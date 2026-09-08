@@ -62,6 +62,15 @@ class PolicyReconstruction:
         service: ObservationService,
         testimony_shapes: bool,
     ) -> None:
+        # Both raises in this constructor are CONSTRUCTION PRECONDITIONS, not
+        # checks over a recording, which is why they stay plain ``ValueError``
+        # and do not route through a caller's violation policy: they say this
+        # object cannot be built at all, before any tick is walked or any
+        # recorded action is compared. The one thing a caller's policy decides
+        # is a disagreement with recorded bytes, and that is
+        # :class:`PolicyReconstructionMismatch`. ``eval.replay_walk`` cannot
+        # reach either raise — it gates on ``format_version == 3`` and pins the
+        # service to version 2 before constructing this.
         if experiment.format_version != 3 or service.temporal_observation_version != 2:
             raise ValueError(
                 "policy reconstruction requires format 3 and temporal version 2"

@@ -37,4 +37,19 @@ describe("public result interpretation", () => {
     expect(mixed).toContain("Custom agent factory");
     expect(mixed).not.toContain("Built-in scripted agent factory");
   });
+  it("names the observation clock, so two groups that differ only by it do not read alike", () => {
+    const base = { game_ids: ["headless-seed-1"], agent_factory_kind: "scripted" as const, experiment_config: null, substrate_flags: null, tactical_policy: null, crew_tactical_policy: null };
+    const mixed = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [
+      { ...base, temporal_observation_version: 1 },
+      { ...base, game_ids: ["headless-seed-2"], temporal_observation_version: 2 },
+    ] }} />);
+    expect(mixed).toContain("mixes recorded behavior configurations");
+    expect(mixed).toContain("Observation clock: v1.");
+    expect(mixed).toContain("Observation clock: v2.");
+    const unstamped = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [
+      { ...base, temporal_observation_version: null },
+    ] }} />);
+    expect(unstamped).toContain("Observation clock: not recorded.");
+    expect(unstamped).not.toContain("Observation clock: v1.");
+  });
 });

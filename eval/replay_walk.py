@@ -615,7 +615,16 @@ def _walk_replay(
                 )
             except PolicyReconstructionMismatch as mismatch:
                 # The profile's declared policy decides, exactly as it does for
-                # every other check the walker performs.
+                # every other check the walker performs. This one differs from
+                # the others in one respect that does NOT reach the walk:
+                # ``before_tick`` asked every living agent to decide before it
+                # raised, so the reconstruction is stepped for a tick whose
+                # recorded actions it disagrees with, and carrying it forward
+                # would re-diverge at every later tick. It is never carried
+                # forward, because :func:`_violate` is ``NoReturn`` for every
+                # kind — a hook that returns instead of raising gets a
+                # ``RuntimeError`` naming its profile rather than a continued
+                # walk on stale state.
                 _violate(
                     config,
                     WalkViolation(

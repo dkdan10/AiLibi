@@ -200,6 +200,24 @@ def build_report(sample_dir: Path) -> TournamentEvalReport:
     )
 
 
+#: The per-game recorded-identity keys a legacy report predates entirely. One
+#: tuple, read by both halves of the historical projection: what
+#: :func:`_historical_report_exclusions` drops from a rebuild, and what
+#: :func:`check_report` requires the committed JSON to be free of before it
+#: compares against the projected shape. They drifted apart once already — the
+#: clock version was added to the first and not the second — and a key missing
+#: from the guard can only produce a loud false STALE, which is exactly the
+#: kind of drift a shared constant and its test remove rather than diagnose.
+_RECORDED_IDENTITY_GAME_KEYS: Final[tuple[str, ...]] = (
+    "agent_factory_kind",
+    "experiment_config",
+    "substrate_flags",
+    "tactical_policy",
+    "crew_tactical_policy",
+    "temporal_observation_version",
+)
+
+
 def _historical_report_exclusions(report: TournamentEvalReport) -> dict[str, Any]:
     """Project the legacy report format without rewriting its recorded cells."""
     return {
@@ -209,12 +227,7 @@ def _historical_report_exclusions(report: TournamentEvalReport) -> dict[str, Any
                 index: {
                     "completion_status": True,
                     "outcome_verified": True,
-                    "agent_factory_kind": True,
-                    "experiment_config": True,
-                    "substrate_flags": True,
-                    "tactical_policy": True,
-                    "crew_tactical_policy": True,
-                    "temporal_observation_version": True,
+                    **{key: True for key in _RECORDED_IDENTITY_GAME_KEYS},
                     "meetings": {"__all__": {"skip_confidence_threshold"}},
                     "failed_calls": {
                         call_index: {"call_id"}
@@ -523,16 +536,7 @@ def check_report(sample_dir: Path) -> int:
         and _can_project_historical(report)
         and "provenance_groups" not in committed.get("report", {})
         and all(
-            not any(
-                key in game
-                for key in (
-                    "agent_factory_kind",
-                    "experiment_config",
-                    "substrate_flags",
-                    "tactical_policy",
-                    "crew_tactical_policy",
-                )
-            )
+            not any(key in game for key in _RECORDED_IDENTITY_GAME_KEYS)
             and all(
                 "skip_confidence_threshold" not in meeting
                 for meeting in game.get("meetings", ())

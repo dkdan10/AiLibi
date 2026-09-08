@@ -45,6 +45,28 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
 
 ## Acceptance
 
+- [x] Review correction: Decision 1 claimed the new clock field answered the
+  earlier review's C4-5 complaint, and the field exhibited exactly C4-5's
+  defect — `Literal[1, 2]` accepts a JSON `true` (`bool` subclasses `int`) and
+  a report whose clock could not be read loaded as clock v1. The recorded row's
+  integer check is now one shared function run at every mirror of the stamp;
+  proved by `tests/eval/test_report_schema.py::test_a_committed_report_whose_clock_is_a_json_boolean_is_refused`
+  (and the four parametrized site tests it sits beside), which load as `1`
+  before the fix and raise after it.
+- [x] Review correction: pull request #441 was `CONFLICTING` against its base,
+  and round 1 declared the shared `tests/fixtures/` inventory row a value
+  someone else would merge. It is merged here instead: `work/evidence-renderer-salience`
+  at `bd6f05dc` is merged in (never rebased), the row recomputed from
+  `git ls-files` with the merge staged, and the result proved by
+  `.venv/bin/python scripts/verify_ml_evidence.py` (exit 0, "every check
+  passed") and `tests/scripts/test_verify_ml_evidence.py` (80 passed).
+- [x] Review correction: three non-blocking defects were code, not prose, and
+  are fixed with their own perturbations — the served provenance cards now name
+  the observation clock (`frontend/src/components/PublicResults.test.tsx`), the
+  historical-projection guard and its exclusion set read one shared key tuple
+  (`tests/scripts/test_build_sample_report.py::test_the_committed_shape_guard_names_every_projected_identity_key`),
+  and the v3 mismatch's "no half-stepped walk" claim is pinned rather than
+  argued (`tests/eval/test_v3_cross_tree_reconstruction.py::test_a_mismatch_cannot_be_swallowed_onto_a_half_stepped_reconstruction`).
 - [x] Review correction: the merge-tree conflict count in "Review corrections,
   round 1" (`grep -c '<<<<<<<'` → 1) reproduced on no committed tree — the
   sentence stating it puts the literal marker into the card, and the merge-tree
@@ -153,10 +175,14 @@ provenance views change shape.
 
 ## Results
 
-Implemented on `work/recorded-provenance-gaps` in five commits off `201849fc`:
-a frozen format-3 fixture, the observation-clock provenance field, the
-`view.json` timestamp exclusion, the meeting-keyed memory guard, and the v3
-policy re-decision as a profile option.
+Implemented on `work/recorded-provenance-gaps` in five implementation commits
+off `201849fc`: a frozen format-3 fixture, the observation-clock provenance
+field, the `view.json` timestamp exclusion, the meeting-keyed memory guard, and
+the v3 policy re-decision as a profile option. Those five are what the sections
+below describe. The branch itself carries more than five — the review rounds
+below added documentation commits, one closeout round added source, and one
+merge commit brought in the base branch — so a reader counting commits should
+count `git log --oneline --first-parent 201849fc..HEAD`, not this list.
 
 Architecture references. `docs/architecture.md` **Layering** — the provenance
 field is added at the `eval`/`api` reader layer over recordings; nothing in
@@ -176,9 +202,11 @@ Run at `201849fc` before any edit.
 * **NC4-3.** `grep -n "temporal_observation_version" eval/report_schema.py
   eval/balance_eval.py api/schemas.py` → exit 1, no matches. The clock was not
   part of the recorded identity anywhere.
-* **NC6-1.** Two runs of `.venv/bin/python -m experiments.investigation_evaluation`
-  into fresh directories: `artifact hash keys: 245 differing: 35 / by basename:
-  {'view.json': 35} / everything else identical: True`, with `created_at`
+* **NC6-1.** Two runs of `.venv/bin/python -m experiments.investigation_evaluation
+  --output-dir <fresh directory>` (the flag is `required=True`; the earlier
+  spelling of this line omitted it and was not runnable — see "Review
+  corrections, closeout round 1"): `artifact hash keys: 245 differing: 35 / by
+  basename: {'view.json': 35} / everything else identical: True`, with `created_at`
   `2026-09-08T04:11:36.838241+00:00` vs `...T04:11:50.234935+00:00` and `view
   identical modulo created_at: True`.
 * **NC6-2.** Replacing `meeting.meeting_id` with `report.meetings[0].meeting_id`
@@ -196,14 +224,22 @@ Run at `201849fc` before any edit.
 
 ### Decisions
 
-1. **The field is typed `TemporalObservationVersion` (`Literal[1, 2] | None`),
-   not the card's literal `int | None`.** It is a narrowing of that type, to the
-   two versions `observation/version.py` can resolve; a report claiming a clock
-   this build cannot reconstruct under is a corrupt claim, and the recorded
-   field it mirrors (`ReplayEntry.temporal_observation_version`) carries the same
-   alias. This matches the house style for sibling version fields
-   (`ExperimentConfigView.format_version`) and answers the earlier review's C4-5
-   complaint that version fields should reject non-version input.
+1. **The field is typed `TemporalObservationVersion` (`Literal[1, 2] | None`)
+   behind an integer check, not the card's literal `int | None`.** The alias is
+   a narrowing to the two versions `observation/version.py` can resolve: a
+   report claiming a clock this build cannot reconstruct under is a corrupt
+   claim. The alias alone is not enough, and saying so is the correction this
+   card was reopened for — `Literal[1, 2]` rejects `0`, `3`, `2.0` and `"2"`
+   but accepts a JSON `true`, because Python's `bool` subclasses `int` and
+   `True == 1`. What is enforced now is the alias plus
+   `orchestrator.replay.require_integer_temporal_version`, a `mode="before"`
+   field validator that refuses any value whose `type` is not exactly `int`.
+   The recorded field it mirrors (`ReplayEntry.temporal_observation_version`)
+   runs the same function object rather than a copy of it, and the served views
+   run a deliberately shadowed copy pinned against it by test. That is the
+   whole of the claim: it is not an appeal to a house style, and no claim is
+   made here about `ExperimentConfigView.format_version`, which carries a bare
+   alias and is not an example of the rule.
 2. **`current-report` enables `reconstruct_v3_policies`; every other shipping
    profile keeps the default `False`.** Enabling it preserves exactly what that
    profile already did, now routed through its own hook. Leaving
@@ -287,14 +323,25 @@ flake, so it was folded into the commit that caused it rather than appended,
 which keeps every commit on the branch green under `npm run tsc:check`. The
 recorded run above is the gate on the final tree.
 
-No committed report or recording changed: `git diff --stat 201849fc HEAD` touches
-nothing under `replays/` or `audits/`. The only `docs/artifacts.md` edit is the
-`tests/fixtures/` inventory row the new fixture moves (23 files / 2,054,135 bytes
-→ 25 / 2,067,334, recomputed from `git ls-files tests/fixtures` with the change
-staged); the coordinator-owned `audits/` row is untouched, because no `audits/`
-byte moves. The frozen held-out manifest needs no restamp: none of the files this
-card edits appears in `experiments/held_out_prefixes.GENERATOR_SOURCES`, and
-`tests/experiments/test_held_out_prefixes.py` is green (28 passed).
+No committed report or recording changed: `git diff --name-only 201849fc HEAD --
+replays audits` names no file under `replays/` at all, and exactly one under
+`audits/` — `audits/deduction-candidate/held-out/manifest.json`, which arrives
+whole from the merged base branch and not from this card (see "Review
+corrections, closeout round 1"). This card's own commits move nothing under
+either: `git diff --name-only 201849fc db6ffb9e -- replays audits` is empty.
+`docs/artifacts.md` carries two inventory rows this branch is responsible for
+reporting — `tests/fixtures/`, which this card's fixture moves and the merge
+then merges (23 files / 2,054,135 bytes at the base → 25 / 2,067,334 on this
+card alone → **29 / 2,098,510** merged), and `audits/`, which the base branch's
+restamp moves (14,852,039 bytes / 202 files) and which this card does not
+touch. Both are recomputed from `git ls-files` with the change staged rather
+than copied. The frozen held-out manifest needs no restamp from this card:
+intersecting `git diff --name-only 201849fc db6ffb9e` and this round's
+uncommitted set with `experiments.held_out_prefixes.GENERATOR_SOURCES` gives
+`[]` both times, the two sources the manifest does record
+(`agents/memory/store.py`, `experiments/held_out_prefixes.py`) are the base
+branch's, and `tests/experiments/test_held_out_prefixes.py` is green
+(28 passed).
 
 ### Planted and perturbed failures
 
@@ -364,6 +411,17 @@ Each was demonstrated by editing the tree, running the check, and restoring.
   decides differently from the recorded bytes. That is the finding, not a stale
   fixture; the fixture README says so, and re-recording it is a decision rather
   than maintenance.
+* **The cross-tree walk is procedurally cross-tree; today it is not yet
+  decision-diverse.** The fixture was recorded at `201849fc` and is walked here,
+  which is what makes it a cross-tree check by construction. But this branch
+  changes no file on the reproduce path — `git diff --name-only 201849fc HEAD`
+  filtered to `agents/`, `engine/`, `observation/` and `meetings/` names only
+  the base branch's two `agents/memory/` files, neither of which the tactical
+  decision path reads — so the tree that re-decides is, for those decisions,
+  the tree that recorded. The check therefore cannot detect drift *today*; its
+  value is prospective, and the planted-defect half is what shows it would.
+  Stated because "cross-tree" otherwise sounds like a measurement rather than a
+  standing tripwire.
 * **The cross-tree oracle covers 9 ticks and 59 recorded actions** of one seed —
   moves, task attempts, a kill, two vents and a body report. It is a real
   cross-tree check, not a broad one, and a 9-tick prefix does not exercise every
@@ -465,6 +523,12 @@ the matching byte note under `[ FAIL ] in-tree family inventory`. Restoring the
 row returns exit 0 and `every check passed`, with `docs/artifacts.md` back at
 its committed bytes.
 
+*(Superseded in "Review corrections, closeout round 1" below: the collision IS
+resolved on this branch now, by merging the base branch's tip rather than
+rebasing onto it. The reasoning below is kept as the state of the argument when
+it was written, and the second bullet's objection — that a merge goes stale the
+moment the base pushes again — is answered there rather than denied.)*
+
 This branch does not resolve the collision, and that is a decision rather than
 an omission:
 
@@ -474,9 +538,11 @@ an omission:
   this pull request, and would go stale the moment its own fix round pushes —
   the same conflict, one tip later.
 
-So the row is declared here as a shared, coordinator-recomputed cell. Whoever
-retargets this pull request to `main` after the renderer card merges sets it to
-**29 files / 2,098,510 bytes**, keeping both descriptive clauses — this branch's
+So the row is declared here as a shared, coordinator-recomputed cell. *(Also
+superseded: this branch now sets it itself, to the same measured value.)*
+Whoever retargets this pull request to `main` after the renderer card merges
+sets it to **29 files / 2,098,510 bytes**, keeping both descriptive clauses —
+this branch's
 "one frozen format-3 recording and its README for the cross-tree policy check"
 and the renderer's own — then re-runs
 `.venv/bin/python scripts/verify_ml_evidence.py` and
@@ -556,7 +622,13 @@ than restated. The single `changed in both` entry is `docs/artifacts.md` — bas
 `33a39860`, `.our` `7c19f025` (`work/evidence-renderer-salience`, the first tip
 argument), `.their` `a615e3fe` (this branch) — and its one hunk is the
 `tests/fixtures/` inventory row, `2,085,311 tracked bytes / 27 files` on their
-side against `2,067,334 / 25` on ours. The round-1 sentence keeps its words and
+side against `2,067,334 / 25` on ours. *(The last clause is superseded in
+"Review corrections, closeout round 1": read against the `.our` / `.their`
+labels this sentence has just defined, it hands each side the other's figure.
+`git merge-tree` prints `2,085,311 / 27` under `<<<<<<< .our` — the renderer
+branch, the first tip argument — and `2,067,334 / 25` above `>>>>>>> .their`,
+this branch. The blob mapping earlier in the sentence, the round-1 table and
+the pull request body all assign them correctly.)* The round-1 sentence keeps its words and
 now carries an explicit supersession marker naming this subsection. The
 inventory table above it was re-run this round as well and is unchanged:
 `git ls-tree -r -l <tree> tests/fixtures` summed with `awk` gives 23 files /
@@ -585,3 +657,253 @@ ran last of all, inside that second `check.sh`.
 | `bash scripts/verify_samples.sh` | exit 0 — "All 50 samples verified clean." twice |
 | `build_sample_report.py --check` × 4 | all four exit 0, "consistent with its replays." each |
 | `cd frontend && npm run e2e` | exit 0 — `13 passed (1.1m)`, 3 skipped |
+
+
+### Review corrections, closeout round 1 (2026-09-08)
+
+One blocking finding, fourteen non-blocking ones across three lenses, and the
+pull request's `CONFLICTING` state against its base. Unlike rounds 1 and 2 this
+round moved source: four findings — the blocking one and three of the
+non-blocking ones — were defects in the code, not in the prose describing it,
+and one more was a claim about the code that turned out to be false.
+
+**1 — the blocking finding: Decision 1 claimed a complaint closed that the
+field still exhibited.** The Decision said the new clock field "answers the
+earlier review's C4-5 complaint that version fields should reject non-version
+input". C4-5 reads: "`temporal_observation_version` accepts a JSON boolean and
+coerces it to 1". Measured at `db6ffb9e`,
+`GameProvenance.model_validate({'temporal_observation_version': True})` returned
+`1`, and the committed `replays/samples/4p1i` report read through
+`TournamentEvalReport` with its first game's stamp set to `true` loaded as clock
+v1 — the exact relabelling the field's own docstring forbids ("a recording made
+before the stamp existed is legacy, not v1, and reading one does not relabel
+it"). The recorded row it says it mirrors did reject it, through a validator
+this card had not mirrored.
+
+Resolved by option (a) of the finding: mirror the enforcement rather than
+weaken the claim. `orchestrator/replay.py`'s three-line rule is lifted out of
+`ReplayEntry` into `require_integer_temporal_version`, so the recording and
+everything that reads it back run one function object instead of copies that
+can drift. Its five boundaries:
+
+| Site | Module | Why it is a boundary and not a repeat |
+| --- | --- | --- |
+| `ReplayEntry` | `orchestrator/replay.py` | The recorded row; the rule's original home, now delegating |
+| `GameProvenance` | `eval/report_schema.py` | The recorded identity, and the type `ReportProvenanceGroup` inherits |
+| `GameReport` | `eval/report_schema.py` | The model a committed report's JSON is actually read through — `recorded_provenance()` only ever sees an already-validated value |
+| `ReplayMetadataView`, `ReportProvenanceGroupView` | `api/schemas.py` | Served DTOs; they shadow the rule rather than import it, because that module's contract is that spectator DTOs do not couple to orchestrator symbols |
+| `_GameReportEvalView` | `api/routes/eval.py` | Validated from a dump, so it inherits no validator from the model it mirrors |
+
+What is enforced, measured on the committed tree with each model loaded
+directly: `True`, `False`, `2.0`, `"2"` and `"v2"` raise `ValidationError`;
+`None`, `1` and `2` load; `3` still raises. Only two of those were reachable
+gaps before — `Literal[1, 2]` already rejected `False` (`== 0`), `"2"` and
+`"v2"`, and accepted `True` and `2.0` — and the perturbation below shows
+exactly those two.
+
+*Planted proofs.* 33 new cases across three modules. Reverting
+`require_integer_temporal_version` to a pass-through (the pre-fix behaviour)
+and running the affected selection gives `7 failed, 10 passed`, failing
+`test_provenance_refuses_a_clock_version_that_is_not_an_integer[True]` and
+`[2.0]`, `test_game_report_refuses_a_clock_version_that_is_not_an_integer[True]`
+and `[2.0]`, `test_a_committed_report_whose_clock_is_a_json_boolean_is_refused`,
+and `test_the_redaction_view_refuses_a_non_integer_clock[True]` and `[2.0]`.
+Reverting the DTO copy in `api/schemas.py` the same way gives `7 failed, 9
+passed` in `tests/api/test_schemas.py`, including every case of
+`test_the_dto_clock_guard_agrees_with_the_recorded_one`, which compares the
+copy against the original on the same inputs so the shadow cannot drift.
+
+*No committed report is affected, and that is measured rather than assumed.*
+`grep -c temporal_observation_version <dir>/tournament-eval-report.json` is `0`
+for all four committed sets, so none of them can carry a non-integer clock; all
+four `--check` runs and both `verify_samples.sh` passes stay green (table
+below).
+
+**2 — the pull request was `CONFLICTING`; it is merged now, not deferred.**
+Round 1 declared the shared `tests/fixtures/` inventory row a cell for whoever
+retargets. That deferral is superseded: `work/evidence-renderer-salience` at
+`bd6f05dc` is MERGED into this branch (never rebased — this branch's commits
+are pushed). `docs/artifacts.md` was the only conflicting path. Both
+descriptive clauses are kept — the renderer branch changed only the number, not
+the row's text — and the value is recomputed from `git ls-files` with the merge
+staged rather than copied from round 1's table: **29 files / 2,098,510 bytes**,
+which is what round 1 predicted. The `audits/` row carries the base branch's
+restamped `14,852,039 bytes / 202 files` and re-measures correct on the merged
+tree.
+
+Round 1's objection to merging — that it goes stale the moment the base pushes
+again — is answered, not denied: the base tip was re-fetched at the start of
+this round and again immediately before the merge, both `bd6f05dc`, and the sha
+is named in the merge commit so a later base tip is a visible re-merge rather
+than a silent drift. Verified on the merged tree:
+`.venv/bin/python scripts/verify_ml_evidence.py` exit 0, `checks: 60 | OK 48 |
+FAIL 0 | ABSENT 7 | INFO 5`, "every check passed";
+`tests/scripts/test_verify_ml_evidence.py` 80 passed.
+
+**3 — the frozen held-out set.** No restamp is owed by this card.
+Intersecting `experiments.held_out_prefixes.GENERATOR_SOURCES` with this card's
+own commits (`git diff --name-only 201849fc db6ffb9e`) gives `[]`, and with this
+round's source changes gives `[]`. The base branch does touch two of them
+(`agents/memory/store.py`, `experiments/held_out_prefixes.py`) and had already
+restamped for both of its commits; that manifest comes through the merge
+byte-identical (`git diff origin/work/evidence-renderer-salience --
+audits/deduction-candidate/held-out/manifest.json` is empty), and
+`tests/experiments/test_held_out_prefixes.py` is green (28 passed). No band
+prefix was printed or opened.
+
+**4 — three non-blocking findings were code.** Each is fixed with its own
+perturbation, restored after measuring:
+
+* **The served surface never named the clock.** `PublicResults.tsx`'s identity
+  card rendered factory, mechanisms, both policy methods and "Rule settings",
+  and dropped `temporal_observation_version` — so the "This set mixes recorded
+  behavior configurations" banner could fire above two cards that read
+  character-for-character alike, which is the opposite of what Record impact
+  asks for. The card now ends with "Observation clock: v2." (or "not
+  recorded."). Perturbation: removing that line fails the new
+  `PublicResults.test.tsx` case (`1 failed | 3 passed`), which renders two
+  groups differing only by clock and asserts both versions appear.
+* **`check_report`'s committed-shape guard had drifted from the exclusion set
+  it partners.** The clock key had been added to `_historical_report_exclusions`
+  and not to the five-key literal in `check_report`. Both now read one
+  `_RECORDED_IDENTITY_GAME_KEYS` tuple, so the guard cannot drift again by
+  construction — it no longer has its own list. What a test can still catch is
+  the *exclusions* half drifting from the tuple, and
+  `test_the_committed_shape_guard_names_every_projected_identity_key` pins that
+  (it also asserts every name is a real field of the model the guard reads, so a
+  typo cannot silently never match). Perturbation: dropping the clock key from
+  the tuple fails 12 tests in `tests/scripts/test_build_sample_report.py`,
+  including all four committed `--check` sets — the tuple is load-bearing in
+  both directions. The original drift could only ever have produced a loud false
+  STALE, so nothing unsafe shipped.
+* **The walker's parity comment claimed something it did not establish.** The
+  inline comment said the v3 mismatch is handled "exactly as ... every other
+  check", while this one alone leaves state behind: `before_tick` asks every
+  living agent to decide before it raises, so the reconstruction is stepped for
+  a tick it disagrees with. The comment now names the mechanism that makes that
+  harmless, and the mechanism is pinned rather than argued — see finding 5.
+
+**5 — one non-blocking finding is refuted, with the refutation pinned.** The
+scope lens held that a profile whose `on_violation` returns would leave the walk
+running on a half-stepped `PolicyReconstruction`, calling `after_tick` at
+`eval/replay_walk.py` on a reconstruction whose agents had already stepped. That
+cannot happen, and not merely because no shipping profile does it: `_violate` is
+declared `NoReturn` and raises `RuntimeError` naming the profile if a hook
+returns, for every violation kind — and `on_violation` is itself typed
+`Callable[[WalkViolation], NoReturn]`, so a returning hook does not type-check
+either. A guard was written for this and then deleted rather than shipped as
+unreachable code. The new
+`test_a_mismatch_cannot_be_swallowed_onto_a_half_stepped_reconstruction` casts a
+returning hook past the type checker, walks the frozen fixture under the planted
+policy defect, and asserts the `RuntimeError` — with the hook having seen the
+violation exactly once, at the diverging tick. Perturbation: making `_violate`
+return instead of raising fails that test.
+
+**6 — the remaining non-blocking findings, and what happened to each.**
+
+* *`PolicyReconstruction.__init__` raises bare `ValueError`s outside the new
+  routing.* Correct, and correct as it stands: both are CONSTRUCTION
+  preconditions — this object cannot be built at all — not checks over a
+  recording, which is what a profile's policy decides. `eval/replay_walk.py`
+  reaches neither (it gates on `format_version == 3` and pins the service to
+  version 2 before constructing). The source now says so where the raise is,
+  rather than leaving the reader to infer it from NC3-1's contract.
+* *Two touched files were named nowhere in the card.* Fixed by the follow-through
+  list below, which now names every file outside `## Expected scope`.
+* *The merged inventory figure was valid only against the renderer branch's
+  current tip.* No longer a forward-looking figure: it is this tree's measured
+  value, recomputed at merge time.
+* *The `.our` / `.their` sentence in round 2 inverted the labels it had just
+  defined.* Corrected in place with a supersession marker; the correct
+  assignment is `2,085,311 / 27` on `.our` (the renderer branch, the first tip
+  argument) and `2,067,334 / 25` on `.their` (this branch).
+* *The NC6-1 reproduction command was not runnable as written.*
+  `experiments/investigation_evaluation.py` declares `--output-dir` as
+  `required=True`, so the command as spelled exited with an argparse error. The
+  line now carries the flag. Its figures stay the dated pre-fix measurement at
+  `201849fc`; the post-fix state was re-measured this round on the merged tree,
+  two runs into fresh directories: `artifact hash keys: 245 differing: 0 by
+  basename: {}`, against `245 differing: 35` before. The committed
+  `audits/investigation-candidate/2026-09-06-normal-policies.json` still carries
+  245 hashes of which 35 are `view.json`, which is the "not retro-certified"
+  limitation holding.
+* *Results opened "in five commits" while the branch carried eight.* The
+  sentence now says which five it means and points at `--first-parent` for the
+  branch's own count, which this round takes to eleven.
+* *Commit `583eba5d`'s `Card:` line lacks the blank line before it.* Half of
+  this reproduces and half does not, and the difference matters. Measured over
+  the ten first-parent commits this card owns: `583eba5d` is the only one whose
+  `Card:` line sits directly under the last prose line — the other nine have the
+  blank line. But `git interpret-trailers --parse` returns `Co-Authored-By`
+  ALONE on all ten, `583eba5d` included, so the claim that the others "parse
+  both trailers" does not reproduce here. The reason is the house commit format
+  itself: it puts a blank line between `Card:` and the final
+  `Co-Authored-By:` line, which makes `Card:` its own paragraph, and git reads
+  only the last block as the trailer block. So the malformed commit is real and
+  the diagnosis attached to it was not; the defect is cosmetic in both cases.
+  It stays as it is either way — the branch policy forbids amending a pushed
+  commit, and rewriting nine descendants over one blank line is the worse
+  trade.
+* *Codex reviewed `e26045b`, two commits behind the head that was reviewed.*
+  Still true, and still harmless — see "Codex review" below.
+
+**Codex review.** Re-polled at this round's start:
+`gh api repos/dkdan10/AiLibi/pulls/441/comments` → `0`,
+`.../pulls/441/reviews` → `0`, `.../issues/441/comments` → one comment, the
+`chatgpt-codex-connector` summary ("Code Review | Completed | `e26045b` | PR
+opened"), with no findings body. There are therefore no Codex findings to
+address, valid or invalid: nothing to reproduce, confirm or refute. The review
+ran against `e26045b`, and every commit between it and `db6ffb9e` was
+documentation-only, so its clean result did cover the source as it then stood —
+but it has not seen this round's source, and Codex re-triggers only on PR-open,
+draft-ready, or an explicit review comment, none of which this round performs.
+
+**Out-of-scope follow-through, each named with its reason.** `## Expected
+scope` admits `eval/`, `api/schemas.py`, `api/replay_loader.py`,
+`api/public_results.py`, `scripts/build_sample_report.py`, the two experiment
+harnesses, their tests, and generated frontend types. These files are outside
+it and are kept:
+
+* `orchestrator/replay.py` — the integer rule's home. Lifting it out of
+  `ReplayEntry` into a shared function is what makes "the report mirrors the
+  recorded field" enforceable rather than a comment; a copy in `eval/` would be
+  the drift the finding objected to.
+* `api/routes/eval.py` — the route declares
+  `model_config = ConfigDict(frozen=True, extra="forbid")` precisely so a new
+  `GameReport` field trips the redaction re-validation loudly, so the mirrored
+  field is required, not optional. Deleting it turns `tests/api` red (the
+  redaction round-trip raises). The integer check follows the field.
+* `scripts/gen_frontend_types.py` — one entry in the generator's optional-field
+  list; `generate_prompts --check` and `tsc:check` are green only with it, and
+  it is what produces the `frontend/src/types/api.ts` the scope line does admit.
+* `frontend/src/components/PublicResults.tsx` and its test — the served card
+  that names the clock, added this round for the finding above. The DTO change
+  had already forced the test file (`TS2741`: the two
+  `ReportProvenanceGroupView` literals were incomplete once the DTO gained a
+  required additive field).
+* `orchestrator/policy_reconstruction.py` — `PolicyReconstructionMismatch` is
+  the exception NC3-1 asks for; it has to live with the class that raises it.
+  This round adds a comment there and no behaviour.
+* `tasks/work/evidence-renderer-salience.md`, `agents/memory/`,
+  `tests/agents/`, `tests/fixtures/memory_rendering/`,
+  `experiments/held_out_prefixes.py` and
+  `audits/deduction-candidate/held-out/manifest.json` — the base branch's own
+  card, arriving through the merge. Not this card's changes; they leave the
+  diff when the pull request is retargeted to `main` after the base merges.
+
+**Gates re-run on this round's tree.** `check.sh` ran twice — once on the
+source changes before this subsection was written, once on the exact bytes this
+round commits — with identical counts; duration is the only figure that moved,
+which is why it is not recorded. Every exit code was read from the command, not
+from a pipeline.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `7265 passed, 20 skipped, 3 xfailed`, mypy "no issues found in 471 source files", `390 historical phase tasks and 390 prompts; 43 work cards`, `All 390 prompts are in sync.`, frontend `19 files / 515 tests` and build |
+| `bash scripts/verify_samples.sh` | exit 0 — "All 50 samples verified clean." twice |
+| `build_sample_report.py --check` × 4 | all four exit 0, "consistent with its replays." each; `0` committed clock stamps in each set's report |
+| `cd frontend && npm run e2e` | exit 0 — `13 passed (2.7m)`, 3 skipped |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | exit 0 — `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`, "every check passed" |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py` | exit 0 — 80 passed |
+| `.venv/bin/python -m pytest tests/experiments/test_held_out_prefixes.py` | exit 0 — 28 passed |
+| `.venv/bin/python -m pytest tests/orchestrator/ --collect-only -q` | exit 0 — 583 tests collected |

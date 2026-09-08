@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, NoReturn
+from collections.abc import Callable
+from typing import Any, NoReturn, cast
 
 import pytest
 
@@ -126,3 +127,67 @@ def test_a_planted_policy_change_makes_the_cross_tree_walk_fail(
     control: list[str] = []
     assert isinstance(_walk(reconstruct=False, calls=control)[-1], WalkComplete)
     assert control == []
+
+
+def _walk_swallowing(calls: list[tuple[str, int | None]]) -> list[Any]:
+    """The same walk, but with a hook that RECORDS and returns rather than raising.
+
+    ``on_violation`` is declared ``Callable[[WalkViolation], NoReturn]``, so a
+    returning hook does not even type-check — the cast below is deliberate, and
+    exists to exercise the RUNTIME backstop that catches a profile written in
+    an untyped or dynamically assembled context.
+    """
+
+    def hook(violation: WalkViolation) -> None:
+        calls.append((violation.kind, violation.tick))
+
+    returning_hook = cast("Callable[[WalkViolation], NoReturn]", hook)
+
+    return list(
+        walk_replay(
+            _FIXTURE,
+            seed=1,
+            num_players=7,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            game_map=load_canonical_map(),
+            config=ReplayWalkConfig(
+                profile="v3-cross-tree-swallowed",
+                on_violation=returning_hook,
+                missing_meeting_row="truncate",
+                supports_temporal_observations=True,
+                supports_experiments=True,
+                reconstruct_v3_policies=True,
+            ),
+        )
+    )
+
+
+def test_a_mismatch_cannot_be_swallowed_onto_a_half_stepped_reconstruction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hook that returns stops the walk anyway, so no stale state is carried.
+
+    This check leaves more behind than the walker's others: ``before_tick``
+    asks every living agent to decide before it raises, so the reconstruction
+    is stepped for a tick whose recorded actions it disagrees with. If the walk
+    could continue past a returning hook, that reconstruction would re-diverge
+    at every later tick. It cannot: ``_violate`` is ``NoReturn`` for every
+    violation kind and turns a returning hook into a ``RuntimeError`` naming
+    the profile. Pinned here for this kind specifically, because it is the one
+    where continuing would be silently wrong rather than merely lenient.
+    """
+
+    def no_task_attempt(self: CrewmatePolicy, *, task_id: str) -> ActionIntent:
+        return self._wait()
+
+    monkeypatch.setattr(CrewmatePolicy, "_do_task", no_task_attempt)
+
+    calls: list[tuple[str, int | None]] = []
+    with pytest.raises(RuntimeError, match="on_violation returned instead of raising"):
+        _walk_swallowing(calls)
+
+    # The hook still saw the violation, and saw it exactly once: the walk ended
+    # at the diverging tick rather than running the remaining six on stale
+    # reconstruction state.
+    assert calls == [("v3_policy_mismatch", 2)]

@@ -329,3 +329,32 @@ def test_seeds_on_disk_still_raises_on_a_mistyped_replay(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="replay-seed-4x.jsonl"):
         bsr._seeds_on_disk(tmp_path)
+
+
+def test_the_committed_shape_guard_names_every_projected_identity_key() -> None:
+    """The projection and the guard read one list, so they cannot drift apart.
+
+    ``check_report`` only projects a rebuild onto the legacy shape when the
+    committed JSON carries none of the recorded-identity keys. That guard and
+    the exclusion set that does the projecting are two halves of one rule, and
+    they did drift: the clock version was added to the exclusions and not to
+    the guard, which can only ever produce a loud false STALE — safe, but a
+    diagnosis nobody should have to make twice. Pinning the projected game keys
+    against the shared tuple fails the moment a new identity field is added to
+    one half only.
+    """
+
+    report = report_9p2i()
+    projected = bsr._historical_report_exclusions(report)["report"]["games"][0]
+    identity_keys = set(projected) - {
+        "completion_status",
+        "outcome_verified",
+        "meetings",
+        "failed_calls",
+    }
+
+    assert identity_keys == set(bsr._RECORDED_IDENTITY_GAME_KEYS)
+    assert "temporal_observation_version" in bsr._RECORDED_IDENTITY_GAME_KEYS
+    # Every name is a real field of the model the guard reads, not a typo that
+    # would silently never match a committed key.
+    assert identity_keys <= set(report.report.games[0].model_dump(mode="json"))
