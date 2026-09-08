@@ -219,7 +219,7 @@
         "card": "tasks/work/evidence-renderer-salience.md",
         "commit": "7bcc79ed",
         "date": "2026-09-08",
-        "note": "The evidence-reasoning v2 salience repair. It changes rendered prompt bytes on the default-OFF v2 path only; prefix generation reads episodic memory and engine state, not the render, so all fifty accepted digests and the eight skips were unchanged. held_out_prefixes.py moved because this restamp list was added to it, which changes no generated prefix.",
+        "note": "The evidence-reasoning v2 salience repair. It changes rendered prompt bytes on the default-OFF v2 path only; prefix generation reads episodic memory and engine state, not the render, so all fifty accepted digests and the eight skips were unchanged. held_out_prefixes.py moved in the restamp commit that follows this one, because this record was added to it there; that edit generates no prefix and changes none.",
         "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
       },
       {
@@ -227,6 +227,13 @@
         "commit": "56d3e5fd",
         "date": "2026-09-08",
         "note": "The round-1 review corrections to the same repair: the withheld caveat count is computed after the token budget instead of before it, and the own-routine demotion's justification was corrected. Both touch the prompt render on the default-OFF v2 path only, which prefix generation does not read, so all fifty accepted digests and the eight skips were unchanged again.",
+        "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
+      },
+      {
+        "card": "tasks/work/evidence-renderer-salience.md",
+        "commit": "00ac7fbb",
+        "date": "2026-09-08",
+        "note": "The closeout round-1 correction to the same repair: the withheld-subjects notice is reserved before any caveat is selected, so a render that hides claim subjects always states how many, and the reserve's guard raises a named error instead of asserting. Both are prompt-render changes on the default-OFF evidence-v2 path, which prefix generation does not read, so all fifty accepted digests and the eight skips were unchanged a third time.",
         "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
       }
     ],
@@ -297,7 +304,7 @@
   },
   "source_sha256": {
     "agents/memory/beliefs.py": "d9c946867abf74152b332b9331bdec000f20069703c6ef67c2c7c1d8956e63ce",
-    "agents/memory/store.py": "08a87431f434d85fa8117091ff718e77a5b9fc17d8c921740eaaab79af46c87e",
+    "agents/memory/store.py": "7a4de65f8b326812ded4b55dc99671d309ec95b0c494a9a0f4074a46e5c8a31a",
     "agents/perception.py": "5c0b064eacefe3a2f412e48be4c0c110e283b75a0374c2cddd112c2d7c96bb16",
     "agents/tactical/crewmate_policy.py": "cd190d211c343b121c6ff4d3fb471de2150830fb6f3adf8f1ff8aba475861a53",
     "agents/tactical/impostor_policy.py": "4cd16044c9f24cfd5ab615faeecedfb730c424009ed5cb7123a802e739e0b727",
@@ -308,7 +315,7 @@
     "engine/tick.py": "655d29d07724c984b32681b00756ee6b759b34469dfc4483addf5b61f3b49459",
     "engine/visibility.py": "90773592a071c60767ba18933315f0aed96c21716996e74649a6fbc4fd7833f3",
     "engine/world.py": "8367cd422ffb9503e91c3a90931efc21803f47307f6f6b61f7a62fe6ae8bd4bb",
-    "experiments/held_out_prefixes.py": "11ebfd132dce0dd0c7d6c9bab834a3915332be32d11542c851ddd71ce60ce173",
+    "experiments/held_out_prefixes.py": "c881c6bd1fe0898a55914935e182167cbdfd23ca26dc6e3e67d725e59218b3c7",
     "observation/action_intent.py": "4b0b9893a52597b96054c982acf9b17d16f3f631bc06058efdf0d62e09b564f3",
     "observation/body_ids.py": "6287e915e7538080f21ae053b92ca78089235dab2642aa14a3288aa948504ab3",
     "observation/service.py": "58e0a2b816287a7de154ea735fc4fe974b7976e8fb9291de883cc8fc10dac326",

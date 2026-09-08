@@ -1350,8 +1350,9 @@ DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = (
                 "prompt bytes on the default-OFF v2 path only; prefix generation "
                 "reads episodic memory and engine state, not the render, so all "
                 "fifty accepted digests and the eight skips were unchanged. "
-                "held_out_prefixes.py moved because this restamp list was added "
-                "to it, which changes no generated prefix."
+                "held_out_prefixes.py moved in the restamp commit that follows "
+                "this one, because this record was added to it there; that edit "
+                "generates no prefix and changes none."
             ),
         }
     ),
@@ -1371,6 +1372,27 @@ DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = (
                 "corrected. Both touch the prompt render on the default-OFF v2 "
                 "path only, which prefix generation does not read, so all fifty "
                 "accepted digests and the eight skips were unchanged again."
+            ),
+        }
+    ),
+    MappingProxyType(
+        {
+            "date": "2026-09-08",
+            "commit": "00ac7fbb",
+            "card": "tasks/work/evidence-renderer-salience.md",
+            "sources": (
+                "agents/memory/store.py, experiments/held_out_prefixes.py "
+                "(this record itself)"
+            ),
+            "note": (
+                "The closeout round-1 correction to the same repair: the "
+                "withheld-subjects notice is reserved before any caveat is "
+                "selected, so a render that hides claim subjects always states "
+                "how many, and the reserve's guard raises a named error instead "
+                "of asserting. Both are prompt-render changes on the "
+                "default-OFF evidence-v2 path, which prefix generation does not "
+                "read, so all fifty accepted digests and the eight skips were "
+                "unchanged a third time."
             ),
         }
     ),
