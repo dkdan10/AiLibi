@@ -170,6 +170,15 @@ What each profile deliberately relaxes, and why:
   reason: the fold reads only meeting trigger bodies and per-tick states, never
   ballots or the recorded winner, and a truncated recording would silently
   under-count the body meetings its whole denominator is made of.
+* ``current-report`` — the only profile that sets ``reconstruct_v3_policies``.
+  Every format-3 recording it certifies was produced by an experimental harness
+  whose whole claim is that the recorded actions ARE what the built-in policies
+  decided, so a divergence is a failed certification and surfaces as a coded
+  ``v3_policy_mismatch`` violation rather than a bare ``ValueError``. Every
+  other profile keeps the default ``False``, ``leak-scan-factory`` most
+  pointedly: the re-decision ran for it too until this option existed, which
+  both bypassed its declared refusal policy and charged the declared no-check
+  walk a full per-agent per-tick policy replay.
 * ``leak-scan-factory`` — NO checks at all, deliberately: the factory walk
   scans packets reconstructed from replays the harness itself recorded moments
   earlier in the same process, and it performed neither hash verification nor
@@ -214,7 +223,10 @@ from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
 from observation.service import ObservationService
 from orchestrator.game import apply_meeting_result
-from orchestrator.policy_reconstruction import PolicyReconstruction
+from orchestrator.policy_reconstruction import (
+    PolicyReconstruction,
+    PolicyReconstructionMismatch,
+)
 from orchestrator.replay import (
     recorded_experiment_config,
     recorded_testimony_shapes,
@@ -249,6 +261,7 @@ WalkViolationKind: TypeAlias = Literal[
     "trailing_replay_rows",
     "missing_game_end_row",
     "recorded_outcome_mismatch",
+    "v3_policy_mismatch",
 ]
 
 # What a profile does when a tick enters MEETING with no recorded meeting row:
@@ -311,6 +324,15 @@ class ReplayWalkConfig:
     checks to the shared spectator validator, which raises
     :class:`orchestrator.replay_integrity.ReplayIntegrityError` directly. Select
     tick and meeting-post hash checks alongside it to certify current reports.
+    ``reconstruct_v3_policies`` re-decides every living agent's tactical intent
+    on every tick of a format-3 recording
+    (:class:`orchestrator.policy_reconstruction.PolicyReconstruction`) and
+    routes a disagreement through ``on_violation`` as ``v3_policy_mismatch``.
+    It is an option like every other check: it ran unconditionally for any
+    ``supports_experiments`` profile until this card, which both replaced the
+    no-check profile's declared refusal with an unclassifiable ``ValueError``
+    and charged that profile the reconstruction's cost. Default ``False``, so a
+    profile that wants the re-decision asks for it.
     """
 
     profile: str
@@ -331,6 +353,7 @@ class ReplayWalkConfig:
     verify_chronology_and_outcome: bool = False
     supports_temporal_observations: bool = False
     supports_experiments: bool = False
+    reconstruct_v3_policies: bool = False
 
 
 @dataclass(frozen=True)
@@ -550,7 +573,11 @@ def _walk_replay(
         tasks_per_crewmate=tasks_per_crewmate,
     )
     policy: PolicyReconstruction | None = None
-    if experiment is not None and experiment.format_version == 3:
+    if (
+        config.reconstruct_v3_policies
+        and experiment is not None
+        and experiment.format_version == 3
+    ):
         audit_directory = resources.enter_context(
             TemporaryDirectory(prefix="ailibi-policy-reconstruction-")
         )
@@ -582,7 +609,21 @@ def _walk_replay(
         pre_state = state
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
         if policy is not None:
-            policy.before_tick(state=state, last_events=last_events, actions=actions)
+            try:
+                policy.before_tick(
+                    state=state, last_events=last_events, actions=actions
+                )
+            except PolicyReconstructionMismatch as mismatch:
+                # The profile's declared policy decides, exactly as it does for
+                # every other check the walker performs.
+                _violate(
+                    config,
+                    WalkViolation(
+                        kind="v3_policy_mismatch",
+                        game_id=game_id,
+                        tick=mismatch.tick,
+                    ),
+                )
         state, raw_events = advance_tick(
             state,
             actions,

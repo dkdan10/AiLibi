@@ -940,6 +940,11 @@ _CURRENT_REPORT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
     verify_chronology_and_outcome=True,
+    # Preserves what this profile already did, now as a declared option whose
+    # failure routes through the hook above instead of a bare ValueError. A
+    # format-3 recording claims its actions are what the built-in policies
+    # decided, so a report cannot certify one without re-deciding them.
+    reconstruct_v3_policies=True,
 )
 
 

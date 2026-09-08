@@ -38,6 +38,7 @@ def _walk(path: Path) -> Generator[ReplayWalkEvent, None, None]:
                 on_violation=_reject,
                 supports_temporal_observations=True,
                 supports_experiments=True,
+                reconstruct_v3_policies=True,
             ),
         ),
     )
@@ -79,9 +80,72 @@ def test_genuine_partial_v3_policy_reconstructs_and_action_drift_is_refused(
     changed = tmp_path / "changed.jsonl"
     changed.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
     # This profile deliberately has no state-hash check. The refusal must come
-    # from actual policy intent reproduction, including on a partial recording.
-    with pytest.raises(ValueError, match="tactical actions disagree"):
+    # from actual policy intent reproduction, including on a partial recording,
+    # and it arrives through the profile's own hook as a coded violation.
+    with pytest.raises(ValueError, match="v3_policy_mismatch"):
         list(_walk(changed))
+
+
+def test_the_v3_reconstruction_is_a_profile_option_not_a_core_check(
+    tmp_path: Path,
+) -> None:
+    """A profile that declares no checks must not acquire this one (NC3-1).
+
+    ``eval/replay_walk``'s contract is that every check the walker performs is a
+    profile-declared option; ``leak-scan-factory`` declares none and its only
+    policy is ``KeyError(tick)``. The re-decision ran for it anyway, raising a
+    bare ``ValueError`` its ``on_violation`` never saw — so the profile silently
+    lost its declared refusal and paid for a per-agent per-tick policy replay it
+    never asked for.
+    """
+
+    clean = _record(tmp_path / "genuine")
+    rows = [json.loads(line) for line in clean.read_text().splitlines()]
+    first = next(row for row in rows if row["kind"] == "tick")
+    first["actions"][0] = {
+        "type": "wait",
+        "actor": first["actions"][0]["actor"],
+        "payload": {},
+    }
+    changed = tmp_path / "changed.jsonl"
+    changed.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+    calls: list[str] = []
+
+    def record_then_raise(violation: WalkViolation) -> NoReturn:
+        calls.append(violation.kind)
+        raise KeyError(violation.tick)
+
+    def walk(path: Path, *, reconstruct: bool) -> None:
+        # Byte-equal to eval/leak_scan.py's declared no-check profile apart from
+        # the option under test.
+        list(
+            replay_walk.walk_replay(
+                path,
+                seed=1,
+                num_players=7,
+                num_impostors=1,
+                tasks_per_crewmate=1,
+                game_map=load_canonical_map(),
+                config=ReplayWalkConfig(
+                    profile="leak-scan-factory",
+                    on_violation=record_then_raise,
+                    missing_meeting_row="violation",
+                    supports_temporal_observations=True,
+                    supports_experiments=True,
+                    reconstruct_v3_policies=reconstruct,
+                ),
+            )
+        )
+
+    # Default OFF: the tampered actions are simply not re-decided.
+    walk(changed, reconstruct=False)
+    assert calls == []
+
+    # Opted in: the profile's OWN policy decides, on a coded violation kind.
+    with pytest.raises(KeyError):
+        walk(changed, reconstruct=True)
+    assert calls == ["v3_policy_mismatch"]
 
 
 @pytest.mark.parametrize("exit_mode", ["close", "throw", "complete"])
