@@ -339,6 +339,24 @@ class InvestigationMeasurement(_Frozen):
     task_completions: tuple[TaskCompletion, ...]
 
 
+def _view_exclusions() -> dict[str, set[str]]:
+    """The one reader field that is not recorded evidence.
+
+    ``created_at`` comes from the replay file's mtime
+    (:meth:`api.replay_loader.ReplayLoader._metadata_view`), so it differs
+    between two runs of the same measurement and between two machines. Both the
+    written ``view.json`` and ``reader_projection_sha256`` exclude it, so the
+    file that is hashed and the digest that claims to describe it agree on what
+    counts as evidence.
+
+    Built fresh per call rather than held as a module constant: Pydantic's
+    ``exclude`` takes a plain nested mapping, and a shared mutable one would be
+    module-level mutable state.
+    """
+
+    return {"metadata": {"created_at"}}
+
+
 def _digest(value: object) -> str:
     return hashlib.sha256(
         json.dumps(
@@ -506,7 +524,13 @@ def measure_capture(capture: InvestigationCapture) -> InvestigationMeasurement:
                 )
             )
     for name, value in (
-        ("view.json", replay.model_dump(mode="json")),
+        # ``created_at`` is derived from the replay file's mtime
+        # (:meth:`api.replay_loader.ReplayLoader._metadata_view`), so writing it
+        # here made every artifact hash over this file a timestamp: two runs of
+        # the same measurement disagreed. Excluded on the same terms as
+        # ``reader_projection_sha256`` below, which never treated creation time
+        # as evidence.
+        ("view.json", replay.model_dump(mode="json", exclude=_view_exclusions())),
         (
             "memories.json",
             {key: value.model_dump(mode="json") for key, value in memories.items()},
@@ -551,7 +575,7 @@ def measure_capture(capture: InvestigationCapture) -> InvestigationMeasurement:
             ]
         ),
         reader_projection_sha256=_digest(
-            replay.model_dump(mode="json", exclude={"metadata": {"created_at"}})
+            replay.model_dump(mode="json", exclude=_view_exclusions())
         ),
         memory_projection_sha256=_digest(
             {key: value.model_dump(mode="json") for key, value in memories.items()}
