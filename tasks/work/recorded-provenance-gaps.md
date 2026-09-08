@@ -45,6 +45,28 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
 
 ## Acceptance
 
+- [x] Review correction: the Verification table's standalone `tests/api` +
+  `tests/scripts` figure (`1721 passed, 2 skipped`) reproduces on no tree. The
+  row now states the trio run this round made on the committed tree —
+  `uv run pytest tests/eval tests/api tests/scripts -q` → `2825 passed, 3
+  skipped`, exit 0 — and the collection count that contradicts the old figure
+  (`.venv/bin/python -m pytest tests/api tests/scripts --collect-only -q` →
+  `1738 tests collected`) is recorded in "Review corrections, round 1".
+- [x] Review correction: a second lens reported the same figure independently and
+  named the base-tree comparison it also made. The "before this card's fixes and
+  green after" clause and the per-file counts are dropped rather than restated,
+  because no command run in this round produced them; `git diff 201849fc HEAD
+  --stat -- tests/api tests/scripts` (58 insertions, no deletions) is what now
+  carries "no existing test was removed or weakened".
+- [x] Review correction: `docs/artifacts.md`'s `tests/fixtures/` inventory row is
+  a cell two concurrent cards write, so pull request #441 is `CONFLICTING`
+  against its declared base. The merged value is stated (29 files / 2,098,510
+  bytes) with the command that computes it, the pull request body's "shares no
+  file with the renderer card" claim is corrected, and a one-sided resolution is
+  shown failing `.venv/bin/python scripts/verify_ml_evidence.py` (exit 1,
+  "promises 27 files, the index tracks 25"), which
+  `tests/scripts/test_verify_ml_evidence.py::test_every_counted_registry_row_matches_the_index`
+  carries into `bash scripts/check.sh`.
 - [x] `GameProvenance` gains `temporal_observation_version: int | None`, carried
   through `ReplayMetadataView` and `ReportProvenanceGroupView` in
   `api/schemas.py`. Absent stays unknown — a historical recording is not
@@ -243,7 +265,7 @@ pipeline.
 | Command | Result |
 | --- | --- |
 | `bash scripts/check.sh` | exit 0 — ruff check + format, lint-imports, `validate_task_docs` (390 historical phase tasks and 390 prompts; 43 work cards), `generate_prompts --check`, mypy "no issues found in 471 source files", `7216 passed, 20 skipped, 3 xfailed`, then frontend lint + `tsc:check` + `19 files / 514 tests` + build |
-| `pytest tests/eval tests/api tests/scripts` (the card's named trio) | run as part of the gate's pytest leg, which collects all of `tests/` — a strict superset. Each suite was also run on its own during development: `tests/eval` `1089 passed, 1 skipped`; `tests/api` + `tests/scripts` `1721 passed, 2 skipped` before this card's fixes and green after (`tests/api/test_leak.py` 9, `tests/api/test_eval.py` + `test_eval_routes.py` + `test_sets.py` 54 passed 1 skipped, `tests/scripts/test_build_sample_report.py` 23, `tests/scripts/test_verify_ml_evidence.py` 80). A final standalone re-run of the trio was abandoned rather than reported: the shared machine was running up to 19 concurrent pytest processes from other workers, so its timing said nothing. The gate above is the run of record. |
+| `uv run pytest tests/eval tests/api tests/scripts -q` (the card's named trio) | exit 0 — `2825 passed, 3 skipped in 2450.75s`, run standalone on the committed tree in review round 1. The same suites run again inside the gate's pytest leg, which collects all of `tests/` — a strict superset — and that leg is the run of record. The per-suite figures this row carried before round 1 were not reproducible and are superseded; see "Review corrections, round 1". |
 | `bash scripts/verify_samples.sh` | exit 0, "All 50 samples verified clean." twice — 100 canonical reconstructions |
 | `build_sample_report.py --check` × 4 (`replays/samples/{4p1i,9p2i}`, `replays/ml_corpus/{4p1i,9p2i}`) | all exit 0, "consistent with its replays." each |
 | `cd frontend && npm run e2e` | exit 0 — 16 Playwright tests, `13 passed (3.9m)`, 3 skipped |
@@ -348,3 +370,123 @@ Each was demonstrated by editing the tree, running the check, and restoring.
   drifted the same way would still agree with itself. This is the same shared
   oracle limitation FU-ORA-1 names for the renderer, and this card does not
   close it.
+
+### Review corrections, round 1 (2026-09-08)
+
+Three findings from the independent verifiers, two distinct defects, both in
+this card's evidence prose rather than in its code. This round changed no
+source file, no test and no committed artifact: `git diff e26045bd HEAD --stat`
+touches `tasks/work/recorded-provenance-gaps.md` alone.
+
+**1 — the standalone trio figure reproduced on no tree.** The Verification row
+used to read: "Each suite was also run on its own during development:
+`tests/eval` `1089 passed, 1 skipped`; `tests/api` + `tests/scripts` `1721
+passed, 2 skipped` before this card's fixes and green after". That sentence is
+superseded. `1721 + 2 = 1723` is not the size of those two directories at any
+commit on this branch:
+
+* `.venv/bin/python -m pytest tests/api tests/scripts --collect-only -q` at
+  `e26045bd` → `1738 tests collected`.
+* `git diff 201849fc HEAD --stat -- tests/api tests/scripts` → `4 files changed,
+  58 insertions(+)`, no deletions. The branch only adds to those directories, so
+  no test was removed and no `xfail` marker dropped, and the base collects fewer
+  than 1738 rather than more. A tree of 1,723 exists nowhere between the two.
+
+The row now carries the run this round actually made on the committed tree —
+`uv run pytest tests/eval tests/api tests/scripts -q` → `2825 passed, 3 skipped
+in 2450.75s`, exit code read from the command and not from a pipeline. The
+"before this card's fixes" half and the per-file breakdown are dropped rather
+than re-derived: this round did not re-run them, and a number nobody in the
+round ran does not belong in Results. The gate's own pytest leg, which collects
+all of `tests/`, remains the run of record — that part of the row was never in
+dispute.
+
+**2 — the `tests/fixtures/` inventory row is a cell two concurrent cards
+write.** Pull request #441 is opened against `work/evidence-renderer-salience`
+because the queue serialises the renderer card ahead of this one. Both branches
+are cut from `201849fc` and both add files under `tests/fixtures/`, so both
+rewrite that row's file count and byte total, and GitHub reports the pull
+request `CONFLICTING` / `DIRTY` (`gh pr view 441 --json
+mergeable,mergeStateStatus`). Reproduced locally: `git merge-tree 201849fc
+origin/work/evidence-renderer-salience HEAD` reports exactly one "changed in
+both" path — `docs/artifacts.md` — with one conflict hunk (`grep -c '<<<<<<<'` →
+1); every other file merges. The pull request body's claim that this branch
+"shares no file with the renderer card" was false about that one line and has
+been corrected there.
+
+| Tree | `tests/fixtures/` |
+| --- | --- |
+| `201849fc`, the shared base | 23 files / 2,054,135 bytes |
+| this branch (adds the frozen format-3 recording and its README) | 25 / 2,067,334 |
+| `work/evidence-renderer-salience` (adds four memory-rendering goldens) | 27 / 2,085,311 |
+| the two merged | **29 / 2,098,510** |
+
+The merged value is computed, not inferred. Neither branch modifies a file the
+other adds and neither touches an existing fixture — `git diff --name-status`
+against the shared base shows only `A` lines on both sides — so the union of the
+two listings is the merged inventory:
+
+```sh
+git ls-tree -r -l HEAD tests/fixtures > ours.txt
+git ls-tree -r -l origin/work/evidence-renderer-salience tests/fixtures > theirs.txt
+cat ours.txt theirs.txt \
+  | awk '{size[$5]=$4} END {n=0; s=0; for (p in size) {n++; s+=size[p]}
+          printf "%d files / %d bytes\n", n, s}'
+# 29 files / 2098510 bytes
+```
+
+Resolving the conflict by keeping either side's number lands a tree whose own
+gate is red, by the mechanism this card already leans on:
+`scripts/verify_ml_evidence.py` compares each in-tree registry row's promised
+file count and byte total against `git ls-files` of the pathspec
+`_IN_TREE_INVENTORY` declares for it, and
+`tests/scripts/test_verify_ml_evidence.py::test_every_counted_registry_row_matches_the_index`
+asserts that row is `OK` at `_REPO_ROOT`, inside the `check.sh` pytest leg.
+Demonstrated by perturbation on this tree: setting the row to the renderer
+branch's `2,085,311 tracked bytes / 27 files` makes
+`.venv/bin/python scripts/verify_ml_evidence.py` exit 1 with `note :
+tests/fixtures/: docs/artifacts.md promises 27 files, the index tracks 25` and
+the matching byte note under `[ FAIL ] in-tree family inventory`. Restoring the
+row returns exit 0 and `every check passed`, with `docs/artifacts.md` back at
+its committed bytes.
+
+This branch does not resolve the collision, and that is a decision rather than
+an omission:
+
+* Rebasing onto `work/evidence-renderer-salience` would rewrite this branch's
+  already-pushed commits, which the branch policy forbids.
+* Merging that branch's tip in would carry another card's in-review code inside
+  this pull request, and would go stale the moment its own fix round pushes —
+  the same conflict, one tip later.
+
+So the row is declared here as a shared, coordinator-recomputed cell. Whoever
+retargets this pull request to `main` after the renderer card merges sets it to
+**29 files / 2,098,510 bytes**, keeping both descriptive clauses — this branch's
+"one frozen format-3 recording and its README for the cross-tree policy check"
+and the renderer's own — then re-runs
+`.venv/bin/python scripts/verify_ml_evidence.py` and
+`.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py` on the
+merged tree. If either branch adds or drops a fixture before then, the number is
+recomputed with the command above rather than copied from the table.
+
+Coordination note, not a claim about either card: `tasks/post-merge-plan.md`
+assigns the `audits/` row of `docs/artifacts.md` to the coordinator and names no
+owner for the `tests/fixtures/` row, which two concurrent cards have now both
+rewritten. The one-writer-per-file rule has a gap exactly the width of that row.
+
+**Gates re-run on the corrected tree.** The card text is the only thing this
+round moved, so these are the same suites on the same code as the original run.
+None of the counts depends on that text, and it was checked rather than assumed:
+`check.sh` ran twice, once before and once after these numbers were written into
+the table, identical both times (`324.51s`, then `288.10s`), and
+`uv run python scripts/validate_task_docs.py` plus
+`tests/scripts/test_work_cards.py` and `tests/scripts/test_check_doc_facts.py`
+ran once more on the exact bytes committed.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/eval tests/api tests/scripts -q` | exit 0 — `2825 passed, 3 skipped in 2450.75s` |
+| `bash scripts/check.sh` | exit 0 — `7216 passed, 20 skipped, 3 xfailed`, mypy "no issues found in 471 source files", `390 historical phase tasks and 390 prompts; 43 work cards`, `All 390 prompts are in sync.`, frontend `19 files / 514 tests` and build |
+| `bash scripts/verify_samples.sh` | exit 0 — "All 50 samples verified clean." twice |
+| `build_sample_report.py --check` × 4 | all four exit 0, "consistent with its replays." each |
+| `cd frontend && npm run e2e` | exit 0 — `13 passed (1.3m)`, 3 skipped |
