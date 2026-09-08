@@ -45,6 +45,28 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
 
 ## Acceptance
 
+- [x] Review correction: the `### Verification` gate table — the card's own
+  headline record, undated and unqualified — still carried the pre-closeout
+  tree's counts (`7216 passed, 20 skipped, 3 xfailed`, frontend
+  `19 files / 514 tests`), which the command it names has not produced since the
+  closeout round added 49 python and 1 frontend test. Both rows now carry values
+  measured on this head: `bash scripts/check.sh` → exit 0, `7265 passed, 20
+  skipped, 3 xfailed`, frontend `19 files / 515 tests`; and
+  `uv run pytest tests/eval tests/api tests/scripts -q` → exit 0, `2860 passed,
+  3 skipped in 788.45s`, run standalone on the committed bytes rather than
+  carried over from round 1. Every superseded figure is dated in "Review
+  corrections, closeout round 2".
+- [x] Review correction: Acceptance and Results spelled four measurements
+  against a moving `HEAD` inside otherwise-dated text, so each silently
+  re-measured itself on every later commit and three had gone false —
+  `git diff 201849fc HEAD --stat -- tests/api tests/scripts` (stated `4 files
+  changed, 58 insertions(+)`; `6 files changed, 202 insertions(+)` at this
+  head), `git merge-tree 201849fc origin/work/evidence-renderer-salience HEAD`
+  (stated `^+<<<<<<<` → 1 and `^changed in both` → 1; 10 and 3 at this head, now
+  that the base branch is merged in), `git diff e26045bd HEAD --stat` and the
+  round-1 `git ls-tree -r -l HEAD tests/fixtures` union block. Each is now
+  pinned to the commit it was measured at — verified to reproduce there — and
+  the head's own value is stated beside it wherever the claim is a live one.
 - [x] Review correction: Decision 1 claimed the new clock field answered the
   earlier review's C4-5 complaint, and the field exhibited exactly C4-5's
   defect — `Literal[1, 2]` accepts a JSON `true` (`bool` subclasses `int`) and
@@ -74,23 +96,30 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
   sentence stating it puts the literal marker into the card, and the merge-tree
   output diffs the card too, so the unanchored pattern matches twice at
   `17e929f4`. The count is now anchored to the diff's added lines and paired with
-  the structural count it summarises: on the committed tree
-  `git merge-tree 201849fc origin/work/evidence-renderer-salience HEAD` piped
-  through `grep -c '^+<<<<<<<'` → 1 and `grep -c '^changed in both'` → 1, both
-  recorded in "Review corrections, round 2".
+  the structural count it summarises: `git merge-tree 201849fc
+  origin/work/evidence-renderer-salience 17e929f4` piped through
+  `grep -c '^+<<<<<<<'` → 1 and `grep -c '^changed in both'` → 1, both recorded
+  in "Review corrections, round 2" and both pinned to that commit rather than to
+  `HEAD` — `git merge-tree 201849fc 6ba434fb 844fbe8d` gives 10 and 3 instead,
+  because the base branch is merged in and a trivial three-way against the
+  shared base no longer describes the pull request. What describes it now is
+  `gh pr view 441 --json mergeable,mergeStateStatus` → `MERGEABLE` / `CLEAN`.
 - [x] Review correction: the Verification table's standalone `tests/api` +
   `tests/scripts` figure (`1721 passed, 2 skipped`) reproduces on no tree. The
-  row now states the trio run this round made on the committed tree —
-  `uv run pytest tests/eval tests/api tests/scripts -q` → `2825 passed, 3
-  skipped`, exit 0 — and the collection count that contradicts the old figure
+  row states a trio run made on the committed tree —
+  `uv run pytest tests/eval tests/api tests/scripts -q`, exit 0, `2825 passed,
+  3 skipped` at `17e929f4` and `2860 passed, 3 skipped` at this head — and the
+  collection count that contradicts the old figure
   (`.venv/bin/python -m pytest tests/api tests/scripts --collect-only -q` →
   `1738 tests collected`) is recorded in "Review corrections, round 1".
 - [x] Review correction: a second lens reported the same figure independently and
   named the base-tree comparison it also made. The "before this card's fixes and
   green after" clause and the per-file counts are dropped rather than restated,
-  because no command run in this round produced them; `git diff 201849fc HEAD
-  --stat -- tests/api tests/scripts` (58 insertions, no deletions) is what now
-  carries "no existing test was removed or weakened".
+  because no command run in that round produced them; `git diff 201849fc HEAD
+  --stat -- tests/api tests/scripts` → `6 files changed, 202 insertions(+)`, no
+  deletions, is what now carries "no existing test was removed or weakened"
+  (`4 files changed, 58 insertions(+)` was the same purely-additive diff at
+  `17e929f4`, before the closeout round's own tests).
 - [x] Review correction: `docs/artifacts.md`'s `tests/fixtures/` inventory row is
   a cell two concurrent cards write, so pull request #441 is `CONFLICTING`
   against its declared base. The merged value is stated (29 files / 2,098,510
@@ -184,9 +213,10 @@ off `201849fc`: a frozen format-3 fixture, the observation-clock provenance
 field, the `view.json` timestamp exclusion, the meeting-keyed memory guard, and
 the v3 policy re-decision as a profile option. Those five are what the sections
 below describe. The branch itself carries more than five — the review rounds
-below added documentation commits, one closeout round added source, and one
-merge commit brought in the base branch — so a reader counting commits should
-count `git log --oneline --first-parent 201849fc..HEAD`, not this list.
+below added documentation commits, one closeout round added source, and two
+merge commits brought in the base branch (`git log --oneline --merges
+201849fc..HEAD`) — so a reader counting commits should count `git log --oneline
+--first-parent 201849fc..HEAD`, not this list.
 
 Architecture references. `docs/architecture.md` **Layering** — the provenance
 field is added at the `eval`/`api` reader layer over recordings; nothing in
@@ -309,12 +339,14 @@ hook — and only the one profile that opts in can produce it.
 ### Verification
 
 Every exit code below was captured directly from the command, never from a
-pipeline.
+pipeline. Every figure in this table was measured on this head, in the closeout
+round 2 described below; the values it carried at earlier heads are superseded
+and dated there rather than dropped.
 
 | Command | Result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — ruff check + format, lint-imports, `validate_task_docs` (390 historical phase tasks and 390 prompts; 43 work cards), `generate_prompts --check`, mypy "no issues found in 471 source files", `7216 passed, 20 skipped, 3 xfailed`, then frontend lint + `tsc:check` + `19 files / 514 tests` + build |
-| `uv run pytest tests/eval tests/api tests/scripts -q` (the card's named trio) | exit 0 — `2825 passed, 3 skipped in 2450.75s`, run standalone on the committed tree in review round 1. The same suites run again inside the gate's pytest leg, which collects all of `tests/` — a strict superset — and that leg is the run of record. The per-suite figures this row carried before round 1 were not reproducible and are superseded; see "Review corrections, round 1". |
+| `bash scripts/check.sh` | exit 0 — ruff check + format, lint-imports, `validate_task_docs` (390 historical phase tasks and 390 prompts; 43 work cards), `generate_prompts --check`, mypy "no issues found in 471 source files", `7265 passed, 20 skipped, 3 xfailed`, then frontend lint + `tsc:check` + `19 files / 515 tests` + build. (Superseded values: `7216 passed` / `514 tests`, true up to `db6ffb9e` and left standing through the closeout round that added 49 python and 1 frontend test — see "Review corrections, closeout round 2".) |
+| `uv run pytest tests/eval tests/api tests/scripts -q` (the card's named trio) | exit 0 — `2860 passed, 3 skipped, 1 warning in 788.45s`, run standalone on this head. The same suites run again inside the gate's pytest leg, which collects all of `tests/` — a strict superset — and that leg is the run of record. Two earlier figures are superseded: the per-suite ones this row carried before round 1 (not reproducible; see "Review corrections, round 1") and round 1's own `2825 passed, 3 skipped in 2450.75s`, which was the trio at `17e929f4`. |
 | `bash scripts/verify_samples.sh` | exit 0, "All 50 samples verified clean." twice — 100 canonical reconstructions |
 | `build_sample_report.py --check` × 4 (`replays/samples/{4p1i,9p2i}`, `replays/ml_corpus/{4p1i,9p2i}`) | all exit 0, "consistent with its replays." each |
 | `cd frontend && npm run e2e` | exit 0 — 16 Playwright tests, `13 passed (3.9m)`, 3 skipped |
@@ -452,8 +484,11 @@ from `PublicResults.tsx`, and `_violate` made to return instead of raising.
 
 Three findings from the independent verifiers, two distinct defects, both in
 this card's evidence prose rather than in its code. This round changed no
-source file, no test and no committed artifact: `git diff e26045bd HEAD --stat`
-touches `tasks/work/recorded-provenance-gaps.md` alone.
+source file, no test and no committed artifact: `git diff e26045bd 17e929f4
+--stat` touches `tasks/work/recorded-provenance-gaps.md` alone, 143 insertions
+and 1 deletion. Every command in this subsection names the commit it was
+measured at rather than `HEAD`; the spelling with `HEAD` was corrected in
+"Review corrections, closeout round 2", where it had gone false.
 
 **1 — the standalone trio figure reproduced on no tree.** The Verification row
 used to read: "Each suite was also run on its own during development:
@@ -464,14 +499,21 @@ commit on this branch:
 
 * `.venv/bin/python -m pytest tests/api tests/scripts --collect-only -q` at
   `e26045bd` → `1738 tests collected`.
-* `git diff 201849fc HEAD --stat -- tests/api tests/scripts` → `4 files changed,
-  58 insertions(+)`, no deletions. The branch only adds to those directories, so
-  no test was removed and no `xfail` marker dropped, and the base collects fewer
-  than 1738 rather than more. A tree of 1,723 exists nowhere between the two.
+* `git diff 201849fc 17e929f4 --stat -- tests/api tests/scripts` → `4 files
+  changed, 58 insertions(+)`, no deletions. The branch only adds to those
+  directories, so no test was removed and no `xfail` marker dropped, and the
+  base collects fewer than 1738 rather than more. A tree of 1,723 exists nowhere
+  between the two. (The same diff run against this head is `6 files changed,
+  202 insertions(+)`, still with no deletions — the closeout round added to
+  `tests/api/test_eval_routes.py`, `tests/api/test_schemas.py` and
+  `tests/scripts/test_build_sample_report.py`. It is the head figure that
+  carries the claim now; see "Review corrections, closeout round 2".)
 
-The row now carries the run this round actually made on the committed tree —
+The row was given the run this round actually made on the committed tree —
 `uv run pytest tests/eval tests/api tests/scripts -q` → `2825 passed, 3 skipped
-in 2450.75s`, exit code read from the command and not from a pipeline. The
+in 2450.75s`, exit code read from the command and not from a pipeline. *(That
+figure is this round's, at `17e929f4`; the row carries `2860 passed, 3 skipped`
+now, re-run on the head — see "Review corrections, closeout round 2".)* The
 "before this card's fixes" half and the per-file breakdown are dropped rather
 than re-derived: this round did not re-run them, and a number nobody in the
 round ran does not belong in Results. The gate's own pytest leg, which collects
@@ -485,11 +527,12 @@ are cut from `201849fc` and both add files under `tests/fixtures/`, so both
 rewrite that row's file count and byte total, and GitHub reports the pull
 request `CONFLICTING` / `DIRTY` (`gh pr view 441 --json
 mergeable,mergeStateStatus`). Reproduced locally: `git merge-tree 201849fc
-origin/work/evidence-renderer-salience HEAD` reports exactly one "changed in
-both" path — `docs/artifacts.md` — with one conflict hunk (`grep -c '<<<<<<<'` →
-1); every other file merges. The pull request body's claim that this branch
-"shares no file with the renderer card" was false about that one line and has
-been corrected there.
+bd6f05dc 17e929f4` — the two tips as they stood in this round — reports exactly
+one "changed in both" path, `docs/artifacts.md`, with one conflict hunk
+(`grep -c '<<<<<<<'` → 1 — superseded, see immediately below; at those pinned
+refs it is 2); every other file merges. The pull request body's
+claim that this branch "shares no file with the renderer card" was false about
+that one line and has been corrected there.
 
 *(Superseded in "Review corrections, round 2" below, in that one parenthetical
 only: the unanchored `grep` count was measurable only before this sentence was
@@ -500,8 +543,8 @@ is re-measured there with anchored patterns.)*
 | Tree | `tests/fixtures/` |
 | --- | --- |
 | `201849fc`, the shared base | 23 files / 2,054,135 bytes |
-| this branch (adds the frozen format-3 recording and its README) | 25 / 2,067,334 |
-| `work/evidence-renderer-salience` (adds four memory-rendering goldens) | 27 / 2,085,311 |
+| this branch at `17e929f4` (adds the frozen format-3 recording and its README) | 25 / 2,067,334 |
+| `work/evidence-renderer-salience` at `bd6f05dc` (adds four memory-rendering goldens) | 27 / 2,085,311 |
 | the two merged | **29 / 2,098,510** (superseded: 2,098,563 against the base branch's later tip — see "Review corrections, closeout round 1") |
 
 The merged value is computed, not inferred. Neither branch modifies a file the
@@ -510,8 +553,12 @@ against the shared base shows only `A` lines on both sides — so the union of t
 two listings is the merged inventory:
 
 ```sh
-git ls-tree -r -l HEAD tests/fixtures > ours.txt
-git ls-tree -r -l origin/work/evidence-renderer-salience tests/fixtures > theirs.txt
+# refs pinned to the two tips this round measured: 17e929f4 (this branch) and
+# bd6f05dc (the base branch). Spelled against HEAD and a moving branch ref, the
+# block re-measures itself on every later commit — see "Review corrections,
+# closeout round 2".
+git ls-tree -r -l 17e929f4 tests/fixtures > ours.txt
+git ls-tree -r -l bd6f05dc tests/fixtures > theirs.txt
 cat ours.txt theirs.txt \
   | awk '{size[$5]=$4} END {n=0; s=0; for (p in size) {n++; s+=size[p]}
           printf "%d files / %d bytes\n", n, s}'
@@ -588,12 +635,16 @@ ran once more on the exact bytes committed.
 One finding, from the documentation and evidence-claims lens, and it is the same
 defect class round 1 reopened this card for: a number in Results that reproduces
 on no committed tree. It is confined to one parenthetical, and this round moved
-nothing else — the diff against `17e929f4` touches
-`tasks/work/recorded-provenance-gaps.md` alone, no source file, no test, no
-committed artifact.
+nothing else — `git diff 17e929f4 db6ffb9e --stat` touches
+`tasks/work/recorded-provenance-gaps.md` alone, 95 insertions: no source file,
+no test, no committed artifact.
 
 **The conflict count counted the sentence that stated it.** Item 2 of "Review
-corrections, round 1" reads, verbatim:
+corrections, round 1" read as follows at `17e929f4`, the commit this finding was
+raised against — the sentence keeps its wording there, but "Review corrections,
+closeout round 2" has since replaced its two moving refs with the pinned pair
+they stood for, so the quotation below is of the sentence as reviewed rather
+than of the sentence as it now stands:
 
 > Reproduced locally: `git merge-tree 201849fc
 > origin/work/evidence-renderer-salience HEAD` reports exactly one "changed in
@@ -611,7 +662,11 @@ point. The figure `1` was measurable only before the sentence was committed —
 the same defect class round 1 reopened this card for. At `17e929f4`:
 
 ```sh
-git merge-tree 201849fc origin/work/evidence-renderer-salience HEAD > mt.txt
+# both tips pinned: bd6f05dc was origin/work/evidence-renderer-salience then,
+# and 17e929f4 was this branch. Spelled against HEAD and a branch ref, the
+# command re-measures itself on every later commit — see "Review corrections,
+# closeout round 2", where it had gone false.
+git merge-tree 201849fc bd6f05dc 17e929f4 > mt.txt
 grep -c '<<<<<<<' mt.txt            # 2 — the marker, and this card quoting it
 grep -c '^+<<<<<<<' mt.txt          # 1 — added lines only: the marker
 grep -c '^changed in both' mt.txt   # 1 — docs/artifacts.md, and nothing else
@@ -624,9 +679,17 @@ prefix. `^+<<<<<<<` can only match an added line whose content *begins* with the
 marker. Prose quoting either pattern cannot satisfy them: it appears in the
 output as an added line, and the quoted token sits mid-line behind a backtick.
 That is not an argument taken on trust — both anchored counts were re-measured
-after this subsection was written, on the exact bytes this round commits, and
-both are still `1` on a card that now spells the marker out seven times rather
-than the one time that broke the count.
+after this subsection was written, on the exact bytes this round commits
+(`db6ffb9e`), and both are still `1` on a card that then spelled the marker out
+seven times rather than the one time that broke the count. *(That last clause is
+a statement about `db6ffb9e`, and it stays pinned there.
+`git merge-tree 201849fc 6ba434fb 844fbe8d` gives `^changed in both` → 3 and
+`^+<<<<<<<` → 10 instead, because the base branch is now merged into this one
+and `git merge-tree`'s trivial merge against the shared base `201849fc`
+re-reports every path the merge already resolved. It is no longer a statement
+about the pull request at all: what describes that is `gh pr view 441 --json
+mergeable,mergeStateStatus` → `MERGEABLE` / `CLEAN`, whose merge base is
+`864b18a1`. See "Review corrections, closeout round 2".)*
 
 The claim the parenthetical summarised is unchanged, and was re-measured rather
 than restated. The single `changed in both` entry is `docs/artifacts.md` — base
@@ -639,12 +702,16 @@ labels this sentence has just defined, it hands each side the other's figure.
 `git merge-tree` prints `2,085,311 / 27` under `<<<<<<< .our` — the renderer
 branch, the first tip argument — and `2,067,334 / 25` above `>>>>>>> .their`,
 this branch. The blob mapping earlier in the sentence, the round-1 table and
-the pull request body all assign them correctly.)* The round-1 sentence keeps its words and
-now carries an explicit supersession marker naming this subsection. The
+the pull request body all assign them correctly.)* The round-1 sentence keeps
+its wording — closeout round 2 pinned its two moving refs to the tips they stood
+for, and changed nothing else — and it now carries an explicit supersession
+marker naming this subsection. The
 inventory table above it was re-run this round as well and is unchanged:
 `git ls-tree -r -l <tree> tests/fixtures` summed with `awk` gives 23 files /
-2,054,135 bytes at `201849fc`, 25 / 2,067,334 at this head, 27 / 2,085,311 on
-the renderer branch, and the union `awk` prints `29 files / 2098510 bytes`.
+2,054,135 bytes at `201849fc`, 25 / 2,067,334 at `db6ffb9e` (this round's head),
+27 / 2,085,311 at `bd6f05dc` (the renderer branch's tip then), and the union
+`awk` prints `29 files / 2098510 bytes`. Every ref is pinned rather than named
+as a branch or as `HEAD`, so the row stays measurable after both branches move.
 
 Nothing else in Results needed changing: the lens reported that every other
 number and command in it reproduced. The pull request body does not repeat the
@@ -937,3 +1004,162 @@ tree, at base tip `864b18a1`.
 | `.venv/bin/python scripts/verify_ml_evidence.py` | exit 0 — `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`, "every check passed" |
 | `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py tests/experiments/test_held_out_prefixes.py` | exit 0 — 108 passed (80 + 28) |
 | `.venv/bin/python -m pytest tests/orchestrator/ --collect-only -q` | exit 0 — 583 tests collected |
+
+### Review corrections, closeout round 2 (2026-09-08)
+
+Two blocking findings, both the same defect the card has now been reopened for
+four times: a figure in the card's own headline that the command naming it does
+not produce on the committed tree. Fixing them surfaced two more instances of
+the underlying cause, which is narrower than "stale prose" and worth naming —
+**a command spelled against `HEAD` re-measures itself on every later commit**,
+so a number that was true when it was written silently becomes a false claim
+about a tree nobody measured. This round moved no source file, no test and no
+committed artifact: its single commit changes
+`tasks/work/recorded-provenance-gaps.md` alone, which `git show --stat` on that
+commit prints.
+
+**1 — the `### Verification` table, the card's headline gate record, still
+carried the pre-closeout tree's counts.** The `check.sh` row read `7216 passed,
+20 skipped, 3 xfailed` and frontend `19 files / 514 tests`. Those were true up
+to `db6ffb9e`; the closeout round then added 49 python tests (`7265 − 7216`, the
+33 clock cases and the round's other new cases) and 1 frontend test
+(`515 − 514`), and the row was not touched. Measured here on `844fbe8d`, in a
+clean checkout after `uv sync --frozen` and `npm ci`, `bash scripts/check.sh`
+exits 0 with
+`===== 7265 passed, 20 skipped, 3 xfailed, 10 warnings in 576.94s =====` and the
+frontend leg's ` Test Files  19 passed (19)` / `      Tests  515 passed (515)`.
+The rest of the row did reproduce (`390 historical phase tasks and 390 prompts;
+43 work cards`; `Success: no issues found in 471 source files`), which is
+exactly what made two stale counts read as current.
+
+The row now carries the head's values, and the superseded pair is dated in it
+rather than deleted. The same table's trio row was stale the same way — it
+carried round 1's `2825 passed, 3 skipped in 2450.75s`, measured at `17e929f4`.
+Re-run here on the committed head: `uv run pytest tests/eval tests/api
+tests/scripts -q` → exit 0, `2860 passed, 3 skipped, 1 warning in 788.45s`. Both
+rows say which tree they were measured on, which no version of this table had
+said before.
+
+**2 — the Acceptance item's `git diff … HEAD` figure had drifted with the
+head it was spelled against.** The item cited `git diff 201849fc HEAD --stat --
+tests/api tests/scripts` → 58 insertions, no deletions, as what carries "no
+existing test was removed or weakened". Run on `844fbe8d` it gives `6 files
+changed, 202 insertions(+)`: `tests/api/test_eval_routes.py` +29,
+`tests/api/test_leak.py` +6, `tests/api/test_public_results.py` +5,
+`tests/api/test_replay_loader.py` +42, `tests/api/test_schemas.py` +86,
+`tests/scripts/test_build_sample_report.py` +34. The substantive half of the
+claim survives — the diff is still purely additive, 0 deletions — but the number
+offered as its proof was the pre-closeout tree's. `4 files changed, 58
+insertions(+)` reproduces against `17e929f4` (where round 1 measured it) and
+against `db6ffb9e`, the last commit before the closeout round added tests.
+
+**3 — the same defect, two more places, found while fixing the first two.**
+Every command in Acceptance and Results that names `HEAD` was re-run at this
+head and compared with what the surrounding text claims. Four had drifted:
+
+| Command as it was spelled | Claimed | Re-run with `HEAD` = `844fbe8d` | Resolution |
+| --- | --- | --- | --- |
+| `git diff 201849fc HEAD --stat -- tests/api tests/scripts` (Acceptance, and round 1) | `4 files changed, 58 insertions(+)` | `6 files changed, 202 insertions(+)` | Acceptance carries the head figure; round 1 pinned to `201849fc 17e929f4`, which reproduces `4 / 58` |
+| `git merge-tree 201849fc origin/work/evidence-renderer-salience HEAD` (Acceptance, and rounds 1 and 2) | `^changed in both` → 1, `^+<<<<<<<` → 1 | `git merge-tree 201849fc 6ba434fb 844fbe8d` → 3 and 10 | Pinned to `201849fc bd6f05dc 17e929f4` (round 1) and `201849fc bd6f05dc db6ffb9e` (round 2); both reproduce 1 and 1. The live claim is now `gh pr view 441` |
+| `git diff e26045bd HEAD --stat` (round 1's "this round changed no source") | the card alone | the card plus every closeout source file | Pinned to `e26045bd 17e929f4` → the card alone, 143 insertions and 1 deletion |
+| `git ls-tree -r -l HEAD tests/fixtures` union block (round 1) | `29 files / 2098510 bytes` | the block's `ours` side is now the merged tree, so the union is not the one it describes | Pinned to `17e929f4` and `bd6f05dc`, which reproduce `29 files / 2098510 bytes` |
+
+The `git merge-tree` row is the one worth reading twice, because its drift is
+not arithmetic. That command performs a trivial three-way merge from the shared
+base `201849fc`. Once the base branch is merged into this one — which the
+closeout round did, twice — every path the merge already resolved is reported
+again as "changed in both", so the command stops describing the pull request at
+all. What describes it is `gh pr view 441 --json mergeable,mergeStateStatus` →
+`MERGEABLE` / `CLEAN`, whose merge base is `git merge-base HEAD
+origin/work/evidence-renderer-salience` → `864b18a1`. Both round subsections
+keep their words, pinned to the tips they measured, under an explicit note.
+
+The rest of the card's `HEAD` spellings are claims about the head by design, and
+each was re-run here rather than assumed true: `git diff --name-only 201849fc
+HEAD -- replays audits` → one path, `audits/deduction-candidate/held-out/manifest.json`,
+the base branch's; the same diff filtered to the reproduce path in Limitations →
+`agents/memory/evidence_context.py` and `agents/memory/store.py`, both the base
+branch's, neither read by the tactical decision path; `278e5318..HEAD` in the
+held-out intersection → `[]`; the two `git ls-tree -r -l HEAD` inventory sums in
+this subsection's closing paragraph; and `git log --oneline --first-parent
+201849fc..HEAD` (15) with `git log --oneline --merges 201849fc..HEAD` (2), which
+are pointers rather than figures. The distinction that matters is not "names
+`HEAD`" but "is a claim about the head": a live claim should re-measure itself,
+and a dated one must not.
+
+**4 — the base branch's tip moved again, and this round does not merge it.**
+`origin/work/evidence-renderer-salience` is `6ba434fb` at this writing;
+`864b18a1`, merged in the closeout round, is its parent-side ancestor. The
+difference is `git diff --name-only 864b18a1 origin/work/evidence-renderer-salience`
+→ `tasks/work/evidence-renderer-salience.md` and
+`tests/agents/test_memory_rendering.py`, and nothing else. Neither inventory row
+moves: `git ls-tree -r -l origin/work/evidence-renderer-salience tests/fixtures`
+sums to 27 files / 2,085,364 bytes, every one of which is already inside this
+head's 29 / 2,098,563, and its `audits/` sums to 202 files / 14,852,791 bytes,
+identical to this head's. So the merge that the closeout round performed to
+resolve the shared `docs/artifacts.md` cell is still the merge that resolves it,
+and the pull request is `MERGEABLE` / `CLEAN` without a third one.
+
+Not merging is the decision, and its reason is this round's own subject: a third
+merge would import another card's in-review test file, move this branch's gate
+counts for no integrity benefit, and restart the treadmill of figures that go
+stale between measurement and review. The rule the closeout round set stands
+unchanged — if the base branch touches `tests/fixtures/`, `audits/` or
+`docs/artifacts.md` before it merges, this branch merges that tip and recomputes
+both rows from `git ls-files` with the merge staged. It has not, so there is
+nothing to recompute.
+
+**5 — the previous round's non-blocking findings.** All fourteen are closed or
+refuted in "Review corrections, closeout round 1" above, and this round's
+verifiers raised no new non-blocking ones. Two items from that list stay open by
+decision rather than by omission, and both are restated here so neither goes
+silent: commit `583eba5d`'s `Card:` line still lacks its blank line (the branch
+policy forbids amending a pushed commit, and rewriting nine descendants over one
+blank line is the worse trade), and `PolicyReconstruction.__init__`'s two bare
+`ValueError`s stay bare (they are construction preconditions, not checks over a
+recording, and `eval/replay_walk.py` reaches neither).
+
+**Codex review.** Re-polled at this round's start:
+`gh api repos/dkdan10/AiLibi/pulls/441/comments` → `0`,
+`gh api repos/dkdan10/AiLibi/pulls/441/reviews` → `0`, and
+`gh api repos/dkdan10/AiLibi/issues/441/comments` → one comment, the
+`chatgpt-codex-connector` summary table recording "Code Review | Completed |
+`e26045b` | PR opened" with no findings body. There are no Codex findings on
+this pull request, valid or invalid, and so nothing to reproduce, confirm or
+refute. Two things follow that the earlier note could not yet say: `e26045b`
+predates the closeout round's source, so unlike at `db6ffb9e` that review no
+longer covers the shipped code, and it will not re-run on its own — the
+connector triggers on PR-open, draft-ready or an explicit review comment, none
+of which this round performs.
+
+**Gates re-run on this round's tree.** `check.sh` ran on the committed head
+before the card text moved and again on the exact bytes this round commits;
+counts identical, duration the only figure that differs, which is why it is
+recorded once. The three gates that read this card —
+`scripts/validate_task_docs.py`, `tests/scripts/test_work_cards.py` and
+`tests/scripts/test_check_doc_facts.py` — run inside that second pass. Every
+exit code was read from the command, never from a pipeline.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `7265 passed, 20 skipped, 3 xfailed`, mypy "no issues found in 471 source files", `390 historical phase tasks and 390 prompts; 43 work cards`, `All 390 prompts are in sync.`, frontend `19 files / 515 tests` and build |
+| `uv run pytest tests/eval tests/api tests/scripts -q` | exit 0 — `2860 passed, 3 skipped, 1 warning in 788.45s` |
+| `bash scripts/verify_samples.sh` | exit 0 — "All 50 samples verified clean." twice |
+| `build_sample_report.py --check` × 4 | all four exit 0, "consistent with its replays." each |
+| `cd frontend && npm run e2e` | exit 0 — `13 passed (3.2m)`, 3 skipped |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | exit 0 — `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`, "every check passed" |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py tests/experiments/test_held_out_prefixes.py` | exit 0 — 108 passed (80 + 28) |
+| `.venv/bin/python -m pytest tests/orchestrator/ --collect-only -q` | exit 0 — 583 tests collected |
+
+The two inventory rows and the frozen held-out set are unchanged by this round
+and were re-measured rather than assumed: `git ls-tree -r -l HEAD tests/fixtures`
+sums to 29 files / 2,098,563 bytes and `git ls-tree -r -l HEAD audits` to 202 /
+14,852,791, both matching their `docs/artifacts.md` rows;
+`git diff origin/work/evidence-renderer-salience HEAD --
+audits/deduction-candidate/held-out/manifest.json experiments/held_out_prefixes.py`
+is empty, so the manifest is still the base branch's byte-for-byte; and
+intersecting `GENERATOR_SOURCES` with each of this card's own commit ranges is
+`[]` again at this head — the only `agents/`, `engine/`, `observation/` or
+`orchestrator/` files those ranges touch are `orchestrator/replay.py` and
+`orchestrator/policy_reconstruction.py`, neither of which the manifest hashes.
+No restamp is owed, and no band prefix was printed or opened.
