@@ -23,6 +23,8 @@ from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.evidence_context import (
     MAX_ACCOUNT_UNCERTAINTY_SUBJECTS,
+    EvidenceContextRow,
+    account_uncertainty_notice_line,
     evidence_context_lines,
 )
 from agents.memory.store import (
@@ -3644,3 +3646,122 @@ class TestEvidenceV2Salience:
         assert "You (IMPOSTOR) killed p-2 in ENGINEERING." in rows[0]
         assert not any("Death evidence for" in row for row in rows)
         assert not any("Travel check for" in row for row in rows)
+
+    def test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped(
+        self,
+    ) -> None:
+        """The count describes THESE bytes, not the pre-budget list.
+
+        The bound takes its subjects before the renderer runs and the budget then
+        sheds caveats below it, so a number fixed in ``evidence_context`` counts
+        only the first of those two cuts: at a budget that keeps one of six
+        caveats it announced one withheld subject while nine were missing
+        (round-1 review). The count is therefore computed after the selection,
+        and the sentence closes a list a reader can see -- never appearing
+        without one, and never leaving a truncated one unmarked.
+        """
+
+        memory = _v2_memory()
+        subjects = [f"p-{20 + index}" for index in range(10)]
+        for subject in subjects:
+            _v2_claim(memory, subject=subject, speaker="p-5", tick=2, room="LABS")
+
+        truncated_lists = 0
+        for budget in range(400, 3000, 20):
+            rows = _observation_rows(render_for_prompt(memory, token_budget=budget))
+            shown = [
+                row for row in rows if row.startswith("- Account uncertainty for ")
+            ]
+            notice = [row for row in rows if row.startswith("- Account uncertainty: ")]
+            if not shown:
+                assert not notice, f"budget {budget}: a notice closing no list"
+                continue
+            # Ten subjects against a bound of six: some are always missing.
+            truncated_lists += 1
+            assert notice == [
+                f"- {account_uncertainty_notice_line(len(subjects) - len(shown))}"
+            ], f"budget {budget}: {len(shown)} of {len(subjects)} subjects rendered"
+        assert truncated_lists, "no budget in the sweep cut inside the caveat block"
+
+    def test_the_withheld_notice_never_costs_the_witnessed_evidence_a_line(
+        self,
+    ) -> None:
+        """A speaker's claim volume must not buy a line from first-hand evidence.
+
+        The notice is reserved only once a caveat is kept, so it competes with
+        the rest of its own block and never with the rows above it. Reserving it
+        from the first row instead spends its cost at every budget: this render
+        has room for exactly two observations, and that variant fills the second
+        with the notice and drops the witnessed vent.
+        """
+
+        fixture, _expected = _load_fixture(
+            "evidence_v2_budget_keeps_witnessed_evidence"
+        )
+        memory = _build_memory_from_fixture(fixture)
+
+        rows = _observation_rows(render_for_prompt(memory, token_budget=290))
+
+        assert len(rows) == 2
+        assert "You discovered p-2's body in ADMIN." in rows[0]
+        assert _VENT_LINE_FRAGMENT in rows[1]
+
+    def test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget(
+        self,
+    ) -> None:
+        """The route block is capped and budgeted, so the demotion costs ticks.
+
+        Own routine ranks below every sighting partly because ``## Where you
+        were:`` restates the route -- but only its recent part: the block holds
+        at most ``SELF_LOCATION_TRAIL_MAX_SPANS`` spans and is charged against
+        the same budget ahead of the observations. A tick older than the rendered
+        route therefore keeps no placement at all once the routine band is shed,
+        and the render says nothing about it beyond the route's own truncation
+        line. Pinned as the limitation it is, not as an invariant to defend: it
+        is what ranking witnessed evidence first costs.
+        """
+
+        fixture, _expected = _load_fixture(
+            "evidence_v2_budget_keeps_witnessed_evidence"
+        )
+        memory = _build_memory_from_fixture(fixture)
+
+        view = render_for_prompt(memory, token_budget=int(fixture["token_budget"]))
+
+        recorded = {
+            row.tick
+            for row in memory.episodic.recent(since_tick=0)
+            if row.type == "self_state"
+        }
+        assert _TRAIL_TRUNCATED in view
+        placed: set[int] = set()
+        for line in view.splitlines():
+            if line.startswith(_TRAIL_ROUTE_PREFIX):
+                for start, end in re.findall(r"t(\d+)(?:-(\d+))?", line):
+                    placed.update(range(int(start), int(end or start) + 1))
+                continue
+            # Every other way the render states the observer's own room: an own
+            # transition, and the "immediately before this event" clause an
+            # event-phase row carries.
+            during = re.search(r"during tick (\d+)", line)
+            if during and ("You moved from" in line or "You were in" in line):
+                placed.add(int(during.group(1)))
+        assert sorted(recorded - placed) == [0, 1, 2, 3, 4, 5, 6]
+
+    def test_a_caveat_row_that_counts_no_subject_is_rejected(self) -> None:
+        """The count is only as good as the rows it is summed from.
+
+        ``subject_count`` is what the renderer sums to learn how many subjects
+        the block covers, so a caveat row minted without one would silently make
+        every withheld count too small.
+        """
+
+        with pytest.raises(ValueError, match="exactly one subject"):
+            EvidenceContextRow(kind="account_uncertainty", line="Account uncertainty…")
+        with pytest.raises(ValueError, match="at least one subject"):
+            EvidenceContextRow(
+                kind="account_uncertainty_notice",
+                line=account_uncertainty_notice_line(1),
+            )
+        with pytest.raises(ValueError, match="no claim subject"):
+            EvidenceContextRow(kind="death", line="Death evidence…", subject_count=1)

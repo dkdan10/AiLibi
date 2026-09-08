@@ -27,6 +27,7 @@ from agents.memory.beliefs import (
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.evidence_context import (
     EvidenceContextKind,
+    account_uncertainty_notice_line,
     evidence_context_lines,
     publicly_dead_ids,
     v2_evidence_context_rows,
@@ -106,10 +107,16 @@ _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
 # The v2 ladder below ranks by what a listener can act on. Nothing here applies
 # to lever-OFF or evidence v1: those paths keep the bands they shipped with.
 #
-# The observer's own route is rendered IN FULL and unbudgeted by the
-# ``## Where you were:`` block, so an own-transition line is a duplicate of
-# something the prompt already states; an own task attempt places only the
-# observer. Both therefore rank below every sighting of another player.
+# Inside the window the ``## Where you were:`` block renders, an own-transition
+# line duplicates a placement the route already states; an own task attempt
+# places only the observer. Both therefore rank below every sighting of another
+# player. The route block is NOT unbounded: it is capped at
+# :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans, charged against the same budget
+# ahead of the observations, and shed oldest-first, so a tick that falls off both
+# the route and this band is stated nowhere. That loss is deliberate and bounded
+# -- it is the observer's own past position, which no other player's testimony
+# depends on -- and it is pinned by
+# ``test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget``.
 _SALIENCE_OWN_ROUTINE: Final[int] = 20
 # Death bounds derived from the agent's own body discovery and the announced
 # roster. One row per dead player, so the class cannot grow with speech; ranked
@@ -123,9 +130,11 @@ _SALIENCE_EVIDENCE_TRAVEL_CONTRADICTED: Final[int] = 83
 # regroup-crossing abstention. Useful context, one row per placement pair, so
 # they rank below the first-hand sightings they are computed from.
 _SALIENCE_EVIDENCE_TRAVEL: Final[int] = 45
-# The bound notice, one row at most, ranked one step above the caveats it counts
-# so a tight budget cannot keep caveats while dropping the statement that others
-# were withheld.
+# The withheld-subjects notice, one row at most, minted by
+# ``_select_within_budget`` once the budget is spent so its number counts what
+# the render actually left out. This band places it one step above the caveats it
+# closes; the budget cannot shed it out from under them, because keeping a caveat
+# reserves it.
 _SALIENCE_EVIDENCE_ACCOUNT_NOTICE: Final[int] = 16
 # "Route feasibility alone cannot establish ..." -- a caveat about a claim, with
 # no placement of its own. Bounded per subject in ``evidence_context`` and ranked
@@ -210,6 +219,11 @@ class _Observation:
     ``sighting_suffix`` is that row's directional breadcrumb, carried beside the key
     rather than inside it -- it lands on a subject's most-recent sighting only, so
     it must not split the run it terminates.
+
+    ``account_uncertainty_subject`` marks the evidence-v2 caveat rows, each of
+    which shows exactly one claim subject. :func:`_select_within_budget` counts
+    the marked rows it keeps so the withheld-subjects notice states what the
+    render actually left out rather than what the per-subject bound alone dropped.
     """
 
     salience: int
@@ -218,6 +232,7 @@ class _Observation:
     observation_id: str | None = None
     sighting: _SightingKey | None = None
     sighting_suffix: str = ""
+    account_uncertainty_subject: bool = False
 
 
 @dataclass(frozen=True)
@@ -460,8 +475,11 @@ def render_for_prompt(
     account-uncertainty caveat ranks last, below the observer's own routine rows.
     A caveat's volume is chosen by the speaker who made the claims, so it can no
     longer displace first-hand evidence; the caveat block is additionally bounded
-    per subject in :mod:`agents.memory.evidence_context` and states how many
-    subjects it withheld. Evidence v1 keeps its single
+    per subject in :mod:`agents.memory.evidence_context`, and a caveat list this
+    render truncates -- by that bound, by the token budget, or by both -- closes
+    with one line counting the subjects missing from THESE bytes, whose cost
+    :func:`_select_within_budget` reserves as soon as the first caveat is kept.
+    Evidence v1 keeps its single
     :data:`_SALIENCE_EVIDENCE_V1_CONTEXT` band and lever-OFF renders no context
     line at all, so both arms stay byte-identical to what they shipped.
 
@@ -522,14 +540,26 @@ def render_for_prompt(
                 memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
             )
         )
-    elif memory.evidence_reasoning_version == 2:
+    account_uncertainty_subjects = 0
+    if memory.evidence_reasoning_version == 2:
+        context_rows = v2_evidence_context_rows(
+            memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+        )
+        # Every subject the caveat block covers, including the ones the
+        # per-subject bound already dropped. The bound's own notice row is NOT
+        # carried into the candidates: the budget sheds caveats below it, so the
+        # number it states is only decidable once the selection is made, and
+        # ``_select_within_budget`` mints the line it can keep true.
+        account_uncertainty_subjects = sum(row.subject_count for row in context_rows)
         observations.extend(
             _Observation(
-                salience=_evidence_context_salience(row.kind), tick=0, line=row.line
+                salience=_evidence_context_salience(row.kind),
+                tick=0,
+                line=row.line,
+                account_uncertainty_subject=row.kind == "account_uncertainty",
             )
-            for row in v2_evidence_context_rows(
-                memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
-            )
+            for row in context_rows
+            if row.kind != "account_uncertainty_notice"
         )
     # Fold each first-hand observation's stable id into its line BEFORE the
     # salience sort, so ordering, tie-breaks and the token-budget arithmetic all
@@ -594,6 +624,7 @@ def render_for_prompt(
         trail_truncated=trail_truncated,
         token_budget=token_budget,
         snapshot_clock=memory.evidence_reasoning_version == 2,
+        account_uncertainty_subjects=account_uncertainty_subjects,
     )
 
 
@@ -1655,8 +1686,12 @@ def _build_v2_observations(
     observations, which the OFF and v1 paths never do. They enter at
     :data:`_SALIENCE_OWN_ROUTINE`, below every sighting of another player: a game
     emits one own-row per tick, so ranking them above the witnessed rows made a
-    long game's render its own movement log (follow-up review NG3-1), and the
-    ``## Where you were:`` block already states the whole route unbudgeted.
+    long game's render its own movement log (follow-up review NG3-1). The
+    ``## Where you were:`` block restates the recent part of the route anyway,
+    but only the recent part: it holds at most
+    :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans and is itself charged against the
+    budget, so a tick older than the rendered route keeps no placement once this
+    band is shed. :data:`_SALIENCE_OWN_ROUTINE` records why that trade is taken.
     """
     observations: list[_Observation] = []
     seen_bodies: set[str] = set()
@@ -2606,6 +2641,7 @@ def _assemble_view(
     trail_truncated: bool,
     token_budget: int,
     snapshot_clock: bool = False,
+    account_uncertainty_subjects: int = 0,
 ) -> str:
     """Assemble the final Markdown view, enforcing token budget on observations.
 
@@ -2624,6 +2660,12 @@ def _assemble_view(
     even the capped route does not fit, so the trail can never overflow the budget
     onto the observations. Whenever any span was dropped -- by the cap or by that
     shedding -- the block says so.
+
+    ``account_uncertainty_subjects`` is how many claim subjects the evidence-v2
+    caveat block covers in total; it is zero for lever-OFF and evidence v1, which
+    render no caveat. A caveat list the budget truncates closes with one line
+    counting the subjects it left out, reserved as it is selected -- see
+    :func:`_select_within_budget`.
 
     The budget arithmetic charges every character that lands in the
     final output, including the Markdown separators (``"\\n\\n"`` between
@@ -2690,6 +2732,7 @@ def _assemble_view(
         kept = _select_within_budget(
             observations=observations,
             budget=remaining - header_cost,
+            account_uncertainty_subjects=account_uncertainty_subjects,
         )
 
     if not trail_block and not kept:
@@ -2750,10 +2793,40 @@ def _select_trail_within_budget(
     return [], 0
 
 
+def _account_notice_cost(withheld: int) -> int:
+    """What the withheld-subjects notice costs, or nothing when none is due."""
+
+    if withheld < 1:
+        return 0
+    return _estimate_tokens("\n- " + account_uncertainty_notice_line(withheld))
+
+
+def _with_account_notice(
+    kept: list[_Observation], *, withheld: int
+) -> list[_Observation]:
+    """The kept rows with the withheld-subjects notice in its salience place."""
+
+    notice = _Observation(
+        salience=_evidence_context_salience("account_uncertainty_notice"),
+        tick=0,
+        line=account_uncertainty_notice_line(withheld),
+    )
+    index = next(
+        (
+            position
+            for position, obs in enumerate(kept)
+            if obs.salience < notice.salience
+        ),
+        len(kept),
+    )
+    return [*kept[:index], notice, *kept[index:]]
+
+
 def _select_within_budget(
     *,
     observations: Iterable[_Observation],
     budget: int,
+    account_uncertainty_subjects: int = 0,
 ) -> list[_Observation]:
     """Include observations in salience order until one cannot fit.
 
@@ -2768,18 +2841,54 @@ def _select_within_budget(
     the observations block (the line is joined to the previous bullet
     line with ``"\\n"`` and prefixed with ``"- "``), so the budget cost
     of inserting it is computed against ``"\\n- " + obs.line``.
+
+    ``account_uncertainty_subjects`` is how many claim subjects the evidence-v2
+    caveat block covers in total, the ones
+    :data:`~agents.memory.evidence_context.MAX_ACCOUNT_UNCERTAINTY_SUBJECTS`
+    dropped included; it is zero on every path that renders no caveat. Rows
+    marked ``account_uncertainty_subject`` each show ONE of those subjects, so
+    how many are missing is decidable only here, after the shedding -- which is
+    why the notice that states it is minted here instead of being ranked in with
+    the candidates, where its number would describe the pre-budget list.
+
+    The invariant is that a PARTIAL caveat list never passes for a whole one:
+    once a caveat is kept, the notice its list will need is reserved, exactly as
+    :func:`_select_trail_within_budget` reserves the route's truncation line. The
+    reserve is charged only while accepting a caveat, so it competes with further
+    caveats and never with the evidence above them -- a speaker's claim volume
+    must not cost a witnessed row. A budget that keeps NO caveat renders none of
+    this class and says nothing about it, like every other class the budget
+    sheds: the sentence marks the end of a list the reader can see, and standing
+    alone it would name a quantity with nothing to count against.
     """
 
     kept: list[_Observation] = []
     remaining = budget
+    shown = 0
     for obs in observations:
         line_with_separator = "\n- " + obs.line
         cost = _estimate_tokens(line_with_separator)
-        if cost > remaining:
+        shown_after = shown + (1 if obs.account_uncertainty_subject else 0)
+        reserved = (
+            _account_notice_cost(account_uncertainty_subjects - shown_after)
+            if shown_after
+            else 0
+        )
+        if cost + reserved > remaining:
             break
         kept.append(obs)
         remaining -= cost
-    return kept
+        shown = shown_after
+    withheld = account_uncertainty_subjects - shown
+    # Accepting a caveat required its cost PLUS the notice due once it was in, so
+    # a kept caveat leaves that notice affordable and the assertion holds by
+    # construction rather than by luck.
+    if shown < 1 or withheld < 1:
+        return kept
+    assert _account_notice_cost(withheld) <= remaining, (
+        "the withheld-subjects notice was not reserved while caveats were selected"
+    )
+    return _with_account_notice(kept, withheld=withheld)
 
 
 __all__ = [

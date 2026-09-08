@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING, Final, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from agents.memory.episodic import EpisodicEvent
 from observation.public_map import PublicMapView
@@ -42,11 +42,58 @@ MAX_ACCOUNT_UNCERTAINTY_SUBJECTS: Final[int] = 6
 
 
 class EvidenceContextRow(BaseModel):
-    """One rendered evidence-context line together with its class."""
+    """One rendered evidence-context line together with its class.
+
+    ``subject_count`` is how many claim subjects the row stands for: one for a
+    caveat, the withheld count for the bound notice, zero for every other class.
+    The renderer sums it to learn how many subjects the caveat block covers in
+    total, which is what the notice has to count against once the token budget
+    has shed part of that block
+    (:func:`~agents.memory.store._select_within_budget`).
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     kind: EvidenceContextKind
     line: str
+    subject_count: int = 0
+
+    @model_validator(mode="after")
+    def _subject_count_matches_the_kind(self) -> EvidenceContextRow:
+        if self.kind == "account_uncertainty" and self.subject_count != 1:
+            raise ValueError(
+                "an account-uncertainty caveat stands for exactly one subject, "
+                f"got {self.subject_count}"
+            )
+        if self.kind == "account_uncertainty_notice" and self.subject_count < 1:
+            raise ValueError(
+                "the account-uncertainty notice withholds at least one subject, "
+                f"got {self.subject_count}"
+            )
+        if (
+            self.kind not in ("account_uncertainty", "account_uncertainty_notice")
+            and self.subject_count != 0
+        ):
+            raise ValueError(f"a {self.kind} row stands for no claim subject")
+        return self
+
+
+def account_uncertainty_notice_line(withheld: int) -> str:
+    """State how many claim subjects the rendered caveat block leaves out.
+
+    The one copy of this sentence. It closes a caveat list the reader can see, so
+    the prompt renderer recomputes it after the token budget has chosen the rows
+    that ship: the number a model reads then counts every subject missing from
+    the rendered list -- the ones :data:`MAX_ACCOUNT_UNCERTAINTY_SUBJECTS`
+    dropped and the ones the budget shed -- rather than only the ones the bound
+    dropped.
+    """
+
+    if withheld < 1:
+        raise ValueError(
+            f"the withheld notice states at least one subject, got {withheld}"
+        )
+    noun = "subject" if withheld == 1 else "subjects"
+    return f"Account uncertainty: {withheld} further {noun} not shown."
 
 
 class TravelAssessment(BaseModel):
@@ -299,10 +346,14 @@ def v2_evidence_context_rows(
     commentary as one flat band. The account-uncertainty caveat collapses to one
     row per SUBJECT and stops at
     :data:`MAX_ACCOUNT_UNCERTAINTY_SUBJECTS` subjects, in the order the claims
-    were ingested; when it stops, one further row states how many subjects it
-    left out, so the bound is visible in the prompt instead of silent. A subject
-    named by several distinct claims states that count rather than one arbitrary
-    claim, so collapsing hides no speaker.
+    were ingested; when it stops, one further row states how many subjects the
+    BOUND left out, so this unbudgeted list is not silent about its own cap. That
+    count is only correct for a consumer that renders every row it is given: the
+    prompt renderer sheds caveats under the token budget, so it recomputes the
+    sentence against the rows that ship (:func:`account_uncertainty_notice_line`
+    is the one copy of it, and :func:`~agents.memory.store._select_within_budget`
+    reserves its cost). A subject named by several distinct claims states that
+    count rather than one arbitrary claim, so collapsing hides no speaker.
     """
     rows = memory.episodic.recent(since_tick=0)
     own_victims = {
@@ -454,15 +505,16 @@ def v2_evidence_context_rows(
             EvidenceContextRow(
                 kind="account_uncertainty",
                 line=f"Account uncertainty for {subject}: route feasibility alone cannot establish {detail}.",
+                subject_count=1,
             )
         )
     withheld = len(uncertain) - len(shown)
     if withheld:
-        noun = "subject" if withheld == 1 else "subjects"
         rows_out.append(
             EvidenceContextRow(
                 kind="account_uncertainty_notice",
-                line=f"Account uncertainty: {withheld} further {noun} not shown.",
+                line=account_uncertainty_notice_line(withheld),
+                subject_count=withheld,
             )
         )
     rows_out.extend(
