@@ -3654,11 +3654,12 @@ class TestEvidenceV2Salience:
 
         The bound takes its subjects before the renderer runs and the budget then
         sheds caveats below it, so a number fixed in ``evidence_context`` counts
-        only the first of those two cuts: at a budget that keeps one of six
-        caveats it announced one withheld subject while nine were missing
-        (round-1 review). The count is therefore computed after the selection,
-        and the sentence closes a list a reader can see -- never appearing
-        without one, and never leaving a truncated one unmarked.
+        only the first of those two cuts (round-1 review). On this memory the
+        pre-budget count says four at every budget: four is what the bound
+        dropped, while at 1,020 tokens nine of the ten subjects are missing from
+        the render. The count is therefore computed after the selection, and the
+        sentence closes a list a reader can see -- never appearing without one,
+        and never leaving a truncated one unmarked.
         """
 
         memory = _v2_memory()
