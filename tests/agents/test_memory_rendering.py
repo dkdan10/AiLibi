@@ -3650,16 +3650,18 @@ class TestEvidenceV2Salience:
     def test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped(
         self,
     ) -> None:
-        """The count describes THESE bytes, not the pre-budget list.
+        """The count describes THESE bytes, and no budget can silence it.
 
         The bound takes its subjects before the renderer runs and the budget then
         sheds caveats below it, so a number fixed in ``evidence_context`` counts
         only the first of those two cuts (round-1 review). On this memory the
         pre-budget count says four at every budget: four is what the bound
         dropped, while at 1,020 tokens nine of the ten subjects are missing from
-        the render. The count is therefore computed after the selection, and the
-        sentence closes a list a reader can see -- never appearing without one,
-        and never leaving a truncated one unmarked.
+        the render. The count is therefore computed after the selection. Every
+        budget in the sweep withholds at least four of the ten subjects, so every
+        one of these renders must carry the sentence -- including the ones that
+        keep no caveat at all, where the whole class was shed and the notice is
+        the only thing standing between the reader and a silent omission.
         """
 
         memory = _v2_memory()
@@ -3668,44 +3670,67 @@ class TestEvidenceV2Salience:
             _v2_claim(memory, subject=subject, speaker="p-5", tick=2, room="LABS")
 
         truncated_lists = 0
+        closed_no_list = 0
         for budget in range(400, 3000, 20):
             rows = _observation_rows(render_for_prompt(memory, token_budget=budget))
             shown = [
                 row for row in rows if row.startswith("- Account uncertainty for ")
             ]
             notice = [row for row in rows if row.startswith("- Account uncertainty: ")]
-            if not shown:
-                assert not notice, f"budget {budget}: a notice closing no list"
-                continue
-            # Ten subjects against a bound of six: some are always missing.
-            truncated_lists += 1
+            # Ten subjects against a bound of six: some are always missing, so
+            # the sentence is due at every budget in the sweep whether or not a
+            # caveat survived to be closed.
+            if shown:
+                truncated_lists += 1
+            else:
+                closed_no_list += 1
             assert notice == [
                 f"- {account_uncertainty_notice_line(len(subjects) - len(shown))}"
             ], f"budget {budget}: {len(shown)} of {len(subjects)} subjects rendered"
         assert truncated_lists, "no budget in the sweep cut inside the caveat block"
+        assert closed_no_list, "no budget in the sweep shed the whole caveat block"
 
-    def test_the_withheld_notice_never_costs_the_witnessed_evidence_a_line(
+    def test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice(
         self,
     ) -> None:
-        """A speaker's claim volume must not buy a line from first-hand evidence.
+        """What the unconditional reserve guarantees, and what it costs.
 
-        The notice is reserved only once a caveat is kept, so it competes with
-        the rest of its own block and never with the rows above it. Reserving it
-        from the first row instead spends its cost at every budget: this render
-        has room for exactly two observations, and that variant fills the second
-        with the notice and drops the witnessed vent.
+        The notice's cost is reserved from the first row selected, so a render
+        that withholds a subject always says so -- which is the point, since the
+        subjects it hides are speaker-supplied and the reader cannot otherwise
+        know they existed. The price is at most one row, the lowest-ranked line
+        the budget would otherwise have reached, and it is paid only where the
+        budget cuts inside the reserve. At the production budget on this fixture
+        it is paid nowhere: the committed golden gains the notice and loses
+        nothing, so the witnessed vent, the third-party sighting and every row
+        that rendered before all still render. At 290 tokens, where there is room
+        for two observations, the price is the vent itself. Both halves are
+        pinned so the trade is a measurement rather than a claim.
         """
 
         fixture, _expected = _load_fixture(
             "evidence_v2_budget_keeps_witnessed_evidence"
         )
         memory = _build_memory_from_fixture(fixture)
+        notice = f"- {account_uncertainty_notice_line(7)}"
 
-        rows = _observation_rows(render_for_prompt(memory, token_budget=290))
+        rows = _observation_rows(
+            render_for_prompt(memory, token_budget=DEFAULT_TOKEN_BUDGET)
+        )
 
-        assert len(rows) == 2
-        assert "You discovered p-2's body in ADMIN." in rows[0]
-        assert _VENT_LINE_FRAGMENT in rows[1]
+        assert any(_VENT_LINE_FRAGMENT in row for row in rows)
+        assert any(_SIGHTING_LINE_FRAGMENT in row for row in rows)
+        assert not any(row.startswith("- Account uncertainty for ") for row in rows)
+        assert [row for row in rows if row.startswith("- Account uncertainty: ")] == [
+            notice
+        ]
+
+        tight = _observation_rows(render_for_prompt(memory, token_budget=290))
+
+        assert len(tight) == 2
+        assert "You discovered p-2's body in ADMIN." in tight[0]
+        assert tight[1] == notice
+        assert not any(_VENT_LINE_FRAGMENT in row for row in tight)
 
     def test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget(
         self,
