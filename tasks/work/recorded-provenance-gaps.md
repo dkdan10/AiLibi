@@ -56,8 +56,10 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
 - [x] Review correction: pull request #441 was `CONFLICTING` against its base,
   and round 1 declared the shared `tests/fixtures/` inventory row a value
   someone else would merge. It is merged here instead: `work/evidence-renderer-salience`
-  at `bd6f05dc` is merged in (never rebased), the row recomputed from
-  `git ls-files` with the merge staged, and the result proved by
+  is merged in twice (never rebased) — at `bd6f05dc`, then again at `864b18a1`
+  when the base branch's own closeout pushed mid-round — with the row
+  recomputed from `git ls-files` with each merge staged, ending at 29 files /
+  2,098,563 bytes, and the result proved by
   `.venv/bin/python scripts/verify_ml_evidence.py` (exit 0, "every check
   passed") and `tests/scripts/test_verify_ml_evidence.py` (80 passed).
 - [x] Review correction: three non-blocking defects were code, not prose, and
@@ -92,7 +94,9 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
 - [x] Review correction: `docs/artifacts.md`'s `tests/fixtures/` inventory row is
   a cell two concurrent cards write, so pull request #441 is `CONFLICTING`
   against its declared base. The merged value is stated (29 files / 2,098,510
-  bytes) with the command that computes it, the pull request body's "shares no
+  bytes — superseded at 2,098,563 once the base branch pushed a later tip; see
+  the closeout round) with the command that computes it, the pull request
+  body's "shares no
   file with the renderer card" claim is corrected, and a one-sided resolution is
   shown failing `.venv/bin/python scripts/verify_ml_evidence.py` (exit 1,
   "promises 27 files, the index tracks 25"), which
@@ -330,12 +334,12 @@ whole from the merged base branch and not from this card (see "Review
 corrections, closeout round 1"). This card's own commits move nothing under
 either: `git diff --name-only 201849fc db6ffb9e -- replays audits` is empty.
 `docs/artifacts.md` carries two inventory rows this branch is responsible for
-reporting — `tests/fixtures/`, which this card's fixture moves and the merge
-then merges (23 files / 2,054,135 bytes at the base → 25 / 2,067,334 on this
-card alone → **29 / 2,098,510** merged), and `audits/`, which the base branch's
-restamp moves (14,852,039 bytes / 202 files) and which this card does not
-touch. Both are recomputed from `git ls-files` with the change staged rather
-than copied. The frozen held-out manifest needs no restamp from this card:
+reporting — `tests/fixtures/`, which this card's fixture moves and the merges
+then merge (23 files / 2,054,135 bytes at the shared base → 25 / 2,067,334 on
+this card alone → **29 / 2,098,563** merged with the base branch at
+`864b18a1`), and `audits/`, which the base branch's restamps move
+(14,852,791 bytes / 202 files) and which this card does not touch. Both are
+recomputed from `git ls-files` with the change staged rather than copied. The frozen held-out manifest needs no restamp from this card:
 intersecting `git diff --name-only 201849fc db6ffb9e` and this round's
 uncommitted set with `experiments.held_out_prefixes.GENERATOR_SOURCES` gives
 `[]` both times, the two sources the manifest does record
@@ -384,6 +388,12 @@ Each was demonstrated by editing the tree, running the check, and restoring.
    with the option off. The same defect applied as a source edit to
    `agents/tactical/crewmate_policy.py` rather than a monkeypatch reproduces it
    identically, then was restored.
+
+Five more were added in the closeout round and are recorded with their output
+in "Review corrections, closeout round 1": the shared integer guard and its
+deliberately shadowed copy each reverted to a pass-through, the shared
+identity-key tuple with the clock key dropped, the served clock line removed
+from `PublicResults.tsx`, and `_violate` made to return instead of raising.
 
 ### Limitations
 
@@ -492,7 +502,7 @@ is re-measured there with anchored patterns.)*
 | `201849fc`, the shared base | 23 files / 2,054,135 bytes |
 | this branch (adds the frozen format-3 recording and its README) | 25 / 2,067,334 |
 | `work/evidence-renderer-salience` (adds four memory-rendering goldens) | 27 / 2,085,311 |
-| the two merged | **29 / 2,098,510** |
+| the two merged | **29 / 2,098,510** (superseded: 2,098,563 against the base branch's later tip — see "Review corrections, closeout round 1") |
 
 The merged value is computed, not inferred. Neither branch modifies a file the
 other adds and neither touches an existing fixture — `git diff --name-status`
@@ -539,10 +549,11 @@ an omission:
   the same conflict, one tip later.
 
 So the row is declared here as a shared, coordinator-recomputed cell. *(Also
-superseded: this branch now sets it itself, to the same measured value.)*
-Whoever retargets this pull request to `main` after the renderer card merges
-sets it to **29 files / 2,098,510 bytes**, keeping both descriptive clauses —
-this branch's
+superseded: this branch sets it itself now, recomputed at each merge — the
+value below was right for the base tip it was computed against and is
+2,098,563 at this head.)* Whoever retargets this pull request to `main` after
+the renderer card merges sets it to **29 files / 2,098,510 bytes**, keeping
+both descriptive clauses — this branch's
 "one frozen format-3 recording and its README for the cross-tree policy check"
 and the renderer's own — then re-runs
 `.venv/bin/python scripts/verify_ml_evidence.py` and
@@ -721,35 +732,47 @@ below).
 
 **2 — the pull request was `CONFLICTING`; it is merged now, not deferred.**
 Round 1 declared the shared `tests/fixtures/` inventory row a cell for whoever
-retargets. That deferral is superseded: `work/evidence-renderer-salience` at
-`bd6f05dc` is MERGED into this branch (never rebased — this branch's commits
-are pushed). `docs/artifacts.md` was the only conflicting path. Both
-descriptive clauses are kept — the renderer branch changed only the number, not
-the row's text — and the value is recomputed from `git ls-files` with the merge
-staged rather than copied from round 1's table: **29 files / 2,098,510 bytes**,
-which is what round 1 predicted. The `audits/` row carries the base branch's
-restamped `14,852,039 bytes / 202 files` and re-measures correct on the merged
-tree.
+retargets. That deferral is superseded: `work/evidence-renderer-salience` is
+MERGED into this branch (never rebased — this branch's commits are pushed).
+`docs/artifacts.md` was the only conflicting path in both merges. Both
+descriptive clauses are kept — the base branch changed only the numbers, not the
+row's text — and the value is recomputed from `git ls-files` with the merge
+staged rather than copied from round 1's table.
 
 Round 1's objection to merging — that it goes stale the moment the base pushes
-again — is answered, not denied: the base tip was re-fetched at the start of
-this round and again immediately before the merge, both `bd6f05dc`, and the sha
-is named in the merge commit so a later base tip is a visible re-merge rather
-than a silent drift. Verified on the merged tree:
+again — did come true, and the answer is the one the objection lacked: re-merge
+visibly rather than hand-recompute a shared row. The base tip was `bd6f05dc`
+when this round started and was merged as such; its own closeout round then
+pushed `864b18a1` mid-round, moving both inventory rows again (a golden fixture
+edited, and its held-out manifest grown by the restamp note), so the newer tip
+is merged too. Each sha is named in its merge commit, so a later base tip is a
+visible re-merge rather than a silent drift. The measured values:
+
+| Tree | `tests/fixtures/` | `audits/` |
+| --- | --- | --- |
+| `201849fc`, the shared base | 23 files / 2,054,135 bytes | — |
+| this card alone | 25 / 2,067,334 | — |
+| merged with base tip `bd6f05dc` | 29 / 2,098,510 | 14,852,039 bytes / 202 files |
+| merged with base tip `864b18a1` (this head) | **29 / 2,098,563** | **14,852,791 / 202** |
+
+The `2,098,510` round 1 predicted was right for the base tip it predicted
+against, and is superseded by 53 bytes of base-branch golden rather than by a
+mistake. Verified on the current merged tree:
 `.venv/bin/python scripts/verify_ml_evidence.py` exit 0, `checks: 60 | OK 48 |
 FAIL 0 | ABSENT 7 | INFO 5`, "every check passed";
-`tests/scripts/test_verify_ml_evidence.py` 80 passed.
+`tests/scripts/test_verify_ml_evidence.py` and
+`tests/experiments/test_held_out_prefixes.py` together 108 passed.
 
 **3 — the frozen held-out set.** No restamp is owed by this card.
 Intersecting `experiments.held_out_prefixes.GENERATOR_SOURCES` with this card's
 own commits (`git diff --name-only 201849fc db6ffb9e`) gives `[]`, and with this
 round's source changes gives `[]`. The base branch does touch two of them
 (`agents/memory/store.py`, `experiments/held_out_prefixes.py`) and had already
-restamped for both of its commits; that manifest comes through the merge
+restamped for each of its own commits; that manifest comes through both merges
 byte-identical (`git diff origin/work/evidence-renderer-salience --
-audits/deduction-candidate/held-out/manifest.json` is empty), and
+audits/deduction-candidate/held-out/manifest.json` is empty at this head), and
 `tests/experiments/test_held_out_prefixes.py` is green (28 passed). No band
-prefix was printed or opened.
+prefix was printed or opened, and no restamp entry is added by this card.
 
 **4 — three non-blocking findings were code.** Each is fixed with its own
 perturbation, restored after measuring:
@@ -829,7 +852,8 @@ return instead of raising fails that test.
   limitation holding.
 * *Results opened "in five commits" while the branch carried eight.* The
   sentence now says which five it means and points at `--first-parent` for the
-  branch's own count, which this round takes to eleven.
+  branch's own count, which this round takes to thirteen (two of them merges of
+  the base branch).
 * *Commit `583eba5d`'s `Card:` line lacks the blank line before it.* Half of
   this reproduces and half does not, and the difference matters. Measured over
   the ten first-parent commits this card owns: `583eba5d` is the only one whose
@@ -891,19 +915,20 @@ it and are kept:
   card, arriving through the merge. Not this card's changes; they leave the
   diff when the pull request is retargeted to `main` after the base merges.
 
-**Gates re-run on this round's tree.** `check.sh` ran twice — once on the
-source changes before this subsection was written, once on the exact bytes this
-round commits — with identical counts; duration is the only figure that moved,
-which is why it is not recorded. Every exit code was read from the command, not
-from a pipeline.
+**Gates re-run on this round's tree.** `check.sh` ran three times: once on the
+source changes before the base branch's second tip existed, once on the
+re-merged tree, and once on the exact bytes this round commits. All three gave
+the same counts — the base branch's later commits moved a golden fixture and
+documentation, not a test — so duration is the only figure that moved and it is
+not recorded. Every exit code was read from the command, not from a pipeline.
+Everything below was measured on the re-merged tree, at base tip `864b18a1`.
 
 | Command | Result |
 | --- | --- |
 | `bash scripts/check.sh` | exit 0 — `7265 passed, 20 skipped, 3 xfailed`, mypy "no issues found in 471 source files", `390 historical phase tasks and 390 prompts; 43 work cards`, `All 390 prompts are in sync.`, frontend `19 files / 515 tests` and build |
 | `bash scripts/verify_samples.sh` | exit 0 — "All 50 samples verified clean." twice |
 | `build_sample_report.py --check` × 4 | all four exit 0, "consistent with its replays." each; `0` committed clock stamps in each set's report |
-| `cd frontend && npm run e2e` | exit 0 — `13 passed (2.7m)`, 3 skipped |
+| `cd frontend && npm run e2e` | exit 0 — `13 passed (1.1m)`, 3 skipped |
 | `.venv/bin/python scripts/verify_ml_evidence.py` | exit 0 — `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`, "every check passed" |
-| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py` | exit 0 — 80 passed |
-| `.venv/bin/python -m pytest tests/experiments/test_held_out_prefixes.py` | exit 0 — 28 passed |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py tests/experiments/test_held_out_prefixes.py` | exit 0 — 108 passed (80 + 28) |
 | `.venv/bin/python -m pytest tests/orchestrator/ --collect-only -q` | exit 0 — 583 tests collected |
