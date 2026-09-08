@@ -1014,9 +1014,9 @@ the underlying cause, which is narrower than "stale prose" and worth naming —
 **a command spelled against `HEAD` re-measures itself on every later commit**,
 so a number that was true when it was written silently becomes a false claim
 about a tree nobody measured. This round moved no source file, no test and no
-committed artifact: its single commit changes
-`tasks/work/recorded-provenance-gaps.md` alone, which `git show --stat` on that
-commit prints.
+committed artifact: `git diff --name-only 844fbe8d
+origin/work/recorded-provenance-gaps` names `tasks/work/recorded-provenance-gaps.md`
+alone, `844fbe8d` being the head this round opened on.
 
 **1 — the `### Verification` table, the card's headline gate record, still
 carried the pre-closeout tree's counts.** The `check.sh` row read `7216 passed,
@@ -1087,27 +1087,34 @@ are pointers rather than figures. The distinction that matters is not "names
 `HEAD`" but "is a claim about the head": a live claim should re-measure itself,
 and a dated one must not.
 
-**4 — the base branch's tip moved again, and this round does not merge it.**
-`origin/work/evidence-renderer-salience` is `6ba434fb` at this writing;
-`864b18a1`, merged in the closeout round, is its parent-side ancestor. The
-difference is `git diff --name-only 864b18a1 origin/work/evidence-renderer-salience`
-→ `tasks/work/evidence-renderer-salience.md` and
-`tests/agents/test_memory_rendering.py`, and nothing else. Neither inventory row
-moves: `git ls-tree -r -l origin/work/evidence-renderer-salience tests/fixtures`
-sums to 27 files / 2,085,364 bytes, every one of which is already inside this
-head's 29 / 2,098,563, and its `audits/` sums to 202 files / 14,852,791 bytes,
-identical to this head's. So the merge that the closeout round performed to
-resolve the shared `docs/artifacts.md` cell is still the merge that resolves it,
-and the pull request is `MERGEABLE` / `CLEAN` without a third one.
+**4 — the base branch's tip keeps moving, and this round does not merge it.**
+`864b18a1`, merged in the closeout round, is an ancestor of every tip since. The
+base branch pushed `6ba434fb` before this round began and `4d2396a3` while it
+ran, and both were measured rather than assumed: `git diff --name-only 864b18a1
+<tip>` names `tasks/work/evidence-renderer-salience.md` and
+`tests/agents/test_memory_rendering.py` and nothing else, for each of them.
+Neither inventory row moves at either tip — `git ls-tree -r -l <tip>
+tests/fixtures` sums to 27 files / 2,085,364 bytes, every one of which is already
+inside this head's 29 / 2,098,563, and `audits/` to 202 files / 14,852,791,
+identical to this head's. So the merge the closeout round performed to resolve
+the shared `docs/artifacts.md` cell is still the merge that resolves it, and the
+pull request is `MERGEABLE` / `CLEAN` without a third one — confirmed at this
+head with CI green.
+
+Naming a tip in prose is the very thing this round is fixing, so the live claim
+is a command rather than a sha: **before retargeting, run `git diff --name-only
+864b18a1 origin/work/evidence-renderer-salience`.** While it names only that
+card and its tests, nothing is owed here. The moment it names `tests/fixtures/`,
+`audits/` or `docs/artifacts.md`, the closeout round's rule applies — merge that
+tip (never rebase) and recompute both inventory rows from `git ls-files` with
+the merge staged.
 
 Not merging is the decision, and its reason is this round's own subject: a third
 merge would import another card's in-review test file, move this branch's gate
 counts for no integrity benefit, and restart the treadmill of figures that go
-stale between measurement and review. The rule the closeout round set stands
-unchanged — if the base branch touches `tests/fixtures/`, `audits/` or
-`docs/artifacts.md` before it merges, this branch merges that tip and recomputes
-both rows from `git ls-files` with the merge staged. It has not, so there is
-nothing to recompute.
+stale between measurement and review. The base branch pushing twice during this
+one round is the evidence for that, not against it — chasing a tip that moves
+faster than a review round is what produced the stale rows above.
 
 **5 — the previous round's non-blocking findings.** All fourteen are closed or
 refuted in "Review corrections, closeout round 1" above, and this round's
