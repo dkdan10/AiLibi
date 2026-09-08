@@ -854,8 +854,8 @@ return instead of raising fails that test.
   limitation holding.
 * *Results opened "in five commits" while the branch carried eight.* The
   sentence now says which five it means and points at `--first-parent` for the
-  branch's own count, which this round takes to fourteen (two of them merges of
-  the base branch).
+  branch's own count rather than restating a number that every further commit
+  invalidates. Two of that count are merges of the base branch.
 * *Commit `583eba5d`'s `Card:` line lacks the blank line before it.* Half of
   this reproduces and half does not, and the difference matters. Measured over
   the ten first-parent commits this card owns: `583eba5d` is the only one whose
@@ -900,8 +900,10 @@ it and are kept:
   field is required, not optional. Deleting it turns `tests/api` red (the
   redaction round-trip raises). The integer check follows the field.
 * `scripts/gen_frontend_types.py` — one entry in the generator's optional-field
-  list; `generate_prompts --check` and `tsc:check` are green only with it, and
-  it is what produces the `frontend/src/types/api.ts` the scope line does admit.
+  list. It is what produces the `frontend/src/types/api.ts` the scope line does
+  admit, and `tests/api/test_view_model.py` re-renders the types and compares
+  them against the committed file, so the generator entry and the generated
+  file have to move together or the gate's pytest leg is red.
 * `frontend/src/components/PublicResults.tsx` and its test — the served card
   that names the clock, added this round for the finding above. The DTO change
   had already forced the test file (`TS2741`: the two
@@ -917,13 +919,14 @@ it and are kept:
   card, arriving through the merge. Not this card's changes; they leave the
   diff when the pull request is retargeted to `main` after the base merges.
 
-**Gates re-run on this round's tree.** `check.sh` ran three times: once on the
-source changes before the base branch's second tip existed, once on the
-re-merged tree, and once on the exact bytes this round commits. All three gave
-the same counts — the base branch's later commits moved a golden fixture and
-documentation, not a test — so duration is the only figure that moved and it is
-not recorded. Every exit code was read from the command, not from a pipeline.
-Everything below was measured on the re-merged tree, at base tip `864b18a1`.
+**Gates re-run on this round's tree.** `check.sh` ran on every intermediate
+tree this round produced — before and after the card text, before and after the
+base branch's second tip was merged — and finally on the exact bytes this round
+commits. Every run gave the counts below; the base branch's later commits moved
+a golden fixture and documentation, not a test, so duration is the only figure
+that moved and it is not recorded for that reason. Every exit code was read from
+the command, not from a pipeline. Everything below was measured on the re-merged
+tree, at base tip `864b18a1`.
 
 | Command | Result |
 | --- | --- |
