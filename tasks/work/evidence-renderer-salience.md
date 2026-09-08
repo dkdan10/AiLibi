@@ -70,7 +70,8 @@ the pin, not the discovery.
   subsection is dated 2026-09-08. The ledger now runs through this commit, the
   delivery state names both completed rounds and the commits they were run on,
   and the pointer names all three dated subsections. Checked against
-  `git log --oneline 201849fc..HEAD`.
+  `git log --oneline 201849fc..HEAD`, and kept current across this round's own
+  two commits.
 - [x] Review correction (closeout round 1): acceptance item 3 held only on the
   unbudgeted `evidence_context_lines` surface — at the default 1,500-token
   budget the committed fixture withheld all seven of its subjects and the
@@ -199,7 +200,7 @@ uv run python scripts/build_sample_report.py --sample-dir replays/ml_corpus/9p2i
 
 ## Results
 
-Implemented on `work/evidence-renderer-salience` from `201849fc` in twelve
+Implemented on `work/evidence-renderer-salience` from `201849fc` in thirteen
 commits before this one (`git log --oneline 201849fc..HEAD` lists them, this
 commit last). Round 0:
 `7bcc79ed` (the renderer), `af150ce0` (the first held-out restamp), `0c5355a3`
@@ -211,9 +212,11 @@ Closeout round 1: `00ac7fbb` (the unconditional notice reserve, its gates and
 the regenerated golden), `0815333d` (the third restamp and both artifacts rows),
 `59df8a9e` (the closeout record), `86e133e3` (the round-1 text that record
 reverses, superseded in place) and `864b18a1` (naming the commit the closeout
-gate was re-run on). Closeout round 2 is the single commit this paragraph ships
-with, carrying both the ranking gate and this record, so that every number below
-was measured on exactly the bytes it commits.
+gate was re-run on). Closeout round 2 is `6ba434fb` (the ranking gate, the
+corrected headline and this record) and the commit this paragraph ships with,
+which withdraws one sentence of that record that claimed more than this worker
+can know; the whole gate suite was re-run on the bytes of each, with identical
+results, so every number below was measured on exactly the bytes it ships with.
 
 Delivery state: closeout round-2 findings answered and verified locally. Round 1
 was re-reviewed on `bd6f05dc` — three verifiers, no blocking findings — and
@@ -1260,7 +1263,7 @@ the delivery state names both completed re-reviews and the commits they ran on
 findings, answered here); and the pointer names all three dated subsections and
 says outright that the shared date does not discriminate between them. Checked
 against `git log --oneline 201849fc..HEAD`, which lists this commit and the
-twelve before it.
+thirteen before it.
 
 **Codex review.** Both comments re-fetched at `864b18a1`
 (`gh api repos/dkdan10/AiLibi/pulls/440/comments`): still exactly two, both with
@@ -1287,7 +1290,9 @@ text is unchanged from what was written against `9cacd3fc`.
   `- Account uncertainty: 7 further subjects not shown.` at the production
   budget.
 
-**Nonblocking items left standing.** None were raised this round. The two
+**Nonblocking items left standing.** Every finding routed to this round was
+blocking, so this round adds none; whether the verifiers also filed nonblocking
+observations is not something this record can speak to. The two
 carried from closeout round 1 stand with their reasons: a render of 120-220
 tokens on the committed fixture carries no observation block and therefore no
 notice, because nothing was selected to reserve it from; and the `audits/`
@@ -1295,14 +1300,14 @@ inventory row is contended with `origin/work/followup-review-dispositions`, so
 whichever card merges second must recompute that row from its own tree rather
 than take either side. This round touches neither row.
 
-**Verification (closeout round 2).** Every command below was run on the working
-tree this commit records byte for byte — the new gate plus this card's final
-Markdown — with exit codes captured directly, never through a pipe.
-`bash scripts/check.sh` was run repeatedly across this round's edits — first
-before this subsection was written, last on the bytes this commit records — with
-identical counts every time. Only Markdown changed between those runs, so only
-wall time moved (222 s to 429 s on a shared machine); the durations are not part
-of the claim. Each pytest log was checked for its own `rootdir`
+**Verification (closeout round 2).** Every command below was run on both of this
+round's commit trees, with exit codes captured directly, never through a pipe,
+and reported identical counts on each. `bash scripts/check.sh` — the only gate
+here that reads this card, through `validate_task_docs` — was additionally
+re-run after every edit to this subsection, the last of them on the bytes this
+commit records; the other gates read no Markdown, so a prose edit cannot move
+them. Wall time varies by more than a factor of three on this shared machine and
+is not part of any claim. Each pytest log was checked for its own `rootdir`
 (`.claude/worktrees/wf_be58e68f-39e-8`), because a concurrent session on this
 machine shares the scratch directory. `uv sync --frozen` and `npm ci` were run
 first in this worktree.
