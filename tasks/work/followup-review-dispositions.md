@@ -34,13 +34,14 @@ not an adopted behaviour.
 - [x] Review correction: the unescaped `|` inside the code span of the retained
   `P-03` row no longer splits that row into four cells, so its Evidence link is
   rendered again. Proved by a cell-count scan and by a GFM render of both changed
-  documents — `cells.py` and `render.py` in the round-1 subsection below; the scan
-  fails on the committed defect and passes now.
+  documents, both quoted in the round-1 subsection below — the cell-count scan is
+  quoted in full and fails on the committed defect (`:93 header=3 row=4`, exit 1)
+  where it passes now.
 - [x] Review correction: the follow-up record's claim that
   `recorded-provenance-gaps` "names all six" is replaced by what that card holds
   at `origin/main` — five ids by name, `NG1-7` by mechanism. Proved by
-  `scratchpad/routes.py` over the six cards exported with
-  `git show origin/main:tasks/work/<card>.md`, quoted below.
+  `git grep -c -E "\b<id>\b" origin/main -- tasks/work/<card>.md` per routed id,
+  quoted below with both outcomes.
 - [x] Review correction: the Results' routing rule now states the rule that was
   actually applied — routed when the target card names the id **or** carries an
   acceptance item repairing the same defect — and every routed row says which of
@@ -383,18 +384,51 @@ the literal `grep -rno '/tmp/' tasks/work/ | wc -l`; GFM ends a cell at an
 unescaped `|` even inside a code span, so the row rendered four cells against a
 three-column header, dropping the Evidence cell — the link to the section 11
 table — and truncating the disposition mid-sentence. The pipe is now written
-`\|` in both places that carry a pipeline inside a table. Two checks, each of
-which fails on the committed bytes and passes now:
+`\|` in both places that carry a pipeline inside a table. Two checks over every
+table in both changed documents — not only the repaired row — each of which fails
+on the committed bytes and passes now. The first splits each row on an unescaped
+pipe and compares its cell count with its header's:
+
+```python
+# scan.py — run as .venv/bin/python scan.py <file> ... ; exits 1 on a bad row
+import pathlib, re, sys
+SPLIT = re.compile(r"(?<!\\)\|")
+def cells(line):
+    parts = SPLIT.split(line.strip())
+    return len(parts[1:-1]) if parts[0] == "" and parts[-1] == "" else len(parts)
+bad = 0
+for path in sys.argv[1:]:
+    header = None
+    for n, line in enumerate(pathlib.Path(path).read_text().splitlines(), 1):
+        row = line.strip()
+        if not row.startswith("|"):
+            header = None
+        elif header is None:
+            header = cells(row)
+        elif not set(row.replace("|", "").replace("\\", "").strip()) <= set("-: "):
+            got = cells(row)
+            if got != header:
+                bad += 1
+                print(f"{path}:{n} header={header} row={got}")
+print(f"rows whose cell count differs from their header: {bad}")
+sys.exit(1 if bad else 0)
+```
 
 ```text
-$ .venv/bin/python scratchpad/cells.py docs/cleanup-dispositions.md \
+$ .venv/bin/python scan.py docs/cleanup-dispositions.md \
     audits/review-2026-09-06/followup-correction-record.md
 audits/review-2026-09-06/followup-correction-record.md:93 header=3 row=4   # at 7cbf9786
 rows whose cell count differs from their header: 1 ; exit=1
 
 rows whose cell count differs from their header: 0 ; exit=0                # at this head
+```
 
-$ .venv/bin/python scratchpad/render.py <both documents>                   # markdown-it, gfm-like
+The second renders each row with `markdown_it` in `gfm-like` mode and counts
+`<td>` against `<th>`, which is the property that actually matters — the row that
+had four cells against a three-column header lost its third cell in the render,
+and now keeps it:
+
+```text
 audits/review-2026-09-06/followup-correction-record.md:103 th=3 td=3
      P-03, P-09, FU-DISP-3, FU-DISP-4, NC5-07
      Retained. Process observations about the correction batch itself: ...
@@ -402,28 +436,33 @@ audits/review-2026-09-06/followup-correction-record.md:103 th=3 td=3
 mismatched rows: 0
 ```
 
-`cells.py` splits on `(?<!\\)\|` and compares each row's cell count with its
-header's; `render.py` renders each row with `markdown_it` in `gfm-like` mode and
-counts `<td>` against `<th>`. Both cover every table in both changed documents,
-not only the repaired row.
-
 **2. "which names all six" was false, and so was the routing rule.** Three
 lenses filed this. The record said
 [recorded provenance gaps](../../audits/review-2026-09-06/followup-correction-record.md#routed-to-a-queued-card)
 "names all six"; that card at `origin/main` names five (`NC4-3`, `NC6-1`,
 `NC6-2`, `NC3-1`, `FU-ORA-2`) and does not mention `NG1-7`. The Results claimed
 more broadly that "only ids a card actually names were routed to it", which is
-false for sixteen of the forty-eight routed ids. Re-measured against the six
-cards as exported from `origin/main`:
+false for sixteen of the forty-eight routed ids. Each routed id was re-measured
+against its card at `origin/main` with one command per id — a count when the card
+names it, nothing and exit 1 when it does not:
 
 ```text
-$ .venv/bin/python scratchpad/routes.py <cards exported with git show origin/main:...>
-evidence-renderer-salience: named=3 by-mechanism=2 -> ['FU-D1', 'GR-6']
-recorded-provenance-gaps: named=5 by-mechanism=1 -> ['NG1-7']
-accounts-channel-hardening: named=7 by-mechanism=2 -> ['GR-3', 'FU-ALIBI-8']
-fresh-deduction-instrument: named=0 by-mechanism=4 -> ['GEV-1', 'GEV-7', 'GEV-9', 'NG2-6']
-nonblocking-followup-improvements: named=12 by-mechanism=4 -> ['FU-04', 'CONC-2', 'GC-3', 'GC-4']
-retire-temporal-evidence-v1: named=5 by-mechanism=3 -> ['G1-02', 'M3-02', 'G4-2']
+$ git grep -c -E "\bNC6-1\b" origin/main -- tasks/work/recorded-provenance-gaps.md
+origin/main:tasks/work/recorded-provenance-gaps.md:2 ; exit=0
+$ git grep -c -E "\bNG1-7\b" origin/main -- tasks/work/recorded-provenance-gaps.md
+(no output) ; exit=1
+```
+
+Over all 48, per card — named by id, then the ids that are not named and are
+therefore routed by mechanism:
+
+```text
+evidence-renderer-salience:        named=3   by-mechanism=2 -> FU-D1, GR-6
+recorded-provenance-gaps:          named=5   by-mechanism=1 -> NG1-7
+accounts-channel-hardening:        named=7   by-mechanism=2 -> GR-3, FU-ALIBI-8
+fresh-deduction-instrument:        named=0   by-mechanism=4 -> GEV-1, GEV-7, GEV-9, NG2-6
+nonblocking-followup-improvements: named=12  by-mechanism=4 -> FU-04, CONC-2, GC-3, GC-4
+retire-temporal-evidence-v1:       named=5   by-mechanism=3 -> G1-02, M3-02, G4-2
 routed ids: 32 named by id, 16 by mechanism
 ```
 
@@ -483,13 +522,13 @@ hard-coding them. The perturbed proof is the same script against the two
 documents as they stood at `7cbf9786`:
 
 ```text
-$ .venv/bin/python scratchpad/inventory.py <7cbf9786 documents + the four inputs>
+$ .venv/bin/python <the inventory script quoted above> <a tree holding the 7cbf9786 documents>
 report-only withdrawn ids: ['C7b-9', 'G4-9', 'P1-2']
 inventory total: 416
 dispositioned: 413
 missing: ['C7b-9', 'G4-9', 'P1-2']
 
-$ .venv/bin/python scratchpad/inventory.py .        # this head
+$ .venv/bin/python <the same script> .              # this head
 inventory total: 416
 dispositioned: 416
 missing: []
