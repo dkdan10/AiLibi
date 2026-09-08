@@ -31,6 +31,45 @@ not an adopted behaviour.
 
 ## Acceptance
 
+- [x] Review correction: the headline Verification paragraph publishes this
+  head's `audits/` figures, not round 1's. The recomputed row is
+  `14,883,359 tracked bytes / 203 files`, the planted-failure note reads "the
+  tracked files contain 14,883,359 bytes", and the superseded values are kept as
+  the dated record of the round that produced each. Proved by `factscan.py`'s
+  check 5, which reads the row, the card's two quoted commands and the
+  planted-failure note and compares all four against `git ls-files audits`; it
+  printed the disagreement (`says 14,880,929, the tree says 14,883,359`) before
+  the fix and exits 0 after it.
+- [x] Review correction: `docs/cleanup-dispositions.md`'s routed section counts
+  its own table. It said "the five ids below" and "The other four are routed by
+  mechanism" against six ids of which five are by mechanism; it now says six and
+  five and names the five (`G1-02`, `M3-02`, `G4-2`, `GC-3`, `GC-4`). Proved by
+  `factscan.py`'s check 5, which parses that sentence and compares its two
+  numbers and its id list against the table below it — against the committed
+  `34a8b8be` bytes it prints `the sentence says 5 ids, the table holds 6` and
+  `the sentence says 4 by mechanism, the table implies 5`, and exits 1.
+- [x] Review correction: `NC4-5` is re-dispositioned as **repaired** by
+  `29b7bb4a`, the commit the record's `FU-2` row already cited, and the
+  `_serialize`-is-dead clause is gone from the retained row. Proved by re-running
+  the finding's own trigger — `grep -n "_serialize" scripts/build_sample_report.py`
+  prints the production call site at `:451` inside `write_report` beside the
+  definition at `:256`, where the finding recorded "referenced from no production
+  call site".
+- [x] Review correction: the two round-subsection sentences that credited
+  `scripts/check_doc_facts.py` with covering this card's own documents and their
+  anchors now state what the code enforces — eleven documents in
+  `_LINKED_DOCUMENTS + _PUBLISHED_DOCUMENTS` (`:230-255`), fragments stripped
+  before resolution (`:4689-4699`), so neither `docs/cleanup-dispositions.md` nor
+  the new record is gate-checked and no anchor is. Proved by the two planted
+  failures in the closeout subsection: a broken relative link in each of those two
+  documents leaves `check_doc_facts.py` at exit 0, while `factscan.py`'s check 2
+  prints it and exits 1.
+- [x] Review correction: `tasks/review-ledger.md`'s new section no longer claims
+  the commits it lists are ones the register "had not yet listed by finding". It
+  now partitions the thirteen into five already listed by finding in the
+  2026-09-07 checkpoint, four already named there without a finding id, and four
+  new to the register. Proved by `factscan.py`'s check 6, which resolves each
+  group against `git show 201849fc:tasks/review-ledger.md`.
 - [x] Review correction: the branch-string figure published as a fact about this
   head is the one the quoted command prints on the committed tree — 28 files, not
   the 27 round 1 wrote — and the enumeration names all three files this pass adds
@@ -339,11 +378,12 @@ the pre-card `14,850,288 tracked bytes / 202 files` makes
 `uv run python scripts/verify_ml_evidence.py` print
 `[ FAIL ] in-tree family inventory` with both notes — "promises 202 files, the
 index tracks 203" and "promises 14,850,288 tracked bytes, the tracked files
-contain 14,879,136 bytes". Restoring the recomputed row returns exit 0. The row
+contain 14,883,359 bytes". Restoring the recomputed row returns exit 0. The row
 was recomputed with the change staged: `git ls-files audits | wc -l` prints 203
-and `git ls-files -z audits | xargs -0 wc -c | tail -1` prints 14879136. (Round 0
-recorded 14,876,233 here; the round-1 corrections added bytes to the record, and
-the row moved with them.)
+and `git ls-files -z audits | xargs -0 wc -c | tail -1` prints 14883359. (The
+figure moved with every round that wrote to the record: 14,876,233 at round 0,
+14,879,136 after round 1, 14,880,929 after round 2. Each of those is the dated
+record of its own head; this paragraph states the head's.)
 
 The card's Validation section, in order:
 
@@ -383,9 +423,11 @@ prefix was printed or opened.
   are owned by mechanism rather than by name: the target card carries an
   acceptance item that repairs the same defect but does not print the id. Whoever
   implements that card can drop the id without noticing, which is the cost of
-  routing by mechanism; each row names the item so the check is cheap. Six cards
-  are in flight on their own branches and none is finished; a routed id is still
-  live until its card lands.
+  routing by mechanism; each row names the item so the check is cheap. The six
+  cards are queued rather than dispatched — `tasks/README.md` records that no card
+  is active, and `git branch -r --list 'origin/work/*'` shows a pushed branch for
+  only `evidence-renderer-salience` and `recorded-provenance-gaps` — so a routed
+  id is live until its card is dispatched, implemented and landed.
   `retire-temporal-evidence-v1` is additionally blocked on an adopting record for
   evidence v2, so the four v1 defects routed to it stay live indefinitely.
 - Retained rows are judgments about scope and cost, not proofs that a finding is
@@ -535,7 +577,7 @@ still prints 64 lines at this head, as the follow-up read it.
 
 **4. `CARD-02` had two filings and one repaired row.** The appendix files
 `CARD-02` twice — `REVIEW_APPENDIX_findings.md:88` (the published source pin) and
-`:89` (a validation output in `tasks/work/temporal-observation-contract.md:172`
+`:89` (a validation output in `tasks/work/temporal-observation-contract.md:173`
 that no longer reproduces) — and the follow-up filed both as unresolved,
 labelling the second `CARD-02(temporal)`. Only the pin half was dispositioned.
 The pin half stays repaired and now sits in the `M5-02` row, which names it; the
@@ -578,8 +620,17 @@ slugs such as `Pre-existing` or `NG1-investigation-runs`.
 
 **Gates, re-run in full at this head.** `uv run python scripts/check_doc_facts.py`
 — exit 0, including "every relative link in 11 front-door and published documents
-resolves", which covers the new anchor link from the ledger's routed section into
-the record's `## Routed to a queued card`.
+resolves". Those eleven are `_LINKED_DOCUMENTS + _PUBLISHED_DOCUMENTS`
+(`scripts/check_doc_facts.py:230-255`); `audits/review-2026-09-06/README.md` is
+among them, so the new record's **path** is resolved from the index, and the rule
+strips the fragment before resolving (`relative_targets`, `:4689-4699`), so no
+anchor is checked and neither document this card writes has its own links
+gate-checked. The anchor link from the ledger's routed section into the record's
+`## Routed to a queued card` is checked by this card's own resolver, quoted in
+the closeout subsection below, not by a committed gate. *(Superseded wording,
+round 1: "exit 0, including 'every relative link in 11 front-door and published
+documents resolves', which covers the new anchor link from the ledger's routed
+section into the record's `## Routed to a queued card`.")*
 `uv run python scripts/validate_task_docs.py` — exit 0: "390 historical phase
 tasks and 390 prompts; 43 work cards".
 `uv run pytest tests/scripts/test_check_doc_facts.py
@@ -906,8 +957,11 @@ lines round 0 added to `README.md` so the index reaches it.
 
 **Gates, re-run in full at this head.** `uv run python scripts/check_doc_facts.py`
 — exit 0, including "every relative link in 11 front-door and published documents
-resolves", which covers the record's new corrections section and its link back to
-the pre-merge correction record.
+resolves". The record's new corrections section is not among those eleven, so its
+link back to the pre-merge correction record is resolved by this card's own
+resolver rather than by the gate; the eleven are enumerated in the round-1
+paragraph above. *(Superseded wording, round 2: "which covers the record's new
+corrections section and its link back to the pre-merge correction record.")*
 `uv run python scripts/validate_task_docs.py` — exit 0: "390 historical phase
 tasks and 390 prompts; 43 work cards". `uv run pytest
 tests/scripts/test_check_doc_facts.py tests/scripts/test_verify_ml_evidence.py
@@ -937,3 +991,704 @@ tracked bytes, the tracked files contain 14,880,929 bytes"; restoring the
 recomputed row returns exit 0. No recording, report, metric or adoption verdict
 changed; no provider was called; the frozen held-out manifest is untouched, and
 this round edits no file in `GENERATOR_SOURCES`, so no restamp was due.
+
+### Review corrections, closeout round 1 (2026-09-08)
+
+Five blocking findings from two independent lenses, every one of the class the
+three earlier rounds were opened for: a sentence that does not reproduce against
+the bytes it describes. One id changed disposition — `NC4-5`, retained to
+repaired — and no other disposition word, no routing and no spot check moved. The
+two reports, the two appendices and `correction-record.md` stay byte-identical.
+
+**1. The headline Verification paragraph still published round 1's `audits/`
+total.** It said, in the present tense about this head, that the planted failure
+prints "the tracked files contain 14,879,136 bytes" and that
+`git ls-files -z audits | xargs -0 wc -c | tail -1` prints 14879136 — while
+`docs/artifacts.md`, the round-2 subsection and the PR body all carried
+14,880,929. Round 2 corrected its own subsection and left the headline paragraph
+alone. This round writes to the record again, so the figure moved again; both
+places now carry the head's, recomputed with the change staged:
+
+```text
+$ git ls-files audits | wc -l
+     203
+$ git ls-files -z audits | xargs -0 wc -c | tail -1
+ 14883359 total
+```
+
+Planted failure, re-run at this head: reverting `docs/artifacts.md`'s `audits/`
+row to the pre-card `14,850,288 tracked bytes / 202 files` makes
+`.venv/bin/python scripts/verify_ml_evidence.py` print
+
+```text
+[ FAIL ] in-tree family inventory
+          note     : audits/: docs/artifacts.md promises 202 files, the index tracks 203
+          note     : audits/: docs/artifacts.md promises 14,850,288 tracked bytes, the tracked files contain 14,883,359 bytes
+```
+
+Restoring the recomputed row returns exit 0, and `git status --porcelain` is
+empty after the restore. The superseded figures — 14,876,233 at round 0,
+14,879,136 after round 1, 14,880,929 after round 2 — stay in the Verification
+paragraph as the dated series they are, each named with the round that produced
+it. The check that stops this recurring is now mechanical: `factscan.py` below
+reads the row, the two commands the card quotes and the planted-failure note out
+of the card's headline sections and compares all four with `git ls-files audits`.
+
+**2. The ledger's routed section miscounted its own table.** It read "Of the five
+ids below, only `CMP-01` is named by id … The other four are routed by
+mechanism" over a table carrying six ids in three rows, five of them by
+mechanism. Both figures were off by one, and they contradicted this card's own
+verified tally (`retire-temporal-evidence-v1: by-mechanism=3 -> G1-02, M3-02,
+G4-2` and `nonblocking-followup-improvements: … GC-3, GC-4`). The sentence now
+says six and five and names the five, so it cannot drift from the table again;
+`factscan.py`'s check 5 parses the sentence and compares its two numbers and its
+id list against the ids it extracts from the rows below it. Against the committed
+`34a8b8be` bytes of that document it prints both halves of the defect and exits
+1:
+
+```text
+  routed sentence: total=5 named=CMP-01 by-mechanism=4 listed=[]
+  routed table:    total=6 ids ['CMP-01', 'G1-02', 'G4-2', 'GC-3', 'GC-4', 'M3-02']
+FAIL docs/cleanup-dispositions.md: the sentence says 5 ids, the table holds 6
+FAIL docs/cleanup-dispositions.md: the sentence says 4 by mechanism, the table implies 5
+```
+
+**3. `NC4-5` was retained for a defect the commit in its own table had
+repaired.** The retained row `FU-02, FU-05, FU-B-03, FU-D3, NC4-5, NC5-11` gave
+as a standing limitation "`_serialize`'s sibling is dead production code the
+docstring still describes". `NC4-5` was filed at `fd1f923c` as
+"`build_sample_report --write` no longer emits the historical serialization
+profile the module docstring still describes, and `_serialize` is now dead
+production code", with the trigger "`grep -n "_serialize" scripts/*.py` shows the
+function is referenced from no production call site". Re-run here:
+
+```text
+$ grep -n "_serialize\|historical_report_payload" scripts/build_sample_report.py
+249:def historical_report_payload(report: TournamentEvalReport) -> dict[str, Any]:
+256:def _serialize(report: TournamentEvalReport) -> str:
+443:    commit the result, so the two must agree: ``_serialize`` projects the legacy
+451:    (sample_dir / _REPORT_FILENAME).write_text(_serialize(report), encoding="utf-8")
+539:        rebuilt = historical_report_payload(report)
+```
+
+`:451` is inside `write_report`, which `main` reaches, so the function is not
+dead and the writer emits the documented profile. The repair is `29b7bb4a`, the
+commit the same table's `FU-2` row already cites and the fix section 5 of the
+follow-up report prescribed ("route `write_report` through `_serialize`");
+`git show 29b7bb4a -- scripts/build_sample_report.py` is exactly that change, and
+`git merge-base --is-ancestor 29b7bb4a fd1f923c` exits 1, so the finding was
+validly filed and later repaired rather than mis-filed. `NC4-5` now sits in the
+`FU-2` row as repaired, the quoted clause is gone from the retained row, and the
+follow-up record's corrections section dates the move. The other five ids in that
+row still reproduce and stay retained.
+
+**4. Two round subsections credited `check_doc_facts.py` with coverage it does
+not have.** Round 1 wrote that its link rule "covers the new anchor link from the
+ledger's routed section into the record's `## Routed to a queued card`", and
+round 2 that it "covers the record's new corrections section and its link back to
+the pre-merge correction record". Neither is true of the code. The checked set is
+`_LINKED_DOCUMENTS + _PUBLISHED_DOCUMENTS` (`scripts/check_doc_facts.py:230-255`)
+— eleven documents, of which `audits/review-2026-09-06/README.md` is the only one
+this pass touches — and `relative_targets` (`:4689-4699`) drops the fragment
+before resolving, so no anchor is checked at all. Two planted failures on the
+committed tree, each restored with `git status --porcelain` empty afterwards:
+
+```text
+$ sed -i '' 's|../tasks/work/retire-temporal-evidence-v1.md|../tasks/work/retire-temporal-evidence-vZ.md|' docs/cleanup-dispositions.md
+$ .venv/bin/python scripts/check_doc_facts.py ; echo EXIT=$?
+... every relative link in 11 front-door and published documents resolves ...
+EXIT=0
+
+$ sed -i '' 's|(correction-record.md)|(correctionXrecord.md)|g' audits/review-2026-09-06/followup-correction-record.md
+$ .venv/bin/python scripts/check_doc_facts.py ; echo EXIT=$?
+EXIT=0
+```
+
+The gate is silent with a broken relative link in each of the two documents this
+card writes. Both subsections now say what the code enforces, with the round-1
+and round-2 wordings quoted in place as superseded, and the property itself is
+established by this card's own resolver rather than claimed for a gate:
+`factscan.py`'s check 2 resolves every relative target in the four written
+documents and, unlike the gate, also resolves the fragment against the target
+file's headings under GitHub slug rules. It prints
+`relative links checked: 168; anchored among them: 7` and exits 0 here, and on
+each planted byte above it printed the broken target and exited 1. That is a
+check of this card's output, not a committed gate — the durable-gate half of
+recommendation 1 is declined in the ledger, and extending the gate's document set
+would edit `scripts/check_doc_facts.py`, which this card does not own.
+
+**5. The ledger's new section claimed the register had not listed commits it had
+already listed.** It read "The commits those dispositions name … are the ones
+this register had not yet listed by finding", then listed thirteen. Five of them
+are listed by finding in the same file, in the "Follow-up correction checkpoint
+(2026-09-07)" section that this PR does not touch — `29b7bb4a` (FU-2) and
+`ad0f9b5a` (CONC-1) under exactly the same ids:
+
+```text
+$ git show 201849fc:tasks/review-ledger.md | sed -n '229,239p'
+`14249a79` attests unresolved tournament usage instead of stranding the ledger
+(NC4-1; `--attest-unknown-usage SEED`, refused with any cumulative cap, never
+counts unknown usage as zero); `29b7bb4a` writes each sample report in the shape
+`--check` compares (FU-2); `46e74f6d` shares one recording-filename pattern between
+the fingerprint, the public completeness check, the loader, the verifier and the
+manifest reader (FU-B-01; every committed fingerprint unchanged); `24a0fe6a` stamps
+the agent-factory/substrate identity pair on the first tick row and the terminal
+row only (FU-D2; state hashes identical to main on the checked seeds, tick rows
+1..N byte-identical to main's, new recordings about 15% smaller than at
+`fd1f923c`); `ad0f9b5a` binds the single-game cost read-back to the recorded game
+identity (CONC-1). `241a5ca9` commit-qualifies the correction record's gate figures
+```
+
+The restrictive clause is gone. The section now partitions the thirteen into the
+five already listed by finding, four more the register already names without a
+finding id (`241a5ca9`, `e12b6180`, the merge `8161689a` and #436's `081aee15`),
+and the four that enter it here (`cb3438ef`, `b79fc1b7`, `700c0671`,
+`8dd0576c`). `factscan.py`'s check 6 parses that sentence and resolves every
+group against `git show 201849fc:tasks/review-ledger.md`: a commit claimed as
+already listed must appear there with its id, one claimed as already named must
+appear there, and one claimed as new must not appear there at all. It prints the
+three groups and confirms they partition the full index of thirteen.
+
+**The systematic re-derivation.** Three rounds of this card were opened for prose
+that does not reproduce, so this round recomputed every mechanical fact the four
+written documents publish rather than re-reading them. One script does it, and it
+is the proof quoted for findings 1, 2, 4 and 5 above: table shapes, relative
+links and anchors, commit shas, ids per disposition table, and the prose numbers
+that describe any of those. The two literals this pass itself counts — the
+cleanup branch name and the host-local path prefix — are assembled at run time so
+that quoting the script inside a counted file cannot move the numbers it
+measures.
+
+```python
+#!/usr/bin/env python3
+"""factscan.py — recompute every mechanical fact this pass publishes.
+
+Run as: .venv/bin/python factscan.py <repo-root>   ; exits 1 on any disagreement.
+
+  1. table shape   every GFM row's cell count equals its header's, splitting on
+                   unescaped '|' (a '|' inside a code span must be written '\\|')
+  2. links         every relative markdown target in the four written documents
+                   resolves, and every '#fragment' names a heading that exists
+                   in the target file (GitHub slug rules)
+  3. commit shas   every backticked 8-hex token resolves to a commit, except an
+                   all-digit one that does not — that is a byte count, and it is
+                   reported rather than failed (an all-digit token that DOES
+                   resolve, like `26386914`, is still checked as a commit)
+  4. id inventory  ids per disposition table, per document and per section
+  5. prose numbers the routed-section sentence, the artifacts row, the counts
+                   the card publishes as facts about this head
+
+The two literals this pass itself counts — the cleanup branch name and the
+host-local path prefix — are assembled at run time so that quoting this script
+inside a counted file cannot move the numbers it measures.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import re
+import subprocess
+import sys
+
+ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+DOCS = (
+    "docs/cleanup-dispositions.md",
+    "audits/review-2026-09-06/followup-correction-record.md",
+    "tasks/review-ledger.md",
+    "tasks/work/followup-review-dispositions.md",
+)
+SPLIT = re.compile(r"(?<!\\)\|")
+ID = re.compile(r"^[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+$")
+failures: list[str] = []
+
+
+def fail(msg: str) -> None:
+    failures.append(msg)
+    print("FAIL", msg)
+
+
+def cells(line: str) -> list[str]:
+    parts = SPLIT.split(line.strip())
+    if parts[0] == "" and parts[-1] == "":
+        parts = parts[1:-1]
+    return [p.strip() for p in parts]
+
+
+def is_divider(row: str) -> bool:
+    return set(row.replace("|", "").replace("\\", "").strip()) <= set("-: ")
+
+
+def rows(text: str):
+    """(lineno, header cells, row cells) for every body row of every table."""
+    header = None
+    for n, line in enumerate(text.splitlines(), 1):
+        row = line.strip()
+        if not row.startswith("|"):
+            header = None
+            continue
+        if header is None:
+            header = cells(row)
+            continue
+        if is_divider(row):
+            continue
+        yield n, header, cells(row)
+
+
+print("== 1. table shape ==")
+for doc in DOCS:
+    bad = [n for n, h, r in rows((ROOT / doc).read_text()) if len(r) != len(h)]
+    print(f"  {doc}: rows whose cell count differs from their header: {len(bad)}")
+    for n in bad:
+        fail(f"{doc}:{n} cell count differs from header")
+
+
+def slug(heading: str) -> str:
+    text = re.sub(r"`|\*|_", "", heading.lstrip("#").strip())
+    text = re.sub(r"[^\w\- ]", "", text)
+    return text.strip().lower().replace(" ", "-")
+
+
+def headings(path: pathlib.Path) -> set[str]:
+    return {
+        slug(line)
+        for line in path.read_text().splitlines()
+        if re.match(r"^#{1,6} ", line)
+    }
+
+
+LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+CODE = re.compile(r"```.*?```|`[^`]*`", re.S)
+print("== 2. links ==")
+checked = anchored = 0
+for doc in DOCS:
+    body = CODE.sub(" ", (ROOT / doc).read_text())
+    base = (ROOT / doc).parent
+    for target in LINK.findall(body):
+        if target.startswith("#") or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target):
+            continue
+        checked += 1
+        path_part, _, frag = target.partition("#")
+        dest = (base / path_part).resolve()
+        if not dest.exists():
+            fail(f"{doc}: relative link {target!r} does not resolve")
+            continue
+        if frag:
+            anchored += 1
+            if slug("# " + frag) not in headings(dest):
+                fail(f"{doc}: anchor {target!r} names no heading in {path_part}")
+print(f"  relative links checked: {checked}; anchored among them: {anchored}")
+
+print("== 3. commit shas ==")
+SHA = re.compile(r"`([0-9a-f]{8})`")
+seen: dict[str, set[str]] = {}
+for doc in DOCS:
+    for sha in SHA.findall((ROOT / doc).read_text()):
+        seen.setdefault(sha, set()).add(doc)
+numeric: list[str] = []
+for sha, where in sorted(seen.items()):
+    found = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "-e", f"{sha}^{{commit}}"],
+        capture_output=True,
+    )
+    if found.returncode == 0:
+        continue
+    if sha.isdigit():  # an eight-digit byte count quoted in prose, not a sha
+        numeric.append(sha)
+        continue
+    fail(f"{sha} (in {', '.join(sorted(where))}) is not a commit in this repo")
+print(f"  8-hex tokens seen: {len(seen)}; resolved as commits: "
+      f"{len(seen) - len(numeric)}; all-digit non-commits (byte counts): {numeric}")
+
+print("== 4. id inventory ==")
+
+
+def table_ids(doc: str, want) -> dict[str, list[int]]:
+    section, header = "", None
+    out: dict[str, list[int]] = {}
+    for n, line in enumerate((ROOT / doc).read_text().splitlines(), 1):
+        if line.startswith("#"):
+            section = line.strip()
+        row = line.strip()
+        if not row.startswith("|"):
+            header = None
+            continue
+        if header is None:
+            header = cells(row)
+            continue
+        if is_divider(row) or not want(section):
+            continue
+        for token in re.split(r"[,\s]+", cells(row)[0].replace("**", "")):
+            if ID.match(token.strip("`")):
+                out.setdefault(token.strip("`"), []).append(n)
+    return out
+
+
+LEDGER = "docs/cleanup-dispositions.md"
+RECORD = "audits/review-2026-09-06/followup-correction-record.md"
+for section in (
+    "### First-pass findings repaired",
+    "### First-pass findings routed to a card",
+    "### First-pass findings refuted or not reproducible",
+    "### First-pass findings retained",
+):
+    print(f"  {LEDGER} {section!r}: {len(table_ids(LEDGER, lambda s, w=section: s == w))} ids")
+routed = table_ids(LEDGER, lambda s: s == "### First-pass findings routed to a card")
+print(f"    routed ids: {sorted(routed)}")
+for section in (
+    "## Repaired",
+    "## Routed to a queued card",
+    "## Retained",
+    "## Findings the review's own adversarial pass did not sustain",
+):
+    print(f"  {RECORD} {section!r}: {len(table_ids(RECORD, lambda s, w=section: s == w))} ids")
+
+pass_ids = table_ids(LEDGER, lambda s: s.startswith("### First-pass findings"))
+record_ids = table_ids(RECORD, lambda s: s.startswith("## "))
+print(f"  {LEDGER}, this pass's sections: {len(pass_ids)} ids")
+print(f"  {RECORD}, all sections: {len(record_ids)} ids")
+print(f"  union: {len(set(pass_ids) | set(record_ids))} ids")
+for name, table in ((LEDGER, pass_ids), (RECORD, record_ids)):
+    for i, lines in sorted(table.items()):
+        if len(lines) > 1:
+            fail(f"{name}: {i} is dispositioned on lines {lines}")
+both = set(pass_ids) & set(record_ids)
+if both:
+    fail(f"ids dispositioned in both documents: {sorted(both)}")
+for doc, count, label in (
+    (LEDGER, len(pass_ids), "That is (\\d+) ids, each appearing exactly once below"),
+    (RECORD, len(record_ids), "All (\\d+) of them are\\s+dispositioned below"),
+):
+    said = re.search(label, (ROOT / doc).read_text())
+    if not said:
+        fail(f"{doc}: the id-total sentence {label!r} no longer parses")
+    elif int(said.group(1)) != count:
+        fail(f"{doc}: says {said.group(1)} ids, its tables hold {count}")
+    else:
+        print(f"  {doc}: id-total sentence says {said.group(1)}, tables hold {count}")
+
+print("== 5. prose numbers ==")
+WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+}
+ledger_text = (ROOT / LEDGER).read_text()
+sentence = re.search(
+    r"Of the (\w+) ids below, only\s+`([A-Z0-9-]+)` is named by id.*?"
+    r"The other\s+(\w+)\s*(?:—\s*(.*?)\s*—\s*)?are routed by mechanism",
+    ledger_text,
+    re.S,
+)
+if not sentence:
+    fail(f"{LEDGER}: the routed-section sentence no longer parses")
+else:
+    total, named, rest = WORDS[sentence.group(1)], sentence.group(2), WORDS[sentence.group(3)]
+    listed = {t.strip("`") for t in re.findall(r"`([A-Z0-9-]+)`", sentence.group(4) or "")}
+    print(f"  routed sentence: total={total} named={named} by-mechanism={rest} listed={sorted(listed)}")
+    print(f"  routed table:    total={len(routed)} ids {sorted(routed)}")
+    if total != len(routed):
+        fail(f"{LEDGER}: the sentence says {total} ids, the table holds {len(routed)}")
+    if rest != len(routed) - 1:
+        fail(f"{LEDGER}: the sentence says {rest} by mechanism, the table implies {len(routed) - 1}")
+    if named not in routed:
+        fail(f"{LEDGER}: the sentence names {named}, which is not in the table")
+    if listed and listed != set(routed) - {named}:
+        fail(f"{LEDGER}: the sentence lists {sorted(listed)}, the table implies "
+             f"{sorted(set(routed) - {named})}")
+
+tracked = subprocess.run(
+    ["git", "-C", str(ROOT), "ls-files", "audits"],
+    capture_output=True, text=True, check=True,
+).stdout.split()
+total_bytes = sum((ROOT / f).stat().st_size for f in tracked)
+row = re.search(
+    r"\| `audits/`[^|]*\|[^|]*\|[^|]*\| ([\d,]+) tracked bytes / (\d+) files \|",
+    (ROOT / "docs/artifacts.md").read_text(),
+)
+if not row:
+    fail("docs/artifacts.md: the audits inventory row no longer parses")
+else:
+    said = (int(row.group(1).replace(",", "")), int(row.group(2)))
+    print(f"  artifacts row: {said[0]} bytes / {said[1]} files")
+    print(f"  git ls-files:  {total_bytes} bytes / {len(tracked)} files")
+    if said != (total_bytes, len(tracked)):
+        fail("docs/artifacts.md: the audits row disagrees with the tracked bytes")
+
+# Only the card's headline sections state facts about this head; the dated
+# "Review corrections, round N" subsections quote the head each round produced.
+card = re.split(
+    r"^### Review corrections, ",
+    (ROOT / "tasks/work/followup-review-dispositions.md").read_text(),
+    flags=re.M,
+)[0]
+for pattern, actual, label in (
+    (r"`git ls-files -z audits \| xargs -0 wc -c \| tail -1` prints\s+(\d+)",
+     str(total_bytes), "audits byte total"),
+    (r"`git ls-files audits \| wc -l` prints\s+(\d+)",
+     str(len(tracked)), "audits file count"),
+    (r"the tracked files\s+contain\s+([\d,]+) bytes", f"{total_bytes:,}",
+     "planted-failure byte note"),
+):
+    found = re.findall(pattern, card)
+    print(f"  card, {label}: {found} (tree says {actual})")
+    if not found:
+        fail(f"card: the headline sections no longer state the {label}")
+    for value in found:
+        if value != actual:
+            fail(f"card: {label} says {value}, the tree says {actual}")
+
+branch = subprocess.run(
+    ["git", "-C", str(ROOT), "grep", "-l", "codex" + "/" + "cleanup"],
+    capture_output=True, text=True,
+).stdout.split()
+tmp = subprocess.run(
+    ["git", "-C", str(ROOT), "grep", "-o", "/" + "tmp" + "/", "--", "tasks/work/"],
+    capture_output=True, text=True,
+).stdout.splitlines()
+print(f"  files carrying the branch string: {len(branch)}")
+print(f"  host-local-path citations under tasks/work/: {len(tmp)}")
+for doc in (LEDGER, RECORD):
+    for said_head in re.findall(r"and (\d+) at this branch's head", (ROOT / doc).read_text()):
+        if said_head not in {str(len(branch)), str(len(tmp))}:
+            fail(f"{doc}: publishes {said_head} at this head, which is neither "
+                 f"{len(branch)} nor {len(tmp)}")
+
+print("== 6. the register's own prior state ==")
+BASE = "201849fc"
+base = subprocess.run(
+    ["git", "-C", str(ROOT), "show", f"{BASE}:tasks/review-ledger.md"],
+    capture_output=True, text=True, check=True,
+).stdout
+section = (ROOT / "tasks/review-ledger.md").read_text().split(
+    "## Review disposition pass (2026-09-08)"
+)[-1]
+claim = re.search(
+    r"Five are already listed by finding.*?—\s*(?P<listed>.*?)\s*—\s*and are\s*\n?"
+    r".*?without a finding id:\s*(?P<named>.*?)\.\s*The remaining four\s*—\s*"
+    r"(?P<new>.*?)\s*—\s*enter this register here\. In full:\s*(?P<full>.*?)"
+    r"This is\s*\na finding-to-commit index",
+    section,
+    re.S,
+)
+if not claim:
+    fail("tasks/review-ledger.md: the three-group sentence no longer parses")
+else:
+    def shas(text):
+        return [s for s in re.findall(r"`([0-9a-f]{8})`", text)]
+
+    listed = shas(claim.group("listed"))
+    named = shas(claim.group("named"))
+    fresh = shas(claim.group("new"))
+    full = list(dict.fromkeys(shas(claim.group("full"))))
+    ids = dict(re.findall(r"`([0-9a-f]{8})`\s*\(([A-Z][A-Za-z0-9-]*)\)", claim.group("listed")))
+    print(f"  listed by finding already: {listed}")
+    print(f"  named without a finding id: {named}")
+    print(f"  new to the register: {fresh}")
+    print(f"  the full index names {len(full)} commits")
+    if sorted(listed + named + fresh) != sorted(full):
+        fail("tasks/review-ledger.md: the three groups do not partition the full index")
+    for sha in listed:
+        if sha not in base:
+            fail(f"{sha} is claimed as already listed, but is absent from {BASE}'s register")
+        elif ids.get(sha) and ids[sha] not in base:
+            fail(f"{sha} is claimed as listed by finding, but {ids[sha]} is absent from {BASE}")
+    for sha in named:
+        if sha not in base:
+            fail(f"{sha} is claimed as already named, but is absent from {BASE}'s register")
+    for sha in fresh:
+        if sha in base:
+            fail(f"{sha} is claimed as new to the register, but {BASE}'s register names it")
+    print(f"  checked against `git show {BASE}:tasks/review-ledger.md`")
+
+print()
+print(f"disagreements: {len(failures)}")
+sys.exit(1 if failures else 0)
+```
+
+```text
+$ .venv/bin/python factscan.py .
+== 1. table shape ==
+  docs/cleanup-dispositions.md: rows whose cell count differs from their header: 0
+  audits/review-2026-09-06/followup-correction-record.md: rows whose cell count differs from their header: 0
+  tasks/review-ledger.md: rows whose cell count differs from their header: 0
+  tasks/work/followup-review-dispositions.md: rows whose cell count differs from their header: 0
+== 2. links ==
+  relative links checked: 168; anchored among them: 7
+== 3. commit shas ==
+  8-hex tokens seen: 58; resolved as commits: 56; all-digit non-commits (byte counts): ['14880929', '14883359']
+== 4. id inventory ==
+  docs/cleanup-dispositions.md '### First-pass findings repaired': 37 ids
+  docs/cleanup-dispositions.md '### First-pass findings routed to a card': 6 ids
+  docs/cleanup-dispositions.md '### First-pass findings refuted or not reproducible': 14 ids
+  docs/cleanup-dispositions.md '### First-pass findings retained': 178 ids
+    routed ids: ['CMP-01', 'G1-02', 'G4-2', 'GC-3', 'GC-4', 'M3-02']
+  audits/review-2026-09-06/followup-correction-record.md '## Repaired': 15 ids
+  audits/review-2026-09-06/followup-correction-record.md '## Routed to a queued card': 42 ids
+  audits/review-2026-09-06/followup-correction-record.md '## Retained': 89 ids
+  audits/review-2026-09-06/followup-correction-record.md "## Findings the review's own adversarial pass did not sustain": 35 ids
+  docs/cleanup-dispositions.md, this pass's sections: 235 ids
+  audits/review-2026-09-06/followup-correction-record.md, all sections: 181 ids
+  union: 416 ids
+  docs/cleanup-dispositions.md: id-total sentence says 235, tables hold 235
+  audits/review-2026-09-06/followup-correction-record.md: id-total sentence says 181, tables hold 181
+== 5. prose numbers ==
+  routed sentence: total=6 named=CMP-01 by-mechanism=5 listed=['G1-02', 'G4-2', 'GC-3', 'GC-4', 'M3-02']
+  routed table:    total=6 ids ['CMP-01', 'G1-02', 'G4-2', 'GC-3', 'GC-4', 'M3-02']
+  artifacts row: 14883359 bytes / 203 files
+  git ls-files:  14883359 bytes / 203 files
+  card, audits byte total: ['14883359'] (tree says 14883359)
+  card, audits file count: ['203'] (tree says 203)
+  card, planted-failure byte note: ['14,883,359'] (tree says 14,883,359)
+  files carrying the branch string: 28
+  host-local-path citations under tasks/work/: 72
+== 6. the register's own prior state ==
+  listed by finding already: ['14249a79', '29b7bb4a', '46e74f6d', '24a0fe6a', 'ad0f9b5a']
+  named without a finding id: ['241a5ca9', 'e12b6180', '8161689a', '081aee15']
+  new to the register: ['cb3438ef', 'b79fc1b7', '700c0671', '8dd0576c']
+  the full index names 13 commits
+  checked against `git show 201849fc:tasks/review-ledger.md`
+
+disagreements: 0
+```
+
+Perturbed proof that the card-figure half is not vacuous: with the head's
+`14883359` / `14,883,359` replaced by round 2's `14880929` / `14,880,929` in the
+card's headline sections and nothing else changed, the same command prints
+
+```text
+FAIL card: audits byte total says 14880929, the tree says 14883359
+FAIL card: planted-failure byte note says 14,880,929, the tree says 14,883,359
+disagreements: 2
+```
+
+and exits 1; restoring the card returns exit 0. The scan reads only the card's
+headline sections — it splits at the first `### Review corrections, ` heading —
+because the dated round subsections quote the head each round produced and must
+not be dragged forward.
+
+**Nonblocking findings, all of them answered.** Eight were cheap and correct to
+fix and are fixed here.
+
+- The record's Repaired preamble read "The four merge blockers of section 5 and
+  the correction-record accuracy item", which counts section 5's fourth blocker
+  twice: `REVIEW_REPORT_FOLLOWUP.md:195-203` lists four, and item 4 *is*
+  "Correction-record accuracy (P-02, FU-3)". It now says so.
+- The ledger's multi-filing note named `CARD-01` and `CARD-02` but not `CARD-04`,
+  which the appendix also files twice (`REVIEW_APPENDIX_findings.md:91`,
+  unsupported-claim, and `:173`, process). `CARD-04` is now named, with both
+  filings and the single retained row that carries them.
+- `CARD-02`'s second filing was cited at
+  `tasks/work/temporal-observation-contract.md:172` in the ledger and in round
+  1's subsection here; the quoted line
+  `# 390 historical tasks/prompts and 23 work cards valid.` is at `:173` at
+  `201849fc`, at `fd1f923c` and at this head, which is also where the review's own
+  appendix cites it. Both citations now say `:173`. No disposition depended on it.
+- Recommendation 1 was quoted with only half its scope. As filed
+  (`REVIEW_REPORT.md:198`) it asks for card count and state in `tasks/README.md`
+  **and the ledger** to equal `tasks/work/*.md`; the adopted item covers
+  `tasks/README.md` only. The row now carries the full quote and decides the
+  ledger half explicitly — declined, because `tasks/review-ledger.md` states no
+  live card count to derive: its one card-count sentence is the dated `9b333a76`
+  handoff figure at `:153`.
+- Recommendation 2's reason measured only the Validation half of the rule it
+  answers. The Results half cannot be measured across the same nine cards — eight
+  are `Status: ready` at `origin/main` with an unwritten Results — so the row now
+  says that, and names the one `done` card, `held-out-prefix-freeze.md`, whose
+  Results carries sixteen card-specific commands by the same counter:
+  `.venv/bin/python valcmds.py . origin/main Results` prints `16` for it and `0`
+  for the other eight.
+- Both documents said every added host-local-path citation was "this same
+  command". Of the eight added matches, all in this card, four are that
+  `grep -rno` pattern and four are the `git grep -o` form used to scope the same
+  count to an earlier commit. Both rows now say that. The substantive claim — a
+  quoted pattern rather than evidence cited from a host-local path — holds for
+  all eight.
+- The record and this card's Limitations described the six routed cards as "in
+  flight on their own branches". `tasks/README.md:17-21` says no card is active,
+  and `git branch -r --list 'origin/work/*'` shows a pushed branch for two of the
+  six. Both now say queued, with that evidence.
+- Section 11's row 7 inferred a uniform trailer convention from mixed history.
+  Measured over the 21 commits in `8161689a..origin/main`: 8 carry `Card:`, 7
+  carry the plural `Cards:`, 6 carry neither, 19 carry the co-author line and 2
+  do not. The row now states the convention as adopted practice and publishes the
+  mix rather than claiming the landed commits already evidence it.
+
+Two are left standing, deliberately, and both are declared rather than silenced.
+
+- **Two writers are queued for `tasks/review-ledger.md`.**
+  `tasks/post-merge-plan.md:85` assigns that file to the Maintenance worker while
+  this card (Documentation worker 1) is given only the two disposition documents,
+  and the nonblocking card's `P-06 / P-10` item adds per-commit rows to the same
+  file. This card's Expected scope at `201849fc` explicitly grants it "where a
+  disposition names a commit", its new section says the per-commit register stays
+  with the nonblocking card, and the PR body raises the collision as a question.
+  Reconciling the plan's ownership table with a committed card contract is an
+  owner decision, not something this card may take.
+- **`audits/review-2026-09-06/README.md` is written but not named in Expected
+  scope.** The eight added lines are what makes the new record reachable from the
+  review index, which an acceptance item requires; the edit is disclosed in
+  Results and reproduced by
+  `git diff --stat 201849fc -- audits/review-2026-09-06/`, which lists exactly two
+  files. Editing the Expected scope now would rewrite a committed contract after
+  the fact rather than record the deviation, so it stays recorded here as a
+  declared deviation.
+
+**Codex review.** One Codex review exists on this PR (state COMMENTED, on round
+0's `7cbf9786`), with seven inline comments; re-polling
+`gh api repos/dkdan10/AiLibi/pulls/439/comments` at this head returns the same
+seven and no new activity. All seven are now addressed at this head. Five were
+fixed in earlier rounds, each with a check that fails on the bytes Codex flagged:
+3954475665 (`CARD-02`'s second filing kept unresolved) — the id now appears once,
+in the retained drifted-Results row; 3954475670 (recompute the branch-reference
+count) — both documents now name the tree per figure and enumerate three added
+files; 3954475676 (assign an allowed disposition to the unreproduced findings) —
+the row opens **Refuted** in the not-reproducible form, proved by the
+disposition-word scan; 3954475681 (account for the card without a specific
+validation command) — `fresh-deduction-authorization.md` is named as a
+document-only exception, proved by `valcmds.py`; 3954475692 (add the prose-only
+`G4-9` disposition) — the refuted row for `P1-2`, `C7b-9` and `G4-9`, proved by
+the perturbed inventory run. The remaining two are fixed in this round:
+3954475672 (describe the routed cards as queued rather than in flight) is
+adopted in full; 3954475687 (do not infer a uniform trailer convention from mixed
+history) is adopted in substance while its example is refuted on the bytes —
+`b6a4c3d6` does carry `Card: tasks/work/held-out-prefix-freeze.md`, so that half
+of the comment is wrong, but `3eb49dfc` carries no card trailer and seven
+commits use `Cards:`, so the generalisation it objected to was loose and the row
+now publishes the measured mix.
+
+**Gates, re-run in full at this head.**
+`uv run python scripts/check_doc_facts.py` — exit 0.
+`uv run python scripts/validate_task_docs.py` — exit 0: "390 historical phase
+tasks and 390 prompts; 43 work cards".
+`uv run pytest tests/scripts/test_check_doc_facts.py
+tests/scripts/test_verify_ml_evidence.py -q` — 364 passed in 241.01s.
+`bash scripts/check.sh` — exit 0 on the committed tree: ruff and format
+"All checks passed!", "Contracts: 4 kept, 0 broken", "Success: no issues found in
+469 source files", "7201 passed, 20 skipped, 3 xfailed", 514 frontend tests in 19
+files, and the production build. Same counts as rounds 0, 1 and 2, which is the
+expected result of a documentation-only round. An earlier run of the same gate,
+sharing the machine with two other gate runs, hit one flake —
+`tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`,
+whose assertion depends on a 0.25-second wall deadline being reached inside a
+loaded xdist worker. It passes in isolation and passed in the unloaded run above;
+nothing in this round touches that path, and the flake is recorded here rather
+than dropped. Also re-run because the post-merge
+plan requires them of every card: `bash scripts/verify_samples.sh` — "All 50
+samples verified clean" twice, exit 0; the four
+`scripts/build_sample_report.py --check` runs — four "is consistent with its
+replays", four exit 0; `pytest tests/orchestrator/ --collect-only` in a fresh
+interpreter — 583 collected, exit 0; `uv run python scripts/verify_ml_evidence.py`
+— 60 checks, 48 OK, 0 FAIL, 7 ABSENT, 5 INFO, exit 0. The scan above exits 0 on
+this head, and its quoted output is the output it prints on the bytes that quote
+it. `npm run e2e` was not run: no served DTO, schema or component byte changed.
+No live provider was called in this round, by any path.
+
+**Record impact of this round.** `audits/` bytes moved once more — `NC4-5`'s row
+move, four corrected wordings and the record's new dated correction entry — so
+the `docs/artifacts.md` row moved with them, to
+`14,883,359 tracked bytes / 203 files`, recomputed with the change staged and
+proved by the planted failure quoted under finding 1. No recording, report,
+metric, fitted weight or adoption verdict changed; no candidate was adopted; no
+provider was called by any path. The frozen held-out manifest is untouched: this
+round edits no file in `experiments/held_out_prefixes.py`'s `GENERATOR_SOURCES`,
+so no restamp was due, `tests/experiments/test_held_out_prefixes.py` passes
+inside the full gate, and no band prefix was printed or opened.
