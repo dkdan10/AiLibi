@@ -9,6 +9,9 @@ claims) so the discriminator round-trips correctly.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Final
+
 import pydantic
 import pytest
 
@@ -46,6 +49,7 @@ from api.schemas import (
     ReplayMetadataView,
     ReplayView,
     ReportBodyEventView,
+    ReportProvenanceGroupView,
     RoomView,
     RubricGameView,
     RubricView,
@@ -61,8 +65,10 @@ from api.schemas import (
     TurnView,
     VentEventView,
     VentView,
+    _integer_clock_version,
     classify_evidence,
 )
+from orchestrator.replay import require_integer_temporal_version
 
 
 def _all_observation_claims() -> tuple[ObservationClaimView, ...]:
@@ -679,3 +685,83 @@ def test_contradiction_view_category_matches_the_classifier() -> None:
         ContradictionView.model_validate_json(contradiction.model_dump_json())
         == contradiction
     )
+
+
+# A served clock version that is not a plain ``int``. ``True`` / ``False`` are
+# why the guard exists: ``bool`` subclasses ``int`` and ``True == 1``, so
+# ``Literal[1, 2]`` alone accepts a JSON boolean and the view serves clock v1
+# for a payload whose clock is unreadable.
+_NON_INTEGER_CLOCKS: Final[tuple[object, ...]] = (True, False, 2.0, "2", "v2")
+
+
+def _replay_metadata_payload(clock: object) -> dict[str, object]:
+    return {
+        "game_id": "headless-seed-0",
+        "seed": 0,
+        "total_ticks": 10,
+        "winner": "CREWMATES",
+        "winner_reason": "TASKS_COMPLETE",
+        "meeting_count": 1,
+        "total_cost_usd": 0.0,
+        "prompt_versions": {},
+        "created_at": None,
+        "temporal_observation_version": clock,
+    }
+
+
+@pytest.mark.parametrize("bad", _NON_INTEGER_CLOCKS)
+def test_served_clock_version_refuses_a_non_integer(bad: object) -> None:
+    """Both served provenance views refuse an unreadable clock outright.
+
+    ``None`` is the only "unknown"; a boolean must not become v1 on the way to
+    the frontend, where the two versions are different arms.
+    """
+
+    with pytest.raises(pydantic.ValidationError):
+        ReplayMetadataView.model_validate(_replay_metadata_payload(bad))
+    with pytest.raises(pydantic.ValidationError):
+        ReportProvenanceGroupView.model_validate(
+            {"temporal_observation_version": bad, "game_ids": ("headless-seed-0",)}
+        )
+
+
+def test_served_clock_version_still_accepts_unknown_and_the_two_readable_clocks() -> (
+    None
+):
+    """The guard narrows the type; it does not close it."""
+
+    for good in (None, 1, 2):
+        assert (
+            ReplayMetadataView.model_validate(
+                _replay_metadata_payload(good)
+            ).temporal_observation_version
+            == good
+        )
+        assert (
+            ReportProvenanceGroupView.model_validate(
+                {"temporal_observation_version": good, "game_ids": ()}
+            ).temporal_observation_version
+            == good
+        )
+    with pytest.raises(pydantic.ValidationError):
+        ReplayMetadataView.model_validate(_replay_metadata_payload(3))
+
+
+@pytest.mark.parametrize("value", [*_NON_INTEGER_CLOCKS, None, 1, 2, 3, 0])
+def test_the_dto_clock_guard_agrees_with_the_recorded_one(value: object) -> None:
+    """``api.schemas`` shadows the recorded rule rather than importing it.
+
+    The module's contract is that spectator DTOs do not couple to orchestrator
+    symbols, so the three-line check is duplicated — which is only safe if the
+    copy is pinned against its original. Compare the two directly, on the same
+    inputs, so a change to either side that the other does not follow fails
+    here rather than at a served payload.
+    """
+
+    def outcome(check: Callable[[object], object]) -> object:
+        try:
+            return check(value)
+        except ValueError as error:
+            return f"raised: {error}"
+
+    assert outcome(_integer_clock_version) == outcome(require_integer_temporal_version)

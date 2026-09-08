@@ -37,7 +37,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Final, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Versioned view-model contract (Phase 12, Task 12.2; DESIGN.md §7). The served
 # payload carries this so the frontend can fail loud on an incompatible
@@ -60,6 +60,25 @@ class _FrozenView(BaseModel):
     """Base for every spectator DTO: frozen, extra fields rejected."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+def _integer_clock_version(value: object) -> object:
+    """Refuse a served clock version that is not a plain ``int``.
+
+    ``Literal[1, 2]`` rejects ``0``, ``3``, ``2.0`` and ``"2"`` but not a JSON
+    ``true``, because ``bool`` is a subclass of ``int`` and ``True == 1``; the
+    view would then serve clock v1 for a payload whose clock is unreadable.
+    This shadows ``orchestrator.replay.require_integer_temporal_version``
+    deliberately rather than importing it: this module's contract (see the
+    module docstring) is that spectator DTOs do not couple to engine or
+    orchestrator symbols, and duplicating a three-line type check is the
+    cheaper side of that trade. ``tests/api/test_schemas.py`` pins the two
+    against each other on the same inputs so the copy cannot drift.
+    """
+
+    if value is not None and type(value) is not int:
+        raise ValueError("temporal observation versions must be integers")
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -1328,6 +1347,11 @@ class ReportProvenanceGroupView(_FrozenView):
     temporal_observation_version: Literal[1, 2] | None = None
     game_ids: tuple[str, ...]
 
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        return _integer_clock_version(value)
+
 
 class ReplayMetadataView(_FrozenView):
     """Shadows ``orchestrator.replay.GameEndReplayEntry`` plus the
@@ -1360,6 +1384,11 @@ class ReplayMetadataView(_FrozenView):
     # The clock the bytes were recorded under, read from the rows themselves.
     # ``None`` is an unstamped legacy recording, which is unknown, not v1.
     temporal_observation_version: Literal[1, 2] | None = None
+
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        return _integer_clock_version(value)
 
 
 class FailedCallView(_FrozenView):

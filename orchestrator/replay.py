@@ -265,6 +265,27 @@ def classify_action_dispositions(
 
 AgentFactoryKind: TypeAlias = Literal["scripted", "experimental", "custom"]
 TemporalObservationVersion: TypeAlias = Literal[1, 2]
+
+
+def require_integer_temporal_version(value: object) -> object:
+    """Refuse a clock version that is not a plain ``int``; ``None`` stays unknown.
+
+    :data:`TemporalObservationVersion` alone rejects ``0``, ``3``, ``2.0`` and
+    ``"2"``, but not a JSON ``true``: Python's ``bool`` is a subclass of ``int``
+    and ``True == 1``, so ``Literal[1, 2]`` accepts it and the field then reads
+    back as clock v1. A recording or report whose clock cannot be read is
+    unresolvable, not v1, and relabelling it would invent the one fact the
+    stamp exists to carry. Every model mirroring this stamp — the recorded row
+    here, the report provenance in :mod:`eval.report_schema`, and the served
+    views — runs this check at its ``mode="before"`` boundary, so the rule
+    cannot drift between a recording and what is read back from it.
+    """
+
+    if value is not None and type(value) is not int:
+        raise ValueError("temporal observation versions must be integers")
+    return value
+
+
 # The stamp value a once-per-recording tick-row read resolves; see
 # :func:`_first_tick_stamp`.
 _StampT = TypeVar("_StampT")
@@ -305,9 +326,7 @@ class ReplayEntry(BaseModel):
     @field_validator("temporal_observation_version", mode="before")
     @classmethod
     def _temporal_version_is_integer(cls, value: object) -> object:
-        if value is not None and type(value) is not int:
-            raise ValueError("temporal observation versions must be integers")
-        return value
+        return require_integer_temporal_version(value)
 
     @model_validator(mode="after")
     def _dispositions_cover_every_action(self) -> ReplayEntry:

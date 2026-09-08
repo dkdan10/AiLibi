@@ -99,6 +99,7 @@ from orchestrator.replay import (
     TacticalPolicyStamp,
     TemporalObservationVersion,
     WinnerSide,
+    require_integer_temporal_version,
 )
 from orchestrator.experiment_config import RecordedExperimentConfig
 
@@ -250,6 +251,14 @@ class GameProvenance(_FrozenModel):
     # a corrupt claim, and the recorded field it mirrors carries the same alias.
     temporal_observation_version: TemporalObservationVersion | None = None
 
+    # The alias alone would let a JSON ``true`` through as v1 (``bool`` is an
+    # ``int``); the recorded row runs this same check, so a report cannot claim
+    # a clock the recording it summarises would have refused.
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        return require_integer_temporal_version(value)
+
 
 class ReportProvenanceGroup(GameProvenance):
     """Games sharing the same recorded identity, including its unknown fields."""
@@ -360,6 +369,14 @@ class GameReport(_FrozenModel):
     tactical_policy: TacticalPolicyStamp | None = None
     crew_tactical_policy: CrewTacticalPolicyStamp | None = None
     temporal_observation_version: TemporalObservationVersion | None = None
+
+    # This is the model a committed report's JSON is read through, so it is the
+    # boundary where a hand-edited or corrupted ``true`` would otherwise become
+    # clock v1 before :meth:`recorded_provenance` ever sees it.
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        return require_integer_temporal_version(value)
 
     def recorded_provenance(self) -> GameProvenance:
         """Project recorded identity without resolving unknowns from this runtime."""

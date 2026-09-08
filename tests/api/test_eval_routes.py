@@ -21,10 +21,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+import pydantic
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
+from api.routes.eval import _GameReportEvalView
 from api.replay_loader import ReplayLoader, get_replay_loader
 from api.schemas import FailedCallEvalView, FailedCallView
 from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
@@ -252,3 +254,30 @@ def test_served_payload_exposes_no_engine_state_field(tmp_path: Path) -> None:
     walk(body)
     leaked = keys & forbidden
     assert not leaked, f"served eval payload leaked {sorted(leaked)}"
+
+
+@pytest.mark.parametrize("bad", [True, False, 2.0, "2", "v2"])
+def test_the_redaction_view_refuses_a_non_integer_clock(bad: object) -> None:
+    """The last boundary before the route serves the clock repeats the check.
+
+    ``_GameReportEvalView`` is validated from ``GameReport.model_dump``, not
+    constructed from the model, so it does not inherit the source model's
+    validators; a payload that reached this layer with an unreadable clock
+    would otherwise be served as v1. ``bool`` subclasses ``int``, which is the
+    whole reason ``Literal[1, 2]`` is not enough on its own.
+    """
+
+    report = _eval_report_with_failed_call()
+    payload = report.report.games[0].model_dump(mode="json")
+    payload["failed_calls"] = []
+
+    payload["temporal_observation_version"] = bad
+    with pytest.raises(pydantic.ValidationError):
+        _GameReportEvalView.model_validate(payload)
+
+    for good in (None, 1, 2):
+        payload["temporal_observation_version"] = good
+        assert (
+            _GameReportEvalView.model_validate(payload).temporal_observation_version
+            == good
+        )

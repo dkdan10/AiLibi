@@ -37,7 +37,7 @@ from collections.abc import Mapping
 from typing import Annotated, Any, Final
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from api.replay_loader import ReplayLoader, get_replay_loader
 from api.public_results import build_public_results
@@ -69,6 +69,7 @@ from orchestrator.replay import (
     TacticalPolicyStamp,
     TemporalObservationVersion,
     WinnerSide,
+    require_integer_temporal_version,
 )
 from orchestrator.experiment_config import RecordedExperimentConfig
 
@@ -137,6 +138,15 @@ class _GameReportEvalView(BaseModel):
     tactical_policy: TacticalPolicyStamp | None = None
     crew_tactical_policy: CrewTacticalPolicyStamp | None = None
     temporal_observation_version: TemporalObservationVersion | None = None
+
+    # ``GameReport`` already refuses a non-int clock, so this repeats the check
+    # one layer out rather than adding one: the redaction re-validation is the
+    # last boundary before the route serves the value, and it is validated from
+    # a dump rather than inheriting the source model's validators.
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        return require_integer_temporal_version(value)
 
 
 class _TournamentReportEvalView(BaseModel):
