@@ -25,7 +25,13 @@ from agents.memory.beliefs import (
     hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
-from agents.memory.evidence_context import evidence_context_lines, publicly_dead_ids
+from agents.memory.evidence_context import (
+    EvidenceContextKind,
+    account_uncertainty_notice_line,
+    evidence_context_lines,
+    publicly_dead_ids,
+    v2_evidence_context_rows,
+)
 from agents.memory.working import (
     LastSeen,
     MeetingHistory,
@@ -89,6 +95,56 @@ _SALIENCE_COMPLETED_TASK: Final[int] = 30
 # cross-meeting social memory.
 _SALIENCE_REPORTED_TESTIMONY: Final[int] = 60
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
+
+# --- Evidence reasoning v2 only (default-OFF candidate renderer) -------------
+# Under v2 the observer's OWN movement and task attempts are recorded as
+# observations, and the derived evidence context is appended as extra lines. Both
+# entered at salience 90, above the witnessed vent (85) and every sighting of
+# another player (50), so a long game's own-route log plus one speaker's claim
+# volume evicted the only rows a meeting can act on (follow-up review NG3-1,
+# VENT-2 and GR-1; reproduced by
+# ``tests/fixtures/memory_rendering/evidence_v2_budget_keeps_witnessed_evidence``).
+# The v2 ladder below ranks by what a listener can act on. Nothing here applies
+# to lever-OFF or evidence v1: those paths keep the bands they shipped with.
+#
+# Inside the window the ``## Where you were:`` block renders, an own-transition
+# line duplicates a placement the route already states; an own task attempt
+# places only the observer. Both therefore rank below every sighting of another
+# player. The route block is NOT unbounded: it is capped at
+# :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans, charged against the same budget
+# ahead of the observations, and shed oldest-first, so a tick that falls off both
+# the route and this band is stated nowhere. That loss is deliberate and bounded
+# -- it is the observer's own past position, which no other player's testimony
+# depends on -- and it is pinned by
+# ``test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget``.
+_SALIENCE_OWN_ROUTINE: Final[int] = 20
+# Death bounds derived from the agent's own body discovery and the announced
+# roster. One row per dead player, so the class cannot grow with speech; ranked
+# just under the witnessed vent, which is first-hand and role-proving.
+_SALIENCE_EVIDENCE_DEATH: Final[int] = 84
+# A placement pair no walk on the public map can join. This is the class the
+# whole travel check exists to produce, so it outranks the sightings it is
+# derived from; it stays under the witnessed vent, which needs no reconciliation.
+_SALIENCE_EVIDENCE_TRAVEL_CONTRADICTED: Final[int] = 83
+# Walking verdicts that contest nothing -- "a walk fits", "insufficient", the
+# regroup-crossing abstention. Useful context, one row per placement pair, so
+# they rank below the first-hand sightings they are computed from.
+_SALIENCE_EVIDENCE_TRAVEL: Final[int] = 45
+# The withheld-subjects notice, one row at most, minted by
+# ``_select_within_budget`` once the budget is spent so its number counts what
+# the render actually left out. This band places it one step above the caveats it
+# closes; the budget cannot shed it out from under them, because keeping a caveat
+# reserves it.
+_SALIENCE_EVIDENCE_ACCOUNT_NOTICE: Final[int] = 16
+# "Route feasibility alone cannot establish ..." -- a caveat about a claim, with
+# no placement of its own. Bounded per subject in ``evidence_context`` and ranked
+# last, because its volume is the speaker's choice rather than the agent's
+# evidence.
+_SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY: Final[int] = 15
+# Evidence reasoning v1 keeps ONE flat band for its context lines. v1 is a
+# committed candidate whose rendered bytes are compared against v2; re-ranking it
+# would change what those comparisons measured, so this stays where it shipped.
+_SALIENCE_EVIDENCE_V1_CONTEXT: Final[int] = 90
 
 # Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
 # belief block is the non-elastic carve-out (``_assemble_view`` never budgets it),
@@ -163,6 +219,11 @@ class _Observation:
     ``sighting_suffix`` is that row's directional breadcrumb, carried beside the key
     rather than inside it -- it lands on a subject's most-recent sighting only, so
     it must not split the run it terminates.
+
+    ``account_uncertainty_subject`` marks the evidence-v2 caveat rows, each of
+    which shows exactly one claim subject. :func:`_select_within_budget` counts
+    the marked rows it keeps so the withheld-subjects notice states what the
+    render actually left out rather than what the per-subject bound alone dropped.
     """
 
     salience: int
@@ -171,6 +232,7 @@ class _Observation:
     observation_id: str | None = None
     sighting: _SightingKey | None = None
     sighting_suffix: str = ""
+    account_uncertainty_subject: bool = False
 
 
 @dataclass(frozen=True)
@@ -247,6 +309,28 @@ _MEETINGS_HEADER: Final[str] = "## Meetings so far:"
 # The one-line summary that replaces a full-roster tick-0 sighting group. It names
 # every subject it stands for, so the fold costs a line instead of a roster.
 _SPAWN_GROUP_PREFIX: Final[str] = "You saw every other player in "
+
+
+def _evidence_context_salience(kind: EvidenceContextKind) -> int:
+    """Where one evidence-reasoning v2 context line sits in the salience ladder.
+
+    A function rather than a module-level table: AGENTS.md forbids module-level
+    mutable state, and an exhaustive ``match`` makes a new
+    :data:`~agents.memory.evidence_context.EvidenceContextKind` a type error here
+    instead of an unranked line that quietly enters at the wrong band.
+    """
+
+    match kind:
+        case "death":
+            return _SALIENCE_EVIDENCE_DEATH
+        case "travel_contradicted":
+            return _SALIENCE_EVIDENCE_TRAVEL_CONTRADICTED
+        case "travel":
+            return _SALIENCE_EVIDENCE_TRAVEL
+        case "account_uncertainty_notice":
+            return _SALIENCE_EVIDENCE_ACCOUNT_NOTICE
+        case "account_uncertainty":
+            return _SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY
 
 
 def _impostors_remaining_clause(remaining: int | None) -> str:
@@ -384,6 +468,21 @@ def render_for_prompt(
     ladder, so the budget sheds routine sightings before it sheds the game's only
     cross-meeting social memory.
 
+    Under evidence reasoning v2 the derived context lines enter by CLASS rather
+    than as one flat band (:func:`_evidence_context_salience`): death bounds and a
+    negative walking verdict rank just under the witnessed vent, the remaining
+    walking verdicts rank under the sightings they are computed from, and the
+    account-uncertainty caveat ranks last, below the observer's own routine rows.
+    A caveat's volume is chosen by the speaker who made the claims, so it can no
+    longer displace first-hand evidence; the caveat block is additionally bounded
+    per subject in :mod:`agents.memory.evidence_context`, and a caveat list this
+    render truncates -- by that bound, by the token budget, or by both -- closes
+    with one line counting the subjects missing from THESE bytes, whose cost
+    :func:`_select_within_budget` reserves as soon as the first caveat is kept.
+    Evidence v1 keeps its single
+    :data:`_SALIENCE_EVIDENCE_V1_CONTEXT` band and lever-OFF renders no context
+    line at all, so both arms stay byte-identical to what they shipped.
+
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
     perception has run is a wiring bug, not a normal state, so we
@@ -434,12 +533,33 @@ def render_for_prompt(
         observations = _coalesce_sightings(
             observations, roster=roster, own_agent_id=own_agent_id
         )
-    if memory.evidence_reasoning_version in (1, 2):
+    if memory.evidence_reasoning_version == 1:
         observations.extend(
-            _Observation(salience=90, tick=0, line=line)
+            _Observation(salience=_SALIENCE_EVIDENCE_V1_CONTEXT, tick=0, line=line)
             for line in evidence_context_lines(
                 memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
             )
+        )
+    account_uncertainty_subjects = 0
+    if memory.evidence_reasoning_version == 2:
+        context_rows = v2_evidence_context_rows(
+            memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+        )
+        # Every subject the caveat block covers, including the ones the
+        # per-subject bound already dropped. The bound's own notice row is NOT
+        # carried into the candidates: the budget sheds caveats below it, so the
+        # number it states is only decidable once the selection is made, and
+        # ``_select_within_budget`` mints the line it can keep true.
+        account_uncertainty_subjects = sum(row.subject_count for row in context_rows)
+        observations.extend(
+            _Observation(
+                salience=_evidence_context_salience(row.kind),
+                tick=0,
+                line=row.line,
+                account_uncertainty_subject=row.kind == "account_uncertainty",
+            )
+            for row in context_rows
+            if row.kind != "account_uncertainty_notice"
         )
     # Fold each first-hand observation's stable id into its line BEFORE the
     # salience sort, so ordering, tie-breaks and the token-budget arithmetic all
@@ -504,6 +624,7 @@ def render_for_prompt(
         trail_truncated=trail_truncated,
         token_budget=token_budget,
         snapshot_clock=memory.evidence_reasoning_version == 2,
+        account_uncertainty_subjects=account_uncertainty_subjects,
     )
 
 
@@ -1559,7 +1680,19 @@ def _build_v2_observations(
     own_agent_id: str | None,
     teammate_ids: frozenset[str],
 ) -> list[_Observation]:
-    """Render actual records without inferring transitions or simultaneity."""
+    """Render actual records without inferring transitions or simultaneity.
+
+    The observer's own transitions and task attempts are recorded here as
+    observations, which the OFF and v1 paths never do. They enter at
+    :data:`_SALIENCE_OWN_ROUTINE`, below every sighting of another player: a game
+    emits one own-row per tick, so ranking them above the witnessed rows made a
+    long game's render its own movement log (follow-up review NG3-1). The
+    ``## Where you were:`` block restates the recent part of the route anyway,
+    but only the recent part: it holds at most
+    :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans and is itself charged against the
+    budget, so a tick older than the rendered route keeps no placement once this
+    band is shed. :data:`_SALIENCE_OWN_ROUTINE` records why that trade is taken.
+    """
     observations: list[_Observation] = []
     seen_bodies: set[str] = set()
     own_victims = _collect_own_kill_victims(episodic)
@@ -1598,7 +1731,7 @@ def _build_v2_observations(
         elif event.type == "own_transition":
             mode = " (inside a vent)" if payload.get("in_vent") else ""
             body = f"You moved from {payload.get('from_room')} to {payload.get('to_room')}{mode}."
-            salience = 90
+            salience = _SALIENCE_OWN_ROUTINE
         elif event.type == "own_task_attempt":
             outcome = payload.get("outcome")
             result = (
@@ -1609,7 +1742,7 @@ def _build_v2_observations(
                 else "the attempt was rejected; no progress or completion occurred"
             )
             body = f"You attempted {payload.get('task_id')} in {payload.get('room')}: {result}."
-            salience = 90
+            salience = _SALIENCE_OWN_ROUTINE
         elif event.type == _EVENT_OWN_KILL:
             body = f"You (IMPOSTOR) killed {payload.get('victim_id')} in {payload.get('room')}."
             salience = _SALIENCE_OWN_KILL
@@ -2508,6 +2641,7 @@ def _assemble_view(
     trail_truncated: bool,
     token_budget: int,
     snapshot_clock: bool = False,
+    account_uncertainty_subjects: int = 0,
 ) -> str:
     """Assemble the final Markdown view, enforcing token budget on observations.
 
@@ -2526,6 +2660,12 @@ def _assemble_view(
     even the capped route does not fit, so the trail can never overflow the budget
     onto the observations. Whenever any span was dropped -- by the cap or by that
     shedding -- the block says so.
+
+    ``account_uncertainty_subjects`` is how many claim subjects the evidence-v2
+    caveat block covers in total; it is zero for lever-OFF and evidence v1, which
+    render no caveat. A caveat list the budget truncates closes with one line
+    counting the subjects it left out, reserved as it is selected -- see
+    :func:`_select_within_budget`.
 
     The budget arithmetic charges every character that lands in the
     final output, including the Markdown separators (``"\\n\\n"`` between
@@ -2592,6 +2732,7 @@ def _assemble_view(
         kept = _select_within_budget(
             observations=observations,
             budget=remaining - header_cost,
+            account_uncertainty_subjects=account_uncertainty_subjects,
         )
 
     if not trail_block and not kept:
@@ -2652,10 +2793,40 @@ def _select_trail_within_budget(
     return [], 0
 
 
+def _account_notice_cost(withheld: int) -> int:
+    """What the withheld-subjects notice costs, or nothing when none is due."""
+
+    if withheld < 1:
+        return 0
+    return _estimate_tokens("\n- " + account_uncertainty_notice_line(withheld))
+
+
+def _with_account_notice(
+    kept: list[_Observation], *, withheld: int
+) -> list[_Observation]:
+    """The kept rows with the withheld-subjects notice in its salience place."""
+
+    notice = _Observation(
+        salience=_evidence_context_salience("account_uncertainty_notice"),
+        tick=0,
+        line=account_uncertainty_notice_line(withheld),
+    )
+    index = next(
+        (
+            position
+            for position, obs in enumerate(kept)
+            if obs.salience < notice.salience
+        ),
+        len(kept),
+    )
+    return [*kept[:index], notice, *kept[index:]]
+
+
 def _select_within_budget(
     *,
     observations: Iterable[_Observation],
     budget: int,
+    account_uncertainty_subjects: int = 0,
 ) -> list[_Observation]:
     """Include observations in salience order until one cannot fit.
 
@@ -2670,18 +2841,54 @@ def _select_within_budget(
     the observations block (the line is joined to the previous bullet
     line with ``"\\n"`` and prefixed with ``"- "``), so the budget cost
     of inserting it is computed against ``"\\n- " + obs.line``.
+
+    ``account_uncertainty_subjects`` is how many claim subjects the evidence-v2
+    caveat block covers in total, the ones
+    :data:`~agents.memory.evidence_context.MAX_ACCOUNT_UNCERTAINTY_SUBJECTS`
+    dropped included; it is zero on every path that renders no caveat. Rows
+    marked ``account_uncertainty_subject`` each show ONE of those subjects, so
+    how many are missing is decidable only here, after the shedding -- which is
+    why the notice that states it is minted here instead of being ranked in with
+    the candidates, where its number would describe the pre-budget list.
+
+    The invariant is that a PARTIAL caveat list never passes for a whole one:
+    once a caveat is kept, the notice its list will need is reserved, exactly as
+    :func:`_select_trail_within_budget` reserves the route's truncation line. The
+    reserve is charged only while accepting a caveat, so it competes with further
+    caveats and never with the evidence above them -- a speaker's claim volume
+    must not cost a witnessed row. A budget that keeps NO caveat renders none of
+    this class and says nothing about it, like every other class the budget
+    sheds: the sentence marks the end of a list the reader can see, and standing
+    alone it would name a quantity with nothing to count against.
     """
 
     kept: list[_Observation] = []
     remaining = budget
+    shown = 0
     for obs in observations:
         line_with_separator = "\n- " + obs.line
         cost = _estimate_tokens(line_with_separator)
-        if cost > remaining:
+        shown_after = shown + (1 if obs.account_uncertainty_subject else 0)
+        reserved = (
+            _account_notice_cost(account_uncertainty_subjects - shown_after)
+            if shown_after
+            else 0
+        )
+        if cost + reserved > remaining:
             break
         kept.append(obs)
         remaining -= cost
-    return kept
+        shown = shown_after
+    withheld = account_uncertainty_subjects - shown
+    # Accepting a caveat required its cost PLUS the notice due once it was in, so
+    # a kept caveat leaves that notice affordable and the assertion holds by
+    # construction rather than by luck.
+    if shown < 1 or withheld < 1:
+        return kept
+    assert _account_notice_cost(withheld) <= remaining, (
+        "the withheld-subjects notice was not reserved while caveats were selected"
+    )
+    return _with_account_notice(kept, withheld=withheld)
 
 
 __all__ = [

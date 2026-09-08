@@ -1320,11 +1320,72 @@ _PREFIX_BYTES_NOTE: Final[str] = (
     "if any digest differs from accepted[].sha256."
 )
 
+_RESTAMP_NOTE: Final[str] = (
+    "One entry per commit that edited a GENERATOR_SOURCES file after the freeze "
+    "WITHOUT moving the set: source_sha256 was regenerated only after "
+    "test_the_committed_manifest_regenerates_from_its_own_band showed accepted[] "
+    "and skipped[] identical to the committed record. A commit that moves any "
+    "prefix digest or skip is not restamped here: the set becomes development "
+    "data and a new band is frozen under a new card "
+    "(tasks/post-merge-plan.md, 'Sequencing')."
+)
+
+#: Every post-freeze restamp of :func:`source_digests`, oldest first. Each entry
+#: names the date, the commit whose edit moved a dependency digest, the files it
+#: moved and the card that authorised it. The list is part of the manifest
+#: ``build_manifest`` produces, so the regeneration test compares it like every
+#: other field and an undocumented restamp cannot pass quietly.
+DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = (
+    MappingProxyType(
+        {
+            "date": "2026-09-08",
+            "commit": "7bcc79ed",
+            "card": "tasks/work/evidence-renderer-salience.md",
+            "sources": (
+                "agents/memory/store.py, experiments/held_out_prefixes.py "
+                "(this record itself)"
+            ),
+            "note": (
+                "The evidence-reasoning v2 salience repair. It changes rendered "
+                "prompt bytes on the default-OFF v2 path only; prefix generation "
+                "reads episodic memory and engine state, not the render, so all "
+                "fifty accepted digests and the eight skips were unchanged. "
+                "held_out_prefixes.py moved because this restamp list was added "
+                "to it, which changes no generated prefix."
+            ),
+        }
+    ),
+    MappingProxyType(
+        {
+            "date": "2026-09-08",
+            "commit": "56d3e5fd",
+            "card": "tasks/work/evidence-renderer-salience.md",
+            "sources": (
+                "agents/memory/store.py, experiments/held_out_prefixes.py "
+                "(this record itself)"
+            ),
+            "note": (
+                "The round-1 review corrections to the same repair: the withheld "
+                "caveat count is computed after the token budget instead of "
+                "before it, and the own-routine demotion's justification was "
+                "corrected. Both touch the prompt render on the default-OFF v2 "
+                "path only, which prefix generation does not read, so all fifty "
+                "accepted digests and the eight skips were unchanged again."
+            ),
+        }
+    ),
+)
+
 
 def build_manifest(
     generated: GeneratedSet, *, repo_root: Path, card: str
 ) -> dict[str, object]:
-    """Assemble the freeze record: band, roster, hashes and skips -- never prefixes."""
+    """Assemble the freeze record: band, roster, hashes and skips -- never prefixes.
+
+    ``dependency_restamps`` states every post-freeze commit that moved a
+    :data:`GENERATOR_SOURCES` digest without moving the set, so the record shows
+    WHY ``source_sha256`` no longer matches the freeze commit's tree.
+    """
 
     development = development_definition_digests()
     collisions = sorted(set(development.values()) & set(generated.digests))
@@ -1356,6 +1417,10 @@ def build_manifest(
             "separators=(',', ':')) encoded as UTF-8, hashed with sha256"
         ),
         "source_sha256": source_digests(repo_root),
+        "dependency_restamps": {
+            "note": _RESTAMP_NOTE,
+            "entries": [dict(entry) for entry in DEPENDENCY_RESTAMPS],
+        },
         "accepted": [
             {"seed": prefix.seed, "sha256": digest}
             for prefix, digest in zip(generated.prefixes, generated.digests)

@@ -12,7 +12,7 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, Final, Literal, cast
 
 import pytest
 from hypothesis import given, settings
@@ -21,6 +21,12 @@ from pydantic import BaseModel
 
 from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
+from agents.memory.evidence_context import (
+    MAX_ACCOUNT_UNCERTAINTY_SUBJECTS,
+    EvidenceContextRow,
+    account_uncertainty_notice_line,
+    evidence_context_lines,
+)
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     SELF_LOCATION_TRAIL_MAX_SPANS,
@@ -48,6 +54,7 @@ from orchestrator.game import (
     build_default_agent_factory,
     build_default_meeting_runner,
 )
+from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.scheduler import TickScheduler
 
@@ -174,7 +181,21 @@ def _saw_body_event(
 
 
 def _build_memory_from_fixture(fixture: Mapping[str, Any]) -> AgentMemory:
-    memory = AgentMemory()
+    # ``evidence_reasoning_version`` and ``public_map`` are read only when the
+    # fixture states them, so every fixture written before the candidate renderer
+    # existed still builds a lever-OFF memory with no public topology. A caller
+    # renders one fixture under another arm by overriding the key:
+    # ``_build_memory_from_fixture({**fixture, "evidence_reasoning_version": None})``.
+    raw_version = fixture.get("evidence_reasoning_version")
+    version = None if raw_version is None else cast(Literal[1, 2], int(raw_version))
+    memory = AgentMemory(
+        evidence_reasoning_version=version,
+        public_map=(
+            public_map_from_engine_map(load_canonical_map())
+            if fixture.get("public_map") == "canonical"
+            else None
+        ),
+    )
 
     for raw_event in fixture["events"]:
         memory.episodic.append(
@@ -183,6 +204,12 @@ def _build_memory_from_fixture(fixture: Mapping[str, Any]) -> AgentMemory:
                 type=str(raw_event["type"]),
                 payload=dict(raw_event["payload"]),
                 provenance=str(raw_event["provenance"]),
+                # Only fixtures that pin the ``[obs ...]`` handles carry ids.
+                observation_id=(
+                    str(raw_event["observation_id"])
+                    if raw_event.get("observation_id") is not None
+                    else None
+                ),
             )
         )
 
@@ -219,9 +246,18 @@ def _build_memory_from_fixture(fixture: Mapping[str, Any]) -> AgentMemory:
     return memory
 
 
-def _load_fixture(name: str) -> tuple[Mapping[str, Any], str]:
+def _load_fixture(name: str, *, arm: str = "") -> tuple[Mapping[str, Any], str]:
+    """The fixture input and the golden bytes for one arm.
+
+    ``arm`` selects a sibling golden beside the default ``.expected.md``:
+    ``lever_off`` and ``evidence_v1`` pin what the SAME input renders with the
+    candidate renderer off and with evidence v1, which the v2 re-ranking must
+    leave byte-identical.
+    """
+
     fixture_path = _FIXTURE_DIR / f"{name}.json"
-    expected_path = _FIXTURE_DIR / f"{name}.expected.md"
+    suffix = f".{arm}" if arm else ""
+    expected_path = _FIXTURE_DIR / f"{name}{suffix}.expected.md"
     fixture = cast(Mapping[str, Any], json.loads(fixture_path.read_text("utf-8")))
     expected = expected_path.read_text("utf-8")
     return fixture, expected
@@ -230,7 +266,12 @@ def _load_fixture(name: str) -> tuple[Mapping[str, Any], str]:
 class TestGoldenFixtures:
     @pytest.mark.parametrize(
         "fixture_name",
-        ["crewmate_basic", "tight_budget_drops_low_salience", "impostor_minimal"],
+        [
+            "crewmate_basic",
+            "tight_budget_drops_low_salience",
+            "impostor_minimal",
+            "evidence_v2_budget_keeps_witnessed_evidence",
+        ],
     )
     def test_render_matches_golden(self, fixture_name: str) -> None:
         fixture, expected = _load_fixture(fixture_name)
@@ -240,6 +281,35 @@ class TestGoldenFixtures:
 
         assert rendered == expected, (
             f"\nFixture: {fixture_name}\n"
+            f"---- expected ----\n{expected}"
+            f"---- rendered ----\n{rendered}"
+        )
+
+    @pytest.mark.parametrize(
+        "arm,version",
+        [("lever_off", None), ("evidence_v1", 1)],
+    )
+    def test_the_reranking_leaves_the_other_arms_byte_identical(
+        self, arm: str, version: Literal[1] | None
+    ) -> None:
+        """The v2 ladder is v2-only: OFF and evidence v1 render what they shipped.
+
+        Both goldens were captured on the pre-repair tree, so a re-ranking that
+        leaked into either arm changes bytes here rather than silently changing
+        what the committed v1-versus-v2 comparisons measured.
+        """
+
+        fixture, expected = _load_fixture(
+            "evidence_v2_budget_keeps_witnessed_evidence", arm=arm
+        )
+        memory = _build_memory_from_fixture(
+            {**fixture, "evidence_reasoning_version": version}
+        )
+
+        rendered = render_for_prompt(memory, token_budget=int(fixture["token_budget"]))
+
+        assert rendered == expected, (
+            f"\nArm: {arm}\n"
             f"---- expected ----\n{expected}"
             f"---- rendered ----\n{rendered}"
         )
@@ -3278,3 +3348,421 @@ def test_a_fabricated_citation_does_not_survive_the_same_meeting_path(
 
     assert client.citations_offered > 0, "the perturbation never cited anything"
     assert marked > 0, "the nulled citation left no audit marker"
+
+
+# --- Evidence reasoning v2 salience (follow-up review NG3-1, VENT-2, GR-1) ---
+#
+# The golden fixture pins the whole render at the production budget. These cases
+# isolate the individual orderings and the account bound, so a failure names the
+# rule that broke rather than handing back a forty-line diff.
+
+_V2_ROUTE: Final[tuple[str, ...]] = (
+    "CAFETERIA",
+    "WEST_HALL",
+    "MEDBAY",
+    "WEST_HALL",
+    "ADMIN",
+    "EAST_HALL",
+    "ENGINEERING",
+)
+_VENT_LINE_FRAGMENT: Final[str] = "You witnessed p-6 vent in ENGINEERING."
+_SIGHTING_LINE_FRAGMENT: Final[str] = "You saw p-3 in WEST_HALL."
+
+
+def _v2_own_rows(*, role: str) -> list[EpisodicEvent]:
+    """A routine own-route log: one transition per tick plus three attempts."""
+
+    rows: list[EpisodicEvent] = []
+    for tick, room in enumerate(_V2_ROUTE):
+        rows.append(
+            _self_state_event(
+                tick=tick,
+                role=role,
+                room=room,
+                agent_id="p-1",
+                owned_task_ids=("prime_shields",),
+            )
+        )
+        if tick == 0:
+            continue
+        rows.append(
+            EpisodicEvent(
+                tick=tick,
+                type="own_transition",
+                payload={
+                    "from_room": _V2_ROUTE[tick - 1],
+                    "to_room": room,
+                    "in_vent": False,
+                    "observation_phase": "event",
+                    "observation_order": 0,
+                    "observer_room": _V2_ROUTE[tick - 1],
+                    "observer_in_vent": False,
+                },
+                provenance="observed",
+            )
+        )
+        if tick % 2 == 0:
+            rows.append(
+                EpisodicEvent(
+                    tick=tick,
+                    type="own_task_attempt",
+                    payload={
+                        "task_id": "prime_shields",
+                        "room": room,
+                        "outcome": "progressed",
+                        "observation_phase": "event",
+                        "observation_order": 1,
+                        "observer_room": room,
+                        "observer_in_vent": False,
+                    },
+                    provenance="observed",
+                )
+            )
+    return rows
+
+
+def _v2_witnessed_evidence() -> list[EpisodicEvent]:
+    """The two rows a meeting can act on: one sighting and the vent."""
+
+    return [
+        EpisodicEvent(
+            tick=1,
+            type="saw_player",
+            payload={
+                "player_id": "p-3",
+                "room": "WEST_HALL",
+                "action": None,
+                "observation_phase": "snapshot",
+            },
+            provenance="observed",
+        ),
+        EpisodicEvent(
+            tick=6,
+            type="saw_player",
+            payload={
+                "player_id": "p-6",
+                "room": "ENGINEERING",
+                "action": "vent",
+                "observation_phase": "event",
+                "observation_order": 2,
+                "observer_room": "ENGINEERING",
+                "observer_in_vent": False,
+            },
+            provenance="observed",
+        ),
+    ]
+
+
+def _v2_claim(
+    memory: AgentMemory, *, subject: str, speaker: str, tick: int, room: str
+) -> None:
+    """One spoken whereabouts claim -- the volume GR-1 says a speaker controls."""
+
+    memory.episodic.append(
+        EpisodicEvent(
+            tick=len(_V2_ROUTE),
+            type="reported_testimony",
+            payload={
+                "speaker": speaker,
+                "kind": "whereabouts",
+                "subject": subject,
+                "meeting_index": 1,
+                "from_tick": tick,
+                "to_tick": tick,
+                "room": room,
+                "co_present": [],
+            },
+            provenance="reported",
+        )
+    )
+
+
+def _v2_claim_flood(memory: AgentMemory, *, speaker: str = "p-5") -> None:
+    for index in range(20, 60):
+        _v2_claim(
+            memory,
+            subject=f"p-{index}",
+            speaker=speaker,
+            tick=index % len(_V2_ROUTE),
+            room="LABS",
+        )
+
+
+def _v2_memory(*, role: str = "CREWMATE") -> AgentMemory:
+    memory = AgentMemory(
+        evidence_reasoning_version=2,
+        public_map=public_map_from_engine_map(load_canonical_map()),
+    )
+    # The store keeps ticks non-decreasing, so the two sources are merged by tick
+    # rather than appended one after the other.
+    rows = _v2_own_rows(role=role) + _v2_witnessed_evidence()
+    for row in sorted(rows, key=lambda event: event.tick):
+        memory.episodic.append(row)
+    return memory
+
+
+class TestEvidenceV2Salience:
+    """Witnessed evidence outranks the observer's own routine under budget."""
+
+    def test_the_vent_and_a_sighting_outrank_every_own_routine_row(self) -> None:
+        memory = _v2_memory()
+
+        rows = _observation_rows(render_for_prompt(memory))
+
+        vent = next(i for i, row in enumerate(rows) if _VENT_LINE_FRAGMENT in row)
+        sighting = next(
+            i for i, row in enumerate(rows) if _SIGHTING_LINE_FRAGMENT in row
+        )
+        own = [i for i, row in enumerate(rows) if "You moved from" in row]
+        attempts = [i for i, row in enumerate(rows) if "You attempted" in row]
+        assert own and attempts
+        assert vent < min(own) and vent < min(attempts)
+        assert sighting < min(own) and sighting < min(attempts)
+
+    def test_a_budget_for_a_few_rows_spends_it_on_the_witnessed_evidence(self) -> None:
+        memory = _v2_memory()
+
+        rows = _observation_rows(render_for_prompt(memory, token_budget=200))
+
+        assert rows, "the budget was too tight to render any observation"
+        assert any(_VENT_LINE_FRAGMENT in row for row in rows)
+        assert not any("You moved from" in row for row in rows)
+
+    def test_a_claim_flood_cannot_push_the_witnessed_vent_out(self) -> None:
+        """The adverse case: the speaker chooses the claim volume, not the rank.
+
+        Forty claims from one speaker at the production budget. Before the
+        re-ranking every one of them entered above the vent, so the render the
+        table read carried the speaker's caveats and not the role-proving
+        observation the caveats were competing with.
+        """
+
+        memory = _v2_memory()
+        _v2_claim_flood(memory)
+
+        rows = _observation_rows(render_for_prompt(memory))
+
+        assert any(_VENT_LINE_FRAGMENT in row for row in rows)
+        assert any(_SIGHTING_LINE_FRAGMENT in row for row in rows)
+        assert len([row for row in rows if "Account uncertainty for" in row]) <= (
+            MAX_ACCOUNT_UNCERTAINTY_SUBJECTS
+        )
+        lines = evidence_context_lines(
+            memory, own_agent_id="p-1", teammate_ids=frozenset()
+        )
+        withheld = 40 - MAX_ACCOUNT_UNCERTAINTY_SUBJECTS
+        assert f"Account uncertainty: {withheld} further subjects not shown." in lines
+
+    def test_the_account_caveat_collapses_subjects_and_states_what_it_withheld(
+        self,
+    ) -> None:
+        memory = _v2_memory()
+        # p-3 is claimed three times, twice identically: one subject, one caveat,
+        # and that caveat counts the DISTINCT placements rather than naming one.
+        # One more subject than the bound allows, so the block must truncate.
+        others = [
+            f"p-{20 + index}" for index in range(MAX_ACCOUNT_UNCERTAINTY_SUBJECTS)
+        ]
+        for subject in ["p-3", "p-3", *others]:
+            _v2_claim(memory, subject=subject, speaker="p-5", tick=2, room="LABS")
+        _v2_claim(memory, subject="p-3", speaker="p-5", tick=4, room="REACTOR")
+
+        lines = evidence_context_lines(
+            memory, own_agent_id="p-1", teammate_ids=frozenset()
+        )
+
+        caveats = [line for line in lines if line.startswith("Account uncertainty for")]
+        assert len(caveats) == MAX_ACCOUNT_UNCERTAINTY_SUBJECTS
+        assert len({line.split(":")[0] for line in caveats}) == len(caveats)
+        assert (
+            "Account uncertainty for p-3: route feasibility alone cannot establish "
+            "any of the 2 claimed placements stated for them." in caveats
+        )
+        assert "Account uncertainty: 1 further subject not shown." in lines
+
+    def test_a_bounded_caveat_block_says_nothing_when_it_withholds_nothing(
+        self,
+    ) -> None:
+        memory = _v2_memory()
+        for subject in ("p-3", "p-4"):
+            _v2_claim(memory, subject=subject, speaker="p-5", tick=2, room="LABS")
+
+        lines = evidence_context_lines(
+            memory, own_agent_id="p-1", teammate_ids=frozenset()
+        )
+
+        assert len([line for line in lines if "Account uncertainty for" in line]) == 2
+        assert not any("further subjects not shown" in line for line in lines)
+
+    def test_a_negative_walking_verdict_outranks_the_caveat_about_the_same_claim(
+        self,
+    ) -> None:
+        memory = _v2_memory()
+        # p-3 was seen in WEST_HALL at tick 1 and is claimed in REACTOR at tick 1:
+        # no walk joins those, so the check is the conviction-grade half of the pair.
+        _v2_claim(memory, subject="p-3", speaker="p-5", tick=1, room="REACTOR")
+
+        rows = _observation_rows(render_for_prompt(memory))
+
+        verdict = next(
+            i for i, row in enumerate(rows) if "walking cannot reconcile" in row
+        )
+        caveat = next(
+            i for i, row in enumerate(rows) if "Account uncertainty for p-3" in row
+        )
+        assert verdict < caveat
+
+    def test_an_own_kill_row_outranks_every_re_ranked_evidence_line(self) -> None:
+        """The 96 band is untouched: the killer's own record still leads."""
+
+        memory = _v2_memory(role="IMPOSTOR")
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=6,
+                type="own_kill",
+                payload={
+                    "victim_id": "p-2",
+                    "room": "ENGINEERING",
+                    "observation_phase": "event",
+                    "observation_order": 3,
+                    "observer_room": "ENGINEERING",
+                    "observer_in_vent": False,
+                },
+                provenance="observed",
+            )
+        )
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=len(_V2_ROUTE),
+                type="public_meeting_roster",
+                payload={"living_ids": ("p-1", "p-3", "p-6"), "dead_ids": ("p-2",)},
+                provenance="public",
+            )
+        )
+        _v2_claim_flood(memory)
+
+        rows = _observation_rows(render_for_prompt(memory, token_budget=200))
+
+        assert "You (IMPOSTOR) killed p-2 in ENGINEERING." in rows[0]
+        assert not any("Death evidence for" in row for row in rows)
+        assert not any("Travel check for" in row for row in rows)
+
+    def test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped(
+        self,
+    ) -> None:
+        """The count describes THESE bytes, not the pre-budget list.
+
+        The bound takes its subjects before the renderer runs and the budget then
+        sheds caveats below it, so a number fixed in ``evidence_context`` counts
+        only the first of those two cuts (round-1 review). On this memory the
+        pre-budget count says four at every budget: four is what the bound
+        dropped, while at 1,020 tokens nine of the ten subjects are missing from
+        the render. The count is therefore computed after the selection, and the
+        sentence closes a list a reader can see -- never appearing without one,
+        and never leaving a truncated one unmarked.
+        """
+
+        memory = _v2_memory()
+        subjects = [f"p-{20 + index}" for index in range(10)]
+        for subject in subjects:
+            _v2_claim(memory, subject=subject, speaker="p-5", tick=2, room="LABS")
+
+        truncated_lists = 0
+        for budget in range(400, 3000, 20):
+            rows = _observation_rows(render_for_prompt(memory, token_budget=budget))
+            shown = [
+                row for row in rows if row.startswith("- Account uncertainty for ")
+            ]
+            notice = [row for row in rows if row.startswith("- Account uncertainty: ")]
+            if not shown:
+                assert not notice, f"budget {budget}: a notice closing no list"
+                continue
+            # Ten subjects against a bound of six: some are always missing.
+            truncated_lists += 1
+            assert notice == [
+                f"- {account_uncertainty_notice_line(len(subjects) - len(shown))}"
+            ], f"budget {budget}: {len(shown)} of {len(subjects)} subjects rendered"
+        assert truncated_lists, "no budget in the sweep cut inside the caveat block"
+
+    def test_the_withheld_notice_never_costs_the_witnessed_evidence_a_line(
+        self,
+    ) -> None:
+        """A speaker's claim volume must not buy a line from first-hand evidence.
+
+        The notice is reserved only once a caveat is kept, so it competes with
+        the rest of its own block and never with the rows above it. Reserving it
+        from the first row instead spends its cost at every budget: this render
+        has room for exactly two observations, and that variant fills the second
+        with the notice and drops the witnessed vent.
+        """
+
+        fixture, _expected = _load_fixture(
+            "evidence_v2_budget_keeps_witnessed_evidence"
+        )
+        memory = _build_memory_from_fixture(fixture)
+
+        rows = _observation_rows(render_for_prompt(memory, token_budget=290))
+
+        assert len(rows) == 2
+        assert "You discovered p-2's body in ADMIN." in rows[0]
+        assert _VENT_LINE_FRAGMENT in rows[1]
+
+    def test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget(
+        self,
+    ) -> None:
+        """The route block is capped and budgeted, so the demotion costs ticks.
+
+        Own routine ranks below every sighting partly because ``## Where you
+        were:`` restates the route -- but only its recent part: the block holds
+        at most ``SELF_LOCATION_TRAIL_MAX_SPANS`` spans and is charged against
+        the same budget ahead of the observations. A tick older than the rendered
+        route therefore keeps no placement at all once the routine band is shed,
+        and the render says nothing about it beyond the route's own truncation
+        line. Pinned as the limitation it is, not as an invariant to defend: it
+        is what ranking witnessed evidence first costs.
+        """
+
+        fixture, _expected = _load_fixture(
+            "evidence_v2_budget_keeps_witnessed_evidence"
+        )
+        memory = _build_memory_from_fixture(fixture)
+
+        view = render_for_prompt(memory, token_budget=int(fixture["token_budget"]))
+
+        recorded = {
+            row.tick
+            for row in memory.episodic.recent(since_tick=0)
+            if row.type == "self_state"
+        }
+        assert _TRAIL_TRUNCATED in view
+        placed: set[int] = set()
+        for line in view.splitlines():
+            if line.startswith(_TRAIL_ROUTE_PREFIX):
+                for start, end in re.findall(r"t(\d+)(?:-(\d+))?", line):
+                    placed.update(range(int(start), int(end or start) + 1))
+                continue
+            # Every other way the render states the observer's own room: an own
+            # transition, and the "immediately before this event" clause an
+            # event-phase row carries.
+            during = re.search(r"during tick (\d+)", line)
+            if during and ("You moved from" in line or "You were in" in line):
+                placed.add(int(during.group(1)))
+        assert sorted(recorded - placed) == [0, 1, 2, 3, 4, 5, 6]
+
+    def test_a_caveat_row_that_counts_no_subject_is_rejected(self) -> None:
+        """The count is only as good as the rows it is summed from.
+
+        ``subject_count`` is what the renderer sums to learn how many subjects
+        the block covers, so a caveat row minted without one would silently make
+        every withheld count too small.
+        """
+
+        with pytest.raises(ValueError, match="exactly one subject"):
+            EvidenceContextRow(kind="account_uncertainty", line="Account uncertainty…")
+        with pytest.raises(ValueError, match="at least one subject"):
+            EvidenceContextRow(
+                kind="account_uncertainty_notice",
+                line=account_uncertainty_notice_line(1),
+            )
+        with pytest.raises(ValueError, match="no claim subject"):
+            EvidenceContextRow(kind="death", line="Death evidence…", subject_count=1)
