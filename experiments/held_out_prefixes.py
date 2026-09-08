@@ -1355,6 +1355,25 @@ DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = (
             ),
         }
     ),
+    MappingProxyType(
+        {
+            "date": "2026-09-08",
+            "commit": "56d3e5fd",
+            "card": "tasks/work/evidence-renderer-salience.md",
+            "sources": (
+                "agents/memory/store.py, experiments/held_out_prefixes.py "
+                "(this record itself)"
+            ),
+            "note": (
+                "The round-1 review corrections to the same repair: the withheld "
+                "caveat count is computed after the token budget instead of "
+                "before it, and the own-routine demotion's justification was "
+                "corrected. Both touch the prompt render on the default-OFF v2 "
+                "path only, which prefix generation does not read, so all fifty "
+                "accepted digests and the eight skips were unchanged again."
+            ),
+        }
+    ),
 )
 
 
