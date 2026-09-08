@@ -168,9 +168,18 @@ The inventory is the 215 ids in
 plus the 17 further original ids that only the follow-up appendix's section A
 carries (`C5-4`, `C7a-1`, `C7c-3`, `CMP-06`, `G3-2`, `M1-F2`, `M2-F3`, `M3-04`,
 `M3-05`, `M7-2`, `M7-3`, `M8-01`, `M8-04`, `P1-5`, `P1-8`, `P2-4`, `P2-7`) — 232
-ids, each appearing exactly once below. `CARD-01` and `CARD-02` are single ids
-that the appendices file under more than one lens; each has one row here that
-covers both filings.
+ids — plus the three ids that only the first review's own section 9 carries,
+withdrawn there and never entered into an appendix (`P1-2`, `C7b-9`, `G4-9`).
+That is 235 ids, each appearing exactly once below.
+
+`CARD-01` and `CARD-02` are single ids that the appendices file under more than
+one lens. `CARD-01`'s two filings are both repaired and share one row.
+`CARD-02`'s two do not share a disposition: its published-source-pin filing
+(`REVIEW_APPENDIX_findings.md:88`) is repaired by the merge, stated in the
+`M5-02` row below, while its stale-validation-output filing (`:89`, which the
+follow-up appendix re-files as `CARD-02(temporal)` and the first report calls
+`CARD-02-temporal`) still stands. Retained is therefore the word `CARD-02`'s one
+row carries, and that row is in the retained table.
 
 Four dispositions, and every id gets exactly one:
 
@@ -210,15 +219,23 @@ tree.
 | G4-4, C7c-4, GL-3 | Repaired. An independent movement-witness reconstruction exists, and the packet census counts event batches under both clocks. | `e12b6180` (+36 lines in `eval/witness_entitlement.py`); the follow-up's `NC1-4` re-verified the census on fresh recordings. |
 | C4-4, C4-5 | Repaired. `ReplayLog` refuses a caller-supplied substrate flag that disagrees with the resolved version, and rejects a non-integer version instead of coercing it. | `e12b6180`; `orchestrator/replay.py` `_temporal_version_is_integer` and the constructor's switch-versus-version check. |
 | C3-03 | Repaired. `accounting_complete` is read: it gates cumulative totals, and an attempt that is not accounted for keeps them refusing. | `cb3438ef`, extended by `14249a79`'s attestation path. |
-| CARD-02, M5-02 | Repaired by the merge. The published source pin `5006a32f` (`api/public_results.py:32`) is reachable from `main` because #435 landed as merge commit `8161689a` rather than a squash. | `8161689a`; `git merge-base --is-ancestor 5006a32f main` exits 0. |
-| P2-6, C7a-6, P2-1 | Repaired. The branch policy is decided and recorded: delivery is a `work/<card-slug>` branch and one pull request per card, `AGENTS.md` and `docs/workflow.md` say so, and the CI workflow no longer triggers on the cleanup branch. `docs/workflow.md` closes with the merged state, so the canonical process document is no longer behind the tree; its pilot narrative keeps that batch's own dated figures, which recommendation 4 below decides deliberately rather than by omission. | #436 (`081aee15`, content `e9c47c76`). 25 files still contain the string `codex/cleanup`; every one is a historical record naming a real branch, and none is a policy statement. |
+| M5-02 | Repaired by the merge. The published source pin `5006a32f` (`api/public_results.py:32`) is reachable from `main` because #435 landed as merge commit `8161689a` rather than a squash. The same merge repairs the identical half of `CARD-02` (`REVIEW_APPENDIX_findings.md:88`), whose second filing is retained below and keeps that id's row. | `8161689a`; `git merge-base --is-ancestor 5006a32f main` exits 0. |
+| P2-6, C7a-6, P2-1 | Repaired. The branch policy is decided and recorded: delivery is a `work/<card-slug>` branch and one pull request per card, `AGENTS.md` and `docs/workflow.md` say so, and the CI workflow no longer triggers on the cleanup branch. `docs/workflow.md` closes with the merged state, so the canonical process document is no longer behind the tree; its pilot narrative keeps that batch's own dated figures, which recommendation 4 below decides deliberately rather than by omission. | #436 (`081aee15`, content `e9c47c76`). The string `codex/cleanup` survives only in historical records naming a real branch, never in a policy statement: `git grep -l 'codex/cleanup' \| wc -l` prints 25 at `201849fc`, the commit this section was written against, and 27 on this branch — the two added files being this document and the follow-up correction record, which are themselves such records. |
 
 ### First-pass findings routed to a card
 
+The six cards were re-read at `origin/main` (`201849fc`) before routing, under the
+rule
+[the follow-up record states](../audits/review-2026-09-06/followup-correction-record.md#routed-to-a-queued-card):
+an id is routed when the card names it by id, or when the card carries an
+acceptance item that repairs the same defect. Of the five ids below, only
+`CMP-01` is named by id — the nonblocking card's `P-05 / CMP-01` item. The other
+four are routed by mechanism, and each row says through which re-filed id.
+
 | IDs | Current disposition | Evidence / owner |
 | --- | --- | --- |
-| G1-02, M3-02, G4-2 | Routed. Each survives only on the temporal-v1 / evidence-v1 path, where the follow-up re-filed them as `NC1-2` / `FU-ALIBI-1` and `FU-ALIBI-3`. Retiring v1 removes the code path they live on. | [Retire temporal v1 and evidence v1](../tasks/work/retire-temporal-evidence-v1.md), whose first acceptance item blocks it until an adopting record for evidence v2 exists. |
-| GC-3, GC-4 | Routed. The probe-to-first-append window is the concurrency item the follow-up re-filed as `CONC-2` / `FU-04`; the queued card decides the probe-descriptor lifetime explicitly instead of leaving it implied. | [Nonblocking follow-up improvements](../tasks/work/nonblocking-followup-improvements.md), its probe-descriptor item. |
+| G1-02, M3-02, G4-2 | Routed. Each survives only on the temporal-v1 / evidence-v1 path, where the follow-up re-filed them as `NC1-2` / `FU-ALIBI-1` and `FU-ALIBI-3`. Retiring v1 removes the code path they live on. | [Retire temporal v1 and evidence v1](../tasks/work/retire-temporal-evidence-v1.md) names the three re-filed ids, not these three, so the routing is by mechanism: the card deletes the v1 path all six live on. Its first acceptance item blocks it until an adopting record for evidence v2 exists. |
+| GC-3, GC-4 | Routed. The probe-to-first-append window is the concurrency item the follow-up re-filed as `CONC-2` / `FU-04`; the queued card decides the probe-descriptor lifetime explicitly instead of leaving it implied. | [Nonblocking follow-up improvements](../tasks/work/nonblocking-followup-improvements.md). Routed by mechanism: the card names neither id, and its probe-descriptor item is the one that closes the peer-unlink race this window opens. |
 | CMP-01 | Routed. Card and gate counts in `tasks/README.md` become derived rather than typed, with a planted failure. | [Nonblocking follow-up improvements](../tasks/work/nonblocking-followup-improvements.md), its `P-05 / CMP-01` item. |
 
 ### First-pass findings refuted or not reproducible
@@ -226,6 +243,7 @@ tree.
 | IDs | Current disposition | Evidence / owner |
 | --- | --- | --- |
 | G1-09, G2-9 | Refuted as written, and the review's own follow-up says so: gameplay is still identical to `main`, but "byte-identical except one new terminal flag" stopped being accurate once the identity stamp landed. The filed severity (info) and class stay as filed. | `24a0fe6a` narrowed the divergence to the first tick row and the terminal row; the standing divergence statement is the `C1-04, C2-7, C4-7, C7b-6` row below. |
+| P1-2, C7b-9, G4-9 | Refuted by the first review itself, in its own section 9, "Findings refuted or withdrawn", and quoted here as it filed them. `P1-2`: "the counts are right ... but no document states a trailer convention and the README makes no git-metadata claim", recorded there as a process observation for section 11 — recommendation 7 in the table below is its decision. `C7b-9`: "pre-existing pattern, out of scope". `G4-9`: "refuted on inspection ... the movement observation's destination naming is by contract". These three never entered either appendix, so none carries a severity, a class or a refuter vote, and the withdrawal is left exactly as the review wrote it. | `REVIEW_REPORT.md:170`, `:173` and `:174`. `P1-5`, withdrawn in the same sentence as `G4-9`, does have an appendix row and is in the not-reproducible row below. |
 | G2-11, G3-2, CMP-06, M3-04, M3-05, M7-3, P1-5, P1-8, P2-4 | Not reproducible at `fd1f923c` by the disposition lens assigned to each, and recorded there as such. `G3-2` was withdrawn by the first review itself (`REVIEW_REPORT.md:171`). No claim is made that the underlying behaviour was repaired. | Follow-up appendix section A, rows marked `not-reproducible`; quoted, not remeasured. |
 
 ### First-pass findings retained
@@ -250,7 +268,7 @@ tree.
 | C1-02, C1-03, C1-06, C1-07, C2-3, C4-8, C5-4, C5-6, C6-9, C7a-1, C7a-3, C7a-4, C7a-7, C7b-4, C7b-10, C7c-1, C7c-3, C7c-5, C7c-6, C7c-8, GH-1, GL-1, GL-2, GL-4, GL-5, GL-6, GL-7, M2-F3, M2-F4, M5-04 | Retained. Reader-strictness gaps, dead or duplicated code, lever-stamp edge cases and small hygiene items, each filed low or info and none reachable on the default path with committed bytes. Repairing them piecemeal adds risk to readers that all 300 canonical recordings currently pass. **Reconsider** in the module that next changes for a card, where the fix is free. | No card owns them; `bash scripts/verify_samples.sh` is the standing control on the reader path. |
 | C5-2, C5-3, C5-8, C7b-7, G5-7, G5-8, G6-3, G6-4, G6-5, G6-7, G6-8, GAP-FE-4, M5-01, P1-3, P1-6, P1-9 | Retained. Viewer copy, suppressed and empty rubric surfaces, an overlapping overlay header, a spoiler-defeating link, unrendered meeting panels and front-door assets. The follow-up re-filed the load-bearing ones as `NG4-1` through `NG4-10`. **Reconsider** as one viewer-copy card, which the review recommended and the queue has not created. | Follow-up section 7, "Viewer copy". |
 | GC-6, C3-08 | Retained. The README still promises bounded-run and resume instructions that `docs/deployment.md` does not carry. The review lists it as nonblocking and no queued card owns it. **Reconsider** with the next operator-facing change to `scripts/run_tournament.py`, the surface the missing section would describe. | Follow-up section 3.2. |
-| C6-4, C6-8, CARD-03, CMP-04, M1-F4, M2-F2, M3-07, M6-01 | Retained. Card Results quote point-in-time figures that have drifted, and one audit-byte total in `tasks/work/audit-fact-gates.md` is stale. Results are dated records of what was verified when a card closed; rewriting them to match this tree would rewrite history, which this project forbids. **Reconsider** by labelling rather than by editing the numbers — recommendation 1's derived-count rule is the durable form. | Follow-up `FU-DISP-3`, part (c). |
+| C6-4, C6-8, CARD-02, CARD-03, CMP-04, M1-F4, M2-F2, M3-07, M6-01 | Retained. Card Results quote point-in-time figures that have drifted, and one audit-byte total in `tasks/work/audit-fact-gates.md` is stale. `CARD-02` is retained here for its surviving filing: its published-source-pin half is repaired by the merge (the `M5-02` row above), while `tasks/work/temporal-observation-contract.md:172` still records `# 390 historical tasks/prompts and 23 work cards valid.` where the live command now reports a different sentence and more cards — the same drift this row covers. Results are dated records of what was verified when a card closed; rewriting them to match this tree would rewrite history, which this project forbids. **Reconsider** by labelling rather than by editing the numbers — recommendation 1's derived-count rule is the durable form. | Follow-up `FU-DISP-3`, part (c); `CARD-02`'s second filing is `REVIEW_APPENDIX_findings.md:89`, re-filed as `CARD-02(temporal)` in the follow-up appendix's section A. |
 | C7c-2, C7c-10, CARD-04, CMP-02, CMP-03, CMP-05, M5-03, M6-03, M6-04, M7-1, M7-2, M7-4, M8-01, M8-02, M8-04, M8-05, P1-7, P2-2, P2-3, P2-5, P2-7, P2-8, P2-9, P2-10, TGE-5 | Retained. Process observations: prose-only closures, an acceptance criterion rewritten in the commit that checked it, evidence cited from `/tmp`, uncommitted review artefacts, mixed commits, aspirational one-writer-per-file, and an unmigrated `CONTRIBUTING.md`. Counting `/tmp` citations under `tasks/work/` on this tree prints 64, unchanged from the follow-up's reading, and the cards holding them are closed records. This section and the follow-up record answer the specific complaint in `CMP-03` and `M6-04` — id-level traceability — for both reviews. **Reconsider** per new card: a card written from here on cites committed evidence. | This document; recommendation 3 below. |
 | C6-2 | Retained. The cold `GET /replays` listing is still unmeasured on this branch; the card that owned the measurement declared the gap rather than closing it. **Reconsider** when the listing path next changes, or when a served-latency claim is published. | [Replay loading](../tasks/work/replay-loading-performance.md). |
 

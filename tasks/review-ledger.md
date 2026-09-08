@@ -319,8 +319,10 @@ prefix bytes. Any later change to a hashed source follows the restamp rule in
 ## Review disposition pass (2026-09-08)
 
 Every finding id in the two 2026-09-06 appendices now has exactly one stated
-disposition, and each of the first review's seven workflow recommendations has an
-adopt-or-decline with a reason. The first review's ids are dispositioned in
+disposition — as do the three ids the first review withdrew in its own section 9
+without ever filing them in an appendix (`P1-2`, `C7b-9`, `G4-9`) — and each of
+the first review's seven workflow recommendations has an adopt-or-decline with a
+reason. The first review's ids are dispositioned in
 [the cleanup disposition ledger](../docs/cleanup-dispositions.md); the follow-up's
 own ids are in
 [the follow-up correction record](../audits/review-2026-09-06/followup-correction-record.md),
@@ -334,8 +336,10 @@ M1-F1, C3-03), `b79fc1b7` (G5-1, GM-1, C2-6, CARD-01, C7a-2, GAP-FE-2, C5-7),
 M6-02), `e12b6180` (C1-01, G5-2, C4-2, TGE-1, TGE-2, G4-4, C7c-4, GL-3, C4-4,
 C4-5), `14249a79` (NC4-1, FU-01, NC5-04), `29b7bb4a` (FU-2), `46e74f6d` (FU-B-01,
 M2-F1), `24a0fe6a` (FU-D2, FU-APPX-5, NC4-4), `ad0f9b5a` (CONC-1), `241a5ca9`
-(P-02, FU-3), the merge `8161689a` (CARD-02, M5-02, by reachability of the
-published source pin) and #436's `081aee15` (P2-6, C7a-6, P2-1, NC5-10). This is
+(P-02, FU-3), the merge `8161689a` (M5-02, and the published-source-pin filing of
+CARD-02, by reachability of that pin; CARD-02's second filing, the stale
+validation output in `work/temporal-observation-contract.md`, is retained rather
+than repaired) and #436's `081aee15` (P2-6, C7a-6, P2-1, NC5-10). This is
 a finding-to-commit index, not a second per-commit register: the per-commit rows
 the follow-up's `P-10` asks for stay with
 [the nonblocking card](work/nonblocking-followup-improvements.md).
