@@ -83,7 +83,10 @@ the pin, not the discovery.
   budget-shed subject. The notice is now minted post-selection and its cost
   reserved as soon as a caveat is kept — the pattern `_select_trail_within_budget`
   uses for the route's truncation line — and the planted revert to the
-  pre-budget count fails the sweep above at budget 980.
+  pre-budget count fails the sweep above at budget 980. *Amended 2026-09-08,
+  closeout round 1: post-selection minting stands and is what makes the count
+  true. The reserve no longer waits for a kept caveat — it runs from the first
+  row selected — so the sentence survives a budget that sheds the whole class.*
 - [x] Review correction: Results claimed the withheld notice reaches the render
   in ordinary play, while the card's own golden carries no such line at 1,500
   tokens. The claim is withdrawn, superseded in place, and replaced by the
@@ -573,6 +576,12 @@ render a truncated list and every one carries the correct count, 186 render no
 caveat and none carries the sentence, zero violations. The gate
 `test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped` runs the
 same sweep over 400-2,980 on a ten-subject memory and asserts both halves.
+*Superseded 2026-09-08, closeout round 1: this whole paragraph describes the
+round-1 mechanism, which no longer ships. The reserve runs from the first row
+selected, so the "keeps at least one caveat" condition is gone; the same sweep
+now reads `empty 11 correct 377 closing no list 175 violations 0` and the gate
+requires the sentence at every budget in its range, not only where a list
+survives. The withdrawal this paragraph justifies is itself withdrawn.*
 
 Why the notice is not reserved unconditionally, which would make the withdrawn
 sentence true as written: it would state a quantity with nothing to count
@@ -651,6 +660,14 @@ claims to detect, by editing the source, running, and restoring.
    (`assert 'You witnessed p-6 vent in ENGINEERING.' in '- Account uncertainty: 7
    further subjects not shown.'`), the same sweep's "closing no list" branch, and
    the v2 golden.
+   *Superseded 2026-09-08, closeout round 1: this edit is no longer a plant, it
+   is the shipping behaviour, and all three tests it broke were changed
+   deliberately — the gate named here is replaced by
+   `test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice`,
+   the sweep's branch is inverted, and the golden was regenerated. Its measured
+   consequence, the vent giving way to the notice at 290 tokens, is unchanged and
+   is now the card's stated price. The plant that proves the CURRENT reserve is
+   its inverse, closeout planted failure 1.*
 3. **The ordering the correction defends.** Setting `_SALIENCE_OWN_ROUTINE` back
    to 90 fails
    `test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget`: the seven
