@@ -959,8 +959,11 @@ PR's review-comments endpoint returns the same two, the latest review
   `- Account uncertainty: 7 further subjects not shown.`
 
 **Verification (closeout round 1).** Run on the committed tree at `0815333d`,
-with this card's own Markdown the only later change to it; exit codes captured
-directly, never through a pipe.
+and `scripts/check.sh` re-run at `86e133e3` with identical numbers — the two
+commits in between change this card's Markdown only. Exit codes captured
+directly, never through a pipe, and each log checked for its own worktree's
+`rootdir` because a concurrent session on this machine shares the scratch
+directory.
 
 - `.venv/bin/python -m pytest tests/agents/test_memory_rendering.py
   tests/agents/test_evidence_context.py -q` → `162 passed` (138 in the rendering
