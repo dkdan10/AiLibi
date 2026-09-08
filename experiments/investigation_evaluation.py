@@ -23,7 +23,7 @@ from engine.entities import Role
 from engine.world import load_canonical_map
 from eval.balance_eval import load_tournament_report
 from eval.report_schema import GameCostSummary, GameProvenance
-from experiments.deduction_evaluation import source_hashes
+from experiments.deduction_evaluation import source_hashes, verify_meeting_memories
 from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
 from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot
@@ -480,14 +480,11 @@ def measure_capture(capture: InvestigationCapture) -> InvestigationMeasurement:
         for meeting in report.meetings
         for ballot in meeting.ballots
     }
-    for memory in memories.values():
-        if not any(
-            agent == memory.agent_id and memory.rendered_memory_text in prompt
-            for agent, prompt in capture.provider.prompts
-        ):
-            raise ValueError(
-                "reconstructed opening memory differs from supplied live input"
-            )
+    verify_meeting_memories(
+        meetings=report.meetings,
+        memories=memories,
+        live_prompts=capture.provider.prompts,
+    )
     facts: list[ObservedFact] = []
     completions: list[TaskCompletion] = []
     for observer, agent in sorted(capture.agents.items()):

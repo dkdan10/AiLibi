@@ -14,8 +14,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from api.replay_loader import ReplayLoader
+from api.schemas import AgentMemoryView
 from eval.balance_eval import load_tournament_report
-from eval.report_schema import GameCostSummary, GameProvenance
+from eval.report_schema import GameCostSummary, GameProvenance, MeetingReport
 from experiments.deduction_scenarios import (
     ScenarioCapture,
     ScenarioCase,
@@ -158,6 +159,58 @@ class CaseMeasurement(_Frozen):
     own_evidence_context: Mapping[str, tuple[str, ...]]
 
 
+def verify_meeting_memories(
+    *,
+    meetings: Sequence[MeetingReport],
+    memories: Mapping[str, AgentMemoryView],
+    live_prompts: Sequence[tuple[str | None, str]],
+) -> None:
+    """Bind each reconstructed memory to the meeting and voter it was built for.
+
+    The guard this replaces asked only whether a memory's rendered text appeared
+    in *some* prompt the agent received anywhere in the game. In a multi-meeting
+    game that is satisfied by any meeting's prompt, so a reconstruction that
+    served meeting 0's memory for meeting 1 passed silently and the published
+    ``memory_projection_sha256`` described memories the model never saw.
+
+    The meeting partition comes from the recorded per-meeting calls, because the
+    provider protocol carries no meeting id. To keep the LIVE prompts the thing
+    actually compared, every recorded ``(agent, prompt)`` pair must be one the
+    live provider was handed — a recording that does not mirror the live inputs
+    is refused rather than quietly standing in for them. Extra live prompts are
+    fine: a failed call never reaches a meeting row.
+    """
+
+    unmatched: Counter[tuple[str | None, str]] = Counter(live_prompts)
+    for meeting in meetings:
+        issued: dict[str, list[str]] = {}
+        for call in meeting.llm_calls:
+            pair = (call.agent_id, call.prompt)
+            if unmatched[pair] <= 0:
+                raise ValueError(
+                    "recorded meeting call is not one of the live provider inputs"
+                )
+            unmatched[pair] -= 1
+            if call.agent_id is not None:
+                issued.setdefault(call.agent_id, []).append(call.prompt)
+        for ballot in meeting.ballots:
+            key = f"{meeting.meeting_id}/{ballot.voter}"
+            memory = memories.get(key)
+            if memory is None:
+                raise ValueError(f"no reconstructed memory for {key}")
+            prompts = issued.get(ballot.voter, [])
+            if not prompts:
+                raise ValueError(
+                    f"meeting {meeting.meeting_id} issued no prompt for {ballot.voter}"
+                )
+            if memory.agent_id != ballot.voter or not any(
+                memory.rendered_memory_text in prompt for prompt in prompts
+            ):
+                raise ValueError(
+                    "reconstructed opening memory differs from supplied live input"
+                )
+
+
 def validate_channels(case: ScenarioCase, *, kills: int, vents: int) -> None:
     """Reject a mislabeled direct-proof control or contaminated deduction case."""
     if case == "witnessed_kill":
@@ -237,15 +290,11 @@ def measure_capture(
         for player in roles
         if any(ballot.voter == player for ballot in meeting.ballots)
     }
-    for name, memory in memories.items():
-        player = name.rsplit("/", 1)[1]
-        if not any(
-            agent == player and memory.rendered_memory_text in prompt
-            for agent, prompt in capture.provider.prompts
-        ):
-            raise ValueError(
-                "reconstructed meeting memory differs from live provider input"
-            )
+    verify_meeting_memories(
+        meetings=report.meetings,
+        memories=memories,
+        live_prompts=capture.provider.prompts,
+    )
     entries = read_all_entries(capture.replay_path)
     ticks = [row for row in entries if isinstance(row, ReplayEntry)]
     if any(row.temporal_observation_version != arm.temporal_version for row in ticks):
