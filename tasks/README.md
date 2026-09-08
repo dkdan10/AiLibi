@@ -83,8 +83,8 @@ archived follow-up review, with candidates still OFF: id-level
 [recorded-provenance gaps](work/recorded-provenance-gaps.md),
 [accounts-channel hardening](work/accounts-channel-hardening.md), the
 [fresh-model deduction instrument](work/fresh-deduction-instrument.md), the
-[held-out prefix freeze](work/held-out-prefix-freeze.md) that prepares its
-inputs, the [nonblocking improvements](work/nonblocking-followup-improvements.md), and
+[held-out prefix freeze](work/held-out-prefix-freeze.md) that prepared its
+inputs (done, #438), the [nonblocking improvements](work/nonblocking-followup-improvements.md), and
 [retiring temporal v1 and evidence v1](work/retire-temporal-evidence-v1.md).
 These are planning documents; none is implemented, and none authorizes a live
 provider call or an experimental adoption. The instrument's provider, token,

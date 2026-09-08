@@ -308,3 +308,10 @@ prefix bytes, and opens the pull request whose owner merge is the freeze; a
 separate runner session, started after that merge, regenerates the set,
 verifies the hashes and opens no prefix before the run. No run is authorized
 by this ruling.
+
+The freeze happened on 2026-09-08 (02:03 UTC): the owner merged #438 (head `f9b8f3bd`) as
+merge commit `23a23c2d` after its four Codex review findings were fixed and
+independently verified on the branch. `audits/deduction-candidate/held-out/manifest.json`
+is the frozen record: fifty accepted seeds (3000 to 3057), eight skips, no
+prefix bytes. Any later change to a hashed source follows the restamp rule in
+`tasks/post-merge-plan.md`.

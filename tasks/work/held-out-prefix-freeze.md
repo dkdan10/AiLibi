@@ -979,8 +979,8 @@ digest in the manifest from `f9d02ad2` through `3eb49dfc`; `ab8db76d…` is seed
 3000's digest at `27e6d952` and at every head since. `1482ce81…` and `8ab1186e…`
 are planted values from the two fail-loud plants and appear in no committed
 object, by design; `9e467dd1…` appears only in round 3's record of the fabricated
-value it replaced and in this audit sentence. No other elided digest occurs in
-this card.
+value it replaced, in round 5's correction note, and in this audit sentence. No
+other elided digest occurs in this card.
 
 **No new gate.** This pass adds no invariant and no test: the behaviour it
 describes is already held by

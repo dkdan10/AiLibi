@@ -537,6 +537,11 @@ the manifest marks the set development and a new band is frozen under a new
 card. The blanks in the authorization card and in the B.12 field list carry
 this ruling.
 
+**Freeze (owner, 2026-09-08, 02:03 UTC):** #438 merged as merge commit `23a23c2d` (head
+`f9b8f3bd`) after its four Codex review findings were fixed and verified. The
+held-out set is frozen; the runner regenerates it from the manifest's band and
+verifies every digest before any arm runs.
+
 ## Not assessed here
 
 PRs #432-#434 (closed on the owner's instruction on 2026-09-07 after each
