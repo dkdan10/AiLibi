@@ -1311,13 +1311,21 @@ class TacticalPolicyView(_FrozenView):
 
 
 class ReportProvenanceGroupView(_FrozenView):
-    """Recorded behavior identities kept distinct in public aggregate results."""
+    """Recorded behavior identities kept distinct in public aggregate results.
+
+    ``temporal_observation_version`` shadows
+    :attr:`eval.report_schema.GameProvenance.temporal_observation_version`:
+    ``substrate_flags`` records only that the temporal lever was on, so without
+    the version a v1 and a v2 recording share one identity and pool into a
+    single unlabelled group. ``None`` is unknown, not v1.
+    """
 
     agent_factory_kind: Literal["scripted", "experimental", "custom"] | None = None
     experiment_config: ExperimentConfigView | None = None
     substrate_flags: Mapping[str, bool] | None = None
     tactical_policy: TacticalPolicyView | None = None
     crew_tactical_policy: TacticalPolicyView | None = None
+    temporal_observation_version: Literal[1, 2] | None = None
     game_ids: tuple[str, ...]
 
 
@@ -1349,6 +1357,9 @@ class ReplayMetadataView(_FrozenView):
     substrate_flags: Mapping[str, bool] | None = None
     tactical_policy: TacticalPolicyView | None = None
     crew_tactical_policy: TacticalPolicyView | None = None
+    # The clock the bytes were recorded under, read from the rows themselves.
+    # ``None`` is an unstamped legacy recording, which is unknown, not v1.
+    temporal_observation_version: Literal[1, 2] | None = None
 
 
 class FailedCallView(_FrozenView):

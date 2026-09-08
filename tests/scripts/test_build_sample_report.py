@@ -114,6 +114,7 @@ def test_historical_serialization_preserves_existing_cells_and_omits_added_metad
             "substrate_flags",
             "tactical_policy",
             "crew_tactical_policy",
+            "temporal_observation_version",
         ):
             assert key not in historical_game
             historical_game[key] = current_game[key]
@@ -145,6 +146,7 @@ def test_check_flags_a_stale_report(tmp_path: Path) -> None:
         "experiment",
         "substrate",
         "cutoff",
+        "temporal_clock",
         "tactical_policy",
         "crew_tactical_policy",
     ],
@@ -181,6 +183,8 @@ def test_current_serialization_cannot_hide_recorded_identity_as_legacy(
                 )
             }
         )
+    elif identity == "temporal_clock":
+        game = game.model_copy(update={"temporal_observation_version": 2})
     else:
         stamp_class = (
             TacticalPolicyStamp
@@ -218,6 +222,7 @@ def test_current_serialization_cannot_hide_recorded_identity_as_legacy(
             "substrate_flags",
             "tactical_policy",
             "crew_tactical_policy",
+            "temporal_observation_version",
             "completion_status",
             "outcome_verified",
         ):

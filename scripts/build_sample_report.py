@@ -214,6 +214,7 @@ def _historical_report_exclusions(report: TournamentEvalReport) -> dict[str, Any
                     "substrate_flags": True,
                     "tactical_policy": True,
                     "crew_tactical_policy": True,
+                    "temporal_observation_version": True,
                     "meetings": {"__all__": {"skip_confidence_threshold"}},
                     "failed_calls": {
                         call_index: {"call_id"}
@@ -232,6 +233,9 @@ def _can_project_historical(report: TournamentEvalReport) -> bool:
     return all(
         game.agent_factory_kind is None
         and game.experiment_config is None
+        # A stamped clock is recorded behavior the legacy shape cannot express,
+        # so it disqualifies the projection instead of being excluded from it.
+        and game.temporal_observation_version is None
         and (
             game.tactical_policy is None
             or game.tactical_policy == fsm_default_tactical_policy_stamp()

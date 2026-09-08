@@ -67,6 +67,7 @@ from orchestrator.replay import (
     CompletionStatus,
     CrewTacticalPolicyStamp,
     TacticalPolicyStamp,
+    TemporalObservationVersion,
     WinnerSide,
 )
 from orchestrator.experiment_config import RecordedExperimentConfig
@@ -135,6 +136,7 @@ class _GameReportEvalView(BaseModel):
     substrate_flags: Mapping[str, bool] | None = None
     tactical_policy: TacticalPolicyStamp | None = None
     crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+    temporal_observation_version: TemporalObservationVersion | None = None
 
 
 class _TournamentReportEvalView(BaseModel):

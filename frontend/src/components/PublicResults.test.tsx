@@ -29,8 +29,8 @@ describe("public result interpretation", () => {
     const old = renderToStaticMarkup(<PublicResultsView results={summary} />);
     expect(old).toContain("Behavior provenance is unavailable");
     const mixed = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [
-      { game_ids: ["headless-seed-1"], agent_factory_kind: null, experiment_config: null, substrate_flags: null, tactical_policy: null, crew_tactical_policy: null },
-      { game_ids: ["headless-seed-2"], agent_factory_kind: "custom", experiment_config: null, substrate_flags: null, tactical_policy: null, crew_tactical_policy: null },
+      { game_ids: ["headless-seed-1"], agent_factory_kind: null, experiment_config: null, substrate_flags: null, tactical_policy: null, crew_tactical_policy: null, temporal_observation_version: null },
+      { game_ids: ["headless-seed-2"], agent_factory_kind: "custom", experiment_config: null, substrate_flags: null, tactical_policy: null, crew_tactical_policy: null, temporal_observation_version: 2 },
     ] }} />);
     expect(mixed).toContain("mixes recorded behavior configurations");
     expect(mixed).toContain("Agent factory not recorded");

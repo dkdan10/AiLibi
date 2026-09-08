@@ -97,6 +97,7 @@ from orchestrator.replay import (
     FailedCallReplayEntry,
     LLMCallRecord,
     TacticalPolicyStamp,
+    TemporalObservationVersion,
     WinnerSide,
 )
 from orchestrator.experiment_config import RecordedExperimentConfig
@@ -227,6 +228,16 @@ class GameProvenance(_FrozenModel):
     A scripted factory describes the built-in policy classes, not a whole-run
     baseline certificate. Engine experiments, substrate and learned policy
     stamps are independent parts of the identity and remain visible together.
+
+    ``temporal_observation_version`` is the observation clock the recording ran
+    under (:func:`orchestrator.replay.recorded_temporal_observation_version`).
+    ``substrate_flags`` only says the temporal lever was on, so without the
+    version a v1 and a v2 recording carry byte-identical provenance and a mixed
+    directory folds into one unlabelled arm. Version 2 is a different
+    source-time perception substrate, so it is a separate arm and grouping must
+    keep it separate. ``None`` means unknown, exactly as it does for every other
+    field here: a recording made before the stamp existed is legacy, not v1, and
+    reading one does not relabel it.
     """
 
     agent_factory_kind: AgentFactoryKind | None = None
@@ -234,6 +245,10 @@ class GameProvenance(_FrozenModel):
     substrate_flags: Mapping[str, bool] | None = None
     tactical_policy: TacticalPolicyStamp | None = None
     crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+    # Narrowed to the versions observation/version.py can resolve rather than a
+    # bare int: a report claiming a clock this build cannot reconstruct under is
+    # a corrupt claim, and the recorded field it mirrors carries the same alias.
+    temporal_observation_version: TemporalObservationVersion | None = None
 
 
 class ReportProvenanceGroup(GameProvenance):
@@ -344,6 +359,7 @@ class GameReport(_FrozenModel):
     substrate_flags: Mapping[str, bool] | None = None
     tactical_policy: TacticalPolicyStamp | None = None
     crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+    temporal_observation_version: TemporalObservationVersion | None = None
 
     def recorded_provenance(self) -> GameProvenance:
         """Project recorded identity without resolving unknowns from this runtime."""
@@ -353,6 +369,7 @@ class GameReport(_FrozenModel):
             substrate_flags=self.substrate_flags,
             tactical_policy=self.tactical_policy,
             crew_tactical_policy=self.crew_tactical_policy,
+            temporal_observation_version=self.temporal_observation_version,
         )
 
     @model_validator(mode="before")
