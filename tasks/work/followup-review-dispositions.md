@@ -31,6 +31,27 @@ not an adopted behaviour.
 
 ## Acceptance
 
+- [x] Review correction: the `Results` invocation published for recommendation 2
+  prints what is quoted under it. `valcmds.py` takes the section as an optional
+  third argument defaulting to `Validation`, so the one counter measures both
+  halves; the quoted run prints `16` for `held-out-prefix-freeze.md` and `0` for
+  the other eight, each marked as having no `## Results` section at all. Proved
+  by `factscan.py`'s new check 7, which re-runs the command from the card's own
+  quoted source: with the two-argument script restored it prints
+  `the output quoted under valcmds.py . origin/main Results is not what it prints`
+  with all nine disagreeing lines and exits 1, and exits 0 here.
+- [x] Review correction: `docs/cleanup-dispositions.md`'s recommendation-2 row no
+  longer claims a script in the card's Results produces the Results-half counts
+  when none did. It names the one counter run once per section, and the card
+  quotes the run that prints each half. Proved by the same check 7, which re-runs
+  both invocations at this head and compares them with the two blocks.
+- [x] Review correction: `factscan.py` covers the class it was written to end.
+  Check 7 re-runs every command the card quotes for one of its own quoted scripts
+  — six of the ten quoted invocations, naming the four it cannot re-run — and
+  check 8 resolves every `file:line` citation and binds it to the literal quoted
+  beside it. Planted proofs for both, quoted in the closeout round 2 subsection:
+  the two-argument counter, and the round-1 off-by-one `:172` citation restored in
+  the ledger, each printing its disagreement and exiting 1.
 - [x] Review correction: the headline Verification paragraph publishes this
   head's `audits/` figures, not round 1's. The recomputed row is
   `14,883,359 tracked bytes / 203 files`, the planted-failure note reads "the
@@ -394,10 +415,10 @@ The card's Validation section, in order:
 - `uv run python scripts/validate_task_docs.py` — exit 0: "390 historical phase
   tasks and 390 prompts; 43 work cards."
 - `uv run pytest tests/scripts/test_check_doc_facts.py
-  tests/scripts/test_verify_ml_evidence.py -q` — 364 passed in 302.63s.
+  tests/scripts/test_verify_ml_evidence.py -q` — 364 passed in 515.66s.
 - `bash scripts/check.sh` — exit 0: ruff and format clean, "Contracts: 4 kept, 0
   broken", document and generated-type checks green, "Success: no issues found in
-  469 source files", "7201 passed, 20 skipped, 3 xfailed" in 214.67s, 514
+  469 source files", "7201 passed, 20 skipped, 3 xfailed" in 249.79s, 514
   frontend tests in 19 files, and the production build.
 
 Also run, because the post-merge plan requires them of every card:
@@ -492,13 +513,21 @@ sys.exit(1 if bad else 0)
 ```
 
 ```text
-$ .venv/bin/python scan.py docs/cleanup-dispositions.md \
-    audits/review-2026-09-06/followup-correction-record.md
-audits/review-2026-09-06/followup-correction-record.md:93 header=3 row=4   # at 7cbf9786
+$ .venv/bin/python scan.py <the 7cbf9786 copies of both documents>
+.../followup-correction-record.md:93 header=3 row=4
 rows whose cell count differs from their header: 1 ; exit=1
 
-rows whose cell count differs from their header: 0 ; exit=0                # at this head
+$ .venv/bin/python scan.py docs/cleanup-dispositions.md \
+    audits/review-2026-09-06/followup-correction-record.md
+rows whose cell count differs from their header: 0 ; exit=0
 ```
+
+*(Closeout round 2 split this block into its two runs, matching the shape the
+round-2 link-survival block below already uses: the planted run was always
+against a scratch copy of the `7cbf9786` documents, and the head run against the
+committed paths. Neither command's output changed. Both runs previously stood
+under one `$` line, which made the head run's output unmappable to a command by
+`factscan.py`'s new check 7.)*
 
 The second check round 1 quoted here — a `markdown_it` `gfm-like` render counting
 `<td>` against `<th>` — is **withdrawn by round 2**, which found it could not
@@ -842,9 +871,10 @@ gates and nothing else, and no card carries ten. Counted per card at
 names a runner and is neither global gate:
 
 ```python
-# valcmds.py — .venv/bin/python valcmds.py <repo-root> origin/main
+# valcmds.py — .venv/bin/python valcmds.py <repo-root> origin/main [section]
 import pathlib, re, subprocess, sys
 ROOT, REF = pathlib.Path(sys.argv[1]), sys.argv[2]
+SECTION = sys.argv[3] if len(sys.argv) > 3 else "Validation"
 GLOBAL = ("validate_task_docs.py", "scripts/check.sh")
 SPAN = re.compile(r"`([^`]+)`")
 RUNNER = re.compile(r"\b(uv run|\.venv/bin|bash |pytest|npm |python -m|scripts/)")
@@ -864,9 +894,18 @@ def commands(section):
     return found
 plan = text("tasks/post-merge-plan.md")
 for card in sorted(set(re.findall(r"work/[a-z0-9-]+\.md", plan))):
-    section = re.search(r"^## Validation\n(.*?)(?=^## |\Z)", text(f"tasks/{card}"), re.S | re.M)
-    print(f"{len(commands(section.group(1)) if section else []):2d}  {card}")
+    section = re.search(rf"^## {SECTION}\n(.*?)(?=^## |\Z)", text(f"tasks/{card}"), re.S | re.M)
+    found = commands(section.group(1)) if section else []
+    print(f"{len(found):2d}  {card}" + ("" if section else f"  (no ## {SECTION} section)"))
 ```
+
+*(Closeout round 2 added the optional third argument — the section name,
+defaulting to `Validation` — and the "no `## <section>` section" marker, so that
+one script measures both halves of the recommendation this row answers. The
+closeout's first round quoted a `Results` invocation of the two-argument script,
+which ignored the third argument and silently re-printed the Validation census;
+the correction is in the closeout round 2 subsection below. The Validation output
+block below is what the parameterised script prints, unchanged.)*
 
 ```text
 $ .venv/bin/python valcmds.py . origin/main
@@ -1159,6 +1198,13 @@ cleanup branch name and the host-local path prefix — are assembled at run time
 that quoting the script inside a counted file cannot move the numbers it
 measures.
 
+*(Closeout round 2 extended this script in place rather than quoting a second
+one: check 7 re-runs every command the card quotes for one of its own quoted
+scripts and compares the output with what is quoted under it, and check 8
+resolves every `file:line` citation and binds it to the literal quoted beside it.
+Checks 1 to 6 are unchanged, and so are the lines they print. The output block
+below is the extended script's, run at this head.)*
+
 ```python
 #!/usr/bin/env python3
 """factscan.py — recompute every mechanical fact this pass publishes.
@@ -1177,6 +1223,16 @@ Run as: .venv/bin/python factscan.py <repo-root>   ; exits 1 on any disagreement
   4. id inventory  ids per disposition table, per document and per section
   5. prose numbers the routed-section sentence, the artifacts row, the counts
                    the card publishes as facts about this head
+  6. prior state   the ledger section's three commit groups, resolved against
+                   the register as it stood before this pass
+  7. quoted output every command the card quotes for one of its own quoted
+                   scripts is re-run from the quoted source and must print the
+                   output quoted under it (the self-run and runs against another
+                   tree, which name a placeholder path, are named and skipped)
+  8. citations     every 'file.ext:line' citation resolves to a file in this
+                   tree and lies inside it, and where a literal is quoted beside
+                   the citation and occurs in that file, it occurs in the cited
+                   range
 
 The two literals this pass itself counts — the cleanup branch name and the
 host-local path prefix — are assembled at run time so that quoting this script
@@ -1185,10 +1241,13 @@ inside a counted file cannot move the numbers it measures.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 DOCS = (
@@ -1499,6 +1558,121 @@ else:
             fail(f"{sha} is claimed as new to the register, but {BASE}'s register names it")
     print(f"  checked against `git show {BASE}:tasks/review-ledger.md`")
 
+print("== 7. quoted commands reproduce their quoted output ==")
+CARD = "tasks/work/followup-review-dispositions.md"
+card_text = (ROOT / CARD).read_text()
+BLOCK = re.compile(r"^```(python|text)\n(.*?)^```", re.S | re.M)
+quoted: dict[str, str] = {}
+for kind, body in BLOCK.findall(card_text):
+    named = re.match(r"#\s*([a-z_]+\.py)", body.splitlines()[0]) or re.match(
+        r"#!.*\n\"\"\"([a-z_]+\.py)", body
+    )
+    if kind == "python" and named:
+        quoted[named.group(1)] = body
+scratch = pathlib.Path(tempfile.mkdtemp(prefix="factscan-"))
+for name, body in quoted.items():
+    (scratch / name).write_text(body)
+SELF = pathlib.Path(__file__).name
+CHILD = bool(os.environ.get("FACTSCAN_CHILD"))
+print(f"  scripts the card quotes: {sorted(quoted)}")
+
+
+def plain(line: str) -> str:
+    """A quoted line without its ' ; exit=N' and trailing '  # note' annotations."""
+    return re.sub(r"\s{2,}#.*$", "", re.sub(r"\s+;\s*exit=\d+\s*$", "", line.rstrip())).rstrip()
+
+
+for kind, body in BLOCK.findall(card_text):
+    if kind != "text":
+        continue
+    joined: list[str] = []
+    for line in body.splitlines():
+        if joined and joined[-1].endswith("\\"):
+            joined[-1] = joined[-1][:-1].rstrip() + " " + line.strip()
+        else:
+            joined.append(line)
+    runs: list[tuple[str, list[str]]] = []
+    for line in joined:
+        if line.startswith("$ "):
+            runs.append((line[2:], []))
+        elif runs:
+            runs[-1][1].append(line)
+    for command, output in runs:
+        invoked = re.match(r"\.venv/bin/python ([a-z_]+\.py)(.*)$", plain(command))
+        if not invoked or invoked.group(1) not in quoted:
+            continue
+        name, argv = invoked.group(1), invoked.group(2)
+        if name == SELF or CHILD or "<" in argv:  # the self-run; a run on another tree
+            print(f"  not re-run here: {name}{argv}")
+            continue
+        done = subprocess.run(
+            [sys.executable, str(scratch / name), *shlex.split(argv)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "FACTSCAN_CHILD": "1"},
+        )
+        want = [plain(line) for line in output if plain(line)]
+        got = [line.rstrip() for line in done.stdout.splitlines() if line.strip()]
+        print(f"  re-run, {len(got)} lines, exit {done.returncode}: {name}{argv}")
+        if got != want:
+            fail(f"{CARD}: the output quoted under {name}{argv} is not what it prints")
+            for i in range(max(len(want), len(got))):
+                a = want[i] if i < len(want) else None
+                b = got[i] if i < len(got) else None
+                if a != b:
+                    print(f"    quoted: {a!r}")
+                    print(f"    prints: {b!r}")
+        codes = [int(c) for c in re.findall(r";\s*exit=(\d+)", "\n".join(output))]
+        if codes and codes[-1] != done.returncode:
+            fail(f"{CARD}: {name}{argv} is quoted with exit={codes[-1]}, it exits {done.returncode}")
+
+print("== 8. file:line citations ==")
+CITE = re.compile(r"`([A-Za-z0-9_./-]+\.(?:md|py|ts|tsx|yml|sh|json)):(\d+)(?:-(\d+))?`")
+NEXT_SPAN = re.compile(r"`([^`\n]*)`")
+cited = bound = 0
+for doc in DOCS:
+    text = (ROOT / doc).read_text()
+    for cite in CITE.finditer(text):
+        path, first = cite.group(1), int(cite.group(2))
+        last = int(cite.group(3)) if cite.group(3) else first
+        shown = cite.group(0).strip("`")  # without backticks: quoting a failure
+
+        dest = next(
+            (
+                c
+                for c in (
+                    ROOT / path,
+                    (ROOT / doc).parent / path,
+                    ROOT / "audits/review-2026-09-06" / path,
+                )
+                if c.is_file()
+            ),
+            None,
+        )
+        if dest is None:
+            fail(f"{doc}: {shown} names no file in this tree")
+            continue
+        lines = dest.read_text().splitlines()
+        if last > len(lines):
+            fail(f"{doc}: {shown} is past the end of {path} ({len(lines)} lines)")
+            continue
+        cited += 1
+        span = NEXT_SPAN.search(text, cite.end())
+        if not span or len(span.group(1)) < 12 or span.start() - cite.end() > 200:
+            continue
+        hits = [n for n, line in enumerate(lines, 1) if span.group(1) in line]
+        if not hits:
+            continue
+        bound += 1
+        if not any(first <= h <= last for h in hits):
+            fail(
+                f"{doc}: {shown} is cited for {span.group(1)[:44]!r}, "
+                f"which is on line(s) {hits}"
+            )
+print(f"  citations resolved and in range: {cited}; of them, bound to a literal "
+      f"quoted beside them: {bound}")
+
 print()
 print(f"disagreements: {len(failures)}")
 sys.exit(1 if failures else 0)
@@ -1546,6 +1720,20 @@ $ .venv/bin/python factscan.py .
   new to the register: ['cb3438ef', 'b79fc1b7', '700c0671', '8dd0576c']
   the full index names 13 commits
   checked against `git show 201849fc:tasks/review-ledger.md`
+== 7. quoted commands reproduce their quoted output ==
+  scripts the card quotes: ['factscan.py', 'gfm_probe.py', 'linkscan.py', 'scan.py', 'valcmds.py', 'words.py']
+  not re-run here: scan.py <the 7cbf9786 copies of both documents>
+  re-run, 1 lines, exit 0: scan.py docs/cleanup-dispositions.md audits/review-2026-09-06/followup-correction-record.md
+  re-run, 3 lines, exit 0: gfm_probe.py
+  not re-run here: linkscan.py <the 7cbf9786 copies of both documents>
+  re-run, 1 lines, exit 0: linkscan.py docs/cleanup-dispositions.md audits/review-2026-09-06/followup-correction-record.md
+  re-run, 9 lines, exit 0: valcmds.py . origin/main
+  not re-run here: words.py '<the 1aaae43e ledger>::## The 2026-09-06 review: first-pass findings' <the 1aaae43e record>
+  re-run, 1 lines, exit 0: words.py 'docs/cleanup-dispositions.md::## The 2026-09-06 review: first-pass findings' audits/review-2026-09-06/followup-correction-record.md
+  not re-run here: factscan.py .
+  re-run, 9 lines, exit 0: valcmds.py . origin/main Results
+== 8. file:line citations ==
+  citations resolved and in range: 25; of them, bound to a literal quoted beside them: 5
 
 disagreements: 0
 ```
@@ -1576,12 +1764,16 @@ fix and are fixed here.
   which the appendix also files twice (`REVIEW_APPENDIX_findings.md:91`,
   unsupported-claim, and `:173`, process). `CARD-04` is now named, with both
   filings and the single retained row that carries them.
-- `CARD-02`'s second filing was cited at
-  `tasks/work/temporal-observation-contract.md:172` in the ledger and in round
-  1's subsection here; the quoted line
+- `CARD-02`'s second filing was cited at line 172 of
+  `tasks/work/temporal-observation-contract.md` in the ledger and in round 1's
+  subsection here; the quoted line
   `# 390 historical tasks/prompts and 23 work cards valid.` is at `:173` at
   `201849fc`, at `fd1f923c` and at this head, which is also where the review's own
   appendix cites it. Both citations now say `:173`. No disposition depended on it.
+  (Closeout round 2 rewrote the superseded citation in this sentence as prose,
+  because `factscan.py`'s new check 8 binds a `file:line` citation to the literal
+  quoted beside it and this sentence deliberately quotes the wrong one. The
+  historical fact is unchanged: what round 1 wrote was line 172.)
 - Recommendation 1 was quoted with only half its scope. As filed
   (`REVIEW_REPORT.md:198`) it asks for card count and state in `tasks/README.md`
   **and the ledger** to equal `tasks/work/*.md`; the adopted item covers
@@ -1593,9 +1785,13 @@ fix and are fixed here.
   answers. The Results half cannot be measured across the same nine cards — eight
   are `Status: ready` at `origin/main` with an unwritten Results — so the row now
   says that, and names the one `done` card, `held-out-prefix-freeze.md`, whose
-  Results carries sixteen card-specific commands by the same counter:
+  Results carries sixteen card-specific commands by the same counter.
+  *(Superseded wording, closeout round 1: "by the same counter:
   `.venv/bin/python valcmds.py . origin/main Results` prints `16` for it and `0`
-  for the other eight.
+  for the other eight." The figures were right and the command was not: the
+  script quoted here took two arguments and ignored a third, so that invocation
+  printed the Validation census. Closeout round 2 parameterised the script on the
+  section and quotes the run that prints them; see finding 1 below.)*
 - Both documents said every added host-local-path citation was "this same
   command". Of the eight added matches, all in this card, four are that
   `grep -rno` pattern and four are the `git grep -o` form used to scope the same
@@ -1692,3 +1888,223 @@ provider was called by any path. The frozen held-out manifest is untouched: this
 round edits no file in `experiments/held_out_prefixes.py`'s `GENERATOR_SOURCES`,
 so no restamp was due, `tests/experiments/test_held_out_prefixes.py` passes
 inside the full gate, and no band prefix was printed or opened.
+
+### Review corrections, closeout round 2 (2026-09-08)
+
+Two blocking findings, filed independently by two lenses against the same
+sentence, and both the same class as the eight before them: a command published
+beside an output it cannot produce. No id changed disposition, no routing moved,
+no spot check moved, and no `audits/` byte changed this round — the two reports,
+the two appendices, `correction-record.md`, the new record and the review
+`README.md` are byte-identical to the previous head, so the `docs/artifacts.md`
+row stays at `14,883,359 tracked bytes / 203 files` and no restamp was due. Two
+files changed: this card and `docs/cleanup-dispositions.md`.
+
+**1. The `Results` invocation quoted for recommendation 2 printed the Validation
+census.** The closeout's first round wrote, as this head's evidence for the
+Results half of recommendation 2, that the one `done` card among the nine
+"carries sixteen card-specific commands by the same counter:
+`.venv/bin/python valcmds.py . origin/main Results` prints `16` for it and `0`
+for the other eight". The script the card quotes bound two arguments and
+hard-coded its section (`^## Validation`), so a third argument was ignored and
+that command printed the Validation census the card already quotes beside it:
+
+```text
+$ .venv/bin/python <the two-argument valcmds.py this card quoted> . origin/main Results
+ 8  work/accounts-channel-hardening.md
+ 6  work/evidence-renderer-salience.md
+ 2  work/followup-review-dispositions.md
+ 0  work/fresh-deduction-authorization.md
+ 3  work/fresh-deduction-instrument.md
+ 4  work/held-out-prefix-freeze.md
+ 2  work/nonblocking-followup-improvements.md
+ 7  work/recorded-provenance-gaps.md
+ 6  work/retire-temporal-evidence-v1.md
+```
+
+The two figures were right and the reproduction path was not:
+`held-out-prefix-freeze.md` is the one `Status: done` card among the nine at
+`origin/main` and its Results carries sixteen card-specific commands, but no
+script this card carried printed that. The counter now takes the section as an
+optional third argument, defaulting to `Validation`, and marks a card that has no
+such section, so one script measures both halves of the recommendation the row
+answers:
+
+```text
+$ .venv/bin/python valcmds.py . origin/main Results
+ 0  work/accounts-channel-hardening.md  (no ## Results section)
+ 0  work/evidence-renderer-salience.md  (no ## Results section)
+ 0  work/followup-review-dispositions.md  (no ## Results section)
+ 0  work/fresh-deduction-authorization.md  (no ## Results section)
+ 0  work/fresh-deduction-instrument.md  (no ## Results section)
+16  work/held-out-prefix-freeze.md
+ 0  work/nonblocking-followup-improvements.md  (no ## Results section)
+ 0  work/recorded-provenance-gaps.md  (no ## Results section)
+ 0  work/retire-temporal-evidence-v1.md  (no ## Results section)
+```
+
+The eight zeros are cards with no `## Results` section at all rather than cards
+with an empty one, which is the reason the row gives for not measuring that half
+across the nine. The `Validation` invocation and its output block are unchanged
+by the parameter — the same script prints the same nine lines for the default
+section — and both blocks are now re-run by the scan below rather than trusted.
+
+The same defect was published in a committed document: section 11's row 2 in
+`docs/cleanup-dispositions.md` ended "The per-card counts for both halves and the
+script that produces them are in the card's Results", which was false for the
+Results half, since no script in the card's Results produced it. The row now
+reads "the one script that produces both — the same counter run once per section
+— are quoted with the run that prints each in the card's Results", which is what
+the card carries.
+
+**2. The scan written to end this class did not cover it.** Closeout round 1
+added `factscan.py` so that every mechanical fact these documents publish is
+recomputed rather than re-read, and it passed at a head carrying this defect: its
+checks read the artifacts row, the ledger's routed sentence, the id tables, the
+links, the shas and the card's headline figures, but never the output blocks the
+card quotes under its own scripts. Two checks close that gap, added to the same
+script rather than quoted as a second one.
+
+Check 7 extracts every script the card quotes by the name that script gives
+itself in its own opening lines — a leading comment or the first line of its
+docstring — writes them to a scratch directory, and re-runs every `$` command in
+a quoted output block that invokes one of them, comparing what it prints — line by line,
+with the ` ; exit=N` and trailing `#` annotations stripped — with what is quoted
+under it, and comparing the exit code with the annotation when there is one. A
+command whose arguments name a placeholder (`<the 7cbf9786 copies of both
+documents>`) is a run against another tree and is named and skipped, as is the
+scan's own self-run; every other one is re-run. Planted failure, on the bytes
+this round repairs — the two-argument `valcmds.py` restored in the card and
+nothing else changed:
+
+```text
+FAIL tasks/work/followup-review-dispositions.md: the output quoted under valcmds.py . origin/main Results is not what it prints
+    quoted: ' 0  work/accounts-channel-hardening.md  (no ## Results section)'
+    prints: ' 8  work/accounts-channel-hardening.md'
+    quoted: ' 0  work/evidence-renderer-salience.md  (no ## Results section)'
+    prints: ' 6  work/evidence-renderer-salience.md'
+    quoted: ' 0  work/followup-review-dispositions.md  (no ## Results section)'
+    prints: ' 2  work/followup-review-dispositions.md'
+    quoted: ' 0  work/fresh-deduction-authorization.md  (no ## Results section)'
+    prints: ' 0  work/fresh-deduction-authorization.md'
+    quoted: ' 0  work/fresh-deduction-instrument.md  (no ## Results section)'
+    prints: ' 3  work/fresh-deduction-instrument.md'
+    quoted: '16  work/held-out-prefix-freeze.md'
+    prints: ' 4  work/held-out-prefix-freeze.md'
+    quoted: ' 0  work/nonblocking-followup-improvements.md  (no ## Results section)'
+    prints: ' 2  work/nonblocking-followup-improvements.md'
+    quoted: ' 0  work/recorded-provenance-gaps.md  (no ## Results section)'
+    prints: ' 7  work/recorded-provenance-gaps.md'
+    quoted: ' 0  work/retire-temporal-evidence-v1.md  (no ## Results section)'
+    prints: ' 6  work/retire-temporal-evidence-v1.md'
+disagreements: 1
+```
+
+It exits 1 there and 0 here, and `git status --porcelain` is empty after the
+restore. The check is not vacuous in the other direction either: it re-runs six
+of the ten quoted invocations at this head — both `valcmds.py` sections, the
+cell-count scan, the link-survival scan, the disposition-word scan and the GFM
+probe — and names the four it does not, which are the three runs against another
+tree and its own self-run.
+
+Round 1's cell-count block was the one other place where two runs stood under a
+single `$` line — the planted run against a scratch copy of the `7cbf9786`
+documents and the head run against the committed paths, distinguished by trailing
+comments. Check 7 cannot map that block to a command, so the block is split into
+its two runs above, in the shape the round-2 link-survival block already used.
+Neither output changed.
+
+Check 8 resolves every `file:line` and `file:start-end` citation in the four
+written documents against this tree — the file must exist and the range must lie
+inside it — and, where a literal is quoted within 200 characters after the
+citation and occurs in that file, requires it to occur inside the cited range.
+That is the round-3 nonblocking finding of the off-by-one `:172` citation, made
+mechanical. Planted failure, restoring that citation in the ledger and changing
+nothing else:
+
+```text
+FAIL docs/cleanup-dispositions.md: tasks/work/temporal-observation-contract.md:172 is cited for '# 390 historical tasks/prompts and 23 work c', which is on line(s) [173]
+  citations resolved and in range: 25; of them, bound to a literal quoted beside them: 5
+disagreements: 1
+```
+
+It exits 1 there and 0 here, with `git status --porcelain` empty after the
+restore. Twenty-five citations resolve and lie inside their files at this head,
+and five of them are bound to a literal quoted beside them.
+
+One sentence had to be reworded for the check to be sound rather than merely
+quiet: the closeout round-1 bullet that records the correction quotes the
+superseded citation deliberately, so it now names line 172 in prose instead of in
+citation form. The historical fact it records is unchanged.
+
+**Nonblocking findings.** The nine the round-3 lenses filed were answered in
+closeout round 1 — eight fixed, two left standing with a stated reason — and both
+of the standing ones stand unchanged here: `tasks/review-ledger.md` has two
+queued writers under `tasks/post-merge-plan.md`'s ownership table while this
+card's committed Expected scope grants it, which is an owner decision; and
+`audits/review-2026-09-06/README.md` is written but not named in that Expected
+scope, which is recorded as a declared deviation rather than fixed by rewriting a
+contract after the fact. This round's two lenses filed no further nonblocking
+findings.
+
+**Codex review.** Re-fetched at this head with
+`gh api repos/dkdan10/AiLibi/pulls/439/comments`: still the seven inline comments
+of the one COMMENTED review on round 0's `7cbf9786`, no new activity, no pending
+review. All seven remain addressed as recorded in the closeout round-1 paragraph
+above; two of them touch what this round rewrote and both survive it. 3954475681
+("account for the card that lacks a specific validation command") is the comment
+recommendation 2's row answers, and the row's Validation half still names
+`fresh-deduction-authorization.md` as the document-only exception, with the same
+counter now re-run by check 7 rather than quoted. 3954475687 ("do not infer a
+uniform trailer convention from mixed history") is adopted in substance with its
+own example refuted on the bytes — `b6a4c3d6` does carry a card trailer — and the
+row still publishes the measured mix, untouched here.
+
+**The whole scan, re-run at this head.** The systematic re-derivation closeout
+round 1 introduced is this round's self-audit as well, extended by the two checks
+above: `.venv/bin/python factscan.py .` recomputes, over the four written
+documents, every GFM row's cell count against its header, every relative link and
+every anchor, every backticked eight-hex token against `git cat-file -e`, the ids
+in each disposition table and their totals against the sentence that states them,
+the `audits/` byte total and file count against `git ls-files`, the routed
+sentence against its table, the ledger section's three commit groups against the
+register as it stood at `201849fc`, the output quoted under each of the card's own
+scripts, and every `file:line` citation against the file it names. It exits 0 on
+the committed tree; the script and its full output are quoted in the closeout
+round 1 subsection above, which is where the script lives.
+
+**Gates, re-run in full at this head.** `bash scripts/check.sh` — exit 0: ruff
+and format "All checks passed!", `lint-imports` "Contracts: 4 kept, 0 broken",
+the document and generated-prompt checks green, mypy "Success: no issues found in
+469 source files", "7201 passed, 20 skipped, 3 xfailed" in 249.79s, 514 frontend
+tests in 19 files, and the production build. Same counts as rounds 0, 1, 2 and
+the first closeout round, which is the expected result of a documentation-only
+round. `uv run python scripts/check_doc_facts.py` — exit 0. `uv run python
+scripts/validate_task_docs.py` — exit 0: "390 historical phase tasks and 390
+prompts; 43 work cards". `uv run pytest tests/scripts/test_check_doc_facts.py
+tests/scripts/test_verify_ml_evidence.py -q` — 364 passed in 515.66s. Also re-run
+because the post-merge plan requires them of every card:
+`bash scripts/verify_samples.sh` — "All 50 samples verified clean" twice, exit 0;
+the four `scripts/build_sample_report.py --sample-dir <set> --check` runs — four
+"is consistent with its replays", four exit 0; `pytest tests/orchestrator/
+--collect-only` in a fresh interpreter — 583 collected, exit 0;
+`uv run python scripts/verify_ml_evidence.py` — 60 checks, 48 OK, 0 FAIL, 7
+ABSENT (evidence-branch bytes, the expected state of this checkout), 5 INFO, exit
+0. The full gate was run twice — once on the bytes this round wrote and again on
+the committed head, after this paragraph was written — with the same exit code
+and the same counts both times. `npm run e2e` was not run: no served DTO, schema
+or component byte changed. No live provider was called in this round, by any
+path, and `verify_ml_evidence.py` was never run with `--complete`.
+
+**Record impact of this round.** No `audits/` byte moved, so the
+`docs/artifacts.md` inventory row is unchanged at
+`14,883,359 tracked bytes / 203 files` and nothing had to be recomputed with the
+change staged. The two files written are `tasks/work/followup-review-dispositions.md`
+and `docs/cleanup-dispositions.md`; `git diff --stat` against this round's parent,
+restricted to `audits/`, prints nothing. No recording, report, metric,
+fitted weight or adoption verdict changed, no candidate was adopted, and no
+disposition word, routing or spot check moved. The frozen held-out manifest is
+untouched: this round edits no file in `experiments/held_out_prefixes.py`'s
+`GENERATOR_SOURCES`, so no restamp was due,
+`tests/experiments/test_held_out_prefixes.py` passes inside the full gate, and no
+band prefix was printed or opened.
