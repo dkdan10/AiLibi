@@ -340,9 +340,9 @@ this card alone → **29 / 2,098,563** merged with the base branch at
 `864b18a1`), and `audits/`, which the base branch's restamps move
 (14,852,791 bytes / 202 files) and which this card does not touch. Both are
 recomputed from `git ls-files` with the change staged rather than copied. The frozen held-out manifest needs no restamp from this card:
-intersecting `git diff --name-only 201849fc db6ffb9e` and this round's
-uncommitted set with `experiments.held_out_prefixes.GENERATOR_SOURCES` gives
-`[]` both times, the two sources the manifest does record
+the intersection of `experiments.held_out_prefixes.GENERATOR_SOURCES` with
+every commit range this card owns is `[]` (enumerated in "Review corrections,
+closeout round 1"), the two sources the manifest does record
 (`agents/memory/store.py`, `experiments/held_out_prefixes.py`) are the base
 branch's, and `tests/experiments/test_held_out_prefixes.py` is green
 (28 passed).
@@ -764,9 +764,11 @@ FAIL 0 | ABSENT 7 | INFO 5`, "every check passed";
 `tests/experiments/test_held_out_prefixes.py` together 108 passed.
 
 **3 — the frozen held-out set.** No restamp is owed by this card.
-Intersecting `experiments.held_out_prefixes.GENERATOR_SOURCES` with this card's
-own commits (`git diff --name-only 201849fc db6ffb9e`) gives `[]`, and with this
-round's source changes gives `[]`. The base branch does touch two of them
+Intersecting `experiments.held_out_prefixes.GENERATOR_SOURCES` with each of
+this card's own commit ranges gives `[]` every time — `201849fc..db6ffb9e` (the
+card before this round), `db6ffb9e..b4352fb7` (the blocking fix),
+`01ca7052..76f6e777` (this round's other source) and `278e5318..HEAD` (its
+record). The base branch does touch two of them
 (`agents/memory/store.py`, `experiments/held_out_prefixes.py`) and had already
 restamped for each of its own commits; that manifest comes through both merges
 byte-identical (`git diff origin/work/evidence-renderer-salience --
@@ -852,7 +854,7 @@ return instead of raising fails that test.
   limitation holding.
 * *Results opened "in five commits" while the branch carried eight.* The
   sentence now says which five it means and points at `--first-parent` for the
-  branch's own count, which this round takes to thirteen (two of them merges of
+  branch's own count, which this round takes to fourteen (two of them merges of
   the base branch).
 * *Commit `583eba5d`'s `Card:` line lacks the blank line before it.* Half of
   this reproduces and half does not, and the difference matters. Measured over
