@@ -3558,7 +3558,9 @@ class TestEvidenceV2Salience:
         # p-3 is claimed three times, twice identically: one subject, one caveat,
         # and that caveat counts the DISTINCT placements rather than naming one.
         # One more subject than the bound allows, so the block must truncate.
-        others = [f"p-{20 + index}" for index in range(MAX_ACCOUNT_UNCERTAINTY_SUBJECTS)]
+        others = [
+            f"p-{20 + index}" for index in range(MAX_ACCOUNT_UNCERTAINTY_SUBJECTS)
+        ]
         for subject in ["p-3", "p-3", *others]:
             _v2_claim(memory, subject=subject, speaker="p-5", tick=2, room="LABS")
         _v2_claim(memory, subject="p-3", speaker="p-5", tick=4, room="REACTOR")
