@@ -25,7 +25,12 @@ from agents.memory.beliefs import (
     hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
-from agents.memory.evidence_context import evidence_context_lines, publicly_dead_ids
+from agents.memory.evidence_context import (
+    EvidenceContextKind,
+    evidence_context_lines,
+    publicly_dead_ids,
+    v2_evidence_context_rows,
+)
 from agents.memory.working import (
     LastSeen,
     MeetingHistory,
@@ -89,6 +94,48 @@ _SALIENCE_COMPLETED_TASK: Final[int] = 30
 # cross-meeting social memory.
 _SALIENCE_REPORTED_TESTIMONY: Final[int] = 60
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
+
+# --- Evidence reasoning v2 only (default-OFF candidate renderer) -------------
+# Under v2 the observer's OWN movement and task attempts are recorded as
+# observations, and the derived evidence context is appended as extra lines. Both
+# entered at salience 90, above the witnessed vent (85) and every sighting of
+# another player (50), so a long game's own-route log plus one speaker's claim
+# volume evicted the only rows a meeting can act on (follow-up review NG3-1,
+# VENT-2 and GR-1; reproduced by
+# ``tests/fixtures/memory_rendering/evidence_v2_budget_keeps_witnessed_evidence``).
+# The v2 ladder below ranks by what a listener can act on. Nothing here applies
+# to lever-OFF or evidence v1: those paths keep the bands they shipped with.
+#
+# The observer's own route is rendered IN FULL and unbudgeted by the
+# ``## Where you were:`` block, so an own-transition line is a duplicate of
+# something the prompt already states; an own task attempt places only the
+# observer. Both therefore rank below every sighting of another player.
+_SALIENCE_OWN_ROUTINE: Final[int] = 20
+# Death bounds derived from the agent's own body discovery and the announced
+# roster. One row per dead player, so the class cannot grow with speech; ranked
+# just under the witnessed vent, which is first-hand and role-proving.
+_SALIENCE_EVIDENCE_DEATH: Final[int] = 84
+# A placement pair no walk on the public map can join. This is the class the
+# whole travel check exists to produce, so it outranks the sightings it is
+# derived from; it stays under the witnessed vent, which needs no reconciliation.
+_SALIENCE_EVIDENCE_TRAVEL_CONTRADICTED: Final[int] = 83
+# Walking verdicts that contest nothing -- "a walk fits", "insufficient", the
+# regroup-crossing abstention. Useful context, one row per placement pair, so
+# they rank below the first-hand sightings they are computed from.
+_SALIENCE_EVIDENCE_TRAVEL: Final[int] = 45
+# The bound notice, one row at most, ranked one step above the caveats it counts
+# so a tight budget cannot keep caveats while dropping the statement that others
+# were withheld.
+_SALIENCE_EVIDENCE_ACCOUNT_NOTICE: Final[int] = 16
+# "Route feasibility alone cannot establish ..." -- a caveat about a claim, with
+# no placement of its own. Bounded per subject in ``evidence_context`` and ranked
+# last, because its volume is the speaker's choice rather than the agent's
+# evidence.
+_SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY: Final[int] = 15
+# Evidence reasoning v1 keeps ONE flat band for its context lines. v1 is a
+# committed candidate whose rendered bytes are compared against v2; re-ranking it
+# would change what those comparisons measured, so this stays where it shipped.
+_SALIENCE_EVIDENCE_V1_CONTEXT: Final[int] = 90
 
 # Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
 # belief block is the non-elastic carve-out (``_assemble_view`` never budgets it),
@@ -249,6 +296,28 @@ _MEETINGS_HEADER: Final[str] = "## Meetings so far:"
 _SPAWN_GROUP_PREFIX: Final[str] = "You saw every other player in "
 
 
+def _evidence_context_salience(kind: EvidenceContextKind) -> int:
+    """Where one evidence-reasoning v2 context line sits in the salience ladder.
+
+    A function rather than a module-level table: AGENTS.md forbids module-level
+    mutable state, and an exhaustive ``match`` makes a new
+    :data:`~agents.memory.evidence_context.EvidenceContextKind` a type error here
+    instead of an unranked line that quietly enters at the wrong band.
+    """
+
+    match kind:
+        case "death":
+            return _SALIENCE_EVIDENCE_DEATH
+        case "travel_contradicted":
+            return _SALIENCE_EVIDENCE_TRAVEL_CONTRADICTED
+        case "travel":
+            return _SALIENCE_EVIDENCE_TRAVEL
+        case "account_uncertainty_notice":
+            return _SALIENCE_EVIDENCE_ACCOUNT_NOTICE
+        case "account_uncertainty":
+            return _SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY
+
+
 def _impostors_remaining_clause(remaining: int | None) -> str:
     """The trailing parity sentence, or "" when the count is underivable."""
 
@@ -384,6 +453,18 @@ def render_for_prompt(
     ladder, so the budget sheds routine sightings before it sheds the game's only
     cross-meeting social memory.
 
+    Under evidence reasoning v2 the derived context lines enter by CLASS rather
+    than as one flat band (:func:`_evidence_context_salience`): death bounds and a
+    negative walking verdict rank just under the witnessed vent, the remaining
+    walking verdicts rank under the sightings they are computed from, and the
+    account-uncertainty caveat ranks last, below the observer's own routine rows.
+    A caveat's volume is chosen by the speaker who made the claims, so it can no
+    longer displace first-hand evidence; the caveat block is additionally bounded
+    per subject in :mod:`agents.memory.evidence_context` and states how many
+    subjects it withheld. Evidence v1 keeps its single
+    :data:`_SALIENCE_EVIDENCE_V1_CONTEXT` band and lever-OFF renders no context
+    line at all, so both arms stay byte-identical to what they shipped.
+
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
     perception has run is a wiring bug, not a normal state, so we
@@ -434,10 +515,19 @@ def render_for_prompt(
         observations = _coalesce_sightings(
             observations, roster=roster, own_agent_id=own_agent_id
         )
-    if memory.evidence_reasoning_version in (1, 2):
+    if memory.evidence_reasoning_version == 1:
         observations.extend(
-            _Observation(salience=90, tick=0, line=line)
+            _Observation(salience=_SALIENCE_EVIDENCE_V1_CONTEXT, tick=0, line=line)
             for line in evidence_context_lines(
+                memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+            )
+        )
+    elif memory.evidence_reasoning_version == 2:
+        observations.extend(
+            _Observation(
+                salience=_evidence_context_salience(row.kind), tick=0, line=row.line
+            )
+            for row in v2_evidence_context_rows(
                 memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
             )
         )
@@ -1559,7 +1649,15 @@ def _build_v2_observations(
     own_agent_id: str | None,
     teammate_ids: frozenset[str],
 ) -> list[_Observation]:
-    """Render actual records without inferring transitions or simultaneity."""
+    """Render actual records without inferring transitions or simultaneity.
+
+    The observer's own transitions and task attempts are recorded here as
+    observations, which the OFF and v1 paths never do. They enter at
+    :data:`_SALIENCE_OWN_ROUTINE`, below every sighting of another player: a game
+    emits one own-row per tick, so ranking them above the witnessed rows made a
+    long game's render its own movement log (follow-up review NG3-1), and the
+    ``## Where you were:`` block already states the whole route unbudgeted.
+    """
     observations: list[_Observation] = []
     seen_bodies: set[str] = set()
     own_victims = _collect_own_kill_victims(episodic)
@@ -1598,7 +1696,7 @@ def _build_v2_observations(
         elif event.type == "own_transition":
             mode = " (inside a vent)" if payload.get("in_vent") else ""
             body = f"You moved from {payload.get('from_room')} to {payload.get('to_room')}{mode}."
-            salience = 90
+            salience = _SALIENCE_OWN_ROUTINE
         elif event.type == "own_task_attempt":
             outcome = payload.get("outcome")
             result = (
@@ -1609,7 +1707,7 @@ def _build_v2_observations(
                 else "the attempt was rejected; no progress or completion occurred"
             )
             body = f"You attempted {payload.get('task_id')} in {payload.get('room')}: {result}."
-            salience = 90
+            salience = _SALIENCE_OWN_ROUTINE
         elif event.type == _EVENT_OWN_KILL:
             body = f"You (IMPOSTOR) killed {payload.get('victim_id')} in {payload.get('room')}."
             salience = _SALIENCE_OWN_KILL

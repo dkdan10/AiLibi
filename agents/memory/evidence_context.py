@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,6 +14,39 @@ if TYPE_CHECKING:
     from agents.memory.store import AgentMemory
 
 ObservationPhase = Literal["snapshot", "event", "unknown"]
+
+#: What an evidence-reasoning v2 context line is, for the renderer's salience
+#: ladder. The classes differ in discriminative value, so the render must be able
+#: to shed them in evidence order rather than by an accident of alphabetical
+#: tie-breaking: a negative walking verdict names a placement pair nobody can
+#: walk, while an account-uncertainty caveat states only that a claim was made.
+EvidenceContextKind = Literal[
+    "death",
+    "travel_contradicted",
+    "travel",
+    "account_uncertainty",
+    "account_uncertainty_notice",
+]
+
+#: Most subjects the account-uncertainty caveat renders, before the block
+#: truncates and states how many subjects it left out. The caveat carries no
+#: placement of its own -- it exists to stop a listener reading a claim as a fact
+#: -- while its VOLUME is set by how many claims the speakers chose to make, so
+#: it is the one evidence class a speaker can inflate at will (follow-up review
+#: GR-1). Six covers every subject in 437 of the 672 meetings in the committed
+#: 4p1i and 9p2i sets (the median meeting names six placement subjects; the
+#: largest names nine), and caps the class at six lines no matter how much a
+#: speaker says. A subject past the bound still gets its travel-check rows, which
+#: carry their own "this alone does not prove a role" hedge.
+MAX_ACCOUNT_UNCERTAINTY_SUBJECTS: Final[int] = 6
+
+
+class EvidenceContextRow(BaseModel):
+    """One rendered evidence-context line together with its class."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    kind: EvidenceContextKind
+    line: str
 
 
 class TravelAssessment(BaseModel):
@@ -166,8 +199,11 @@ def evidence_context_lines(
     if memory.evidence_reasoning_version is None:
         return ()
     if memory.evidence_reasoning_version == 2:
-        return _v2_evidence_context_lines(
-            memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+        return tuple(
+            row.line
+            for row in v2_evidence_context_rows(
+                memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+            )
         )
     last_alive: dict[str, int] = {}
     dead_by: dict[str, int] = {}
@@ -247,16 +283,26 @@ def evidence_context_lines(
     return tuple(lines)
 
 
-def _v2_evidence_context_lines(
+def v2_evidence_context_rows(
     memory: AgentMemory,
     *,
     own_agent_id: str | None,
     teammate_ids: frozenset[str],
-) -> tuple[str, ...]:
+) -> tuple[EvidenceContextRow, ...]:
     """Keep earlier intervals and explicitly condition checks on public claims.
 
     A claim has no within-tick phase. The conservative unknown-phase assessment
     cannot turn that missing precision into an impossible-travel verdict.
+
+    Each row carries its :data:`EvidenceContextKind` so the renderer can rank the
+    classes against the first-hand observations rather than treating derived
+    commentary as one flat band. The account-uncertainty caveat collapses to one
+    row per SUBJECT and stops at
+    :data:`MAX_ACCOUNT_UNCERTAINTY_SUBJECTS` subjects, in the order the claims
+    were ingested; when it stops, one further row states how many subjects it
+    left out, so the bound is visible in the prompt instead of silent. A subject
+    named by several distinct claims states that count rather than one arbitrary
+    claim, so collapsing hides no speaker.
     """
     rows = memory.episodic.recent(since_tick=0)
     own_victims = {
@@ -335,7 +381,7 @@ def _v2_evidence_context_lines(
                 else "your recorded sighting"
             )
             placements.setdefault(subject, []).append((row.tick, room, phase, source))
-    lines: list[str] = []
+    rows_out: list[EvidenceContextRow] = []
     for victim, upper in sorted(dead_by.items()):
         facts = [f"known dead by tick {upper}"]
         if victim in alive:
@@ -344,11 +390,14 @@ def _v2_evidence_context_lines(
             facts.append(
                 f"you discovered their body at the start of tick {discovered[victim]}"
             )
-        lines.append(
-            f"Death evidence for {victim}: {'; '.join(facts)}. Discovery does not date the death."
+        rows_out.append(
+            EvidenceContextRow(
+                kind="death",
+                line=f"Death evidence for {victim}: {'; '.join(facts)}. Discovery does not date the death.",
+            )
         )
     if memory.public_map is None:
-        return tuple(lines)
+        return tuple(rows_out)
     checks: list[
         tuple[
             str,
@@ -363,6 +412,12 @@ def _v2_evidence_context_lines(
         for earlier, later in zip(observed, observed[1:], strict=False):
             if earlier[1] != later[1]:
                 checks.append((subject, earlier, later, False))
+    # Keyed by subject, in claim order, holding that subject's DISTINCT claimed
+    # placements: the caveat is per subject, not per claim, so a speaker repeating
+    # itself buys no extra lines (follow-up review GR-1).
+    uncertain: dict[str, list[tuple[str, str, int]]] = {}
+    unverifiable: list[str] = []
+    seen: set[str] = set()
     for subject, tick, room, source in claims:
         if subject == own_agent_id or subject in teammate_ids:
             continue
@@ -379,14 +434,40 @@ def _v2_evidence_context_lines(
             checks.append((subject, before[-1], claimed, True))
         if after and (not before or after[0] != before[-1]):
             checks.append((subject, claimed, after[0], True))
-        lines.append(
-            f"Account uncertainty for {subject}: route feasibility alone cannot establish the {source}'s claimed presence in {room} at tick {tick}."
-        )
+        placement = (source, room, tick)
+        stated = uncertain.setdefault(subject, [])
+        if placement not in stated:
+            stated.append(placement)
         if not before and not after:
-            lines.append(
-                f"Travel check for {subject}: insufficient observed placements to check the {source} at tick {tick}."
+            line = f"Travel check for {subject}: insufficient observed placements to check the {source} at tick {tick}."
+            if line not in seen:
+                unverifiable.append(line)
+                seen.add(line)
+    shown = list(uncertain.items())[:MAX_ACCOUNT_UNCERTAINTY_SUBJECTS]
+    for subject, stated in shown:
+        if len(stated) == 1:
+            source, room, tick = stated[0]
+            detail = f"the {source}'s claimed presence in {room} at tick {tick}"
+        else:
+            detail = f"any of the {len(stated)} claimed placements stated for them"
+        rows_out.append(
+            EvidenceContextRow(
+                kind="account_uncertainty",
+                line=f"Account uncertainty for {subject}: route feasibility alone cannot establish {detail}.",
             )
-    seen: set[str] = set()
+        )
+    withheld = len(uncertain) - len(shown)
+    if withheld:
+        noun = "subject" if withheld == 1 else "subjects"
+        rows_out.append(
+            EvidenceContextRow(
+                kind="account_uncertainty_notice",
+                line=f"Account uncertainty: {withheld} further {noun} not shown.",
+            )
+        )
+    rows_out.extend(
+        EvidenceContextRow(kind="travel", line=line) for line in unverifiable
+    )
     for subject, earlier, later, includes_claim in checks:
         crossed = [
             regroup
@@ -397,7 +478,7 @@ def _v2_evidence_context_lines(
             when, destination, _ = crossed[-1]
             line = f"Travel check for {subject}: the interval from tick {earlier[0]} to tick {later[0]} crosses the public regroup at tick {when} in {destination}. A walking-only check cannot decide this interval."
             if line not in seen:
-                lines.append(line)
+                rows_out.append(EvidenceContextRow(kind="travel", line=line))
                 seen.add(line)
             continue
         assessment = assess_travel(
@@ -435,6 +516,15 @@ def _v2_evidence_context_lines(
             result = "the available timing or placements are insufficient for a walking verdict."
         line = prefix + result
         if line not in seen:
-            lines.append(line)
+            rows_out.append(
+                EvidenceContextRow(
+                    kind=(
+                        "travel_contradicted"
+                        if assessment.feasible is False
+                        else "travel"
+                    ),
+                    line=line,
+                )
+            )
             seen.add(line)
-    return tuple(lines)
+    return tuple(rows_out)

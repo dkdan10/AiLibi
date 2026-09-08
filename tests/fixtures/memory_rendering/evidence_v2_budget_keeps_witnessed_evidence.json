@@ -1,0 +1,910 @@
+{
+  "name": "evidence_v2_budget_keeps_witnessed_evidence",
+  "description": "Evidence-reasoning v2 under the production 1,500-token budget. Sixteen own transitions, seven own task attempts and one speaker's seven whereabouts claims compete with a witnessed vent, five third-party sightings and a body discovery. Pins that the witnessed evidence outranks the observer's own routine rows and the speaker-controlled account-uncertainty text.",
+  "token_budget": 1500,
+  "evidence_reasoning_version": 2,
+  "public_map": "canonical",
+  "events": [
+    {
+      "tick": 0,
+      "type": "self_state",
+      "payload": {
+        "room": "CAFETERIA",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 1,
+      "type": "self_state",
+      "payload": {
+        "room": "CAFETERIA",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 2,
+      "type": "self_state",
+      "payload": {
+        "room": "WEST_HALL",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 2,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "CAFETERIA",
+        "to_room": "WEST_HALL",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "CAFETERIA",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:2:0"
+    },
+    {
+      "tick": 2,
+      "type": "saw_player",
+      "payload": {
+        "player_id": "p-3",
+        "room": "WEST_HALL",
+        "action": null,
+        "observation_phase": "snapshot"
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:2:2"
+    },
+    {
+      "tick": 3,
+      "type": "self_state",
+      "payload": {
+        "room": "MEDBAY",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 3,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "WEST_HALL",
+        "to_room": "MEDBAY",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "WEST_HALL",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:3:0"
+    },
+    {
+      "tick": 3,
+      "type": "own_task_attempt",
+      "payload": {
+        "task_id": "calibrate_distributor",
+        "room": "MEDBAY",
+        "outcome": "progressed",
+        "observation_phase": "event",
+        "observation_order": 1,
+        "observer_room": "MEDBAY",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:3:1"
+    },
+    {
+      "tick": 4,
+      "type": "self_state",
+      "payload": {
+        "room": "MEDBAY",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 4,
+      "type": "own_task_attempt",
+      "payload": {
+        "task_id": "prime_shields",
+        "room": "MEDBAY",
+        "outcome": "completed",
+        "observation_phase": "event",
+        "observation_order": 1,
+        "observer_room": "MEDBAY",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:4:1"
+    },
+    {
+      "tick": 4,
+      "type": "saw_player",
+      "payload": {
+        "player_id": "p-4",
+        "room": "MEDBAY",
+        "action": null,
+        "observation_phase": "snapshot"
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:4:2"
+    },
+    {
+      "tick": 5,
+      "type": "self_state",
+      "payload": {
+        "room": "LABS",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 5,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "MEDBAY",
+        "to_room": "LABS",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "MEDBAY",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:5:0"
+    },
+    {
+      "tick": 6,
+      "type": "self_state",
+      "payload": {
+        "room": "MEDBAY",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 6,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "LABS",
+        "to_room": "MEDBAY",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "LABS",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:6:0"
+    },
+    {
+      "tick": 6,
+      "type": "own_task_attempt",
+      "payload": {
+        "task_id": "calibrate_distributor",
+        "room": "MEDBAY",
+        "outcome": "progressed",
+        "observation_phase": "event",
+        "observation_order": 1,
+        "observer_room": "MEDBAY",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:6:1"
+    },
+    {
+      "tick": 7,
+      "type": "self_state",
+      "payload": {
+        "room": "WEST_HALL",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 7,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "MEDBAY",
+        "to_room": "WEST_HALL",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "MEDBAY",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:7:0"
+    },
+    {
+      "tick": 8,
+      "type": "self_state",
+      "payload": {
+        "room": "ADMIN",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 8,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "WEST_HALL",
+        "to_room": "ADMIN",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "WEST_HALL",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:8:0"
+    },
+    {
+      "tick": 8,
+      "type": "saw_player",
+      "payload": {
+        "player_id": "p-7",
+        "room": "ADMIN",
+        "action": null,
+        "observation_phase": "snapshot"
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:8:2"
+    },
+    {
+      "tick": 9,
+      "type": "self_state",
+      "payload": {
+        "room": "EAST_HALL",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 9,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "ADMIN",
+        "to_room": "EAST_HALL",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "ADMIN",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:9:0"
+    },
+    {
+      "tick": 10,
+      "type": "self_state",
+      "payload": {
+        "room": "ENGINEERING",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 10,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "EAST_HALL",
+        "to_room": "ENGINEERING",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "EAST_HALL",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:10:0"
+    },
+    {
+      "tick": 11,
+      "type": "self_state",
+      "payload": {
+        "room": "ENGINEERING",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 11,
+      "type": "own_task_attempt",
+      "payload": {
+        "task_id": "chart_course",
+        "room": "ENGINEERING",
+        "outcome": "progressed",
+        "observation_phase": "event",
+        "observation_order": 1,
+        "observer_room": "ENGINEERING",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:11:1"
+    },
+    {
+      "tick": 11,
+      "type": "saw_player",
+      "payload": {
+        "player_id": "p-6",
+        "room": "ENGINEERING",
+        "action": "vent",
+        "observation_phase": "event",
+        "observation_order": 2,
+        "observer_room": "ENGINEERING",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:11:2"
+    },
+    {
+      "tick": 12,
+      "type": "self_state",
+      "payload": {
+        "room": "STORAGE",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 12,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "ENGINEERING",
+        "to_room": "STORAGE",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "ENGINEERING",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:12:0"
+    },
+    {
+      "tick": 12,
+      "type": "saw_player",
+      "payload": {
+        "player_id": "p-8",
+        "room": "STORAGE",
+        "action": null,
+        "observation_phase": "snapshot"
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:12:2"
+    },
+    {
+      "tick": 13,
+      "type": "self_state",
+      "payload": {
+        "room": "ENGINEERING",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 13,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "STORAGE",
+        "to_room": "ENGINEERING",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "STORAGE",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:13:0"
+    },
+    {
+      "tick": 13,
+      "type": "own_task_attempt",
+      "payload": {
+        "task_id": "prime_shields",
+        "room": "ENGINEERING",
+        "outcome": "rejected",
+        "observation_phase": "event",
+        "observation_order": 1,
+        "observer_room": "ENGINEERING",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:13:1"
+    },
+    {
+      "tick": 14,
+      "type": "self_state",
+      "payload": {
+        "room": "REACTOR",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 14,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "ENGINEERING",
+        "to_room": "REACTOR",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "ENGINEERING",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:14:0"
+    },
+    {
+      "tick": 15,
+      "type": "self_state",
+      "payload": {
+        "room": "ENGINEERING",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 15,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "REACTOR",
+        "to_room": "ENGINEERING",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "REACTOR",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:15:0"
+    },
+    {
+      "tick": 15,
+      "type": "own_task_attempt",
+      "payload": {
+        "task_id": "calibrate_distributor",
+        "room": "ENGINEERING",
+        "outcome": "progressed",
+        "observation_phase": "event",
+        "observation_order": 1,
+        "observer_room": "ENGINEERING",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:15:1"
+    },
+    {
+      "tick": 16,
+      "type": "self_state",
+      "payload": {
+        "room": "EAST_HALL",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 16,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "ENGINEERING",
+        "to_room": "EAST_HALL",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "ENGINEERING",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:16:0"
+    },
+    {
+      "tick": 17,
+      "type": "self_state",
+      "payload": {
+        "room": "CAFETERIA",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 17,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "EAST_HALL",
+        "to_room": "CAFETERIA",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "EAST_HALL",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:17:0"
+    },
+    {
+      "tick": 17,
+      "type": "saw_player",
+      "payload": {
+        "player_id": "p-9",
+        "room": "CAFETERIA",
+        "action": null,
+        "observation_phase": "snapshot"
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:17:2"
+    },
+    {
+      "tick": 18,
+      "type": "self_state",
+      "payload": {
+        "room": "UPPER_HALL",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 18,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "CAFETERIA",
+        "to_room": "UPPER_HALL",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "CAFETERIA",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:18:0"
+    },
+    {
+      "tick": 18,
+      "type": "own_task_attempt",
+      "payload": {
+        "task_id": "calibrate_distributor",
+        "room": "UPPER_HALL",
+        "outcome": "completed",
+        "observation_phase": "event",
+        "observation_order": 1,
+        "observer_room": "UPPER_HALL",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:18:1"
+    },
+    {
+      "tick": 19,
+      "type": "self_state",
+      "payload": {
+        "room": "ADMIN",
+        "role": "CREWMATE",
+        "pending_task_id": null,
+        "agent_id": "p-1",
+        "owned_task_ids": [
+          "calibrate_distributor",
+          "prime_shields",
+          "chart_course"
+        ]
+      },
+      "provenance": "observed"
+    },
+    {
+      "tick": 19,
+      "type": "own_transition",
+      "payload": {
+        "from_room": "UPPER_HALL",
+        "to_room": "ADMIN",
+        "in_vent": false,
+        "observation_phase": "event",
+        "observation_order": 0,
+        "observer_room": "UPPER_HALL",
+        "observer_in_vent": false
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:19:0"
+    },
+    {
+      "tick": 19,
+      "type": "saw_body",
+      "payload": {
+        "body_id": "body-p-2",
+        "victim_id": "p-2",
+        "room": "ADMIN",
+        "observation_phase": "snapshot"
+      },
+      "provenance": "observed",
+      "observation_id": "p-1:19:3"
+    },
+    {
+      "tick": 20,
+      "type": "public_meeting_roster",
+      "payload": {
+        "living_ids": [
+          "p-1",
+          "p-3",
+          "p-4",
+          "p-5",
+          "p-6",
+          "p-7",
+          "p-8",
+          "p-9"
+        ],
+        "dead_ids": [
+          "p-2"
+        ]
+      },
+      "provenance": "public"
+    },
+    {
+      "tick": 20,
+      "type": "reported_testimony",
+      "payload": {
+        "speaker": "p-5",
+        "kind": "whereabouts",
+        "subject": "p-3",
+        "meeting_index": 1,
+        "from_tick": 2,
+        "to_tick": 2,
+        "room": "REACTOR",
+        "co_present": []
+      },
+      "provenance": "reported"
+    },
+    {
+      "tick": 20,
+      "type": "reported_testimony",
+      "payload": {
+        "speaker": "p-5",
+        "kind": "whereabouts",
+        "subject": "p-4",
+        "meeting_index": 1,
+        "from_tick": 4,
+        "to_tick": 4,
+        "room": "MEDBAY",
+        "co_present": []
+      },
+      "provenance": "reported"
+    },
+    {
+      "tick": 20,
+      "type": "reported_testimony",
+      "payload": {
+        "speaker": "p-5",
+        "kind": "whereabouts",
+        "subject": "p-5",
+        "meeting_index": 1,
+        "from_tick": 5,
+        "to_tick": 5,
+        "room": "ADMIN",
+        "co_present": []
+      },
+      "provenance": "reported"
+    },
+    {
+      "tick": 20,
+      "type": "reported_testimony",
+      "payload": {
+        "speaker": "p-5",
+        "kind": "whereabouts",
+        "subject": "p-6",
+        "meeting_index": 1,
+        "from_tick": 11,
+        "to_tick": 11,
+        "room": "LABS",
+        "co_present": []
+      },
+      "provenance": "reported"
+    },
+    {
+      "tick": 20,
+      "type": "reported_testimony",
+      "payload": {
+        "speaker": "p-5",
+        "kind": "whereabouts",
+        "subject": "p-7",
+        "meeting_index": 1,
+        "from_tick": 8,
+        "to_tick": 8,
+        "room": "ADMIN",
+        "co_present": []
+      },
+      "provenance": "reported"
+    },
+    {
+      "tick": 20,
+      "type": "reported_testimony",
+      "payload": {
+        "speaker": "p-5",
+        "kind": "whereabouts",
+        "subject": "p-8",
+        "meeting_index": 1,
+        "from_tick": 12,
+        "to_tick": 12,
+        "room": "STORAGE",
+        "co_present": []
+      },
+      "provenance": "reported"
+    },
+    {
+      "tick": 20,
+      "type": "reported_testimony",
+      "payload": {
+        "speaker": "p-5",
+        "kind": "whereabouts",
+        "subject": "p-9",
+        "meeting_index": 1,
+        "from_tick": 17,
+        "to_tick": 17,
+        "room": "LABS",
+        "co_present": []
+      },
+      "provenance": "reported"
+    }
+  ],
+  "beliefs": [
+    {
+      "player_id": "p-3",
+      "suspicion": 0.4,
+      "trust": 0.6
+    },
+    {
+      "player_id": "p-4",
+      "suspicion": 0.5,
+      "trust": 0.5
+    },
+    {
+      "player_id": "p-6",
+      "suspicion": 0.9,
+      "trust": 0.2
+    },
+    {
+      "player_id": "p-8",
+      "suspicion": 0.6,
+      "trust": 0.4
+    }
+  ],
+  "contradictions": [],
+  "last_seen": []
+}
