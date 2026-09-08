@@ -692,13 +692,21 @@ def build_prefix(
         ).steps:
             steps.append((tick, _move(bystander, room)))
 
-    # Nobody but the reporter acts on the report tick. The meeting interrupts
-    # that tick: ``advance_tick`` returns the instant the report puts the world
-    # in ``MEETING``, so every action ordered after the reporter's is discarded
-    # without even a rejection, and a move drawn for that tick would be hashed
-    # into a digest the engine never executed. The walks above are drawn exactly
-    # as before -- the draws are untouched and only the drawn step is discarded --
-    # so a seed's world up to the report is the same world it always was.
+    # Nobody but the reporter is SCHEDULED on the report tick. Whether an action
+    # drawn for that tick runs at all depends on how its actor's id sorts against
+    # the reporter's: ``advance_tick`` returns the instant the report puts the
+    # world in ``MEETING`` (``engine/tick.py``, step 1) and the tick's actions are
+    # ordered by actor (``orchestrator/action_ordering.py``), so an EARLIER-sorting
+    # actor's move is executed while a later-sorting one's is discarded without
+    # even a rejection. A hashed schedule must not depend on that tiebreak, so the
+    # drawn step is dropped for EVERY non-reporter -- the ones the engine would
+    # have executed included. The walks above are drawn exactly as before (same
+    # calls, same ``last_tick``, same RNG consumption), so a seed's roles, kill
+    # room, kill tick, routes and walks are the ones it always had and its world
+    # is identical through ``report_tick - 1``; at the report tick itself the
+    # dropped executed moves change where those actors stand when the meeting
+    # opens, which is the tiebreak dependence leaving the frozen input. The card's
+    # round-4 subsection records how many prefixes that moved.
     ordered = tuple(
         PrefixStep(tick=tick, action=action)
         for tick, action in sorted(steps, key=lambda row: (row[0], row[1].actor))

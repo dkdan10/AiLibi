@@ -55,6 +55,21 @@ development data by construction.
 
 ## Acceptance
 
+- [x] Review correction: the card, the module comment and the pull request
+  describe what the report-tick drop actually did to the set. It is NOT true that
+  a move drawn for the report tick is never executed, nor that only the hashed
+  schedule moved: an actor whose id sorts BEFORE the reporter's has its
+  report-tick action applied before the report flips the phase, so of the 61
+  steps the drop removed from the fifty accepted prefixes, 26 were phantoms the
+  engine never resolved and 35 were moves it ran. Every draw, role, kill room,
+  kill tick, route and walk is unchanged and every seed's world is byte-identical
+  through `report_tick - 1` (0 of 50 pre-report event streams differ), but 28 of
+  the 50 prefixes now open the meeting with a different living-player room
+  assignment and a different episodic memory. That is deliberate — a frozen
+  scenario must not depend on the actor-sort tiebreak at the report tick — and it
+  is now stated as such wherever the drop is described. The executed half of the
+  behaviour is held by
+  `test_a_report_tick_step_the_engine_does_resolve_passes_the_seam`.
 - [x] Review correction: the certifying seam compares the hashed schedule with
   what the ENGINE resolved, not with what the scripted agent served. Every hashed
   `(tick, actor)` pair must appear among the events the tick function emitted for
@@ -67,13 +82,17 @@ development data by construction.
   the other side by
   `test_a_report_tick_step_the_engine_does_resolve_passes_the_seam`.
 - [x] Review correction: nobody but the reporter is scheduled on the report tick.
-  The meeting interrupts that tick, so a move drawn for it is never executed;
-  `build_prefix` draws the walks exactly as before and DROPS the drawn step, so
-  every seed's world up to the report is the world it always was while no phantom
-  step reaches a digest. Proved by
-  `test_the_generator_scripts_nobody_but_the_reporter_on_the_report_tick`; the
-  set kept the same fifty seeds, the same eight skips and the same last accepted
-  seed.
+  The meeting interrupts that tick, so whether an action drawn for it runs depends
+  on how its actor's id sorts against the reporter's, and a hashed schedule must
+  not depend on that tiebreak: `build_prefix` draws the walks exactly as before —
+  same calls, same `last_tick`, same RNG consumption — and DROPS the drawn step
+  for EVERY non-reporter, the ones the engine would have executed included. Proved
+  by `test_the_generator_scripts_nobody_but_the_reporter_on_the_report_tick`, and
+  bounded by `test_a_report_tick_step_the_engine_does_resolve_passes_the_seam`,
+  which shows an earlier-sorting actor's report-tick move IS executed and does
+  pass the seam. The set kept the same fifty accepted seeds, the same eight skips
+  and the same last accepted seed, and no filter verdict or rendered trigger line
+  moved; it did not keep the same worlds, and the item above states what did move.
 - [x] Review correction: a seed whose own draw overruns the tick budget is a
   recorded `schedule_exceeds_tick_budget` skip rather than an abort of the whole
   draw, and `tally_reasons` returns its totals as fields of a `ReasonTally`
@@ -252,9 +271,9 @@ aggregate count over band seeds is still a probe, and a narrow enough range woul
 be a per-seed read.
 
 `audits/deduction-candidate/held-out/manifest.json` is the freeze artifact —
-**sha256 `c5fb806e7b115cd168227ec89f02c5624d02e19ee49b650d6035ef09debebad9`**,
+**sha256 `21190ab58f940a4d0085aa6a72118a1b5f8a14e2b62aa45323246fd3adc65946`**,
 11,524 bytes. The set is not frozen until the owner merges this pull request, and
-three correction rounds moved the file before then; each dated subsection below
+four correction rounds moved the file before then; each dated subsection below
 names the digest it left behind, and only the value above describes the file as
 it now stands. It records the band, the roster, the tick budget, the temporal
 version, the filter's stated environment, the canonical-JSON recipe, the sha256
@@ -292,12 +311,14 @@ into the kill room on the kill tick. That is what makes the proof-free filter
 load-bearing rather than a formality, and it is where all eight band skips came
 from. Their wander, and the impostor's, stop being HASHED at the report tick: the
 meeting interrupts that tick, so whether an action ordered there runs at all
-depends on how the actor's id sorts against the reporter's, and a schedule that
-depended on that would bind steps the engine never executes. The walks are still
-drawn to the report tick — the draws are what the seed determines — and the drawn
-step for that one tick is discarded, so the generator remains a pure function of
-the seed and the reporter is the only actor scheduled on the tick that ends the
-prefix.
+depends on how the actor's id sorts against the reporter's, and a hashed schedule
+must not depend on that tiebreak. The walks are still drawn to the report tick —
+the draws are what the seed determines — and the drawn step for that one tick is
+discarded for every non-reporter, the ones the engine would have EXECUTED
+included, so the generator remains a pure function of the seed and the reporter is
+the only actor scheduled on the tick that ends the prefix. Dropping the executed
+ones is a change to the prefixes' content, not only to their hashes, and the
+round-3 and round-4 subsections below record its size across the set.
 
 The manifest's `source_sha256` covers `orchestrator/game.py`, the engine and the
 observation layer as well as the generator, and the regeneration test asserts
@@ -367,10 +388,10 @@ committed.
    went red on `rebuilt["source_sha256"] != manifest["source_sha256"]`
    (`experiments/held_out_prefixes.py`: `8ab1186e…`, the planted value, committed
    nowhere, versus `9c6ec3ab…`, the entry frozen at the time of this plant).
-   Reverted; `14 passed`. Three correction passes have since re-stamped that one
+   Reverted; `14 passed`. Four correction passes have since re-stamped that one
    entry, and the chain of committed values is `9c6ec3ab…` at `f9d02ad2` and
    `2daa5612`, then `0b94fec1…` at `92bec106`, then `89d0220e…` at `3eb49dfc`,
-   then `1c8ce570…` at the head of this branch.
+   then `1c8ce570…` at `27e6d952`, then `9bc18db8…` at the head of this branch.
 
 The planted adverse cases that live in the suite: a witnessed kill (a second
 crewmate standing in ADMIN when the kill lands) is rejected `witnessed_kill`; a
@@ -643,7 +664,10 @@ still open, and four documentation statements that do not reproduce. This is the
 first pass that MOVED the set: the schedules changed, so forty-five of the fifty
 accepted digests changed with them. The set is not frozen until the owner merges
 this pull request, so a pre-freeze digest move is a correction, not a break of
-the freeze.
+the freeze. **This pass then described its own set change wrongly** — it said the
+worlds were untouched and only the hashes moved, which does not reproduce; the
+round-4 subsection below measures what actually moved and every statement of it in
+this card, the module and the pull request now says that instead.
 
 1. **The seam counted what the agent SERVED, not what the engine EXECUTED**
    (`experiments/held_out_prefixes.py`). `_PrefixAgent.decide` returning an
@@ -680,8 +704,14 @@ the freeze.
    same RNG consumption — and then discards the drawn step whose tick is the
    report tick and whose actor is not the reporter. Because no draw moved, every
    seed's roles, kill room, kill tick, routes and walk are the ones they always
-   were, and the world up to the report is unchanged; only the hashed schedule
-   is. Proved by
+   were. **This pass wrote here that "the world up to the report is unchanged;
+   only the hashed schedule is", which is false and is corrected in round 4
+   below**: the drop is unconditional on the actor sort, so it also removed 35
+   moves the engine really executed, and 28 of the 50 prefixes changed content,
+   not only digest. The mechanism the drop is there for is the one stated in the
+   design-decisions section — a hashed schedule must not depend on how an actor's
+   id sorts against the reporter's — and that is what the corrected wording says.
+   Proved by
    `test_the_generator_scripts_nobody_but_the_reporter_on_the_report_tick`, and
    by the set comparison below.
 
@@ -713,7 +743,8 @@ the freeze.
    frozen `source_sha256` of `9e467dd1…`, which matches no object on this branch
    and no revision of it — it was fabricated; the true chain is `9c6ec3ab…` at
    `f9d02ad2` and `2daa5612`, `0b94fec1…` at `92bec106`, `89d0220e…` at
-   `3eb49dfc`, `1c8ce570…` at this head, and every other elided digest in this
+   `3eb49dfc`, `1c8ce570…` at `27e6d952` (this pass's head; round 4 moved it
+   again), and every other elided digest in this
    card was re-verified against committed bytes in the same pass. "Each neuter
    turned exactly its own planted case red" does not reproduce — every module
    edit also moves `source_sha256`, so
@@ -743,7 +774,22 @@ for `experiments/held_out_prefixes.py`, which moved from `89d0220e…` to
 count is unchanged at 11,524, so `docs/artifacts.md`'s `audits/` inventory row
 still reads `14,850,288 tracked bytes / 202 files` and was not touched. The
 manifest's own sha256 moved from `3089c2d7…` to
-`c5fb806e7b115cd168227ec89f02c5624d02e19ee49b650d6035ef09debebad9`.
+`c5fb806e7b115cd168227ec89f02c5624d02e19ee49b650d6035ef09debebad9` at commit
+`27e6d952` — a superseded pre-freeze revision; round 4 below moved it once more.
+
+**What the digest move actually was**, measured in round 4 and stated here beside
+the two figures this pass published (23 of 50 prefixes carrying a phantom step,
+45 of 50 digests moved). The drop removed **61 steps** across the fifty accepted
+prefixes: **26 the engine never resolved** (the phantoms, spread over 23
+prefixes) and **35 moves the engine DID execute**, for actors whose ids sort
+before their reporter's. So of the 45 prefixes whose digest moved, **17 dropped
+only phantom steps** and **28 dropped at least one executed move** — and those 28
+are exactly the prefixes whose **meeting-open world moved**: a different
+living-player room assignment and a different episodic memory (7,267 → 7,218
+rows over the four agents' stores, 49 movement observations fewer). Nothing
+before the report tick moved at all (0 of 50 pre-report event streams differ),
+and no filter verdict, proof-row count or rendered meeting-trigger line moved in
+any of the fifty.
 
 **Fail-loud for the round-3 gates.** Each was neutered in turn, the module's
 suite run, and the module restored byte-for-byte
@@ -770,10 +816,11 @@ witnessed_kill 5
 band was printed, opened or reasoned about during these corrections. The only
 band values that left the generator are the ones the manifest already records —
 seeds, reason codes and digests — plus the two aggregate counts stated above (23
-of 50 prefixes affected, 45 of 50 digests moved). Every planted case and every
-probe used seed 1 or seeds 9001–9002, and the tally used seeds 1–50; all are
-outside the band and were already recorded as development seeds. No arm ran and
-no provider call was made.
+of 50 prefixes affected, 45 of 50 digests moved); the further aggregates in "What
+the digest move actually was" were measured in round 4 and carry the same
+statement. Every planted case and every probe used seed 1 or seeds 9001–9002, and
+the tally used seeds 1–50; all are outside the band and were already recorded as
+development seeds. No arm ran and no provider call was made.
 
 **Gate after the round-3 corrections**, run in order on this branch:
 
@@ -785,3 +832,134 @@ no provider call was made.
 | `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
 | `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed in 87.99 s |
 | `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,198 passed / 20 skipped / 3 xfailed** in 240.21 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |
+
+### Review corrections, round 4 (2026-09-07)
+
+A third verification round found the round-3 pass's own description of its set
+change false in four places. No gate, filter or generated schedule changes here:
+the only code edit is the comment above the report-tick drop in `build_prefix`.
+The set at `27e6d952` is correct and was NOT regenerated into a different set —
+regenerating with `uv run python -m experiments.held_out_prefixes` moved one line,
+the module's own `source_sha256`, exactly as a comment edit should.
+
+**What was wrong.** Round 3 justified dropping the non-reporters' report-tick
+step with an after-the-reporter argument and then generalised it: "a move drawn
+for it is never executed", "every seed's world up to the report is the world it
+always was", "only the hashed schedule is". The drop in `build_prefix` is
+unconditional on the actor sort (`if tick != report_tick or action.actor ==
+reporter`), while the justification held only for actors sorting AFTER the
+reporter. `orchestrator/action_ordering.py::_action_order_key` sorts a tick's
+actions by actor, so an actor whose id sorts BEFORE the reporter's has its
+report-tick action applied by `engine/tick.py` before the report flips the phase
+to `MEETING` — which is exactly what this branch's own
+`test_a_report_tick_step_the_engine_does_resolve_passes_the_seam` asserts. The
+mechanism the drop is FOR is the one the design-decisions section and that test
+already state correctly: a hashed schedule must not depend on that tiebreak. The
+four statements now say that, and say what the drop cost.
+
+**What the round-3 drop actually did**, measured over the fifty accepted seeds by
+replaying each one twice — once with `experiments/held_out_prefixes.py` at
+`3eb49dfc`, once at this head, both against the same canonical map — and
+comparing counts and per-seed hashes only, never a step:
+
+| measure | at `3eb49dfc` | at this head |
+| --- | --- | --- |
+| accepted seeds / skips / last accepted seed | 50 / 8 `witnessed_kill` / 3057 | identical |
+| accepted prefix digests that differ | — | **45 of 50** |
+| steps the drop removed | — | **61** (26 the engine never resolved, **35 it executed**) |
+| prefixes dropping only phantom steps | — | 17 |
+| prefixes dropping at least one executed move | — | **28** |
+| prefixes carrying at least one phantom step | 23 | 0 |
+| engine-executed `Moved` events at the report tick, summed | **35** | **0** |
+| event streams for every tick `< report_tick` that differ | — | **0 of 50** |
+| meeting-open living-player room assignments that differ | — | **28 of 50** |
+| meeting-open episodic memories that differ | — | **28 of 50** (7,267 → 7,218 rows) |
+| filter verdicts, proof-row counts, rendered trigger lines that differ | — | **0 of 50** |
+
+So the true statement is: every draw, role, kill room, kill tick, route and walk
+is unchanged, and every seed's world is byte-identical through
+`report_tick - 1`; at the report tick the drop removed 26 phantom steps AND 35
+moves the engine really ran, so **28 of the 50 frozen prefixes now open the
+meeting with a different living-player room assignment and a different episodic
+memory** — the evaluated content moved, not only the hash. That is deliberate:
+the frozen scenario must not depend on how an actor's id sorts against the
+reporter's on the tick the meeting interrupts. It is also why the freeze is the
+owner's merge and not this card's completion — the change is pre-freeze.
+
+**Where it is corrected.** `experiments/held_out_prefixes.py` (the comment above
+the drop in `build_prefix`), the Acceptance item on the report-tick drop plus a
+new Acceptance item stating the set change, the design-decisions paragraph on the
+wanderers, round 3's item 2 and its "Set impact" paragraph — each marked as
+corrected rather than rewritten in silence — and the pull-request body.
+
+**Manifest impact of this pass.** Running
+`.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q -k regenerates`
+BEFORE regenerating failed on `source_sha256` alone: `rebuilt["accepted"] ==
+manifest["accepted"]` and `rebuilt["skipped"] == manifest["skipped"]` both held,
+which is the direct evidence that a comment edit moved no prefix. Regenerating
+produced one insertion and one deletion — the `source_sha256` entry for
+`experiments/held_out_prefixes.py`, from `1c8ce570…` to `9bc18db8…`; the other
+twenty-one source entries, all fifty accepted seeds and digests (seed 3000 still
+`ab8db76d…`), the eight skips, `skipped_reason_counts`, `last_accepted_seed`
+(3057), `band`, `roster`, `filter_environment`, `development_definitions`,
+`body_handle_assertion`, `status`, `status_note`, `card`, `max_ticks`,
+`temporal_observation_version`, `canonical_json`, `version`, `prefix_bytes` and
+`filter` are untouched. The file's byte count is unchanged at 11,524, so
+`docs/artifacts.md`'s `audits/` inventory row still reads
+`14,850,288 tracked bytes / 202 files` (recomputed from `git ls-files audits/` at
+this head) and was not touched. The manifest's own sha256 moved from
+`c5fb806e…` at `27e6d952` to
+`21190ab58f940a4d0085aa6a72118a1b5f8a14e2b62aa45323246fd3adc65946`.
+
+**Digest audit.** Every elided digest in this card was re-verified against a
+committed object at this head. `9c6ec3ab…`, `0b94fec1…`, `89d0220e…`,
+`1c8ce570…` and `9bc18db8…` are the sha256 of
+`experiments/held_out_prefixes.py` at `f9d02ad2`/`2daa5612`, `92bec106`,
+`3eb49dfc`, `27e6d952` and this head respectively, and each equals that
+revision's own `source_sha256` entry. `75de8723…`, `c060f3ca…`, `3089c2d7…`,
+`c5fb806e…` and `21190ab5…` are the sha256 of the manifest file at the same five
+points. `ab053eef…` is seed 3000's prefix digest in the manifest from `f9d02ad2`
+through `3eb49dfc`; `ab8db76d…` is seed 3000's digest at `27e6d952` and here.
+`1482ce81…` and `8ab1186e…` are planted values from the two fail-loud plants and
+appear in no committed object, by design; `9e467dd1…` appears only in round 3's
+record of the fabricated value it replaced. No other elided digest occurs in this
+card.
+
+**No new gate.** This pass adds no invariant and no test: the behaviour it
+describes is already held by
+`test_a_report_tick_step_the_engine_does_resolve_passes_the_seam` (an
+earlier-sorting actor's report-tick move IS executed and passes the seam),
+`test_a_step_the_meeting_tick_discards_never_reaches_a_digest` (a later-sorting
+one is discarded and refused) and
+`test_the_generator_scripts_nobody_but_the_reporter_on_the_report_tick` (the
+generator scripts neither). The suite count is therefore unchanged at 25.
+
+**Out-of-band tally, re-run at this head** — unchanged from all three earlier
+rounds:
+
+```text
+$ uv run python -m experiments.held_out_prefixes --tally 1 50
+seeds 50
+accepted 45
+witnessed_kill 5
+```
+
+**Preparer statement, restated for this pass.** No prefix from the preregistered
+band was printed, opened or reasoned about during these corrections. The
+comparison above ran in-process and emitted counts and per-seed hashes only; the
+only band values that left it are the ones the manifest already records — seeds,
+reason codes and digests — plus the aggregate counts in the table. Every planted
+case and every probe used seed 1 or seeds 9001–9002, and the tally used seeds
+1–50; all are outside the band and were already recorded as development seeds. No
+arm ran and no provider call was made.
+
+**Gate after the round-4 corrections**, run in order on this branch:
+
+| check | result |
+| --- | --- |
+| `.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q` | 25 passed in 2.29 s (unchanged; this pass adds no test) |
+| `.venv/bin/python scripts/validate_task_docs.py` | 390 phase tasks, 390 prompts, 43 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed in 88.92 s |
+| `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,198 passed / 20 skipped / 3 xfailed** in 226.63 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |
