@@ -213,6 +213,18 @@
   },
   "canonical_json": "json.dumps(prefix.model_dump(mode='json'), sort_keys=True, separators=(',', ':')) encoded as UTF-8, hashed with sha256",
   "card": "tasks/work/held-out-prefix-freeze.md",
+  "dependency_restamps": {
+    "entries": [
+      {
+        "card": "tasks/work/evidence-renderer-salience.md",
+        "commit": "7bcc79ed",
+        "date": "2026-09-08",
+        "note": "The evidence-reasoning v2 salience repair. It changes rendered prompt bytes on the default-OFF v2 path only; prefix generation reads episodic memory and engine state, not the render, so all fifty accepted digests and the eight skips were unchanged. held_out_prefixes.py moved because this restamp list was added to it, which changes no generated prefix.",
+        "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
+      }
+    ],
+    "note": "One entry per commit that edited a GENERATOR_SOURCES file after the freeze WITHOUT moving the set: source_sha256 was regenerated only after test_the_committed_manifest_regenerates_from_its_own_band showed accepted[] and skipped[] identical to the committed record. A commit that moves any prefix digest or skip is not restamped here: the set becomes development data and a new band is frozen under a new card (tasks/post-merge-plan.md, 'Sequencing')."
+  },
   "development_definitions": {
     "absent_from_accepted": true,
     "note": "The seven hand-authored development cases in experiments/deduction_scenarios.py are seed 1 by construction, so the band excludes them; their digests are recorded here and asserted absent from accepted[].sha256.",
@@ -278,7 +290,7 @@
   },
   "source_sha256": {
     "agents/memory/beliefs.py": "d9c946867abf74152b332b9331bdec000f20069703c6ef67c2c7c1d8956e63ce",
-    "agents/memory/store.py": "ddc0538517875377a253689cab707322d6393b9eff60713700c9f1d6b7ed0791",
+    "agents/memory/store.py": "e4653f040ea2f5b77e98b3eebcdd355790cd5222005a295e7d8ef75d3b1592d9",
     "agents/perception.py": "5c0b064eacefe3a2f412e48be4c0c110e283b75a0374c2cddd112c2d7c96bb16",
     "agents/tactical/crewmate_policy.py": "cd190d211c343b121c6ff4d3fb471de2150830fb6f3adf8f1ff8aba475861a53",
     "agents/tactical/impostor_policy.py": "4cd16044c9f24cfd5ab615faeecedfb730c424009ed5cb7123a802e739e0b727",
@@ -289,7 +301,7 @@
     "engine/tick.py": "655d29d07724c984b32681b00756ee6b759b34469dfc4483addf5b61f3b49459",
     "engine/visibility.py": "90773592a071c60767ba18933315f0aed96c21716996e74649a6fbc4fd7833f3",
     "engine/world.py": "8367cd422ffb9503e91c3a90931efc21803f47307f6f6b61f7a62fe6ae8bd4bb",
-    "experiments/held_out_prefixes.py": "968273bf8064c92e102efc8ec852724d69319f9723d1498d0c314e3f855901cf",
+    "experiments/held_out_prefixes.py": "f5c0d18669c8cf895b632467345ea05b1a9efe3a18d53035d07f6b590952c40c",
     "observation/action_intent.py": "4b0b9893a52597b96054c982acf9b17d16f3f631bc06058efdf0d62e09b564f3",
     "observation/body_ids.py": "6287e915e7538080f21ae053b92ca78089235dab2642aa14a3288aa948504ab3",
     "observation/service.py": "58e0a2b816287a7de154ea735fc4fe974b7976e8fb9291de883cc8fc10dac326",
