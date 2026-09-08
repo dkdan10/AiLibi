@@ -4,10 +4,17 @@
 
 ## Outcome
 
-Under the production prompt budget a rendered memory keeps the witnessed
-evidence a meeting could act on — vent sightings and sightings of other players
-— instead of shedding it for the observer's own routine movement and task rows.
-Speaker-controlled account-uncertainty text can no longer flood the render.
+Under the production prompt budget the evidence-v2 render stops shedding
+witnessed evidence for the observer's own routine. A witnessed vent (band 85)
+now outranks everything the renderer emits except the observer's own kill (96),
+and a sighting of another player (50) outranks the observer's own transitions
+and task attempts (20) and the account-uncertainty caveats (15), so neither the
+observer's own movement log nor a speaker's claim volume can shed them. A
+sighting does NOT outrank reported testimony, which stays at 60 and is not this
+card's to move: a large enough claim volume still evicts sightings, and the
+limitation below carries the probe. The caveat block is bounded per subject, and
+a render that withholds any caveat subject — by that bound, by the token budget,
+or by shedding the class outright — always states how many it withheld.
 Lever-OFF and evidence-v1 rendered bytes stay identical.
 
 ## Evidence
@@ -35,6 +42,29 @@ the pin, not the discovery.
 
 ## Acceptance
 
+- [x] Review correction (closeout round 1): acceptance item 3 held only on the
+  unbudgeted `evidence_context_lines` surface — at the default 1,500-token
+  budget the committed fixture withheld all seven of its subjects and the
+  model-facing render said nothing. `_select_within_budget` now reserves the
+  notice's cost from the FIRST row it selects and keeps it reserved until every
+  subject is shown, so the sentence always fits and the item's own wording holds
+  on `render_for_prompt`. Gated by
+  `test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped` (the
+  sweep's former "a notice closing no list" branch now requires the notice) and
+  by `test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice`,
+  which pins both what the reserve guarantees and what it costs.
+- [x] Review correction (closeout round 1): the reserve invariant was guarded by
+  a production `assert`, which `python -O` strips. It is now an explicit raise of
+  the named `UnreservedAccountNoticeError`, and the planted revert to the round-1
+  conditional reserve raises it (`3 failed` of the 4 reds that revert produces,
+  each with the token arithmetic in the message).
+- [x] Review correction (closeout round 1): the Outcome claimed sightings of
+  other players are kept under budget pressure without qualification, while the
+  code ranks them at 50 against reported testimony at 60. The Outcome now states
+  the ranks it enforces, the reported-testimony ceiling is a limitation with a
+  reproduced probe, every stale `store.py` line reference in the round-1
+  subsection is corrected to this head, and the round-0 planted-failure counts
+  carry the head's values beside the commit they were measured on.
 - [x] Review correction: the demotion's stated justification was false. The
   `## Where you were:` route is capped at `SELF_LOCATION_TRAIL_MAX_SPANS` = 12
   spans and charged against the same budget, not "rendered in full and
@@ -59,12 +89,19 @@ the pin, not the discovery.
   tokens. The claim is withdrawn, superseded in place, and replaced by the
   invariant the code enforces — the sentence closes a caveat list the reader can
   see, so a render keeping no caveat carries none — gated by the "a notice
-  closing no list" branch of the same sweep.
+  closing no list" branch of the same sweep. *Superseded 2026-09-08, closeout
+  round 1: the replacement invariant was the narrower of the two available and
+  the coordinator reversed the choice. The notice is now reserved before any
+  caveat is selected, a render keeping no caveat DOES carry it, and the
+  withdrawn round-0 claim is true again as originally written — including on the
+  committed golden at 1,500 tokens.*
 - [x] Review correction (docs verifier, same sentence): the visibility claim
   named no enforcing mechanism and every notice assertion ran pre-budget against
   `evidence_context_lines`. Both invariants are now asserted on
   `render_for_prompt` output, each with a planted failure recorded in
-  "Review corrections, round 1 (2026-09-08)".
+  "Review corrections, round 1 (2026-09-08)". *Still true: every notice
+  assertion runs on `render_for_prompt` output. Which invariants they assert
+  changed in closeout round 1 — see the item at the top of this list.*
 - [x] Reproduce the eviction first, as a fixture: at the default 1,500-token
   budget a witnessed vent and a third-party sighting are shed while own
   transitions, own task attempts and account-uncertainty lines survive. The
@@ -200,7 +237,7 @@ revert below; the "after" column is the committed
    own-transition row duplicates something the prompt states anyway.
    *Superseded 2026-09-08, review correction 1: that justification is false. The
    route block holds at most `SELF_LOCATION_TRAIL_MAX_SPANS` = 12 spans
-   (`store.py:278`) and is charged against the same budget ahead of the
+   (`store.py:309` at this head) and is charged against the same budget ahead of the
    observations, shed oldest-first. The ranking decision stands on the corrected
    reasoning, and the placement it costs is a limitation — both in "Review
    corrections, round 1 (2026-09-08)".*
@@ -214,8 +251,14 @@ revert below; the "after" column is the committed
    hedge.
 4. **A subject with several claims states the count.** Collapsing to one row per
    subject would otherwise silently promote one speaker's claim over another's,
-   so a subject with more than one distinct placement renders "any of the N
-   claimed placements stated for them".
+   so a subject named by more than one distinct claim renders "any of the N
+   claimed placements stated for them". Distinct means distinct
+   `(speaker, room, tick)`: two speakers who agree on one placement render as
+   two, which is the point — the count exists so that collapsing never hides a
+   speaker, and a placement is only "the same claim" when the same speaker made
+   it. *Corrected 2026-09-08, closeout round 1: this decision previously said
+   "more than one distinct placement", which is narrower than the key
+   `agents/memory/evidence_context.py` actually uses.*
 5. **The notice sits one band above the caveats it counts** (16 versus 15), so a
    budget that keeps caveats cannot drop the statement that others were withheld.
    The notice pluralises: `1 further subject not shown`, `3 further subjects not
@@ -225,6 +268,11 @@ revert below; the "after" column is the committed
    longer a candidate row at all — `_select_within_budget` mints it after the
    selection and reserves its cost from the first kept caveat. The band is still
    16, which is now only where the minted line is inserted.*
+   *Superseded again 2026-09-08, closeout round 1: the reserve is no longer
+   charged from the first kept caveat but from the first row selected, and holds
+   until every subject is shown, so the budget cannot shed the notice at all —
+   whether it keeps caveats or none. The band is still 16 and still only decides
+   where the minted line is inserted.*
 6. **Evidence v1 keeps its flat band** under the new name
    `_SALIENCE_EVIDENCE_V1_CONTEXT` = 90. v1 is a committed comparison arm; moving
    it would change what the committed v1-versus-v2 captures measured.
@@ -285,7 +333,13 @@ run.
 ### Planted failures
 
 Each new gate was shown to fail on the defect it claims to detect, by editing
-the source, running, and restoring.
+the source, running, and restoring. The counts below were measured on
+`0c5355a3` and reproduce there; later rounds added gates to the same `-k`
+selections, so the same commands give larger counts at the head. Re-run at the
+head they give `7 failed, 15 passed, 116 deselected` (1), `3 failed, 8 passed,
+127 deselected` (2) and `1 failed, 10 passed, 127 deselected` (3) — every
+originally named test still red, plus the round-1 and closeout gates. The
+head-side detail is in "Review corrections, closeout round 1 (2026-09-08)".
 
 1. **The ordering.** Setting the six new v2 constants back to 90 in
    `agents/memory/store.py` (`_SALIENCE_OWN_ROUTINE`, `…_DEATH`,
@@ -376,6 +430,14 @@ which is red on either row alone; that test and the whole
   "Review corrections, round 1 (2026-09-08)". The rest of the bullet stands: the
   caveat carries no placement, and a withheld subject keeps its travel-check
   rows — `Travel check for p-9` is in the golden.*
+  *Restored 2026-09-08, closeout round 1: the withdrawal is itself withdrawn. The
+  reserve now runs from the first row selected, so those 235 renders do carry the
+  notice, and this card's golden at 1,500 tokens carries it over zero caveats:
+  `- Account uncertainty: 7 further subjects not shown.` is the last observation
+  bullet in
+  `…evidence_v2_budget_keeps_witnessed_evidence.expected.md`. The
+  "at least one caveat" clause in the note above is history, not current
+  behaviour.*
 - The negative-verdict band (83) is above the sightings, and negative verdicts
   are not themselves capped. A speaker who states many DIFFERENT impossible
   placements can therefore fill that band. It cannot reach the witnessed vent at
@@ -384,10 +446,16 @@ which is red on either row alone; that test and the whole
   with the accounts-channel card that owns the speaking side.
 - The account caveat renders subjects in the order their claims were ingested,
   not by any relevance signal, because the caveat carries no evidence to rank by.
-- `tests/agents/test_memory_rendering.py` gained one import,
+- `tests/agents/test_memory_rendering.py` gained three imports:
   `orchestrator.boundary.public_map_from_engine_map`, so a fixture can declare a
   canonical public map (`engine.world.load_canonical_map` was already imported
-  there). No `agents/` module gained an import and `lint-imports` is green.
+  there); `agents.memory.evidence_context` names for the row model and the notice
+  sentence; and `typing.Literal` for the arm parameter. No `agents/` module
+  gained an import and `lint-imports` is green — "Contracts: 4 kept, 0 broken".
+  *Corrected 2026-09-08, closeout round 1: this bullet said "gained one import".
+  `git diff 201849fc <head> -- tests/agents/test_memory_rendering.py` shows
+  three. The operative claim — no `agents/` module gained a dependency — was and
+  is true.*
 
 ### Review corrections, round 1 (2026-09-08)
 
@@ -399,10 +467,13 @@ verified locally; the round-1 findings are answered, not re-reviewed, not owner
 reviewed, not merged.
 
 **Finding 1 — the demotion rested on a claim the code contradicts.** The comment
-at `store.py:108`, the `_build_v2_observations` docstring and Decision 2 all said
+above `_SALIENCE_OWN_ROUTINE` (`store.py:110-119` at this head; `:108` at
+`9cacd3fc`, the commit the finding was raised on), the `_build_v2_observations`
+docstring and Decision 2 all said
 the observer's route is "rendered IN FULL and unbudgeted" by
 `## Where you were:`. It is neither: `SELF_LOCATION_TRAIL_MAX_SPANS` = 12 caps it
-(`store.py:278`, applied at `:575-576`) and `_select_trail_within_budget` charges
+(`store.py:309` at this head, applied at `:623-624`; `:278` and `:575-576` at
+`9cacd3fc`) and `_select_trail_within_budget` charges
 it against the same budget ahead of the observations, shedding oldest-first. All
 three statements now say that. The consequence the verifier measured is real and
 was recorded nowhere: on the committed fixture at 1,500 tokens, of the twenty
@@ -515,6 +586,18 @@ witnessed vent, which is planted failure 2 below and what
 Ranking is not an alternative to the reserve either: the budget cuts above band
 16 as readily as below it, which is why the notice was silent at 1,500 tokens to
 begin with.
+*Superseded 2026-09-08, closeout round 1: the coordinator reversed this choice
+and the unconditional reserve is what ships. The measurement stands and is
+reproduced at the new head — 290 tokens still buys the notice with the witnessed
+vent — but it is now the accepted price rather than the reason to decline, and
+`test_the_withheld_notice_never_costs_the_witnessed_evidence_a_line` is replaced
+by `test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice`,
+which pins the same 290-token render as the price and the production budget as
+the case where nothing is paid. The reasoning that fell: "a quantity with nothing
+to count against" weighs a reader's momentary confusion against a render that
+silently hides speaker-supplied subjects, and the second is the worse failure —
+the reader cannot even know those subjects existed. Ranking is still not an
+alternative, for the reason given.*
 
 **Verification (round 1).** Run at `73b7f53f`, the tree this card's own Markdown
 and one test docstring are the only later change to; exit codes captured
@@ -622,6 +705,363 @@ report, DTO or schema byte.
   committed fixture that is what happens, so the caveats' hedging work falls to
   the travel-check rows and to the self-framing of the testimony rows
   ("CLAIM by … (unverified)"), both of which do render there.
+  *Superseded 2026-09-08, closeout round 1: half of this is now false. Such a
+  render still shows no caveat — the hedging work does still fall to the
+  travel-check and testimony rows, which is the half that stands — but it no
+  longer says nothing about the class: it carries the withheld-subjects notice.
+  On the committed fixture at 1,500 tokens the notice is the last observation
+  bullet, over zero caveats.*
 - The reserve costs the caveat block at most one of its own rows: a budget that
   would have fitted the last caveat spends that room on the sentence saying the
   list is short. It never costs any other class a row.
+  *Superseded 2026-09-08, closeout round 1: the reserve now runs from the first
+  row selected, so it can cost any class its last row, not only the caveats. It
+  is still at most ONE row, it is still paid only by a render that goes on to
+  carry the notice, and it is paid only where the budget cuts inside the reserved
+  margin — on the committed fixture at the production budget it costs nothing at
+  all. Measured both ways in the closeout subsection below.*
+
+### Review corrections, closeout round 1 (2026-09-08)
+
+Three independent verifiers returned NO blocking findings on `bd6f05dc`. The
+coordinator overruled three of their nonblocking items into required changes;
+this subsection records those three, what else in the nonblocking set was fixed,
+and why the remainder stays. Repaired by `00ac7fbb` (the renderer, its gates and
+the golden) and `0815333d` (the third held-out restamp and the `audits/` row).
+Delivery state: closeout findings answered and verified locally; not
+re-reviewed, not owner reviewed, not merged.
+
+**Finding A — the render the model reads could still hide subjects silently.**
+Acceptance item 3 asks for an explicit `N further subjects not shown` line when
+the bound truncates. After round 1 that held on the unbudgeted
+`evidence_context_lines` surface and, in `render_for_prompt`, only when at least
+one caveat survived the budget. On the committed fixture — seven caveat subjects
+against a bound of six, so the bound does truncate — the model-facing render at
+`DEFAULT_TOKEN_BUDGET` carried neither a caveat nor the notice. Reproduced on
+`bd6f05dc` and again as the "before" column here:
+
+| budget | caveats of 7 | notice, before | notice, after |
+| --- | --- | --- | --- |
+| 290 | 0 | — | `7 further subjects not shown` |
+| 1,500 | 0 | — | `7 further subjects not shown` |
+| 1,980 | 1 | `6 further subjects not shown` | `6 further subjects not shown` |
+| 2,500 | 6 | `1 further subject not shown` | `1 further subject not shown` |
+
+The mechanism: `_select_within_budget` reserves the notice's cost from the FIRST
+row it selects, not from the first kept caveat, and keeps it reserved until
+every subject is shown. The reserve is exact rather than pessimistic — at each
+row it is `_account_notice_cost(total - shown_after)`, the cost of the sentence
+that row's acceptance would leave due — so it is charged only while a notice is
+genuinely owed, and it drops to zero the moment the last subject renders. Two
+consequences follow by construction rather than by test: the reserve is never
+spent on nothing (a break can only happen while subjects are unshown, and then
+the notice is due and renders), and the sentence always fits (the last accepted
+row reserved exactly what the minted line costs).
+
+The whole shape, swept over 388 budgets from 120 to 3,990 on the committed
+fixture:
+
+```sh
+uv run python -c "
+import importlib.util as u, json
+from pathlib import Path
+from agents.memory.store import render_for_prompt
+from agents.memory.evidence_context import account_uncertainty_notice_line
+spec = u.spec_from_file_location('t', 'tests/agents/test_memory_rendering.py')
+t = u.module_from_spec(spec); spec.loader.exec_module(t)
+base = 'tests/fixtures/memory_rendering/evidence_v2_budget_keeps_witnessed_evidence'
+memory = t._build_memory_from_fixture(json.loads(Path(base + '.json').read_text()))
+empty = correct = closing_no_list = violations = 0
+for budget in range(120, 4000, 10):
+    rows = t._observation_rows(render_for_prompt(memory, token_budget=budget))
+    shown = [r for r in rows if r.startswith('- Account uncertainty for ')]
+    notice = [r for r in rows if r.startswith('- Account uncertainty: ')]
+    if not rows:
+        empty += 1
+        continue
+    if notice != ['- ' + account_uncertainty_notice_line(7 - len(shown))]:
+        violations += 1
+        continue
+    correct += 1
+    closing_no_list += not shown
+print('budgets', 388, 'empty', empty, 'correct', correct, 'closing no list', closing_no_list, 'violations', violations)
+"
+```
+
+→ `budgets 388 empty 11 correct 377 closing no list 175 violations 0`. The
+eleven are budgets 120-220, where the non-elastic blocks leave no room for any
+observation and the notice has nothing to be reserved from; 230-260 render the
+notice as the only observation. The gate
+`test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped` runs the
+same sweep over 400-2,980 on a ten-subject memory and now asserts the notice at
+EVERY budget, counting separately the renders that close a visible list and the
+renders that close none, and failing if either count is zero.
+
+What the reserve costs, measured both ways and pinned by
+`test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice`: at
+`DEFAULT_TOKEN_BUDGET` on the committed fixture it costs nothing — the
+regenerated golden's diff against `bd6f05dc` is one added line, the notice, with
+no row displaced, so the witnessed vent, all five third-party sightings and the
+seven testimony rows still render. At 290 tokens, where there is room for
+exactly two observations, it costs the witnessed vent. That is the trade the
+round-1 note above declined and the coordinator accepted: a render that hides
+speaker-supplied subjects must say so, because a reader cannot otherwise know
+they existed.
+
+Unchanged by this finding, and re-verified: own-kill rows still lead
+(`test_an_own_kill_row_outranks_every_re_ranked_evidence_line`, a 40-claim flood
+at 200 tokens), and the lever-OFF and evidence-v1 goldens are byte-identical —
+the fixture diff between `bd6f05dc` and this head touches only
+`…evidence_v2_budget_keeps_witnessed_evidence.expected.md`. The notice exists
+only on the v2 path: `account_uncertainty_subjects` is 0 on every other arm, so
+`_account_notice_cost` returns 0 and no reserve is charged.
+
+**Finding B — the reserve's guard was a production `assert`.** `python -O`
+strips assertions, so the one statement standing between a broken reserve and a
+prompt over its token budget could vanish from a production run. It is now an
+explicit `raise` of the named `UnreservedAccountNoticeError`
+(`agents/memory/store.py:177` for the class, raised at `:2925`), carrying the
+token arithmetic. It is not reachable from any input — the reserve makes it
+unreachable, which is what a guard is for — so it is proved by perturbation:
+planted failure 1 below restores the round-1 conditional reserve and three of
+the four resulting reds are this error, e.g. `the withheld-subjects notice was
+not reserved while rows were selected: 14 tokens due for 40 withheld subjects, 1
+left of a 1378-token budget`.
+
+**Finding C — statements wider than the code, and stale anchors.** All corrected
+in place:
+
+- The Outcome said the render "keeps the witnessed evidence a meeting could act
+  on — vent sightings and sightings of other players". Only the vent is
+  protected outright: at 85 it clears the uncapped
+  `_SALIENCE_EVIDENCE_TRAVEL_CONTRADICTED` = 83 and everything below. A sighting
+  sits at 50, under `_SALIENCE_REPORTED_TESTIMONY` = 60 (`store.py:96`), which
+  this card does not touch. The adverse probe — 42 claims from one speaker about
+  the already-observed p-3, spread over three ticks and eight rooms so each
+  mints its own testimony row and negative verdict:
+
+  ```sh
+  uv run python -c "
+  import importlib.util as u
+  from agents.memory.store import render_for_prompt
+  spec = u.spec_from_file_location('t', 'tests/agents/test_memory_rendering.py')
+  t = u.module_from_spec(spec); spec.loader.exec_module(t)
+  rooms = ['REACTOR','LABS','ADMIN','MEDBAY','STORAGE','ENGINEERING','WEST_HALL','CAFETERIA']
+  memory = t._v2_memory()
+  for i in range(42):
+      t._v2_claim(memory, subject='p-3', speaker='p-5', tick=1 + (i // len(rooms)) % 3, room=rooms[i % len(rooms)])
+  for budget in (200, 400, 800, 1500, 3000):
+      rows = t._observation_rows(render_for_prompt(memory, token_budget=budget))
+      print('budget', budget, 'rows', len(rows),
+            'vent', sum(t._VENT_LINE_FRAGMENT in r for r in rows),
+            'p-3 sighting', sum(t._SIGHTING_LINE_FRAGMENT in r for r in rows),
+            'contradicted', sum('walking cannot reconcile' in r for r in rows),
+            'testimony', sum('CLAIM by' in r for r in rows))
+  "
+  ```
+
+  → the vent survives at every budget (`vent 1` at 200, 400, 800, 1,500 and
+  3,000) while the p-3 sighting is absent from 200 through 1,500 and returns at
+  3,000, with 30 testimony rows and 9 negative verdicts occupying 1,500. This is
+  not a regression this card introduced — testimony outranked sightings before
+  it — but the Outcome did not qualify the sighting half, and now does. Moving
+  band 60 belongs to the card that owns the speaking side, not here.
+- Every `store.py` line number inside "Review corrections, round 1" pointed at
+  `9cacd3fc`, the commit the findings were raised on, while the surrounding
+  sentences described the corrected code. Each now carries this head's number
+  with the old one named as history: the constant at `:309` (was `:278`),
+  applied at `:623-624` (was `:575-576`), the corrected comment block at
+  `:110-119` (was `:108`). The `## Evidence` section's citations are exact on
+  `201849fc`, which it names, and were re-checked: `:66`, `:77`, `:1601`,
+  `:1612`, `:437-443`, `:459` and `evidence_context.py:383`.
+- The round-0 "Planted failures" counts were measured on `0c5355a3` and do not
+  reproduce at the head, because each later round added gates to the same `-k`
+  selections. That block now carries the head's counts beside the originals.
+- "Two surfaces, two numbers" is now stated as the invariant it is, in
+  `account_uncertainty_notice_line`'s docstring: one copy of the sentence, and
+  each surface states what THAT surface withholds. The unbudgeted
+  `evidence_context_lines` sheds nothing, so its count is the per-subject
+  bound's alone; `render_for_prompt` counts the bound's subjects plus the ones
+  its budget shed. The only non-test consumer, `eval/reasoning_evidence.py`, is
+  on the v1 arm and reads neither.
+- Decision 4 said "a subject with more than one distinct placement", which is
+  narrower than the `(speaker, room, tick)` key the code uses: two speakers
+  agreeing on one placement render as two. Corrected in place; the design intent
+  (collapsing never hides a speaker) is what the wider key serves.
+- "Record impact and limitations" said the test module "gained one import"; the
+  diff against `201849fc` shows three. Corrected in place, with the operative
+  claim — no `agents/` module gained a dependency, `lint-imports` "Contracts: 4
+  kept, 0 broken" — unchanged.
+- `7bcc79ed`'s commit message body says "The observer's route is already
+  rendered in full by the unbudgeted route block, so an own-transition row
+  duplicates it." Round-1 finding 1 established that this is false — the route is
+  capped at `SELF_LOCATION_TRAIL_MAX_SPANS` = 12 spans and charged against the
+  same budget — and the delivery policy forbids amending a pushed commit, so the
+  history will carry the false sentence into main. The correct statement, for a
+  reader arriving from that message: inside the window the route block renders,
+  an own-transition row duplicates a placement the route already states; outside
+  that window the placement is stated nowhere, which is the limitation
+  `test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget` pins. The
+  ranking decision rests on the corrected reasoning, not on the message's.
+
+**Nonblocking items left standing.** One, with its reason: a render of 120-220
+tokens on the committed fixture carries no observation block and therefore no
+notice either. Nothing is reserved because nothing was selected, and a prompt
+with no observations has no shedding to disclose; the alternative — spending a
+budget that fits no evidence on a sentence about evidence — states a quantity
+with nothing to count against and nothing beside it. It is a stated limitation
+rather than a defect, and the sweep counts those eleven budgets explicitly
+rather than skipping them.
+
+**Codex review.** Two comments, both re-fetched at this head; no new review was
+triggered by `56d3e5fd`, `73b7f53f`, `bd6f05dc`, `00ac7fbb` or `0815333d` (the
+PR's review-comments endpoint returns the same two, the latest review
+`COMMENTED` on `9cacd3fc`).
+
+- **P1, "Preserve the commit named by the restamp record" — REFUTED, no change.**
+  Codex asserts that the reviewed commit is "a sibling of `7bcc79ed`, not its
+  descendant (`029aaab` and `7bcc79ed` both have `201849fc` as their parent)",
+  so the manifest would cite a commit the delivered history will not preserve.
+  There is no such object: `cat-file -t 029aaab` reports `fatal: Not a valid
+  object name 029aaab`. The branch is one linear chain —
+  `0815333d ← 00ac7fbb ← bd6f05dc ← 73b7f53f ← 56d3e5fd ← 9cacd3fc ← 0c5355a3 ←
+  af150ce0 ← 7bcc79ed ← 201849fc` — and `merge-base --is-ancestor` succeeds for
+  each of the three commits `dependency_restamps` names (`7bcc79ed`,
+  `56d3e5fd`, `00ac7fbb`) against the head, while `rev-parse 7bcc79ed^` is
+  `201849fc`. Under the post-#436 delivery policy (merge commit or fast-forward,
+  never squash, never amend) all three stay retrievable in main.
+- **P2, "Keep the truncation notice through the prompt budget" — VALID, now
+  fully addressed.** Its first half (the band-16 notice can be budget-shed, so
+  the count describes a list the prompt does not contain) was repaired by
+  `56d3e5fd`; its second half (assert on `render_for_prompt`, not on
+  `evidence_context_lines`) was answered by the same commit. Its remaining
+  recommendation — protect the notice in the final render so it always ships —
+  was declined in round 1 and is implemented here by `00ac7fbb`. Codex's
+  observation that a 1,500-token render of a seven-subject memory carried no
+  notice is no longer true at this head: it carries
+  `- Account uncertainty: 7 further subjects not shown.`
+
+**Verification (closeout round 1).** Run on the committed tree at `0815333d`,
+with this card's own Markdown the only later change to it; exit codes captured
+directly, never through a pipe.
+
+- `.venv/bin/python -m pytest tests/agents/test_memory_rendering.py
+  tests/agents/test_evidence_context.py -q` → `162 passed` (138 in the rendering
+  module; one round-1 gate was replaced by one closeout gate, so the count is
+  unchanged from round 1).
+- `bash scripts/check.sh` → exit 0. `ruff check` "All checks passed!",
+  `ruff format --check` "498 files already formatted", `lint-imports`
+  "Contracts: 4 kept, 0 broken", `validate_task_docs` "390 historical phase
+  tasks and 390 prompts; 43 work cards", `generate_prompts --check` "All 390
+  prompts are in sync", `mypy` "no issues found in 469 source files", pytest
+  `7215 passed, 20 skipped, 3 xfailed`, and the frontend leg: lint, `tsc:check`,
+  `19` test files / `514` tests passed, and the production build.
+- `bash scripts/verify_samples.sh` → exit 0, "All 50 samples verified clean."
+  for `replays/samples/4p1i` and again for `replays/samples/9p2i` (100 canonical
+  reconstructions).
+- The four derived report checks → exit 0 each, "… is consistent with its
+  replays." for `replays/samples/4p1i`, `replays/samples/9p2i`,
+  `replays/ml_corpus/4p1i` and `replays/ml_corpus/9p2i`.
+- `.venv/bin/python -m pytest tests/orchestrator --collect-only -q` in isolation
+  → `583 tests collected`.
+- `.venv/bin/python scripts/verify_ml_evidence.py` (offline half) →
+  `checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5`, exit 0. The seven absent
+  rows are the evidence-branch bytes a fresh clone lacks; `--complete` was not
+  run and is not claimed.
+
+No live provider call of any kind was made in this round: the fake provider is
+the only one these paths construct.
+
+**Planted failures (closeout round 1).** Each edit was applied to the source,
+run, and restored; the working tree is clean of all of them.
+
+1. **The conditional reserve** (the round-1 behaviour this round reverses):
+   restoring `if shown_after else 0` around the reserve gives `4 failed, 18
+   passed, 116 deselected` on
+   `pytest tests/agents/test_memory_rendering.py -k "EvidenceV2Salience or Golden"`
+   — `test_a_claim_flood_cannot_push_the_witnessed_vent_out`,
+   `test_an_own_kill_row_outranks_every_re_ranked_evidence_line` and
+   `test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped` by
+   raising `UnreservedAccountNoticeError` (the guard of finding B, doing its
+   job), and
+   `test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice`
+   on the missing notice at 1,500 tokens.
+2. **The pre-budget count** (round-1 planted failure 1, re-run here): returning
+   the notice to the candidate rows and zeroing `account_uncertainty_subjects`
+   gives `3 failed, 19 passed, 116 deselected` — the same sweep, the new
+   production-budget gate, and the v2 golden.
+3. **The ordering** (round-0 planted failure 1, re-run here): the six v2
+   constants back to 90 gives `7 failed, 15 passed, 116 deselected`, every test
+   the round-0 record named plus
+   `test_a_tick_off_the_trail_keeps_no_own_placement_under_the_budget` and the
+   new production-budget gate.
+4. **The demotion** (round-1 planted failure 3, re-run here):
+   `_SALIENCE_OWN_ROUTINE` back to 90 gives `5 failed, 17 passed, 116
+   deselected`.
+5. **The bound** (round-0 planted failure 2, re-run here): dropping the
+   `[:MAX_ACCOUNT_UNCERTAINTY_SUBJECTS]` slice gives `3 failed, 8 passed, 127
+   deselected` on `-k EvidenceV2Salience`.
+6. **The per-subject collapse** (round-0 planted failure 3, re-run here): making
+   `stated.append(placement)` unconditional gives `1 failed, 10 passed, 127
+   deselected`.
+7. **The row's own count** (round-1 planted failure 4, re-run here): dropping
+   `subject_count=1` from the caveat row gives `9 failed, 13 passed, 116
+   deselected`.
+
+**Held-out set (closeout round 1).** `agents/memory/store.py` moved a third
+time, so
+`tests/experiments/test_held_out_prefixes.py::test_the_committed_manifest_regenerates_from_its_own_band`
+went red on `source_sha256` alone — the failure names exactly one differing key,
+`agents/memory/store.py`. Regenerated with
+`.venv/bin/python -m experiments.held_out_prefixes` and compared field by field
+against the committed manifest: all 50 accepted digests identical, all 8 skips
+identical, `last_accepted_seed` still 3057, band, roster,
+`skipped_reason_counts` and `development_definitions` identical, the top-level
+key set identical, and exactly two of the 22 source digests moved —
+`agents/memory/store.py` and `experiments/held_out_prefixes.py`, the latter
+because the third restamp entry was added to it. `DEPENDENCY_RESTAMPS` gained a
+dated entry naming `00ac7fbb` and this card. The `7bcc79ed` entry's note also
+said `held_out_prefixes.py` moved "because this restamp list was added to it",
+which read as if `7bcc79ed` had made that edit; the list was added in the
+restamp commit that followed it, `af150ce0`, and the note now says so. No prefix
+was printed or opened; the band was read only through the manifest's own counts.
+`tests/experiments/test_held_out_prefixes.py` was not edited. After the restamp:
+`28 passed`.
+
+`docs/artifacts.md` inventory rows recomputed with the change staged, from
+`git ls-files` and `git cat-file --batch-check`: `tests/fixtures/` 2,085,311 →
+2,085,364 tracked bytes across the same 27 files (the one regenerated golden),
+and `audits/` 14,852,039 → 14,852,791 tracked bytes across the same 202 files
+(the manifest grew 13,275 → 14,027 bytes). Both are pinned by
+`tests/scripts/test_verify_ml_evidence.py::test_every_counted_registry_row_matches_the_index`;
+that module is green (`80 passed`). The `audits/` row is contended with
+`origin/work/followup-review-dispositions`, which rewrites the same line for its
+own tree — same-line edits, so git conflicts rather than mismerging, and
+whichever card merges second must recompute the row from its own tree rather
+than taking either side.
+
+**Scope this round.** `agents/memory/store.py`,
+`agents/memory/evidence_context.py` (docstrings only),
+`tests/agents/test_memory_rendering.py`, the one v2 golden, plus the two paths
+the restamp rule directs here (`experiments/held_out_prefixes.py`,
+`audits/deduction-candidate/held-out/manifest.json`), the two `docs/artifacts.md`
+rows and this card. No fixture INPUT changed, no new lever, env switch or profile
+field, no committed recording, report, DTO or schema byte, and the default path
+is untouched.
+
+**Limitations this round adds or corrects.**
+
+- A sighting of another player is not protected against reported testimony: 50
+  against 60. A speaker with enough distinct claims still evicts sightings from
+  the production render — 42 claims does it on the probe above — while the
+  witnessed vent at 85 survives. Band 60 is outside this card's scope and
+  belongs with the accounts-channel card that owns the speaking side.
+- The notice's reserve can cost one row of any class, not only a caveat. It is
+  paid only by a render that goes on to carry the notice, and only where the
+  budget cuts inside the reserved margin: nothing at the production budget on
+  the committed fixture, the witnessed vent at 290 tokens. Both are pinned.
+- A render with no observation block at all — 120 to 220 tokens on the committed
+  fixture — carries no notice, because nothing was selected to reserve it from.
+- Every number in this subsection was produced by a command run on the committed
+  tree at `00ac7fbb` or `0815333d`; the two commands worth re-running are quoted
+  above in full.
