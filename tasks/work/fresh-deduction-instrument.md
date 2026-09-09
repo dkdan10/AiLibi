@@ -65,6 +65,12 @@ denominator.
   fenced output is the head's `2095 tracked files; offenders []`. The earlier
   figures are kept as dated history, and the Results preamble names the merge of
   `cfbf162f` rather than an unmerged predecessor tip.
+- [x] Review correction (round 6): every claim the card makes about "this branch"
+  is true of the merged branch or scoped to this card's own commits — the
+  restamp sentence names the chain's three `dependency_restamps` entries and the
+  22-of-22 digest match at head instead of asserting that no hashed file moved,
+  and the Verification trio about `tests/fixtures/`, `audits/` and `npm run e2e`
+  says whose commits it describes.
 - [x] Review correction: the grader-isolation gate landmines every grader the
   instrument defines, the list read off the module rather than typed, so the
   manifest's "every grader" is what the test does.
@@ -481,6 +487,12 @@ on this branch touches `orchestrator/run_limits.py`, the meeting runner or the
 game loop. Recorded rather than dropped, because a reader running two suites at
 once will see it too.
 
+The three statements that follow are about **this card's own commits**, not about
+everything the branch carries; since round 6 the branch also carries the merge of
+`cfbf162f`, and the round-6 subsection states that side separately (`npm run e2e`
+was run there, and the chain moves `tests/fixtures/` and `audits/` bytes of its
+own).
+
 `cd frontend && npm run e2e` was not run: no served DTO changed. No
 `tests/fixtures/` byte moved. Two `audits/` files moved: the new
 `audits/deduction-candidate/execution-manifest.md` and eight added lines in
@@ -520,11 +532,30 @@ print(f'{len(whole)} prefixes; {len(steps)} distinct step encodings; {len(files)
 ```
 
 The prose here first read "382 distinct step encodings"; 382 is the needle total
-and 332 is the step count, corrected in round 1 below. This branch edits no
-`GENERATOR_SOURCES` file,
-so the freeze manifest needed no `dependency_restamps` entry;
+and 332 is the step count, corrected in round 1 below.
+
+**Restamps.** This card's own commits edit no `GENERATOR_SOURCES` file, so none
+of them owes a `dependency_restamps` entry. The branch is not this card alone,
+though: since round 6 it carries the merge of `cfbf162f`, and the
+`work/evidence-renderer-salience` commits inside it do edit two hashed sources.
+The manifest already carries their restamps —
+
+```sh
+git log --oneline origin/main..HEAD -- agents/memory/store.py \
+  experiments/held_out_prefixes.py agents/memory/beliefs.py \
+  agents/perception.py orchestrator/game.py
+```
+
+prints six commits, three source changes (`7bcc79ed`, `56d3e5fd`, `00ac7fbb`)
+each followed by its own restamp commit, and the manifest's
+`dependency_restamps.entries` names exactly those three. All fifty accepted
+digests and the eight skips are unchanged across every one of them, which is
+what makes a restamp rather than a re-freeze the right move. Every hashed source
+matches the manifest at this head — 22 of 22, no mismatch, 50 accepted and 8
+skipped — and
 `tests/experiments/test_held_out_prefixes.py::test_the_committed_manifest_regenerates_from_its_own_band`
-passes unchanged inside the `tests/eval tests/experiments` run above.
+passes inside the `tests/experiments tests/ev*l` run above. The round-6 merge
+itself changes no hashed file and so adds no fourth entry.
 
 ### Registry row
 
@@ -1292,6 +1323,25 @@ files are prompt-loader, meetings, tests, docs, tasks and audits bytes — and
 both parents, so `git diff` against each is empty and all fifty accepted digests
 and the skip list are untouched. No band prefix was generated, printed or
 opened.
+
+That holds for the merge, and it was **not** true of two blanket sentences the
+card made about "this branch"; the merge falsified both, and they are corrected
+in the same pass. The branch is no longer this card alone. Checked rather than
+assumed: `git diff --name-only origin/main...HEAD` lists 64 files, and two of
+them — `agents/memory/store.py` and `experiments/held_out_prefixes.py` — are
+hashed sources, arriving from `work/evidence-renderer-salience`. So "this branch
+edits no `GENERATOR_SOURCES` file, so the freeze manifest needed no
+`dependency_restamps` entry" was false at the branch level. **The frozen held-out
+set** now says what actually holds: this card's own commits owe no entry; the
+chain's three source commits (`7bcc79ed`, `56d3e5fd`, `00ac7fbb`) each already
+carry one; the manifest's `dependency_restamps.entries` names exactly those
+three, which is what the quoted `git log` over the five hashed files most likely
+to move prints; and all 22 hashed sources match the manifest at this head, with
+50 accepted digests and 8 skips. The **Verification** section's "no
+`tests/fixtures/` byte moved / two `audits/` files moved / `npm run e2e` was not
+run" trio is scoped explicitly to this card's commits now, with the branch-level
+position pointed at this subsection. Nothing here weakens the freeze: the merge
+moves no hashed byte, so no fourth entry is due.
 
 #### Verification, round 6
 
