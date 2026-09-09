@@ -534,7 +534,9 @@ longer held out.
 
 ## Verification of this manifest
 
-The offline mechanics check, at commit `5682ea2a` plus this branch's changes:
+The offline mechanics check, run on this branch's merged tree — the stacked
+predecessor chain came in as merge `73e4b476` and no source byte moves after it,
+so the figures below are what the command prints at the branch head:
 
 ```sh
 .venv/bin/python -m experiments.fresh_deduction_instrument --dry-run
@@ -546,11 +548,15 @@ each, 19 role-correct, 31 wrongful, 18 supported-correct, 150 supported ballots 
 guard-rewritten ones per arm, with 100 ballots naming the ejected player of which
 6 cited evidence that does not bear on that player. The report carries the sampling configuration it
 drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps 2,048 / 1,024). Input tokens by the fake provider's `len // 4`
-heuristic were 886,054 (`repaired_clock`) and 575,251 (`combined_accounts`);
-applying the decision memo's calibrated 1.28x real-input ratio to their sum gives
-about 1.87 M against the 2.4 M ceiling, and the larger arm's 17,721 per unit
-gives about 22,700 against the 45,000 per-unit ceiling — headroom checks, not
-predictions, because a real model writes a different transcript.
+heuristic were 886,054 (`repaired_clock`) and 577,228 (`combined_accounts`);
+applying the decision memo's calibrated 1.28x real-input ratio to their sum
+(1,463,282) gives about 1.87 M against the 2.4 M ceiling, and the larger arm's
+17,721 per unit gives about 22,700 against the 45,000 per-unit ceiling — headroom
+checks, not predictions, because a real model writes a different transcript. The
+candidate arm's figure was 577,228 only after the merge: on the pre-merge tree at
+`44f0b99e` it was 575,251, and `73e4b476` brought the accounts-channel templates
+and `meetings/public_accounts.py` that only that arm renders, which is why the
+reference arm did not move.
 
 The relevance amendment cost this fixture no unit: 18 supported-correct before it
 and 18 after, because its 6 off-target citations all fall in units the primary

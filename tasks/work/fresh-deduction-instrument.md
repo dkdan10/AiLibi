@@ -58,6 +58,20 @@ denominator.
 
 ## Acceptance
 
+- [x] Review correction (round 7): the dry-run table's undated block prints what
+  the head prints — the candidate arm's input-token cell is the head's `577,228`,
+  the headroom arithmetic sums to `1,463,282`, and the execution manifest's
+  verification paragraph carries the same figure and is pinned to the tree it
+  describes rather than to the pre-merge base. The superseded `575,251` is kept
+  as a dated history line naming the commits it was true at, with the merged
+  bytes that moved it, and the block's prose about which rows round 4 added names
+  the rows it actually added.
+- [x] Review correction (round 7): the round-6 subsection's accounting is the
+  one a command reproduces — seven commits in `44f0b99e..46a63e52`, one merge and
+  six doc commits with `46a63e52` named among them, the count pinned to that
+  range — and its closing "the dry run was not re-run, so no figure can have
+  moved" is marked superseded with the reason it was unsound, because the run
+  reads rendered prompt bytes the merge moved.
 - [x] Review correction (round 6): the branch carries the predecessor chain, and
   every undated evidence block prints what the head prints — the registry row's
   fenced output is the head's `204` / `14925876`, not a superseded round's
@@ -386,13 +400,29 @@ directory would publish a held-out input for nothing. The precedent is
 | of those, off-target citations | 6 | 6 |
 | defaulted turns / votes | 0 / 0 | 0 / 0 |
 | units carrying a default | 0 | 0 |
-| input tokens (`len // 4`) | 886,054 | 575,251 |
+| input tokens (`len // 4`) | 886,054 | 577,228 |
 | output tokens (`len // 4`) | 19,800 | 19,800 |
 
-100 units, 600 calls, `total_cost_usd` 0.0, in a few seconds of wall. The last
-two rows arrived with round 4's citation-relevance rule; every other figure is
-unchanged by it, including the primary outcome, because those 6 off-target
-citations all fall in units the primary already scored 0.
+100 units, 600 calls, `total_cost_usd` 0.0, in a few seconds of wall. The two
+ballot rows — those naming the ejected player, and the off-target citations among
+them — arrived with round 4's citation-relevance rule
+(`git show 360b277a -- tasks/work/fresh-deduction-instrument.md` adds exactly
+those two); every other figure is unchanged by it, including the primary outcome,
+because those 6 off-target citations all fall in units the primary already
+scored 0.
+
+*(History, because one cell moved with the predecessor merge: the candidate
+arm's input-token cell read `575,251` from this table's first writing at
+`87dfd918` through the pre-merge tip `44f0b99e` — `git show
+44f0b99e:tasks/work/fresh-deduction-instrument.md` still carries it. The run
+reads the rendered prompt bytes, not only the instrument's, and the round-6
+merge `73e4b476` brought the accounts channel that only this arm renders:
+`git diff --stat 44f0b99e 73e4b476 -- agents/strategic/prompts/ meetings/` lists
+`loader.py`, `_account_transcript.j2`, `accusation_round_accounts.j2`,
+`meetings/manager.py` and `meetings/public_accounts.py`. That is why the
+reference arm is unchanged at `886,054` and only the candidate arm moved, by
+1,977 tokens. Round 7 re-ran the command at the merged head; every other cell of
+the table printed the same value it had.)*
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; the run
@@ -404,7 +434,7 @@ not a comparison between the arms.
 The token figures are a headroom check, not a prediction: the prompts are the
 real rendered ones but the transcript a real model writes will differ. Applying
 the decision memo's calibrated 1.28x real-input ratio to the sum
-(886,054 + 575,251 = 1,461,305) gives about 1.87 M against the 2.4 M run-level
+(886,054 + 577,228 = 1,463,282) gives about 1.87 M against the 2.4 M run-level
 ceiling, and the larger arm's 17,721 per unit gives about 22,700 against the
 45,000 per-unit ceiling.
 
@@ -581,10 +611,10 @@ git ls-files audits | tr '\n' '\0' | xargs -0 stat -f %z | awk '{s+=$1} END {pri
 
 ```
 204
-14925876
+14926312
 ```
 
-`docs/artifacts.md` reads exactly that: `14,925,876 tracked bytes / 204 files`.
+`docs/artifacts.md` reads exactly that: `14,926,312 tracked bytes / 204 files`.
 `scripts/verify_ml_evidence.py` compares the row against disk, and it is green
 at this head.
 
@@ -593,15 +623,17 @@ The 204th file is not this card's. Merging `cfbf162f` brought
 chain, and because both sides had added one file to the same row, neither side's
 total was right for the merged tree — the row was recomputed rather than
 resolved to a side. The base commit `5682ea2a` carried `14,852,791 / 202`, this
-branch added 39,479 bytes and the predecessor 33,606, and those sum to the
-14,925,876 above.
+branch adds 39,915 bytes (39,382 in the manifest and 533 in the README index)
+and the predecessor 33,606, and those sum to the 14,926,312 above.
 
 *(History, since the same one manifest grew on each review round: the total was
 `14,873,520 / 203` at first close, `14,878,444 / 203` after the round-1
 corrections, `14,882,522 / 203` after the round-2 ones, `14,889,236 / 203` at
-`3a02ede8` after the round-4 ones and `14,892,270 / 203` at `87005a14` after the
-round-5 ones — each figure measured at the commit it is dated to, and each the
-pre-merge count. The merge is what moved the file count to 204.)*
+`3a02ede8` after the round-4 ones, `14,892,270 / 203` at `87005a14` after the
+round-5 ones and `14,925,876 / 204` at `46a63e52` after the round-6 ones — each
+figure measured at the commit it is dated to, and every one before the last a
+pre-merge count. The merge is what moved the file count to 204; round 7's
+manifest correction is what moved the total off `14,925,876`.)*
 
 ### Limitations
 
@@ -1282,9 +1314,13 @@ Merging then surfaced four more stale claims of the same kind, all of them
 sentences written when the branch was this card alone; they are listed below and
 repaired in this round.
 
-Six commits: one merge and five that touch this card and nothing else — no
-source byte moves after the merge, which `git diff 73e4b476..HEAD --stat` shows
-as a single changed file. The merge, `73e4b476`, takes `cfbf162f`, the tip of
+Round 6 ended at `46a63e52`, seven commits on `44f0b99e`: one merge and six that
+touch this card and nothing else — no source byte moved during the round, which
+`git diff 73e4b476 46a63e52 --stat` shows as a single changed file. (The count
+is pinned to the range the round covers, `git log --first-parent
+44f0b99e..46a63e52`, so a later round's commits do not falsify it; the round-7
+subsection below reports its own.) The merge, `73e4b476`, takes `cfbf162f`, the
+tip of
 `work/accounts-channel-hardening`, which already carries
 `work/recorded-provenance-gaps` (`42095485`),
 `work/evidence-renderer-salience` (`94c76388`) and
@@ -1292,23 +1328,31 @@ as a single changed file. The merge, `73e4b476`, takes `cfbf162f`, the tip of
 chain. It conflicted in exactly one place, `docs/artifacts.md`'s `audits/` row,
 because both sides had added one audit file to the same row. Neither side's
 total is true of the merged tree, so the row was recomputed from the index with
-everything staged rather than resolved to a side. The five doc commits are
+everything staged rather than resolved to a side. The six doc commits are
 `42ba4db1` (the registry row), `eddbb643` (the tracked-file count), `927ceae0`
 (which rows of the gate table were re-run at the tip), `6a6cd3ee` (the restamp
-sentences) and `e945ae6a` (the flaky-test note).
+sentences), `e945ae6a` (the flaky-test note) and `46a63e52` (this subsection's
+own commit accounting and its closing paragraph, both drafted when the round was
+still two commits). Round 7 found `46a63e52` missing from the list that commit
+itself wrote: the commit that repaired a miscount reintroduced one off by exactly
+itself, so the count above is now pinned to a commit range rather than typed.
 
 The rows, before and after:
 
-| row | ours at `44f0b99e` | theirs at `cfbf162f` | merged head |
+| row | ours at `44f0b99e` | theirs at `cfbf162f` | merged, at `46a63e52` |
 | --- | --- | --- | --- |
 | `audits/` | 14,892,270 / 203 | 14,886,397 / 203 | **14,925,876 / 204** |
 | `tests/fixtures/` | 2,098,563 / 29 | 2,098,563 / 29 | 2,098,563 / 29 |
 
 The merged total reconciles rather than being asserted: the merge base
-`5682ea2a` carried `14,852,791 / 202`, this branch added 39,479 bytes in
-`audits/deduction-candidate/execution-manifest.md` and the predecessor added
-33,606 in `audits/review-2026-09-06/followup-correction-record.md`, and
-14,852,791 + 39,479 + 33,606 = 14,925,876. Every other counted row
+`5682ea2a` carried `14,852,791 / 202`, this branch had added 39,479 bytes by
+`46a63e52` (38,946 in the new
+`audits/deduction-candidate/execution-manifest.md` and 533 in that directory's
+README index) and the predecessor added 33,606 in
+`audits/review-2026-09-06/followup-correction-record.md`, and
+14,852,791 + 39,479 + 33,606 = 14,925,876. (Round 7 edited the manifest again,
+so the current row is the larger total the **Registry row** section prints.)
+Every other counted row
 `scripts/verify_ml_evidence.py` checks was recomputed the same way on the merged
 tree and is unchanged: `replays/samples/` 107 files, `replays/ml_corpus/` 209,
 `replays/records/phase-21-wave2-finding/` 2, the four shipped tactical weight
@@ -1383,11 +1427,12 @@ and each is reproducible on the committed tree at this head.
 #### Verification, round 6
 
 Run on the merged tree. `bash scripts/check.sh` was re-run after each doc commit
-and is reported at the branch tip, as are
+and is reported at this round's tip, `46a63e52`, as are
 `.venv/bin/python scripts/verify_ml_evidence.py` and the held-out suite. The
 remaining rows were measured earlier in the round, on the same merged source
-tree: every commit after the merge touches this card only, so no command below
-reads a byte they moved.
+tree: every commit in `73e4b476..46a63e52` touches this card only, so no command
+below reads a byte they moved. (Round 7 does move `audits/` and `docs/` bytes,
+so its own table below re-reports the rows that read them.)
 
 | Command | Result |
 | --- | --- |
@@ -1410,6 +1455,125 @@ card's changed count. `tests/experiments` and `tests/eval` are unchanged at
 did not move. `npm run e2e` was run this round because the chain carries the
 provenance DTO change; round 5 skipped it because nothing served had moved.
 
-The fake-provider dry run was not re-run and its table above is unchanged: no
-instrument byte moved this round, so no figure in it can have. No live provider
-call of any kind was made.
+The fake-provider dry run was not re-run this round, on the reasoning that no
+instrument byte had moved, so no figure in its table could have.
+**Superseded 2026-09-09 (round 7): that inference was unsound and one figure had
+moved.** The run renders real prompts, so its arms' token figures depend on
+bytes outside the instrument module, and the merge this same subsection
+enumerates brought the accounts channel that the `combined_accounts` arm renders.
+Round 7 re-ran the command at the head and carried its number into the table, the
+headroom arithmetic and the manifest; see the round-7 subsection below. No live
+provider call of any kind was made.
+
+### Review corrections, round 7 (2026-09-09)
+
+Documentation only. Round 6 merged the predecessor chain and swept the sentences
+the merge had falsified; it missed one, and its own commit accounting drifted by
+exactly the commit that wrote it. Both are repaired here, and no source byte
+moves: `git diff 73e4b476 HEAD --name-only` prints
+`audits/deduction-candidate/execution-manifest.md`, `docs/artifacts.md` and
+`tasks/work/fresh-deduction-instrument.md`.
+
+**1. The dry run's candidate arm moved with the merge, in three places.**
+`### The fake-provider dry run` is an undated headline block, so it must print
+what the head prints. Re-run at this head, twice, deterministically:
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run
+```
+
+The report's two arm blocks carry `"input_tokens": 886054` (`repaired_clock`) and
+`"input_tokens": 577228` (`combined_accounts`). The
+table read `575,251` for the candidate arm — 1,977 low — and two statements
+derived from it were wrong with it: the card's headroom sum, and
+`audits/deduction-candidate/execution-manifest.md`'s verification paragraph. All
+three now carry `577,228` and the sum `886,054 + 577,228 = 1,463,282`. Every
+other cell of the table reproduces unchanged at the head: units 50/50, calls
+300/300, ejections 50/50, role-correct 19/19, supported-correct 18/18, supported
+ballots 150/150, guard-rewritten 6/6, ballots naming the ejected player 100/100,
+off-target citations 6/6, defaulted turns and votes 0/0, units carrying a default
+0/0, output tokens 19,800/19,800, and the paired `b=0, c=0, p=1.0`.
+
+The conclusion the block draws is unchanged, which is why this is an accuracy
+repair and not a headroom finding: 1,463,282 x 1.28 is about 1.87 M against the
+2.4 M run-level ceiling, and the per-unit reference is `repaired_clock`'s 17,721,
+the arm the merge did not touch.
+
+The cause is the merge, not a mis-measurement. The run renders real prompts, so
+its token figures depend on bytes outside `experiments/fresh_deduction_instrument.py`,
+and `git diff --stat 44f0b99e 73e4b476 -- agents/strategic/prompts/ meetings/`
+lists `loader.py`, `_account_transcript.j2`, `accusation_round_accounts.j2`,
+`meetings/manager.py` and `meetings/public_accounts.py` — the accounts channel
+only the `combined_accounts` arm renders, which is why `repaired_clock` stayed at
+exactly `886,054`. The superseded figure is kept as a dated history line in the
+dry-run section and named in the manifest, pinned to the commits it was true at.
+
+That also falsifies round 6's closing sentence, "no instrument byte moved this
+round, so no figure in it can have". It is marked superseded in place, with the
+narrower true statement beside it: the run reads more than the instrument's
+bytes. This is the same defect class round 6 declared it was sweeping — a claim
+written when the branch was this card alone — reaching one sentence further than
+that sweep did.
+
+**2. The round-6 subsection miscounted its own round.** It said "Six commits: one
+merge and five" and named five doc commits, while
+`git log --first-parent 44f0b99e..46a63e52 --format='%h %s'` prints seven — the
+merge plus six — and the unnamed sixth was `46a63e52` itself, the commit written
+to repair a miscount. The subsection now says seven, names `46a63e52` with what
+it repaired, and pins the count to the commit range the round covers rather than
+typing a number a later commit can invalidate. Two neighbouring claims that read
+against a moving `HEAD` are pinned the same way: the "single changed file" diff
+now reads `git diff 73e4b476 46a63e52 --stat`, and the round-6 verification
+preamble scopes its "every commit after the merge touches this card only" to
+`73e4b476..46a63e52`, because round 7 does move `audits/` and `docs/` bytes.
+
+**3. The manifest's verification framing was stale for the same reason.** Its
+`## Verification of this manifest` opened "at commit `5682ea2a` plus this
+branch's changes", which stopped describing the branch when the chain merged in.
+It now names the merge `73e4b476` and states why the figures beneath it are the
+head's: no source byte moves after that commit.
+
+**4. One more sentence in the same block did not describe its table.** "The last
+two rows arrived with round 4's citation-relevance rule" pointed at the token
+rows, which predate round 4; `git show 360b277a -- tasks/work/fresh-deduction-instrument.md`
+adds the two ballot rows and nothing else. The sentence now names them. Found
+while re-reading the block the re-run corrected, and repaired here rather than
+left for an eighth round.
+
+Editing the manifest moves `audits/` bytes, so the **Registry row** section and
+`docs/artifacts.md` were recomputed with the change staged: `204` files and
+`14,926,312` bytes, which reconciles as 14,852,791 at the base `5682ea2a` plus
+this branch's 39,915 and the predecessor's 33,606. The round-6 before-and-after
+table's merged column is pinned to `46a63e52`, the total that was true when it
+was written, and the round-6 total joins the registry history line.
+
+#### Verification, round 7
+
+Run at the branch tip on the committed tree, after the edits above were staged.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run` | arm `input_tokens` 886054 / 577228, `output_tokens` 19800 / 19800, `total_cost_usd` 0.0, paired `b` 0 `c` 0 `p_exact` 1.0 |
+| `bash scripts/check.sh` | exit 0 — `Contracts: 4 kept, 0 broken`; `Success: no issues found in 473 source files`; `7471 passed, 20 skipped, 3 xfailed`; frontend `Test Files 19 passed`, `Tests 515 passed` |
+| `.venv/bin/pytest -q tests/experiments tests/ev*l` | `1329 passed, 1 skipped` |
+| `.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q` | `28 passed` |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 43 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified` |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `every check passed` |
+| `git ls-files audits \| wc -l` and the size sum | `204` / `14926312`, which `docs/artifacts.md` now reads |
+
+Four gate rows were **not** re-run this round, and the reason is narrower than
+"nothing moved": `bash scripts/verify_samples.sh`, the four
+`scripts/build_sample_report.py --check` runs, `pytest tests/orchestrator/
+--collect-only` and `cd frontend && npm run e2e` read replays, the orchestrator
+package and the served DTOs, and `git diff 73e4b476 HEAD --name-only` shows this
+round touched none of those — its three files are this card, the execution
+manifest and `docs/artifacts.md`. Their round-6 results at `46a63e52` stand.
+That test is what round 6's dry-run sentence skipped: the dry run does read
+bytes this round could have moved, so it was re-run rather than reasoned about.
+
+The held-out set did not move and owes no restamp: this round changes no file in
+`experiments/held_out_prefixes.py`'s `GENERATOR_SOURCES` — it changes no source
+file at all — and the manifest-regeneration test passes at the tip. No band
+prefix was generated, printed or opened, and no live provider call of any kind
+was made.
