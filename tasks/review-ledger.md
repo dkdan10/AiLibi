@@ -355,3 +355,124 @@ the follow-up's `P-10` asks for stay with
 
 No row above advances a delivery state, no candidate is adopted, and no live
 provider was called.
+
+## Post-merge commit register (as of 2026-09-09)
+
+One row per post-review commit, which `P-10` asked for and the
+disposition pass above deferred here. A post-review commit is every
+non-merge commit reachable from this branch and not from `8161689a`, the
+merge that landed the cleanup — the boundary the sections above stop at.
+Rows cover every non-merge commit from `8161689a` to `51118004`, which is the last row below; a commit after that tip is uncovered until the tip advances with it.
+
+Nothing here is typed: `tests/scripts/test_review_ledger_register.py`
+re-derives every sha, card and subject from `git log` over that range and
+fails on a missing row, an invented row, a row out of order, a subject
+that does not match the commit, or a coverage tip that is not an ancestor
+of the branch. A commit cannot carry its own row, so the register is
+advanced by the commit after the one it records.
+
+| Commit | Card | Subject |
+| --- | --- | --- |
+| `e9c47c76` | — | coordination: record the merge of #435 and retire the cleanup-branch delivery policy |
+| `90a410bb` | — | docs: correct the deduction card's output calibration and point it at the memo |
+| `7b4c3daa` | — | docs: propose the fresh-model evaluation's authorization limits |
+| `aafc947b` | — | docs: assess the open items deferred at the merge |
+| `5c5138d1` | — | coordination: record the owner's rulings of 2026-09-07 (#436, #437 merged; #432-#434 closed) |
+| `03814585` | — | coordination: complete the record of the 2026-09-07 rulings |
+| `f9ce179c` | — | coordination: rule the held-out preparer and runner roles and open the freeze card |
+| `86a919f1` | — | feat: generate held-out proof-free prefixes from a preregistered seed band |
+| `f9d02ad2` | — | docs: freeze the held-out prefix digests and refresh the audits inventory |
+| `2daa5612` | — | docs: complete the held-out prefix freeze card |
+| `6f684642` | — | docs: state the restamp rule for the frozen held-out set and bind the runner to it |
+| `0c8bc31c` | — | docs: collapse a doubled blank line in the instrument card |
+| `92bec106` | — | fix: close the four review findings on the held-out prefix freeze |
+| `3eb49dfc` | — | fix: close the certifying seam and stop overclaiming the frozen filter environment |
+| `27e6d952` | — | fix: hash only the steps the engine executes and repair the freeze card's digests |
+| `b6a4c3d6` | held-out-prefix-freeze | fix: state what dropping the report-tick steps did to the frozen set |
+| `f9b8f3bd` | held-out-prefix-freeze | docs: correct the freeze card's bystander count and skip attribution |
+| `201849fc` | — | coordination: record the freeze of the held-out set (#438 merged as 23a23c2d) |
+| `7bcc79ed` | evidence-renderer-salience | fix: rank witnessed evidence above own routine in the evidence-v2 render |
+| `af150ce0` | evidence-renderer-salience | chore: restamp the held-out dependency digests for 7bcc79ed |
+| `0c5355a3` | evidence-renderer-salience | style: wrap the salience test's subject list to ruff format |
+| `6ea91b69` | — | test: freeze a format-3 recording for the cross-tree policy check |
+| `9cacd3fc` | evidence-renderer-salience | docs: close the evidence-renderer-salience card with its evidence |
+| `3fae166e` | — | docs: disposition every 2026-09-06 review finding by id |
+| `7cbf9786` | — | docs: index the disposition pass and close its card |
+| `583eba5d` | — | feat: record the observation clock in the provenance identity |
+| `e6b4b9c4` | — | fix: hash the investigation view without its filesystem timestamp |
+| `414fa332` | — | fix: bind the live-vs-reconstructed memory guard to its meeting |
+| `21640d87` | — | fix: make the v3 policy re-decision a declared profile option |
+| `e26045bd` | — | docs: record the recorded-provenance-gaps results |
+| `56d3e5fd` | evidence-renderer-salience | fix: count the caveat subjects the render actually drops |
+| `73b7f53f` | evidence-renderer-salience | chore: restamp the held-out dependency digests for 56d3e5fd |
+| `ab467228` | followup-review-dispositions | docs: correct the disposition pass's routing, counts and coverage claims |
+| `bd6f05dc` | evidence-renderer-salience | docs: record the round-1 review corrections and what they enforce |
+| `1aaae43e` | followup-review-dispositions | docs: make the round-1 correction proofs reproducible from the card alone |
+| `17e929f4` | — | docs: correct the card's trio count and declare the shared inventory row |
+| `34a8b8be` | — | docs: correct the counts and proofs round 1 falsified by writing them |
+| `db6ffb9e` | — | docs: anchor the merge-tree conflict count so it reproduces on this tree |
+| `00ac7fbb` | — | fix: state the withheld account subjects in the prompt the model reads |
+| `b4352fb7` | — | fix: refuse a clock version that is not an integer at every provenance boundary |
+| `0815333d` | — | chore: restamp the held-out dependency digests for 00ac7fbb |
+| `59df8a9e` | — | docs: record the closeout round-1 corrections and what the render now enforces |
+| `86e133e3` | — | docs: supersede the round-1 reserve text the closeout correction reverses |
+| `864b18a1` | — | docs: name the commit the closeout gate was re-run on |
+| `5bde0c95` | followup-review-dispositions | docs: correct the closeout findings this pass's own writes falsified |
+| `76f6e777` | — | fix: close the closeout round's non-blocking findings and record the round |
+| `af8d7f71` | — | docs: record the base-branch re-merge and its recomputed inventory rows |
+| `115b46c5` | — | docs: state the held-out intersection per commit range instead of per worktree |
+| `844fbe8d` | — | docs: make the closeout round's self-referential figures stop invalidating |
+| `cb788692` | followup-review-dispositions | docs: make the counter that answers recommendation 2 print what is quoted |
+| `6ba434fb` | — | docs: correct the ranking headline and pin the bands above the vent |
+| `4d2396a3` | — | docs: withdraw a closeout-round-2 claim this worker cannot verify |
+| `4e744f63` | — | docs: pin every card figure to the commit it was measured at |
+| `b4555f39` | — | docs: make the base-tip claim a command rather than a sha |
+| `c3a78366` | — | docs: qualify the withheld-notice guarantee to what the reserve enforces |
+| `80fae3e5` | evidence-renderer-salience | docs: name every place the withheld-notice absolute still stands |
+| `30fb9083` | — | docs: stop the pinning commit's own figure from drifting |
+| `a8974d6f` | — | docs: count every place the withheld-notice absolute still stands |
+| `5682ea2a` | — | docs: date the e2e row of the provenance card's verification table |
+| `520d5a9b` | — | fix: fence account free text and match the reply ask to the schema |
+| `5f496ef3` | — | fix: place a speaker by their own account and impeach a lone contradictor |
+| `35e83271` | — | fix: extend the teammate firewall to every role-proving account shape |
+| `a260f062` | — | docs: state the vent-certificate trade-off in both candidate checkpoints |
+| `96a83a6a` | — | test: pin the vision hop the account comparison grants |
+| `28742c2b` | — | docs: record the accounts-channel hardening results |
+| `07b962a0` | fresh-deduction-instrument | feat: build the fresh-model deduction instrument on the public API |
+| `87c4ef3d` | fresh-deduction-instrument | docs: bind the fresh-model evaluation's execution manifest |
+| `87dfd918` | fresh-deduction-instrument | docs: close the fresh-deduction-instrument card with its evidence |
+| `987f99b2` | fresh-deduction-instrument | docs: record the gate's own counts and the one load-sensitive failure |
+| `4142f661` | — | fix: keep the widened kill firewall behind the account channel |
+| `93eeb7d5` | — | fix: fence every line boundary and advance the account prompt revision |
+| `f8140c32` | — | fix: repair the account comparison's derived rows and its belief fold |
+| `113c046c` | — | docs: record the round-1 review corrections |
+| `2dde0c91` | — | fix: enforce the manifest the instrument said it enforced |
+| `5503f754` | — | docs: record the round-1 corrections and what they changed |
+| `25351035` | — | fix: never pair two account rows read out of one artifact |
+| `0769bee9` | — | docs: record the round-2 review corrections |
+| `bfd5696b` | — | fix: count the meeting's own defaults and bound the work window in flight |
+| `bb44f104` | — | docs: record the round-2 corrections and what they changed |
+| `97cc8d62` | — | docs: pin the audits-diff command to the commit it was measured at |
+| `3a02ede8` | — | fix: grade what a citation is about, not just that it is present |
+| `360b277a` | — | docs: record the round-4 corrections and what they changed |
+| `87005a14` | fresh-deduction-instrument | fix: landmine every grader and date every pre-run amendment |
+| `44f0b99e` | fresh-deduction-instrument | docs: record the round-5 corrections and what they changed |
+| `42ba4db1` | — | docs: recompute the instrument card's registry row on the integrated tree |
+| `eddbb643` | — | docs: carry the merged head's tracked-file count into the prefix-secrecy scan |
+| `927ceae0` | — | docs: say which round-6 gate rows were re-run at the branch tip |
+| `6a6cd3ee` | — | docs: say what the branch's restamps are instead of denying they exist |
+| `e945ae6a` | — | docs: argue the flaky-test note from the files that are actually untouched |
+| `46a63e52` | — | docs: make the round-6 subsection describe the round it actually became |
+| `444a47fd` | nonblocking-followup-improvements | fix: refuse a tournament report destination named like a recording |
+| `db885271` | nonblocking-followup-improvements | fix: print the integrity rule code verify_samples already knows |
+| `29393cda` | nonblocking-followup-improvements | fix: refuse a meeting whose recorded cutoff cannot be attributed |
+| `d282dd06` | nonblocking-followup-improvements | chore: restamp the held-out dependency digests for 29393cda |
+| `c8efd12a` | nonblocking-followup-improvements | test: pin the v2 entitlement rule against a vented observer |
+| `f8a68519` | nonblocking-followup-improvements | test: pin the off-profile refusal of a task-activity account |
+| `666dfbbb` | nonblocking-followup-improvements | feat: hold .env.example to the meeting-experiment registry |
+| `54c623e8` | nonblocking-followup-improvements | fix: close the clear-and-install window in the public-results cache |
+| `4a7c0071` | nonblocking-followup-improvements | docs: decide the probe-descriptor lifetime and pin what it leaves open |
+| `51118004` | nonblocking-followup-improvements | feat: derive the task index's card counts from the cards themselves |
+
+No row above advances a delivery state, adopts a candidate or records a
+live provider call.

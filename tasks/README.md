@@ -14,15 +14,20 @@ separately budgeted fresh-model decision. The supplied
 The owner's later follow-up report and appendix are archived beside them by the
 [follow-up review archive](work/followup-review-archive.md).
 
-## Active ownership
+## Ownership of the post-merge queue
 
-No card is active. The [post-merge plan](post-merge-plan.md#ownership) holds the
-writer-to-file table for the seven queued cards; it takes effect when the owner
-dispatches one.
+The batch this index describes is the post-merge queue, not the finished
+correction batch: its cards are dispatched on `work/<card-slug>` branches in the
+order [the plan](post-merge-plan.md#ordered-outcomes) sets, and
+[the plan's ownership table](post-merge-plan.md#ownership) is the writer-to-file
+assignment they run under. The card inventory below states how many are still
+open, and it is derived rather than typed, so this section cannot go on
+describing a batch that finished.
 
 Cards own precise acceptance and file boundaries. Each card's worker commits on
 that card's branch; the coordinator serializes shared-file handovers and owns
-the planning commits on `main`.
+the planning commits on `main`. Every commit those branches carry is registered,
+one row each, in [the review ledger](review-ledger.md).
 
 Start with the [review ledger](review-ledger.md) for commits, independent reviews
 and verification. The [roadmap](cleanup-roadmap.md) preserves priority numbers;
