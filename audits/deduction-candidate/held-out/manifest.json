@@ -235,6 +235,13 @@
         "date": "2026-09-08",
         "note": "The closeout round-1 correction to the same repair: the withheld-subjects notice is reserved before any caveat is selected, so a render that hides claim subjects always states how many, and the reserve's guard raises a named error instead of asserting. Both are prompt-render changes on the default-OFF evidence-v2 path, which prefix generation does not read, so all fifty accepted digests and the eight skips were unchanged a third time.",
         "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
+      },
+      {
+        "card": "tasks/work/nonblocking-followup-improvements.md",
+        "commit": "29393cda",
+        "date": "2026-09-09",
+        "note": "The write-time refusal of a meeting whose eject cutoff no reader could attribute, plus the two docstrings that state the contract. It adds a guard on the recording path and changes no engine transition; prefix generation records no meeting and never reaches the guard, so all fifty accepted digests and the eight skips were unchanged again.",
+        "sources": "orchestrator/game.py, experiments/held_out_prefixes.py (this record itself)"
       }
     ],
     "note": "One entry per commit that edited a GENERATOR_SOURCES file after the freeze WITHOUT moving the set: source_sha256 was regenerated only after test_the_committed_manifest_regenerates_from_its_own_band showed accepted[] and skipped[] identical to the committed record. A commit that moves any prefix digest or skip is not restamped here: the set becomes development data and a new band is frozen under a new card (tasks/post-merge-plan.md, 'Sequencing')."
@@ -315,14 +322,14 @@
     "engine/tick.py": "655d29d07724c984b32681b00756ee6b759b34469dfc4483addf5b61f3b49459",
     "engine/visibility.py": "90773592a071c60767ba18933315f0aed96c21716996e74649a6fbc4fd7833f3",
     "engine/world.py": "8367cd422ffb9503e91c3a90931efc21803f47307f6f6b61f7a62fe6ae8bd4bb",
-    "experiments/held_out_prefixes.py": "c881c6bd1fe0898a55914935e182167cbdfd23ca26dc6e3e67d725e59218b3c7",
+    "experiments/held_out_prefixes.py": "90eec7081a4a7c831cd2b21ae2d0c5a93040295a51b83efd5e3711831648954d",
     "observation/action_intent.py": "4b0b9893a52597b96054c982acf9b17d16f3f631bc06058efdf0d62e09b564f3",
     "observation/body_ids.py": "6287e915e7538080f21ae053b92ca78089235dab2642aa14a3288aa948504ab3",
     "observation/service.py": "58e0a2b816287a7de154ea735fc4fe974b7976e8fb9291de883cc8fc10dac326",
     "observation/temporal.py": "23262ec60d8a30e974d5e5cb6e997fd049891347f9a2f07fb68676cc61898b5f",
     "orchestrator/action_ordering.py": "698d8e0b6c809925967c390f52c2fa94258318fba26c4a538fc2569822432963",
     "orchestrator/boundary.py": "ab5a8b2397c71256e3895e16cec1687d346140f00e3719360608447b96f1817b",
-    "orchestrator/game.py": "a05072e17843c3f59e8c3c3a6e84bab34b291786c62771184de3fe5203b6a1af",
+    "orchestrator/game.py": "88dd847accf43605d24e6cb0b0dcf789ef908b18bcfd799e29b2bd12c0d8bfe8",
     "orchestrator/observation_delivery.py": "8b6734d40634b235b36fece522f444c4083d56d0853afe8824afa9abf119bda2",
     "orchestrator/seeder.py": "8e9e594d911478755d1fbf22cb78e46f60840bbfad7ba5297143e47033d8bf35"
   },
