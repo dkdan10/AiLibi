@@ -58,6 +58,25 @@ denominator.
 
 ## Acceptance
 
+- [x] Review correction: the live run builds its client from the authorized
+  provider and model rather than from the ambient environment, and a response
+  from any other model is a stop on the call that returns it.
+- [x] Review correction: a live invocation is authenticated against the
+  committed manifest's own path and bytes, not against the fields of the object
+  handed in.
+- [x] Review correction: `--units` is a dry-run knob; a live invocation carrying
+  one is refused, so the authorized command cannot run a one-unit pilot.
+- [x] Review correction: every way a unit can fail stops the run with a
+  partial-state record, the truncation stop included, and the stopped unit's
+  spend is retained rather than dropped.
+- [x] Review correction: the manifest binds the sampling temperatures and the
+  acceptable wrongful-decision tradeoff, and the instrument serves and enforces
+  both.
+- [x] Review correction: the frozen set's band, tick budget and task count are
+  compared and then used, so `verify_frozen_set` enforces what its docstring
+  claims.
+- [x] Review correction: the held-out scan figure in Results is the reproducible
+  332 distinct step encodings, quoted with the command that prints it.
 - [x] A new instrument, separate from the two committed MECHANICS_ONLY
   harnesses, driving the run through the public API only
   (`HeadlessGame`, `build_default_agent_factory`, `build_default_meeting_runner`).
@@ -182,8 +201,9 @@ reimplementing the test.
 field `audits/deduction-candidate/preregistration.md:105-118` names, with the
 owner's authorized limits copied verbatim.
 
-`tests/experiments/test_fresh_deduction_instrument.py` — 82 tests, every one on
-the fake provider.
+`tests/experiments/test_fresh_deduction_instrument.py` — 112 tests, every one on
+the fake provider (82 when this card was first closed; the round-1 corrections
+below added 30).
 
 ### Architecture and design sections
 
@@ -223,18 +243,30 @@ and the Acceptance item above carries the same dated note.
 
 **A live call needs an explicit invocation, not just the manifest.**
 `assert_live_run_is_authorized` refuses every provider except `fake` without a
-`LiveRunInvocation` naming `audits/deduction-candidate/execution-manifest.md`;
-`LiveRunInvocation.naming` refuses any other path, and refuses a manifest that
-does not name the authorized provider, model and prompt set; `run_dry` refuses a
-`LiveRunInvocation` outright so the mechanics check cannot become the run; and a
+`LiveRunInvocation`, and takes nothing on that object's word: it re-resolves
+`audits/deduction-candidate/execution-manifest.md` under the repository root and
+requires the invocation to name exactly that file, re-hashes the file and
+requires the invocation's digest to match, requires the invocation's model to be
+the authorized one, and refuses moved limits, a moved sampling configuration and
+any `--units` override. `LiveRunInvocation.naming` applies the same full-path
+check when the invocation is built and additionally refuses a manifest that does
+not name the authorized provider, model and prompt set. The client such a run
+uses is `build_authorized_client`'s — the provider and model pinned from the
+authorization, with only the API key crossing over from the shell — and a
+response from any other model stops the run. `run_dry` refuses a
+`LiveRunInvocation` outright so the mechanics check cannot become the run, and a
 tree scan keeps `--i-am-the-runner` out of every committed test, script and
 workflow. No live provider call of any kind was made on this card.
 
 **The analysis is frozen in code and in the record before any outcome exists.**
-`PRIMARY_OUTCOME`, `DECISION_RULE`, `MINIMUM_ACTIONABLE_EFFECT_UNITS` and
-`STOP_RULE` are module constants; the manifest quotes each verbatim and a test
-asserts it does. The minimum actionable effect (net 10 of 50) is justified from
-the design's own resolution, and every figure in that justification recomputes:
+`PRIMARY_OUTCOME`, `DECISION_RULE`, `MINIMUM_ACTIONABLE_EFFECT_UNITS`,
+`WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE` are module constants; the manifest
+quotes each verbatim and a test asserts it does. The decision rule is the
+conjunction of three conditions — p below 0.05, a net of at least 10, and a net
+increase in wrongful crew ejections no larger than that net — and
+`PairedResult.meets_decision_rule` computes all three. The minimum actionable
+effect (net 10 of 50) is justified from the design's own resolution, and every
+figure in that justification recomputes:
 
 ```sh
 .venv/bin/python -c "import sys; sys.path.insert(0, 'scripts'); \
@@ -292,9 +324,9 @@ ceiling, and the larger arm's 17,721 per unit gives about 22,700 against the
 
 ### Planted and perturbed failures
 
-Every gate this card adds was removed or perturbed in turn, its own test run, and
-the source restored. One worked example, then the table of all ten produced the
-same way:
+Measured at `87dfd918`, when the suite held 82 tests. Every gate this card added
+was removed or perturbed in turn, its own test run, and the source restored. One
+worked example, then the table of all ten produced the same way:
 
 ```sh
 .venv/bin/python -c "import pathlib; p = pathlib.Path('experiments/fresh_deduction_instrument.py'); \
@@ -322,9 +354,10 @@ FAILED tests/experiments/test_fresh_deduction_instrument.py::TestFrozenSet::test
 | the abort handler stops charging the stopped unit's calls | `TestBudgetAndDeadline::test_the_stopped_units_spend_is_retained` |
 | the primary outcome stops excluding guard-rewritten ballots | `TestGraders::test_a_guard_rewritten_ballot_is_not_the_voters_supported_call` |
 
-All ten went red; the source was restored and
+All ten went red; the source was restored and, at `87dfd918`,
 `.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q`
-returned `82 passed` again.
+returned `82 passed` again. The round-1 corrections below add their own planted
+cases and their own table.
 
 The seventh row is a real defect this exercise found rather than a synthetic one:
 the guard originally searched `report.model_dump_json()`, and a prefix step
@@ -377,14 +410,33 @@ once will see it too.
 
 Regenerated in process and checked against
 `audits/deduction-candidate/held-out/manifest.json` before anything else runs: 50
-accepted digests (seeds 3000-3057) and 8 skips, all `witnessed_kill`. No prefix
-was printed, logged or written into any report. That last claim is checked
-rather than asserted: every one of the 50 prefixes' canonical JSON and every one
-of their 382 distinct step encodings was searched for across all 2,094 tracked
-files on this branch, and no file carries one — the scan regenerates the
-fragments through `experiments.held_out_prefixes` and reported `files carrying a
-band prefix or one of its steps: []`. This branch edits no `GENERATOR_SOURCES`
-file,
+accepted digests (seeds 3000-3057) and 8 skips, all `witnessed_kill`, under the
+band, tick budget and roster the manifest itself names. No prefix was printed,
+logged or written into any report. That last claim is checked rather than
+asserted — 382 search needles, being the 50 prefixes' canonical JSON plus their
+332 distinct step encodings, over all 2,094 tracked files on this branch:
+
+```sh
+git ls-files > /tmp/tracked.txt
+.venv/bin/python -c "
+import json, pathlib
+from experiments.held_out_prefixes import canonical_prefix_json, generate
+g = generate()
+whole = {canonical_prefix_json(p) for p in g.prefixes}
+steps = {json.dumps(s.model_dump(mode='json'), sort_keys=True, separators=(',', ':')) for p in g.prefixes for s in p.steps}
+files = pathlib.Path('/tmp/tracked.txt').read_text('utf-8').split()
+bad = [f for f in files if any(n in pathlib.Path(f).read_text('utf-8', errors='ignore') for n in whole | steps)]
+print(f'{len(whole)} prefixes; {len(steps)} distinct step encodings; {len(files)} tracked files; offenders {bad}')
+"
+```
+
+```
+50 prefixes; 332 distinct step encodings; 2094 tracked files; offenders []
+```
+
+The prose here first read "382 distinct step encodings"; 382 is the needle total
+and 332 is the step count, corrected in round 1 below. This branch edits no
+`GENERATOR_SOURCES` file,
 so the freeze manifest needed no `dependency_restamps` entry;
 `tests/experiments/test_held_out_prefixes.py::test_the_committed_manifest_regenerates_from_its_own_band`
 passes unchanged inside the `tests/eval tests/experiments` run above.
@@ -395,12 +447,14 @@ passes unchanged inside the `tests/eval tests/experiments` run above.
 staged, by listing the tracked paths and summing their sizes:
 
 ```
-203 files 14873520 bytes
+203 files 14878444 bytes
 ```
 
-`docs/artifacts.md` now reads `14,873,520 tracked bytes / 203 files`, up from
+`docs/artifacts.md` now reads `14,878,444 tracked bytes / 203 files`, up from
 `14,852,791 / 202`, and `scripts/verify_ml_evidence.py` compares that row
-against disk (`OK 48 | FAIL 0` above).
+against disk (`OK 48 | FAIL 0` above). *(That total was `14,873,520` when this
+card first closed; the round-1 corrections grew the same one manifest by 4,924
+bytes and the row moved with them.)*
 
 ### Limitations
 
@@ -420,3 +474,168 @@ against disk (`OK 48 | FAIL 0` above).
   authorizes no call. Executing the design needs a separate card carrying an
   explicit runner invocation, and the result of such a run would be a
   measurement, not an adoption.
+
+### Review corrections, round 1 (2026-09-09)
+
+Eighteen blocking findings from the independent verifiers and Codex; nine
+distinct defects, eight of them in the code and one in this card's prose. Seven
+of the eight sit in the two places this card asked to be trusted about — the
+live-run gate and the stop path — and one pattern runs through them: the
+instrument DESCRIBED limits it did not enforce. Source, tests, the manifest and
+the registry row moved in `2dde0c91`; this subsection and the rest of the card
+moved in the commit after it, which edits this Results section only. Every
+command quoted here was run on `2dde0c91`.
+
+**1 — the live client came from the shell, not from the authorization.**
+`main()` validated `--provider featherless` and then built the client with a bare
+`build_default_client()`, which reads `AILIBI_LLM_PROVIDER` and
+`AILIBI_LLM_MEETING_MODEL`. An invocation labelled `featherless` therefore
+reached whatever the shell named: with the variable unset it reached the fake
+provider and wrote a report reading `provider: featherless`, `dry_run: False`;
+with `anthropic` and a key in the environment it would have reached a metered
+provider the manifest's own cost statement excludes. The live client is now
+`build_authorized_client`'s — the provider and both model variables pinned to
+the authorized values, with exactly one ambient value crossing over, the API key
+— and `_InstrumentClient` refuses a RESPONSE whose `model` is not the authorized
+one, on the call that returns it rather than in the report afterwards.
+
+**2 — `--units` was honoured on the live path.** `main()` passed
+`units=args.units` into `run_instrument`, which sliced `frozen.prefixes[:units]`,
+and the gate inspected only provider, invocation and limits. `--provider
+featherless --i-am-the-runner --units 1` therefore ran the one-unit pilot the
+authorization card, this card and the manifest all refuse, against a set the rest
+of which stays held out. `assert_live_run_is_authorized` now refuses any
+non-`None` `units` for a live invocation, and `main` runs that gate BEFORE it
+constructs a client.
+
+**3 — `LiveRunInvocation.naming` authenticated a path suffix.** It compared the
+last three components of the resolved path and looked for three substrings in the
+text, and neither the recorded digest nor the path was re-checked at the
+authorization boundary. A 41-byte file at any
+`.../audits/deduction-candidate/execution-manifest.md` carrying only
+`featherless Qwen/Qwen3.6-27B qwen3_6_27b` authorized a run, and a directly
+constructed `LiveRunInvocation` skipped even that. `naming` now compares the full
+resolved path against `repo_root / EXECUTION_MANIFEST_PATH`, and
+`assert_live_run_is_authorized` re-resolves that path, re-hashes the file and
+compares the invocation's digest and model against it — the dataclass's own
+fields are no longer evidence for anything.
+
+**4 — stops escaped without a partial run.** The abort wrapper caught four
+classes. A provider transport failure left `run_instrument` as a raw
+`RuntimeError`, a mid-run legacy body handle as a `HeldOutPrefixError`, and an
+unreconciled spend or a wrong ballot count as a plain `InstrumentError` — none
+carrying the `PartialRun` the stop rule and the manifest both promise. The
+wrapper now catches `Exception`: every way a unit can fail is a stop that reports
+its partial state, the class and message are copied into `reason` and the
+original is chained, and `BaseException` is deliberately left alone so an
+interrupt is not a run stop.
+
+**5 — the truncation stop discarded the spend it claimed to retain.**
+`_InstrumentClient.complete` raised `PerCallCapExceeded` before appending the
+`CapturedCall` and before charging the model-work clock, so the one stop
+condition this gate itself creates reported zero calls and zero tokens. Every
+stop in the client now records the response first — it came back, so it was
+spent. Fixing that surfaced the same defect one level up: `run_unit` drained the
+client with `take()` before the handle and prompt-mirror checks, so a stop in
+either handed the abort handler an empty client. Those checks now read
+`client.calls`, and a unit is drained only once it has been accepted.
+
+**6 — the manifest bound no sampling configuration.**
+`audits/deduction-candidate/preregistration.md:113-115` requires it to; the
+manifest named no temperature and the instrument constructed no `MeetingConfig`,
+so the run inherited `meetings/manager.py:211,213` and a later edit to those
+defaults would have moved a frozen design's sampling distribution without moving
+the manifest. Turn 0.4 and vote 0.2 are now `AUTHORIZED_*` constants gathered
+with the two caps into a frozen `AUTHORIZED_SAMPLING`, served through an explicit
+`MeetingConfig` (carrying the HEADLESS deadlines, so an explicit config does not
+opt this run into the interactive 30 s per-turn wall), recorded on every report,
+refused by the live gate if moved, and pinned against the shipped values by a
+test.
+
+**7 — the advancement rule carried no acceptable tradeoff.** The preregistration
+requires the manifest to bind "acceptable tradeoffs" and makes advancement
+conditional on the predeclared wrongful-decision tradeoff; `DECISION_RULE` was p
+and net alone, so a candidate that bought 10 supported-correct ejections while
+converting reference-arm skips into wrongful crew ejections advanced.
+`WRONGFUL_EJECTION_TRADEOFF` is now frozen beside the rest of the analysis and
+before any held-out outcome exists: the candidate's net increase in wrongful crew
+ejections may not exceed its net paired gain, one for one.
+`PairedResult.meets_decision_rule` is the conjunction of all three conditions,
+and the per-arm wrongful count is reported beside the role-correct one (31 per
+arm on the dry run).
+
+**8 — `verify_frozen_set` claimed three comparisons it did not make.** Its
+docstring named the band, the roster and the tick budget; the body read `status`,
+the clock, `num_players`, `num_impostors`, the digests and the skips, and called
+`generate()` on the module defaults, so a manifest describing band 9000-9999, a
+999-tick budget or 7 tasks per crewmate stayed green. All three are compared now,
+against the generator's own frozen values, and the parsed band and roster are
+what `generate()` is driven with.
+
+**9 — "382 distinct step encodings" was not a count of anything.** 382 is the
+needle total: the 50 prefixes' canonical encodings plus their 332 distinct step
+encodings. "The frozen held-out set" above attributed it to steps alone; it now
+carries 332, the arithmetic, and the command that prints both counts together
+with the empty offender list.
+
+#### Planted and perturbed failures, round 1
+
+Each new gate was neutered in turn, its own test run, and the source restored:
+
+| Gate removed or perturbed | Test that went red |
+| --- | --- |
+| `if units is not None:` → `if False:` | `TestLiveGate::test_a_live_invocation_carrying_a_unit_override_is_refused` |
+| `if resolved != expected:` → `if False:` | `TestLiveGate::test_a_same_named_manifest_outside_the_repository_is_refused` |
+| `if invocation.manifest_sha256 != committed:` → `if False:` | `TestLiveGate::test_a_hand_built_invocation_with_a_stale_digest_is_refused` |
+| `if invocation.model != AUTHORIZED_MODEL:` → `if False:` | `TestLiveGate::test_a_hand_built_invocation_naming_another_model_is_refused` |
+| `if sampling != AUTHORIZED_SAMPLING:` → `if False:` | `TestLiveGate::test_a_live_run_may_not_move_the_authorized_sampling` |
+| the pinned environment reads `AILIBI_LLM_PROVIDER` from the ambient one | `TestAuthorizedClient::test_the_pinned_environment_ignores_the_ambient_provider_and_model` |
+| the response-model check → `if False:` | `TestAuthorizedClient::test_a_response_from_another_model_stops_the_run` |
+| the truncation stop raises before the call is recorded and the clock charged | `TestPerCallCaps::test_a_truncation_stop_retains_the_capped_calls_spend` |
+| `except Exception as exc:` → `except InstrumentError as exc:` | `TestBudgetAndDeadline::test_a_provider_transport_failure_stops_the_run_with_partial_state` |
+| the handle check drains the client with `take()` before it runs | `TestBudgetAndDeadline::test_a_mid_run_legacy_body_handle_stops_the_run_with_partial_state` |
+| `if band != PREREGISTERED_BAND:` → `if False:` | `TestFrozenSet::test_a_moved_band_is_refused` |
+| `if manifest.get("max_ticks") != MAX_TICKS:` → `if False:` | `TestFrozenSet::test_a_moved_tick_budget_is_refused` |
+| `if parsed_roster != FROZEN_PREFIX_ROSTER:` → `if False:` | `TestFrozenSet::test_a_moved_task_count_is_refused` |
+| `and meets_tradeoff` dropped from the decision rule | `TestPairedStatistics::test_a_candidate_that_buys_ejections_with_innocents_is_blocked` |
+| `config=sampling.meeting_config(),` dropped from the runner call | `TestAuthorizedConstants::test_the_run_serves_the_authorized_meeting_config` |
+
+All fifteen went red and the source was restored;
+`.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q` then
+returned `113 passed` at `2dde0c91`.
+
+#### Verification, round 1
+
+Every row was run on `2dde0c91`, the commit that carries the source, the tests,
+the manifest and the registry row; the commit after it edits this Results section
+only, and `validate_task_docs` was re-run on it.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `Contracts: 4 kept, 0 broken`; `Success: no issues found in 473 source files`; `7378 passed, 20 skipped, 3 xfailed`; frontend `Test Files 19 passed`, `Tests 515 passed` |
+| `.venv/bin/pytest tests/eval tests/experiments -q` | `1290 passed, 1 skipped in 135.03s` |
+| `.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q` | `113 passed` |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 43 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified` |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `every check passed` |
+| `bash scripts/verify_samples.sh` | `All 50 samples verified clean.` for both sets |
+| `scripts/build_sample_report.py --check` x 4 | all four `is consistent with its replays` |
+| `.venv/bin/pytest tests/orchestrator/ --collect-only -q` | `583 tests collected` |
+| `.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run` | 100 units, 600 calls, `total_cost_usd` 0.0; per arm 50 ejections, 19 role-correct, 31 wrongful, 18 supported-correct; `sampling` recorded as `turn_temperature` 0.4 / `vote_temperature` 0.2 |
+
+The dry run's per-arm counts and token totals are unchanged from the closing run
+above, which is the point: the explicit `MeetingConfig` states the values the
+meeting layer was already defaulting to, so binding them moved no byte.
+
+`cd frontend && npm run e2e` was not run: no served DTO changed. The frontend
+gate leg needed `npm ci` in this worktree before `scripts/check.sh` could reach
+it — the first attempt exited 127 on `eslint: command not found` and is not a
+result of this branch. This round changed no `tests/fixtures/` byte and no
+`GENERATOR_SOURCES` file, so the freeze manifest still needs no
+`dependency_restamps` entry; only `audits/deduction-candidate/execution-manifest.md`
+moved, and its registry row moved with it.
+
+No live provider call of any kind was made in this round. The two new gate tests
+that touch a client factory (`TestAuthorizedClient`) assert refusals: each one
+runs with no Featherless credential in the environment it is handed, so the
+pinned environment stops before a client is constructed.
