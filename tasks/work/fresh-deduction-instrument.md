@@ -1278,7 +1278,13 @@ round-5 value `14,892,270 / 203`. A block whose command and whose output
 disagree is exactly the drift this queue keeps catching: the reader cannot tell
 which number the head prints, and neither figure was the head's after the merge.
 
-Two commits. The first merges `cfbf162f`, the tip of
+Merging then surfaced four more stale claims of the same kind, all of them
+sentences written when the branch was this card alone; they are listed below and
+repaired in this round.
+
+Six commits: one merge and five that touch this card and nothing else — no
+source byte moves after the merge, which `git diff 73e4b476..HEAD --stat` shows
+as a single changed file. The merge, `73e4b476`, takes `cfbf162f`, the tip of
 `work/accounts-channel-hardening`, which already carries
 `work/recorded-provenance-gaps` (`42095485`),
 `work/evidence-renderer-salience` (`94c76388`) and
@@ -1286,8 +1292,10 @@ Two commits. The first merges `cfbf162f`, the tip of
 chain. It conflicted in exactly one place, `docs/artifacts.md`'s `audits/` row,
 because both sides had added one audit file to the same row. Neither side's
 total is true of the merged tree, so the row was recomputed from the index with
-everything staged rather than resolved to a side. The second commit is this
-card, and touches nothing else.
+everything staged rather than resolved to a side. The five doc commits are
+`42ba4db1` (the registry row), `eddbb643` (the tracked-file count), `927ceae0`
+(which rows of the gate table were re-run at the tip), `6a6cd3ee` (the restamp
+sentences) and `e945ae6a` (the flaky-test note).
 
 The rows, before and after:
 
@@ -1365,17 +1373,21 @@ orchestrator/game.py` prints nothing, so the deadline clock and
 test passes at the merged head both inside `bash scripts/check.sh` and alone
 (`1 passed in 0.45s`).
 
-All three corrections are the same defect: a claim written when the branch was
-this card alone, left unchecked when the branch grew. The `git` commands quoted
-beside each are what makes the new wording checkable rather than merely narrower.
+Those four sentences — the tracked-file count, the two restamp claims and this
+one — are one defect repeated: a claim written when the branch was this card
+alone, left unchecked when the branch grew. Round 5 could not have caught any of
+them, because none was false until the merge. The `git` commands now quoted
+beside each are what makes the new wording checkable rather than merely narrower,
+and each is reproducible on the committed tree at this head.
 
 #### Verification, round 6
 
-Run on the merged tree, with this card's edits in place. `bash scripts/check.sh`,
-`scripts/verify_ml_evidence.py` and the held-out suite were re-run after the
-tracked-count correction and are reported at the branch tip; the rest were run on
-the same tree one doc commit earlier, and no command below reads a byte that
-commit moved.
+Run on the merged tree. `bash scripts/check.sh` was re-run after each doc commit
+and is reported at the branch tip, as are
+`.venv/bin/python scripts/verify_ml_evidence.py` and the held-out suite. The
+remaining rows were measured earlier in the round, on the same merged source
+tree: every commit after the merge touches this card only, so no command below
+reads a byte they moved.
 
 | Command | Result |
 | --- | --- |
