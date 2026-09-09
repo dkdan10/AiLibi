@@ -982,3 +982,79 @@ def test_an_impostor_menu_answer_naming_its_teammate_never_records() -> None:
         for prompts in client.prompts.values()
         for prompt in prompts
     )
+
+
+async def _off_profile_task_account(self: AccountClient, **kwargs: Any) -> LLMResponse:
+    """p-1 answers with a task-activity account the recorded profile lacks."""
+
+    agent_id = kwargs["agent_id"]
+    self.prompts.setdefault(agent_id, []).append(kwargs["prompt"])
+    if kwargs["schema"] is MeetingTurn:
+        turn = self.turns[agent_id]
+        if agent_id == "p-1":
+            turn = turn.model_copy(
+                update={
+                    "observations": (
+                        TaskActivityAccount(
+                            type="task_activity",
+                            task_id="fuel_reserves",
+                            room="STORAGE",
+                            from_tick=3,
+                            to_tick=5,
+                        ),
+                    )
+                }
+            )
+        text = turn.model_dump_json()
+    else:
+        text = VoteBallot(
+            voter=agent_id,
+            target="SKIP",
+            confidence=0.0,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="unsure",
+        ).model_dump_json()
+    return LLMResponse(
+        text=text,
+        usage=TokenUsage(input_tokens=4, output_tokens=3),
+        cost_usd=0.0,
+        model="scripted-public-accounts",
+    )
+
+
+def test_a_task_account_cannot_enter_a_transcript_recorded_without_the_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NC5-03: the off-profile refusal, which no test previously exercised.
+
+    ``MeetingTurn`` is the structured-output contract for every profile, so a
+    provider can return a ``TaskActivityAccount`` in a meeting recorded with
+    ``public_account_version=None``. Nothing else stops that shape: the public
+    accounts validator does not run off-profile. Deleting the refusal left
+    1,375 meeting tests green.
+    """
+
+    monkeypatch.setattr(AccountClient, "complete", _off_profile_task_account)
+    result, _ = asyncio.run(
+        _meeting(grounded=False, attributed=None, common=None, expected_defaults=1)
+    )
+    speaker = next(turn for turn in result.transcript.turns if turn.speaker == "p-1")
+    assert speaker.observations == ()
+    assert not any(
+        isinstance(observation, TaskActivityAccount)
+        for turn in result.transcript.turns
+        for observation in turn.observations
+    )
+    assert len(result.ballots) == 3
+
+
+def test_the_same_account_is_kept_when_its_profile_is_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control: the identical turn is accepted under the profile itself."""
+
+    monkeypatch.setattr(AccountClient, "complete", _off_profile_task_account)
+    result, _ = asyncio.run(_meeting(grounded=False))
+    speaker = next(turn for turn in result.transcript.turns if turn.speaker == "p-1")
+    assert [type(row) for row in speaker.observations] == [TaskActivityAccount]
