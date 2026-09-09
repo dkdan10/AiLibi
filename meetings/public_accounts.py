@@ -275,12 +275,32 @@ def detect_public_account_conflicts(
     (:func:`meetings.transcript._apply_proxy_intra_turn_guard`, Task 10.10);
     the comparison is reimplemented here rather than shared because this module
     compares only public speech and reads no private record.
+
+    Two rows read out of the SAME artifact are never paired: a flag reports a
+    disagreement between two statements, and one sentence's internal
+    impossibility is not one.
     """
 
     placements = _placements(transcript)
     flags: list[ContradictionRef] = []
     for index, first in enumerate(placements):
         for second in placements[index + 1 :]:
+            if first.event_id == second.event_id:
+                # One artifact yields up to three rows, and a speaker may name
+                # ITSELF as a sighting's subject -- the roster check is the
+                # only check on that field. Such a sentence places the speaker
+                # twice, at the destination it states and at the origin its own
+                # witness row infers, so pairing the two rows would flag one
+                # sentence against itself through a single event id. Every
+                # evidence classifier reads that self-linkage as ``role_proof``
+                # by rule (``api.schemas.classify_evidence``, whose table says
+                # a flag naming ONE artifact is not a conflict between two
+                # statements whatever its kind), which is the opposite of what
+                # this channel promises above and the opposite of what its
+                # ``weak`` band says. Skipping the pair keeps the promise and
+                # the rule agreeing; the speaker stays placed for every
+                # comparison against a DIFFERENT artifact.
+                continue
             if (
                 first.subject != second.subject
                 or first.subject not in roster

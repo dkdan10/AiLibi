@@ -18,6 +18,7 @@ from agents.memory.store import (
     absorb_reported_testimony,
 )
 from agents.perception import ingest_event_observations
+from api.schemas import classify_evidence
 from engine.world import load_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.evidence_profile import MeetingEvidenceProfile
@@ -52,7 +53,11 @@ from meetings.schemas import (
     VoteBallot,
     WhereaboutsClaim,
 )
-from meetings.transcript import contradiction_lift_key, detect_contradictions
+from meetings.transcript import (
+    contradiction_lift_key,
+    detect_contradictions,
+    is_weak_contradiction,
+)
 from observation.public_map import PublicMapView
 from observation.packet import EventObservationBatch, PlayerView
 from orchestrator.boundary import public_map_from_engine_map
@@ -910,6 +915,50 @@ def test_a_derived_row_flags_through_an_artifact_id_a_reader_resolves() -> None:
     assert endpoints == {"turn:p-2:obs:0", "turn:p-2:obs:1"}
     reader = _reader_event_id_pattern()
     assert all(reader.match(endpoint) for endpoint in endpoints)
+
+
+def test_one_sentence_cannot_contradict_itself_into_a_role_proof() -> None:
+    # Review round 2: a sighting's `subject` is checked against the roster
+    # only, so a speaker may name ITSELF. That one `saw_move` yields two rows
+    # -- the stated destination, and the speaker's own witness position at the
+    # origin the sighting was made from -- and both keep the artifact's event
+    # id, so pairing them produced a flag whose two endpoints were the SAME
+    # artifact. `classify_evidence` types self-linkage as `role_proof` by rule,
+    # whatever the kind, so before the skip this one sentence minted the
+    # spectator's and the prompt's strongest band out of a channel that
+    # promises to prove no role -- and a role-proof flag on the arm whose
+    # defining count of them is zero. ADMIN -> LABS is three rooms with two
+    # steps allowed (one within-tick, one for the witness row's vision hop):
+    # exactly the impossible route the self-pair asserted.
+    self_named = SawMoveObservation(
+        type="saw_move", tick=5, subject="p-2", from_room="ADMIN", to_room="LABS"
+    )
+    assert _flags(_turn("p-2", (self_named,)), roster=frozenset({"p-1", "p-2"})) == ()
+
+    # The control: the skip is per ARTIFACT, not per endpoint pair, so the
+    # same sentence still answers to somebody else's account. p-3 puts p-2 in
+    # REACTOR at the same tick, which both of p-2's rows are too far from, and
+    # the two flags share one endpoint pair while staying distinct by
+    # `contradiction_id`. Every endpoint pair the channel emits names two
+    # different artifacts, which is what keeps it out of the self-linked
+    # role-proof row entirely.
+    flags = _flags(
+        _turn("p-2", (self_named,)),
+        _claim_turn("p-3", (_alibi("p-2", "REACTOR", 5),)),
+        roster=frozenset({"p-1", "p-2", "p-3"}),
+    )
+    assert len(flags) == 2
+    assert len({flag.contradiction_id for flag in flags}) == 2
+    assert all(flag.event_a_id != flag.event_b_id for flag in flags)
+    assert {
+        classify_evidence(
+            kind=flag.kind,
+            event_a_id=flag.event_a_id,
+            event_b_id=flag.event_b_id,
+            weak=is_weak_contradiction(flag),
+        )
+        for flag in flags
+    } == {"weak_signal"}
 
 
 def test_an_impostor_menu_answer_naming_its_teammate_never_records() -> None:
