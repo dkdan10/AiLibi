@@ -50,6 +50,35 @@ the pin, not the discovery.
 
 ## Acceptance
 
+- [x] Review correction (closeout round 4): closeout round 3's table of "every
+  place the absolute appeared" was not exhaustive, and the place it missed still
+  carried the absolute at `c3a78366` — PR #440's `## Round-1 review corrections`
+  section, the bullet whose note read "the reserve is now unconditional, a
+  render keeping no caveat DOES carry the notice, and the withdrawn sentence is
+  true again as originally written", which is the same sentence the card amends
+  in two places. The body pushed with this commit states it with its
+  precondition — the notice reaches the render wherever the render carries an
+  observation block at all — and the round-3 table now records that it was not
+  exhaustive and which place it missed. Checked with
+  `gh pr view 440 --json body`; the boundary is the one-token sweep quoted in
+  "Review corrections, closeout round 3 (2026-09-09)", re-run at `c3a78366`:
+  `no observation block: 1 .. 229 contiguous True`, the notice alone at 230.
+- [x] Review correction (closeout round 4): closeout round 3's "Left standing"
+  note counted four unqualified comments where six carry that form —
+  `agents/memory/store.py:2872-2878` and
+  `agents/memory/evidence_context.py:356-359` were missed — and the reason it
+  gave, that `agents/memory/store.py` is a hashed `GENERATOR_SOURCES` entry,
+  covers neither the `evidence_context.py` comment it missed nor the
+  `tests/agents/test_memory_rendering.py` comment it named: neither file is in
+  that tuple (`experiments/held_out_prefixes.py:155-178`), so editing
+  either pulls no restamp. All six are enumerated in "Review corrections,
+  closeout round 4 (2026-09-09)" with the reason split — text-only this round
+  for all six, a held-out restamp for the four in `store.py` alone — and the
+  `evidence_context.py` comment is routed to the card whose Expected scope owns
+  that file, `tasks/work/retire-temporal-evidence-v1.md:81-83`, rather than to
+  `store.py`'s next writer, which would have left it unassigned. Reproduced with
+  `grep -rn "always" agents/memory/store.py agents/memory/evidence_context.py
+  tests/agents/test_memory_rendering.py`.
 - [x] Review correction (closeout round 3): the Outcome said "a render that
   withholds any caveat subject — by that bound, by the token budget, or by
   shedding the class outright — always states how many it withheld", with no
@@ -92,7 +121,11 @@ the pin, not the discovery.
   `git log --oneline 201849fc..HEAD`, and kept current across this round's own
   two commits. *Kept current 2026-09-09, closeout round 3: the ledger, the
   delivery state and the pointer are updated again for this round's commit, and
-  the pointer now names four dated subsections.*
+  the pointer now names four dated subsections.* *Kept current 2026-09-09,
+  closeout round 4: updated again for this round's commit — fifteen commits
+  before it, closeout round 3 named as `c3a78366`, the third completed
+  re-review and its two findings named, and five dated subsections in the
+  pointer.*
 - [x] Review correction (closeout round 1): acceptance item 3 held only on the
   unbudgeted `evidence_context_lines` surface — at the default 1,500-token
   budget the committed fixture withheld all seven of its subjects and the
@@ -228,7 +261,7 @@ uv run python scripts/build_sample_report.py --sample-dir replays/ml_corpus/9p2i
 
 ## Results
 
-Implemented on `work/evidence-renderer-salience` from `201849fc` in fourteen
+Implemented on `work/evidence-renderer-salience` from `201849fc` in fifteen
 commits before this one (`git log --oneline 201849fc..HEAD` lists them, this
 commit last). Round 0:
 `7bcc79ed` (the renderer), `af150ce0` (the first held-out restamp), `0c5355a3`
@@ -243,28 +276,33 @@ reverses, superseded in place) and `864b18a1` (naming the commit the closeout
 gate was re-run on). Closeout round 2 is `6ba434fb` (the ranking gate, the
 corrected headline and that record) and `4d2396a3`, which withdrew one sentence
 of it that claimed more than its worker could know; the whole gate suite was
-re-run on the bytes of each, with identical results. Closeout round 3 is the
-single commit this paragraph ships with, which changes documentation only — no
-source, fixture, manifest or artifacts-row byte — so every number below was
-measured on exactly the bytes it ships with.
+re-run on the bytes of each, with identical results. Closeout round 3 is
+`c3a78366`, which qualified the withheld-notice guarantee to what the reserve
+enforces. Closeout round 4 is the single commit this paragraph ships with. Both
+change documentation only — no source, fixture, manifest or artifacts-row
+byte — so every number below was measured on exactly the bytes it ships with.
 
-Delivery state: closeout round-3 findings answered and verified locally. Round 1
+Delivery state: closeout round-4 findings answered and verified locally. Round 1
 was re-reviewed on `bd6f05dc` — three verifiers, no blocking findings — closeout
 round 1 was re-reviewed on `864b18a1`, which returned three blocking findings
 (two lenses on the same rewritten Outcome sentence, plus this paragraph's own
-staleness), and closeout round 2 was re-reviewed on `4d2396a3`, which returned
-one blocking finding on the Outcome sentence again — all answered below. Not
-owner reviewed, not merged.
+staleness), closeout round 2 was re-reviewed on `4d2396a3`, which returned one
+blocking finding on the Outcome sentence again, and closeout round 3 was
+re-reviewed on `c3a78366`, which returned two — the qualification round 3
+applied to the card had not reached one place in PR #440's body, and round 3's
+own list of the comments it left unqualified undercounted them. All are answered
+below. Not owner reviewed, not merged.
 Adoption: not applicable — evidence reasoning v2 stays default-OFF and this
 repairs a candidate renderer rather than proposing one.
 
 Where a statement in an earlier section was later found false it keeps its text,
 is marked superseded or corrected in place with the date, and the correction
-lives in one of the four dated subsections that close this Results: "Review
+lives in one of the five dated subsections that close this Results: "Review
 corrections, round 1 (2026-09-08)", "Review corrections, closeout round 1
-(2026-09-08)", "Review corrections, closeout round 2 (2026-09-08)" and "Review
-corrections, closeout round 3 (2026-09-09)". The first three carry the same
-date; the round each belongs to is in its heading, not in the date.
+(2026-09-08)", "Review corrections, closeout round 2 (2026-09-08)", "Review
+corrections, closeout round 3 (2026-09-09)" and "Review corrections, closeout
+round 4 (2026-09-09)". The first three carry one date and the last two another;
+the round each belongs to is in its heading, not in the date.
 
 Architecture and contract sections this follows: `docs/architecture.md`
 "Layering" (`agents/` reasons from typed memory and never imports `engine/`;
@@ -1514,6 +1552,17 @@ Every place the absolute appeared, and what happened to it:
 | "Record impact and limitations", the restored bullet ("those 235 renders do carry the notice") | qualified in place, dated |
 | PR #440's body — summary, closeout round-1 bullet, two decisions, definition of done | qualified to the same statement |
 
+*Corrected 2026-09-09, closeout round 4: the table above is not the exhaustive
+list its lead line claims. One further place carried the absolute at
+`c3a78366` — PR #440's `## Round-1 review corrections` section, the bullet
+"**'Those renders will carry the withheld notice' was false**", whose closing
+note read "the reserve is now unconditional, a render keeping no caveat DOES
+carry the notice, and the withdrawn sentence is true again as originally
+written". The PR row above names the summary, the closeout round-1 bullet, two
+decisions and the definition of done, and this note is none of those. It is
+qualified in the body pushed with the next commit; see "Review corrections,
+closeout round 4 (2026-09-09)".*
+
 The superseded Outcome sentence is quoted verbatim in the Acceptance item this
 round prepends rather than left standing inside the Outcome itself: the card
 format asks the headline to describe the current state, and both earlier Outcome
@@ -1532,6 +1581,17 @@ that implements it, `_select_within_budget` at
 `agents/memory/store.py:2913-2916` — "the sentence still renders when the budget
 holds it alone, and is dropped when even that does not fit". A later card that
 already owns `store.py` should carry the qualifier into those four.
+
+*Corrected 2026-09-09, closeout round 4: six comments carry that form, not four.
+`agents/memory/store.py:2872-2878` (`_select_within_budget`'s own docstring) and
+`agents/memory/evidence_context.py:356-359` were missed, and the reason above
+does not cover every place it applies to: `tests/agents/test_memory_rendering.py`,
+which it names, and `agents/memory/evidence_context.py`, which it missed, are not
+`GENERATOR_SOURCES` entries, so editing either would pull no restamp — what
+leaves those two standing is the text-only decision alone. The hand-off to `store.py`'s next writer is
+likewise wrong for the `evidence_context.py` comment, which that writer does not
+own. All six are enumerated, the reason split and the routing corrected in
+"Review corrections, closeout round 4 (2026-09-09)".*
 
 **Housekeeping in the same commit.** "Review corrections, closeout round 2
 (2026-09-08)" closed on `git log --oneline 201849fc..HEAD`, "which lists this
@@ -1595,3 +1655,165 @@ No live provider call of any kind was made in this round: the fake provider is
 the only one these paths construct. No planted failure is recorded for this
 round, because it adds no gate and changes no source — the plants and their
 counts stand as measured in "Review corrections, closeout round 2 (2026-09-08)".
+
+### Review corrections, closeout round 4 (2026-09-09)
+
+The verification round on `c3a78366` returned two blocking findings, both from
+the documentation lens and both on the round-3 record rather than on shipped
+behaviour: the qualification round 3 applied did not reach one place in PR
+#440's body that round 3's own table implies it reached, and round 3's note
+listing the comments it deliberately left unqualified undercounts them and gives
+a reason that does not cover two of them. The coordinator's decision for this
+round is text-only again — no source, fixture, manifest or `docs/artifacts.md`
+byte changes — so the frozen held-out set is untouched and no restamp is due.
+Nothing the renderer does changes here, and the boundary this round's prose
+relies on is the one closeout round 3 measured, re-run at `c3a78366` with the
+command that subsection quotes: `no observation block: 1 .. 229 contiguous
+True`, then `229 block: False []` and `230 block: True ['- Account uncertainty:
+7 further subjects not shown.']`.
+
+**Finding 1 — the absolute survived in PR #440's body.** The round-3 table
+"Every place the absolute appeared, and what happened to it" gives one row to
+the pull request: "summary, closeout round-1 bullet, two decisions, definition
+of done | qualified to the same statement". `gh pr view 440 --json body` at
+`c3a78366` carries one more place, in the `## Round-1 review corrections
+(56d3e5fd, 73b7f53f)` section, under the bullet "**'Those renders will carry the
+withheld notice' was false**":
+
+> *Reversed in closeout round 1 below: the reserve is now unconditional, a
+> render keeping no caveat DOES carry the notice, and the withdrawn sentence is
+> true again as originally written.*
+
+That is the same sentence the card amends in its Acceptance items and in its
+limitations, and it is false on the committed fixture at every budget below 230
+tokens, where the render carries no observation block and therefore no notice.
+The body pushed with this commit states it with its precondition — the reserve
+runs from the first row selected, so a render keeping no caveat carries the
+notice wherever the render carries an observation block at all, and below 230
+tokens on the committed fixture there is neither — and marks the note as
+qualified in this round. The round-3 table keeps its text and carries a dated
+correction naming the place it missed, so its lead line no longer reads as an
+exhaustive list that is not one.
+
+**Finding 2 — six comments carry the unqualified form, not four, and the reason
+given fits only four of them.** Round 3's "Left standing, with the reason" names
+three comments in `agents/memory/store.py` and one in
+`tests/agents/test_memory_rendering.py`. Two more carry the same form. The
+complete list, from `grep -rn "always" agents/memory/store.py
+agents/memory/evidence_context.py tests/agents/test_memory_rendering.py` at this
+head:
+
+| place | what it says | named in round 3 | a `GENERATOR_SOURCES` file |
+| --- | --- | --- | --- |
+| `agents/memory/store.py:136-139` | band comment: "the budget cannot shed it at all … so a render withholding subjects always says so -- caveats or none" | yes | yes |
+| `agents/memory/store.py:182` | `UnreservedAccountNoticeError`'s docstring: "a render that withholds a subject can always state it" | yes | yes |
+| `agents/memory/store.py:499-500` | `render_for_prompt`'s docstring: "reserves before it selects any caveat so the line always fits" | yes | yes |
+| `agents/memory/store.py:2872-2878` | `_select_within_budget`'s docstring: "the notice saying how many are missing is emitted … so the sentence always fits" | **no** | yes |
+| `agents/memory/evidence_context.py:356-359` | "reserves its cost before selecting any caveat so it always fits, which is why a prompt can carry the sentence with no caveats under it" | **no** | **no** |
+| `tests/agents/test_memory_rendering.py:3751-3752` | the test's docstring: "a render that withholds a subject always says so" | yes | **no** |
+
+**The reason, split.** All six are left standing for one reason that does cover
+all six: the coordinator's decision for closeout rounds 3 and 4 is text-only,
+and a comment is source. The held-out cost round 3 gave is a second reason that
+applies to four of them and not to the other two —
+`experiments/held_out_prefixes.py:155-178` lists the frozen manifest's
+twenty-two `GENERATOR_SOURCES`, `agents/memory/store.py` is in that tuple and
+`agents/memory/evidence_context.py` and `tests/agents/test_memory_rendering.py`
+are not, so editing either of the latter would pull no restamp at all. Round 3
+offered the restamp reason for all four places it named, one of which is the
+test module.
+
+**Where each one goes.** The four in `agents/memory/store.py` go to that file's
+next writer: `tasks/post-merge-plan.md:53` puts outcomes 2 and 4 both over
+`agents/memory/store.py`, `tasks/work/accounts-channel-hardening.md:83-85`
+names that file as the one it must not hold while this card does, and
+`tasks/work/retire-temporal-evidence-v1.md:81-83` names it in its Expected
+scope. The one in
+`agents/memory/evidence_context.py` goes to a card that owns THAT file —
+`tasks/work/retire-temporal-evidence-v1.md:81-83`, status ready, whose prose
+sweep is its own stated work and which is blocked until an adopting record for
+evidence v2 exists. It does not go to `store.py`'s next writer, which is what
+round 3's hand-off said: `tasks/post-merge-plan.md:80` names
+`agents/memory/evidence_context.py` in this card's ownership row and in no
+other, so "a later card that already owns `store.py`" selects nobody for it. The
+one in `tests/agents/test_memory_rendering.py` travels with `tests/agents/`,
+which `tasks/work/accounts-channel-hardening.md:88-93` names in its Expected
+scope. None of the six misleads a reader of its own module about shipped
+behaviour: the exception they omit is written into the branch that implements
+it, `agents/memory/store.py:2913-2916` — "the sentence still renders when the
+budget holds it alone, and is dropped when even that does not fit".
+
+**Scope this round.** This card and the pull-request body only.
+`git diff --name-only c3a78366 HEAD` prints one path,
+`tasks/work/evidence-renderer-salience.md`, and `git diff c3a78366 HEAD --stat`
+counts it as the single file changed: no source, test, fixture, manifest or
+`docs/artifacts.md` byte moved, so neither inventory row changes and the frozen
+held-out set needs no restamp. No lever, env switch or profile field, no
+committed recording, report, DTO or schema byte, and the default path is
+untouched.
+
+**Limitations this round adds.** None. The limitation the corrected prose states
+was recorded in closeout round 1 and stated in the card's own voice in closeout
+round 3: a render whose budget holds neither an observation row nor the notice
+sentence carries no observation block and no notice — on the committed fixture,
+every budget below 230 tokens. What this round adds is a hand-off rather than a
+limitation: six code comments state the guarantee without that precondition and
+are corrected by the cards named above, not here.
+
+**Verification (closeout round 4).** Every command below was run in this
+worktree with its exit code captured directly, never through a pipe, after
+`uv sync --frozen` and `cd frontend && npm ci`. `bash scripts/check.sh` — the
+only gate here that reads this card, through `validate_task_docs` — was re-run
+after the last edit to this subsection, on exactly the bytes this commit
+records; the other gates read no Markdown, and this round changes no code, so
+nothing they measure can move. The full-suite log's `rootdir` was checked to be
+this worktree, `.claude/worktrees/wf_0631f4d8-cbc-6`, because another session on
+this machine shares the scratch directory.
+
+- `.venv/bin/python scripts/validate_task_docs.py` → exit 0, "390 historical
+  phase tasks and 390 prompts; 43 work cards".
+- `.venv/bin/python scripts/check_doc_facts.py` → exit 0: "Doc facts verified",
+  "Front door verified", "Budgets verified".
+- `.venv/bin/python -m pytest tests/agents/test_memory_rendering.py
+  tests/agents/test_evidence_context.py -q` → exit 0, `163 passed`, unchanged
+  from closeout rounds 2 and 3.
+- `bash scripts/check.sh` → exit 0. `ruff check` "All checks passed!",
+  `ruff format --check` "498 files already formatted", `lint-imports`
+  "Contracts: 4 kept, 0 broken", `validate_task_docs` "390 historical phase
+  tasks and 390 prompts; 43 work cards", `generate_prompts --check` "All 390
+  prompts are in sync", `mypy` "no issues found in 469 source files", pytest
+  `7216 passed, 20 skipped, 3 xfailed`, and the frontend leg: lint, `tsc:check`,
+  `19` test files / `514` tests passed, and the production build. Every number
+  is closeout round 3's, as a round that changes no code must be. That run
+  includes
+  `tests/experiments/test_held_out_prefixes.py::test_the_committed_manifest_regenerates_from_its_own_band`,
+  which is green on the untouched manifest.
+- `bash scripts/verify_samples.sh` → exit 0, "All 50 samples verified clean."
+  twice, for `replays/samples/4p1i` and `replays/samples/9p2i` (100 canonical
+  reconstructions).
+- The four derived report checks → exit 0 each, "… is consistent with its
+  replays." for `replays/samples/4p1i`, `replays/samples/9p2i`,
+  `replays/ml_corpus/4p1i` and `replays/ml_corpus/9p2i`.
+- `.venv/bin/python -m pytest tests/orchestrator --collect-only -q` in isolation
+  → exit 0, `583 tests collected`.
+- `.venv/bin/python scripts/verify_ml_evidence.py` (offline half) → exit 0,
+  `checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5`, "every check passed". The
+  seven absent rows are the evidence-branch bytes a fresh clone lacks;
+  `--complete` was not run and is not claimed.
+- The one-token boundary sweep quoted in "Review corrections, closeout round 3
+  (2026-09-09)", re-run here at `c3a78366` → `no observation block: 1 .. 229
+  contiguous True`, `229 block: False []`, `230 block: True ['- Account
+  uncertainty: 7 further subjects not shown.']`.
+- `grep -rn "always" agents/memory/store.py agents/memory/evidence_context.py
+  tests/agents/test_memory_rendering.py` → 15 matching lines: the six places
+  tabulated above and nine on unrelated sentences (the retained contradictions
+  in both files, the anchor rule, the salience-ordered prefix, the visibility
+  co-occurrence, the route's own guarantee, the planted log, and the sweep's
+  "some are always missing").
+
+`cd frontend && npm run e2e` was not run: no served DTO changed, and this round
+changes no code at all. No live provider call of any kind was made: the fake
+provider is the only one these paths construct. No planted failure is recorded
+for this round, because it adds no gate and changes no source — the plants and
+their counts stand as measured in "Review corrections, closeout round 2
+(2026-09-08)".
