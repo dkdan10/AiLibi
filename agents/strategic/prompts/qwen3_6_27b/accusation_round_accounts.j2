@@ -7,6 +7,9 @@ Other living players: {{ living_ids | join(', ') }}. Dead or ejected: {{ dead_id
 {% set account_flags = contradictions %}
 {% include '_account_transcript.j2' %}
 {% include '_account_rules.j2' %}
-{% if prior_turn %}Answer the new point in [{{ prior_turn.turn_id }}] by {{ prior_turn.speaker }}. Cite your relevant placement or observation, explain what it does and does not establish, and correct an earlier mistake explicitly.{% else %}Add useful information or say you have nothing further. Do not repeat a charge merely because somebody else made it.{% endif %}
+{#- The reply instruction branches on the SAME condition as the shape menu in
+    _account_rules.j2, so a speaker who was told to keep observations empty is
+    never also told to cite a placement it has no shape to file. -#}
+{% if prior_turn %}Answer the new point in [{{ prior_turn.turn_id }}] by {{ prior_turn.speaker }}. {% if public_account_version or not is_impostor %}Cite your relevant placement or observation, explain what it does and does not establish, and correct an earlier mistake explicitly.{% else %}Answer in free text; make an accusation claim or stay unsure, explain what your answer does and does not establish, and correct an earlier mistake explicitly.{% endif %}{% else %}Add useful information or say you have nothing further. Do not repeat a charge merely because somebody else made it.{% endif %}
 Return only JSON:
 {"turn_id":"t","turn_index":0,"speaker":"{{ agent_id }}","turn_kind":"{{ turn_kind }}","reply_to":{% if prior_turn %}"{{ prior_turn.turn_id }}"{% else %}null{% endif %},"observations":[],"claims":[],"free_text":"<brief account or answer>"}

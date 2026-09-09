@@ -1,6 +1,16 @@
+{#- Speaker-authored bytes reach this block, so free text is fenced the way the
+    baseline accusation_round.j2 / vote_ballot.j2 fence theirs: the whole
+    transcript sits inside <transcript> delimiters and each spoken line is
+    quoted with its newlines flattened, so no speaker can start a line at
+    column 0 and open a section this template's own structure owns (the
+    "## Account comparisons" heading below). The structured rows are safe
+    without flattening: model_dump_json escapes newlines, and every id in them
+    is checked against the roster, room and task ids by
+    meetings.public_accounts.validate_public_accounts before the turn records. -#}
 ## What players said
+<transcript>
 {% for turn in transcript.turns %}
-[{{ turn.turn_id }}] {{ turn.speaker }} said: {{ turn.free_text }}
+[{{ turn.turn_id }}] {{ turn.speaker }} said: "{{ turn.free_text | replace('\r', ' ') | replace('\n', ' ') | replace('"', "'") }}"
 {% for obs in turn.observations %}
 - [turn:{{ turn.turn_id }}:{% if obs.type == "whereabouts" %}whereabouts{% else %}obs{% endif %}:{{ loop.index0 }}] {{ turn.speaker }} stated {{ obs.model_dump_json() }}
 {% endfor %}
@@ -8,6 +18,7 @@
 - [turn:{{ turn.turn_id }}:claim:{{ loop.index0 }}] {{ turn.speaker }} stated {{ claim.model_dump_json() }}
 {% endfor %}
 {% endfor %}
+</transcript>
 ## Account comparisons
 {% for flag in account_flags %}
 - {{ flag.description }}
