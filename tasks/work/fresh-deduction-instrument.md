@@ -58,6 +58,12 @@ denominator.
 
 ## Acceptance
 
+- [x] Review correction: the grader-isolation gate landmines every grader the
+  instrument defines, the list read off the module rather than typed, so the
+  manifest's "every grader" is what the test does.
+- [x] Review correction: the manifest's amendment log carries all three pre-run
+  amendments with their commits, and a history walk fails when a commit that
+  moved the frozen analysis is missing from it.
 - [x] Review correction: the privileged grader scores "right for THAT reason" —
   a ballot whose citation does not bear on the ejected player no longer scores
   the primary outcome, under a rule frozen in the manifest before any unit ran.
@@ -234,10 +240,10 @@ reimplementing the test.
 field `audits/deduction-candidate/preregistration.md:105-118` names, with the
 owner's authorized limits copied verbatim.
 
-`tests/experiments/test_fresh_deduction_instrument.py` — 149 tests, every one on
+`tests/experiments/test_fresh_deduction_instrument.py` — 152 tests, every one on
 the fake provider (82 when this card was first closed; the round-1 corrections
-below took it to 113, the round-2 corrections to 127 and the round-4 ones
-to 149):
+below took it to 113, the round-2 corrections to 127, the round-4 ones to 149
+and the round-5 ones to 152):
 
 ```sh
 .venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py \
@@ -245,7 +251,7 @@ to 149):
 ```
 
 ```
-149 tests collected in 0.23s
+152 tests collected in 0.56s
 ```
 
 *(That paragraph read "112 tests … added 30" until round 2; both figures were
@@ -265,7 +271,9 @@ of the decision is claimed. Listener-visible evidence stays distinct from the
 privileged grader: `grade_supported` reads only the prompts a voter was handed,
 `grade_citation_relevance` reads the recorded turns and those same prompts and no
 role at all, `grade_privileged` reads the hidden roles and takes the support
-labels as an argument, and the run path calls none of the three.
+labels as an argument, and the run path calls no grader at all — every `grade_*`
+function the module defines is replaced by a landmine before a unit is run, the
+list read off the module rather than typed into the test.
 
 ### Decisions
 
@@ -331,7 +339,9 @@ The stop rule reads no outcome: 50 paired units are a fixed sample with no
 interim analysis and no optional stopping, so nothing in it can be tripped by a
 result the run produced. It was amended in round 2 — still before any held-out
 outcome exists — to state that a meeting-internal default is counted rather than
-stopped, which is what the code does; the amendment is recorded below.
+stopped, which is what the code does; the amendment is recorded below and, since
+round 5, dated in the manifest's own amendment log beside the other two, whose
+completeness a history walk now checks rather than asserts.
 
 **The observation audit goes to the null device.** It restates the prefix packet
 by packet and the instrument reads none of it, so writing it into a results
@@ -521,12 +531,12 @@ git ls-files audits | tr '\n' '\0' | xargs -0 stat -f %z | awk '{s+=$1} END {pri
 14889236
 ```
 
-`docs/artifacts.md` now reads `14,889,236 tracked bytes / 203 files`, up from
+`docs/artifacts.md` now reads `14,892,270 tracked bytes / 203 files`, up from
 `14,852,791 / 202` on the base commit, and `scripts/verify_ml_evidence.py`
 compares that row against disk. *(The same one manifest has grown on each round:
 the total was `14,873,520` at first close, `14,878,444` after the round-1
-corrections, `14,882,522` after the round-2 ones and `14,889,236` after the
-round-4 ones.)*
+corrections, `14,882,522` after the round-2 ones, `14,889,236` after the round-4
+ones and `14,892,270` after the round-5 ones.)*
 
 ### Limitations
 
@@ -1065,3 +1075,128 @@ Nothing was left standing: the two blocking findings and all five nonblocking
 ones the coordinator forwarded are repaired above, each with its own planted or
 perturbed case where a mechanism changed and with the prose corrected where a
 claim rather than a mechanism was wrong.
+
+### Review corrections, round 5 (2026-09-09)
+
+Two blocking findings, both the defect class every earlier round turned up: a
+mechanism described more strongly than it is enforced. Neither invariant was
+false at head — the run path calls no grader, and the frozen analysis moved only
+before any unit ran — so what this round repairs is the PROOF in each case, and
+the sentence that cited it. Source is untouched: the instrument's own bytes are
+identical to `3a02ede8`'s. Tests, the manifest and the registry row moved in
+`87005a14`; this subsection and the two Acceptance items above moved in the
+commit after it, which touches this card's Acceptance and Results sections and
+nothing else. Every command quoted here was run on the tree those two commits
+make.
+
+**1 — the grader landmine covered three graders of four.** The manifest says
+judge information cannot reach a listener or a tactic because "the run path
+calls no grader at all (pinned by a test that makes every grader raise and runs
+a unit anyway)". That test landmined a hand-kept tuple —
+`("grade_unit", "grade_supported", "grade_privileged")` — and round 4 added a
+fourth grader, `grade_citation_relevance`, which the manifest itself enumerates
+as grading pass 2 of 3. A hand-kept list does not grow with the module, so the
+gate could not see the newest grader, and a run path that called it passed.
+
+The list is now READ off the module: every module-level `grade_*` callable is
+replaced by a landmine, with an equality assertion beside it so a grader renamed
+out of that prefix — and out of the sweep with it — fails instead of vanishing.
+The manifest's sentence keeps its claim and now names the mechanism that makes
+it true.
+
+The planted case is the defect itself, injected: a real
+`grade_citation_relevance` call added to `run_unit` immediately before
+`calls = client.take()`, which is a grader running inside the run path.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest \
+  'tests/experiments/test_fresh_deduction_instrument.py::TestGraders::test_the_run_path_calls_no_grader' \
+  -q --no-header
+```
+
+```
+FAILED tests/experiments/test_fresh_deduction_instrument.py::TestGraders::test_the_run_path_calls_no_grader
+1 failed in 0.94s
+```
+
+Perturbed back to the hand-kept tuple with the same injection still in place,
+that run is `1 passed in 0.92s` — which is what the gate did before this round.
+The injection was then removed and the module restored; `git diff -- experiments/`
+is empty at head and the file's bytes are `3a02ede8`'s.
+
+**2 — the amendment log dated one amendment of three.** "## Amendments before
+first run" opened with "Every amendment is dated here" and carried a single
+entry, the round-4 relevance rule. Two earlier changes to the same frozen
+analysis, both after the manifest was committed at `87c4ef3d` and both before
+any unit ran, were absent: `2dde0c91` rewrote `DECISION_RULE` from BOTH
+conditions to ALL THREE and bound `AUTHORIZED_SAMPLING` with the marked sampling
+row, and `bfd5696b` reversed `STOP_RULE` and the Inputs "Maximum opportunities"
+row so that a schema-validation default is counted rather than stopped. A reader
+consulting the log would conclude the frozen design moved once.
+
+Both are now dated entries in the same shape as the third, each naming its
+commit, what moved, and why it was legitimate before a run — with the direction
+stated, because it matters which way an amendment cuts: the round-1 entry RAISES
+the bar the candidate must clear, the round-2 entry is the one that RELAXES a
+rule, and it says so. The round-4 entry gained its commit hash so all three read
+alike.
+
+The completeness is a mechanism now, not a promise.
+`test_the_amendment_log_names_every_commit_that_moved_the_frozen_analysis`
+walks `87c4ef3d..HEAD` for commits touching the instrument, parses the twelve
+frozen-analysis constants out of each revision and its parent without importing
+either, and requires every commit whose values differ to be named in the
+section. It skips rather than passes where the history is not there — a shallow
+clone or no git — following `tests/scripts/test_check_doc_facts.py`, because a
+truncated log would report an empty amendment set and pass vacuously.
+
+The planted case is the tree this round started from: the pre-round-5 manifest,
+which is exactly a log missing two amendments.
+
+```sh
+git show 360b277a:audits/deduction-candidate/execution-manifest.md \
+  > audits/deduction-candidate/execution-manifest.md
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest \
+  'tests/experiments/test_fresh_deduction_instrument.py::TestExecutionManifest::test_the_amendment_log_names_every_commit_that_moved_the_frozen_analysis' \
+  -q --no-header
+```
+
+```
+FAILED tests/experiments/test_fresh_deduction_instrument.py::TestExecutionManifest::test_the_amendment_log_names_every_commit_that_moved_the_frozen_analysis
+1 failed in 0.75s
+```
+
+Dropping the round-2 entry's hash from the head manifest turns two tests red —
+that walk and `test_the_manifest_dates_each_amendment[bfd5696b-…]`, the
+per-entry pin — and the manifest was restored after each.
+
+The walk's own output is what the two entries record: at head it classifies
+`2dde0c91` (`AUTHORIZED_SAMPLING`, `DECISION_RULE`, `WRONGFUL_EJECTION_TRADEOFF`),
+`bfd5696b` (`STOP_RULE`) and `3a02ede8` (`CITATION_RELEVANCE_RUBRIC`,
+`PRIMARY_OUTCOME_RUBRIC`, `PRIVILEGED_RUBRIC`) as the three amendments and finds
+nothing else.
+
+#### Verification, round 5
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `Contracts: 4 kept, 0 broken`; `Success: no issues found in 473 source files`; `7417 passed, 20 skipped, 3 xfailed`; frontend `Test Files 19 passed`, `Tests 515 passed` |
+| `.venv/bin/pytest tests/eval tests/experiments -q` | `1329 passed, 1 skipped in 142.17s` |
+| `.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q` | `152 passed` |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 43 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified` |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `every check passed` |
+| `bash scripts/verify_samples.sh` | `All 50 samples verified clean.` for both sets |
+| `scripts/build_sample_report.py --check` x 4 | all four `is consistent with its replays` |
+| `.venv/bin/pytest tests/orchestrator/ --collect-only -q` | `583 tests collected` |
+
+The fake-provider dry run was not re-run this round and its table above is
+unchanged: no instrument byte moved, so no figure in it can have. `cd frontend
+&& npm run e2e` was not run either — no served DTO changed. No
+`tests/fixtures/` byte and no `GENERATOR_SOURCES` file moved, so the freeze
+manifest still needs no `dependency_restamps` entry; under `audits/` only
+`audits/deduction-candidate/execution-manifest.md` moved, and its registry row
+moved with it.
+
+No live provider call of any kind was made in this round. The two new tests read
+committed bytes and git history and construct no client.
