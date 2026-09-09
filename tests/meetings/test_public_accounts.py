@@ -128,6 +128,7 @@ async def _meeting(
     accuse: bool = False,
     fail_reply: str | None = None,
     expected_defaults: int = 0,
+    teammate_kill: bool = False,
 ) -> tuple[MeetingResult, AccountClient]:
     client = AccountClient(
         {
@@ -144,6 +145,18 @@ async def _meeting(
         }
     )
     client.fail_reply = fail_reply
+    if teammate_kill:
+        # p-3 answers the account menu with the kill sighting it offers and
+        # names its own teammate p-2.
+        client.turns["p-3"] = client.turns["p-3"].model_copy(
+            update={
+                "observations": (
+                    SawKillObservation(
+                        type="saw_kill", tick=4, subject="p-2", room="LABS"
+                    ),
+                )
+            }
+        )
     if accuse:
         client.turns["p-3"] = client.turns["p-3"].model_copy(
             update={
@@ -195,9 +208,17 @@ async def _meeting(
             if grounded
             else (),
         ),
-        MeetingParticipant(agent_id="p-2", role="CREWMATE", rendered_memory=own_memory),
         MeetingParticipant(
-            agent_id="p-3", role="IMPOSTOR", rendered_memory="Own private cover."
+            agent_id="p-2",
+            role="IMPOSTOR" if teammate_kill else "CREWMATE",
+            rendered_memory=own_memory,
+            fellow_impostor_ids=("p-3",) if teammate_kill else (),
+        ),
+        MeetingParticipant(
+            agent_id="p-3",
+            role="IMPOSTOR",
+            rendered_memory="Own private cover.",
+            fellow_impostor_ids=("p-2",) if teammate_kill else (),
         ),
     )
     result = await manager.run(
@@ -716,3 +737,25 @@ def test_a_named_bystander_is_placed_by_the_sighting_that_named_them() -> None:
     assert flag.subjects == ("p-3",)
     assert "p-2 places p-3 alongside that sighting in ADMIN" in flag.description
 
+
+def test_an_impostor_menu_answer_naming_its_teammate_never_records() -> None:
+    # The account menu is the first arm that hands an impostor a structured
+    # observation menu, and it offers a kill sighting. p-3 answers it naming
+    # teammate p-2: the turn-level firewall drops the row before it records,
+    # so no listener's transcript block and no derived testimony carries it.
+    result, client = asyncio.run(_meeting(grounded=False, teammate_kill=True))
+    p3_turn = next(turn for turn in result.transcript.turns if turn.speaker == "p-3")
+    assert p3_turn.observations == ()
+    assert not any(
+        statement.kind == "saw_kill"
+        for statement in derive_reported_testimony(
+            result, public_account_version=1, attributed_testimony_version=1
+        )
+    )
+    # The menu itself names the shape, so the check is the transcript row a
+    # recorded observation would render as.
+    assert not any(
+        'stated {"type":"saw_kill"' in prompt
+        for prompts in client.prompts.values()
+        for prompt in prompts
+    )

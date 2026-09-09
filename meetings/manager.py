@@ -1739,15 +1739,15 @@ class MeetingManager:
                 normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
             )
             # Task 15.4: the teammate firewall's observation-side twin. A
-            # structured vent observation naming a fellow impostor is
-            # role-proving incrimination (grounded, it would mint a STRONG
+            # structured vent or kill observation naming a fellow impostor is
+            # role-proving incrimination (a grounded vent would mint a STRONG
             # ``vent_sighting`` flag against the teammate), so it drops at the
             # same per-turn chokepoint the teammate accusation does -- BEFORE
             # the turn records, so it never reaches detection, the fold, or a
             # prompt surface. Silent like the claims guard (the 7.12
             # convention); a deterministic no-op for every crewmate and a sole
             # impostor, so replay reconstruction is unaffected.
-            guarded_observations = exclude_teammate_vent_observations(
+            guarded_observations = exclude_teammate_role_proving_observations(
                 parsed.observations,
                 fellow_impostor_ids=participant.fellow_impostor_ids,
             )
@@ -3288,12 +3288,44 @@ def exclude_teammate_accusation_claims(
     )
 
 
-def exclude_teammate_vent_observations(
+# The role-PROVING observation shapes: naming somebody in one of these asserts
+# they are an impostor. A witnessed vent is impostor-only (DESIGN.md §3.4) and
+# a witnessed kill names a killer, so either one aimed at a fellow impostor is
+# the public incrimination the 7.12 firewall exists to prevent.
+_ROLE_PROVING_OBSERVATIONS: Final[
+    tuple[type[SawVentObservation], type[SawKillObservation]]
+] = (SawVentObservation, SawKillObservation)
+
+# One decision per structured observation shape a meeting can elicit: True
+# where an instance naming a fellow impostor is dropped by
+# :func:`exclude_teammate_role_proving_observations`, False where it records.
+# The False shapes are deliberate and match the claims guard, which retains a
+# teammate ALIBI and a teammate CORROBORATION: an ordinary placement of a
+# teammate is cover, not incrimination. Declared rather than implied so a new
+# observation shape cannot join the public-account menu without a stated
+# decision -- ``TestTeammateObservationFirewall`` in
+# ``tests/meetings/test_manager.py`` fails when this mapping and the
+# ``ObservationClaim`` union disagree in either direction.
+TEAMMATE_GUARDED_OBSERVATION_KINDS: Final[Mapping[str, bool]] = MappingProxyType(
+    {
+        "saw_vent": True,
+        "saw_kill": True,
+        "saw_player": False,
+        "saw_move": False,
+        "whereabouts": False,
+        "completed_task": False,
+        "found_body": False,
+        "task_activity": False,
+    }
+)
+
+
+def exclude_teammate_role_proving_observations(
     observations: tuple[ObservationClaim, ...],
     *,
     fellow_impostor_ids: tuple[PlayerId, ...],
 ) -> tuple[ObservationClaim, ...]:
-    """Drop every :class:`SawVentObservation` naming a fellow impostor (Task 15.4).
+    """Drop every role-proving observation naming a fellow impostor (Task 15.4).
 
     The observation-side twin of :func:`exclude_teammate_accusation_claims`,
     made necessary by the same 7.12 doctrine the moment vents became
@@ -3302,12 +3334,15 @@ def exclude_teammate_vent_observations(
     guard 15.4 would open the first path by which an impostor's structured
     output can hard-flag its own teammate -- the render layer does NOT
     suppress a witnessed teammate vent (``_sighting_is_suppressed`` covers
-    only kill-window sightings), so the elicitation can surface one. Returns
-    ``observations`` unchanged when ``fellow_impostor_ids`` is empty (every
-    crewmate and a sole impostor), so the no-coordination path is
-    byte-identical; only vent observations are filtered -- the three existing
-    observation kinds pass through untouched, exactly as the claims guard
-    retains teammate alibis and corroborations.
+    only kill-window sightings), so the elicitation can surface one. A spoken
+    :class:`SawKillObservation` is the same class of assertion and the
+    public-account menu elicits it from impostors too, so it is filtered on
+    the same rule. Returns ``observations`` unchanged when
+    ``fellow_impostor_ids`` is empty (every crewmate and a sole impostor), so
+    the no-coordination path is byte-identical; the shapes that record
+    untouched are the ones :data:`TEAMMATE_GUARDED_OBSERVATION_KINDS` marks
+    False, exactly as the claims guard retains teammate alibis and
+    corroborations.
     """
 
     if not fellow_impostor_ids:
@@ -3317,7 +3352,7 @@ def exclude_teammate_vent_observations(
         observation
         for observation in observations
         if not (
-            isinstance(observation, SawVentObservation)
+            isinstance(observation, _ROLE_PROVING_OBSERVATIONS)
             and observation.subject in teammates
         )
     )
@@ -4554,6 +4589,7 @@ __all__ = [
     "OPENING_UNSURE_MARKER",
     "OPENING_UNSURE_MAX_FREE_TEXT_CHARS",
     "TEAMMATE_COERCED_VOTE_RATIONALE",
+    "TEAMMATE_GUARDED_OBSERVATION_KINDS",
     "TEAMMATE_VOTE_TARGET_MARKER",
     "UNCITED_ZERO_FLAG_EJECT_MARKER",
     "VOTE_PARSE_DEFAULT_MARKER",
@@ -4582,7 +4618,7 @@ __all__ = [
     "derive_reported_testimony",
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",
-    "exclude_teammate_vent_observations",
+    "exclude_teammate_role_proving_observations",
     "extract_belief_evidence",
     "guard_ballot_citation",
     "guard_ballot_target_graph",
