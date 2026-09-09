@@ -16,9 +16,13 @@ account-uncertainty caveats (15), so the observer's own movement log can no
 longer shed it. A sighting does NOT outrank reported testimony, which stays at
 60 and is not this card's to move: a large enough claim volume still evicts
 sightings, and the limitation below carries the probe. The caveat block is
-bounded per subject, and a render that withholds any caveat subject — by that
-bound, by the token budget, or by shedding the class outright — always states
-how many it withheld.
+bounded per subject, and a render that withholds a caveat subject — by that
+bound, by the token budget, or by shedding the class outright — states how many
+it withheld whenever it carries an observation block at all: the notice's cost
+is reserved from the first row selected and stays reserved until every subject
+is shown, and where no row fits the sentence still renders alone if the budget
+holds it. A budget too small for even that sentence renders no observation block
+and no notice — every budget below 230 tokens on the committed fixture.
 Lever-OFF and evidence-v1 rendered bytes stay identical.
 
 ## Evidence
@@ -46,6 +50,21 @@ the pin, not the discovery.
 
 ## Acceptance
 
+- [x] Review correction (closeout round 3): the Outcome said "a render that
+  withholds any caveat subject — by that bound, by the token budget, or by
+  shedding the class outright — always states how many it withheld", with no
+  qualification, and that absolute is false wherever the render carries no
+  observation block — the case this card's own limitation already records.
+  `_select_within_budget` reserves the notice's cost from the first row it
+  accepts, so a budget that accepts none reserves nothing, and its `if not
+  kept:` branch then renders the sentence alone only while the budget holds that
+  sentence: on the committed fixture every budget below 230 tokens renders
+  neither a block nor a notice. The Outcome now states the guarantee with that
+  precondition. What holds over the budgets that do render a block is gated by
+  `test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped`, and the
+  boundary is reproduced at one-token resolution by the command in "Review
+  corrections, closeout round 3 (2026-09-09)" — `no observation block: 1 .. 229`,
+  the notice alone at 230.
 - [x] Review correction (closeout round 2): the Outcome rewritten in closeout
   round 1 said a witnessed vent "outranks everything the renderer emits except
   the observer's own kill (96)". Two further bands the v2 renderer emits sit
@@ -71,7 +90,9 @@ the pin, not the discovery.
   delivery state names both completed rounds and the commits they were run on,
   and the pointer names all three dated subsections. Checked against
   `git log --oneline 201849fc..HEAD`, and kept current across this round's own
-  two commits.
+  two commits. *Kept current 2026-09-09, closeout round 3: the ledger, the
+  delivery state and the pointer are updated again for this round's commit, and
+  the pointer now names four dated subsections.*
 - [x] Review correction (closeout round 1): acceptance item 3 held only on the
   unbudgeted `evidence_context_lines` surface — at the default 1,500-token
   budget the committed fixture withheld all seven of its subjects and the
@@ -82,7 +103,11 @@ the pin, not the discovery.
   `test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped` (the
   sweep's former "a notice closing no list" branch now requires the notice) and
   by `test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice`,
-  which pins both what the reserve guarantees and what it costs.
+  which pins both what the reserve guarantees and what it costs. *Amended
+  2026-09-09, closeout round 3: "the sentence always fits" holds wherever a row
+  is selected; where none is, the sentence renders alone only if the budget
+  holds it, and below 230 tokens on the committed fixture the render carries no
+  observation block and no notice.*
 - [x] Review correction (closeout round 1): the reserve invariant was guarded by
   a production `assert`, which `python -O` strips. It is now an explicit raise of
   the named `UnreservedAccountNoticeError`, and the planted revert to the round-1
@@ -131,7 +156,10 @@ the pin, not the discovery.
   the coordinator reversed the choice. The notice is now reserved before any
   caveat is selected, a render keeping no caveat DOES carry it, and the
   withdrawn round-0 claim is true again as originally written — including on the
-  committed golden at 1,500 tokens.*
+  committed golden at 1,500 tokens.* *Amended 2026-09-09, closeout round 3: "a
+  render keeping no caveat DOES carry it" is true of every render that carries
+  an observation block, which the production budget does on this fixture; below
+  230 tokens on it there is no block and no notice.*
 - [x] Review correction (docs verifier, same sentence): the visibility claim
   named no enforcing mechanism and every notice assertion ran pre-budget against
   `evidence_context_lines`. Both invariants are now asserted on
@@ -200,7 +228,7 @@ uv run python scripts/build_sample_report.py --sample-dir replays/ml_corpus/9p2i
 
 ## Results
 
-Implemented on `work/evidence-renderer-salience` from `201849fc` in thirteen
+Implemented on `work/evidence-renderer-salience` from `201849fc` in fourteen
 commits before this one (`git log --oneline 201849fc..HEAD` lists them, this
 commit last). Round 0:
 `7bcc79ed` (the renderer), `af150ce0` (the first held-out restamp), `0c5355a3`
@@ -213,26 +241,30 @@ the regenerated golden), `0815333d` (the third restamp and both artifacts rows),
 `59df8a9e` (the closeout record), `86e133e3` (the round-1 text that record
 reverses, superseded in place) and `864b18a1` (naming the commit the closeout
 gate was re-run on). Closeout round 2 is `6ba434fb` (the ranking gate, the
-corrected headline and this record) and the commit this paragraph ships with,
-which withdraws one sentence of that record that claimed more than this worker
-can know; the whole gate suite was re-run on the bytes of each, with identical
-results, so every number below was measured on exactly the bytes it ships with.
+corrected headline and that record) and `4d2396a3`, which withdrew one sentence
+of it that claimed more than its worker could know; the whole gate suite was
+re-run on the bytes of each, with identical results. Closeout round 3 is the
+single commit this paragraph ships with, which changes documentation only — no
+source, fixture, manifest or artifacts-row byte — so every number below was
+measured on exactly the bytes it ships with.
 
-Delivery state: closeout round-2 findings answered and verified locally. Round 1
-was re-reviewed on `bd6f05dc` — three verifiers, no blocking findings — and
-closeout round 1 was re-reviewed on `864b18a1`, which returned three blocking
-findings (two lenses on the same rewritten Outcome sentence, plus this
-paragraph's own staleness), all answered below. Not owner reviewed, not merged.
+Delivery state: closeout round-3 findings answered and verified locally. Round 1
+was re-reviewed on `bd6f05dc` — three verifiers, no blocking findings — closeout
+round 1 was re-reviewed on `864b18a1`, which returned three blocking findings
+(two lenses on the same rewritten Outcome sentence, plus this paragraph's own
+staleness), and closeout round 2 was re-reviewed on `4d2396a3`, which returned
+one blocking finding on the Outcome sentence again — all answered below. Not
+owner reviewed, not merged.
 Adoption: not applicable — evidence reasoning v2 stays default-OFF and this
 repairs a candidate renderer rather than proposing one.
 
 Where a statement in an earlier section was later found false it keeps its text,
 is marked superseded or corrected in place with the date, and the correction
-lives in one of the three dated subsections that close this Results: "Review
+lives in one of the four dated subsections that close this Results: "Review
 corrections, round 1 (2026-09-08)", "Review corrections, closeout round 1
-(2026-09-08)" and "Review corrections, closeout round 2 (2026-09-08)". All three
-carry the same date; the round each belongs to is in its heading, not in the
-date.
+(2026-09-08)", "Review corrections, closeout round 2 (2026-09-08)" and "Review
+corrections, closeout round 3 (2026-09-09)". The first three carry the same
+date; the round each belongs to is in its heading, not in the date.
 
 Architecture and contract sections this follows: `docs/architecture.md`
 "Layering" (`agents/` reasons from typed memory and never imports `engine/`;
@@ -338,6 +370,11 @@ revert below; the "after" column is the committed
    until every subject is shown, so the budget cannot shed the notice at all —
    whether it keeps caveats or none. The band is still 16 and still only decides
    where the minted line is inserted.*
+   *Qualified 2026-09-09, closeout round 3: "cannot shed the notice at all"
+   holds of every render that carries an observation block. Where no row is
+   selected there is nothing to reserve from, and the sentence then renders
+   alone only while the budget holds it; below 230 tokens on the committed
+   fixture the render carries no observation block and no notice.*
 6. **Evidence v1 keeps its flat band** under the new name
    `_SALIENCE_EVIDENCE_V1_CONTEXT` = 90. v1 is a committed comparison arm; moving
    it would change what the committed v1-versus-v2 captures measured.
@@ -507,6 +544,10 @@ which is red on either row alone; that test and the whole
   `…evidence_v2_budget_keeps_witnessed_evidence.expected.md`. The
   "at least one caveat" clause in the note above is history, not current
   behaviour.*
+  *Qualified 2026-09-09, closeout round 3: "those 235 renders do carry the
+  notice" holds at every budget that renders an observation block, which the
+  production budget does on this fixture; below 230 tokens on it there is no
+  block and no notice.*
 - The negative-verdict band (83) is above the sightings, and negative verdicts
   are not themselves capped. A speaker who states many DIFFERENT impossible
   placements can therefore fill that band. It cannot reach the witnessed vent at
@@ -1262,8 +1303,10 @@ the delivery state names both completed re-reviews and the commits they ran on
 (`bd6f05dc`, three verifiers, no blocking findings; `864b18a1`, three blocking
 findings, answered here); and the pointer names all three dated subsections and
 says outright that the shared date does not discriminate between them. Checked
-against `git log --oneline 201849fc..HEAD`, which lists this commit and the
-thirteen before it.
+against `git log --oneline 201849fc..4d2396a3`, which lists that commit and
+the thirteen before it. *Pinned 2026-09-09, closeout round 3: this command was
+written against `HEAD`, where its count goes stale one commit later; it now
+names the tree it was measured on.*
 
 **Codex review.** Both comments re-fetched at `864b18a1`
 (`gh api repos/dkdan10/AiLibi/pulls/440/comments`): still exactly two, both with
@@ -1395,3 +1438,160 @@ schema byte, and the default path is untouched.
 in the card's own voice were already recorded here: a sighting at 50 is not
 protected against reported testimony at 60, and the three first-hand bands above
 the witnessed vent are outside this card's scope and unchanged by it.
+
+### Review corrections, closeout round 3 (2026-09-09)
+
+The verification round on `4d2396a3` returned one blocking finding, from the
+docs lens, on the Outcome sentence closeout round 1 wrote and closeout round 2
+left standing. It is a documentation defect — no shipped behaviour was found
+wrong — and the coordinator's decision for this round is text-only: no source,
+fixture, manifest or `docs/artifacts.md` byte changes, so the frozen held-out
+set is untouched and no restamp is due.
+
+**Finding — the notice guarantee was stated without its precondition.** The
+Outcome said the caveat block is "bounded per subject, and a render that
+withholds any caveat subject — by that bound, by the token budget, or by
+shedding the class outright — always states how many it withheld". The reserve
+does not reach that far. `_select_within_budget` charges the notice's cost
+against every row it accepts, starting with the first, and stops charging once
+no subject is left unshown (`agents/memory/store.py:2896-2908`); a budget that
+accepts no row therefore reserves nothing, and the `if not kept:` branch below
+it renders the sentence alone when the budget holds that sentence and drops it
+when it does not (`agents/memory/store.py:2913-2919`). Under that point the
+render carries no observation block and no notice — which "Review corrections,
+closeout round 1 (2026-09-08)" already records as a limitation, so the Outcome
+contradicted its own Results.
+
+Where the boundary is on the committed fixture, at one-token resolution:
+
+```sh
+.venv/bin/python -c "
+import importlib.util as u, json
+from pathlib import Path
+from agents.memory.store import render_for_prompt
+spec = u.spec_from_file_location('t', 'tests/agents/test_memory_rendering.py')
+t = u.module_from_spec(spec); spec.loader.exec_module(t)
+base = 'tests/fixtures/memory_rendering/evidence_v2_budget_keeps_witnessed_evidence'
+memory = t._build_memory_from_fixture(json.loads(Path(base + '.json').read_text()))
+empty = [b for b in range(1, 300) if not t._observation_rows(render_for_prompt(memory, token_budget=b))]
+print('no observation block:', empty[0], '..', empty[-1], 'contiguous', empty == list(range(empty[0], empty[-1] + 1)))
+for b in (229, 230):
+    view = render_for_prompt(memory, token_budget=b)
+    print(b, 'block:', t._OBSERVATIONS_HEADER in view.splitlines(), t._observation_rows(view))
+"
+```
+
+→ `no observation block: 1 .. 229 contiguous True`, then `229 block: False []`
+and `230 block: True ['- Account uncertainty: 7 further subjects not shown.']`.
+So the boundary is 230 tokens, and at 230 the notice is the whole observation
+block: no observation ROW fits there either, which is why the finding's
+suggested wording — "a budget too small for even one observation row" — is
+narrowed here to a budget too small for even the sentence. That is the line the
+code draws, and it sits one row below the finding's. The 388-budget sweep quoted
+in "Review corrections, closeout round 1 (2026-09-08)" re-runs unchanged at this
+head — `budgets 388 empty 11 correct 377 closing no list 175 violations 0` — and
+the "120 to 220 tokens" window that subsection names is that sweep's 10-token
+grid, whose lowest point is 120 and whose last empty point is 220; the grid
+cannot locate the boundary, the one-token sweep above does.
+
+The Outcome now states what the reserve enforces: a render that withholds a
+caveat subject says how many WHENEVER IT CARRIES AN OBSERVATION BLOCK, and a
+budget too small for even the sentence alone carries neither. Over the budgets
+that do render a block the guarantee is gated by
+`test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped`, which
+sweeps 400 to 2,980 on a ten-subject memory, asserts the exact notice at every
+budget, and requires both branches — the renders closing a visible caveat list
+and the renders closing none — to be non-empty.
+
+Every place the absolute appeared, and what happened to it:
+
+| where | disposition |
+| --- | --- |
+| `## Outcome` | rewritten to the qualified guarantee |
+| Acceptance, the closeout round-1 item ("so the sentence always fits") | amended in place, dated |
+| Acceptance, the round-0 item's closeout note ("a render keeping no caveat DOES carry it") | amended in place, dated |
+| Decision 5's second supersession ("the budget cannot shed the notice at all") | qualified in place, dated |
+| "Record impact and limitations", the restored bullet ("those 235 renders do carry the notice") | qualified in place, dated |
+| PR #440's body — summary, closeout round-1 bullet, two decisions, definition of done | qualified to the same statement |
+
+The superseded Outcome sentence is quoted verbatim in the Acceptance item this
+round prepends rather than left standing inside the Outcome itself: the card
+format asks the headline to describe the current state, and both earlier Outcome
+corrections on this card were recorded the same way — the false sentence quoted
+and dated in that round's Acceptance item and subsection, the Outcome rewritten.
+
+**Left standing, with the reason.** Four comments carry the same unqualified
+form and are NOT edited here, because this round is text-only and
+`agents/memory/store.py` is one of the frozen manifest's twenty-two
+`GENERATOR_SOURCES`: editing it would pull a held-out restamp into a
+documentation fix. They are `agents/memory/store.py:136-139` (the band comment),
+`:182` (the error's docstring), `:499-500` (`render_for_prompt`'s docstring) and
+`tests/agents/test_memory_rendering.py:3751-3752`. None of them misleads a
+reader of the module on its own terms: the exception is written into the branch
+that implements it, `_select_within_budget` at
+`agents/memory/store.py:2913-2916` — "the sentence still renders when the budget
+holds it alone, and is dropped when even that does not fit". A later card that
+already owns `store.py` should carry the qualifier into those four.
+
+**Housekeeping in the same commit.** "Review corrections, closeout round 2
+(2026-09-08)" closed on `git log --oneline 201849fc..HEAD`, "which lists this
+commit and the thirteen before it" — a HEAD-relative command inside a dated
+subsection, whose count goes false one commit later. It now names `4d2396a3`,
+the tree it was measured on, with the change marked in place.
+
+**Scope this round.** This card only. `git diff --name-only 4d2396a3 HEAD`
+prints one path, `tasks/work/evidence-renderer-salience.md`, and
+`git diff 4d2396a3 HEAD --stat` counts it as the single file changed: no source,
+test, fixture, manifest or `docs/artifacts.md` byte moved, so neither inventory
+row changes and the frozen held-out set needs no restamp.
+No lever, env switch or profile field, no committed recording, report, DTO or
+schema byte, and the default path is untouched.
+
+**Limitations this round adds.** None. The one the corrected Outcome now states
+in the card's own voice was already recorded here in closeout round 1: a render
+whose budget holds neither an observation row nor the notice sentence carries no
+observation block and no notice — on the committed fixture, every budget below
+230 tokens.
+
+**Verification (closeout round 3).** Every command below was run in this
+worktree with its exit code captured directly, never through a pipe, after
+`uv sync --frozen` and `cd frontend && npm ci`. `bash scripts/check.sh` — the
+only gate here that reads this card, through `validate_task_docs` — was re-run
+after the last edit to this subsection, on exactly the bytes this commit
+records; the other gates read no Markdown, and this round changes no code, so
+nothing they measure can move. The full-suite log's `rootdir` was checked to be
+this worktree, `.claude/worktrees/wf_0631f4d8-cbc-1`, because another session on
+this machine shares the scratch directory.
+
+- `.venv/bin/python scripts/validate_task_docs.py` → exit 0, "390 historical
+  phase tasks and 390 prompts; 43 work cards".
+- `.venv/bin/python scripts/check_doc_facts.py` → exit 0: "Doc facts verified",
+  "Front door verified", "Budgets verified".
+- `.venv/bin/python -m pytest tests/agents/test_memory_rendering.py
+  tests/agents/test_evidence_context.py -q` → exit 0, `163 passed`, unchanged
+  from closeout round 2.
+- `bash scripts/check.sh` → exit 0. `ruff check` "All checks passed!",
+  `ruff format --check` "498 files already formatted", `lint-imports`
+  "Contracts: 4 kept, 0 broken", `validate_task_docs` "390 historical phase
+  tasks and 390 prompts; 43 work cards", `generate_prompts --check` "All 390
+  prompts are in sync", `mypy` "no issues found in 469 source files", pytest
+  `7216 passed, 20 skipped, 3 xfailed`, and the frontend leg: lint, `tsc:check`,
+  `19` test files / `514` tests passed, and the production build. Every number
+  is closeout round 2's, as a round that changes no code must be.
+- `bash scripts/verify_samples.sh` → exit 0, "All 50 samples verified clean."
+  for `replays/samples/4p1i` and again for `replays/samples/9p2i` (100 canonical
+  reconstructions).
+- The four derived report checks → exit 0 each, "… is consistent with its
+  replays." for `replays/samples/4p1i`, `replays/samples/9p2i`,
+  `replays/ml_corpus/4p1i` and `replays/ml_corpus/9p2i`.
+- `.venv/bin/python -m pytest tests/orchestrator --collect-only -q` in isolation
+  → exit 0, `583 tests collected`.
+- `.venv/bin/python scripts/verify_ml_evidence.py` (offline half) → exit 0,
+  `checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5`, "every check passed". The
+  seven absent rows are the evidence-branch bytes a fresh clone lacks;
+  `--complete` was not run and is not claimed.
+
+No live provider call of any kind was made in this round: the fake provider is
+the only one these paths construct. No planted failure is recorded for this
+round, because it adds no gate and changes no source — the plants and their
+counts stand as measured in "Review corrections, closeout round 2 (2026-09-08)".
