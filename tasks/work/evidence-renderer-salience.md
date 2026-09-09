@@ -50,6 +50,20 @@ the pin, not the discovery.
 
 ## Acceptance
 
+- [x] Review correction (closeout round 5): closeout round 4's list of the
+  comments that carry the unqualified form is the list the quoted `grep` for
+  "always" finds, not a complete list — a seventh place carries the same
+  guarantee without that word, `tests/agents/test_memory_rendering.py:3706`
+  ("no budget can silence it"); it is left standing text-only this round (not
+  a `GENERATOR_SOURCES` file, so no restamp) and travels with `tests/agents/` to
+  the accounts card like the 3751-3752 row. Round 4's "one further place" was
+  also short by one: the held-out manifest's `dependency_restamps` entry for
+  `00ac7fbb` ("a render that hides claim subjects always states how many") is a
+  string in `experiments/held_out_prefixes.py`, a `GENERATOR_SOURCES` file, so
+  qualifying it means regenerating and restamping the manifest and recomputing
+  the `audits/` row; it is routed to the next commit that legitimately
+  regenerates the manifest. Recorded in "Review corrections, closeout round 5
+  (2026-09-09)".
 - [x] Review correction (closeout round 4): closeout round 3's table of "every
   place the absolute appeared" was not exhaustive, and the place it missed still
   carried the absolute at `c3a78366` — PR #440's `## Round-1 review corrections`
@@ -1563,6 +1577,17 @@ decisions and the definition of done, and this note is none of those. It is
 qualified in the body pushed with the next commit; see "Review corrections,
 closeout round 4 (2026-09-09)".*
 
+*Corrected again 2026-09-09, closeout round 5: "one further place" was itself short
+by one. A second further place ships in this branch's own committed artifact:
+`audits/deduction-candidate/held-out/manifest.json`, the `dependency_restamps`
+entry for `00ac7fbb`, reads "a render that hides claim subjects always states
+how many". That text is a string in `experiments/held_out_prefixes.py`, a
+`GENERATOR_SOURCES` file, so qualifying it means regenerating and restamping
+the manifest and recomputing the `audits/` row of `docs/artifacts.md` — the
+restamp reason round 3 attached to the wrong files genuinely applies here. It
+is left standing and routed to the next commit that legitimately regenerates
+the manifest.*
+
 The superseded Outcome sentence is quoted verbatim in the Acceptance item this
 round prepends rather than left standing inside the Outcome itself: the card
 format asks the headline to describe the current state, and both earlier Outcome
@@ -1696,12 +1721,14 @@ correction naming the place it missed, so its lead line no longer reads as an
 exhaustive list that is not one.
 
 **Finding 2 — six comments carry the unqualified form, not four, and the reason
-given fits only four of them.** Round 3's "Left standing, with the reason" names
+given fits only four of them.** *(Corrected 2026-09-09, closeout round 5: seven — see
+the note under the table.)* Round 3's "Left standing, with the reason" names
 three comments in `agents/memory/store.py` and one in
 `tests/agents/test_memory_rendering.py`. Two more carry the same form. The
 complete list, from `grep -rn "always" agents/memory/store.py
 agents/memory/evidence_context.py tests/agents/test_memory_rendering.py` at this
-head:
+head (the places that grep finds, not a complete list — see the correction under
+the table):
 
 | place | what it says | named in round 3 | a `GENERATOR_SOURCES` file |
 | --- | --- | --- | --- |
@@ -1711,6 +1738,14 @@ head:
 | `agents/memory/store.py:2872-2878` | `_select_within_budget`'s docstring: "the notice saying how many are missing is emitted … so the sentence always fits" | **no** | yes |
 | `agents/memory/evidence_context.py:356-359` | "reserves its cost before selecting any caveat so it always fits, which is why a prompt can carry the sentence with no caveats under it" | **no** | **no** |
 | `tests/agents/test_memory_rendering.py:3751-3752` | the test's docstring: "a render that withholds a subject always says so" | yes | **no** |
+
+*Corrected 2026-09-09, closeout round 5: a seventh place carries the same guarantee
+without the word "always", which the quoted grep cannot see —
+`tests/agents/test_memory_rendering.py:3706`, the docstring of
+`test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped`: "no
+budget can silence it". Same disposition as the 3751-3752 row: text-only this
+round, not a `GENERATOR_SOURCES` file, so no restamp; it travels with
+`tests/agents/` to the accounts card.*
 
 **The reason, split.** All six are left standing for one reason that does cover
 all six: the coordinator's decision for closeout rounds 3 and 4 is text-only,
@@ -1817,3 +1852,27 @@ provider is the only one these paths construct. No planted failure is recorded
 for this round, because it adds no gate and changes no source — the plants and
 their counts stand as measured in "Review corrections, closeout round 2
 (2026-09-08)".
+
+### Review corrections, closeout round 5 (2026-09-09)
+
+The docs verifier of closeout round 4 (head `80fae3e5`) refuted two counts in
+that round's record; both are corrected in place above, dated, and neither
+changes code, a fixture, the held-out manifest or a `docs/artifacts.md` row.
+
+1. **The "complete list" of comments carrying the unqualified form was the
+   grep's list.** `tests/agents/test_memory_rendering.py:3706` ("no budget can
+   silence it") carries the guarantee without the word "always". The round-4
+   table's lead line now says what the command finds, and the seventh place is
+   recorded with the 3751-3752 row's disposition.
+2. **"One further place" was two.** The held-out manifest's `dependency_restamps`
+   entry for `00ac7fbb` carries the absolute; its source is a string in
+   `experiments/held_out_prefixes.py` (a `GENERATOR_SOURCES` file), so it is
+   routed to the next commit that legitimately regenerates the manifest rather
+   than pulled into a text-only round.
+
+Gates run on the committed tree (documentation-only commit; the code, fixtures
+and manifest are byte-identical to `80fae3e5`): `uv run python
+scripts/validate_task_docs.py` (exit 0), `uv run python scripts/check_doc_facts.py`
+(exit 0), `uv run pytest tests/agents/test_memory_rendering.py
+tests/agents/test_evidence_context.py -q` (163 passed). The full `check.sh`
+gate ran on `80fae3e5` in closeout round 4 and CI re-runs it on this head.
