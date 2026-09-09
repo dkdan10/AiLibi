@@ -23,9 +23,12 @@ What this module is NOT
   is their own acceptance criterion; nothing here reuses, subclasses or relaxes
   it, and neither file is imported.
 * It is not an authorization to spend. Running it against a real provider
-  requires an explicit :class:`LiveRunInvocation` naming the execution manifest
-  (:func:`resolve_live_client`). No test, CI job or dry run constructs one, and
-  :func:`run_dry` refuses one outright.
+  requires an explicit :class:`LiveRunInvocation` naming the committed execution
+  manifest, re-verified by path and digest in
+  :func:`assert_live_run_is_authorized`. No test, CI job or dry run constructs
+  one, and :func:`run_dry` refuses one outright. The client such a run uses is
+  built from the authorized provider and model
+  (:func:`build_authorized_client`), never from the ambient environment.
 
 Two things this module deliberately never does with a held-out prefix: print it
 and serialize it. Inspecting a held-out input converts it to development data
@@ -64,19 +67,28 @@ from engine.entities import PlayerId, Role
 from engine.world import load_canonical_map
 from experiments.held_out_prefixes import (
     MANIFEST_PATH,
+    MAX_TICKS,
+    PREREGISTERED_BAND,
     TEMPORAL_OBSERVATION_VERSION,
     GeneratedSet,
     HeldOutPrefix,
+    PrefixRoster,
+    SeedBand,
     assert_no_legacy_body_handles,
     canonical_prefix_json,
     generate,
     legacy_body_handles,
     prefix_sha256,
 )
-from llm.budget import BudgetExceededError, GameBudget
+from experiments.held_out_prefixes import AUTHORIZED_ROSTER as FROZEN_PREFIX_ROSTER
+from llm.budget import GameBudget
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
-from meetings.manager import DEFAULT_TURN_MAX_TOKENS, DEFAULT_VOTE_MAX_TOKENS
+from meetings.manager import (
+    DEFAULT_TURN_MAX_TOKENS,
+    DEFAULT_VOTE_MAX_TOKENS,
+    MeetingConfig,
+)
 from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot, VoteBallot
 from observation.action_intent import ActionIntent, WaitIntent
 from observation.packet import ObservationPacket
@@ -84,6 +96,7 @@ from observation.public_map import PublicMapView
 from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.game import (
+    HEADLESS_MEETING_DEADLINES,
     HeadlessGame,
     TacticalAgent,
     build_default_meeting_runner,
@@ -138,6 +151,19 @@ AUTHORIZED_PROMPT_SET: Final[str] = "qwen3_6_27b"
 #: than a claim.
 AUTHORIZED_TURN_MAX_TOKENS: Final[int] = DEFAULT_TURN_MAX_TOKENS
 AUTHORIZED_VOTE_MAX_TOKENS: Final[int] = DEFAULT_VOTE_MAX_TOKENS
+
+#: The sampling temperatures the run draws at. The preregistration asks the
+#: manifest to bind the SAMPLING CONFIGURATION, and a temperature the run
+#: inherits from a module default is not bound: a later edit to
+#: ``meetings.manager`` would move the hosted sampling distribution of a frozen
+#: design without moving this manifest. So they are written here as numbers, the
+#: instrument passes them in an explicit :class:`~meetings.manager.MeetingConfig`
+#: rather than letting the manager default them, and
+#: ``tests/experiments/test_fresh_deduction_instrument.py`` asserts they are
+#: still the shipped values — a default change then breaks a test rather than
+#: the run.
+AUTHORIZED_TURN_TEMPERATURE: Final[float] = 0.4
+AUTHORIZED_VOTE_TEMPERATURE: Final[float] = 0.2
 
 #: The run-level hard stop, both token dimensions.
 AUTHORIZED_RUN_MAX_INPUT_TOKENS: Final[int] = 2_400_000
@@ -204,6 +230,52 @@ AUTHORIZED_LIMITS: Final[RunLimits] = RunLimits(
 )
 
 
+class SamplingConfig(BaseModel):
+    """The draw itself: the two caps and the two temperatures, as one value.
+
+    Separate from :class:`RunLimits` because it is not a limit — it is the
+    sampling distribution the manifest binds. Held as a value object for the
+    same two reasons: a live run is refused unless it equals
+    :data:`AUTHORIZED_SAMPLING`, and the report carries it, so a result names
+    the distribution it was drawn from rather than whatever the meeting layer's
+    defaults were on the day.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    turn_max_tokens: int
+    turn_temperature: float
+    vote_max_tokens: int
+    vote_temperature: float
+
+    def meeting_config(self) -> MeetingConfig:
+        """The meeting configuration these values are served through.
+
+        The deadlines are the HEADLESS ones on purpose: passing any explicit
+        :class:`~meetings.manager.MeetingConfig` opts back into the interactive
+        30 s per-turn wall (``orchestrator/game.py:1425-1435``), and a recording
+        that loses a turn to a wall-clock race is exactly the audit-gp-2 failure
+        the headless default exists to prevent. The run's own wall limits are
+        the two clocks the authorization names, not this one.
+        """
+
+        return MeetingConfig(
+            deadlines=HEADLESS_MEETING_DEADLINES,
+            turn_max_tokens=self.turn_max_tokens,
+            turn_temperature=self.turn_temperature,
+            vote_max_tokens=self.vote_max_tokens,
+            vote_temperature=self.vote_temperature,
+        )
+
+
+AUTHORIZED_SAMPLING: Final[SamplingConfig] = SamplingConfig(
+    turn_max_tokens=AUTHORIZED_TURN_MAX_TOKENS,
+    turn_temperature=AUTHORIZED_TURN_TEMPERATURE,
+    vote_max_tokens=AUTHORIZED_VOTE_MAX_TOKENS,
+    vote_temperature=AUTHORIZED_VOTE_TEMPERATURE,
+)
+
+
 # ---------------------------------------------------------------------------
 # The preregistered analysis, frozen before any outcome is inspected
 # ---------------------------------------------------------------------------
@@ -230,12 +302,35 @@ DECISION_ALPHA: Final[float] = 0.05
 
 DECISION_RULE: Final[str] = (
     "combined_accounts advances to an explicitly scoped adopting review only if "
-    "BOTH hold on the 50 paired units: the two-sided exact McNemar p over the "
-    "discordant pairs (scripts/paired_stats.py::exact_mcnemar_p) is below "
-    "0.05, AND the net paired difference b - c is at least 10 units. Any other "
-    "result is inconclusive, and inconclusive is not success. A result in "
-    "either direction is a measurement, never an adoption: adoption stays a "
-    "separate owner decision on a separate card."
+    "ALL THREE hold on the 50 paired units: the two-sided exact McNemar p over "
+    "the discordant pairs (scripts/paired_stats.py::exact_mcnemar_p) is below "
+    "0.05; the net paired difference b - c is at least 10 units; and the "
+    "candidate's net increase in wrongful crew ejections over the reference arm "
+    "is no larger than that net paired difference. Any other result is "
+    "inconclusive, and inconclusive is not success. A result in either "
+    "direction is a measurement, never an adoption: adoption stays a separate "
+    "owner decision on a separate card."
+)
+
+#: The preregistration (`audits/deduction-candidate/preregistration.md:116-118`,
+#: `:236-239`) requires the manifest to bind the ACCEPTABLE TRADEOFFS, and names
+#: the wrongful decision as one of them. This is that bound, frozen with the rest
+#: of the analysis and before any held-out outcome exists.
+WRONGFUL_EJECTION_TRADEOFF: Final[str] = (
+    "A wrongful ejection is a unit whose meeting ejected a player whose hidden "
+    "role is CREWMATE. The candidate may not buy its supported-correct "
+    "ejections by ejecting more innocents: its net increase in wrongful "
+    "ejections over the reference arm, on the same 50 paired units, must be no "
+    "larger than its net paired gain b - c on the primary outcome. One extra "
+    "wrongful ejection has to be paid for by at least one extra "
+    "supported-correct ejection. The bound is one-for-one because the failure it "
+    "guards against is a candidate that merely raises the ejection RATE: "
+    "converting reference-arm skips into ejections lifts both counts together, "
+    "and a candidate whose wrongful count rises at least as fast as its "
+    "supported-correct count has moved the meeting's willingness to eject rather "
+    "than its deduction. No ratio below one is asserted, because this design "
+    "resolves 50 paired units and a finer bound would be a number the sample "
+    "cannot carry."
 )
 
 MINIMUM_ACTIONABLE_EFFECT_RATIONALE: Final[str] = (
@@ -265,10 +360,10 @@ STOP_RULE: Final[str] = (
 )
 
 _ANALYSIS_FREEZE_NOTE: Final[str] = (
-    "PRIMARY_OUTCOME, DECISION_RULE, MINIMUM_ACTIONABLE_EFFECT_UNITS and "
-    "STOP_RULE are module constants and the execution manifest quotes them "
-    "verbatim, so the analysis is frozen in code and in the record before any "
-    "held-out outcome exists."
+    "PRIMARY_OUTCOME, DECISION_RULE, MINIMUM_ACTIONABLE_EFFECT_UNITS, "
+    "WRONGFUL_EJECTION_TRADEOFF and STOP_RULE are module constants and the "
+    "execution manifest quotes them verbatim, so the analysis is frozen in code "
+    "and in the record before any held-out outcome exists."
 )
 
 
@@ -291,6 +386,16 @@ class LiveRunNotAuthorized(InstrumentError):
 
 class PerCallCapExceeded(InstrumentError):
     """A call asked for, or a response reached, more than the authorized cap."""
+
+
+class ProviderIdentityMismatch(InstrumentError):
+    """A response came back from a model this manifest does not authorize.
+
+    Checked on the response rather than on the request, because the request only
+    says what was ASKED for: a hosted endpoint that silently serves a different
+    checkpoint would otherwise be discovered in the report's ``model_ids`` after
+    the whole run had been spent.
+    """
 
 
 class ProvenanceMismatch(InstrumentError):
@@ -451,19 +556,34 @@ class LiveRunInvocation:
     model: str
 
     @classmethod
-    def naming(cls, manifest_path: Path, *, provider: str, model: str) -> Self:
+    def naming(
+        cls,
+        manifest_path: Path,
+        *,
+        provider: str,
+        model: str,
+        repo_root: Path = _REPO_ROOT,
+    ) -> Self:
         """Build an invocation from the manifest on disk, or refuse.
 
-        Refuses a manifest that is not the authorized path, is absent, or does
-        not carry the authorized provider and model — an invocation that names
-        a manifest saying something else authorizes nothing.
+        Refuses a manifest that is not THE committed manifest — the path is
+        compared against ``repo_root / EXECUTION_MANIFEST_PATH`` in full, not by
+        its last components, because a same-named file anywhere on disk would
+        otherwise authorize a run while carrying none of the owner's limits.
+        Refuses one that is absent, or that does not carry the authorized
+        provider, model and prompt set.
+
+        The digest this records is re-checked against the same file at the
+        authorization boundary (:func:`assert_live_run_is_authorized`), so a
+        directly constructed dataclass does not skip the check.
         """
 
+        expected = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
         resolved = manifest_path.resolve()
-        if resolved.as_posix().split("/")[-3:] != EXECUTION_MANIFEST_PATH.split("/"):
+        if resolved != expected:
             raise LiveRunNotAuthorized(
                 "a live run names the authorized execution manifest "
-                f"{EXECUTION_MANIFEST_PATH}, got {manifest_path}"
+                f"{expected}, got {resolved}"
             )
         if not resolved.is_file():
             raise LiveRunNotAuthorized(
@@ -489,6 +609,9 @@ def assert_live_run_is_authorized(
     provider: str,
     invocation: LiveRunInvocation | None,
     limits: RunLimits = AUTHORIZED_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    units: int | None = None,
+    repo_root: Path = _REPO_ROOT,
 ) -> None:
     """Refuse any non-fake provider without an explicit live invocation.
 
@@ -496,6 +619,14 @@ def assert_live_run_is_authorized(
     everywhere in this module. Every other value — including one the owner has
     authorized in the manifest — needs the runner to say so at the call, because
     the manifest authorizes LIMITS and the invocation is the run.
+
+    Nothing here is taken on the invocation's word. The manifest it names is
+    re-read from ``repo_root`` and re-hashed, so a hand-built
+    :class:`LiveRunInvocation` carrying a path, a digest or a model of its own
+    does not pass; and ``units`` must be ``None``, because a live run is the
+    whole frozen set. A subset is the pilot the authorization card, this card
+    and the manifest all refuse — and it would spend part of the held-out set
+    outside the 50-pair design while leaving the rest held out.
     """
 
     if provider == "fake":
@@ -523,11 +654,92 @@ def assert_live_run_is_authorized(
             f"{AUTHORIZED_PROVIDER!r}; a different provider needs its own "
             "authorization and its own manifest"
         )
+    if units is not None:
+        raise LiveRunNotAuthorized(
+            f"a live run is the whole frozen set; this one asks for {units} "
+            "prefixes. No pilot, smoke run or retry is authorized, including on "
+            "flat-rate service, and a subset would spend part of a held-out set "
+            "the rest of which is still held out. --units is a dry-run knob."
+        )
     if limits != AUTHORIZED_LIMITS:
         raise LiveRunNotAuthorized(
             "a live run runs under the authorized limits exactly; the limits "
             "this run carries are not the ones the owner authorized"
         )
+    if sampling != AUTHORIZED_SAMPLING:
+        raise LiveRunNotAuthorized(
+            "a live run draws at the authorized sampling configuration exactly; "
+            "the caps or temperatures this run carries are not the ones the "
+            "manifest binds"
+        )
+    if invocation.model != AUTHORIZED_MODEL:
+        raise LiveRunNotAuthorized(
+            f"the live invocation names model {invocation.model!r}, not the "
+            f"authorized {AUTHORIZED_MODEL!r}"
+        )
+    manifest = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
+    if invocation.manifest_path.resolve() != manifest:
+        raise LiveRunNotAuthorized(
+            f"the live invocation names {invocation.manifest_path}, not the "
+            f"committed execution manifest {manifest}"
+        )
+    if not manifest.is_file():
+        raise LiveRunNotAuthorized(f"execution manifest is missing: {manifest}")
+    committed = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    if invocation.manifest_sha256 != committed:
+        raise LiveRunNotAuthorized(
+            "the live invocation's manifest digest is not the committed "
+            f"manifest's: invocation {invocation.manifest_sha256}, file "
+            f"{committed}"
+        )
+
+
+def authorized_client_environment(env: Mapping[str, str]) -> dict[str, str]:
+    """The environment the live client is built from: pinned, not inherited.
+
+    :func:`llm.provider.build_default_client` selects BOTH the provider and the
+    model from the environment, so calling it bare would let the ambient shell
+    decide what an invocation labelled ``featherless`` actually reaches — a fake
+    provider recorded as a live run, or a metered provider this manifest does
+    not authorize and whose cost statement explicitly excludes it. Everything
+    the factory reads is therefore written here from the authorized constants,
+    and exactly one value crosses over from the ambient environment: the API
+    key, which is a credential rather than a choice.
+    """
+
+    from llm.provider import (
+        ENV_FEATHERLESS_API_KEY,
+        ENV_MEETING_MODEL,
+        ENV_PROVIDER,
+        ENV_TRIGGER_MODEL,
+    )
+
+    api_key = env.get(ENV_FEATHERLESS_API_KEY, "").strip()
+    if not api_key:
+        raise LiveRunNotAuthorized(
+            f"{ENV_FEATHERLESS_API_KEY} is not set; the authorized provider "
+            f"{AUTHORIZED_PROVIDER!r} cannot be reached and no other provider "
+            "may stand in for it"
+        )
+    return {
+        ENV_PROVIDER: AUTHORIZED_PROVIDER,
+        ENV_MEETING_MODEL: AUTHORIZED_MODEL,
+        ENV_TRIGGER_MODEL: AUTHORIZED_MODEL,
+        ENV_FEATHERLESS_API_KEY: api_key,
+    }
+
+
+def build_authorized_client(env: Mapping[str, str] | None = None) -> LLMClient:
+    """Construct the ONE client a live run may use, from the pinned environment.
+
+    ``env`` defaults to the process environment, from which
+    :func:`authorized_client_environment` keeps only the credential.
+    """
+
+    from llm.provider import build_default_client
+
+    ambient = dict(os.environ) if env is None else dict(env)
+    return build_default_client(env=authorized_client_environment(ambient))
 
 
 # ---------------------------------------------------------------------------
@@ -606,14 +818,21 @@ class _ModelWorkClock:
 class _InstrumentClient:
     """Wrap the provider to enforce the per-call caps and capture the prompts.
 
-    Three jobs, none of which the budget layer does:
+    Four jobs, none of which the budget layer does:
 
     1. refuse a ``max_tokens`` that is not one of the two shipped caps, so
        "the shipped defaults unchanged" is checked rather than asserted;
     2. treat a response that reached its cap as a STOP — a truncation is a cap
        artifact, and the authorization says a truncation in either arm is a
        stop, not a datum;
-    3. hold the prompts the supported grader reads, in memory, for one unit.
+    3. refuse a response from a model other than ``expected_model`` on the call
+       that returns it, so a hosted endpoint serving a different checkpoint
+       stops the run instead of being noticed in the report afterwards;
+    4. hold the prompts the supported grader reads, in memory, for one unit.
+
+    Every stop above records the call FIRST. The response came back, so the
+    tokens were spent whether or not they are usable, and the partial accounting
+    the stop rule promises has to carry them.
 
     Not a subclass of anything in ``experiments/``: the committed MECHANICS_ONLY
     harnesses keep their own refusal, and this wrapper composes an arbitrary
@@ -627,11 +846,16 @@ class _InstrumentClient:
         work_clock: _ModelWorkClock,
         turn_max_tokens: int = AUTHORIZED_TURN_MAX_TOKENS,
         vote_max_tokens: int = AUTHORIZED_VOTE_MAX_TOKENS,
+        expected_model: str | None = None,
     ) -> None:
         self._inner = inner
         self._work_clock = work_clock
         self._allowed_max_tokens = frozenset({turn_max_tokens, vote_max_tokens})
         self._ceiling = max(turn_max_tokens, vote_max_tokens)
+        # ``None`` on the dry run, where the served model is the fixture's own
+        # marker; the authorized model id on a live run, where the served model
+        # is a thing the manifest binds.
+        self._expected_model = expected_model
         self._calls: list[CapturedCall] = []
         # A zero pre-flight rate is the honest statement for a client whose
         # completions are free: it disables ``BudgetedLLMClient``'s USD
@@ -687,12 +911,9 @@ class _InstrumentClient:
             agent_id=agent_id,
         )
         seconds = time.monotonic() - started
-        if response.usage.output_tokens >= max_tokens:
-            raise PerCallCapExceeded(
-                f"a response reached its {max_tokens}-token output cap "
-                f"({response.usage.output_tokens} tokens); a truncation is a "
-                "stop, not a datum"
-            )
+        # Recorded before any of the three stops below, because the response
+        # exists: its tokens were spent and its provider time elapsed, and a
+        # stop that dropped them would understate its own partial accounting.
         self._calls.append(
             CapturedCall(
                 agent_id=agent_id,
@@ -706,6 +927,17 @@ class _InstrumentClient:
             )
         )
         self._work_clock.charge(seconds)
+        if self._expected_model is not None and response.model != self._expected_model:
+            raise ProviderIdentityMismatch(
+                f"a response came back from model {response.model!r}; this run "
+                f"is authorized for {self._expected_model!r} only"
+            )
+        if response.usage.output_tokens >= max_tokens:
+            raise PerCallCapExceeded(
+                f"a response reached its {max_tokens}-token output cap "
+                f"({response.usage.output_tokens} tokens); a truncation is a "
+                "stop, not a datum"
+            )
         return response
 
 
@@ -899,14 +1131,61 @@ class FrozenSet:
         return self.generated.prefixes
 
 
+def _as_int(raw: Mapping[str, object], key: str) -> int:
+    """One manifest field as an ``int``, or a stop naming the field."""
+
+    value = raw.get(key)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise FrozenSetMismatch(
+            f"the frozen manifest's {key!r} is {value!r}, not a whole number"
+        )
+    return value
+
+
+def _parsed_band(raw: object) -> SeedBand:
+    """The manifest's band as a :class:`SeedBand`, or a stop.
+
+    The manifest's band block carries a ``draw_order`` the model does not model,
+    so the three band fields are lifted by name rather than splatted; a band that
+    is not drawn ascending is a different draw and is refused here rather than
+    silently accepted by dropping the key.
+    """
+
+    if not isinstance(raw, Mapping):
+        raise FrozenSetMismatch(f"the frozen set's band is {raw!r}, not a block")
+    if raw.get("draw_order") != "ascending":
+        raise FrozenSetMismatch(
+            f"the frozen set was drawn {raw.get('draw_order')!r}; the generator "
+            "draws ascending and a different order is a different set"
+        )
+    return SeedBand(
+        first_seed=_as_int(raw, "first_seed"),
+        last_seed=_as_int(raw, "last_seed"),
+        size=_as_int(raw, "size"),
+    )
+
+
+def _parsed_roster(raw: Mapping[str, object]) -> PrefixRoster:
+    """The manifest's roster as a :class:`PrefixRoster`, or a stop."""
+
+    return PrefixRoster(
+        num_players=_as_int(raw, "num_players"),
+        num_impostors=_as_int(raw, "num_impostors"),
+        tasks_per_crewmate=_as_int(raw, "tasks_per_crewmate"),
+    )
+
+
 def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
     """Regenerate the held-out set and refuse to proceed on any difference.
 
     Runs BEFORE any arm and before any provider exists. What it compares:
     the band, the roster, the tick budget, the observation clock, every accepted
-    seed and digest in order, and the skip list with its reason codes. A
-    mismatch names seeds and digests only — both are already published in the
-    committed manifest — and never a step.
+    seed and digest in order, and the skip list with its reason codes. The
+    first three are compared against the generator's own frozen values and the
+    parsed band and roster are then what :func:`generate` is called with, so the
+    set that is regenerated is the one this manifest describes rather than one
+    the manifest merely sits beside. A mismatch names seeds and digests only —
+    both are already published in the committed manifest — and never a step.
 
     Not compared here: ``source_sha256``. That is the freeze's own restamp
     record, and ``tests/experiments/test_held_out_prefixes.py::
@@ -944,8 +1223,34 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
             f"{AUTHORIZED_ROSTER_IMPOSTORS}i and a change of roster "
             "invalidates it"
         )
+    # The band, the tick budget and the rest of the roster are compared too, and
+    # the parsed band and roster are what generate() is then driven with. Read
+    # but unchecked, they would let the manifest DESCRIBE a draw that is not the
+    # one the run regenerates — a different band, a different tick budget or a
+    # different task count — while every digest still matched, because the
+    # digests would have come from the module defaults either way.
+    band = _parsed_band(manifest.get("band"))
+    if band != PREREGISTERED_BAND:
+        raise FrozenSetMismatch(
+            f"the frozen set names band {band.first_seed}-{band.last_seed} "
+            f"size {band.size}; the preregistered band is "
+            f"{PREREGISTERED_BAND.first_seed}-{PREREGISTERED_BAND.last_seed} "
+            f"size {PREREGISTERED_BAND.size}"
+        )
+    parsed_roster = _parsed_roster(roster)
+    if parsed_roster != FROZEN_PREFIX_ROSTER:
+        raise FrozenSetMismatch(
+            f"the frozen set's roster is {parsed_roster!r}; the generator draws "
+            f"{FROZEN_PREFIX_ROSTER!r} and a change of roster invalidates the "
+            "screening"
+        )
+    if manifest.get("max_ticks") != MAX_TICKS:
+        raise FrozenSetMismatch(
+            f"the frozen set names a {manifest.get('max_ticks')!r}-tick budget; "
+            f"the generator builds every prefix inside {MAX_TICKS}"
+        )
 
-    generated = generate()
+    generated = generate(band=band, roster=parsed_roster)
     expected_accepted = [
         (int(row["seed"]), str(row["sha256"])) for row in manifest["accepted"]
     ]
@@ -1091,6 +1396,7 @@ def run_unit(
     output_dir: Path,
     provider: str = "fake",
     limits: RunLimits = AUTHORIZED_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
 ) -> UnitRecord:
     """Run one frozen prefix's meeting under one arm through the public API.
 
@@ -1098,6 +1404,10 @@ def run_unit(
     exactly "one frozen legal prefix followed by one fresh meeting" and nothing
     downstream of the decision is claimed (the preregistration's "Apply that
     meeting's outcome and stop").
+
+    The sampling configuration is PASSED rather than inherited: the manifest
+    binds the two temperatures and the two caps, so the meeting runs on a
+    :class:`~meetings.manager.MeetingConfig` this module states.
     """
 
     game_map = load_canonical_map()
@@ -1112,6 +1422,7 @@ def run_unit(
     runner = build_default_meeting_runner(
         llm_client=client,
         budget=unit_budget,
+        config=sampling.meeting_config(),
         deadline=deadline,
         env=arm.environment(provider=provider),
         public_map=public_map,
@@ -1173,13 +1484,17 @@ def run_unit(
     _assert_arm_provenance(entries, arm=arm, seed=prefix.seed)
     _reconcile_recorded_spend(meeting, budget=unit_budget, seed=prefix.seed, arm=arm)
 
-    calls = client.take()
+    # Read, not drained. Every check below can stop the run, and a stop after
+    # the buffer was emptied would hand the abort handler an empty client and
+    # report a unit that spent nothing — the same understatement the truncation
+    # stop used to make. The unit is drained only once it has been accepted.
     prompts: dict[str, list[str]] = {}
-    for call in calls:
+    for call in client.calls:
         if call.agent_id is not None:
             prompts.setdefault(call.agent_id, []).append(call.prompt)
-    assert_no_legacy_body_handles([call.prompt for call in calls])
-    _assert_live_prompts_were_recorded(meeting, calls=calls, seed=prefix.seed)
+    assert_no_legacy_body_handles([call.prompt for call in client.calls])
+    _assert_live_prompts_were_recorded(meeting, calls=client.calls, seed=prefix.seed)
+    calls = client.take()
     del work_clock  # charged inside the client; named here so the caller sees it
 
     return UnitRecord(
@@ -1372,6 +1687,17 @@ class PrivilegedGrade:
     role_correct: bool
     supported_correct_ejection: bool
 
+    @property
+    def wrongful_ejection(self) -> bool:
+        """An innocent was ejected: the unit the acceptable-tradeoff bound counts.
+
+        A skipped meeting is not wrongful — it decided nothing — so this is an
+        ejection that landed on a crewmate, not the complement of
+        ``role_correct``.
+        """
+
+        return self.ejected_player_id is not None and not self.role_correct
+
 
 def grade_privileged(
     record: UnitRecord, *, supported: Sequence[SupportedGrade]
@@ -1472,6 +1798,10 @@ class PairedResult(BaseModel):
     p_exact: float
     alpha: float
     minimum_actionable_effect_units: int
+    reference_wrongful_ejections: int
+    candidate_wrongful_ejections: int
+    wrongful_net: int
+    meets_wrongful_ejection_tradeoff: bool
     meets_decision_rule: bool
 
 
@@ -1486,15 +1816,22 @@ def paired_result(
     Refuses an unpaired seed rather than dropping it: a unit missing from one arm
     is a hole in the pairing, and silently analysing the rest would change the
     design after the fact.
+
+    The wrongful-ejection tradeoff is computed here beside the test, not left to
+    a reader: ``meets_decision_rule`` is the conjunction of all three frozen
+    conditions, so a candidate that buys its supported-correct ejections by
+    ejecting more innocents cannot satisfy the rule by satisfying two of them.
     """
 
     by_arm: dict[ArmName, dict[int, bool]] = {reference: {}, candidate: {}}
+    wrongful_by_arm: dict[ArmName, dict[int, bool]] = {reference: {}, candidate: {}}
     for grade in grades:
         if grade.arm not in by_arm:
             raise InstrumentError(f"unit for unknown arm {grade.arm!r}")
         if grade.seed in by_arm[grade.arm]:
             raise InstrumentError(f"seed {grade.seed} appears twice on {grade.arm}")
         by_arm[grade.arm][grade.seed] = grade.primary
+        wrongful_by_arm[grade.arm][grade.seed] = grade.privileged.wrongful_ejection
     seeds = sorted(by_arm[reference])
     if sorted(by_arm[candidate]) != seeds:
         raise InstrumentError(
@@ -1509,6 +1846,10 @@ def paired_result(
     )
     p_exact = exact_mcnemar_p(b, c)
     net = b - c
+    reference_wrongful = sum(wrongful_by_arm[reference].values())
+    candidate_wrongful = sum(wrongful_by_arm[candidate].values())
+    wrongful_net = candidate_wrongful - reference_wrongful
+    meets_tradeoff = wrongful_net <= net
     return PairedResult(
         primary_outcome=PRIMARY_OUTCOME,
         paired_units=len(seeds),
@@ -1522,8 +1863,14 @@ def paired_result(
         p_exact=p_exact,
         alpha=DECISION_ALPHA,
         minimum_actionable_effect_units=MINIMUM_ACTIONABLE_EFFECT_UNITS,
+        reference_wrongful_ejections=reference_wrongful,
+        candidate_wrongful_ejections=candidate_wrongful,
+        wrongful_net=wrongful_net,
+        meets_wrongful_ejection_tradeoff=meets_tradeoff,
         meets_decision_rule=(
-            p_exact < DECISION_ALPHA and net >= MINIMUM_ACTIONABLE_EFFECT_UNITS
+            p_exact < DECISION_ALPHA
+            and net >= MINIMUM_ACTIONABLE_EFFECT_UNITS
+            and meets_tradeoff
         ),
     )
 
@@ -1540,6 +1887,7 @@ class ArmSummary(BaseModel):
     units: int
     ejections: int
     role_correct: int
+    wrongful_ejections: int
     supported_correct_ejections: int
     terminal_units: int
     partial_units: int
@@ -1575,8 +1923,10 @@ class InstrumentReport(BaseModel):
     held_out_accepted_seeds: int
     held_out_skipped_seeds: int
     limits: RunLimits
+    sampling: SamplingConfig
     primary_outcome: str
     decision_rule: str
+    wrongful_ejection_tradeoff: str
     stop_rule: str
     arms: tuple[ArmSummary, ...]
     paired: PairedResult
@@ -1692,6 +2042,9 @@ def _summarize_arm(
         units=len(own),
         ejections=sum(1 for grade in own if grade.outcome == "EJECTED"),
         role_correct=sum(1 for grade in own if grade.privileged.role_correct),
+        wrongful_ejections=sum(
+            1 for grade in own if grade.privileged.wrongful_ejection
+        ),
         supported_correct_ejections=sum(1 for grade in own if grade.primary),
         terminal_units=sum(1 for grade in own if grade.stop == "terminal"),
         partial_units=sum(1 for grade in own if grade.stop == "partial"),
@@ -1734,6 +2087,7 @@ def run_instrument(
     repo_root: Path = _REPO_ROOT,
     units: int | None = None,
     limits: RunLimits = AUTHORIZED_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
 ) -> InstrumentReport:
     """Run both arms over the frozen set, sequentially, and grade the result.
 
@@ -1744,7 +2098,12 @@ def run_instrument(
     """
 
     assert_live_run_is_authorized(
-        provider=provider, invocation=live_invocation, limits=limits
+        provider=provider,
+        invocation=live_invocation,
+        limits=limits,
+        sampling=sampling,
+        units=units,
+        repo_root=repo_root,
     )
     frozen = verify_frozen_set(repo_root)
     prefixes = frozen.prefixes if units is None else frozen.prefixes[:units]
@@ -1753,7 +2112,16 @@ def run_instrument(
 
     inner = client if client is not None else DryRunProvider()
     work_clock = _ModelWorkClock(max_seconds=limits.model_work_seconds)
-    instrument_client = _InstrumentClient(inner, work_clock=work_clock)
+    instrument_client = _InstrumentClient(
+        inner,
+        work_clock=work_clock,
+        turn_max_tokens=sampling.turn_max_tokens,
+        vote_max_tokens=sampling.vote_max_tokens,
+        # A live run is bound to the model the invocation names; a dry run has
+        # no served model to bind, and its fixture says so in the report's
+        # ``model_ids`` and its caveat.
+        expected_model=None if live_invocation is None else live_invocation.model,
+    )
     run_budget = GameBudget(
         max_cost_usd=limits.max_cost_usd,
         max_input_tokens=limits.run_max_input_tokens,
@@ -1779,13 +2147,21 @@ def run_instrument(
                     output_dir=output_dir,
                     provider=provider,
                     limits=limits,
+                    sampling=sampling,
                 )
-            except (
-                BudgetExceededError,
-                RunDeadlineExceeded,
-                PerCallCapExceeded,
-                ProvenanceMismatch,
-            ) as exc:
+            # Every way a unit can fail is a stop that reports its partial
+            # state, which is why this catches Exception rather than the four
+            # limit classes it started with. The stop rule promises partial
+            # accounting for "a missing or truncated attempt", and a provider
+            # transport failure, a mid-run legacy body handle
+            # (:class:`~experiments.held_out_prefixes.HeldOutPrefixError`), a
+            # spend that does not reconcile or a meeting that resolved the wrong
+            # number of ballots are all missing attempts. Nothing is swallowed:
+            # the class and message are copied into ``reason`` and the original
+            # is chained, so a stop is louder than the raw exception, not
+            # quieter. ``BaseException`` is deliberately not caught — an
+            # interrupt is not a run stop.
+            except Exception as exc:
                 # The stopped unit's calls are still in the client. They were
                 # spent, so they are charged into the partial accounting before
                 # it is reported — "retains partial evidence and unresolved
@@ -1815,11 +2191,13 @@ def run_instrument(
         instrument_sha256=instrument_sha256(),
         prompt_set=AUTHORIZED_PROMPT_SET,
         limits=limits,
+        sampling=sampling,
         held_out_manifest_sha256=frozen.manifest_sha256,
         held_out_accepted_seeds=len(frozen.accepted_seeds),
         held_out_skipped_seeds=len(frozen.skipped_seeds),
         primary_outcome=PRIMARY_OUTCOME,
         decision_rule=DECISION_RULE,
+        wrongful_ejection_tradeoff=WRONGFUL_EJECTION_TRADEOFF,
         stop_rule=STOP_RULE,
         arms=tuple(
             _summarize_arm(
@@ -1847,6 +2225,7 @@ def run_dry(
     repo_root: Path = _REPO_ROOT,
     units: int | None = None,
     limits: RunLimits = AUTHORIZED_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
     live_invocation: LiveRunInvocation | None = None,
 ) -> InstrumentReport:
     """The fake-provider mechanics check. Refuses a live invocation outright.
@@ -1867,6 +2246,7 @@ def run_dry(
             repo_root=repo_root,
             units=units,
             limits=limits,
+            sampling=sampling,
         )
     with TemporaryDirectory() as directory:
         return run_instrument(
@@ -1875,6 +2255,7 @@ def run_dry(
             repo_root=repo_root,
             units=units,
             limits=limits,
+            sampling=sampling,
         )
 
 
@@ -1899,7 +2280,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--output-dir", type=Path, default=None)
-    parser.add_argument("--units", type=int, default=None)
+    parser.add_argument(
+        "--units",
+        type=int,
+        default=None,
+        help=(
+            "run only the first N frozen prefixes. A DRY-RUN knob: a live "
+            "invocation carrying it is refused, because a live run is the whole "
+            "frozen set and a subset is a pilot"
+        ),
+    )
     parser.add_argument("--json", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -1918,11 +2308,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             provider=args.provider,
             model=AUTHORIZED_MODEL,
         )
-        from llm.provider import build_default_client
-
+        # Authorized BEFORE a client exists. ``run_instrument`` runs the same
+        # gate, but building the client first would let an unauthorized shape —
+        # a unit override, moved limits — construct a provider it may not use.
+        assert_live_run_is_authorized(
+            provider=args.provider, invocation=invocation, units=args.units
+        )
         report = run_instrument(
             output_dir=args.output_dir,
-            client=build_default_client(),
+            # NOT ``build_default_client()``: that reads the ambient environment
+            # for both provider and model, so an invocation labelled
+            # ``featherless`` would reach whatever the shell happened to name.
+            client=build_authorized_client(),
             provider=args.provider,
             live_invocation=invocation,
             units=args.units,

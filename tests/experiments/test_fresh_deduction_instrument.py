@@ -14,6 +14,7 @@ step and a planted body handle.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Sequence
@@ -29,6 +30,7 @@ from experiments.fresh_deduction_instrument import (
     AUTHORIZED_MODEL,
     AUTHORIZED_PROMPT_SET,
     AUTHORIZED_PROVIDER,
+    AUTHORIZED_SAMPLING,
     DECISION_RULE,
     EXECUTION_MANIFEST_PATH,
     MINIMUM_ACTIONABLE_EFFECT_UNITS,
@@ -80,6 +82,12 @@ _INSTRUMENT_SOURCE: Final[Path] = (
 _SMOKE_UNITS: Final[int] = 2
 
 
+def _manifest_digest() -> str:
+    """The committed execution manifest's own digest, as the gate recomputes it."""
+
+    return hashlib.sha256(_MANIFEST.read_bytes()).hexdigest()
+
+
 def _write_frozen_manifest(root: Path, payload: dict[str, Any]) -> None:
     path = root / MANIFEST_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,8 +103,9 @@ def _committed_manifest() -> dict[str, Any]:
 class _StubClient:
     """A minimal in-process client with no schema behaviour, for cap tests."""
 
-    def __init__(self, *, output_tokens: int = 5) -> None:
+    def __init__(self, *, output_tokens: int = 5, input_tokens: int = 1) -> None:
         self.output_tokens = output_tokens
+        self.input_tokens = input_tokens
         self.calls = 0
 
     async def complete(
@@ -114,9 +123,81 @@ class _StubClient:
         self.calls += 1
         return LLMResponse(
             text="{}",
-            usage=TokenUsage(input_tokens=1, output_tokens=self.output_tokens),
+            usage=TokenUsage(
+                input_tokens=self.input_tokens, output_tokens=self.output_tokens
+            ),
             cost_usd=0.0,
             model="stub",
+        )
+
+
+class _TruncatingProvider(DryRunProvider):
+    """A dry-run provider whose responses always reach their output cap.
+
+    Well-formed payloads, so the meeting layer accepts them and the stop comes
+    from the truncation gate rather than from a validation failure.
+    """
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        response = await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+        return LLMResponse(
+            text=response.text,
+            usage=TokenUsage(
+                input_tokens=response.usage.input_tokens, output_tokens=max_tokens
+            ),
+            cost_usd=response.cost_usd,
+            model=response.model,
+        )
+
+
+class _FailingProvider(DryRunProvider):
+    """A dry-run provider whose transport fails partway through a unit."""
+
+    def __init__(self, *, fail_on_call: int) -> None:
+        super().__init__()
+        self._fail_on_call = fail_on_call
+        self.calls = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        self.calls += 1
+        if self.calls >= self._fail_on_call:
+            raise RuntimeError("transport failure: connection reset by peer")
+        return await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
         )
 
 
@@ -167,6 +248,42 @@ class TestFrozenSet:
         manifest["roster"]["num_players"] = 9
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="change of roster"):
+            verify_frozen_set(tmp_path)
+
+    def test_a_moved_band_is_refused(self, tmp_path: Path) -> None:
+        """PLANTED: the manifest describes a band the run does not draw. Without
+        the check the digests still matched, because they came from the
+        generator's defaults either way, and the manifest could have described a
+        different set from the one regenerated."""
+
+        manifest = _committed_manifest()
+        manifest["band"]["first_seed"] = 9000
+        manifest["band"]["last_seed"] = 9999
+        _write_frozen_manifest(tmp_path, manifest)
+        with pytest.raises(FrozenSetMismatch, match="preregistered band"):
+            verify_frozen_set(tmp_path)
+
+    def test_a_moved_tick_budget_is_refused(self, tmp_path: Path) -> None:
+        # PLANTED: a tick budget no prefix in this set was screened under.
+        manifest = _committed_manifest()
+        manifest["max_ticks"] = 999
+        _write_frozen_manifest(tmp_path, manifest)
+        with pytest.raises(FrozenSetMismatch, match="tick budget"):
+            verify_frozen_set(tmp_path)
+
+    def test_a_moved_task_count_is_refused(self, tmp_path: Path) -> None:
+        # PLANTED: the roster field the 4p1i check does not look at.
+        manifest = _committed_manifest()
+        manifest["roster"]["tasks_per_crewmate"] = 7
+        _write_frozen_manifest(tmp_path, manifest)
+        with pytest.raises(FrozenSetMismatch, match="change of roster"):
+            verify_frozen_set(tmp_path)
+
+    def test_a_descending_draw_is_refused(self, tmp_path: Path) -> None:
+        manifest = _committed_manifest()
+        manifest["band"]["draw_order"] = "descending"
+        _write_frozen_manifest(tmp_path, manifest)
+        with pytest.raises(FrozenSetMismatch, match="draws ascending"):
             verify_frozen_set(tmp_path)
 
     def test_a_missing_manifest_is_refused(self, tmp_path: Path) -> None:
@@ -220,13 +337,123 @@ class TestLiveGate:
     def test_an_invocation_whose_manifest_omits_the_model_is_refused(
         self, tmp_path: Path
     ) -> None:
-        # PERTURBED: the same path shape, a manifest that authorizes nothing.
+        # PERTURBED: this scratch root's own manifest, authorizing nothing.
         stray = tmp_path / "audits" / "deduction-candidate" / "execution-manifest.md"
         stray.parent.mkdir(parents=True)
         stray.write_text("# not an authorization\n", encoding="utf-8")
         with pytest.raises(LiveRunNotAuthorized, match="does not name"):
             LiveRunInvocation.naming(
-                stray, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+                stray,
+                provider=AUTHORIZED_PROVIDER,
+                model=AUTHORIZED_MODEL,
+                repo_root=tmp_path,
+            )
+
+    def test_a_same_named_manifest_outside_the_repository_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the review's own reproduction — a 41-byte file whose last
+        three path components match, carrying none of the owner's limits."""
+
+        forged = tmp_path / "audits" / "deduction-candidate" / "execution-manifest.md"
+        forged.parent.mkdir(parents=True)
+        forged.write_text(
+            f"{AUTHORIZED_PROVIDER} {AUTHORIZED_MODEL} {AUTHORIZED_PROMPT_SET}",
+            encoding="utf-8",
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="authorized execution manifest"):
+            LiveRunInvocation.naming(
+                forged, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+            )
+
+    def test_a_hand_built_invocation_naming_another_path_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: ``naming`` bypassed entirely, so the authorization boundary
+        has to carry the path check on its own."""
+
+        forged = LiveRunInvocation(
+            manifest_path=tmp_path / "execution-manifest.md",
+            manifest_sha256=_manifest_digest(),
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="committed execution manifest"):
+            assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=forged
+            )
+
+    def test_a_hand_built_invocation_with_a_stale_digest_is_refused(self) -> None:
+        """PLANTED: the right path, a digest that is not this file's. The
+        invocation's own field is not evidence; the file on disk is."""
+
+        forged = LiveRunInvocation(
+            manifest_path=_MANIFEST,
+            manifest_sha256="0" * 64,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="manifest digest"):
+            assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=forged
+            )
+
+    def test_a_hand_built_invocation_naming_another_model_is_refused(self) -> None:
+        # PLANTED: the authorized provider, somebody else's model.
+        forged = LiveRunInvocation(
+            manifest_path=_MANIFEST,
+            manifest_sha256=_manifest_digest(),
+            provider=AUTHORIZED_PROVIDER,
+            model="claude-sonnet-4-6",
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="not the authorized"):
+            assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=forged
+            )
+
+    def test_a_live_invocation_carrying_a_unit_override_is_refused(self) -> None:
+        """PLANTED: the one-unit live pilot. A live run is the whole frozen set;
+        a subset spends part of a set the rest of which is still held out."""
+
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="whole frozen set"):
+            assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=invocation, units=1
+            )
+
+    def test_the_cli_refuses_a_live_unit_override_before_building_a_client(
+        self, tmp_path: Path
+    ) -> None:
+        """The same refusal through the documented command shape, which is where
+        a runner would actually type it."""
+
+        with pytest.raises(LiveRunNotAuthorized, match="whole frozen set"):
+            instrument.main(
+                [
+                    "--provider",
+                    AUTHORIZED_PROVIDER,
+                    "--execution-manifest",
+                    str(_MANIFEST),
+                    "--i-am-the-runner",
+                    "--output-dir",
+                    str(tmp_path),
+                    "--units",
+                    "1",
+                ]
+            )
+
+    def test_a_live_run_may_not_move_the_authorized_sampling(self) -> None:
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        hotter = instrument.AUTHORIZED_SAMPLING.model_copy(
+            update={"turn_temperature": 1.0}
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="sampling configuration"):
+            assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=invocation, sampling=hotter
             )
 
     def test_a_manifest_that_does_not_name_the_provider_authorizes_nothing(
@@ -314,6 +541,122 @@ class TestLiveGate:
         assert re.search(r"^\s*(?:from|import)\s+llm\.provider", source, re.M) is None
 
 
+class TestAuthorizedClient:
+    """The live client is built from the authorization, not from the shell.
+
+    Nothing here constructs a real provider: the pinned environment carries no
+    credential in any of these cases, so every call refuses before a client
+    exists. That refusal IS the property under test.
+    """
+
+    def test_the_pinned_environment_ignores_the_ambient_provider_and_model(
+        self,
+    ) -> None:
+        # PLANTED: a shell that names a metered provider and another model —
+        # the review's reproduction, which used to decide what a run labelled
+        # `featherless` actually reached.
+        pinned = instrument.authorized_client_environment(
+            {
+                "AILIBI_LLM_PROVIDER": "anthropic",
+                "AILIBI_LLM_MEETING_MODEL": "claude-sonnet-4-6",
+                "AILIBI_LLM_TRIGGER_MODEL": "claude-haiku-4-5",
+                "ANTHROPIC_API_KEY": "sk-ambient",
+                "FEATHERLESS_API_KEY": "fk-ambient",
+            }
+        )
+        assert pinned["AILIBI_LLM_PROVIDER"] == AUTHORIZED_PROVIDER
+        assert pinned["AILIBI_LLM_MEETING_MODEL"] == AUTHORIZED_MODEL
+        assert pinned["AILIBI_LLM_TRIGGER_MODEL"] == AUTHORIZED_MODEL
+        # The credential is the only ambient value that crosses over, and no
+        # other provider's key comes with it.
+        assert set(pinned) == {
+            "AILIBI_LLM_PROVIDER",
+            "AILIBI_LLM_MEETING_MODEL",
+            "AILIBI_LLM_TRIGGER_MODEL",
+            "FEATHERLESS_API_KEY",
+        }
+        assert pinned["FEATHERLESS_API_KEY"] == "fk-ambient"
+
+    def test_an_ambient_fake_provider_cannot_stand_in_for_the_authorized_one(
+        self,
+    ) -> None:
+        """PLANTED: exactly the reproduction that recorded a fake run as live —
+        `AILIBI_LLM_PROVIDER=fake` and no Featherless key. It must refuse, not
+        hand back a `FakeProvider` for a report labelled `dry_run: false`."""
+
+        with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
+            instrument.build_authorized_client(env={"AILIBI_LLM_PROVIDER": "fake"})
+
+    def test_the_default_environment_is_the_process_one_and_still_pinned(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AILIBI_LLM_PROVIDER", "fake")
+        monkeypatch.delenv("FEATHERLESS_API_KEY", raising=False)
+        with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
+            instrument.build_authorized_client()
+
+    def test_a_response_from_another_model_stops_the_run(self) -> None:
+        """PLANTED: the endpoint serves a different checkpoint. The stop lands on
+        the call that returned it, not in the report afterwards."""
+
+        import asyncio
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(
+            _StubClient(), work_clock=clock, expected_model=AUTHORIZED_MODEL
+        )
+        with pytest.raises(instrument.ProviderIdentityMismatch, match="'stub'"):
+            asyncio.run(
+                client.complete(
+                    prompt="p", schema=None, max_tokens=1024, temperature=0.2
+                )
+            )
+        # Spent, therefore retained: the response came back before it was refused.
+        assert [call.model for call in client.calls] == ["stub"]
+
+    def test_a_live_run_binds_the_client_to_the_invocations_model(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The wiring, not just the gate: the run must hand the client the model
+        it is authorized for. Nothing is called — the spy stops the run at the
+        moment the client is built, so no unit and no provider is reached."""
+
+        seen: dict[str, Any] = {}
+
+        class _Stop(RuntimeError):
+            pass
+
+        def spy(inner: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            raise _Stop("stopped before any unit ran")
+
+        monkeypatch.setattr(instrument, "_InstrumentClient", spy)
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        with pytest.raises(_Stop):
+            run_instrument(
+                output_dir=tmp_path,
+                client=_StubClient(),
+                provider=AUTHORIZED_PROVIDER,
+                live_invocation=invocation,
+            )
+        assert seen["expected_model"] == AUTHORIZED_MODEL
+
+    def test_the_dry_run_binds_no_served_model(self) -> None:
+        """The check is a live-run one: the dry run's fixture model is its own
+        marker, so binding it would be a fiction rather than a gate."""
+
+        import asyncio
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(_StubClient(), work_clock=clock)
+        asyncio.run(
+            client.complete(prompt="p", schema=None, max_tokens=1024, temperature=0.2)
+        )
+        assert [call.model for call in client.calls] == ["stub"]
+
+
 class TestPerCallCaps:
     def _client(self, inner: _StubClient, *, work_seconds: float = 3600.0) -> Any:
         clock = instrument._ModelWorkClock(max_seconds=work_seconds)
@@ -348,6 +691,43 @@ class TestPerCallCaps:
                     prompt="p", schema=None, max_tokens=1024, temperature=0.2
                 )
             )
+
+    def test_a_truncation_stop_retains_the_capped_calls_spend(self) -> None:
+        """The truncation stop is the one stop condition this gate itself
+        creates, so the partial accounting it hands back must carry the call
+        that caused it. PLANTED: a response that reaches its cap at 1,234 input
+        tokens."""
+
+        import asyncio
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(
+            _StubClient(output_tokens=1024, input_tokens=1234), work_clock=clock
+        )
+        with pytest.raises(PerCallCapExceeded, match="a truncation is a stop"):
+            asyncio.run(
+                client.complete(
+                    prompt="p", schema=None, max_tokens=1024, temperature=0.2
+                )
+            )
+        usage = instrument.ArmUsage().plus(client.take())
+        assert (usage.calls, usage.input_tokens, usage.output_tokens) == (1, 1234, 1024)
+        assert usage.model_work_seconds >= 0.0
+        assert clock.seconds >= 0.0
+
+    def test_a_truncation_mid_run_reports_the_partial_state(
+        self, tmp_path: Path
+    ) -> None:
+        """The same property through the run: a provider whose first response
+        reaches its cap stops the run with the stopped unit's spend."""
+
+        with pytest.raises(InstrumentAborted) as caught:
+            run_instrument(output_dir=tmp_path, client=_TruncatingProvider(), units=1)
+        partial = caught.value.partial
+        assert "a truncation is a stop" in partial.reason
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.calls == 1
+        assert usage.input_tokens > 0
 
     def test_a_response_under_its_cap_is_kept(self) -> None:
         import asyncio
@@ -390,6 +770,46 @@ class TestBudgetAndDeadline:
         usage = caught.value.partial.usage_by_arm["repaired_clock"]
         assert usage.calls > 0
         assert usage.input_tokens > 0
+
+    def test_a_provider_transport_failure_stops_the_run_with_partial_state(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the provider drops the connection on its fifth call. The
+        stop rule calls a missing attempt a stop, so it must arrive as an
+        `InstrumentAborted` carrying the spend, not as a bare `RuntimeError`."""
+
+        failing = _FailingProvider(fail_on_call=5)
+        with pytest.raises(InstrumentAborted) as caught:
+            run_instrument(output_dir=tmp_path, client=failing, units=1)
+        partial = caught.value.partial
+        assert "transport failure" in partial.reason
+        assert partial.completed_units == 0
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.calls == 4
+        assert usage.input_tokens > 0
+
+    def test_a_mid_run_legacy_body_handle_stops_the_run_with_partial_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: the handle check fires on a RENDERED PROMPT rather than on a
+        regenerated prefix, which is the half of that stop condition the frozen
+        set's own verification cannot reach. The planted assertion passes every
+        prefix (canonical JSON, so it starts with a brace) and refuses every
+        prompt."""
+
+        def planted(texts: Sequence[str]) -> None:
+            for text in texts:
+                if not text.startswith("{"):
+                    raise HeldOutPrefixError(
+                        "planted handle match in a rendered prompt: body-p-1-7"
+                    )
+
+        monkeypatch.setattr(instrument, "assert_no_legacy_body_handles", planted)
+        with pytest.raises(InstrumentAborted) as caught:
+            run_instrument(output_dir=tmp_path, units=1)
+        partial = caught.value.partial
+        assert "body-p-1-7" in partial.reason
+        assert partial.usage_by_arm["repaired_clock"].calls == 6
 
     def test_an_expired_deadline_stops_the_run_and_reports_partial_state(
         self, tmp_path: Path
@@ -678,6 +1098,76 @@ class TestPairedStatistics:
         )
         assert (result.b, result.c) == (10, 0)
         assert result.p_exact < 0.05
+        assert result.wrongful_net == 0
+        assert result.meets_decision_rule is True
+
+    def _wrongful_grades(
+        self, *, reference: Sequence[bool], candidate: Sequence[bool]
+    ) -> list[UnitGrade]:
+        """Units whose meetings ejected a CREWMATE where the flag is set.
+
+        The primary outcome is False on every one of them: a wrongful ejection is
+        neither role-correct nor supported-correct.
+        """
+
+        grades: list[UnitGrade] = []
+        for index, (ref, cand) in enumerate(zip(reference, candidate)):
+            for arm, wrongful in (
+                ("repaired_clock", ref),
+                ("combined_accounts", cand),
+            ):
+                grades.append(
+                    UnitGrade(
+                        seed=4000 + index,
+                        arm=arm,  # type: ignore[arg-type]
+                        outcome="EJECTED" if wrongful else "SKIPPED",
+                        stop="terminal",
+                        supported=(),
+                        privileged=PrivilegedGrade(
+                            ejected_player_id="p-3" if wrongful else None,
+                            ejected_role="CREWMATE" if wrongful else None,
+                            role_correct=False,
+                            supported_correct_ejection=False,
+                        ),
+                    )
+                )
+        return grades
+
+    def test_a_wrongful_ejection_is_an_ejected_crewmate_not_a_skip(self) -> None:
+        wrongful, skipped = self._wrongful_grades(
+            reference=[True, False], candidate=[True, False]
+        )[:2]
+        del skipped
+        assert wrongful.privileged.wrongful_ejection is True
+        clean = self._grades([True], [True])[0]
+        assert clean.privileged.wrongful_ejection is False
+        # A meeting that decided nothing is not a wrongful decision.
+        no_ejection = self._grades([False], [False])[0]
+        assert no_ejection.privileged.wrongful_ejection is False
+
+    def test_a_candidate_that_buys_ejections_with_innocents_is_blocked(self) -> None:
+        """PLANTED: the exact trade the preregistration's acceptable-tradeoff
+        field exists to refuse — 12 supported-correct ejections bought while
+        converting 13 reference-arm skips into wrongful crew ejections. p and
+        the minimum actionable effect are both satisfied; the rule is not."""
+
+        gains = self._grades([False] * 12 + [True] * 25, [True] * 12 + [True] * 25)
+        cost = self._wrongful_grades(reference=[False] * 13, candidate=[True] * 13)
+        result = paired_result([*gains, *cost])
+        assert (result.b, result.c, result.net) == (12, 0, 12)
+        assert result.p_exact < 0.05
+        assert (result.reference_wrongful_ejections, result.wrongful_net) == (0, 13)
+        assert result.meets_wrongful_ejection_tradeoff is False
+        assert result.meets_decision_rule is False
+
+    def test_one_for_one_is_paid_for_and_still_advances(self) -> None:
+        """The bound is one-for-one, so 12 extra wrongful ejections against a net
+        of 12 is the boundary and passes; 13 does not."""
+
+        gains = self._grades([False] * 12 + [True] * 25, [True] * 12 + [True] * 25)
+        cost = self._wrongful_grades(reference=[False] * 12, candidate=[True] * 12)
+        result = paired_result([*gains, *cost])
+        assert (result.net, result.wrongful_net) == (12, 12)
         assert result.meets_decision_rule is True
 
     def test_the_minimum_actionable_effects_own_figures_reproduce(self) -> None:
@@ -747,8 +1237,10 @@ class TestPrefixSecrecy:
             "held_out_accepted_seeds",
             "held_out_skipped_seeds",
             "limits",
+            "sampling",
             "primary_outcome",
             "decision_rule",
+            "wrongful_ejection_tradeoff",
             "stop_rule",
             "arms",
             "paired",
@@ -815,6 +1307,7 @@ class TestExecutionManifest:
             "`featherless`",
             "`Qwen/Qwen3.6-27B`",
             "turn 2,048 output / vote 1,024",
+            "turn temperature 0.4 / vote temperature 0.2",
             "2,400,000 input / 200,000 output run-level",
             "45,000 input / 4,000 output per unit",
             "4 h of model work within a 6 h elapsed deadline",
@@ -841,9 +1334,23 @@ class TestExecutionManifest:
     def test_the_manifest_quotes_the_frozen_analysis(self) -> None:
         text = self._text()
         assert PRIMARY_OUTCOME in text
-        assert DECISION_RULE in " ".join(text.split())
+        assert " ".join(DECISION_RULE.split()) in " ".join(text.split())
         assert " ".join(STOP_RULE.split()) in " ".join(text.split())
         assert f"at least {MINIMUM_ACTIONABLE_EFFECT_UNITS} units" in text
+
+    def test_the_manifest_binds_the_acceptable_tradeoff(self) -> None:
+        """The preregistration names 'acceptable tradeoffs' among the fields a
+        manifest must bind, so the wrongful-decision bound is quoted here the
+        same way the decision rule is."""
+
+        text = " ".join(self._text().split())
+        assert " ".join(instrument.WRONGFUL_EJECTION_TRADEOFF.split()) in text
+        assert "acceptable tradeoff" in text.lower()
+
+    def test_the_manifest_binds_the_sampling_temperatures(self) -> None:
+        text = self._text()
+        assert f"turn temperature {AUTHORIZED_SAMPLING.turn_temperature}" in text
+        assert f"vote temperature {AUTHORIZED_SAMPLING.vote_temperature}" in text
 
     def test_the_manifest_states_that_it_authorizes_no_run(self) -> None:
         text = self._text()
@@ -985,6 +1492,62 @@ class TestAuthorizedConstants:
 
         assert instrument.AUTHORIZED_TURN_MAX_TOKENS == DEFAULT_TURN_MAX_TOKENS
         assert instrument.AUTHORIZED_VOTE_MAX_TOKENS == DEFAULT_VOTE_MAX_TOKENS
+        # And the numbers the manifest names, so a moved shipped default breaks
+        # this rather than moving what the owner authorized.
+        assert (DEFAULT_TURN_MAX_TOKENS, DEFAULT_VOTE_MAX_TOKENS) == (2048, 1024)
+
+    def test_the_sampling_temperatures_are_the_shipped_defaults(self) -> None:
+        """The manifest binds the sampling configuration, so the run may not
+        inherit it. The constants are written as numbers and checked against the
+        shipped ones here: a change to `meetings.manager` then turns this red
+        instead of quietly moving a frozen design's draw."""
+
+        from meetings.manager import DEFAULT_TURN_TEMPERATURE, DEFAULT_VOTE_TEMPERATURE
+
+        assert AUTHORIZED_SAMPLING.turn_temperature == DEFAULT_TURN_TEMPERATURE
+        assert AUTHORIZED_SAMPLING.vote_temperature == DEFAULT_VOTE_TEMPERATURE
+        assert (
+            AUTHORIZED_SAMPLING.turn_temperature,
+            AUTHORIZED_SAMPLING.vote_temperature,
+        ) == (0.4, 0.2)
+
+    def test_the_served_meeting_config_carries_the_authorized_sampling(self) -> None:
+        """Passed, not defaulted — and passed with the HEADLESS deadlines, since
+        any explicit config would otherwise opt this run into the interactive
+        30 s per-turn wall."""
+
+        from orchestrator.game import HEADLESS_MEETING_DEADLINES
+
+        config = AUTHORIZED_SAMPLING.meeting_config()
+        assert config.turn_temperature == AUTHORIZED_SAMPLING.turn_temperature
+        assert config.vote_temperature == AUTHORIZED_SAMPLING.vote_temperature
+        assert config.turn_max_tokens == AUTHORIZED_SAMPLING.turn_max_tokens
+        assert config.vote_max_tokens == AUTHORIZED_SAMPLING.vote_max_tokens
+        assert config.deadlines == HEADLESS_MEETING_DEADLINES
+
+    def test_the_report_records_the_sampling_it_drew_at(self, tmp_path: Path) -> None:
+        report = run_instrument(output_dir=tmp_path, units=1)
+        assert report.sampling == AUTHORIZED_SAMPLING
+
+    def test_the_run_serves_the_authorized_meeting_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The wiring, not the value: every unit's runner must be built WITH the
+        authorized configuration, or the meeting layer defaults it and the
+        manifest's binding is decoration."""
+
+        from orchestrator.game import build_default_meeting_runner
+
+        served: list[Any] = []
+        real = build_default_meeting_runner
+
+        def spy(**kwargs: Any) -> Any:
+            served.append(kwargs.get("config"))
+            return real(**kwargs)
+
+        monkeypatch.setattr(instrument, "build_default_meeting_runner", spy)
+        run_instrument(output_dir=tmp_path, units=1)
+        assert served == [AUTHORIZED_SAMPLING.meeting_config()] * 2
 
     def test_the_limits_object_is_the_authorized_numbers(self) -> None:
         assert AUTHORIZED_LIMITS == RunLimits(

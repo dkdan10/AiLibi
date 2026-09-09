@@ -82,6 +82,7 @@ Constraints table, whose reasoning of record is item B of
 | Provider | `featherless` |
 | Model | `Qwen/Qwen3.6-27B` (locked 2026-07-12, Task 16.2). Non-thinking with `enable_thinking=false` pinned on every call, `response_format_mode = json_object`, prompt set `qwen3_6_27b` — all carried from the model lock, not re-decided here |
 | Per-call token cap | turn 2,048 output / vote 1,024, the shipped defaults unchanged. The committed lab rows for this model-and-prompt-set pair ran at `max_tokens=4096` and never exceeded 195 output tokens, so a truncation is a real signal rather than a cap artifact |
+| Sampling temperature | turn temperature 0.4 / vote temperature 0.2 — the shipped values (`meetings/manager.py:211,213`), bound here rather than inherited. The instrument passes an explicit `MeetingConfig` carrying them, records both on every report, and a test asserts they are still the shipped values, so a later edit to those module defaults breaks a test instead of silently moving this frozen design's sampling distribution |
 | Total token budget | 2,400,000 input / 200,000 output run-level, and 45,000 input / 4,000 output per unit. Hard stop. Projection for option A: 600 calls; input `repaired_clock` 3,636/call x 300 + `combined_accounts` 2,441/call x 300 = 1,823,100; output 600 x 220 = 132,000 |
 | Wall-clock deadline | 4 h of model work within a 6 h elapsed deadline. The work window comes from the measured 12-23 s/call band; the 2 h margin covers one recorded 3h21m provider-side HTTP 529 stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
 | Dollar limit | $0.00 marginal, recorded as bookkeeping and not as an enforcement mechanism. The provider's zero pre-flight rate disables the USD dimension, so only the token budget and the deadline can stop a run |
@@ -117,14 +118,25 @@ card:
 
 Every number above is a module constant in
 `experiments/fresh_deduction_instrument.py`
-(`AUTHORIZED_*`, gathered into the frozen `AUTHORIZED_LIMITS`), so the
-instrument enforces the manifest rather than describing it, and
-`tests/experiments/test_fresh_deduction_instrument.py` asserts this document
-quotes each of them.
+(`AUTHORIZED_*`, gathered into the frozen `AUTHORIZED_LIMITS` and
+`AUTHORIZED_SAMPLING`), so the instrument enforces the manifest rather than
+describing it, and `tests/experiments/test_fresh_deduction_instrument.py`
+asserts this document quotes each of them.
 
+- **Provider and model.** The live client is built from the authorized values,
+  not from the shell: `build_authorized_client` pins `AILIBI_LLM_PROVIDER` and
+  both model variables to `featherless` and `Qwen/Qwen3.6-27B` and carries
+  exactly one value over from the ambient environment, the API key.
+  `_InstrumentClient` then refuses a RESPONSE whose `model` is not the
+  authorized one, on the call that returns it, so a hosted endpoint serving a
+  different checkpoint is a stop rather than something noticed in the report
+  afterwards.
 - **Per-call cap.** `_InstrumentClient` refuses a call whose `max_tokens` is not
   one of the two shipped values, and refuses a response whose output reached its
   cap — a truncation is a stop, not a datum.
+- **Sampling.** The two temperatures and the two caps are served through an
+  explicit `MeetingConfig` built from `AUTHORIZED_SAMPLING`, and a live run whose
+  sampling configuration is not that one is refused before any client is built.
 - **Token budget.** One `llm.budget.GameBudget` per unit with a run-level parent,
   so every charge reaches both ceilings. After each unit the RECORDED per-call
   spend on the replay row is reconciled against the enforced budget snapshot, and
@@ -139,7 +151,11 @@ quotes each of them.
 - **On any of these, the run stops** and raises with a partial-state record: the
   units completed out of those planned, per-arm calls and tokens including the
   stopped unit's spent-but-unusable calls, elapsed wall and model work. No retry
-  and no widening is authorized by a stop.
+  and no widening is authorized by a stop. Every stop records the response that
+  caused it BEFORE raising — a truncated or foreign-model response was still
+  spent — and every way a unit can fail is one of these stops, including a
+  provider transport failure and a mid-run legacy body handle, so a missing
+  attempt reports its partial state rather than escaping as a bare exception.
 
 ## The live gate: what actually authorizes a call
 
@@ -155,12 +171,26 @@ invocation that names this file:
 ```
 
 `assert_live_run_is_authorized` refuses every provider except `fake` without a
-`LiveRunInvocation`, refuses an invocation naming any other path, refuses one
-whose manifest does not name the authorized provider, model and prompt set, and
-refuses limits that are not `AUTHORIZED_LIMITS`. `run_dry` refuses a
+`LiveRunInvocation`. Given one, it takes nothing on that object's word: it
+re-resolves this file's own path under the repository root and requires the
+invocation to name exactly it, re-hashes the file on disk and requires the
+invocation's `manifest_sha256` to equal that digest, and requires the
+invocation's model to be `Qwen/Qwen3.6-27B` — so a same-named file elsewhere on
+disk, and a hand-built invocation carrying a path, digest or model of its own,
+authorize nothing. It also refuses limits that are not `AUTHORIZED_LIMITS`, a
+sampling configuration that is not `AUTHORIZED_SAMPLING`, and any `--units`
+override: a live run is the whole frozen set, and a subset is the pilot this
+manifest does not authorize. `LiveRunInvocation.naming` applies the same path
+check when the invocation is built, and additionally refuses a manifest that does
+not name the authorized provider, model and prompt set. `run_dry` refuses a
 `LiveRunInvocation` outright, so the mechanics check cannot become the run. No
 committed test, CI workflow or script passes `--i-am-the-runner`, and a test
 scans the tree to keep it that way.
+
+The gate runs BEFORE the client is constructed, and the client that is then
+constructed is `build_authorized_client`'s, not `build_default_client`'s: an
+invocation labelled `featherless` cannot reach whatever provider and model the
+shell's `AILIBI_LLM_PROVIDER` / `AILIBI_LLM_MEETING_MODEL` happen to name.
 
 ## Evidence privileges and grading
 
@@ -199,6 +229,7 @@ Per unit, with counts beside every rate:
 | Decision coverage | Units run / units planned (100). A stopped unit is reported, never dropped |
 | Ejections | Per resolved meeting, per arm |
 | Role-correct ejections | Per resolved meeting and conditional on an ejection, per arm |
+| Wrongful ejections | Per resolved meeting, per arm: an ejection that landed on a crewmate. A skipped meeting is not wrongful. This is the count the acceptable-tradeoff bound below is computed on |
 | Supported / unsupported / uncited ballots | Per ballot, per arm, with guard-rewritten ballots counted separately |
 | Terminal vs partial units | A unit whose meeting ended the game is terminal; one that stopped at the tick after the report is deliberately partial. Neither is a game-win trial |
 | Provider cost | Calls, input and output tokens, `cost_usd` and model-work seconds, per arm and per run, against the limits above |
@@ -206,10 +237,10 @@ Per unit, with counts beside every rate:
 The unit of analysis is the paired seed, not the ballot: three voters in one
 meeting are correlated, so the paired difference is taken per seed.
 
-## Decision rule, minimum actionable effect and stop rule
+## Decision rule, minimum actionable effect, acceptable tradeoffs and stop rule
 
 Frozen here and in code (`PRIMARY_OUTCOME`, `DECISION_RULE`,
-`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `STOP_RULE` in
+`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF`, `STOP_RULE` in
 `experiments/fresh_deduction_instrument.py`) before any held-out outcome exists.
 
 **Primary outcome — `supported_correct_ejection`.** A unit scores 1 when its
@@ -223,12 +254,17 @@ pairs, `scripts/paired_stats.py::exact_mcnemar_p`, on 50 paired units.
 
 **Decision rule.** Quoted verbatim from `DECISION_RULE`:
 
-combined_accounts advances to an explicitly scoped adopting review only if BOTH
-hold on the 50 paired units: the two-sided exact McNemar p over the discordant
-pairs (scripts/paired_stats.py::exact_mcnemar_p) is below 0.05, AND the net
-paired difference b - c is at least 10 units. Any other result is inconclusive,
-and inconclusive is not success. A result in either direction is a measurement,
-never an adoption: adoption stays a separate owner decision on a separate card.
+combined_accounts advances to an explicitly scoped adopting review only if ALL
+THREE hold on the 50 paired units: the two-sided exact McNemar p over the
+discordant pairs (scripts/paired_stats.py::exact_mcnemar_p) is below 0.05; the
+net paired difference b - c is at least 10 units; and the candidate's net
+increase in wrongful crew ejections over the reference arm is no larger than
+that net paired difference. Any other result is inconclusive, and inconclusive
+is not success. A result in either direction is a measurement, never an
+adoption: adoption stays a separate owner decision on a separate card.
+
+`PairedResult.meets_decision_rule` is the conjunction of the three, computed
+beside the test rather than left to a reader.
 
 **Minimum actionable effect — 10 of 50.** Chosen for the resolution of this
 design, not for a headline. The smallest net difference the exact test can call
@@ -245,6 +281,33 @@ from paired_stats import exact_mcnemar_p as p; \
 print([(b, c, round(p(b, c), 6)) for b, c in \
 [(5, 0), (6, 0), (15, 5), (16, 6)]])"
 ```
+
+**Acceptable tradeoffs — the wrongful-decision bound.** The preregistration
+(`:116-118`, `:236-239`) requires the manifest to bind the acceptable tradeoffs
+and names the wrongful decision among them. Quoted verbatim from
+`WRONGFUL_EJECTION_TRADEOFF`:
+
+A wrongful ejection is a unit whose meeting ejected a player whose hidden role
+is CREWMATE. The candidate may not buy its supported-correct ejections by
+ejecting more innocents: its net increase in wrongful ejections over the
+reference arm, on the same 50 paired units, must be no larger than its net
+paired gain b - c on the primary outcome. One extra wrongful ejection has to be
+paid for by at least one extra supported-correct ejection. The bound is
+one-for-one because the failure it guards against is a candidate that merely
+raises the ejection RATE: converting reference-arm skips into ejections lifts
+both counts together, and a candidate whose wrongful count rises at least as
+fast as its supported-correct count has moved the meeting's willingness to eject
+rather than its deduction. No ratio below one is asserted, because this design
+resolves 50 paired units and a finer bound would be a number the sample cannot
+carry.
+
+The other tradeoffs the preregistration names are structural here rather than
+numeric, and are bound by the design above: direct-evidence use is excluded by
+construction (the held-out prefixes are proof-free, and the `- [x]` freeze
+asserts no living crewmate holds a firsthand kill or vent observation), the
+tactical layer is identical on both arms (the same public policies drive the same
+frozen schedule), and the cost tradeoff is the $0.00 marginal statement with the
+token and wall limits above.
 
 **Stop rule.** Quoted verbatim from `STOP_RULE`:
 
@@ -297,8 +360,9 @@ The offline mechanics check, at commit `5682ea2a` plus this branch's changes:
 
 100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in a few
 seconds of wall. Both arms carried a non-SKIP decision to a graded outcome: 50 ejections
-each, 19 role-correct, 18 supported-correct, 150 supported ballots and 6
-guard-rewritten ones per arm. Input tokens by the fake provider's `len // 4`
+each, 19 role-correct, 31 wrongful, 18 supported-correct, 150 supported ballots and 6
+guard-rewritten ones per arm. The report carries the sampling configuration it
+drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps 2,048 / 1,024). Input tokens by the fake provider's `len // 4`
 heuristic were 886,054 (`repaired_clock`) and 575,251 (`combined_accounts`);
 applying the decision memo's calibrated 1.28x real-input ratio to their sum gives
 about 1.87 M against the 2.4 M ceiling, and the larger arm's 17,721 per unit
