@@ -85,8 +85,11 @@ The meeting matrix on the same final runtime still has 42 strictly reconstructed
 runs, 144 voluntary SKIP ballots, 289 scripted calls, no ejections and no changed
 trajectories. The independent reply arm adds exactly one answer and one call.
 It retains direct kill/vent controls, actual no-direct-proof cases, common account
-vocabulary and attributed public testimony. Its earlier checkpoint remains a
-separately preserved historical record.
+vocabulary and attributed public testimony. Attributed public testimony replaces
+the grounded vent certificate by design, so shared role-proof flags fall to zero
+on the attributed arms, as recorded at
+`audits/deduction-candidate/gameplay-review.md:68` and explained at `:153-157`.
+Its earlier checkpoint remains a separately preserved historical record.
 
 ## Verification
 

@@ -32,6 +32,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
+from typing import get_args
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -75,6 +76,7 @@ from meetings.manager import (
     OPENING_UNSURE_DEGRADE_MARKER,
     OPENING_UNSURE_MARKER,
     OPENING_UNSURE_MAX_FREE_TEXT_CHARS,
+    TEAMMATE_GUARDED_OBSERVATION_KINDS,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -100,6 +102,7 @@ from meetings.manager import (
     derive_belief_evidence,
     drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
+    exclude_teammate_role_proving_observations,
     extract_belief_evidence,
     guard_ballot_citation,
     guard_ballot_target_graph,
@@ -109,6 +112,7 @@ from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
     Claim,
+    CompletedTaskObservation,
     ContradictionRef,
     CorroborationClaim,
     FoundBodyObservation,
@@ -118,12 +122,16 @@ from meetings.schemas import (
     ModelAuthoredVoteBallot,
     ObservationClaim,
     PlayerId,
+    SawKillObservation,
+    SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
+    TaskActivityAccount,
     TurnAnnotation,
     VentWitnessRecord,
     VoteBallot,
+    WhereaboutsClaim,
 )
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
@@ -6992,6 +7000,160 @@ class TestVentObservabilityEndToEnd:
             isinstance(observation, SawVentObservation)
             for observation in result.transcript.turns[0].observations
         )
+
+
+def _teammate_naming_observations() -> dict[str, ObservationClaim]:
+    """One instance of every structured shape, naming teammate ``p-3``.
+
+    The two shapes with no subject field (a self-placement and a task
+    account) and the body report name p-3 in the only field they have, so
+    each row is the strongest teammate-naming form that shape can take.
+    """
+
+    return {
+        "saw_player": SawPlayerObservation(
+            type="saw_player", tick=4, subject="p-3", room="MEDBAY"
+        ),
+        "saw_move": SawMoveObservation(
+            type="saw_move",
+            tick=4,
+            subject="p-3",
+            from_room="MEDBAY",
+            to_room="ADMIN",
+        ),
+        "saw_vent": SawVentObservation(
+            type="saw_vent", tick=4, subject="p-3", room="MEDBAY"
+        ),
+        "saw_kill": SawKillObservation(
+            type="saw_kill", tick=4, subject="p-3", room="MEDBAY"
+        ),
+        "found_body": FoundBodyObservation(
+            type="found_body", tick=4, body_of="p-3", room="MEDBAY"
+        ),
+        "whereabouts": WhereaboutsClaim(type="whereabouts", tick=4, room="MEDBAY"),
+        "completed_task": CompletedTaskObservation(
+            type="completed_task", tick=4, task_id="fuel_reserves", room="STORAGE"
+        ),
+        "task_activity": TaskActivityAccount(
+            type="task_activity",
+            task_id="fuel_reserves",
+            room="STORAGE",
+            from_tick=3,
+            to_tick=4,
+        ),
+    }
+
+
+class TestTeammateObservationFirewall:
+    """The 7.12 observation-side firewall over the whole account menu.
+
+    The public-account menu elicits a structured observation from impostors
+    too, so the guard's coverage is a property of the shape union rather
+    than of the one shape that motivated it: every member of
+    ``ObservationClaim`` carries a stated decision on each path, and the
+    role-proving ones — a witnessed vent always, a witnessed kill where the
+    account channel elicits it — drop when they name a fellow impostor.
+    """
+
+    @pytest.mark.parametrize("accounts_enabled", [False, True])
+    def test_the_guard_decides_every_shape_the_union_can_carry(
+        self, accounts_enabled: bool
+    ) -> None:
+        # The declaration and the code are checked against each other on BOTH
+        # paths, so neither a shape that drops only with the channel on nor one
+        # that drops on every path can be mis-stated in either direction.
+        union_kinds = {
+            get_args(member.model_fields["type"].annotation)[0]
+            for member in get_args(get_args(ObservationClaim)[0])
+        }
+        planted = _teammate_naming_observations()
+        assert set(planted) == union_kinds == set(TEAMMATE_GUARDED_OBSERVATION_KINDS)
+        for kind, observation in planted.items():
+            kept = exclude_teammate_role_proving_observations(
+                (observation,),
+                fellow_impostor_ids=("p-3",),
+                accounts_enabled=accounts_enabled,
+            )
+            scope = TEAMMATE_GUARDED_OBSERVATION_KINDS[kind]
+            dropped = scope == "always" or (scope == "accounts" and accounts_enabled)
+            assert (kept == ()) is dropped, (kind, scope, accounts_enabled)
+
+    def test_a_role_proving_shape_naming_a_stranger_still_records(self) -> None:
+        planted = _teammate_naming_observations()
+        role_proving = tuple(
+            planted[kind]
+            for kind, scope in TEAMMATE_GUARDED_OBSERVATION_KINDS.items()
+            if scope != "never"
+        )
+        assert (
+            exclude_teammate_role_proving_observations(
+                role_proving, fellow_impostor_ids=("p-5",), accounts_enabled=True
+            )
+            == role_proving
+        )
+
+    def test_the_default_path_keeps_the_vent_guard_and_only_the_vent_guard(
+        self,
+    ) -> None:
+        # The card changes no default-path byte: with both account levers OFF
+        # (``_make_manager`` builds exactly that manager), a multi-impostor
+        # turn still drops a teammate vent — the 15.4 guard, global — and still
+        # RECORDS a teammate kill, exactly as it did before the account channel
+        # existed. Widening the default path is a separate decision with its
+        # own record; the accounts-arm drop is proved end to end by
+        # ``tests/meetings/test_public_accounts.py::
+        # test_an_impostor_menu_answer_naming_its_teammate_never_records``.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-3": None},
+            observations={
+                "p-1": (
+                    SawKillObservation(
+                        type="saw_kill", tick=100, subject="p-3", room="MEDBAY"
+                    ),
+                    SawVentObservation(
+                        type="saw_vent", tick=100, subject="p-3", room="MEDBAY"
+                    ),
+                )
+            },
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant("p-1", role="IMPOSTOR", fellow_impostor_ids=("p-3",)),
+                _participant("p-2"),
+                _participant("p-3", role="IMPOSTOR", fellow_impostor_ids=("p-1",)),
+                _participant("p-4"),
+            ),
+        )
+
+        (recorded,) = result.transcript.turns[0].observations
+        assert isinstance(recorded, SawKillObservation) and recorded.subject == "p-3"
+
+    def test_the_same_kill_observation_of_a_crewmate_records(self) -> None:
+        # The control: only the teammate-naming row is filtered, so the guard
+        # cannot be satisfied by dropping kill sightings wholesale.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-3": None},
+            observations={
+                "p-1": (
+                    SawKillObservation(
+                        type="saw_kill", tick=100, subject="p-2", room="MEDBAY"
+                    ),
+                )
+            },
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant("p-1", role="IMPOSTOR", fellow_impostor_ids=("p-3",)),
+                _participant("p-2"),
+                _participant("p-3", role="IMPOSTOR", fellow_impostor_ids=("p-1",)),
+                _participant("p-4"),
+            ),
+        )
+
+        (recorded,) = result.transcript.turns[0].observations
+        assert isinstance(recorded, SawKillObservation) and recorded.subject == "p-2"
 
 
 class TestVentSceneOptInEligibility:

@@ -1,13 +1,28 @@
+{#- Speaker-authored bytes reach this block, so free text is fenced the way the
+    baseline accusation_round.j2 / vote_ballot.j2 fence theirs: the whole
+    transcript sits inside <transcript> delimiters and each spoken line is
+    quoted with every line boundary flattened, so no speaker can start a line
+    at column 0 and open a section this template's own structure owns (the
+    "## Account comparisons" heading below). The structured rows carry speaker
+    free text too (an accusation's or a corroboration's reason), and
+    model_dump_json escapes only the boundaries below \x1f -- NEL (U+0085),
+    LINE SEPARATOR (U+2028) and PARAGRAPH SEPARATOR (U+2029) pass through it
+    intact -- so each serialized row is flattened by the same filter. The ids
+    inside those rows are separately checked against the roster, room and task
+    ids by meetings.public_accounts.validate_public_accounts before the turn
+    records. -#}
 ## What players said
+<transcript>
 {% for turn in transcript.turns %}
-[{{ turn.turn_id }}] {{ turn.speaker }} said: {{ turn.free_text }}
+[{{ turn.turn_id }}] {{ turn.speaker }} said: "{{ turn.free_text | flatten_lines | replace('"', "'") }}"
 {% for obs in turn.observations %}
-- [turn:{{ turn.turn_id }}:{% if obs.type == "whereabouts" %}whereabouts{% else %}obs{% endif %}:{{ loop.index0 }}] {{ turn.speaker }} stated {{ obs.model_dump_json() }}
+- [turn:{{ turn.turn_id }}:{% if obs.type == "whereabouts" %}whereabouts{% else %}obs{% endif %}:{{ loop.index0 }}] {{ turn.speaker }} stated {{ obs.model_dump_json() | flatten_lines }}
 {% endfor %}
 {% for claim in turn.claims %}
-- [turn:{{ turn.turn_id }}:claim:{{ loop.index0 }}] {{ turn.speaker }} stated {{ claim.model_dump_json() }}
+- [turn:{{ turn.turn_id }}:claim:{{ loop.index0 }}] {{ turn.speaker }} stated {{ claim.model_dump_json() | flatten_lines }}
 {% endfor %}
 {% endfor %}
+</transcript>
 ## Account comparisons
 {% for flag in account_flags %}
 - {{ flag.description }}

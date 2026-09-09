@@ -18,6 +18,10 @@ its own observation; listeners receive attributed testimony without its private
 reference. The honest and impossible route accounts differ conditionally, while
 a missed observation leaves uncertainty. The bounded additional reply answers a
 late charge with actual route context. Direct kill and vent controls stay separate.
+Attributed mode buys that at a deliberate price: it replaces the grounded vent
+certificate with speaker-attributed accounts, so shared role-proof flags fall to
+zero on every attributed arm, as the [gameplay review](gameplay-review.md)
+records at `gameplay-review.md:68` and explains at `:153-157`.
 
 The command below ran seven cases across six independently selected profiles:
 

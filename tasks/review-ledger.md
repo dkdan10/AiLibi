@@ -315,3 +315,43 @@ independently verified on the branch. `audits/deduction-candidate/held-out/manif
 is the frozen record: fifty accepted seeds (3000 to 3057), eight skips, no
 prefix bytes. Any later change to a hashed source follows the restamp rule in
 `tasks/post-merge-plan.md`.
+
+## Review disposition pass (2026-09-08)
+
+Every finding id in the two 2026-09-06 appendices now has exactly one stated
+disposition — as do the three ids the first review withdrew in its own section 9
+without ever filing them in an appendix (`P1-2`, `C7b-9`, `G4-9`) — and each of
+the first review's seven workflow recommendations has an adopt-or-decline with a
+reason. The first review's ids are dispositioned in
+[the cleanup disposition ledger](../docs/cleanup-dispositions.md); the follow-up's
+own ids are in
+[the follow-up correction record](../audits/review-2026-09-06/followup-correction-record.md),
+which also carries three reproduced spot checks. Both are additive: the two
+reports, the two appendices and the pre-merge correction record are unchanged.
+
+The commits those dispositions name, all reachable from `main`, are the
+finding-to-commit index for this pass. Thirteen commits carry it, in three
+groups. Five are already listed by finding in the "Follow-up correction
+checkpoint (2026-09-07)" section above — `14249a79` (NC4-1), `29b7bb4a` (FU-2),
+`46e74f6d` (FU-B-01), `24a0fe6a` (FU-D2) and `ad0f9b5a` (CONC-1) — and are
+repeated below with the further ids this pass attributes to them. Four more are
+already named in this register but without a finding id: `241a5ca9`, `e12b6180`,
+the merge `8161689a` and #436's `081aee15`. The remaining four — `cb3438ef`,
+`b79fc1b7`, `700c0671` and `8dd0576c` — enter this register here. In full:
+`cb3438ef` (C2-1, C2-4, C7b-2, GC-2,
+M1-F1, C3-03), `b79fc1b7` (G5-1, GM-1, C2-6, CARD-01, C7a-2, GAP-FE-2, C5-7),
+`700c0671` (G6-2, GAP-FE-1, G6-1, GAP-FE-3, P1-1, C5-1), `8dd0576c` (C6-1, C6-3,
+M6-02), `e12b6180` (C1-01, G5-2, C4-2, TGE-1, TGE-2, G4-4, C7c-4, GL-3, C4-4,
+C4-5), `14249a79` (NC4-1, FU-01, NC5-04), `29b7bb4a` (FU-2, NC4-5), `46e74f6d`
+(FU-B-01, M2-F1), `24a0fe6a` (FU-D2, FU-APPX-5, NC4-4), `ad0f9b5a` (CONC-1),
+`241a5ca9`
+(P-02, FU-3), the merge `8161689a` (M5-02, and the published-source-pin filing of
+CARD-02, by reachability of that pin; CARD-02's second filing, the stale
+validation output in `work/temporal-observation-contract.md`, is retained rather
+than repaired) and #436's `081aee15` (P2-6, C7a-6, P2-1, NC5-10). This is
+a finding-to-commit index, not a second per-commit register: the per-commit rows
+the follow-up's `P-10` asks for stay with
+[the nonblocking card](work/nonblocking-followup-improvements.md).
+
+No row above advances a delivery state, no candidate is adopted, and no live
+provider was called.

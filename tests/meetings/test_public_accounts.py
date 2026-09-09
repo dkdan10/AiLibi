@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -17,6 +18,7 @@ from agents.memory.store import (
     absorb_reported_testimony,
 )
 from agents.perception import ingest_event_observations
+from api.schemas import classify_evidence
 from engine.world import load_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.evidence_profile import MeetingEvidenceProfile
@@ -37,16 +39,25 @@ from meetings.public_accounts import (
 from meetings.schemas import (
     MeetingResult,
     AccusationClaim,
+    AlibiClaim,
+    ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
     ObservationClaim,
+    SawKillObservation,
+    SawMoveObservation,
+    SawPlayerObservation,
     SawVentObservation,
     TaskActivityAccount,
     VentWitnessRecord,
     VoteBallot,
     WhereaboutsClaim,
 )
-from meetings.transcript import detect_contradictions
+from meetings.transcript import (
+    contradiction_lift_key,
+    detect_contradictions,
+    is_weak_contradiction,
+)
 from observation.public_map import PublicMapView
 from observation.packet import EventObservationBatch, PlayerView
 from orchestrator.boundary import public_map_from_engine_map
@@ -54,6 +65,26 @@ from orchestrator.boundary import public_map_from_engine_map
 
 def _map() -> PublicMapView:
     return public_map_from_engine_map(load_map(Path("engine/maps/canonical_1.yaml")))
+
+
+def _reader_event_id_pattern() -> re.Pattern[str]:
+    """The endpoint vocabulary, read from the one file that declares it.
+
+    ``frontend/src/lib/contradictions.ts`` calls itself the ONE place the
+    segment list is written down, and ``MeetingView`` builds its turn parser
+    from that list. Reading the declaration rather than copying it means a
+    segment taught to the reader reaches this guard too — and a flag endpoint
+    the reader could not resolve fails here.
+    """
+
+    source = Path("frontend/src/lib/contradictions.ts").read_text(encoding="utf-8")
+    declaration = re.search(
+        r"OBSERVATION_EVENT_SEGMENTS = \[(.*?)\] as const", source, re.DOTALL
+    )
+    assert declaration is not None, "the frontend segment declaration moved"
+    segments = re.findall(r'"([a-z_]+)"', declaration.group(1))
+    assert segments, "the frontend segment declaration is empty"
+    return re.compile(rf"^turn:(.+):(?:{'|'.join(segments)}):\d+$")
 
 
 def _turn(speaker: str, observations: tuple[ObservationClaim, ...]) -> MeetingTurn:
@@ -123,6 +154,7 @@ async def _meeting(
     accuse: bool = False,
     fail_reply: str | None = None,
     expected_defaults: int = 0,
+    teammate_kill: bool = False,
 ) -> tuple[MeetingResult, AccountClient]:
     client = AccountClient(
         {
@@ -139,6 +171,18 @@ async def _meeting(
         }
     )
     client.fail_reply = fail_reply
+    if teammate_kill:
+        # p-3 answers the account menu with the kill sighting it offers and
+        # names its own teammate p-2.
+        client.turns["p-3"] = client.turns["p-3"].model_copy(
+            update={
+                "observations": (
+                    SawKillObservation(
+                        type="saw_kill", tick=4, subject="p-2", room="LABS"
+                    ),
+                )
+            }
+        )
     if accuse:
         client.turns["p-3"] = client.turns["p-3"].model_copy(
             update={
@@ -190,9 +234,17 @@ async def _meeting(
             if grounded
             else (),
         ),
-        MeetingParticipant(agent_id="p-2", role="CREWMATE", rendered_memory=own_memory),
         MeetingParticipant(
-            agent_id="p-3", role="IMPOSTOR", rendered_memory="Own private cover."
+            agent_id="p-2",
+            role="IMPOSTOR" if teammate_kill else "CREWMATE",
+            rendered_memory=own_memory,
+            fellow_impostor_ids=("p-3",) if teammate_kill else (),
+        ),
+        MeetingParticipant(
+            agent_id="p-3",
+            role="IMPOSTOR",
+            rendered_memory="Own private cover.",
+            fellow_impostor_ids=("p-2",) if teammate_kill else (),
         ),
     )
     result = await manager.run(
@@ -539,3 +591,394 @@ def test_turn_validation_gate_rejects_a_missing_chokepoint(
     )
     with pytest.raises(AssertionError):
         _assert_future_account_refused()
+
+
+def _flags(*turns: MeetingTurn, roster: frozenset[str]) -> tuple[ContradictionRef, ...]:
+    return detect_public_account_conflicts(
+        MeetingTranscript(turns=turns),
+        roster=roster,
+        room_neighbors=_map().room_neighbors,
+    )
+
+
+def _claim_turn(speaker: str, claims: tuple[AlibiClaim, ...]) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=speaker,
+        turn_index=0,
+        speaker=speaker,
+        turn_kind="opening",
+        reply_to=None,
+        claims=claims,
+        free_text="unsure",
+    )
+
+
+def _alibi(subject: str, room: str, tick: int) -> AlibiClaim:
+    return AlibiClaim(
+        type="alibi", subject=subject, room=room, from_tick=tick, to_tick=tick
+    )
+
+
+def test_one_speaker_alone_impeaches_itself_not_the_player_it_named() -> None:
+    # The adverse case: p-2 alone states two mutually distant placements of
+    # innocent p-5. Two sentences from one mouth are one account, so the flag
+    # names p-2 and the description says whose account it impeaches. Before
+    # this rule the identical transcript minted a flag whose subjects tuple
+    # named p-5 alone, and that subject is what the belief fold contradicts.
+    (flag,) = _flags(
+        _claim_turn("p-2", (_alibi("p-5", "REACTOR", 2), _alibi("p-5", "LABS", 3))),
+        roster=frozenset({"p-2", "p-5"}),
+    )
+    assert flag.subjects == ("p-2",)
+    assert "come from p-2 alone" in flag.description
+    assert "rather than p-5" in flag.description
+    assert flag.evidence_band == "weak"
+
+
+def test_two_speakers_who_disagree_still_name_the_player_they_disagree_about() -> None:
+    # The control that keeps the repair from silencing the channel: the same
+    # two placements from DIFFERENT speakers are a genuine disagreement about
+    # p-5, so the flag still names p-5 and carries no re-target sentence.
+    (flag,) = _flags(
+        _claim_turn("p-2", (_alibi("p-5", "REACTOR", 2),)),
+        _claim_turn("p-4", (_alibi("p-5", "LABS", 3),)),
+        roster=frozenset({"p-2", "p-4", "p-5"}),
+    )
+    assert flag.subjects == ("p-5",)
+    assert "alone" not in flag.description
+
+
+def test_a_speaker_who_contradicts_their_own_placements_stays_the_subject() -> None:
+    # A single speaker's self-placements are already about that speaker, so
+    # the re-target rule leaves them exactly as they were.
+    (flag,) = _flags(
+        _turn(
+            "p-1",
+            (
+                WhereaboutsClaim(type="whereabouts", room="REACTOR", tick=5),
+                WhereaboutsClaim(type="whereabouts", room="LABS", tick=5),
+            ),
+        ),
+        roster=frozenset({"p-1"}),
+    )
+    assert flag.subjects == ("p-1",)
+    assert "alone" not in flag.description
+
+
+def test_the_cheapest_lie_now_places_the_speaker_who_told_it() -> None:
+    # NG3-5's adverse case: an alibi in one room plus a fabricated sighting
+    # across the map. Watching an event says where the watcher was, so the
+    # pair is p-2's own impossible route and the flag names p-2. Before the
+    # speaker placement the identical turn raised nothing at all.
+    (flag,) = _flags(
+        _turn(
+            "p-2",
+            (
+                WhereaboutsClaim(type="whereabouts", room="REACTOR", tick=5),
+                SawPlayerObservation(
+                    type="saw_player", tick=5, subject="p-1", room="LABS"
+                ),
+            ),
+        ),
+        roster=frozenset({"p-1", "p-2"}),
+    )
+    assert flag.subjects == ("p-2",)
+    assert "p-2's own sighting places p-2 in LABS" in flag.description
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        SawVentObservation(type="saw_vent", tick=5, subject="p-1", room="LABS"),
+        SawKillObservation(type="saw_kill", tick=5, subject="p-1", room="LABS"),
+        SawMoveObservation(
+            type="saw_move", tick=5, subject="p-1", from_room="LABS", to_room="MEDBAY"
+        ),
+    ],
+)
+def test_every_sighting_shape_places_the_speaker(
+    observation: ObservationClaim,
+) -> None:
+    # A witnessed transition is stated from its origin room; the destination
+    # is one hop away, which the vision slack already covers.
+    (flag,) = _flags(
+        _turn(
+            "p-2",
+            (WhereaboutsClaim(type="whereabouts", room="REACTOR", tick=5), observation),
+        ),
+        roster=frozenset({"p-1", "p-2"}),
+    )
+    assert flag.subjects == ("p-2",)
+
+
+@pytest.mark.parametrize(
+    "sighting_room,sighting_tick",
+    [
+        # Adjacent to the stated room at the same tick: the plainest legal
+        # sighting an impostor's one-hop vision allows (DESIGN.md §3.4).
+        ("WEST_HALL", 5),
+        # Three rooms away one tick later: legal only because the comparison
+        # grants BOTH the within-tick step it already granted every pair and
+        # the hop a claimed sighting is inferred across. Removing the vision
+        # hop turns this pair into a flag against an account nothing in the
+        # public record excludes.
+        ("LABS", 6),
+    ],
+)
+def test_a_sighting_within_the_granted_slack_is_never_called_impossible(
+    sighting_room: str, sighting_tick: int
+) -> None:
+    assert (
+        _flags(
+            _turn(
+                "p-2",
+                (
+                    WhereaboutsClaim(type="whereabouts", room="ADMIN", tick=5),
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=sighting_tick,
+                        subject="p-1",
+                        room=sighting_room,
+                    ),
+                ),
+            ),
+            roster=frozenset({"p-1", "p-2"}),
+        )
+        == ()
+    )
+
+
+def test_a_named_bystander_is_placed_by_the_sighting_that_named_them() -> None:
+    # NG2-2's second half: co_present was validated but never compared, so a
+    # bystander could deny a co-presence nobody could check. p-2 places p-3
+    # alongside the sighting in ADMIN; p-3 says LABS, three rooms away.
+    (flag,) = _flags(
+        _turn(
+            "p-2",
+            (
+                SawPlayerObservation(
+                    type="saw_player",
+                    tick=5,
+                    subject="p-4",
+                    room="ADMIN",
+                    co_present=("p-3",),
+                ),
+            ),
+        ),
+        MeetingTurn(
+            turn_id="p-3",
+            turn_index=1,
+            speaker="p-3",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(WhereaboutsClaim(type="whereabouts", room="LABS", tick=5),),
+            free_text="unsure",
+        ),
+        roster=frozenset({"p-2", "p-3", "p-4"}),
+    )
+    assert flag.subjects == ("p-3",)
+    assert "p-2 places p-3 alongside that sighting in ADMIN" in flag.description
+
+
+def test_a_speaker_named_among_its_own_bystanders_impeaches_nobody() -> None:
+    # Review round 1: `co_present` is checked against the roster only, so a
+    # speaker may name ITSELF. Its own sighting already places it -- with the
+    # vision hop -- so the self-mention must add nothing. CAFETERIA is exactly
+    # the same-tick sighting two rooms from ADMIN that the comparison promises
+    # never to call impossible; before the skip, the identical turn minted a
+    # flag against p-2 out of p-2's own two sentences, because the duplicate
+    # co-present row carried no vision slack.
+    speaker_named_itself = _turn(
+        "p-2",
+        (
+            WhereaboutsClaim(type="whereabouts", room="ADMIN", tick=5),
+            SawPlayerObservation(
+                type="saw_player",
+                tick=5,
+                subject="p-1",
+                room="CAFETERIA",
+                co_present=("p-2",),
+            ),
+        ),
+    )
+    assert _flags(speaker_named_itself, roster=frozenset({"p-1", "p-2"})) == ()
+
+    # The control: the skip is surgical. The same turn additionally naming
+    # p-3, who places itself three rooms away, still flags that disagreement
+    # and still names p-3.
+    (flag,) = _flags(
+        speaker_named_itself.model_copy(
+            update={
+                "observations": (
+                    speaker_named_itself.observations[0],
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=5,
+                        subject="p-1",
+                        room="CAFETERIA",
+                        co_present=("p-2", "p-3"),
+                    ),
+                )
+            }
+        ),
+        MeetingTurn(
+            turn_id="p-3",
+            turn_index=1,
+            speaker="p-3",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(WhereaboutsClaim(type="whereabouts", room="LABS", tick=5),),
+            free_text="unsure",
+        ),
+        roster=frozenset({"p-1", "p-2", "p-3"}),
+    )
+    assert flag.subjects == ("p-3",)
+    assert "p-2 places p-3 alongside that sighting in CAFETERIA" in flag.description
+
+
+def test_every_re_target_against_one_speaker_folds_to_one_belief_lift() -> None:
+    # Task 10.10's rule, applied to this channel: three mutually distant
+    # placements of p-5 from one mouth are three flags, but the belief fold
+    # must charge p-2 ONCE -- `contradiction_lift_key` returns its constant
+    # proxy key for every flag carrying WEAK_REASON_PROXY_INTRA_TURN. Without
+    # the marker each claim pair keys on its own event ids and one narrator's
+    # inconsistent account stacks three weak deltas against itself.
+    flags = _flags(
+        _claim_turn(
+            "p-2",
+            (
+                _alibi("p-5", "REACTOR", 2),
+                _alibi("p-5", "ADMIN", 3),
+                _alibi("p-5", "LABS", 4),
+            ),
+        ),
+        roster=frozenset({"p-2", "p-5"}),
+    )
+    assert len(flags) == 3
+    assert {flag.subjects for flag in flags} == {("p-2",)}
+    assert len({contradiction_lift_key(flag) for flag in flags}) == 1
+
+    # Non-vacuity: a genuine two-speaker disagreement is NOT folded into that
+    # key, so the constant cannot be collapsing the whole channel.
+    (cross_speaker,) = _flags(
+        _claim_turn("p-2", (_alibi("p-5", "REACTOR", 2),)),
+        _claim_turn("p-4", (_alibi("p-5", "LABS", 3),)),
+        roster=frozenset({"p-2", "p-4", "p-5"}),
+    )
+    assert contradiction_lift_key(cross_speaker) not in {
+        contradiction_lift_key(flag) for flag in flags
+    }
+
+
+def test_a_derived_row_flags_through_an_artifact_id_a_reader_resolves() -> None:
+    # `frontend/src/lib/contradictions.ts` declares the whole endpoint
+    # vocabulary (`claim`, `obs`, `whereabouts`) and `MeetingView` builds its
+    # parser from that declaration, so a flag whose endpoint carried a
+    # derivation suffix would attach to no turn artifact. The derivation lives
+    # in the id the contradiction_id hashes instead -- which is what keeps the
+    # three flags this turn produces from collapsing onto one id.
+    flags = _flags(
+        _turn(
+            "p-2",
+            (
+                SawPlayerObservation(
+                    type="saw_player",
+                    tick=5,
+                    subject="p-1",
+                    room="ADMIN",
+                    co_present=("p-3",),
+                ),
+                SawPlayerObservation(
+                    type="saw_player",
+                    tick=5,
+                    subject="p-1",
+                    room="LABS",
+                    co_present=("p-3",),
+                ),
+            ),
+        ),
+        roster=frozenset({"p-1", "p-2", "p-3"}),
+    )
+    # Two derived pairs off ONE pair of artifacts: p-1's two stated rooms and
+    # p-3's two co-present rooms. They share both endpoints and must still be
+    # two distinct flags -- hashing the endpoints alone would collapse them.
+    assert len(flags) == 2
+    assert len({flag.contradiction_id for flag in flags}) == 2
+    assert {flag.description.split(".")[0] for flag in flags} == {
+        "p-2 places p-1 in ADMIN at ticks 5–5; p-2 places p-1 in LABS at ticks 5–5",
+        "p-2 places p-3 alongside that sighting in ADMIN at ticks 5–5; "
+        "p-2 places p-3 alongside that sighting in LABS at ticks 5–5",
+    }
+    endpoints = {flag.event_a_id for flag in flags} | {
+        flag.event_b_id for flag in flags
+    }
+    assert endpoints == {"turn:p-2:obs:0", "turn:p-2:obs:1"}
+    reader = _reader_event_id_pattern()
+    assert all(reader.match(endpoint) for endpoint in endpoints)
+
+
+def test_one_sentence_cannot_contradict_itself_into_a_role_proof() -> None:
+    # Review round 2: a sighting's `subject` is checked against the roster
+    # only, so a speaker may name ITSELF. That one `saw_move` yields two rows
+    # -- the stated destination, and the speaker's own witness position at the
+    # origin the sighting was made from -- and both keep the artifact's event
+    # id, so pairing them produced a flag whose two endpoints were the SAME
+    # artifact. `classify_evidence` types self-linkage as `role_proof` by rule,
+    # whatever the kind, so before the skip this one sentence minted the
+    # spectator's and the prompt's strongest band out of a channel that
+    # promises to prove no role -- and a role-proof flag on the arm whose
+    # defining count of them is zero. ADMIN -> LABS is three rooms with two
+    # steps allowed (one within-tick, one for the witness row's vision hop):
+    # exactly the impossible route the self-pair asserted.
+    self_named = SawMoveObservation(
+        type="saw_move", tick=5, subject="p-2", from_room="ADMIN", to_room="LABS"
+    )
+    assert _flags(_turn("p-2", (self_named,)), roster=frozenset({"p-1", "p-2"})) == ()
+
+    # The control: the skip is per ARTIFACT, not per endpoint pair, so the
+    # same sentence still answers to somebody else's account. p-3 puts p-2 in
+    # REACTOR at the same tick, which both of p-2's rows are too far from, and
+    # the two flags share one endpoint pair while staying distinct by
+    # `contradiction_id`. Every endpoint pair the channel emits names two
+    # different artifacts, which is what keeps it out of the self-linked
+    # role-proof row entirely.
+    flags = _flags(
+        _turn("p-2", (self_named,)),
+        _claim_turn("p-3", (_alibi("p-2", "REACTOR", 5),)),
+        roster=frozenset({"p-1", "p-2", "p-3"}),
+    )
+    assert len(flags) == 2
+    assert len({flag.contradiction_id for flag in flags}) == 2
+    assert all(flag.event_a_id != flag.event_b_id for flag in flags)
+    assert {
+        classify_evidence(
+            kind=flag.kind,
+            event_a_id=flag.event_a_id,
+            event_b_id=flag.event_b_id,
+            weak=is_weak_contradiction(flag),
+        )
+        for flag in flags
+    } == {"weak_signal"}
+
+
+def test_an_impostor_menu_answer_naming_its_teammate_never_records() -> None:
+    # The account menu is the first arm that hands an impostor a structured
+    # observation menu, and it offers a kill sighting. p-3 answers it naming
+    # teammate p-2: the turn-level firewall drops the row before it records,
+    # so no listener's transcript block and no derived testimony carries it.
+    result, client = asyncio.run(_meeting(grounded=False, teammate_kill=True))
+    p3_turn = next(turn for turn in result.transcript.turns if turn.speaker == "p-3")
+    assert p3_turn.observations == ()
+    assert not any(
+        statement.kind == "saw_kill"
+        for statement in derive_reported_testimony(
+            result, public_account_version=1, attributed_testimony_version=1
+        )
+    )
+    # The menu itself names the shape, so the check is the transcript row a
+    # recorded observation would render as.
+    assert not any(
+        'stated {"type":"saw_kill"' in prompt
+        for prompts in client.prompts.values()
+        for prompt in prompts
+    )
