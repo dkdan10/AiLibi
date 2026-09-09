@@ -141,6 +141,7 @@ from meetings.schemas import (
     VentWitnessRecord,
 )
 from meetings.transcript import MeetingTriggerKind
+from meetings.voting import tally_ballots
 from observation.action_intent import ActionIntent
 from observation.body_ids import public_body_id
 from observation.packet import EventObservationBatch, ObservationPacket
@@ -149,6 +150,7 @@ from orchestrator.experiment_config import (
     normalize_experiment_config,
 )
 from orchestrator.observation_delivery import event_observation_batches
+from orchestrator.replay_integrity import LEGACY_SKIP_CONFIDENCE_THRESHOLD
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
 from observation.version import (
@@ -742,6 +744,17 @@ class MeetingArtifacts:
     Custom runners without that ledger retain the legacy ``defaulted_calls`` /
     ``recovered_call_failures`` metadata path. Both default to ``()`` so a
     runner that produces neither need not set them.
+
+    ``skip_confidence_threshold`` is the eject cutoff the runner actually
+    resolved ``result`` under, and it is REQUIRED whenever that cutoff is not
+    :data:`~orchestrator.replay_integrity.LEGACY_SKIP_CONFIDENCE_THRESHOLD`.
+    ``None`` does not mean "the default": it means the recording carries no
+    cutoff, which every reader interprets as the frozen legacy value. A runner
+    that resolved at some other cutoff and left this ``None`` would record
+    ballots that do not tally to their own recorded outcome, and
+    :class:`~orchestrator.replay_integrity.ReplayIntegrityValidator` then
+    refuses that game permanently -- so the orchestrator refuses those bytes at
+    write time instead (:func:`_assert_recorded_cutoff_is_attributable`).
     """
 
     result: MeetingResult
@@ -764,6 +777,15 @@ class MeetingRunner(Protocol):
     ``state``; engine-state application happens through
     :func:`apply_meeting_result` after the runner returns
     (DESIGN.md §1.3, §5.1).
+
+    A runner that resolves its meeting under an eject cutoff other than
+    :data:`~orchestrator.replay_integrity.LEGACY_SKIP_CONFIDENCE_THRESHOLD`
+    MUST report it as :attr:`MeetingArtifacts.skip_confidence_threshold`. The
+    recording is the only place a reader can learn which cutoff produced the
+    outcome, and an absent field is read as the legacy value rather than as
+    "unknown". Recording a resolved meeting whose own ballots do not reproduce
+    its outcome at that legacy cutoff is refused when the artifacts are
+    written, not left for the reader to discover.
     """
 
     async def run_meeting(
@@ -1666,6 +1688,44 @@ def _validate_runner_result(
             f"{result.trigger_tick} does not match the engine-emitted "
             f"trigger_tick {expected_trigger.trigger_tick}"
         )
+
+
+def _assert_recorded_cutoff_is_attributable(artifacts: MeetingArtifacts) -> None:
+    """Refuse meeting bytes whose eject cutoff no reader could recover.
+
+    A recording carries the cutoff only when the runner reports it. When the
+    field is absent every reader applies
+    :data:`~orchestrator.replay_integrity.LEGACY_SKIP_CONFIDENCE_THRESHOLD`,
+    so a runner that resolved under a different cutoff and omitted it writes
+    ballots that contradict their own recorded outcome. Those bytes are not
+    recoverable later -- ``ReplayIntegrityValidator``, ``verify_samples`` and
+    the tournament report reader all refuse the game, permanently -- so the
+    contradiction is refused here, where the run can still be fixed and the
+    meeting's provider spend is still retained by the abort record.
+
+    Runners that resolve at the legacy cutoff (every shipped runner) reproduce
+    their own outcome and pass untouched.
+    """
+
+    if artifacts.skip_confidence_threshold is not None:
+        return
+    result = artifacts.result
+    resolved = tally_ballots(
+        result.ballots,
+        skip_confidence_threshold=LEGACY_SKIP_CONFIDENCE_THRESHOLD,
+    )
+    if resolved == (result.outcome, result.ejected_player_id):
+        return
+    raise ValueError(
+        "MeetingRunner returned MeetingArtifacts without a "
+        "skip_confidence_threshold, but its ballots resolve to "
+        f"{resolved} at the recorded-absent cutoff "
+        f"{LEGACY_SKIP_CONFIDENCE_THRESHOLD} rather than to the returned "
+        f"{(result.outcome, result.ejected_player_id)}. A runner resolving "
+        "under a different cutoff must report it as "
+        "MeetingArtifacts.skip_confidence_threshold; recording it absent "
+        "would write a meeting every reader refuses permanently."
+    )
 
 
 def apply_meeting_result(
@@ -2624,6 +2684,11 @@ class HeadlessGame:
             _assert_no_emergency_opening_body(
                 trigger_kind=trigger_kind, result=artifacts.result
             )
+            # Refuse an unattributable cutoff while the meeting's calls can
+            # still be retained by the abort record below, rather than writing
+            # a game the readers will refuse forever.
+            if replay is not None:
+                _assert_recorded_cutoff_is_attributable(artifacts)
         except BaseException as exc:
             _record_meeting_abort(
                 replay=replay,
