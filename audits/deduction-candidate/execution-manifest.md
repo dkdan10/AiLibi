@@ -69,7 +69,7 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 | Legal schedules | Each prefix is replayed through the engine, which accepts or rejects every step; a prefix whose hashed steps the engine did not resolve step for step never gets a digest |
 | Provider-response repetitions | One. Each unit is one prefix and one meeting; no response is sampled twice and no unit is repeated |
 | Run order | Sequential, seed ascending, both arms per seed before the next seed |
-| Maximum opportunities | 50 prefixes × 2 arms = 100 meeting units, ~600 model calls. A missing or truncated attempt is a stop, and the partial state is reported rather than replaced |
+| Maximum opportunities | 50 prefixes × 2 arms = 100 meeting units, ~600 model calls. An attempt that never resolves — a transport failure, a truncation, an exhausted limit — is a stop, and the partial state is reported rather than replaced. An attempt whose payload failed schema validation is NOT a stop: the meeting layer substitutes a placeholder turn or a marked SKIP ballot for it at an accepted ~1-in-50 rate, and the instrument counts every such substitution per unit and per arm (see "Meeting-internal defaults" below) so it stays visible instead of being silently replaced |
 
 ## Sampling configuration, caps and limits — the owner's authorized values
 
@@ -144,7 +144,16 @@ asserts this document quotes each of them.
 - **Wall.** Two clocks, because the authorization names two limits: one
   `orchestrator.run_limits.RunDeadline` for the 6 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
-  4 h of model work.
+  4 h of model work. The work clock bounds each provider await by what is LEFT
+  of its window, the way `RunDeadline.run` bounds meeting work by what is left
+  of the elapsed one, so the run stops DURING the call that exhausts the window.
+  A clock charged only when a call returns would be a one-call-granular limit,
+  and one call on this provider is not small: `llm/featherless_client.py` retries
+  a send six times at a 600 s timeout with exponential backoff, so a run at
+  3 h 59 m of model work could otherwise spend a fifth hour against an
+  authorization of four. The cut-off attempt's elapsed wall is charged to the
+  clock and its call recorded in the partial accounting with unknown (zero)
+  usage before the stop is raised.
 - **Dollar.** `max_cost_usd=0.0` on both budgets, which the provider's zero
   pre-flight rate makes bookkeeping rather than a brake — exactly as the cost
   statement says.
@@ -154,8 +163,39 @@ asserts this document quotes each of them.
   and no widening is authorized by a stop. Every stop records the response that
   caused it BEFORE raising — a truncated or foreign-model response was still
   spent — and every way a unit can fail is one of these stops, including a
-  provider transport failure and a mid-run legacy body handle, so a missing
-  attempt reports its partial state rather than escaping as a bare exception.
+  provider transport failure and a mid-run legacy body handle, so an attempt
+  that never resolved reports its partial state rather than escaping as a bare
+  exception. A meeting-internal default is the one case that is NOT a stop; it
+  is counted instead, immediately below.
+
+### Meeting-internal defaults: counted, not stopped
+
+The meeting layer does not abort a meeting on a payload that fails schema
+validation. A turn falls back to a placeholder (`meetings/manager.py::_default_turn`)
+and a ballot to a marked SKIP (`_vote_parse_default`, the cap-truncation runaway
+class accepted at about 1 in 50 calls); each fires a `deadline_default`
+`FailedCallReplayEntry` row. On the ~600 calls this manifest authorizes, that
+rate puts roughly a dozen such substitutions inside a completed run, so a fixed
+50-unit paired sample cannot be abandoned for one — but the preregistration
+requires that "Missing or truncated attempts remain visible" (`preregistration.md:112`)
+and that failed attempts are retained (`:136`), and a substitution nobody counts
+is neither.
+
+The instrument therefore reads those rows for every unit and reports them per
+arm: `defaulted_turns`, `defaulted_votes`, `defaults_by_validation`,
+`defaults_by_deadline`, `degraded_openings` (the Task 10.6 validation-degrade,
+recognised by its typed `opening_degraded_unsure` turn annotation) and
+`units_with_defaults`. A recorded default whose phase and trigger the instrument
+cannot classify IS a stop: the producer's wording would have moved and the
+counts would no longer be evidence.
+
+Two consequences a reader of the results has to carry. A defaulted ballot is a
+SKIP the voter did not choose, so it inflates the abstention side of the ballot
+verdicts; and because the privileged grader's "every naming ballot supported"
+is an `all()` over the ballots naming the ejected player, a defaulted ballot
+removes a constraint rather than failing it, which biases the primary outcome
+UPWARD. `units_with_defaults` per arm is the bound on how many of that arm's
+decisions that can touch.
 
 ## The live gate: what actually authorizes a call
 
@@ -231,6 +271,7 @@ Per unit, with counts beside every rate:
 | Role-correct ejections | Per resolved meeting and conditional on an ejection, per arm |
 | Wrongful ejections | Per resolved meeting, per arm: an ejection that landed on a crewmate. A skipped meeting is not wrongful. This is the count the acceptable-tradeoff bound below is computed on |
 | Supported / unsupported / uncited ballots | Per ballot, per arm, with guard-rewritten ballots counted separately |
+| Meeting-internal defaults | Per attempt, per arm: `defaulted_turns` and `defaulted_votes`, split by trigger into `defaults_by_validation` and `defaults_by_deadline`, plus `degraded_openings`. `units_with_defaults` counts the units carrying at least one, and is the bound on how many of that arm's decisions rest on a partly unauthored meeting |
 | Terminal vs partial units | A unit whose meeting ended the game is terminal; one that stopped at the tick after the report is deliberately partial. Neither is a game-win trial |
 | Provider cost | Calls, input and output tokens, `cost_usd` and model-work seconds, per arm and per run, against the limits above |
 
@@ -314,13 +355,22 @@ token and wall limits above.
 The run stops, retains its partial evidence and unresolved accounting, and
 authorizes no retry and no widening of any limit, on any of: a token budget
 exhausted at either the per-unit or the run level; the elapsed wall deadline or
-the model-work window; a per-call response that reached its output cap (a
-truncation is a stop, not a datum); a held-out digest or skip that differs from
-the frozen manifest; a rendered prompt or regenerated prefix matching the
-legacy body handle; or a unit whose recorded observation clock or experiment
-config is not the arm's. No stop condition reads an outcome: the 50 paired
-units are a fixed sample with no interim analysis and no optional stopping, so
-nothing here can be tripped by a result the run has produced.
+the model-work window, the latter cutting off the attempt in flight rather than
+one call later; a per-call response that reached its output cap (a truncation
+is a stop, not a datum); a held-out digest or skip that differs from the frozen
+manifest; a rendered prompt or regenerated prefix matching the legacy body
+handle; a unit whose recorded observation clock or experiment config is not the
+arm's; or a recorded meeting default whose phase and trigger this instrument
+cannot classify. A meeting-internal default is NOT itself a stop. The meeting
+layer's shipped fail-soft substitutes a placeholder turn or a marked SKIP
+ballot for a payload that failed schema validation, at an accepted rate of
+about 1 in 50 calls, and a fixed 50-unit paired sample cannot be abandoned for
+a substitution the engine is designed to make. Every such substitution is
+instead counted per arm and per unit — turns and votes separately, by trigger,
+with the units carrying any — and reported beside decision coverage, so it is
+visible rather than silently replaced. No stop condition reads an outcome: the
+50 paired units are a fixed sample with no interim analysis and no optional
+stopping, so nothing here can be tripped by a result the run has produced.
 
 **Possible decisions**, per the preregistration: advance for an explicitly scoped
 adopting review, revise and evaluate a new version, reject, or gather more

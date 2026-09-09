@@ -8,15 +8,19 @@ workflow.
 Each guard the instrument adds is paired with a planted or perturbed case that
 fails on the defect the guard claims to catch — a moved digest, a changed skip
 list, a call over the cap, a truncated response, an exhausted budget, an expired
-deadline, a mislabelled clock, a citation the voter never saw, a leaked prefix
-step and a planted body handle.
+deadline, a model-work window that has to bite while a call is still in flight,
+a mislabelled clock, a citation the voter never saw, a meeting whose turns or
+ballots all fell back to the layer's defaults, a leaked prefix step and a
+planted body handle.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Final
@@ -68,7 +72,20 @@ from experiments.held_out_prefixes import (
     canonical_prefix_json,
 )
 from llm.client import CallKind, LLMResponse, TokenUsage
-from meetings.schemas import VoteBallot
+from meetings.manager import DefaultedCall
+from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot, VoteBallot
+
+# The PRODUCER of the ``deadline_default`` message the instrument classifies.
+# Imported private on purpose: pinning the counter's regex against a copy of the
+# wording would pin it against itself, and the ``deadline`` trigger is
+# interactive-only, so no headless test can reach it end to end.
+from orchestrator.game import _deadline_default_message
+from orchestrator.replay import (
+    FailedCallReplayEntry,
+    MeetingReplayEntry,
+    read_all_entries,
+)
+from orchestrator.run_limits import RunDeadlineExceeded
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _MANIFEST: Final[Path] = _REPO_ROOT / EXECUTION_MANIFEST_PATH
@@ -166,6 +183,195 @@ class _TruncatingProvider(DryRunProvider):
             cost_usd=response.cost_usd,
             model=response.model,
         )
+
+
+class _InvalidTurnProvider(DryRunProvider):
+    """A dry-run provider whose TURN payloads never satisfy the schema.
+
+    The meeting layer's fail-soft substitutes a placeholder turn for each one,
+    so the unit resolves with no model-authored turn in it at all — the case
+    that used to reach the report as a complete, fully supported unit.
+    """
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is MeetingTurn:
+            return LLMResponse(
+                text='{"this": "is not a turn"}',
+                usage=TokenUsage(input_tokens=len(prompt) // 4, output_tokens=6),
+                cost_usd=0.0,
+                model=instrument.DRY_RUN_MODEL,
+            )
+        return await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+
+
+class _InvalidBallotProvider(DryRunProvider):
+    """A dry-run provider whose FIRST ballot payload fails validation.
+
+    The manager degrades it to a marked SKIP, which reaches the ballot verdicts
+    as one more abstention: without a separate count it is indistinguishable
+    from a voter who chose to abstain.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ballots = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is ModelAuthoredVoteBallot:
+            self.ballots += 1
+            if self.ballots == 1:
+                return LLMResponse(
+                    text='{"not_a_ballot": true}',
+                    usage=TokenUsage(input_tokens=len(prompt) // 4, output_tokens=6),
+                    cost_usd=0.0,
+                    model=instrument.DRY_RUN_MODEL,
+                )
+        return await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+
+
+class _PositionlessOpeningProvider(DryRunProvider):
+    """A dry-run provider whose OPENING takes no position, on both attempts.
+
+    DESIGN.md §5.2 PHASE 1 requires an opening to accuse or say "unsure"; an
+    opening that parses but does neither is the Task 10.6 validation-DEGRADE,
+    rebuilt as an unsure turn and annotated `opening_degraded_unsure`. Every
+    later turn is the ordinary dry-run one.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.turns = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is MeetingTurn:
+            self.turns += 1
+            # The opening gets one retry, so both of its attempts must be
+            # position-less for the degrade rather than a plain default to fire.
+            if self.turns <= 2:
+                payload = MeetingTurn.model_validate(
+                    {
+                        "turn_id": "dry-run",
+                        "turn_index": 0,
+                        "speaker": agent_id or "p-1",
+                        "turn_kind": "opening",
+                        "reply_to": None,
+                        "observations": [],
+                        "claims": [],
+                        "free_text": "I spent the round finishing my own tasks.",
+                    }
+                )
+                text = payload.model_dump_json()
+                return LLMResponse(
+                    text=text,
+                    usage=TokenUsage(
+                        input_tokens=max(1, len(prompt) // 4),
+                        output_tokens=max(1, len(text) // 4),
+                    ),
+                    cost_usd=0.0,
+                    model=instrument.DRY_RUN_MODEL,
+                )
+        return await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+
+
+class _SlowProvider:
+    """A client whose single call stays in flight far longer than the window."""
+
+    def __init__(self, *, seconds: float) -> None:
+        self.seconds = seconds
+        self.finished = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        del prompt, schema, temperature, call_kind, model, agent_id
+        await asyncio.sleep(self.seconds)
+        self.finished += 1
+        return LLMResponse(
+            text="{}",
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model="slow",
+        )
+
+
+class _TimingOutProvider:
+    """A client that raises its OWN ``TimeoutError``, not the window's."""
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        del prompt, schema, temperature, call_kind, model, agent_id
+        raise TimeoutError("the provider's own read timeout")
 
 
 class _FailingProvider(DryRunProvider):
@@ -828,6 +1034,243 @@ class TestBudgetAndDeadline:
         assert "model-work window" in caught.value.partial.reason
 
 
+class TestModelWorkWindow:
+    """The 4 h window is a limit on model work, so it has to bind IN FLIGHT.
+
+    Charged only on return it is a one-call-granular limit, and one call on the
+    authorized provider is six sends at a 600 s timeout with backoff — close to
+    an hour. A run at 3 h 59 m could then spend a fifth hour against an
+    authorization of four, with only the separate 6 h elapsed clock behind it.
+    """
+
+    def test_the_window_stops_during_the_call_that_exhausts_it(self) -> None:
+        """PLANTED: a 0.2 s window and a call that stays in flight for 5 s.
+
+        The stop must arrive while the call is still running. Without the bound
+        the same call returns first and the stop lands 5 s later, which is the
+        defect: the assertion below is on WHEN it stopped, not that it stopped.
+        """
+
+        clock = instrument._ModelWorkClock(max_seconds=0.2)
+        inner = _SlowProvider(seconds=5.0)
+        client = instrument._InstrumentClient(inner, work_clock=clock)
+        started = time.monotonic()
+        with pytest.raises(RunDeadlineExceeded, match="exhausted mid-call"):
+            asyncio.run(
+                client.complete(
+                    prompt="p", schema=None, max_tokens=1024, temperature=0.2
+                )
+            )
+        elapsed = time.monotonic() - started
+        assert elapsed < 2.0, f"the stop waited for the call: {elapsed:.1f}s"
+        assert inner.finished == 0
+
+    def test_the_cut_off_attempt_is_charged_and_reported(self) -> None:
+        """The attempt bought no response but held the provider, so its wall is
+        on the clock and its call is in the partial accounting — marked, so a
+        reader cannot mistake it for a response that arrived."""
+
+        clock = instrument._ModelWorkClock(max_seconds=0.2)
+        client = instrument._InstrumentClient(
+            _SlowProvider(seconds=5.0), work_clock=clock
+        )
+        with pytest.raises(RunDeadlineExceeded):
+            asyncio.run(
+                client.complete(
+                    prompt="p", schema=None, max_tokens=1024, temperature=0.2
+                )
+            )
+        usage = instrument.ArmUsage().plus(client.take())
+        assert usage.calls == 1
+        assert usage.input_tokens == usage.output_tokens == 0
+        assert usage.model_work_seconds >= 0.2
+        assert clock.seconds >= 0.2
+
+    def test_a_providers_own_timeout_is_not_relabelled_as_the_window(self) -> None:
+        """PLANTED: the inner client raises `TimeoutError` with the window wide
+        open. A provider timeout is a transport failure, not a limit that was
+        reached, and mislabelling it would forge a stop reason."""
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(_TimingOutProvider(), work_clock=clock)
+        with pytest.raises(TimeoutError, match="the provider's own read timeout"):
+            asyncio.run(
+                client.complete(
+                    prompt="p", schema=None, max_tokens=1024, temperature=0.2
+                )
+            )
+        assert clock.seconds == 0.0
+
+    def test_a_call_inside_the_window_is_untouched(self) -> None:
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        inner = _SlowProvider(seconds=0.01)
+        client = instrument._InstrumentClient(inner, work_clock=clock)
+        asyncio.run(
+            client.complete(prompt="p", schema=None, max_tokens=1024, temperature=0.2)
+        )
+        assert inner.finished == 1
+        assert 0.0 < clock.seconds < 1.0
+
+
+class TestMeetingDefaults:
+    """A meeting-internal default is counted, never invisible and never a stop.
+
+    The meeting layer substitutes a placeholder turn or a marked SKIP ballot for
+    a payload that failed schema validation (`meetings/manager.py::_default_turn`,
+    `_vote_parse_default`, the runaway class accepted at about 1 in 50). The
+    preregistration requires missing attempts to remain visible, so the
+    instrument reads the `deadline_default` rows the orchestrator records.
+    """
+
+    def _entries(self, directory: Path, name: str) -> Sequence[Any]:
+        return read_all_entries(directory / name)
+
+    def test_a_clean_unit_records_no_defaults(self, tmp_path: Path) -> None:
+        report = run_instrument(output_dir=tmp_path, units=1)
+        for arm in report.arms:
+            assert arm.defaulted_turns == arm.defaulted_votes == 0
+            assert arm.units_with_defaults == 0
+            assert arm.degraded_openings == 0
+
+    def test_a_unit_whose_turns_all_defaulted_is_counted_not_hidden(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: every turn payload fails validation, so the meeting holds no
+        model-authored turn at all. Before this count the unit reached the report
+        as `units 1, ejections 1, supported 3` with nothing saying so."""
+
+        report = run_instrument(
+            output_dir=tmp_path, client=_InvalidTurnProvider(), units=1
+        )
+        for arm in report.arms:
+            assert arm.units == 1
+            assert arm.defaulted_turns == 3
+            assert arm.defaulted_votes == 0
+            assert arm.defaults_by_validation == 3
+            assert arm.defaults_by_deadline == 0
+            assert arm.units_with_defaults == 1
+
+    def test_a_defaulted_ballot_is_counted_apart_from_a_voluntary_abstention(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the first ballot payload is unparseable. It degrades to a
+        marked SKIP, which reaches `ballot_verdicts` as one more abstention; the
+        `defaulted_votes` count is what separates the two."""
+
+        report = run_instrument(
+            output_dir=tmp_path, client=_InvalidBallotProvider(), units=1
+        )
+        reference = report.arms[0]
+        assert reference.defaulted_votes == 1
+        assert reference.defaults_by_validation == 1
+        assert reference.defaulted_turns == 0
+        assert reference.units_with_defaults == 1
+
+    def test_a_defaulted_unit_still_completes_and_is_not_a_stop(
+        self, tmp_path: Path
+    ) -> None:
+        """The counterpart claim: the run does NOT abort. A fixed 50-unit paired
+        sample cannot be abandoned for a substitution the engine is designed to
+        make, which is why the stop rule says so explicitly."""
+
+        report = run_instrument(
+            output_dir=tmp_path, client=_InvalidBallotProvider(), units=1
+        )
+        assert [arm.units for arm in report.arms] == [1, 1]
+        assert "A meeting-internal default is NOT itself a stop" in report.stop_rule
+
+    def test_a_degraded_opening_is_counted_as_the_degrade_it_was(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: an opening that parses but takes no position, on both of its
+        attempts. The manager rebuilds it as an unsure turn — the Task 10.6
+        degrade — which keeps the model's observations and is therefore NOT the
+        same event as a full placeholder default. The replay carries no
+        `degraded` field, so the typed turn annotation is the only seam."""
+
+        report = run_instrument(
+            output_dir=tmp_path, client=_PositionlessOpeningProvider(), units=1
+        )
+        reference = report.arms[0]
+        assert reference.degraded_openings == 1
+        assert reference.defaulted_turns == 1
+        assert reference.defaults_by_validation == 1
+        assert reference.units_with_defaults == 1
+
+    def test_a_default_the_counter_cannot_classify_stops_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a `deadline_default` row whose message the producer would
+        never write. An unclassifiable row means the wording moved and the
+        counts are no longer evidence, so it is a stop rather than a zero."""
+
+        run_instrument(output_dir=tmp_path, units=1)
+        entries = list(self._entries(tmp_path, "repaired_clock-seed-3000.jsonl"))
+        meeting = next(e for e in entries if isinstance(e, MeetingReplayEntry))
+        foreign = FailedCallReplayEntry(
+            game_id="g",
+            meeting_id=meeting.meeting_id,
+            tick=1,
+            model="m",
+            prompt_length=0,
+            raw_response="",
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            error_type="deadline_default",
+            error_message="something else went wrong",
+        )
+        with pytest.raises(instrument.InstrumentError, match="cannot classify"):
+            instrument.count_defaulted_attempts(
+                [*entries, foreign], meeting=meeting, seed=3000
+            )
+
+    @pytest.mark.parametrize(
+        ("default", "phase", "trigger"),
+        [
+            (
+                DefaultedCall(phase="vote", agent_id="p-1", trigger="validation"),
+                "vote",
+                "validation",
+            ),
+            (
+                DefaultedCall(phase="vote", agent_id="p-1", trigger="deadline"),
+                "vote",
+                "deadline",
+            ),
+            (
+                DefaultedCall(
+                    phase="opening",
+                    agent_id="p-1",
+                    trigger="validation",
+                    turn_index=0,
+                ),
+                "turn",
+                "validation",
+            ),
+            (
+                DefaultedCall(phase="opt_in", agent_id="p-2", trigger="deadline"),
+                "turn",
+                "deadline",
+            ),
+        ],
+    )
+    def test_the_counter_parses_what_the_producer_writes(
+        self, default: DefaultedCall, phase: str, trigger: str
+    ) -> None:
+        """Pinned against `orchestrator.game._deadline_default_message` itself,
+        not against a copy of its wording. The `deadline` trigger is
+        interactive-only, so this is the only place it can be covered."""
+
+        message = _deadline_default_message(default)
+        vote = instrument._DEFAULTED_VOTE_MESSAGE.match(message)
+        turn = instrument._DEFAULTED_TURN_MESSAGE.match(message)
+        matched = vote or turn
+        assert matched is not None
+        assert ("vote" if vote is not None else "turn") == phase
+        assert matched.group(1) == trigger
+
+
 class TestProvenance:
     def test_each_unit_records_its_arms_clock_and_config(self, tmp_path: Path) -> None:
         report = run_instrument(output_dir=tmp_path, units=1)
@@ -929,6 +1372,7 @@ class TestGraders:
             "recorded_temporal_version": 2,
             "recorded_experiment_config": None,
             "prompt_versions": {},
+            "defaults": instrument.DefaultedAttempts(),
         }
         payload.update(kwargs)
         return instrument.UnitRecord(**payload)

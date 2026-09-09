@@ -42,6 +42,7 @@ carries one.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import os
@@ -89,7 +90,12 @@ from meetings.manager import (
     DEFAULT_VOTE_MAX_TOKENS,
     MeetingConfig,
 )
-from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot, VoteBallot
+from meetings.schemas import (
+    MeetingTurn,
+    ModelAuthoredVoteBallot,
+    TurnAnnotationKind,
+    VoteBallot,
+)
 from observation.action_intent import ActionIntent, WaitIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -102,6 +108,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.replay import (
+    FailedCallReplayEntry,
     MeetingReplayEntry,
     ReplayLogEntry,
     read_all_entries,
@@ -349,11 +356,21 @@ STOP_RULE: Final[str] = (
     "The run stops, retains its partial evidence and unresolved accounting, and "
     "authorizes no retry and no widening of any limit, on any of: a token "
     "budget exhausted at either the per-unit or the run level; the elapsed wall "
-    "deadline or the model-work window; a per-call response that reached its "
+    "deadline or the model-work window, the latter cutting off the attempt in "
+    "flight rather than one call later; a per-call response that reached its "
     "output cap (a truncation is a stop, not a datum); a held-out digest or "
     "skip that differs from the frozen manifest; a rendered prompt or "
-    "regenerated prefix matching the legacy body handle; or a unit whose "
-    "recorded observation clock or experiment config is not the arm's. No stop "
+    "regenerated prefix matching the legacy body handle; a unit whose recorded "
+    "observation clock or experiment config is not the arm's; or a recorded "
+    "meeting default whose phase and trigger this instrument cannot classify. "
+    "A meeting-internal default is NOT itself a stop. The meeting layer's "
+    "shipped fail-soft substitutes a placeholder turn or a marked SKIP ballot "
+    "for a payload that failed schema validation, at an accepted rate of about "
+    "1 in 50 calls, and a fixed 50-unit paired sample cannot be abandoned for a "
+    "substitution the engine is designed to make. Every such substitution is "
+    "instead counted per arm and per unit — turns and votes separately, by "
+    "trigger, with the units carrying any — and reported beside decision "
+    "coverage, so it is visible rather than silently replaced. No stop "
     "condition reads an outcome: the 50 paired units are a fixed sample with no "
     "interim analysis and no optional stopping, so nothing here can be tripped "
     "by a result the run has produced."
@@ -792,6 +809,16 @@ class _ModelWorkClock:
     Separate from :class:`~orchestrator.run_limits.RunDeadline`, which measures
     ELAPSED time: the authorization allows 4 h of model work inside a 6 h
     elapsed window, which is two limits and therefore two clocks.
+
+    The window bounds each call IN FLIGHT as well as the total after it. A clock
+    charged only on return can be overrun by one whole call, and one whole call
+    on the authorized provider is not small: ``llm/featherless_client.py`` retries
+    a send six times at a 600 s timeout with exponential backoff, so a single
+    ``complete`` can stay in flight for the better part of an hour. Charging on
+    return alone would let a run at 3 h 59 m of model work spend a fifth hour
+    against an authorization of four, with only the separate 6 h elapsed clock
+    behind it. :meth:`remaining` is what
+    :meth:`_InstrumentClient.complete` bounds each await by.
     """
 
     def __init__(self, *, max_seconds: float) -> None:
@@ -804,6 +831,11 @@ class _ModelWorkClock:
     def seconds(self) -> float:
         return self._seconds
 
+    def remaining(self) -> float:
+        """Work seconds left in the window; never negative."""
+
+        return max(0.0, self._max_seconds - self._seconds)
+
     def charge(self, seconds: float) -> None:
         if seconds < 0:
             raise ValueError(f"a call cannot take {seconds} seconds")
@@ -814,11 +846,33 @@ class _ModelWorkClock:
                 f"{self._max_seconds:.1f}s"
             )
 
+    def charge_aborted(self, seconds: float) -> RunDeadlineExceeded:
+        """Charge an attempt the window cut off, and RETURN the stop to raise.
+
+        Returned rather than raised so the caller can chain the underlying
+        timeout onto it. The attempt bought no response, but its provider wall
+        elapsed, so the clock carries it: the partial accounting a stop reports
+        would otherwise understate the very limit that fired.
+        """
+
+        self._seconds += max(seconds, 0.0)
+        return RunDeadlineExceeded(
+            f"model-work window exhausted mid-call: {self._seconds:.1f}s of "
+            f"{self._max_seconds:.1f}s, the attempt in flight was cut off"
+        )
+
+
+#: The ``model`` a :class:`CapturedCall` carries for an attempt the model-work
+#: window cut off in flight. No response came back, so no served model is known;
+#: the marker keeps the aborted attempt distinguishable in the partial
+#: accounting from a response that actually arrived.
+ABORTED_ATTEMPT_MODEL: Final[str] = "aborted-in-flight"
+
 
 class _InstrumentClient:
     """Wrap the provider to enforce the per-call caps and capture the prompts.
 
-    Four jobs, none of which the budget layer does:
+    Five jobs, none of which the budget layer does:
 
     1. refuse a ``max_tokens`` that is not one of the two shipped caps, so
        "the shipped defaults unchanged" is checked rather than asserted;
@@ -828,7 +882,10 @@ class _InstrumentClient:
     3. refuse a response from a model other than ``expected_model`` on the call
        that returns it, so a hosted endpoint serving a different checkpoint
        stops the run instead of being noticed in the report afterwards;
-    4. hold the prompts the supported grader reads, in memory, for one unit.
+    4. bound each provider await by the model-work window's remaining seconds,
+       so the authorized window stops the run DURING the call that exhausts it
+       rather than one whole call later;
+    5. hold the prompts the supported grader reads, in memory, for one unit.
 
     Every stop above records the call FIRST. The response came back, so the
     tokens were spent whether or not they are usable, and the partial accounting
@@ -901,15 +958,48 @@ class _InstrumentClient:
                 "this run may not move them"
             )
         started = time.monotonic()
-        response = await self._inner.complete(
-            prompt=prompt,
-            schema=schema,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            call_kind=call_kind,
-            model=model,
-            agent_id=agent_id,
-        )
+        # The await is bounded by what is LEFT of the model-work window, the
+        # way orchestrator.run_limits.RunDeadline.run bounds meeting work by
+        # what is left of the elapsed one. Without it the window is checked only
+        # once a call returns, so a run near its limit can spend one further
+        # whole call — up to the provider client's own retry-and-timeout budget
+        # — beyond an authorized ceiling. ``timeout.expired()`` separates OUR
+        # stop from a timeout the inner client raised itself, which stays a
+        # provider failure and is not re-labelled as a limit.
+        window = asyncio.timeout(self._work_clock.remaining())
+        try:
+            async with window:
+                response = await self._inner.complete(
+                    prompt=prompt,
+                    schema=schema,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    call_kind=call_kind,
+                    model=model,
+                    agent_id=agent_id,
+                )
+        except TimeoutError as exc:
+            if not window.expired():
+                raise
+            aborted = time.monotonic() - started
+            # Recorded like every other stop in this client: the attempt bought
+            # no response, but it held the provider for ``aborted`` seconds and
+            # may have been billed for tokens this side cannot see, so it enters
+            # the partial accounting as a call with unknown (zero) usage rather
+            # than vanishing.
+            self._calls.append(
+                CapturedCall(
+                    agent_id=agent_id,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    input_tokens=0,
+                    output_tokens=0,
+                    cost_usd=0.0,
+                    model=ABORTED_ATTEMPT_MODEL,
+                    seconds=aborted,
+                )
+            )
+            raise self._work_clock.charge_aborted(aborted) from exc
         seconds = time.monotonic() - started
         # Recorded before any of the three stops below, because the response
         # exists: its tokens were spent and its provider time elapsed, and a
@@ -1359,6 +1449,124 @@ class _ScriptedPrefixAgent(TacticalAgent):
         return scripted
 
 
+# ---------------------------------------------------------------------------
+# Meeting-internal defaults: counted, never dropped
+# ---------------------------------------------------------------------------
+
+#: The error type ``orchestrator/game.py`` stamps on every fired meeting default.
+_DEFAULT_MARKER_ERROR_TYPE: Final[str] = "deadline_default"
+#: The two message shapes ``orchestrator.game._deadline_default_message`` writes.
+#: Parsed rather than trusted: an unrecognised message means the producer's
+#: wording moved and this classification is no longer evidence of anything, so
+#: :func:`count_defaulted_attempts` stops the run instead of miscounting.
+_DEFAULTED_VOTE_MESSAGE: Final[re.Pattern[str]] = re.compile(
+    r"^vote defaulted \((deadline|validation)\); "
+)
+_DEFAULTED_TURN_MESSAGE: Final[re.Pattern[str]] = re.compile(
+    r"^\w+ turn(?: \(turn \d+\))? defaulted \((deadline|validation)\); "
+)
+#: The typed note the manager puts on a Task 10.6 validation-DEGRADE: an opening
+#: rebuilt as unsure from the model's last parsed-but-position-less attempt. The
+#: replay carries no ``degraded`` field, so this annotation is the only recorded
+#: seam between a degrade and a full placeholder default.
+_DEGRADED_OPENING_ANNOTATION: Final[TurnAnnotationKind] = "opening_degraded_unsure"
+
+
+@dataclass(frozen=True)
+class DefaultedAttempts:
+    """One unit's meeting-internal fail-soft substitutions, as counts.
+
+    The meeting layer does not abort on a payload that fails schema validation:
+    a turn becomes a placeholder (``meetings/manager.py::_default_turn``) and a
+    ballot becomes a marked SKIP (``_vote_parse_default``, the runaway class
+    accepted at about 1 in 50). Both are recorded as ``deadline_default``
+    :class:`~orchestrator.replay.FailedCallReplayEntry` rows, and the
+    preregistration requires missing attempts to REMAIN VISIBLE
+    (``audits/deduction-candidate/preregistration.md:112``) and failed attempts
+    to be retained (``:136``).
+
+    Reading those rows is what makes that true of this instrument. Without it a
+    defaulted ballot reaches the report as one more ``uncited`` or
+    ``guard_rewritten`` verdict, indistinguishable from a voter who chose to
+    abstain, and a defaulted TURN reaches it as nothing at all — a meeting in
+    which no model-authored turn existed would score as a complete unit.
+
+    Counts, not a stop: see :data:`STOP_RULE`. Fields are per unit and summed
+    per arm onto :class:`ArmSummary`.
+    """
+
+    defaulted_turns: int = 0
+    defaulted_votes: int = 0
+    by_validation: int = 0
+    by_deadline: int = 0
+    degraded_openings: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.defaulted_turns + self.defaulted_votes
+
+    def plus(self, other: DefaultedAttempts) -> DefaultedAttempts:
+        return DefaultedAttempts(
+            defaulted_turns=self.defaulted_turns + other.defaulted_turns,
+            defaulted_votes=self.defaulted_votes + other.defaulted_votes,
+            by_validation=self.by_validation + other.by_validation,
+            by_deadline=self.by_deadline + other.by_deadline,
+            degraded_openings=self.degraded_openings + other.degraded_openings,
+        )
+
+
+def count_defaulted_attempts(
+    entries: Sequence[ReplayLogEntry], *, meeting: MeetingReplayEntry, seed: int
+) -> DefaultedAttempts:
+    """Count this unit's recorded meeting defaults, by phase and by trigger.
+
+    ``seed`` names the unit in the stop message only; nothing about the prefix
+    itself is read, and no message text reaches a report.
+    """
+
+    turns = 0
+    votes = 0
+    validation = 0
+    deadline = 0
+    for entry in entries:
+        if not isinstance(entry, FailedCallReplayEntry):
+            continue
+        if entry.error_type != _DEFAULT_MARKER_ERROR_TYPE:
+            continue
+        vote = _DEFAULTED_VOTE_MESSAGE.match(entry.error_message)
+        turn = _DEFAULTED_TURN_MESSAGE.match(entry.error_message)
+        matched = vote or turn
+        if matched is None:
+            raise InstrumentError(
+                f"seed {seed}: a recorded meeting default carries a message "
+                "this instrument cannot classify by phase and trigger; the "
+                "producer's wording moved and the defaulted-attempt counts "
+                "would be wrong"
+            )
+        if vote is not None:
+            votes += 1
+        else:
+            turns += 1
+        if matched.group(1) == "validation":
+            validation += 1
+        else:
+            deadline += 1
+    return DefaultedAttempts(
+        defaulted_turns=turns,
+        defaulted_votes=votes,
+        by_validation=validation,
+        by_deadline=deadline,
+        degraded_openings=sum(
+            1
+            for turn_record in meeting.transcript.turns
+            if any(
+                note.kind == _DEGRADED_OPENING_ANNOTATION
+                for note in turn_record.annotations
+            )
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class UnitRecord:
     """One unit's raw capture, before any grading. Privileged and in-memory only.
@@ -1383,6 +1591,7 @@ class UnitRecord:
     recorded_temporal_version: int | None
     recorded_experiment_config: RecordedExperimentConfig | None
     prompt_versions: Mapping[str, str]
+    defaults: DefaultedAttempts
 
 
 def run_unit(
@@ -1516,6 +1725,7 @@ def run_unit(
         recorded_temporal_version=recorded_temporal_observation_version(entries),
         recorded_experiment_config=recorded_experiment_config(entries),
         prompt_versions=MappingProxyType(dict(meeting.prompt_versions)),
+        defaults=count_defaulted_attempts(entries, meeting=meeting, seed=prefix.seed),
     )
 
 
@@ -1892,6 +2102,18 @@ class ArmSummary(BaseModel):
     terminal_units: int
     partial_units: int
     ballot_verdicts: Mapping[str, int]
+    # The meeting-internal fail-soft substitutions this arm's units recorded.
+    # Reported beside decision coverage rather than folded into the verdicts,
+    # because a defaulted ballot is a SKIP the model did not choose and a
+    # defaulted turn is a placeholder it did not write: without these counts
+    # both are invisible, and ``units_with_defaults`` is what bounds how many of
+    # this arm's decisions rest on a partly unauthored meeting.
+    defaulted_turns: int
+    defaulted_votes: int
+    defaults_by_validation: int
+    defaults_by_deadline: int
+    degraded_openings: int
+    units_with_defaults: int
     prompt_versions: Mapping[str, str]
     calls: int
     input_tokens: int
@@ -2037,6 +2259,10 @@ def _summarize_arm(
     verdicts: Counter[str] = Counter()
     for grade in own:
         verdicts.update(grade.verdict_counts())
+    own_records = [record for record in records if record.arm == arm]
+    defaults = DefaultedAttempts()
+    for record in own_records:
+        defaults = defaults.plus(record.defaults)
     return ArmSummary(
         arm=arm,
         units=len(own),
@@ -2049,6 +2275,14 @@ def _summarize_arm(
         terminal_units=sum(1 for grade in own if grade.stop == "terminal"),
         partial_units=sum(1 for grade in own if grade.stop == "partial"),
         ballot_verdicts=dict(sorted(verdicts.items())),
+        defaulted_turns=defaults.defaulted_turns,
+        defaulted_votes=defaults.defaulted_votes,
+        defaults_by_validation=defaults.by_validation,
+        defaults_by_deadline=defaults.by_deadline,
+        degraded_openings=defaults.degraded_openings,
+        units_with_defaults=sum(
+            1 for record in own_records if record.defaults.total > 0
+        ),
         prompt_versions=dict(_one_prompt_version_set(records, arm=arm)),
         calls=usage.calls,
         input_tokens=usage.input_tokens,
@@ -2151,12 +2385,15 @@ def run_instrument(
                 )
             # Every way a unit can fail is a stop that reports its partial
             # state, which is why this catches Exception rather than the four
-            # limit classes it started with. The stop rule promises partial
-            # accounting for "a missing or truncated attempt", and a provider
-            # transport failure, a mid-run legacy body handle
+            # limit classes it started with. An attempt that never resolved is
+            # a stop with partial accounting — a provider transport failure, a
+            # mid-run legacy body handle
             # (:class:`~experiments.held_out_prefixes.HeldOutPrefixError`), a
             # spend that does not reconcile or a meeting that resolved the wrong
-            # number of ballots are all missing attempts. Nothing is swallowed:
+            # number of ballots all land here. A meeting-internal default does
+            # NOT: the engine substituted for it and the unit resolved, so it is
+            # counted onto :class:`DefaultedAttempts` instead. Nothing is
+            # swallowed either way:
             # the class and message are copied into ``reason`` and the original
             # is chained, so a stop is louder than the raw exception, not
             # quieter. ``BaseException`` is deliberately not caught — an
