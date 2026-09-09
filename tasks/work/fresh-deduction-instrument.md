@@ -58,6 +58,16 @@ denominator.
 
 ## Acceptance
 
+- [x] Review correction: a meeting-internal default is counted per unit and per
+  arm rather than vanishing into the ballot verdicts, and the manifest says what
+  actually stops the run instead of promising a stop the code never made.
+- [x] Review correction: the model-work window bounds each provider await, so it
+  stops the run during the call that exhausts it rather than one whole call
+  later.
+- [x] Review correction: the card's own test count and its round-1 delta are the
+  numbers the collect-only command prints.
+- [x] Review correction: the declared blast radius names both `audits/` files
+  this branch moved.
 - [x] Review correction: the live run builds its client from the authorized
   provider and model rather than from the ambient environment, and a response
   from any other model is a stop on the call that returns it.
@@ -150,8 +160,10 @@ after the run, when they are no longer held out.
 ## Expected scope
 
 A new instrument module under `experiments/`, its tests, the frozen prefix
-generator and its hash inventory, and
-`audits/deduction-candidate/execution-manifest.md`, plus the `docs/artifacts.md`
+generator and its hash inventory,
+`audits/deduction-candidate/execution-manifest.md` and the entry for it in
+`audits/deduction-candidate/README.md` (that directory's index, which names each
+file in it), plus the `docs/artifacts.md`
 audits row that follows. `experiments/deduction_evaluation.py` and
 `experiments/investigation_evaluation.py` are read, not edited. Reuse
 `scripts/paired_stats.py` rather than reimplementing the test.
@@ -201,9 +213,21 @@ reimplementing the test.
 field `audits/deduction-candidate/preregistration.md:105-118` names, with the
 owner's authorized limits copied verbatim.
 
-`tests/experiments/test_fresh_deduction_instrument.py` — 112 tests, every one on
+`tests/experiments/test_fresh_deduction_instrument.py` — 127 tests, every one on
 the fake provider (82 when this card was first closed; the round-1 corrections
-below added 30).
+below took it to 113 and the round-2 corrections to 127):
+
+```sh
+.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -q --collect-only | tail -1
+```
+
+```
+127 tests collected in 0.65s
+```
+
+*(That paragraph read "112 tests … added 30" until round 2; both figures were
+wrong, and the round-1 verification table below already said `113 passed`.)*
 
 ### Architecture and design sections
 
@@ -281,7 +305,9 @@ print([(b, c, round(p(b, c), 6)) for b, c in \
 
 The stop rule reads no outcome: 50 paired units are a fixed sample with no
 interim analysis and no optional stopping, so nothing in it can be tripped by a
-result the run produced.
+result the run produced. It was amended in round 2 — still before any held-out
+outcome exists — to state that a meeting-internal default is counted rather than
+stopped, which is what the code does; the amendment is recorded below.
 
 **The observation audit goes to the null device.** It restates the prefix packet
 by packet and the instrument reads none of it, so writing it into a results
@@ -303,6 +329,8 @@ directory would publish a held-out input for nothing. The precedent is
 | supported-correct | 18 | 18 |
 | supported ballots | 150 | 150 |
 | guard-rewritten ballots | 6 | 6 |
+| defaulted turns / votes | 0 / 0 | 0 / 0 |
+| units carrying a default | 0 | 0 |
 | input tokens (`len // 4`) | 886,054 | 575,251 |
 | output tokens (`len // 4`) | 19,800 | 19,800 |
 
@@ -403,8 +431,15 @@ on this branch touches `orchestrator/run_limits.py`, the meeting runner or the
 game loop. Recorded rather than dropped, because a reader running two suites at
 once will see it too.
 
-`cd frontend && npm run e2e` was not run: no served DTO changed. No `audits/` or
-`tests/fixtures/` byte outside this card's own new manifest moved.
+`cd frontend && npm run e2e` was not run: no served DTO changed. No
+`tests/fixtures/` byte moved. Two `audits/` files moved: the new
+`audits/deduction-candidate/execution-manifest.md` and eight added lines in
+`audits/deduction-candidate/README.md`, the directory index, which gained an
+entry for the freeze and one for the manifest. *(This sentence read "No `audits/`
+or `tests/fixtures/` byte outside this card's own new manifest moved" until round
+2; the README had already moved in `87c4ef3d`, two commits earlier, so the
+sentence was wrong when it was written. `git diff --name-status 5682ea2a..HEAD --
+audits/ tests/fixtures/` prints exactly those two paths.)*
 
 ### The frozen held-out set
 
@@ -443,18 +478,25 @@ passes unchanged inside the `tests/eval tests/experiments` run above.
 
 ### Registry row
 
-`audits/` gained one file, the execution manifest. Recomputed with the change
-staged, by listing the tracked paths and summing their sizes:
+`audits/` gained one file, the execution manifest, and eight lines in the
+directory's own README index. Recomputed with the change staged, by listing the
+tracked paths and summing their sizes:
+
+```sh
+git ls-files audits | wc -l
+git ls-files audits | tr '\n' '\0' | xargs -0 stat -f %z | awk '{s+=$1} END {print s}'
+```
 
 ```
-203 files 14878444 bytes
+203
+14882522
 ```
 
-`docs/artifacts.md` now reads `14,878,444 tracked bytes / 203 files`, up from
-`14,852,791 / 202`, and `scripts/verify_ml_evidence.py` compares that row
-against disk (`OK 48 | FAIL 0` above). *(That total was `14,873,520` when this
-card first closed; the round-1 corrections grew the same one manifest by 4,924
-bytes and the row moved with them.)*
+`docs/artifacts.md` now reads `14,882,522 tracked bytes / 203 files`, up from
+`14,852,791 / 202` on the base commit, and `scripts/verify_ml_evidence.py`
+compares that row against disk. *(The same one manifest has grown on each round:
+the total was `14,873,520` at first close, `14,878,444` after the round-1
+corrections and `14,882,522` after the round-2 ones.)*
 
 ### Limitations
 
@@ -467,6 +509,23 @@ bytes and the row moved with them.)*
   exercised as rendering and reduction paths with a thin ledger. A real model
   fills them; this run does not test how well.
 - **`build_default_agent_factory` is not used**, for the reason in Decisions.
+- **A meeting-internal default is counted, not stopped, and it biases the
+  primary outcome upward.** The meeting layer substitutes a placeholder turn or
+  a marked SKIP ballot for a payload that fails schema validation, at a rate the
+  lab accepts at about 1 in 50 calls. The instrument reports every such
+  substitution per arm (`defaulted_turns`, `defaulted_votes`, by trigger, plus
+  `units_with_defaults`), but it does not repair one: a defaulted ballot is a
+  SKIP the voter did not choose, and because the privileged grader's "every
+  naming ballot supported" is an `all()` over the ballots naming the ejected
+  player, a defaulted ballot removes a constraint rather than failing it.
+  `units_with_defaults` per arm is the bound on how many decisions that can
+  touch, and a run whose arms differ materially on it is not a clean comparison.
+- **The `degraded` split the manager keeps is not fully recoverable from a
+  replay.** `DefaultedCall.degraded` is in-process only; the replay's
+  `deadline_default` row carries no such field. The instrument recovers the
+  opening half of it from the typed `opening_degraded_unsure` turn annotation,
+  so a degraded opening is counted, but a degrade on any other turn kind is not
+  separable from a full placeholder default.
 - **The freeze manifest's `source_sha256` is not re-checked here.** The freeze's
   own regeneration test owns it; duplicating the check would stop a run for a
   reason that test states better.
@@ -639,3 +698,143 @@ No live provider call of any kind was made in this round. The two new gate tests
 that touch a client factory (`TestAuthorizedClient`) assert refusals: each one
 runs with no Featherless credential in the environment it is handed, so the
 pinned environment stops before a client is constructed.
+
+### Review corrections, round 2 (2026-09-09)
+
+Seven blocking findings from the three verifiers; four distinct defects, two in
+the code and two in this card's prose. Both code defects are the same shape as
+round 1's pattern — the instrument DESCRIBED a limit it did not enforce — and
+both were raised as Codex P1 comments that round 1 left undispositioned. Source,
+tests, the manifest and the registry row moved in this round's implementation
+commit; every command quoted here was run on that commit.
+
+**1 — a meeting-internal default was neither stopped nor reported.** Codex P1
+`3966328120` ("Report failure defaults separately from voluntary abstentions"),
+raised on `ArmSummary` and unaddressed in round 1. The meeting layer does not
+abort on a payload that fails schema validation: a turn falls back to a
+placeholder and a ballot to a marked SKIP (`meetings/manager.py:1911`,
+`:2260-2295`, the runaway class the lab accepts at about 1 in 50 calls), and the
+orchestrator records each one as a `deadline_default`
+`FailedCallReplayEntry` (`orchestrator/game.py:3055-3087`). `run_unit` read only
+the `MeetingReplayEntry`, so those rows were discarded: a defaulted ballot
+reached the report as one more `uncited` verdict, indistinguishable from a voter
+who chose to abstain, and a defaulted TURN reached it as nothing at all. On the
+committed tree a provider whose turn payloads all fail validation produced
+`units 1, ejections 1, supported 3` — a fully complete, fully supported unit on
+a meeting in which no model-authored turn existed.
+
+Meanwhile `audits/deduction-candidate/execution-manifest.md` bound the
+preregistration's "Missing or truncated attempts remain visible"
+(`preregistration.md:112`) with "A missing or truncated attempt is a stop, and
+the partial state is reported rather than replaced" — false of the code, and not
+what the preregistration asks for either: it asks for visibility, and `:136`
+asks for failed attempts to be retained.
+
+Both halves are repaired, and in the direction the record supports. The
+substitution is not made a stop: it is a shipped fail-soft with a committed
+accepted rate, so on the ~600 authorized calls it would fire roughly a dozen
+times and abort a fixed 50-unit paired sample for something the engine is
+designed to do. Instead `count_defaulted_attempts` reads the unit's
+`deadline_default` rows, classifies each by phase and trigger against the
+producer's own wording, and `ArmSummary` now carries `defaulted_turns`,
+`defaulted_votes`, `defaults_by_validation`, `defaults_by_deadline`,
+`degraded_openings` (recovered from the typed `opening_degraded_unsure` turn
+annotation, because the replay row carries no `degraded` field) and
+`units_with_defaults`. A row whose phase and trigger cannot be classified IS a
+stop — the producer's wording would have moved and the counts would no longer be
+evidence. `STOP_RULE`, the manifest's Inputs row, its Measures table and a new
+"Meeting-internal defaults: counted, not stopped" section now say exactly that,
+including the direction of the bias: because the privileged grader's "every
+naming ballot supported" is an `all()` over the ballots naming the ejected
+player, a defaulted ballot removes a constraint rather than failing it, so the
+primary outcome is biased UPWARD and `units_with_defaults` is the bound on how
+many decisions that can touch. The card's Limitations carries the same statement.
+
+**2 — the 4 h model-work window was charged only after a call returned.** Codex
+P1 `3966328096`, also unaddressed in round 1. `_InstrumentClient.complete`
+awaited the provider and charged `_ModelWorkClock` afterwards, so the window was
+a one-call-granular limit; one call on the authorized provider is six sends at a
+600 s timeout with exponential backoff (`llm/featherless_client.py:540,785`),
+close to an hour in flight. A run at 3 h 59 m of model work could therefore spend
+a fifth hour against an owner authorization of four, with only the separate 6 h
+elapsed clock behind it — spend beyond an authorized limit, not a tuning choice.
+Each await is now bounded by `_ModelWorkClock.remaining()`, mirroring
+`orchestrator/run_limits.py:42-56`; `window.expired()` separates this stop from a
+timeout the provider raised itself, so a transport timeout is not relabelled as a
+limit; and the cut-off attempt's elapsed wall is charged to the clock and its
+call recorded in the partial accounting (marked `aborted-in-flight`, with unknown
+usage recorded as zero) before the stop is raised.
+
+**3 — "112 tests … the round-1 corrections added 30".** Both numbers were wrong
+and the card contradicted its own round-1 verification row, which already read
+`113 passed`. The suite held 113 at `2dde0c91` (82 at first close, so round 1
+added 31, not 30) and holds 127 at this round's commit. "What was built" now
+carries 127 and the `--collect-only` command that prints it.
+
+**4 — "No `audits/` byte outside this card's own new manifest moved".** False
+when it was written: `audits/deduction-candidate/README.md`, the directory's own
+index, gained eight lines in `87c4ef3d`, two commits BEFORE the `87dfd918` that
+Verification section is pinned to, and the README was not in Expected scope
+either. Both are corrected; `git diff --name-status 5682ea2a..HEAD -- audits/
+tests/fixtures/` prints exactly the two paths now named.
+
+#### Planted and perturbed failures, round 2
+
+Each new gate was neutered in turn, its own test run, and the source restored:
+
+| Gate removed or perturbed | Test that went red |
+| --- | --- |
+| `defaults=count_defaulted_attempts(…)` → `defaults=DefaultedAttempts()` | `TestMeetingDefaults::test_a_unit_whose_turns_all_defaulted_is_counted_not_hidden` |
+| `if matched is None:` → `if False:` | `TestMeetingDefaults::test_a_default_the_counter_cannot_classify_stops_the_run` |
+| `degraded_openings=sum(` → `degraded_openings=0 * sum(` | `TestMeetingDefaults::test_a_degraded_opening_is_counted_as_the_degrade_it_was` |
+| `asyncio.timeout(self._work_clock.remaining())` → `asyncio.timeout(None)` | `TestModelWorkWindow::test_the_window_stops_during_the_call_that_exhausts_it` |
+| `if not window.expired():` → `if False:` | `TestModelWorkWindow::test_a_providers_own_timeout_is_not_relabelled_as_the_window` |
+| the aborted attempt's `CapturedCall` is not recorded | `TestModelWorkWindow::test_the_cut_off_attempt_is_charged_and_reported` |
+
+All six went red and the source was restored;
+`.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q` then
+returned `127 passed`.
+
+The three defaulted-attempt cases are planted end to end rather than in a
+fixture: a provider whose turn payloads never validate, one whose first ballot
+payload is unparseable, and one whose opening parses but takes no position on
+both attempts (the Task 10.6 unsure-degrade). The window's stop is planted on
+WHEN it fires — a 0.2 s window against a call that stays in flight for 5 s — so
+the assertion fails on the one-call-granular behaviour rather than passing on it.
+The counter's regex is pinned against `orchestrator.game._deadline_default_message`
+itself for both phases and both triggers, since the `deadline` trigger is
+interactive-only and no headless test can reach it end to end.
+
+#### Verification, round 2
+
+Every row was run on `bfd5696b`, the commit that carries the source, the tests,
+the manifest and the registry row; the commit after it edits this Results section
+only, and `validate_task_docs` was re-run on it.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `Contracts: 4 kept, 0 broken`; `Success: no issues found in 473 source files`; `7392 passed, 20 skipped, 3 xfailed`; frontend `Test Files 19 passed`, `Tests 515 passed` |
+| `.venv/bin/pytest tests/experiments tests/eval -q` | `1304 passed, 1 skipped in 183.07s` |
+| `.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q` | `127 passed` |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 43 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified` |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `every check passed` |
+| `bash scripts/verify_samples.sh` | `All 50 samples verified clean.` for both sets |
+| `scripts/build_sample_report.py --check` x 4 | all four `is consistent with its replays` |
+| `.venv/bin/pytest tests/orchestrator/ --collect-only -q` | `583 tests collected` |
+| `.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run` | 100 units, 600 calls, `total_cost_usd` 0.0; per arm 50 ejections, 19 role-correct, 31 wrongful, 18 supported-correct, and 0 defaulted turns, 0 defaulted votes, 0 units carrying a default |
+
+The dry run's per-arm counts and token totals are unchanged from both earlier
+rounds, which is the point twice over: the new counts are zero on a provider
+whose payloads all validate, and bounding the await moved no figure because no
+dry-run call comes close to the window.
+
+`cd frontend && npm run e2e` was not run: no served DTO changed. This round
+changed no `tests/fixtures/` byte and no `GENERATOR_SOURCES` file, so the freeze
+manifest still needs no `dependency_restamps` entry; only
+`audits/deduction-candidate/execution-manifest.md` moved under `audits/`, and its
+registry row moved with it.
+
+No live provider call of any kind was made in this round. The three new
+default-path providers and the two new clock providers are in-process fakes;
+none of them constructs a client factory or reads a credential.
