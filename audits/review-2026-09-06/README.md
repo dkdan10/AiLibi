@@ -14,3 +14,11 @@ The owner supplied [a follow-up report](REVIEW_REPORT_FOLLOWUP.md) and
 verbatim. Their claims belong to that review; reproduction and disposition of
 its findings are recorded in the correction record below and in the cards it
 links.
+
+[The follow-up correction record](followup-correction-record.md) dispositions
+every new finding id the follow-up filed, and points at the commit, card or
+reason behind each one. The original ids both appendices carry are dispositioned
+in [the cleanup disposition ledger](../../docs/cleanup-dispositions.md), which
+also records a decision on each of the first review's seven workflow
+recommendations. Both are additive: they state what was done, and they do not
+edit the reports, the appendices or the correction record.
