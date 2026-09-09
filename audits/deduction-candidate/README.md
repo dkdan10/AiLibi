@@ -12,6 +12,14 @@ This directory records the unadopted follow-through to the owner's independent
 - [Prospective evaluation](preregistration.md) separates controlled fresh
   meeting decisions from complete normal-policy games. It requires a frozen
   candidate and budget before live execution.
+- [Held-out freeze](held-out/manifest.json) records fifty proof-free scripted
+  prefixes as HASHES ONLY, drawn from a preregistered seed band by a session
+  that runs no arm. No prefix bytes are committed anywhere.
+- [Execution manifest](execution-manifest.md) binds every preregistration field
+  for the fresh-model comparison, including the limits the owner authorized on
+  2026-09-07. It authorizes no live call: a call additionally requires an
+  explicit runner invocation naming that file, and no test or CI job performs
+  one.
 
 The reproducible development command is:
 
