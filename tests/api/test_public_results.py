@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -200,6 +202,88 @@ def test_warm_summary_refuses_same_mtime_corruption_and_recovers(
     completed_recording.write_bytes(original)
     os.utime(completed_recording, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
     assert public.build_public_results(loader) == first
+
+
+def test_a_peer_walk_landing_during_a_clear_cannot_install_pre_flip_bytes(
+    summary_recording: Path,
+) -> None:
+    """CONC-6: the controlled interleaving that produced a silent stale install.
+
+    A same-mtime replacement is invisible to the mtime-keyed caches, so the
+    builder clears them on a fingerprint miss. Clearing does not cancel walks
+    another thread already started: their PRE-flip results land in the freshly
+    cleared caches, and the builder then reads them back while its own
+    fingerprint is already the POST-flip one -- publishing a summary derived
+    from bytes the fingerprint does not cover.
+
+    Two peers are held mid-walk, one per cache the builder reads, so both land
+    after the clear and before the builder looks. The replacement makes the
+    recording invalid, so consuming those stale walks publishes an outcome the
+    bytes no longer support, while reading the disk refuses.
+    """
+
+    loader = ReplayLoader(summary_recording.parent)
+    original = summary_recording.read_bytes()
+    stamp = summary_recording.stat()
+    rows = [json.loads(line) for line in original.splitlines()]
+    assert rows[-1]["winner"] == "CREWMATES"
+    rows[-1]["winner"] = "IMPOSTORS"
+    flipped = "\n".join(json.dumps(row) for row in rows) + "\n"
+
+    parsed = threading.Barrier(3, timeout=30)
+    caches_cleared = threading.Event()
+    landed = threading.Barrier(3, timeout=30)
+    walk = loader._walk
+    peer_names = ("peer-metadata", "peer-replay")
+
+    def held_walk(*args: Any, **kwargs: Any) -> Any:
+        """Hold a peer's parsed result until the builder has cleared."""
+
+        result = walk(*args, **kwargs)
+        if threading.current_thread().name in peer_names:
+            parsed.wait()
+            assert caches_cleared.wait(timeout=30)
+        return result
+
+    def read_metadata() -> None:
+        loader.list_replays()
+        landed.wait()
+
+    def read_replay() -> None:
+        loader.load_replay("headless-seed-1")
+        landed.wait()
+
+    def release_peers_on_clear() -> None:
+        clear_cache()
+        caches_cleared.set()
+        landed.wait()
+
+    clear_cache = loader.clear_cache
+    threads = [
+        threading.Thread(target=read_metadata, name=peer_names[0]),
+        threading.Thread(target=read_replay, name=peer_names[1]),
+    ]
+    with patch.object(loader, "_walk", held_walk):
+        for thread in threads:
+            thread.start()
+        try:
+            # Both peers have parsed the pre-flip bytes and are holding them.
+            parsed.wait()
+            summary_recording.write_text(flipped)
+            os.utime(summary_recording, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+            with patch.object(loader, "clear_cache", release_peers_on_clear):
+                with pytest.raises(ValueError, match="invalid or unverified"):
+                    public.build_public_results(loader)
+        finally:
+            caches_cleared.set()
+            parsed.abort()
+            landed.abort()
+            for thread in threads:
+                thread.join(timeout=30)
+    assert loader._public_results_cache is None
+    summary_recording.write_bytes(original)
+    os.utime(summary_recording, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    assert public.build_public_results(loader).games == 1
 
 
 def test_warm_summary_refuses_after_a_negative_seed_recording_appears(

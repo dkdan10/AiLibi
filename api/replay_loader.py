@@ -35,6 +35,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final, Literal, get_args
@@ -895,6 +896,17 @@ class ReplayLoader:
         self._public_results_cache: (
             tuple[str, tuple[tuple[str, bool], ...], PublicResultsView] | None
         ) = None
+        # Every cached walk folds this counter into its LRU key, and
+        # ``clear_cache`` advances it. A peer thread whose walk was already in
+        # flight when the caches were cleared lands its result under the
+        # PREVIOUS generation, so a build that cleared the caches because the
+        # source bytes changed cannot read that pre-flip parse back -- which is
+        # how a same-length, same-mtime replacement used to reach a summary
+        # keyed to the post-flip fingerprint. The lock serialises the
+        # clear-build-install sequence itself; it creates no thread and does
+        # not coalesce in-flight work.
+        self._cache_generation = 0
+        self._results_lock = threading.RLock()
 
     # -- public API -------------------------------------------------------
 
@@ -957,6 +969,7 @@ class ReplayLoader:
             _mtime_ns(path),
             self._roster_mtime(),
             self._substrate_cache_key(),
+            self._cache_generation,
         )
         if include_llm_bodies:
             return replay
@@ -996,6 +1009,7 @@ class ReplayLoader:
                     _mtime_ns(path),
                     self._roster_mtime(),
                     self._substrate_cache_key(),
+                    self._cache_generation,
                 )
                 # Analysis overrides cannot certify incompatible outcome claims.
                 _assert_recorded_substrate(
@@ -1146,6 +1160,7 @@ class ReplayLoader:
                 _mtime_ns(path),
                 self._roster_mtime(),
                 self._substrate_cache_key(),
+                self._cache_generation,
             )
             _assert_recorded_substrate(
                 game.game_id,
@@ -1208,6 +1223,7 @@ class ReplayLoader:
             _mtime_ns(path),
             self._roster_mtime(),
             self._substrate_cache_key(),
+            self._cache_generation,
         )
         known_meetings = {meeting for meeting, _ in memories}
         if meeting_id not in known_meetings:
@@ -1234,6 +1250,7 @@ class ReplayLoader:
             _mtime_ns(path),
             self._roster_mtime(),
             self._substrate_cache_key(),
+            self._cache_generation,
         )
 
     def rubric(self) -> RubricView:
@@ -1307,14 +1324,22 @@ class ReplayLoader:
         )
 
     def clear_cache(self) -> None:
-        """Drop the per-process caches (engine playback, memory walk, summary)."""
+        """Drop the per-process caches (engine playback, memory walk, summary).
 
-        self._cached_load.cache_clear()
-        self._cached_memories.cache_clear()
-        self._cached_belief_frames.cache_clear()
-        self._cached_summary.cache_clear()
-        self._cached_validated_summary.cache_clear()
-        self._public_results_cache = None
+        Advancing the generation is what makes the drop hold under concurrent
+        readers: emptying an LRU does not cancel a walk another thread already
+        started, and that walk's result would otherwise land in the cache the
+        caller just emptied, under a key the caller then reads.
+        """
+
+        with self._results_lock:
+            self._cache_generation += 1
+            self._cached_load.cache_clear()
+            self._cached_memories.cache_clear()
+            self._cached_belief_frames.cache_clear()
+            self._cached_summary.cache_clear()
+            self._cached_validated_summary.cache_clear()
+            self._public_results_cache = None
 
     # -- cached implementations ------------------------------------------
 
@@ -1336,6 +1361,7 @@ class ReplayLoader:
         _mtime_key: int,
         _roster_mtime_key: int,
         _substrate_key: tuple[tuple[str, bool], ...] | None = None,
+        _generation_key: int = 0,
     ) -> ReplayView:
         # ``_mtime_key`` / ``_roster_mtime_key`` participate in the LRU key only
         # (Audit H-H-2): an in-place rewrite of the replay OR the per-set
@@ -1371,6 +1397,7 @@ class ReplayLoader:
         _mtime_key: int,
         _roster_mtime_key: int,
         _substrate_key: tuple[tuple[str, bool], ...] | None = None,
+        _generation_key: int = 0,
     ) -> Mapping[tuple[str, str], AgentMemoryView]:
         # ``_mtime_key`` / ``_roster_mtime_key`` / ``_substrate_key`` key the
         # cache only (Audit H-H-2; ``_substrate_cache_key``); see ``_load_replay``.
@@ -1383,12 +1410,13 @@ class ReplayLoader:
         _mtime_key: int,
         _roster_mtime_key: int,
         _substrate_key: tuple[tuple[str, bool], ...] | None = None,
+        _generation_key: int = 0,
     ) -> tuple[BeliefFrameView, ...]:
         # Reshapes the (separately cached) meeting-memory walk; no second walk.
         # ``_mtime_key`` / ``_roster_mtime_key`` / ``_substrate_key`` key the
         # cache only (Audit H-H-2; ``_substrate_cache_key``).
         memories = self._cached_memories(
-            seed, path, _mtime_key, _roster_mtime_key, _substrate_key
+            seed, path, _mtime_key, _roster_mtime_key, _substrate_key, _generation_key
         )
         return _belief_frames_from_memories(memories)
 
@@ -2323,9 +2351,11 @@ class ReplayLoader:
     def _file_summary(self, path: Path) -> _ReplaySummary:
         """Return the memoized one-pass reduction for ``path`` (Audit G-G-2)."""
 
-        return self._cached_summary(path, _mtime_ns(path))
+        return self._cached_summary(path, _mtime_ns(path), self._cache_generation)
 
-    def _read_summary(self, path: Path, _mtime_key: int) -> _ReplaySummary:
+    def _read_summary(
+        self, path: Path, _mtime_key: int, _generation_key: int = 0
+    ) -> _ReplaySummary:
         return self._summarize_entries(path, read_all_entries(path))
 
     def _summarize_entries(
@@ -2392,6 +2422,7 @@ class ReplayLoader:
             _mtime_ns(path),
             self._roster_mtime(),
             self._substrate_cache_key(),
+            self._cache_generation,
         )
         return self._metadata_from_summary(path, seed, summary)
 
@@ -2402,6 +2433,7 @@ class ReplayLoader:
         _mtime_key: int,
         _roster_mtime_key: int,
         _substrate_key: tuple[tuple[str, bool], ...] | None,
+        _generation_key: int = 0,
     ) -> _ReplaySummary:
         """Advertise only a verified timeline, caching its compact metadata.
 
