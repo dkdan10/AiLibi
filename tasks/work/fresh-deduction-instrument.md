@@ -345,17 +345,30 @@ clocks. A live run cannot use those parameters:
 
 ### Verification
 
+Every row was run on this branch's code at `87dfd918`, the commit that carries
+all of it; the commit after it edits this Results section only.
+
 | Command | Result |
 | --- | --- |
 | `.venv/bin/pytest tests/eval tests/experiments -q` | `1259 passed, 1 skipped in 184.64s` |
 | `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 43 work cards` |
-| `bash scripts/check.sh` | exit 0 (`Contracts: 4 kept, 0 broken`; `Success: no issues found in 471 source files`) |
+| `bash scripts/check.sh` | exit 0 — `Contracts: 4 kept, 0 broken`; `Success: no issues found in 473 source files`; `7347 passed, 20 skipped, 3 xfailed`; frontend `Test Files 19 passed`, `Tests 515 passed` |
 | `.venv/bin/python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified` |
 | `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `every check passed` |
 | `bash scripts/verify_samples.sh` | `All 50 samples verified clean.` for both sets |
 | `scripts/build_sample_report.py --check` x 4 | all four `is consistent with its replays` |
 | `.venv/bin/pytest tests/orchestrator/ --collect-only -q` | `583 tests collected` |
 | `.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q` | `82 passed` |
+
+One earlier suite run, made while a second full parallel suite was running on
+the same machine, failed
+`tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`
+with `provider.attempts == 0`. That test builds a `RunDeadline(0.25)` and asserts
+two provider attempts inside 250 ms of wall, so it is load-sensitive; it passes
+in isolation (`2 passed in 0.45s`) and inside the quiet gate above, and nothing
+on this branch touches `orchestrator/run_limits.py`, the meeting runner or the
+game loop. Recorded rather than dropped, because a reader running two suites at
+once will see it too.
 
 `cd frontend && npm run e2e` was not run: no served DTO changed. No `audits/` or
 `tests/fixtures/` byte outside this card's own new manifest moved.
