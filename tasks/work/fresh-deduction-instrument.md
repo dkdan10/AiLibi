@@ -39,7 +39,7 @@ committed harnesses (`experiments/deduction_evaluation.py`,
 instruments whose refusal of real providers is their own acceptance criterion
 and must stay. The public API already supports the run without editing tracked
 code: `HeadlessGame` (`orchestrator/game.py:1978`) with
-`build_default_agent_factory(experiment_config=...)` (`:4283`) and
+`build_default_agent_factory(experiment_config=...)` (`:4295`) and
 `build_default_meeting_runner(llm_client=...)` (`:1258`) accepts an injected
 client. The committed token figures are `len//4` heuristics; calibrated against
 the real usage rows in `replays/samples/`, real input runs about 1.27x and real
@@ -58,6 +58,27 @@ denominator.
 
 ## Acceptance
 
+- [x] Review correction: the privileged grader scores "right for THAT reason" —
+  a ballot whose citation does not bear on the ejected player no longer scores
+  the primary outcome, under a rule frozen in the manifest before any unit ran.
+- [x] Review correction: no committed test drives the live CLI, the tree scan
+  needs no exemption for the file that runs it, the scan covers `tasks/` and the
+  repository root, and the three copies of the sentence about it say what is
+  true.
+- [x] Review correction: the live gate keys on the client's real type, so a live
+  client under the offline label and the offline fixture under a live label are
+  both refused.
+- [x] Review correction: the frozen held-out set is verified before any client is
+  constructed, and that order is a property of the signature rather than of two
+  lines' order.
+- [x] Review correction: the instrument's client wrapper passes the wrapped
+  client's USD pre-flight rates through instead of hardcoding zero for every
+  client it composes.
+- [x] Review correction: a freeze manifest missing its `accepted` or `skipped`
+  block is a named stop, not a bare `KeyError`.
+- [x] Review correction: the card's own prose figures — the factory's line
+  number, which sections each docs commit touched, and how many commits earlier
+  the directory README moved — are the ones the tree and the log show.
 - [x] Review correction: a meeting-internal default is counted per unit and per
   arm rather than vanishing into the ballot verdicts, and the manifest says what
   actually stops the run instead of promising a stop the code never made.
@@ -213,9 +234,10 @@ reimplementing the test.
 field `audits/deduction-candidate/preregistration.md:105-118` names, with the
 owner's authorized limits copied verbatim.
 
-`tests/experiments/test_fresh_deduction_instrument.py` — 127 tests, every one on
+`tests/experiments/test_fresh_deduction_instrument.py` — 149 tests, every one on
 the fake provider (82 when this card was first closed; the round-1 corrections
-below took it to 113 and the round-2 corrections to 127):
+below took it to 113, the round-2 corrections to 127 and the round-4 ones
+to 149):
 
 ```sh
 .venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py \
@@ -223,11 +245,12 @@ below took it to 113 and the round-2 corrections to 127):
 ```
 
 ```
-127 tests collected in 0.65s
+149 tests collected in 0.23s
 ```
 
 *(That paragraph read "112 tests … added 30" until round 2; both figures were
-wrong, and the round-1 verification table below already said `113 passed`.)*
+wrong, and the round-1 verification table below already said `113 passed`. The
+127 it then carried was measured at `bfd5696b`.)*
 
 ### Architecture and design sections
 
@@ -240,8 +263,9 @@ frozen prefix through the same tick function the freeze screened it with, and
 the tick budget stops the game one tick after the report so nothing downstream
 of the decision is claimed. Listener-visible evidence stays distinct from the
 privileged grader: `grade_supported` reads only the prompts a voter was handed,
-`grade_privileged` reads the hidden roles and takes the support labels as an
-argument, and the run path calls neither.
+`grade_citation_relevance` reads the recorded turns and those same prompts and no
+role at all, `grade_privileged` reads the hidden roles and takes the support
+labels as an argument, and the run path calls none of the three.
 
 ### Decisions
 
@@ -279,8 +303,8 @@ uses is `build_authorized_client`'s — the provider and model pinned from the
 authorization, with only the API key crossing over from the shell — and a
 response from any other model stops the run. `run_dry` refuses a
 `LiveRunInvocation` outright so the mechanics check cannot become the run, and a
-tree scan keeps `--i-am-the-runner` out of every committed test, script and
-workflow. No live provider call of any kind was made on this card.
+tree scan keeps the runner flag out of every committed file except the module
+that defines it and the manifest's own documented command. No live provider call of any kind was made on this card.
 
 **The analysis is frozen in code and in the record before any outcome exists.**
 `PRIMARY_OUTCOME`, `DECISION_RULE`, `MINIMUM_ACTIONABLE_EFFECT_UNITS`,
@@ -329,12 +353,17 @@ directory would publish a held-out input for nothing. The precedent is
 | supported-correct | 18 | 18 |
 | supported ballots | 150 | 150 |
 | guard-rewritten ballots | 6 | 6 |
+| ballots naming the ejected player | 100 | 100 |
+| of those, off-target citations | 6 | 6 |
 | defaulted turns / votes | 0 / 0 | 0 / 0 |
 | units carrying a default | 0 | 0 |
 | input tokens (`len // 4`) | 886,054 | 575,251 |
 | output tokens (`len // 4`) | 19,800 | 19,800 |
 
-100 units, 600 calls, `total_cost_usd` 0.0, in a few seconds of wall.
+100 units, 600 calls, `total_cost_usd` 0.0, in a few seconds of wall. The last
+two rows arrived with round 4's citation-relevance rule; every other figure is
+unchanged by it, including the primary outcome, because those 6 off-target
+citations all fall in units the primary already scored 0.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; the run
@@ -407,7 +436,7 @@ clocks. A live run cannot use those parameters:
 ### Verification
 
 Every row was run on this branch's code at `87dfd918`, the commit that carries
-all of it; the commit after it edits this Results section only.
+all of it; the commit after it, `987f99b2`, edits this Results section only.
 
 | Command | Result |
 | --- | --- |
@@ -437,7 +466,7 @@ once will see it too.
 `audits/deduction-candidate/README.md`, the directory index, which gained an
 entry for the freeze and one for the manifest. *(This sentence read "No `audits/`
 or `tests/fixtures/` byte outside this card's own new manifest moved" until round
-2; the README had already moved in `87c4ef3d`, two commits earlier, so the
+2; the README had already moved in `87c4ef3d`, the commit before, so the
 sentence was wrong when it was written. `git diff --name-status 5682ea2a..bfd5696b --
 audits/ tests/fixtures/` prints exactly those two paths.)*
 
@@ -489,14 +518,15 @@ git ls-files audits | tr '\n' '\0' | xargs -0 stat -f %z | awk '{s+=$1} END {pri
 
 ```
 203
-14882522
+14889236
 ```
 
-`docs/artifacts.md` now reads `14,882,522 tracked bytes / 203 files`, up from
+`docs/artifacts.md` now reads `14,889,236 tracked bytes / 203 files`, up from
 `14,852,791 / 202` on the base commit, and `scripts/verify_ml_evidence.py`
 compares that row against disk. *(The same one manifest has grown on each round:
 the total was `14,873,520` at first close, `14,878,444` after the round-1
-corrections and `14,882,522` after the round-2 ones.)*
+corrections, `14,882,522` after the round-2 ones and `14,889,236` after the
+round-4 ones.)*
 
 ### Limitations
 
@@ -526,6 +556,14 @@ corrections and `14,882,522` after the round-2 ones.)*
   opening half of it from the typed `opening_degraded_unsure` turn annotation,
   so a degraded opening is counted, but a degrade on any other turn kind is not
   separable from a full placeholder default.
+- **Citation relevance is aboutness, not sufficiency.** The rule asks whether
+  the cited turn or observation bears on the player the ballot named; it cannot
+  ask whether that evidence WARRANTS an ejection, which is a judgment no
+  mechanical grader on this design makes. A ballot citing a turn in which the
+  ejected player merely spoke is relevant under the rule and may still be a weak
+  case, so the primary outcome remains an upper bound on "right for that reason"
+  rather than a measure of argument quality. It is also blind to a rendered
+  memory line that names the player without bearing on the death.
 - **The freeze manifest's `source_sha256` is not re-checked here.** The freeze's
   own regeneration test owns it; duplicating the check would stop a run for a
   reason that test states better.
@@ -541,9 +579,10 @@ distinct defects, eight of them in the code and one in this card's prose. Seven
 of the eight sit in the two places this card asked to be trusted about — the
 live-run gate and the stop path — and one pattern runs through them: the
 instrument DESCRIBED limits it did not enforce. Source, tests, the manifest and
-the registry row moved in `2dde0c91`; this subsection and the rest of the card
-moved in the commit after it, which edits this Results section only. Every
-command quoted here was run on `2dde0c91`.
+the registry row moved in `2dde0c91`; this subsection and the Acceptance items
+above moved in the commit after it, `5503f754`, which touches this card's
+Acceptance list and Results section and nothing else. Every command quoted here
+was run on `2dde0c91`.
 
 **1 — the live client came from the shell, not from the authorization.**
 `main()` validated `--provider featherless` and then built the client with a bare
@@ -561,9 +600,9 @@ one, on the call that returns it rather than in the report afterwards.
 **2 — `--units` was honoured on the live path.** `main()` passed
 `units=args.units` into `run_instrument`, which sliced `frozen.prefixes[:units]`,
 and the gate inspected only provider, invocation and limits. `--provider
-featherless --i-am-the-runner --units 1` therefore ran the one-unit pilot the
-authorization card, this card and the manifest all refuse, against a set the rest
-of which stays held out. `assert_live_run_is_authorized` now refuses any
+featherless` with the runner flag and `--units 1` therefore ran the one-unit
+pilot the authorization card, this card and the manifest all refuse, against a
+set the rest of which stays held out. `assert_live_run_is_authorized` now refuses any
 non-`None` `units` for a live invocation, and `main` runs that gate BEFORE it
 constructs a client.
 
@@ -666,8 +705,9 @@ returned `113 passed` at `2dde0c91`.
 #### Verification, round 1
 
 Every row was run on `2dde0c91`, the commit that carries the source, the tests,
-the manifest and the registry row; the commit after it edits this Results section
-only, and `validate_task_docs` was re-run on it.
+the manifest and the registry row; the commit after it, `5503f754`, touches this
+card's Acceptance list and Results section and nothing else, and
+`validate_task_docs` was re-run on it.
 
 | Command | Result |
 | --- | --- |
@@ -773,7 +813,7 @@ carries 127 and the `--collect-only` command that prints it.
 
 **4 — "No `audits/` byte outside this card's own new manifest moved".** False
 when it was written: `audits/deduction-candidate/README.md`, the directory's own
-index, gained eight lines in `87c4ef3d`, two commits BEFORE the `87dfd918` that
+index, gained eight lines in `87c4ef3d`, the commit BEFORE the `87dfd918` that
 Verification section is pinned to, and the README was not in Expected scope
 either. Both are corrected; `git diff --name-status 5682ea2a..bfd5696b -- audits/
 tests/fixtures/` prints exactly the two paths now named.
@@ -808,8 +848,9 @@ interactive-only and no headless test can reach it end to end.
 #### Verification, round 2
 
 Every row was run on `bfd5696b`, the commit that carries the source, the tests,
-the manifest and the registry row; the commit after it edits this Results section
-only, and `validate_task_docs` was re-run on it.
+the manifest and the registry row; the commit after it, `bb44f104`, touches this
+card's Acceptance list, Expected scope and Results section and nothing else, and
+`validate_task_docs` was re-run on it.
 
 | Command | Result |
 | --- | --- |
@@ -838,3 +879,189 @@ registry row moved with it.
 No live provider call of any kind was made in this round. The three new
 default-path providers and the two new clock providers are in-process fakes;
 none of them constructs a client factory or reads a credential.
+### Review corrections, round 4 (2026-09-09)
+
+Two blocking findings and five nonblocking ones. Both blocking findings are about
+the same thing the earlier rounds kept turning up — a claim this card asked to be
+trusted about rather than a mechanism — and one of them is the last Codex P1 that
+no round had dispositioned. Source, tests, the manifest and the registry row
+moved in `3a02ede8`; this subsection and the Acceptance items above moved in the
+commit after it, which touches this card and nothing else. Every command quoted
+here was run on the tree those two commits make, and `check.sh`,
+`validate_task_docs` and `check_doc_facts` were re-run on it after this card was
+written.
+
+**1 — "right for that reason" was only "with a citation attached".** Codex P1
+`3966328054` ("Verify that cited evidence actually supports the ejection"), the
+one comment of the eleven on this pull request that rounds 1 to 3 neither
+repaired nor refuted. `grade_privileged` scored the primary outcome from
+role-correctness plus the SUPPORTED verdict, and that verdict is a presence
+check: the cited turn id or observation id appears somewhere in that voter's own
+prompts. Presence is not aboutness. A ballot that guessed the impostor while
+citing an unrelated alibi, or a turn about another player entirely, scored 1 on
+the primary outcome — the exact collapse the outcome exists to prevent, since the
+whole design is a comparison of DEDUCTION between two arms and a lucky guess with
+a citation stapled to it is not deduction.
+
+Repaired the way the coordinator ruled: relevance is graded, under a rule frozen
+BEFORE any outcome is inspected, and the presence check keeps its own name.
+`CITATION_RELEVANCE_RUBRIC` is a new module constant the manifest quotes
+verbatim: a cited turn must be the ejected player's own (they spoke it — the case
+the ballot template itself asks a voter to cite when a contradiction broke the
+target's account) or name that player anywhere in its recorded content; a cited
+observation's rendered `[obs ...]` line in that voter's own prompt must name
+them; a player id matches as a whole token, so `p-1` is not `p-10`; a turn this
+meeting never recorded is relevant to nobody. `grade_supported` still answers
+presence alone, `grade_citation_relevance` answers aboutness from the recorded
+turns and the same entitled prompts and reads no role, and `grade_privileged` is
+the conjunction of all three. The manifest's preregistration is amended, dated
+and reasoned in a new "Amendments before first run" section, which is legitimate
+here for one reason only: no unit has run and no held-out outcome exists.
+
+Two figures come with it, per arm and per report — `naming_ballots` and
+`off_target_citations` — so a reader can see how often relevance rather than
+presence is what a unit turned on. `UnitRecord` now carries the recorded turns
+rather than their ids, because an id cannot say what a turn was about.
+
+**2 — a committed test drove the live CLI, and the scan exempted the file doing
+the scanning.** The manifest, this card and the pull request all said no
+committed test passes the runner flag. One did:
+`test_the_cli_refuses_a_live_unit_override_before_building_a_client` called
+`main(...)` with `--provider featherless`, the committed manifest, the runner
+flag and `--units 1`, and the tree scan listed that test file among its three
+exempt paths, so the scan could not see it. The refusal under test was real, but
+the sentence describing the tree was not, and an exemption for the file that
+performs the scan is not a check.
+
+All three copies of the sentence are corrected, and the tree is what they now
+describe. The flag is defined once, as `LIVE_RUN_FLAG`; `main` registers it from
+that constant and the scan searches for the constant, so the scanning file
+carries no copy of the needle and needs no exemption. The scan's file list is
+every tracked file whose suffix a command could be written in, read from the git
+index rather than a hand-kept list of roots, so `tasks/` and the repository root
+are covered — with a count assertion so a short listing cannot pass vacuously.
+The two remaining occurrences are the module that defines the flag and the
+manifest's documented command; this card's own two mentions are rewritten to
+"the runner flag". The CLI refusal is still tested, without a live invocation: a
+live provider named without the runner flag exits at the parser, and the client
+factory is replaced by a landmine first, so even a CLI perturbed to skip the flag
+check constructs nothing. The unit-override refusal is tested directly on
+`assert_live_run_is_authorized`, where it always was.
+
+**3 — the live gate read the provider LABEL, not the client** (nonblocking).
+`provider="fake"` with a metered client handed to `run_instrument` satisfied
+every refusal in the module and then reached that provider;
+`provider="featherless"` with the offline fixture would have written a report
+labelled live over output no model wrote. `assert_client_matches_provider` now
+checks the object's real type — the fake path takes a `FakeProvider` or the
+`None` that becomes one, the live path takes neither — and the run path calls it
+before anything is spent.
+
+**4 — the CLI built its client before the frozen set was verified**
+(nonblocking). `main` evaluated `build_authorized_client()` in the argument list
+of a `run_instrument` call that verified the set inside itself, so a run against
+a moved held-out set read a credential and opened a client first. The order is
+now a property of the signatures: `assert_ready_for_a_live_run` runs the
+authorization gate, then `verify_frozen_set`, and RETURNS the verified set, which
+`build_authorized_client` requires as its first argument. `verify_frozen_set` is
+that type's only producer, so no later edit to `main` can reverse the order
+without failing to type-check.
+
+**5 — the client wrapper hardcoded zero USD pre-flight rates** (nonblocking).
+`BudgetedLLMClient` reads those rates off whatever it is handed, so the hardcoded
+zero disabled the USD dimension for every client `_InstrumentClient` ever
+composed — a metered one included, whose $0.00 cap would then stop nothing. The
+wrapper now passes the wrapped client's own rates through, states none when the
+inner client states none (leaving the budget layer its calibrated defaults), and
+reports zero for a `FakeProvider`, whose completions are free by construction.
+On the authorized provider the pass-through is zero anyway
+(`llm/featherless_client.py:244-245`), which is what the authorization card's
+cost statement says: the token budget and the wall deadline are the only limits
+that can stop this run.
+
+**6 — a freeze manifest missing a row block raised a bare `KeyError`**
+(nonblocking). `verify_frozen_set` reached `manifest["accepted"]` and
+`manifest["skipped"]` directly, so a manifest without either crashed unnamed
+where the stop rule promises a refusal that says what differed. Both are read
+through a checked helper that raises `FrozenSetMismatch` naming the block.
+
+**7 — six prose claims in this card and the manifest were wrong** (nonblocking).
+The module docstring said no test constructs a `LiveRunInvocation`; several do,
+and that is what proves the refusals — it now says so, and says what is true
+instead (no committed file outside the module and the manifest carries the flag,
+and no test reaches a provider). The tree-scan docstring said "exactly two
+committed places" while exempting three. "The commit after it edits this Results
+section only" was true of `987f99b2` and false of `5503f754` (Acceptance and
+Results) and `bb44f104` (Acceptance, Expected scope and Results); each now names
+its commit and its sections, checked by walking the diff hunks back to their
+enclosing headings. `87c4ef3d` is one commit before `87dfd918`, not two.
+`build_default_agent_factory` is at `orchestrator/game.py:4295`, which is what
+this card's Decisions section already said; its Evidence section said `:4283`.
+And the manifest's owner table said it was copied verbatim from the authorization
+card while carrying a sampling-temperature row that card does not have: the claim
+is now qualified, the row is marked, and a test asserts both halves — that the
+authorization card names no temperature and that the row says so.
+
+#### Planted and perturbed failures, round 4
+
+Each new gate was neutered in turn, its own test run, and the source restored:
+
+| Gate removed or perturbed | Test that went red |
+| --- | --- |
+| `and every_citation_relevant` dropped from the primary outcome | `TestGraders::test_a_citation_about_another_player_is_not_the_primary_outcome` |
+| the whole-token match becomes `player in text` | `TestGraders::test_a_longer_id_is_not_the_player_it_starts_with` |
+| `if provider == "fake" and not is_fake:` → `if False:` | `TestClientType::test_a_non_fake_client_labelled_fake_is_refused_before_any_call` |
+| `if provider != "fake" and is_fake:` → `if False:` | `TestClientType::test_a_fake_client_on_a_live_label_is_refused` |
+| `frozen: FrozenSet` gains a `None` default | `TestAuthorizedClient::test_a_client_cannot_be_built_before_the_frozen_set_is_verified` |
+| `if actual_accepted != expected_accepted:` → `if False:` | `TestAuthorizedClient::test_the_pre_client_gate_stops_on_a_moved_frozen_set` |
+| the rate pass-through returns `(0.0, 0.0)` again | `TestPreflightRates::test_a_metered_clients_rates_pass_through` |
+| the row-block type check → `if False:` | `TestFrozenSet::test_a_manifest_missing_a_row_block_is_a_named_stop` |
+| `or not args.i_am_the_runner` dropped from the CLI's refusal | `TestLiveGate::test_the_cli_live_path_is_unreachable_without_the_runners_own_flag` |
+| the runner flag planted in this card, under `tasks/` | `TestLiveGate::test_no_committed_file_outside_the_module_and_the_manifest_names_the_flag` |
+
+All ten went red and the source was restored. The ninth is the one that matters
+twice: with the flag check dropped the CLI ran on to the client factory, and what
+stopped it was the landmine that test installs — the belt the test wears so that
+a perturbed CLI cannot reach a provider from inside the suite. The tenth planted
+the flag in this card rather than in a scratch file, because `tasks/` is exactly
+the root the scan did not cover before.
+
+The relevance cases are planted on the distinction itself: a ballot naming the
+impostor and citing a turn that is somebody else's and about somebody else
+(present, therefore `supported`; off-target, therefore not the primary outcome),
+its mirror where the cited turn accuses the ejected player, a cited observation
+line that names them and one that names another player, and a cited turn this
+meeting never recorded.
+
+#### Verification, round 4
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `Contracts: 4 kept, 0 broken`; `Success: no issues found in 473 source files`; `7414 passed, 20 skipped, 3 xfailed`; frontend `Test Files 19 passed`, `Tests 515 passed` |
+| `.venv/bin/pytest tests/eval tests/experiments -q` | `1326 passed, 1 skipped in 141.00s` |
+| `.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q` | `149 passed` |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 43 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified` |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `every check passed` |
+| `bash scripts/verify_samples.sh` | `All 50 samples verified clean.` for both sets |
+| `scripts/build_sample_report.py --check` x 4 | all four `is consistent with its replays` |
+| `.venv/bin/pytest tests/orchestrator/ --collect-only -q` | `583 tests collected` |
+| `.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run` | 100 units, 600 calls, `total_cost_usd` 0.0; per arm 50 ejections, 19 role-correct, 31 wrongful, 18 supported-correct, 100 ballots naming the ejected player and 6 off-target citations among them |
+
+`cd frontend && npm run e2e` was not run: no served DTO changed. No
+`tests/fixtures/` byte and no `GENERATOR_SOURCES` file moved this round, so the
+freeze manifest still needs no `dependency_restamps` entry; under `audits/` only
+`audits/deduction-candidate/execution-manifest.md` moved, and its registry row
+moved with it.
+
+No live provider call of any kind was made in this round. The new tests that
+touch the live path assert refusals: the CLI test replaces the client factory
+with a landmine before it runs, `assert_ready_for_a_live_run` constructs no
+client at all, and `build_authorized_client` cannot be called without a verified
+frozen set — the one call to it here is the one that raises `TypeError` for
+lacking one.
+
+Nothing was left standing: the two blocking findings and all five nonblocking
+ones the coordinator forwarded are repaired above, each with its own planted or
+perturbed case where a mechanism changed and with the prose corrected where a
+claim rather than a mechanism was wrong.
