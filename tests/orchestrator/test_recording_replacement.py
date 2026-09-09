@@ -538,3 +538,41 @@ def test_explicit_null_audit_sink_can_be_reused_with_forced_replay(
     assert replay.read_bytes() == control.read_bytes()
     assert not _audit_path(replay).exists()
     assert Path(os.devnull).is_char_device()
+
+
+def test_rollback_removes_an_empty_output_a_peer_created(tmp_path: Path) -> None:
+    """The disclaimed peer-unlink window, pinned as the accepted behaviour.
+
+    ``prepare_recording_paths`` records which outputs were absent when it
+    started and removes them at rollback if they are empty. It cannot tell its
+    own leftover from a file a concurrent writer created a moment later, so the
+    peer's empty output is removed. That is the module's stated limit, not a
+    guarantee: this case exists so a change to it is a decision rather than a
+    surprise, and it changes with the disclaimer if a writer protocol is ever
+    added.
+
+    Holding the exclusive probe open for the recording's lifetime was the
+    proposed fix and was declined; the second half of this case is the premise
+    that decision rests on -- an open exclusive handle does not stop a peer
+    from replacing the path underneath it, so retaining the descriptor would
+    not close this window for the forced writers that produced it.
+    """
+
+    replay = tmp_path / "replay.jsonl"
+    audit = _audit_path(replay)
+    with pytest.raises(RuntimeError, match="injected failure"):
+        with prepare_recording_paths(replay, audit, force=True):
+            # The peer writer's freshly created, not-yet-written outputs.
+            replay.touch()
+            audit.touch()
+            raise RuntimeError("injected failure")
+    assert not replay.exists()
+    assert not audit.exists()
+
+    # The premise: an exclusive create confers no exclusion afterwards.
+    held = tmp_path / "held.jsonl"
+    with held.open("x", encoding="utf-8"):
+        replacement = tmp_path / "replacement.jsonl"
+        replacement.write_bytes(b"peer bytes\n")
+        replacement.replace(held)
+    assert held.read_bytes() == b"peer bytes\n"
