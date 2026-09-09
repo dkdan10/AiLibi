@@ -1,6 +1,6 @@
 # Close the nonblocking follow-up improvements
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -34,42 +34,42 @@ descriptors, released before the write) and `:60-67` (the zero-byte rollback).
 One commit per item; each box needs its named planted-failure proof, not merely
 an implementation.
 
-- [ ] **NC4-2 / FU-5.** `scripts/run_tournament.py` refuses a `--report-output`
+- [x] **NC4-2 / FU-5.** `scripts/run_tournament.py` refuses a `--report-output`
   or `--progress-output` whose basename parses as a recording, regardless of the
   directory it names. Planted proof: a destination outside `--output-dir` whose
   basename is `replay-seed-1.jsonl` is refused before any game runs.
   [Report destinations](report-destinations.md) owns the in-directory alias
   protection this extends; do not weaken it.
-- [ ] **FU-03.** `scripts/_verify_samples.py::VerifyFailure.render` prints the
+- [x] **FU-03.** `scripts/_verify_samples.py::VerifyFailure.render` prints the
   integrity code instead of `recorded None, reconstructed None` when the recorded
   and reconstructed values are absent. Planted proof: an integrity violation
   carrying a tick renders its code, not two `None`s.
-- [ ] **FU-06.** A `MeetingRunner` that resolves under a non-default skip cutoff
+- [x] **FU-06.** A `MeetingRunner` that resolves under a non-default skip cutoff
   must set `MeetingArtifacts.skip_confidence_threshold`. Document the contract at
   `orchestrator/game.py` on the protocol (`:757`) and the field (`:753`), and
   consider a write-time check so the recorder refuses an unattributable cutoff
   rather than leaving the reader to discover a permanently unreadable recording.
   Planted proof: bytes a custom runner would write are refused at write time, or
   the contract change is shown to make them unwritable.
-- [ ] **NC5-02.** Adverse test for the vented v2 observer guard at
+- [x] **NC5-02.** Adverse test for the vented v2 observer guard at
   `observation/temporal.py:71`. Planted proof: dropping `not observer.in_vent`
   fails the new test where it passes the whole suite today.
-- [ ] **NC5-03.** Adverse test for the off-profile `TaskActivityAccount` refusal
+- [x] **NC5-03.** Adverse test for the off-profile `TaskActivityAccount` refusal
   at `meetings/manager.py:1683`. Planted proof: disabling the guard fails the new
   test where it passes the whole suite today.
-- [ ] **P-04.** A `check_doc_facts.py` lever-registry rule covering the four new
+- [x] **P-04.** A `check_doc_facts.py` lever-registry rule covering the four new
   experiment env names in `.env.example` (`AILIBI_EVIDENCE_REASONING`,
   `AILIBI_BOUNDED_REBUTTAL`, `AILIBI_PUBLIC_ACCOUNTS`,
   `AILIBI_ATTRIBUTED_TESTIMONY`). Planted proof: renaming one in `.env.example`
   without updating its documentation fails the gate.
-- [ ] **P-05 / CMP-01.** Card and gate counts in `tasks/README.md` are derived
+- [x] **P-05 / CMP-01.** Card and gate counts in `tasks/README.md` are derived
   from `tasks/work/*.md` rather than typed. Planted proof: flipping a card's
   Status to `active` without touching the README fails the gate.
-- [ ] **P-06 / P-10.** The `tasks/README.md` ownership label describes the
+- [x] **P-06 / P-10.** The `tasks/README.md` ownership label describes the
   current batch rather than a finished one, and `tasks/review-ledger.md` gains a
   row per post-review commit. Planted proof for the ledger half: a post-review
   commit with no ledger row is visible in the check.
-- [ ] **CONC-6.** `api/public_results.py`'s `clear_cache()` plus install
+- [x] **CONC-6.** `api/public_results.py`'s `clear_cache()` plus install
   (`:228-232`) is serialised under a per-loader lock, and the loader's `lru`
   keys (`api/replay_loader.py:949-956`) carry a cache-generation counter so a
   same-length, same-mtime replacement during a concurrent cold build cannot
@@ -77,7 +77,7 @@ an implementation.
   [cache card](public-results-cache.md)'s constraint sentence, which currently
   rules out locking. Planted proof: the controlled interleaving that reproduced
   the silent corrupt install now refuses.
-- [ ] **Probe-descriptor lifetime.** Either hold the exclusive probe descriptors
+- [x] **Probe-descriptor lifetime.** Either hold the exclusive probe descriptors
   in `orchestrator/recording.py:134-139` for the recording's lifetime — which
   closes the peer-unlink race the zero-byte rollback at `:60-67` opened, by
   construction — or drop the item and keep the module's existing disclaimer.
@@ -123,3 +123,157 @@ since the shipped runners tally at the default cutoff.
 for the planted failures, plus the targeted observation and orchestrator tests
 each item adds, then `bash scripts/check.sh`, then
 `bash scripts/verify_samples.sh`.
+
+## Results
+
+Ten commits, one per acceptance item plus the held-out restamp the cutoff
+contract required, each with the planted or perturbed failure its box names.
+Scope follows `docs/architecture.md` Packages and Determinism and the
+privileged script, reader and meeting-layer boundaries; no engine transition,
+prompt byte, recording, report or served DTO moved, and every candidate stays
+default-OFF. Numbers below were measured on the commit each row names.
+
+| Item | Commit | Perturbation | What the check then said |
+| --- | --- | --- | --- |
+| NC4-2 / FU-5 | `444a47fd` | the two guard calls replaced by `pass` | 8 destination cases fail with "destination validation must precede the evaluator" |
+| FU-03 | `db885271` | the pre-repair tick branch restored | `assert 'ballot_roster_mismatch' in 'FAIL: headless-seed-22 diverged at tick 7: recorded None, reconstructed None'` |
+| FU-06 | `29393cda` | the write-time guard call removed | `Failed: DID NOT RAISE <class 'ValueError'>` |
+| NC5-02 | `c8efd12a` | `not observer.in_vent` dropped | all three arms fail; 152 other v2 tests still pass |
+| NC5-03 | `f8a68519` | the off-profile condition disabled | the new case fails; 1,429 other meeting tests still pass |
+| P-04 | `666dfbbb` | `AILIBI_PUBLIC_ACCOUNTS` renamed in `.env.example` | exit 1, naming the undocumented switch and the unregistered one |
+| CONC-6 | `54c623e8` | the cache generation frozen | `DID NOT RAISE`; the silent install publishes `crew_wins 1` under the post-flip fingerprint |
+| Probe descriptors | `4a7c0071` | the empty-output removal dropped | the pinned case fails with the peer's file still present |
+| P-05 / CMP-01 | `51118004` | one card flipped to `active` | exit 1: "breaks down as '3 ready, 40 done', but tasks/work/ holds 2 ready, 1 active, 40 done" |
+| P-06 / P-10 | `2d06e0b4` | one register row deleted | "post-review commits with no ledger row: [('54c623e8', ...)]" |
+
+Two commits carry no acceptance box of their own. `d282dd06` restamps the
+frozen held-out manifest, which `29393cda` moved by editing one of the
+twenty-two hashed generator sources: regenerating the band left all fifty
+accepted prefix digests and all eight skips byte-identical, `last_accepted_seed`
+still 3057, and only `source_sha256` and the new dated `dependency_restamps`
+entry changed. No prefix was printed or opened; the `docs/artifacts.md`
+`audits/` row was recomputed with the change staged (14,925,876 → 14,926,477
+bytes across the same 204 files) and `scripts/verify_ml_evidence.py` reported
+`checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5`. `d210c04c` then repairs two
+strict-mypy re-export errors that only the whole-tree run reaches.
+
+### Decisions
+
+**The destination guard runs after the preflight, not before.** A destination
+inside `--output-dir` is refused by the existing preflight, whose message names
+the exact recording it collides with; the new basename rule is what remains for
+the recordings no preflight can enumerate. Running it second keeps the more
+specific message where both apply. What counts as a recording is read from
+`orchestrator.recording_fingerprint`'s shared filename contract plus the audit
+sidecar built from the same stem, so `replay-seed-debug.jsonl` and other names
+the recorder never writes stay usable as report destinations. This extends
+[report destinations](report-destinations.md)' in-directory alias protection
+and changes none of it.
+
+**FU-06 took the write-time refusal, not documentation alone.** The check is
+small — when a runner reports no cutoff, its ballots must reproduce its own
+outcome at `LEGACY_SKIP_CONFIDENCE_THRESHOLD` — and it makes the unreadable
+bytes unwritable rather than leaving the reader to discover them. It sits
+inside the meeting's `try` block, so a refusal still retains the meeting's
+provider attempts on the abort record, and it is gated on a replay being
+recorded, since the defect is a recording that no reader will accept. Every
+shipped runner tallies at the legacy cutoff; the default runner reports its
+cutoff and never reaches the tally.
+
+**P-05's gate lives in `scripts/validate_task_docs.py`, not
+`check_doc_facts.py`.** The finding suggested the latter, but the former is the
+gate that already parses every `tasks/work/*.md`, is invoked directly by
+`scripts/check.sh`, and needs no document-fixture surgery to read the cards.
+
+**"Post-review commit" is defined from git, not by hand:** every non-merge
+commit reachable from this branch and not from the cleanup merge `8161689a`.
+A commit cannot contain its own sha, so the register declares the coverage tip
+it reaches; the tip must be the register's own last row and an ancestor of
+`HEAD`, and the commit after the one it records advances it. The residual is
+stated rather than hidden: a tip that lags leaves later commits uncovered until
+it moves.
+
+**The probe-descriptor lifetime: declined, and why.** Holding the exclusive
+probes open for the recording's lifetime does not close the peer-unlink race
+the zero-byte rollback opened. An open descriptor confers no exclusion on
+POSIX: a peer running with `force` replaces the path and creates its own file
+whoever holds a handle, and both writers in the observed race passed `force`.
+Making retention decisive would need advisory locking every writer honours — a
+multi-process protocol this card explicitly does not introduce — and it would
+break the recorder's "nothing on disk until the first append" contract, since
+the probe file would survive as a zero-byte output. The window therefore stays
+disclaimed, the disclaimer now names it, and a test pins the behaviour so a
+future change is a decision rather than a surprise.
+
+**CONC-6 keeps the cache's shape.** A per-loader lock and a generation counter
+in the LRU keys; no thread created, no in-flight work coalesced, still one
+immutable result per loader. The [cache card](public-results-cache.md)'s
+constraint sentence, which read "no new threads" as ruling this out, is amended
+with a dated subsection in its own Results recording what changed.
+
+### Verification
+
+Focused, on the tree at `2d06e0b4`:
+
+```sh
+.venv/bin/pytest tests/scripts tests/meetings/test_lever_registry.py \
+  tests/api/test_public_results.py -q
+.venv/bin/pytest tests/observation/test_temporal_v2.py \
+  tests/meetings/test_public_accounts.py \
+  tests/orchestrator/test_experimental_evaluation_integrity.py \
+  tests/orchestrator/test_recording_replacement.py -q
+```
+
+The first selection passed 1,389 tests with one warning; the second passed 148.
+Every perturbation in the table above was applied to the working tree, run, and
+restored, on the commit its row names.
+
+Combined, on the tree at `d210c04c` plus the card, index and ledger records in
+the commit that carries this paragraph:
+
+```sh
+bash scripts/check.sh
+bash scripts/verify_samples.sh
+AILIBI_SAMPLES_ROOT="$PWD/replays/ml_corpus" bash scripts/verify_samples.sh
+.venv/bin/pytest tests/orchestrator/ --collect-only -q
+uv run python scripts/build_sample_report.py --sample-dir <set> --check
+```
+
+`scripts/check.sh` exited 0: 7,508 Python tests, 20 optional skips and three
+expected failures; 515 frontend tests across 19 files; strict typing on 474
+sources; ruff lint and format; four import contracts kept; task-doc and
+generated-type checks; and the production build. `verify_samples.sh` verified
+all 300 canonical recordings — 100 under `replays/samples/` and 200 under
+`replays/ml_corpus/` — without modifying their bytes. `tests/orchestrator/`
+collects 586 tests in a fresh interpreter. All four
+`build_sample_report.py --check` runs report their committed report consistent
+with its replays. The browser journeys were not run: no served DTO changed.
+An earlier run of the same gate at `2d06e0b4` failed on two strict-mypy
+re-export errors that only the whole-tree run reaches; `d210c04c` repairs them.
+
+### Which documents the new rules now bind
+
+Three documents are held to derived facts they were not held to before, and
+each is green at this tree: `.env.example`'s
+independently-versioned-experiments section (every registered switch documented
+as a commented bare default, no active export, no unregistered assignment);
+`tasks/README.md`'s card inventory (total and per-status breakdown, with an
+as-of stamp); and `tasks/review-ledger.md`'s post-merge commit register (every
+sha, card and subject re-derived from `git log`).
+
+### Limitations
+
+The destination guard is a name rule: a genuine recording stored under a name
+the recorder never writes is still not protected outside `--output-dir`, and
+the in-directory protection that covers that case is unchanged. The cutoff
+refusal binds recordings only — a runner used without a replay is unaffected —
+and it cannot detect a runner that reports a cutoff other than the one it
+actually resolved under. The concurrency work is confined to the cache's own
+clear-and-install: concurrent cold requests still each reconstruct, and
+`orchestrator/recording.py`'s concurrent-writer disclaimer stands, now with the
+peer-unlink window named. The commit register's coverage tip can lag the
+branch; nothing forces it forward except the next commit's author. The
+git-derived half of that check skips, with its reason, on a shallow clone,
+where the merge checkpoint is not in the object store — CI checks out at
+`fetch-depth: 1`. No live provider was called, no recorded bytes were rewritten
+and nothing here adopts a candidate.

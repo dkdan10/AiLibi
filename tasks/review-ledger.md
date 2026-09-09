@@ -362,7 +362,7 @@ One row per post-review commit, which `P-10` asked for and the
 disposition pass above deferred here. A post-review commit is every
 non-merge commit reachable from this branch and not from `8161689a`, the
 merge that landed the cleanup — the boundary the sections above stop at.
-Rows cover every non-merge commit from `8161689a` to `51118004`, which is the last row below; a commit after that tip is uncovered until the tip advances with it.
+Rows cover every non-merge commit from `8161689a` to `d210c04c`, which is the last row below; a commit after that tip is uncovered until the tip advances with it.
 
 Nothing here is typed: `tests/scripts/test_review_ledger_register.py`
 re-derives every sha, card and subject from `git log` over that range and
@@ -473,6 +473,8 @@ advanced by the commit after the one it records.
 | `54c623e8` | nonblocking-followup-improvements | fix: close the clear-and-install window in the public-results cache |
 | `4a7c0071` | nonblocking-followup-improvements | docs: decide the probe-descriptor lifetime and pin what it leaves open |
 | `51118004` | nonblocking-followup-improvements | feat: derive the task index's card counts from the cards themselves |
+| `2d06e0b4` | nonblocking-followup-improvements | docs: register every post-merge commit and label the ownership section |
+| `d210c04c` | nonblocking-followup-improvements | style: import the two registries from the modules that own them |
 
 No row above advances a delivery state, adopts a candidate or records a
 live provider call.
