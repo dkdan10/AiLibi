@@ -59,9 +59,10 @@ denominator.
 ## Acceptance
 
 - [x] Review correction (round 6): the branch carries the predecessor chain, and
-  the registry-row evidence block prints what the head prints — the fenced
-  output under the two quoted commands is the head's `204` / `14925876`, not a
-  superseded round's total, `docs/artifacts.md` reads exactly that, the earlier
+  every undated evidence block prints what the head prints — the registry row's
+  fenced output is the head's `204` / `14925876`, not a superseded round's
+  total, `docs/artifacts.md` reads exactly that, and the prefix-secrecy scan's
+  fenced output is the head's `2095 tracked files; offenders []`. The earlier
   figures are kept as dated history, and the Results preamble names the merge of
   `cfbf162f` rather than an unmerged predecessor tip.
 - [x] Review correction: the grader-isolation gate landmines every grader the
@@ -498,7 +499,7 @@ accepted digests (seeds 3000-3057) and 8 skips, all `witnessed_kill`, under the
 band, tick budget and roster the manifest itself names. No prefix was printed,
 logged or written into any report. That last claim is checked rather than
 asserted — 382 search needles, being the 50 prefixes' canonical JSON plus their
-332 distinct step encodings, over all 2,094 tracked files on this branch:
+332 distinct step encodings, over all 2,095 tracked files on this branch:
 
 ```sh
 git ls-files > /tmp/tracked.txt
@@ -515,7 +516,7 @@ print(f'{len(whole)} prefixes; {len(steps)} distinct step encodings; {len(files)
 ```
 
 ```
-50 prefixes; 332 distinct step encodings; 2094 tracked files; offenders []
+50 prefixes; 332 distinct step encodings; 2095 tracked files; offenders []
 ```
 
 The prose here first read "382 distinct step encodings"; 382 is the needle total
@@ -1274,6 +1275,15 @@ superseded figures are kept as a dated history line naming the commit each was
 measured at. The Results preamble no longer describes the branch as based on the
 verified tip of `work/recorded-provenance-gaps`; it names the merge of
 `cfbf162f`, which is what the branch actually carries.
+
+The merge staled one further undated block, and it is corrected in the same
+pass. **The frozen held-out set**'s prefix-secrecy scan prints a tracked-file
+count, and the merge added one tracked file, so `2,094` became `2,095` in both
+the prose and the fenced output. Re-running the quoted command at this head
+prints `50 prefixes; 332 distinct step encodings; 2095 tracked files; offenders
+[]` — the offender list is still empty, so what moved is the denominator and not
+the finding. That block is undated and describes the head, so it carries the
+head's number rather than a history line.
 
 The frozen held-out set did not move and needs no restamp. The merge changes no
 file in `experiments/held_out_prefixes.py`'s `GENERATOR_SOURCES` — its 19 changed
