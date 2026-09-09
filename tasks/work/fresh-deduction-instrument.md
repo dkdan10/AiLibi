@@ -58,6 +58,16 @@ denominator.
 
 ## Acceptance
 
+- [x] Review correction (round 8): the round-6 acceptance item's registry figure
+  is pinned to the commit it was measured at (`204` / `14925876` at `46a63e52`)
+  and names the head's `204` / `14926312`, which round 7's execution-manifest
+  edit produced; PR #443's "Definition of done" is rewritten against the head
+  (round 7 holds the head's gate table; `npm run e2e` ran in round 6 because the
+  merged chain carries the provenance DTO change while this card's own commits
+  changed no served DTO; the flaky-test note argues only from
+  `orchestrator/run_limits.py` and `orchestrator/game.py` being untouched on the
+  branch). Documentation only; recorded in "Review corrections, round 8
+  (2026-09-09)".
 - [x] Review correction (round 7): the dry-run table's undated block prints what
   the head prints — the candidate arm's input-token cell is the head's `577,228`,
   the headroom arithmetic sums to `1,463,282`, and the execution manifest's
@@ -74,8 +84,10 @@ denominator.
   reads rendered prompt bytes the merge moved.
 - [x] Review correction (round 6): the branch carries the predecessor chain, and
   every undated evidence block prints what the head prints — the registry row's
-  fenced output is the head's `204` / `14925876`, not a superseded round's
-  total, `docs/artifacts.md` reads exactly that, and the prefix-secrecy scan's
+  fenced output was `204` / `14925876` at `46a63e52`, the round-6 tip (round 7's
+  manifest edit moved it to `204` / `14926312`, which the head's fenced output
+  and `docs/artifacts.md` now read), not a superseded round's total, and the
+  prefix-secrecy scan's
   fenced output is the head's `2095 tracked files; offenders []`. The earlier
   figures are kept as dated history, and the Results preamble names the merge of
   `cfbf162f` rather than an unmerged predecessor tip.
@@ -1577,3 +1589,22 @@ The held-out set did not move and owes no restamp: this round changes no file in
 file at all — and the manifest-regeneration test passes at the tip. No band
 prefix was generated, printed or opened, and no live provider call of any kind
 was made.
+
+### Review corrections, round 8 (2026-09-09)
+
+The round-7 verifiers (head `5031e735`) found the round-6 acceptance item still
+calling `204` / `14925876` "the head's" registry figure after round 7's
+execution-manifest edit had moved the row to `204` / `14926312`, and PR #443's
+undated "Definition of done" still pointing at round 4 as the head's gate table,
+saying `npm run e2e` was not run, and arguing the flaky-test note from a
+branch-wide claim the integration merge had falsified. All three are corrected
+in place: the acceptance figure is pinned to `46a63e52` with the head's value
+beside it; the PR body's section now names round 7 as the gate table of record,
+records the round-6 `npm run e2e` run (`13 passed`, 3 skipped, owed by the
+merged chain's provenance DTO change), and narrows the flaky-test sentence to
+`orchestrator/run_limits.py` and `orchestrator/game.py` being untouched on the
+branch. No code, test, manifest or inventory byte moves; `docs/artifacts.md`
+still reads `14,926,312 tracked bytes / 204 files`. Gates run on the committed
+tree: `uv run python scripts/validate_task_docs.py` (exit 0) and
+`uv run python scripts/check_doc_facts.py` (exit 0); the full gate ran at
+`5031e735` in round 7 and CI re-runs it on this head.
