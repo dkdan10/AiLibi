@@ -1295,7 +1295,11 @@ opened.
 
 #### Verification, round 6
 
-Run on the merged tree, with this card's edits in place.
+Run on the merged tree, with this card's edits in place. `bash scripts/check.sh`,
+`scripts/verify_ml_evidence.py` and the held-out suite were re-run after the
+tracked-count correction and are reported at the branch tip; the rest were run on
+the same tree one doc commit earlier, and no command below reads a byte that
+commit moved.
 
 | Command | Result |
 | --- | --- |
