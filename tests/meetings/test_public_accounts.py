@@ -37,9 +37,14 @@ from meetings.public_accounts import (
 from meetings.schemas import (
     MeetingResult,
     AccusationClaim,
+    AlibiClaim,
+    ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
     ObservationClaim,
+    SawKillObservation,
+    SawMoveObservation,
+    SawPlayerObservation,
     SawVentObservation,
     TaskActivityAccount,
     VentWitnessRecord,
@@ -539,3 +544,175 @@ def test_turn_validation_gate_rejects_a_missing_chokepoint(
     )
     with pytest.raises(AssertionError):
         _assert_future_account_refused()
+
+
+def _flags(*turns: MeetingTurn, roster: frozenset[str]) -> tuple[ContradictionRef, ...]:
+    return detect_public_account_conflicts(
+        MeetingTranscript(turns=turns),
+        roster=roster,
+        room_neighbors=_map().room_neighbors,
+    )
+
+
+def _claim_turn(speaker: str, claims: tuple[AlibiClaim, ...]) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=speaker,
+        turn_index=0,
+        speaker=speaker,
+        turn_kind="opening",
+        reply_to=None,
+        claims=claims,
+        free_text="unsure",
+    )
+
+
+def _alibi(subject: str, room: str, tick: int) -> AlibiClaim:
+    return AlibiClaim(
+        type="alibi", subject=subject, room=room, from_tick=tick, to_tick=tick
+    )
+
+
+def test_one_speaker_alone_impeaches_itself_not_the_player_it_named() -> None:
+    # The adverse case: p-2 alone states two mutually distant placements of
+    # innocent p-5. Two sentences from one mouth are one account, so the flag
+    # names p-2 and the description says whose account it impeaches. Before
+    # this rule the identical transcript minted a flag whose subjects tuple
+    # named p-5 alone, and that subject is what the belief fold contradicts.
+    (flag,) = _flags(
+        _claim_turn("p-2", (_alibi("p-5", "REACTOR", 2), _alibi("p-5", "LABS", 3))),
+        roster=frozenset({"p-2", "p-5"}),
+    )
+    assert flag.subjects == ("p-2",)
+    assert "come from p-2 alone" in flag.description
+    assert "rather than p-5" in flag.description
+    assert flag.evidence_band == "weak"
+
+
+def test_two_speakers_who_disagree_still_name_the_player_they_disagree_about() -> None:
+    # The control that keeps the repair from silencing the channel: the same
+    # two placements from DIFFERENT speakers are a genuine disagreement about
+    # p-5, so the flag still names p-5 and carries no re-target sentence.
+    (flag,) = _flags(
+        _claim_turn("p-2", (_alibi("p-5", "REACTOR", 2),)),
+        _claim_turn("p-4", (_alibi("p-5", "LABS", 3),)),
+        roster=frozenset({"p-2", "p-4", "p-5"}),
+    )
+    assert flag.subjects == ("p-5",)
+    assert "alone" not in flag.description
+
+
+def test_a_speaker_who_contradicts_their_own_placements_stays_the_subject() -> None:
+    # A single speaker's self-placements are already about that speaker, so
+    # the re-target rule leaves them exactly as they were.
+    (flag,) = _flags(
+        _turn(
+            "p-1",
+            (
+                WhereaboutsClaim(type="whereabouts", room="REACTOR", tick=5),
+                WhereaboutsClaim(type="whereabouts", room="LABS", tick=5),
+            ),
+        ),
+        roster=frozenset({"p-1"}),
+    )
+    assert flag.subjects == ("p-1",)
+    assert "alone" not in flag.description
+
+
+def test_the_cheapest_lie_now_places_the_speaker_who_told_it() -> None:
+    # NG3-5's adverse case: an alibi in one room plus a fabricated sighting
+    # across the map. Watching an event says where the watcher was, so the
+    # pair is p-2's own impossible route and the flag names p-2. Before the
+    # speaker placement the identical turn raised nothing at all.
+    (flag,) = _flags(
+        _turn(
+            "p-2",
+            (
+                WhereaboutsClaim(type="whereabouts", room="REACTOR", tick=5),
+                SawPlayerObservation(
+                    type="saw_player", tick=5, subject="p-1", room="LABS"
+                ),
+            ),
+        ),
+        roster=frozenset({"p-1", "p-2"}),
+    )
+    assert flag.subjects == ("p-2",)
+    assert "p-2's own sighting places p-2 in LABS" in flag.description
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        SawVentObservation(type="saw_vent", tick=5, subject="p-1", room="LABS"),
+        SawKillObservation(type="saw_kill", tick=5, subject="p-1", room="LABS"),
+        SawMoveObservation(
+            type="saw_move", tick=5, subject="p-1", from_room="LABS", to_room="MEDBAY"
+        ),
+    ],
+)
+def test_every_sighting_shape_places_the_speaker(
+    observation: ObservationClaim,
+) -> None:
+    # A witnessed transition is stated from its origin room; the destination
+    # is one hop away, which the vision slack already covers.
+    (flag,) = _flags(
+        _turn(
+            "p-2",
+            (WhereaboutsClaim(type="whereabouts", room="REACTOR", tick=5), observation),
+        ),
+        roster=frozenset({"p-1", "p-2"}),
+    )
+    assert flag.subjects == ("p-2",)
+
+
+def test_a_sighting_one_room_away_is_never_called_impossible() -> None:
+    # Soundness of the speaker placement: an impostor sees one adjacent room
+    # (DESIGN.md §3.4), so a sighting next door must not contradict the
+    # speaker's own stated position. ADMIN and WEST_HALL are adjacent.
+    assert (
+        _flags(
+            _turn(
+                "p-2",
+                (
+                    WhereaboutsClaim(type="whereabouts", room="ADMIN", tick=5),
+                    SawPlayerObservation(
+                        type="saw_player", tick=5, subject="p-1", room="WEST_HALL"
+                    ),
+                ),
+            ),
+            roster=frozenset({"p-1", "p-2"}),
+        )
+        == ()
+    )
+
+
+def test_a_named_bystander_is_placed_by_the_sighting_that_named_them() -> None:
+    # NG2-2's second half: co_present was validated but never compared, so a
+    # bystander could deny a co-presence nobody could check. p-2 places p-3
+    # alongside the sighting in ADMIN; p-3 says LABS, three rooms away.
+    (flag,) = _flags(
+        _turn(
+            "p-2",
+            (
+                SawPlayerObservation(
+                    type="saw_player",
+                    tick=5,
+                    subject="p-4",
+                    room="ADMIN",
+                    co_present=("p-3",),
+                ),
+            ),
+        ),
+        MeetingTurn(
+            turn_id="p-3",
+            turn_index=1,
+            speaker="p-3",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(WhereaboutsClaim(type="whereabouts", room="LABS", tick=5),),
+            free_text="unsure",
+        ),
+        roster=frozenset({"p-2", "p-3", "p-4"}),
+    )
+    assert flag.subjects == ("p-3",)
+    assert "p-2 places p-3 alongside that sighting in ADMIN" in flag.description
+
