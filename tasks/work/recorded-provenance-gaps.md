@@ -45,6 +45,13 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
 
 ## Acceptance
 
+- [x] Review correction (closeout round 4): the `### Verification` table's
+  `npm run e2e` row still carried the implementation round's figure
+  (`13 passed (3.9m)`, measured at `e26045bd`) under a preamble saying every
+  figure was measured on this head in closeout round 2. The row now names the
+  run of record — closeout round 2 at `844fbe8d`, `13 passed`, 3 skipped — and
+  the preamble says so; durations are dropped from the row per closeout round
+  3's rule. Recorded in "Review corrections, closeout round 4 (2026-09-09)".
 - [x] Review correction: the commit that pinned round 2's drifting figures
   (`4e744f63`, "pin every card figure to the commit it was measured at") wrote a
   fresh unpinned one in the same sentence — `git log --oneline --first-parent
@@ -361,9 +368,10 @@ hook — and only the one profile that opts in can produce it.
 ### Verification
 
 Every exit code below was captured directly from the command, never from a
-pipeline. Every figure in this table was measured on this head, in the closeout
-round 2 described below; the values it carried at earlier heads are superseded
-and dated there rather than dropped.
+pipeline. Every figure in this table was measured in closeout round 2 at
+`844fbe8d`, described below, and re-measured on this head where the round that
+produced this head says so; the values the rows carried at earlier heads are
+superseded and dated there rather than dropped.
 
 | Command | Result |
 | --- | --- |
@@ -371,7 +379,7 @@ and dated there rather than dropped.
 | `uv run pytest tests/eval tests/api tests/scripts -q` (the card's named trio) | exit 0 — `2860 passed, 3 skipped, 1 warning in 788.45s`, run standalone on this head. The same suites run again inside the gate's pytest leg, which collects all of `tests/` — a strict superset — and that leg is the run of record. Two earlier figures are superseded: the per-suite ones this row carried before round 1 (not reproducible; see "Review corrections, round 1") and round 1's own `2825 passed, 3 skipped in 2450.75s`, which was the trio at `17e929f4`. |
 | `bash scripts/verify_samples.sh` | exit 0, "All 50 samples verified clean." twice — 100 canonical reconstructions |
 | `build_sample_report.py --check` × 4 (`replays/samples/{4p1i,9p2i}`, `replays/ml_corpus/{4p1i,9p2i}`) | all exit 0, "consistent with its replays." each |
-| `cd frontend && npm run e2e` | exit 0 — 16 Playwright tests, `13 passed (3.9m)`, 3 skipped |
+| `cd frontend && npm run e2e` | exit 0 — 16 Playwright tests, `13 passed`, 3 skipped, the closeout round-2 run at `844fbe8d` (run of record). Superseded: the implementation round's `13 passed (3.9m)` at `e26045bd`, which this row carried until closeout round 4. GitHub's `Frontend e2e (Playwright)` job is green on this head. |
 
 The first `check.sh` run on this branch exited **2**: the two
 `ReportProvenanceGroupView` literals in
@@ -1317,3 +1325,19 @@ this round changes one documentation file. The run of record stays round 2's
 green on `b4555f39`, the last commit that touched source. No provider call of
 any kind was made, and `scripts/verify_ml_evidence.py` was never run with
 `--complete`.
+
+### Review corrections, closeout round 4 (2026-09-09)
+
+The docs verifier of closeout round 3 (head `30fb9083`) found one row of the
+`### Verification` table contradicting its own preamble: the `npm run e2e` row
+still carried `13 passed (3.9m)`, the implementation round's measurement at
+`e26045bd`, while the preamble claimed every figure was measured on this head in
+closeout round 2. Corrected in place: the row names closeout round 2's run at
+`844fbe8d` (`13 passed`, 3 skipped) as the run of record, marks the earlier
+figure superseded, drops the duration, and notes that GitHub's `Frontend e2e
+(Playwright)` job is green on this head; the preamble now says which rows were
+re-measured on the head. No code, fixture, manifest or inventory row changed.
+
+Gates run on the committed tree: `uv run python scripts/validate_task_docs.py`
+(exit 0) and `uv run python scripts/check_doc_facts.py` (exit 0); the full gate
+ran on `30fb9083` in closeout round 3 and CI re-runs it on this head.
