@@ -58,6 +58,12 @@ denominator.
 
 ## Acceptance
 
+- [x] Review correction (round 6): the branch carries the predecessor chain, and
+  the registry-row evidence block prints what the head prints — the fenced
+  output under the two quoted commands is the head's `204` / `14925876`, not a
+  superseded round's total, `docs/artifacts.md` reads exactly that, the earlier
+  figures are kept as dated history, and the Results preamble names the merge of
+  `cfbf162f` rather than an unmerged predecessor tip.
 - [x] Review correction: the grader-isolation gate landmines every grader the
   instrument defines, the list read off the module rather than typed, so the
   manifest's "every grader" is what the test does.
@@ -218,12 +224,16 @@ evaluation as a check.
 
 ## Results
 
-Delivered on `work/fresh-deduction-instrument`, based on `5682ea2a` (the
-verified tip of `work/recorded-provenance-gaps`, which carries both
-preconditions: the renderer repair and
-`GameProvenance.temporal_observation_version`). Every figure below was produced
-by the quoted command on the tree this card was completed at; a figure measured
-at an earlier commit is dated where it appears.
+Delivered on `work/fresh-deduction-instrument`. The branch started from
+`5682ea2a` and now carries the merge of `cfbf162f`, the tip of
+`work/accounts-channel-hardening`, which is the last link of the stacked chain
+and so brings `work/recorded-provenance-gaps`, `work/evidence-renderer-salience`
+and `work/followup-review-dispositions` with it. Both preconditions are on that
+merged tree: the renderer repair and
+`GameProvenance.temporal_observation_version`. This card's PR is based on
+`work/accounts-channel-hardening` and is retargeted to `main` once that merges.
+Every figure below was produced by the quoted command on the tree this card was
+completed at; a figure measured at an earlier commit is dated where it appears.
 
 ### What was built
 
@@ -517,8 +527,9 @@ passes unchanged inside the `tests/eval tests/experiments` run above.
 
 ### Registry row
 
-`audits/` gained one file, the execution manifest, and eight lines in the
-directory's own README index. Recomputed with the change staged, by listing the
+This branch adds one file to `audits/` — the execution manifest — plus eight
+lines in the directory's own README index, and the predecessor merge described
+below adds a second file. Recomputed at the head of this branch by listing the
 tracked paths and summing their sizes:
 
 ```sh
@@ -527,16 +538,28 @@ git ls-files audits | tr '\n' '\0' | xargs -0 stat -f %z | awk '{s+=$1} END {pri
 ```
 
 ```
-203
-14889236
+204
+14925876
 ```
 
-`docs/artifacts.md` now reads `14,892,270 tracked bytes / 203 files`, up from
-`14,852,791 / 202` on the base commit, and `scripts/verify_ml_evidence.py`
-compares that row against disk. *(The same one manifest has grown on each round:
-the total was `14,873,520` at first close, `14,878,444` after the round-1
-corrections, `14,882,522` after the round-2 ones, `14,889,236` after the round-4
-ones and `14,892,270` after the round-5 ones.)*
+`docs/artifacts.md` reads exactly that: `14,925,876 tracked bytes / 204 files`.
+`scripts/verify_ml_evidence.py` compares the row against disk, and it is green
+at this head.
+
+The 204th file is not this card's. Merging `cfbf162f` brought
+`audits/review-2026-09-06/followup-correction-record.md` in from the predecessor
+chain, and because both sides had added one file to the same row, neither side's
+total was right for the merged tree — the row was recomputed rather than
+resolved to a side. The base commit `5682ea2a` carried `14,852,791 / 202`, this
+branch added 39,479 bytes and the predecessor 33,606, and those sum to the
+14,925,876 above.
+
+*(History, since the same one manifest grew on each review round: the total was
+`14,873,520 / 203` at first close, `14,878,444 / 203` after the round-1
+corrections, `14,882,522 / 203` after the round-2 ones, `14,889,236 / 203` at
+`3a02ede8` after the round-4 ones and `14,892,270 / 203` at `87005a14` after the
+round-5 ones — each figure measured at the commit it is dated to, and each the
+pre-merge count. The merge is what moved the file count to 204.)*
 
 ### Limitations
 
@@ -1200,3 +1223,91 @@ moved with it.
 
 No live provider call of any kind was made in this round. The two new tests read
 committed bytes and git history and construct no client.
+
+### Review corrections, round 6 (2026-09-09)
+
+Integration, not a source change. This card is the last link of the stacked
+chain, and round 5's verifiers found two things wrong with it as a delivery:
+the PR still sat on an unmerged predecessor and would not merge as it stood, and
+the **Registry row** section's evidence block was stale — the fenced output
+under the two quoted commands still printed `203` / `14889236`, the round-4
+total measured at `3a02ede8`, while the sentence beneath it asserted the
+round-5 value `14,892,270 / 203`. A block whose command and whose output
+disagree is exactly the drift this queue keeps catching: the reader cannot tell
+which number the head prints, and neither figure was the head's after the merge.
+
+Two commits. The first merges `cfbf162f`, the tip of
+`work/accounts-channel-hardening`, which already carries
+`work/recorded-provenance-gaps` (`42095485`),
+`work/evidence-renderer-salience` (`94c76388`) and
+`work/followup-review-dispositions` (`cb788692`) — so one merge brings the whole
+chain. It conflicted in exactly one place, `docs/artifacts.md`'s `audits/` row,
+because both sides had added one audit file to the same row. Neither side's
+total is true of the merged tree, so the row was recomputed from the index with
+everything staged rather than resolved to a side. The second commit is this
+card, and touches nothing else.
+
+The rows, before and after:
+
+| row | ours at `44f0b99e` | theirs at `cfbf162f` | merged head |
+| --- | --- | --- | --- |
+| `audits/` | 14,892,270 / 203 | 14,886,397 / 203 | **14,925,876 / 204** |
+| `tests/fixtures/` | 2,098,563 / 29 | 2,098,563 / 29 | 2,098,563 / 29 |
+
+The merged total reconciles rather than being asserted: the merge base
+`5682ea2a` carried `14,852,791 / 202`, this branch added 39,479 bytes in
+`audits/deduction-candidate/execution-manifest.md` and the predecessor added
+33,606 in `audits/review-2026-09-06/followup-correction-record.md`, and
+14,852,791 + 39,479 + 33,606 = 14,925,876. Every other counted row
+`scripts/verify_ml_evidence.py` checks was recomputed the same way on the merged
+tree and is unchanged: `replays/samples/` 107 files, `replays/ml_corpus/` 209,
+`replays/records/phase-21-wave2-finding/` 2, the four shipped tactical weight
+files, `training/artifacts/{impostor,crew,anchor_study}/` 105,
+`training/artifacts/{surrogate,conviction,composed}/` 15,
+`training/artifacts/coevo/` 90 beside its own `EVIDENCE-MANIFEST.md` row,
+`training/reports/` 21, `docs/media/` 7, `design/phase-12/` 18, and
+`experiments/lab/` + `experiments/model_probe/` 164.
+
+The **Registry row** section above now quotes the two commands and shows what
+they print at this head, `docs/artifacts.md` reads exactly that, and the
+superseded figures are kept as a dated history line naming the commit each was
+measured at. The Results preamble no longer describes the branch as based on the
+verified tip of `work/recorded-provenance-gaps`; it names the merge of
+`cfbf162f`, which is what the branch actually carries.
+
+The frozen held-out set did not move and needs no restamp. The merge changes no
+file in `experiments/held_out_prefixes.py`'s `GENERATOR_SOURCES` — its 19 changed
+files are prompt-loader, meetings, tests, docs, tasks and audits bytes — and
+`audits/deduction-candidate/held-out/manifest.json` arrives byte-identical from
+both parents, so `git diff` against each is empty and all fifty accepted digests
+and the skip list are untouched. No band prefix was generated, printed or
+opened.
+
+#### Verification, round 6
+
+Run on the merged tree, with this card's edits in place.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `Contracts: 4 kept, 0 broken`; `Success: no issues found in 473 source files`; `7471 passed, 20 skipped, 3 xfailed`; frontend `Test Files 19 passed`, `Tests 515 passed` |
+| `.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q` | `28 passed` |
+| `.venv/bin/pytest -q tests/experiments tests/ev*l` | `1329 passed, 1 skipped in 142.83s` |
+| `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | `80 passed` |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 43 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified` |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `every check passed` |
+| `bash scripts/verify_samples.sh` | `All 50 samples verified clean.` for both sets |
+| `scripts/build_sample_report.py --check` x 4 | all four `is consistent with its replays` |
+| `.venv/bin/pytest tests/orchestrator/ --collect-only -q` | `583 tests collected` |
+| `cd frontend && npm run e2e` | `13 passed, 3 skipped` |
+
+`check.sh`'s count moved from round 5's `7417 passed` to `7471`: the 54 added
+tests are the predecessor chain's, arriving with the merge, and no test of this
+card's changed count. `tests/experiments` and `tests/eval` are unchanged at
+`1329 passed, 1 skipped`, which is the round-5 figure — this card's own suites
+did not move. `npm run e2e` was run this round because the chain carries the
+provenance DTO change; round 5 skipped it because nothing served had moved.
+
+The fake-provider dry run was not re-run and its table above is unchanged: no
+instrument byte moved this round, so no figure in it can have. No live provider
+call of any kind was made.
