@@ -45,6 +45,15 @@ implementing.
 
 ## Acceptance
 
+- [x] Review correction: the comparison never pairs two rows read out of the same
+  artifact, so no public-account flag is self-linked and none is typed
+  `role_proof` by any of the three evidence classifiers. A planted case shows the
+  self-named sighting that used to mint one, and a control shows a genuine
+  cross-artifact disagreement still flags twice.
+- [x] Review correction: the round-0 table's head-drift caveat names what actually
+  moved — the NG3-5 (slack) row's endpoint, not its `contradiction_id`, which is
+  unchanged — and both halves are reproduced by the quoted command on the two
+  commits they are pinned to.
 - [x] Review correction: the firewall's `saw_kill` arm is filtered only where the
   account channel elicits it, so a default-path meeting records exactly what it
   recorded before this card. A default-path case pins it; the accounts arm keeps
@@ -211,7 +220,13 @@ kept.
   vocabulary `frontend/src/lib/contradictions.ts` declares and every reader
   resolves; the derivation lives in `_Placement.identity`, which the
   `contradiction_id` hashes, so two derived pairs off one artifact pair stay two
-  distinct flags.
+  distinct flags. Because those rows share an event id, the comparison also
+  refuses to pair two rows read out of the SAME artifact: a flag reports a
+  disagreement between two statements, and `api.schemas.classify_evidence` types a
+  flag whose endpoints name one artifact as `role_proof` whatever its kind — so a
+  speaker naming itself as a sighting's subject would otherwise turn one sentence
+  into this channel's strongest band. Every endpoint pair the channel emits names
+  two different artifacts.
 - **The teammate firewall is total over the shape union, per path.**
   `exclude_teammate_vent_observations` is renamed
   `exclude_teammate_role_proving_observations` and drops a `saw_kill` naming a
@@ -267,6 +282,15 @@ kept.
   turn to a placeholder over a redundant sentence, so `_placements` derives nothing
   from it and the speaker stays placed by the witness row, which carries the vision
   hop. Nothing is dropped from the record; the speaker's position is unchanged.
+- **A self-pair is skipped at the pair, not by dropping one of its rows.** A
+  speaker naming itself as a sighting's SUBJECT is also legal, but unlike the
+  bystander case the two rows it produces are different placements — the
+  destination it states and the origin its own sighting was made from — and both
+  are worth comparing against what other speakers said. Suppressing either would
+  leave a claimed position uncompared, so `_placements` still emits both and only
+  the comparison declines to pair them with each other. The skip keys on
+  `event_id`, so it covers any derivation a later change adds rather than the one
+  shape that exposed it.
 - **The flattening filter is registered for every prompt set.** It is a pure text
   primitive with no game state, and only the account transcript uses it, so no other
   set's bytes move (`test_explicit_off_preserves_every_default_renderer` compares the
@@ -284,9 +308,11 @@ This table is the round-0 record and stays pinned to `96a83a6a`. The round-1
 corrections below moved three of these guards, so at the head the NC2-3 rows name
 an anchor that no longer exists (`_ROLE_PROVING_OBSERVATIONS` is now two
 scope-specific tuples), the NC2-1 command runs eleven parametrisations rather than
-one, and the NG3-5 (slack) row's `contradiction_id` differs because the hash source
-moved from the endpoint pair to the derived identity. Each of those guards is
-re-planted against the current tree in **Review corrections, round 1** below.
+one, and the NG3-5 (slack) row's flag now carries the artifact endpoint
+`event_b_id='turn:p-2:obs:1'` where it used to carry `turn:p-2:obs:1:witness` — its
+`contradiction_id` is unchanged, because `_Placement.identity` hashes the same
+string the endpoint pair used to. Each of those guards is re-planted against the
+current tree in **Review corrections, round 1** below.
 
 | Finding | Perturbation | Command | Observed |
 | --- | --- | --- | --- |
@@ -304,16 +330,17 @@ was empty afterwards.
 
 ### Verification
 
-All commands run on the code tree at `f8140c32` — the last commit that changes
-anything executable — with this card's own round-1 text on disk as the only
+All commands run on the code tree at `25351035` — the last commit that changes
+anything executable — with this card's own round-2 text on disk as the only
 uncommitted difference, which is exactly the tree this card's commit produces.
-The round-0 figures they replace were measured at `96a83a6a`, before the review
-corrections.
+The figures they replace were measured at `f8140c32` after round 1 and at
+`96a83a6a` before it; both are superseded, and the only movement is the one test
+round 2 adds.
 
 | Command | Result |
 | --- | --- |
-| `.venv/bin/python -m pytest tests/meetings tests/agents -q` | 2,598 passed |
-| `bash scripts/check.sh` | exit 0 — 7,317 Python passed, 20 skipped, 3 xfailed; 515 frontend tests over 19 files; strict mypy on 471 sources; 4 import contracts kept, 0 broken; 390 phase tasks / 390 prompts in sync; 43 work cards; production build |
+| `.venv/bin/python -m pytest tests/meetings tests/agents -q` | 2,599 passed |
+| `bash scripts/check.sh` | exit 0 — 7,318 Python passed, 20 skipped, 3 xfailed; 515 frontend tests over 19 files; strict mypy on 471 sources; 4 import contracts kept, 0 broken; 390 phase tasks / 390 prompts in sync; 43 work cards; production build |
 | `bash scripts/verify_samples.sh` | all 100 canonical recordings verified clean |
 | `AILIBI_SAMPLES_ROOT=replays/ml_corpus bash scripts/verify_samples.sh` | all 200 ML-corpus recordings verified clean |
 | `.venv/bin/python scripts/build_sample_report.py --sample-dir <set> --check` for `replays/samples/4p1i`, `replays/samples/9p2i`, `replays/ml_corpus/4p1i`, `replays/ml_corpus/9p2i` | all four consistent with their replays, exit 0 |
@@ -327,7 +354,8 @@ Recomputed with that change staged: `git ls-files audits | wc -l` → 202 and
 `git ls-files audits -z | xargs -0 wc -c | tail -1` → 14,853,326, which is the
 row written in `docs/artifacts.md`. The round-1 corrections move no `audits/`
 byte — they only READ two committed captures from a test — so that row is
-unchanged and `verify_ml_evidence.py` still reconciles it against disk.
+unchanged and `verify_ml_evidence.py` still reconciles it against disk. The
+round-2 correction moves no `audits/` byte either.
 
 No file in `experiments/held_out_prefixes.py::GENERATOR_SOURCES` is touched by
 this branch. The prompt-revision bump lives in
@@ -375,8 +403,9 @@ whole Python and frontend suites regardless.
   same-tick sighting two rooms from the speaker's stated position is legal
   arithmetic here even though the engine's vision would not allow it. The
   comparison keeps its existing posture of never calling a legal account
-  impossible — including when the speaker names itself among the bystanders of
-  that sighting, which is the one way this card briefly broke that posture.
+  impossible — including when the speaker names itself, among the bystanders of
+  that sighting or as its subject. Both are ways this card briefly broke that
+  posture: the first repaired in round 1, the second in round 2.
 - `eval/alibi_fabrication.py` scores a caught alibi by subject membership, so an
   author-retargeted flag leaves the alibi's third-party subject outside the caught
   set and the alibi counts as survived. That is a real property and it is NOT new
@@ -388,8 +417,8 @@ whole Python and frontend suites regardless.
   published metric's definition for every arm including the baseline, and
   `eval/` is outside this card's writer boundary, so it stays an open item for
   whoever next owns that metric rather than a silent redefinition here.
-- Delivery state: implemented and verified locally; one independent review round
-  received and its blocking findings repaired (below). Not owner reviewed, not
+- Delivery state: implemented and verified locally; two independent review rounds
+  received and their blocking findings repaired (below). Not owner reviewed, not
   merged. Adoption is not applicable — this card repairs a gated channel and
   adopts nothing.
 
@@ -486,3 +515,72 @@ levers OFF, and the scorer has always read it the same way — the reproduction 
 the limitation above. Repairing it would redefine a published metric for every arm
 including the baseline, in `eval/`, which is outside this card's writer boundary.
 It is recorded there as an open item instead.
+
+### Review corrections, round 2 (2026-09-09)
+
+A second review round over the head `113c046c` returned two blocking findings:
+one code defect the round-1 endpoint repair traded for the defect it fixed, and
+one mis-recorded evidence statement introduced by the round-1 documentation
+commit itself. Both were reproduced before being repaired. Neither reaches the
+default meeting path, any `audits/` byte or any file in
+`experiments/held_out_prefixes.py::GENERATOR_SOURCES`, so no recorded byte moves,
+the registry row is unchanged and the frozen held-out manifest still needs no
+restamp.
+
+**One code defect: one sentence could contradict itself into a role proof.**
+Before round 1 a flag's two endpoints were two artifacts by construction —
+`_placements` emitted exactly one row per artifact. The round-1 repair made a
+derived row keep its artifact's `event_id` (the derivation moved into
+`_Placement.identity`), which made a self-pair reachable: `validate_public_accounts`
+checks a sighting's `subject` against the roster and nothing else, so a speaker
+may name ITSELF, and one `saw_move` then places that speaker at the `to_room` it
+states and at the `from_room` its own witness row infers. Reproduced at
+`113c046c` over `engine/maps/canonical_1.yaml` with p-2 speaking
+`saw_move(subject='p-2', from_room='ADMIN', to_room='LABS', tick=5)` —
+d(ADMIN, LABS) = 3 against two allowed steps — which minted
+`kind=alibi_conflict evidence_band=weak` with
+`event_a_id == event_b_id == 'turn:p-2:obs:0'`, and
+`api.schemas.classify_evidence`, `eval.deduction_metrics.classify_flag` and
+`agents.strategic.prompts.loader.classify_flag_for_prompt` each typed it
+`role_proof`. All three implement the same documented self-linkage rule, whose
+docstring says it exists so a known kind that starts emitting self-linked flags
+cannot silently render as a contradiction — and this branch made `alibi_conflict`
+start emitting them. So one sentence produced a `weak`-band flag that the
+spectator, the eval and the prompt each called a role proof, inside a channel
+whose docstring promises to declare no role proven, on the arm whose defining
+count of shared role-proof flags is zero. Repaired at `25351035` by skipping a
+pair whose two rows come from the same artifact, which is the assumption
+`api/schemas.py` already documents. Dropping one of the two rows instead would
+have lost a real placement — the speaker's claimed origin would go uncompared —
+so the skip is at the pair, and the speaker stays placed against every OTHER
+artifact.
+
+**One mis-recorded evidence statement.** The round-0 table's head-drift caveat
+said the NG3-5 (slack) row's `contradiction_id` differs at the head "because the
+hash source moved from the endpoint pair to the derived identity". It does not:
+`_Placement.identity` returns `f"{event_id}:witness"` for a witness row, which is
+the exact string the pre-repair endpoint pair hashed, so that id is invariant
+under the round-1 repair. What moved is the endpoint the flag carries. Re-measured
+with the same substitution (`vision_slack=1` → `vision_slack=0`) and the same
+command on each commit, run inside a `git archive` of that commit:
+
+```sh
+.venv/bin/python -m pytest tests/meetings/test_public_accounts.py::test_a_sighting_within_the_granted_slack_is_never_called_impossible -q -vv
+```
+
+| Tree | `contradiction_id` | `event_b_id` | Summary |
+| --- | --- | --- | --- |
+| `96a83a6a` | `public-account-aa6d4eba507d9b36` | `turn:p-2:obs:1:witness` | `1 failed, 1 passed` |
+| `113c046c` | `public-account-aa6d4eba507d9b36` | `turn:p-2:obs:1` | `1 failed, 1 passed` |
+
+The caveat above now names the endpoint. It is the third mis-recorded evidence
+statement in this card's Results, so every figure in this round was measured on
+the tree it is pinned to rather than predicted from a diff.
+
+**Planted failure, measured at `25351035`.** Apply the substitution, run the
+command, restore the file from a copy taken before it; afterwards `git status
+--porcelain` named this card alone.
+
+| Guard | Perturbation | Command | Observed |
+| --- | --- | --- | --- |
+| Same-artifact skip | `public_accounts.py`: `if first.event_id == second.event_id:` → `if False and first.event_id == second.event_id:` | `.venv/bin/python -m pytest tests/meetings/test_public_accounts.py::test_one_sentence_cannot_contradict_itself_into_a_role_proof -q` | the self-named sighting mints a flag again, `ContradictionRef(contradiction_id='public-account-bdfa24d95bbad5ef', kind='alibi_conflict', event_a_id='turn:p-2:obs:0', event_b_id='turn:p-2:obs:0', subjects=('p-2',), …)` — `1 failed` |
