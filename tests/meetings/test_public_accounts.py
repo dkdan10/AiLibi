@@ -685,10 +685,23 @@ def test_every_sighting_shape_places_the_speaker(
     assert flag.subjects == ("p-2",)
 
 
-def test_a_sighting_one_room_away_is_never_called_impossible() -> None:
-    # Soundness of the speaker placement: an impostor sees one adjacent room
-    # (DESIGN.md §3.4), so a sighting next door must not contradict the
-    # speaker's own stated position. ADMIN and WEST_HALL are adjacent.
+@pytest.mark.parametrize(
+    "sighting_room,sighting_tick",
+    [
+        # Adjacent to the stated room at the same tick: the plainest legal
+        # sighting an impostor's one-hop vision allows (DESIGN.md §3.4).
+        ("WEST_HALL", 5),
+        # Three rooms away one tick later: legal only because the comparison
+        # grants BOTH the within-tick step it already granted every pair and
+        # the hop a claimed sighting is inferred across. Removing the vision
+        # hop turns this pair into a flag against an account nothing in the
+        # public record excludes.
+        ("LABS", 6),
+    ],
+)
+def test_a_sighting_within_the_granted_slack_is_never_called_impossible(
+    sighting_room: str, sighting_tick: int
+) -> None:
     assert (
         _flags(
             _turn(
@@ -696,7 +709,10 @@ def test_a_sighting_one_room_away_is_never_called_impossible() -> None:
                 (
                     WhereaboutsClaim(type="whereabouts", room="ADMIN", tick=5),
                     SawPlayerObservation(
-                        type="saw_player", tick=5, subject="p-1", room="WEST_HALL"
+                        type="saw_player",
+                        tick=sighting_tick,
+                        subject="p-1",
+                        room=sighting_room,
                     ),
                 ),
             ),
