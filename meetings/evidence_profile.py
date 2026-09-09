@@ -4,11 +4,32 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from typing import Literal
+from types import MappingProxyType
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 EvidenceVersion = Literal[1, 2]
+
+EVIDENCE_REASONING_ENV: Final = "AILIBI_EVIDENCE_REASONING"
+BOUNDED_REBUTTAL_ENV: Final = "AILIBI_BOUNDED_REBUTTAL"
+PUBLIC_ACCOUNTS_ENV: Final = "AILIBI_PUBLIC_ACCOUNTS"
+ATTRIBUTED_TESTIMONY_ENV: Final = "AILIBI_ATTRIBUTED_TESTIMONY"
+
+#: The registry of independently versioned meeting experiments: each ambient
+#: env switch and the :class:`MeetingEvidenceProfile` field it resolves. The
+#: resolvers below read these names, so a rename here moves the switch itself
+#: -- and ``scripts/check_doc_facts.py`` holds ``.env.example`` to this
+#: registry, the way it already holds it to the substrate-lever registry, so a
+#: switch cannot be renamed, dropped or misspelled in the template unnoticed.
+EXPERIMENT_ENV_NAMES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        EVIDENCE_REASONING_ENV: "evidence_reasoning_version",
+        BOUNDED_REBUTTAL_ENV: "bounded_rebuttal_version",
+        PUBLIC_ACCOUNTS_ENV: "public_account_version",
+        ATTRIBUTED_TESTIMONY_ENV: "attributed_testimony_version",
+    }
+)
 
 
 def _enabled(name: str, env: Mapping[str, str] | None) -> bool:
@@ -32,15 +53,15 @@ def evidence_reasoning_version(
 ) -> EvidenceVersion | None:
     """Keep old true/1 selections on v1; v2 requires an explicit 2."""
     source = os.environ if env is None else env
-    if source.get("AILIBI_EVIDENCE_REASONING", "").strip() == "2":
+    if source.get(EVIDENCE_REASONING_ENV, "").strip() == "2":
         return 2
-    return 1 if _enabled("AILIBI_EVIDENCE_REASONING", source) else None
+    return 1 if _enabled(EVIDENCE_REASONING_ENV, source) else None
 
 
 def bounded_rebuttal_enabled(env: Mapping[str, str] | None = None) -> bool:
     """Resolve the independently opt-in additional-reply experiment."""
 
-    return _enabled("AILIBI_BOUNDED_REBUTTAL", env)
+    return _enabled(BOUNDED_REBUTTAL_ENV, env)
 
 
 class MeetingEvidenceProfile(BaseModel):
@@ -76,10 +97,8 @@ class MeetingEvidenceProfile(BaseModel):
         return cls(
             evidence_reasoning_version=evidence_reasoning_version(source),
             bounded_rebuttal_version=1 if bounded_rebuttal_enabled(source) else None,
-            public_account_version=1
-            if _enabled("AILIBI_PUBLIC_ACCOUNTS", source)
-            else None,
+            public_account_version=1 if _enabled(PUBLIC_ACCOUNTS_ENV, source) else None,
             attributed_testimony_version=1
-            if _enabled("AILIBI_ATTRIBUTED_TESTIMONY", source)
+            if _enabled(ATTRIBUTED_TESTIMONY_ENV, source)
             else None,
         )

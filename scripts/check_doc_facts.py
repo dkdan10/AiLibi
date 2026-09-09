@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Twenty checks. Each accumulates precise errors; all of them are reported
+Twenty-one checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -170,6 +170,17 @@ together, so one run names every drifted fact rather than the first.
     the recorded sets' own ``tournament-eval-report.json``, so the section
     cannot be relabelled onto a new substrate with the previous substrate's
     arithmetic still in it.
+21. **Experiment registry vs .env.example.** ``meetings.evidence_profile``
+    owns the four independently versioned meeting experiments and the ambient
+    env switch each one reads. Every switch must be documented IN the
+    independently-versioned-experiments section as a commented example line
+    showing the value a bare environment resolves for it — read from
+    ``MeetingEvidenceProfile`` itself — and may never appear as an active
+    export anywhere in the template, because a copied .env that turned a
+    candidate ON would move meeting behaviour that stays default-OFF until an
+    adopting record. An ``AILIBI_*=`` line in that section that no registry
+    name claims is a renamed or never-registered switch this build does not
+    read. Same shape as check 3, second registry.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -209,6 +220,10 @@ from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
 from paired_stats import compute_paired_stats  # noqa: E402
 
+from meetings.evidence_profile import (  # noqa: E402
+    EXPERIMENT_ENV_NAMES,
+    MeetingEvidenceProfile,
+)
 from orchestrator.replay import (  # noqa: E402
     SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
@@ -337,6 +352,9 @@ _RECORD_DATE_CLAIM: Final = re.compile(r"the (\d{4}-\d{2}-\d{2}) record\b")
 # The .env.example section whose AILIBI_*= assignments must all resolve to a
 # live registry key, delimited by the repo's dashed section banners.
 _LEVER_SECTION_TITLE: Final = "# Belief-substrate levers"
+# The second registry section: the independently versioned meeting experiments,
+# whose env switches meetings.evidence_profile owns.
+_EXPERIMENT_SECTION_TITLE: Final = "# Independently versioned experiments"
 _SECTION_RULE: Final = re.compile(r"^# -{20,}[ \t]*$", re.MULTILINE)
 _ENV_ASSIGNMENT: Final = re.compile(r"^#?[ \t]*(AILIBI_[A-Z0-9_]+)=", re.MULTILINE)
 # The graduated note is the contiguous comment block opening with this marker;
@@ -934,7 +952,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"Doc facts verified: {_README} and {_ENV_EXAMPLE} agree with "
         f"{len(_SAMPLE_SETS)} sample manifests, {_LADDER_TIP_AUDIT}, and the "
-        f"{len(SUBSTRATE_FLAG_KEYS)}-lever substrate registry; "
+        f"{len(SUBSTRATE_FLAG_KEYS)}-lever substrate registry and the "
+        f"{len(EXPERIMENT_ENV_NAMES)}-switch experiment registry; "
         f"{_VOTE_CORRECTNESS_MODULE} agrees with {len(_RECORDED_SETS)} "
         "recorded eval reports."
     )
@@ -982,7 +1001,12 @@ def check_facts(repo_root: Path) -> list[str]:
         check_populated_report_example(repo_root, readme, errors)
         check_volatile_stamps(readme, errors)
     check_ladder_tip(repo_root, errors)
-    check_lever_registry(repo_root, errors)
+    # One read for both registry checks, so a missing template is reported
+    # once rather than once per registry it would have been audited against.
+    environment = read_document(repo_root, _ENV_EXAMPLE, errors)
+    if environment is not None:
+        check_lever_registry(environment, errors)
+        check_experiment_registry(environment, errors)
     check_vote_correctness_sentinel(repo_root, errors)
     check_phase_coverage(repo_root, errors)
     check_audits_index(repo_root, errors)
@@ -1736,8 +1760,8 @@ def recorded_ladder_tip(repo_root: Path, errors: list[str]) -> str | None:
     return str(recorded[0])
 
 
-def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
-    """.env.example against the live substrate-lever registry.
+def check_lever_registry(text: str, errors: list[str]) -> None:
+    """``text``, the .env.example body, against the live substrate registry.
 
     Toggleable levers must be documented with a commented example line showing
     the value this build resolves under a bare environment. Graduated levers
@@ -1746,9 +1770,6 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
     assignment: their env gate is gone, so such a line documents nothing.
     """
 
-    text = read_document(repo_root, _ENV_EXAMPLE, errors)
-    if text is None:
-        return
     section = lever_section(text)
     if section is None:
         errors.append(
@@ -1847,6 +1868,74 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
             f"'{assigned.group(1)}=', but {key!r} is not in the live lever "
             "registry — a misspelled or never-registered knob this build does "
             "not read."
+        )
+
+
+def check_experiment_registry(text: str, errors: list[str]) -> None:
+    """``text``, the .env.example body, against the experiment registry.
+
+    The four meeting-experiment switches are as much a lever register as the
+    substrate keys, and .env.example is the one place that states them, their
+    prerequisites and their conflicts. Until this check existed the register
+    was unguarded: all four lines could be deleted, renamed or misspelled with
+    every gate green, while dropping one substrate lever failed loudly.
+
+    Each switch must appear in the experiments section as a commented example
+    line showing the value a bare environment resolves -- read from
+    :class:`~meetings.evidence_profile.MeetingEvidenceProfile` itself, never
+    typed here -- and never as an active export anywhere in the template: a
+    copied .env that turned a candidate ON would move meeting behaviour that
+    stays default-OFF until an adopting record. An ``AILIBI_*=`` line in the
+    section that no registry name claims is a knob this build does not read.
+    """
+
+    section = experiment_section(text)
+    if section is None:
+        errors.append(
+            f"{_ENV_EXAMPLE}: missing the {_EXPERIMENT_SECTION_TITLE!r} section "
+            "banner — the experiment register cannot be located, so its claims "
+            "cannot be audited against meetings.evidence_profile."
+        )
+        return
+    bare = MeetingEvidenceProfile.from_environment({})
+    for variable, field in EXPERIMENT_ENV_NAMES.items():
+        if variable not in section:
+            errors.append(
+                f"{_ENV_EXAMPLE}: experiment switch {variable} is undocumented "
+                "— it appears nowhere in the independently-versioned-experiments "
+                "section, so the one register naming this build's meeting "
+                "experiments is invisible to anyone copying the template."
+            )
+            continue
+        default = "0" if getattr(bare, field) is None else "1"
+        example = re.compile(
+            rf"^#[ \t]*{re.escape(variable)}={default}[ \t]*$", re.MULTILINE
+        )
+        if example.search(section) is None:
+            errors.append(
+                f"{_ENV_EXAMPLE}: experiment switch {variable} has no commented "
+                f"example line '# {variable}={default}' in the "
+                "independently-versioned-experiments section showing the value "
+                "a bare environment resolves for it in this build."
+            )
+        active = re.compile(rf"^[ \t]*{re.escape(variable)}=", re.MULTILINE)
+        if active.search(text) is not None:
+            errors.append(
+                f"{_ENV_EXAMPLE}: active export of experiment switch {variable} "
+                "— an uncommented line would turn a candidate ON for anyone who "
+                "copies the template, and every candidate stays default-OFF "
+                "until an adopting record; it may appear only as the commented "
+                "bare-default example."
+            )
+
+    for assigned in _ENV_ASSIGNMENT.finditer(section):
+        if assigned.group(1) in EXPERIMENT_ENV_NAMES:
+            continue
+        errors.append(
+            f"{_ENV_EXAMPLE}: the independently-versioned-experiments section "
+            f"advertises '{assigned.group(1)}=', which is not in "
+            "meetings.evidence_profile's experiment registry — a renamed, "
+            "misspelled or never-registered switch this build does not read."
         )
 
 
@@ -4946,22 +5035,34 @@ def table_cells(line: str) -> list[str] | None:
     return [cell.strip() for cell in stripped.strip("|").split("|")]
 
 
-def lever_section(text: str) -> str | None:
-    """.env.example's belief-substrate section, or ``None`` if unlocatable.
+def banner_section(text: str, title: str) -> str | None:
+    """One .env.example section body, or ``None`` if unlocatable.
 
     The section runs from the dashed rule closing its title banner to the
     dashed rule opening the next section's banner (or end of file).
     """
 
-    title = text.find(_LEVER_SECTION_TITLE)
-    if title == -1:
+    heading = text.find(title)
+    if heading == -1:
         return None
-    rules = [m for m in _SECTION_RULE.finditer(text) if m.start() > title]
+    rules = [m for m in _SECTION_RULE.finditer(text) if m.start() > heading]
     if not rules:
         return None
     start = rules[0].end()
     end = rules[1].start() if len(rules) > 1 else len(text)
     return text[start:end]
+
+
+def lever_section(text: str) -> str | None:
+    """.env.example's belief-substrate section, or ``None`` if unlocatable."""
+
+    return banner_section(text, _LEVER_SECTION_TITLE)
+
+
+def experiment_section(text: str) -> str | None:
+    """.env.example's independently-versioned-experiments section."""
+
+    return banner_section(text, _EXPERIMENT_SECTION_TITLE)
 
 
 def graduated_note(section: str) -> str | None:

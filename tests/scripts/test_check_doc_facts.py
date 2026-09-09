@@ -4422,3 +4422,79 @@ def test_a_deleted_exhibit_is_rejected() -> None:
         {328},
     )
     assert any("marker pair is gone" in problem for problem in problems), problems
+
+
+# The four independently versioned meeting experiments (P-04). The registry is
+# read from meetings.evidence_profile, never copied, for the same reason the
+# substrate levers are.
+_EXPERIMENT_EXAMPLE_LINE = "# AILIBI_PUBLIC_ACCOUNTS=0"
+
+
+def test_renamed_experiment_switch_detected(doc_tree: Path) -> None:
+    # The planted rename: .env.example renames a switch and its documentation
+    # is not updated. Two facets are reported -- the registered switch is
+    # undocumented, and the section advertises a knob no registry claims.
+    _substitute(
+        doc_tree,
+        _ENV_EXAMPLE,
+        _EXPERIMENT_EXAMPLE_LINE,
+        "# AILIBI_PUBLIC_ACCTS=0",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert "AILIBI_PUBLIC_ACCOUNTS is undocumented" in errors[0]
+    assert "'AILIBI_PUBLIC_ACCTS='" in errors[1]
+    assert "experiment registry" in errors[1]
+
+
+def test_deleted_experiment_switches_detected(doc_tree: Path) -> None:
+    # The appendix's probe: dropping all four lines left the gate green.
+    text = _read(doc_tree, _ENV_EXAMPLE)
+    for variable in check_doc_facts.EXPERIMENT_ENV_NAMES:
+        text = text.replace(f"# {variable}=0\n", "")
+    _write(doc_tree, _ENV_EXAMPLE, text)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == len(check_doc_facts.EXPERIMENT_ENV_NAMES)
+    assert all("is undocumented" in error for error in errors)
+
+
+def test_uncommented_experiment_switch_detected(doc_tree: Path) -> None:
+    # A candidate stays default-OFF until an adopting record, so a copied .env
+    # may not turn one on. Both facets are reported.
+    _substitute(
+        doc_tree,
+        _ENV_EXAMPLE,
+        _EXPERIMENT_EXAMPLE_LINE,
+        "AILIBI_PUBLIC_ACCOUNTS=1",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert "no commented example line" in errors[0]
+    assert f"'{_EXPERIMENT_EXAMPLE_LINE}'" in errors[0]
+    assert "active export of experiment switch" in errors[1]
+
+
+def test_missing_experiment_section_banner_detected(doc_tree: Path) -> None:
+    # The section audit fails loud when its banner disappears rather than
+    # silently auditing nothing.
+    _substitute(
+        doc_tree,
+        _ENV_EXAMPLE,
+        "# Independently versioned experiments",
+        "# Experiments",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'# Independently versioned experiments'" in errors[0]
+    assert "cannot be located" in errors[0]
+
+
+def test_experiment_registry_is_read_from_the_live_module() -> None:
+    # The register is code, not a copy: every name the checker holds
+    # .env.example to is the name meetings.evidence_profile resolves.
+    from meetings.evidence_profile import MeetingEvidenceProfile
+
+    for variable, field in check_doc_facts.EXPERIMENT_ENV_NAMES.items():
+        enabled = MeetingEvidenceProfile.from_environment({variable: "1"})
+        assert getattr(enabled, field) is not None
+        assert getattr(MeetingEvidenceProfile.from_environment({}), field) is None
