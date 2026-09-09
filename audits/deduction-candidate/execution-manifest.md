@@ -29,9 +29,48 @@ refusal below is proved; none of them reaches a provider (see "The live gate").
 
 This manifest may still be amended: no held-out outcome has been inspected, no
 unit has been run, and preregistration binds a design before results exist
-rather than after. Every amendment is dated here.
+rather than after. Every amendment is dated here, in the order it was made, and
+that completeness is a mechanism rather than a promise:
+`tests/experiments/test_fresh_deduction_instrument.py::TestExecutionManifest::test_the_amendment_log_names_every_commit_that_moved_the_frozen_analysis`
+walks this branch's history from the commit that first bound this document,
+reads the frozen-analysis constants out of every later revision of
+`experiments/fresh_deduction_instrument.py`, and requires each commit whose
+values differ from its parent's to be named in this section. A pre-run change to
+the frozen analysis that nobody logged here fails that test.
 
-**2026-09-09 — citation relevance joins the primary outcome.** Round-4 review of
+**2026-09-09 (`2dde0c91`) — the decision rule gains its third condition, and
+the sampling configuration is bound.** Round-1 review of the instrument's pull
+request (#443) found that this document bound two preregistration fields as
+prose the instrument did not enforce. `DECISION_RULE` advanced the candidate on
+two conditions — p below 0.05 AND a net paired difference of at least 10 — so an
+arm could buy its supported-correct ejections by ejecting more innocents and
+still advance, and the preregistration's "acceptable tradeoffs" field
+(`preregistration.md:116-118`) had no bound to point at. The rule was rewritten
+from BOTH to ALL THREE by adding the wrongful-ejection bound now quoted below as
+`WRONGFUL_EJECTION_TRADEOFF`, and the sampling configuration was bound as
+`AUTHORIZED_SAMPLING` in code with the marked sampling row added to the owner's
+table above. The amendment RAISES the bar the candidate must clear and adds a
+field rather than removing one, and it was written before any unit ran.
+
+**2026-09-09 (`bfd5696b`) — a meeting-internal default is counted, not
+stopped.** Round-2 review found that the stop rule promised a stop the code
+never made. The Inputs row "Maximum opportunities" read "A missing or truncated
+attempt is a stop, and the partial state is reported rather than replaced",
+while the meeting layer's shipped fail-soft substitutes a placeholder turn or a
+marked SKIP ballot for a payload that failed schema validation and the run
+carries on. Both that row and `STOP_RULE` were reversed: an attempt that never
+resolves is still a stop, a schema-validation default is NOT, and every such
+substitution is counted per unit and per arm instead (see "Meeting-internal
+defaults: counted, not stopped"). This is the one amendment that RELAXES a rule,
+and it is on the record as such: a fixed 50-unit paired sample cannot be
+abandoned for a substitution the engine is designed to make at an accepted rate
+of about 1 in 50 calls, and the alternative was a stop rule the run would have
+tripped on its first default. Its cost to a reader — a defaulted ballot removes
+a constraint from the primary outcome rather than failing it, biasing it upward
+— is stated where the counts are. It was written before any unit ran.
+
+**2026-09-09 (`3a02ede8`) — citation relevance joins the primary outcome.**
+Round-4 review of
 the instrument's pull request (#443) found that the privileged grader checked
 only that a ballot's citation was PRESENT in that voter's prompt, so a ballot
 that guessed the impostor while citing a turn about somebody else scored the
@@ -317,8 +356,11 @@ rather than a convention.
 
 Judge information never returns to a listener or a tactic: grading is a pure
 function over a finished `UnitRecord`, the run path calls no grader at all
-(pinned by a test that makes every grader raise and runs a unit anyway), and the
-hidden roles are read off the final state only after the game has returned.
+(pinned by a test that replaces every `grade_*` function the instrument defines
+with a landmine and runs a unit anyway — the list read off the module rather
+than typed into the test, so a grader added later is landmined the round it
+lands), and the hidden roles are read off the final state only after the game
+has returned.
 
 The two arms are compared on prompts the instrument captured live, and every
 recorded meeting call is checked to be one of those live inputs — a recording

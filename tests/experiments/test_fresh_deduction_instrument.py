@@ -22,6 +22,7 @@ handle.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import hashlib
 import json
@@ -109,6 +110,110 @@ _INSTRUMENT_SOURCE: Final[Path] = (
 #: Two prefixes is enough for a paired comparison and keeps these tests fast;
 #: the full 50 runs once, in the dry-run test.
 _SMOKE_UNITS: Final[int] = 2
+
+#: The commit that first bound the execution manifest. Every later change to a
+#: frozen-analysis constant is an amendment to a document that already existed,
+#: so it belongs in the manifest's amendment log; the commit that introduced the
+#: constants is the freeze itself and is an ancestor of this one.
+_MANIFEST_FREEZE_COMMIT: Final[str] = "87c4ef3d"
+
+#: What "the frozen analysis" means for the amendment walk: the constants this
+#: manifest quotes as the design it binds before any outcome exists. A change to
+#: any of them after the freeze moves what a result would MEAN.
+_FROZEN_ANALYSIS_CONSTANTS: Final[tuple[str, ...]] = (
+    "AUTHORIZED_SAMPLING",
+    "CITATION_RELEVANCE_RUBRIC",
+    "DECISION_ALPHA",
+    "DECISION_RULE",
+    "MINIMUM_ACTIONABLE_EFFECT_RATIONALE",
+    "MINIMUM_ACTIONABLE_EFFECT_UNITS",
+    "PRIMARY_OUTCOME",
+    "PRIMARY_OUTCOME_RUBRIC",
+    "PRIVILEGED_RUBRIC",
+    "STOP_RULE",
+    "SUPPORTED_RUBRIC",
+    "WRONGFUL_EJECTION_TRADEOFF",
+)
+
+_INSTRUMENT_REPO_PATH: Final[str] = "experiments/fresh_deduction_instrument.py"
+
+
+def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _frozen_analysis_at(revision: str) -> dict[str, str] | None:
+    """The frozen-analysis constants as one revision of the module defines them.
+
+    Parsed, never imported: the point is to read a revision that is not the one
+    running, and executing an arbitrary past revision to read four strings off it
+    would be a worse idea than parsing it. ``None`` when the module does not
+    exist at that revision.
+    """
+
+    shown = _git("show", f"{revision}:{_INSTRUMENT_REPO_PATH}")
+    if shown.returncode != 0:
+        return None
+    values: dict[str, str] = {}
+    for node in ast.parse(shown.stdout).body:
+        target: str | None = None
+        bound: ast.expr | None = None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target, bound = node.target.id, node.value
+        elif (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            target, bound = node.targets[0].id, node.value
+        if target in _FROZEN_ANALYSIS_CONSTANTS and bound is not None:
+            values[target] = ast.unparse(bound)
+    return values
+
+
+def _frozen_analysis_amendments() -> dict[str, list[str]] | None:
+    """``{abbreviated commit: the constants it moved}`` since the manifest froze.
+
+    ``None`` with no usable history — a shallow clone or a missing git — the way
+    ``tests/scripts/test_check_doc_facts.py`` handles the same problem: a
+    truncated log would report an empty amendment set and pass vacuously, so the
+    caller skips rather than passes.
+    """
+
+    shallow = _git("rev-parse", "--is-shallow-repository")
+    if shallow.returncode != 0 or shallow.stdout.strip() != "false":
+        return None
+    if _git(
+        "rev-parse", "--verify", f"{_MANIFEST_FREEZE_COMMIT}^{{commit}}"
+    ).returncode:
+        return None
+    listed = _git(
+        "log",
+        "--format=%h",
+        f"{_MANIFEST_FREEZE_COMMIT}..HEAD",
+        "--",
+        _INSTRUMENT_REPO_PATH,
+    )
+    if listed.returncode != 0:
+        return None
+    amendments: dict[str, list[str]] = {}
+    for commit in listed.stdout.split():
+        before = _frozen_analysis_at(f"{commit}^") or {}
+        after = _frozen_analysis_at(commit) or {}
+        moved = [
+            name
+            for name in _FROZEN_ANALYSIS_CONSTANTS
+            if before.get(name) != after.get(name)
+        ]
+        if moved:
+            amendments[commit] = moved
+    return amendments
 
 
 def _manifest_digest() -> str:
@@ -1775,12 +1880,32 @@ class TestGraders:
     ) -> None:
         """Judge information cannot reach a listener or a tactic if no grader
         runs while the game does. Every grader is replaced by a landmine and a
-        unit is run anyway; the run must complete."""
+        unit is run anyway; the run must complete.
+
+        The landmine list is READ off the module rather than typed here. A
+        hand-kept tuple does not grow with the module: round 4 added
+        ``grade_citation_relevance`` and the tuple kept naming the other three,
+        so a run path that called the new grader passed this gate. The equality
+        below is the other half of the mechanism — it fails if a grader is
+        renamed out of the ``grade_`` prefix and out of the sweep with it.
+        """
+
+        graders = sorted(
+            name
+            for name, value in vars(instrument).items()
+            if name.startswith("grade_") and callable(value)
+        )
+        assert graders == [
+            "grade_citation_relevance",
+            "grade_privileged",
+            "grade_supported",
+            "grade_unit",
+        ], graders
 
         def landmine(*args: Any, **kwargs: Any) -> Any:
             raise AssertionError("a grader ran inside the run path")
 
-        for name in ("grade_unit", "grade_supported", "grade_privileged"):
+        for name in graders:
             monkeypatch.setattr(instrument, name, landmine)
         frozen = verify_frozen_set(_REPO_ROOT)
         arm = instrument_arms()[0]
@@ -2124,13 +2249,56 @@ class TestExecutionManifest:
         assert " ".join(instrument.PRIMARY_OUTCOME_RUBRIC.split()) in text
         assert " ".join(instrument.CITATION_RELEVANCE_RUBRIC.split()) in text
 
-    def test_the_manifest_dates_the_amendment_that_added_relevance(self) -> None:
-        """A preregistration may be amended before results exist, and only if the
-        amendment is on the record with its date and its reason."""
-
+    def _amendments_section(self) -> str:
         text = self._text()
-        assert "## Amendments before first run" in text
-        assert "2026-09-09 — citation relevance joins the primary outcome" in text
+        start = text.index("## Amendments before first run")
+        return text[start : text.index("\n## ", start + 1)]
+
+    @pytest.mark.parametrize(
+        ("commit", "subject"),
+        [
+            ("2dde0c91", "the decision rule gains its third condition"),
+            ("bfd5696b", "a meeting-internal default is counted, not"),
+            ("3a02ede8", "citation relevance joins the primary outcome"),
+        ],
+    )
+    def test_the_manifest_dates_each_amendment(self, commit: str, subject: str) -> None:
+        """A preregistration may be amended before results exist, and only if the
+        amendment is on the record with its date, its commit and its reason.
+
+        One entry per amendment, each naming the commit that carried it, so a
+        reader reconstructing the frozen design from this document can walk to
+        the bytes that moved it.
+        """
+
+        section = self._amendments_section()
+        assert f"**2026-09-09 (`{commit}`) — {subject}" in section
+
+    def test_the_amendment_log_names_every_commit_that_moved_the_frozen_analysis(
+        self,
+    ) -> None:
+        """The log's completeness is checked rather than asserted.
+
+        "Every amendment is dated here" is the kind of sentence a document asks
+        to be trusted about. This walks the history instead: every commit after
+        the manifest's own freeze whose frozen-analysis constants differ from its
+        parent's is an amendment, and its abbreviated hash has to appear in the
+        section. Three do — the decision rule's third condition with the sampling
+        binding, the stop rule's reversal, and the relevance rubric — and two of
+        them went unlogged until round 5 of this pull request's review.
+        """
+
+        amendments = _frozen_analysis_amendments()
+        if amendments is None:
+            pytest.skip("no full git history here; the amendment log cannot be walked")
+        assert amendments, "no post-freeze revision of the frozen analysis was found"
+        section = self._amendments_section()
+        unlogged = {
+            commit: moved
+            for commit, moved in amendments.items()
+            if f"`{commit}`" not in section
+        }
+        assert unlogged == {}, f"amendments missing from the log: {unlogged}"
 
     def test_the_manifest_marks_the_row_the_authorization_card_does_not_carry(
         self,
