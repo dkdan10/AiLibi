@@ -70,7 +70,9 @@ denominator.
   restamp sentence names the chain's three `dependency_restamps` entries and the
   22-of-22 digest match at head instead of asserting that no hashed file moved,
   and the Verification trio about `tests/fixtures/`, `audits/` and `npm run e2e`
-  says whose commits it describes.
+  says whose commits it describes. The flaky-test note argues from
+  `orchestrator/run_limits.py` and `orchestrator/game.py` being untouched, which
+  a quoted diff shows, rather than from a branch-wide claim the merge falsified.
 - [x] Review correction: the grader-isolation gate landmines every grader the
   instrument defines, the list read off the module rather than typed, so the
   manifest's "every grader" is what the test does.
@@ -482,10 +484,18 @@ the same machine, failed
 `tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`
 with `provider.attempts == 0`. That test builds a `RunDeadline(0.25)` and asserts
 two provider attempts inside 250 ms of wall, so it is load-sensitive; it passes
-in isolation (`2 passed in 0.45s`) and inside the quiet gate above, and nothing
-on this branch touches `orchestrator/run_limits.py`, the meeting runner or the
+in isolation (`2 passed in 0.45s`) and inside the quiet gate above, and no commit
+of this card's touches `orchestrator/run_limits.py`, the meeting runner or the
 game loop. Recorded rather than dropped, because a reader running two suites at
-once will see it too.
+once will see it too. *(Round 6 narrowed this sentence from "nothing on this
+branch". The merge of `cfbf162f` brings `meetings/manager.py` and
+`meetings/public_accounts.py`, which the runner drives, so the branch-level claim
+stopped being true; `orchestrator/run_limits.py` and `orchestrator/game.py`,
+where the deadline clock and `build_default_meeting_runner` live, are still
+untouched by anything on the branch —
+`git diff --name-only origin/main...HEAD -- orchestrator/run_limits.py
+orchestrator/game.py` prints nothing — and the test passes at the merged head
+both in the gate and alone, `1 passed in 0.45s`.)*
 
 The three statements that follow are about **this card's own commits**, not about
 everything the branch carries; since round 6 the branch also carries the merge of
@@ -1342,6 +1352,22 @@ to move prints; and all 22 hashed sources match the manifest at this head, with
 run" trio is scoped explicitly to this card's commits now, with the branch-level
 position pointed at this subsection. Nothing here weakens the freeze: the merge
 moves no hashed byte, so no fourth entry is due.
+
+A third sentence was narrowed for the same reason. The load-sensitive
+`test_wall_deadline_cancels_meeting_and_retains_success` note argued the flake
+was not the card's doing because "nothing on this branch touches
+`orchestrator/run_limits.py`, the meeting runner or the game loop" — and the
+merge brings `meetings/manager.py` and `meetings/public_accounts.py`, which the
+runner drives. The argument survives on the narrower claim, which is checked:
+`git diff --name-only origin/main...HEAD -- orchestrator/run_limits.py
+orchestrator/game.py` prints nothing, so the deadline clock and
+`build_default_meeting_runner` are untouched by anything on the branch, and the
+test passes at the merged head both inside `bash scripts/check.sh` and alone
+(`1 passed in 0.45s`).
+
+All three corrections are the same defect: a claim written when the branch was
+this card alone, left unchecked when the branch grew. The `git` commands quoted
+beside each are what makes the new wording checkable rather than merely narrower.
 
 #### Verification, round 6
 
