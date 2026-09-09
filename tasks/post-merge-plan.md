@@ -33,7 +33,10 @@ original severity labels and refuter votes stay intact.
    schema lacks. [Card](work/accounts-channel-hardening.md).
 5. **Build the fresh-model deduction instrument and manifest.** A frozen
    held-out design, an offline instrument on the public API, and an execution
-   manifest whose owner-authorization fields stay empty.
+   manifest binding the limits the owner authorized by merging #437 (ruling
+   B.12 of the 2026-09-07 decision memo superseded the original "fields stay
+   empty" wording; the run itself stays unauthorized until a runner session
+   is dispatched).
    [Card](work/fresh-deduction-instrument.md). Planning and offline mechanics
    only; no live call is authorized by it. Its held-out inputs are frozen by a
    separate [freeze card](work/held-out-prefix-freeze.md): a preparer session
