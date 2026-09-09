@@ -351,3 +351,61 @@ def test_orphaned_meeting_tick_detected(
     assert failures[0].game_id == f"headless-seed-{_MEETING_SEED}"
     assert "9999" in failures[0].reason
     assert "row_order" in failures[0].reason
+
+
+def _drop_one_ballot(path: Path) -> int:
+    """Remove one ballot from the first meeting, and return its tick.
+
+    A meeting requires exactly one ballot per living player, so a dropped
+    ballot is refused with ``ballot_roster_mismatch`` -- one of the three
+    ballot rules whose codes the operator could not previously read.
+    """
+
+    lines = path.read_text().splitlines()
+    corrupted_tick: int | None = None
+    out: list[str] = []
+    for line in lines:
+        obj = json.loads(line)
+        if corrupted_tick is None and obj.get("kind") == "meeting":
+            assert len(obj["ballots"]) > 1
+            obj["ballots"] = obj["ballots"][:-1]
+            corrupted_tick = int(obj["tick"])
+            line = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+        out.append(line)
+    assert corrupted_tick is not None
+    path.write_text("\n".join(out) + "\n")
+    return corrupted_tick
+
+
+def test_integrity_failure_renders_its_code_instead_of_two_nones(
+    tmp_path: Path,
+) -> None:
+    """FU-03: an integrity violation carrying a tick prints its rule code.
+
+    ``ReplayIntegrityError`` sets a tick but no recorded/reconstructed hashes,
+    so the tick branch used to render ``recorded None, reconstructed None`` and
+    the operator saw an unexplained hash divergence for every ballot forgery.
+    """
+
+    path = _copy_seed(tmp_path, _MEETING_SEED)
+    tick = _drop_one_ballot(path)
+    failures = vs.verify_samples(tmp_path)
+    assert len(failures) == 1
+    rendered = failures[0].render()
+    assert "ballot_roster_mismatch" in rendered
+    assert f"tick {tick}" in rendered
+    assert "None" not in rendered
+
+
+def test_state_hash_divergence_still_renders_both_hashes(tmp_path: Path) -> None:
+    """The control for the case above: a real divergence keeps its pair."""
+
+    path = _copy_seed(tmp_path, _SEED)
+    tick = _corrupt_first_tick_hash(path)
+    failures = vs.verify_samples(tmp_path)
+    assert len(failures) == 1
+    rendered = failures[0].render()
+    assert f"diverged at tick {tick}" in rendered
+    assert failures[0].expected is not None
+    assert f"recorded {failures[0].expected!r}" in rendered
+    assert f"reconstructed {failures[0].actual!r}" in rendered
