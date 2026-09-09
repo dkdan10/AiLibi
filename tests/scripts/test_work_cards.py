@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import validate_task_docs
+from _task_parser import TASKS_DIR
 
 
 _CARD = """# Account for spent tokens
@@ -225,5 +226,5 @@ def test_inventory_sentence_may_wrap_in_the_file(tmp_path: Path) -> None:
 
 def test_committed_task_index_matches_its_cards() -> None:
     errors: list[str] = []
-    validate_task_docs.validate_card_inventory(validate_task_docs.TASKS_DIR, errors)
+    validate_task_docs.validate_card_inventory(TASKS_DIR, errors)
     assert errors == []

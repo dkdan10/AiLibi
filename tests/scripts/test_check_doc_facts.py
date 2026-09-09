@@ -24,6 +24,7 @@ from xml.etree import ElementTree
 import pytest
 
 import check_doc_facts
+from meetings.evidence_profile import EXPERIMENT_ENV_NAMES, MeetingEvidenceProfile
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "check_doc_facts.py"
@@ -4450,11 +4451,11 @@ def test_renamed_experiment_switch_detected(doc_tree: Path) -> None:
 def test_deleted_experiment_switches_detected(doc_tree: Path) -> None:
     # The appendix's probe: dropping all four lines left the gate green.
     text = _read(doc_tree, _ENV_EXAMPLE)
-    for variable in check_doc_facts.EXPERIMENT_ENV_NAMES:
+    for variable in EXPERIMENT_ENV_NAMES:
         text = text.replace(f"# {variable}=0\n", "")
     _write(doc_tree, _ENV_EXAMPLE, text)
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == len(check_doc_facts.EXPERIMENT_ENV_NAMES)
+    assert len(errors) == len(EXPERIMENT_ENV_NAMES)
     assert all("is undocumented" in error for error in errors)
 
 
@@ -4492,9 +4493,7 @@ def test_missing_experiment_section_banner_detected(doc_tree: Path) -> None:
 def test_experiment_registry_is_read_from_the_live_module() -> None:
     # The register is code, not a copy: every name the checker holds
     # .env.example to is the name meetings.evidence_profile resolves.
-    from meetings.evidence_profile import MeetingEvidenceProfile
-
-    for variable, field in check_doc_facts.EXPERIMENT_ENV_NAMES.items():
+    for variable, field in EXPERIMENT_ENV_NAMES.items():
         enabled = MeetingEvidenceProfile.from_environment({variable: "1"})
         assert getattr(enabled, field) is not None
         assert getattr(MeetingEvidenceProfile.from_environment({}), field) is None
