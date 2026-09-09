@@ -438,7 +438,7 @@ once will see it too.
 entry for the freeze and one for the manifest. *(This sentence read "No `audits/`
 or `tests/fixtures/` byte outside this card's own new manifest moved" until round
 2; the README had already moved in `87c4ef3d`, two commits earlier, so the
-sentence was wrong when it was written. `git diff --name-status 5682ea2a..HEAD --
+sentence was wrong when it was written. `git diff --name-status 5682ea2a..bfd5696b --
 audits/ tests/fixtures/` prints exactly those two paths.)*
 
 ### The frozen held-out set
@@ -775,7 +775,7 @@ carries 127 and the `--collect-only` command that prints it.
 when it was written: `audits/deduction-candidate/README.md`, the directory's own
 index, gained eight lines in `87c4ef3d`, two commits BEFORE the `87dfd918` that
 Verification section is pinned to, and the README was not in Expected scope
-either. Both are corrected; `git diff --name-status 5682ea2a..HEAD -- audits/
+either. Both are corrected; `git diff --name-status 5682ea2a..bfd5696b -- audits/
 tests/fixtures/` prints exactly the two paths now named.
 
 #### Planted and perturbed failures, round 2
