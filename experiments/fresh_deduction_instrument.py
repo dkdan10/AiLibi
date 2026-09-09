@@ -25,10 +25,16 @@ What this module is NOT
 * It is not an authorization to spend. Running it against a real provider
   requires an explicit :class:`LiveRunInvocation` naming the committed execution
   manifest, re-verified by path and digest in
-  :func:`assert_live_run_is_authorized`. No test, CI job or dry run constructs
-  one, and :func:`run_dry` refuses one outright. The client such a run uses is
-  built from the authorized provider and model
-  (:func:`build_authorized_client`), never from the ambient environment.
+  :func:`assert_live_run_is_authorized`, AND :data:`LIVE_RUN_FLAG` on the command
+  line. Tests do construct invocations — proving each refusal is what they are
+  for — but none of them reaches a provider: no committed file outside this
+  module and the manifest's documented command carries :data:`LIVE_RUN_FLAG` (a
+  tree scan holds that), :func:`run_dry` refuses an invocation outright, and the
+  gate reads the CLIENT's real type rather than the provider label it was given.
+  The client a live run uses is built from the authorized provider and model
+  (:func:`build_authorized_client`), never from the ambient environment, and
+  cannot be constructed before the frozen set is verified — the verified
+  :class:`FrozenSet` is that function's first argument.
 
 Two things this module deliberately never does with a held-out prefix: print it
 and serialize it. Inspecting a held-out input converts it to development data
@@ -203,6 +209,12 @@ AUTHORIZED_EXECUTION_MODE: Final[Literal["sequential"]] = "sequential"
 #: exact path (:class:`LiveRunInvocation`).
 EXECUTION_MANIFEST_PATH: Final[str] = "audits/deduction-candidate/execution-manifest.md"
 
+#: The runner's explicit live-run flag, defined once. :func:`main` registers it
+#: from here and the tree-scan test searches for THIS value, so the scan needs no
+#: second copy of the string to look for — and therefore no exemption for the
+#: file that does the looking.
+LIVE_RUN_FLAG: Final[str] = "--i-am-the-runner"
+
 
 class RunLimits(BaseModel):
     """The six numbers that bound a run, as one frozen value object.
@@ -294,10 +306,11 @@ PRIMARY_OUTCOME: Final[str] = "supported_correct_ejection"
 
 PRIMARY_OUTCOME_RUBRIC: Final[str] = (
     "A unit scores 1 when its meeting ejected the player whose hidden role is "
-    "IMPOSTOR and every ballot naming that player carried a citation the "
-    "supported grader graded 'supported'; otherwise 0. Role-correctness alone "
-    "and support alone are reported beside it and neither is the primary "
-    "outcome."
+    "IMPOSTOR and every ballot naming that player carried a citation that is "
+    "both PRESENT in that voter's own prompts (the supported grader) and "
+    "RELEVANT to the ejected player (the citation-relevance rule); otherwise 0. "
+    "Role-correctness alone, support alone and relevance alone are reported "
+    "beside it and none of them is the primary outcome."
 )
 
 #: The net paired difference (b - c over 50 paired units) below which a
@@ -711,6 +724,78 @@ def assert_live_run_is_authorized(
         )
 
 
+def assert_client_matches_provider(*, provider: str, client: object | None) -> None:
+    """Refuse a run whose CLIENT is not what its provider label says it is.
+
+    The rest of the gate reads the ``provider`` string a caller passed. That
+    string is a label, and a label is not a client: ``provider="fake"`` with a
+    metered client handed in reaches the metered provider with every refusal in
+    this module satisfied, and ``provider="featherless"`` with an offline client
+    writes a report labelled live that no model authored. Both are refused here,
+    on the object's real type:
+
+    * the fake path accepts only a :class:`~llm.fake_provider.FakeProvider` — or
+      ``None``, which is :func:`run_instrument`'s own
+      :class:`DryRunProvider` fallback, itself one;
+    * the live path accepts neither a ``FakeProvider`` nor ``None``, because the
+      fallback IS a ``FakeProvider``.
+
+    This is a type check, not a name check: subclassing ``FakeProvider`` keeps a
+    client offline, and calling a class ``FeatherlessClient`` does not make it
+    one.
+    """
+
+    is_fake = client is None or isinstance(client, FakeProvider)
+    if provider == "fake" and not is_fake:
+        raise LiveRunNotAuthorized(
+            "a run labelled 'fake' was handed a "
+            f"{type(client).__name__}, which is not the offline fake provider; "
+            "the label authorizes nothing and this client would reach whatever "
+            "it wraps"
+        )
+    if provider != "fake" and is_fake:
+        raise LiveRunNotAuthorized(
+            f"a run labelled {provider!r} was handed "
+            f"{'no client' if client is None else type(client).__name__}, which "
+            "is the offline fake provider; a live-labelled report must be the "
+            "authorized provider's own output, not a fixture's"
+        )
+
+
+def assert_ready_for_a_live_run(
+    *,
+    provider: str,
+    invocation: LiveRunInvocation,
+    units: int | None = None,
+    limits: RunLimits = AUTHORIZED_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    repo_root: Path = _REPO_ROOT,
+) -> FrozenSet:
+    """Everything that must hold BEFORE a live client exists, in order.
+
+    The authorization gate first, then the frozen held-out set, and only then may
+    a caller build a client — which is why this returns the verified
+    :class:`FrozenSet` and :func:`build_authorized_client` takes one. A client is
+    a credential and a connection; a run that must stop should stop before one is
+    made, and a moved held-out set is exactly such a stop.
+
+    ``FrozenSet`` and :func:`verify_frozen_set` are defined further down this
+    module; the annotations are lazy (``from __future__ import annotations``) and
+    the call happens at run time, so the ordering of the definitions is a reading
+    convenience rather than a constraint.
+    """
+
+    assert_live_run_is_authorized(
+        provider=provider,
+        invocation=invocation,
+        limits=limits,
+        sampling=sampling,
+        units=units,
+        repo_root=repo_root,
+    )
+    return verify_frozen_set(repo_root)
+
+
 def authorized_client_environment(env: Mapping[str, str]) -> dict[str, str]:
     """The environment the live client is built from: pinned, not inherited.
 
@@ -746,12 +831,23 @@ def authorized_client_environment(env: Mapping[str, str]) -> dict[str, str]:
     }
 
 
-def build_authorized_client(env: Mapping[str, str] | None = None) -> LLMClient:
+def build_authorized_client(
+    frozen: FrozenSet, env: Mapping[str, str] | None = None
+) -> LLMClient:
     """Construct the ONE client a live run may use, from the pinned environment.
 
     ``env`` defaults to the process environment, from which
     :func:`authorized_client_environment` keeps only the credential.
+
+    ``frozen`` is evidence rather than an input: it is unused below, and it is
+    required so that no client can be constructed before the held-out set has
+    been verified. The only producer of a :class:`FrozenSet` is
+    :func:`verify_frozen_set`, so "the frozen set is checked before a provider
+    exists" is a property of this signature instead of an ordering a later edit
+    to :func:`main` could quietly reverse.
     """
+
+    del frozen  # see the docstring: proof of ordering, not an input
 
     from llm.provider import build_default_client
 
@@ -869,6 +965,27 @@ class _ModelWorkClock:
 ABORTED_ATTEMPT_MODEL: Final[str] = "aborted-in-flight"
 
 
+def _preflight_rates(inner: LLMClient) -> tuple[float, float] | None:
+    """The USD pre-flight rates :class:`_InstrumentClient` should expose, if any.
+
+    ``None`` means "expose none", which leaves ``BudgetedLLMClient`` free to
+    apply its own frontier-calibrated defaults exactly as it would to the
+    unwrapped client (``llm/budgeted_client.py:115-129``). A client that states
+    its own rates has them passed through unchanged; a
+    :class:`~llm.fake_provider.FakeProvider` states none but bills nothing, and
+    zero is the honest rate for a client whose ``cost_usd`` is 0.0 by
+    construction — the same statement the free providers make about themselves.
+    """
+
+    input_rate = getattr(inner, "preflight_cost_per_input_token_usd", None)
+    output_rate = getattr(inner, "preflight_cost_per_output_token_usd", None)
+    if isinstance(input_rate, float) and isinstance(output_rate, float):
+        return (input_rate, output_rate)
+    if isinstance(inner, FakeProvider):
+        return (0.0, 0.0)
+    return None
+
+
 class _InstrumentClient:
     """Wrap the provider to enforce the per-call caps and capture the prompts.
 
@@ -914,12 +1031,19 @@ class _InstrumentClient:
         # is a thing the manifest binds.
         self._expected_model = expected_model
         self._calls: list[CapturedCall] = []
-        # A zero pre-flight rate is the honest statement for a client whose
-        # completions are free: it disables ``BudgetedLLMClient``'s USD
-        # dimension exactly as the live provider's own zero rate does, so the
-        # authorized $0.00 cap means the same thing on both paths.
-        self.preflight_cost_per_input_token_usd = 0.0
-        self.preflight_cost_per_output_token_usd = 0.0
+        # The USD pre-flight rates are the WRAPPED client's, never this
+        # wrapper's own. ``BudgetedLLMClient`` reads them off whatever it is
+        # handed (``llm/budgeted_client.py:115-129``), so hardcoding zero here
+        # would disable the USD dimension for every client this wrapper ever
+        # composed — including a metered one, whose $0.00 cap would then stop
+        # nothing. On the authorized provider the pass-through IS zero
+        # (``llm/featherless_client.py:244-245``), which is what the
+        # authorization card's cost statement says: the token budget and the
+        # wall deadline are the only limits that can stop this run.
+        rates = _preflight_rates(inner)
+        if rates is not None:
+            self.preflight_cost_per_input_token_usd = rates[0]
+            self.preflight_cost_per_output_token_usd = rates[1]
 
     @property
     def calls(self) -> tuple[CapturedCall, ...]:
@@ -1232,6 +1356,37 @@ def _as_int(raw: Mapping[str, object], key: str) -> int:
     return value
 
 
+def _as_str(raw: Mapping[str, object], key: str) -> str:
+    """One manifest field as a ``str``, or a stop naming the field."""
+
+    value = raw.get(key)
+    if not isinstance(value, str):
+        raise FrozenSetMismatch(
+            f"the frozen manifest's {key!r} is {value!r}, not a string"
+        )
+    return value
+
+
+def _manifest_rows(
+    manifest: Mapping[str, object], key: str
+) -> list[Mapping[str, object]]:
+    """One of the freeze manifest's row blocks, or a stop naming what is missing.
+
+    A manifest with no ``accepted`` or no ``skipped`` block used to reach a bare
+    ``KeyError`` here — an unnamed crash where the stop rule promises a refusal
+    that says what differed. AGENTS.md: invalid input raises explicitly.
+    """
+
+    rows = manifest.get(key)
+    if not isinstance(rows, list) or not all(isinstance(row, Mapping) for row in rows):
+        raise FrozenSetMismatch(
+            f"the frozen manifest carries no {key!r} block of rows (found "
+            f"{type(rows).__name__}); it does not describe a frozen set and this "
+            "run may not proceed on it"
+        )
+    return [row for row in rows if isinstance(row, Mapping)]
+
+
 def _parsed_band(raw: object) -> SeedBand:
     """The manifest's band as a :class:`SeedBand`, or a stop.
 
@@ -1342,7 +1497,8 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
 
     generated = generate(band=band, roster=parsed_roster)
     expected_accepted = [
-        (int(row["seed"]), str(row["sha256"])) for row in manifest["accepted"]
+        (_as_int(row, "seed"), _as_str(row, "sha256"))
+        for row in _manifest_rows(manifest, "accepted")
     ]
     actual_accepted = [
         (prefix.seed, digest)
@@ -1357,7 +1513,8 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
             )
         )
     expected_skipped = [
-        (int(row["seed"]), str(row["reason"])) for row in manifest["skipped"]
+        (_as_int(row, "seed"), _as_str(row, "reason"))
+        for row in _manifest_rows(manifest, "skipped")
     ]
     actual_skipped = [(skip.seed, skip.reason) for skip in generated.skipped]
     if actual_skipped != expected_skipped:
@@ -1583,7 +1740,9 @@ class UnitRecord:
     outcome: str
     ejected_player_id: PlayerId | None
     ballots: tuple[VoteBallot, ...]
-    turn_ids: tuple[str, ...]
+    # The turns themselves, not their ids: the citation-relevance rule asks what
+    # a cited turn SAYS and who spoke it, which an id cannot answer.
+    turns: tuple[MeetingTurn, ...]
     roles: Mapping[PlayerId, Role]
     prompts_by_agent: Mapping[str, tuple[str, ...]]
     calls: tuple[CapturedCall, ...]
@@ -1713,7 +1872,7 @@ def run_unit(
         outcome=meeting.outcome,
         ejected_player_id=meeting.ejected_player_id,
         ballots=meeting.ballots,
-        turn_ids=tuple(turn.turn_id for turn in meeting.transcript.turns),
+        turns=tuple(meeting.transcript.turns),
         roles=MappingProxyType(
             {pid: player.role for pid, player in result.final_state.players.items()}
         ),
@@ -1818,15 +1977,40 @@ SUPPORTED_RUBRIC: Final[str] = (
 )
 
 PRIVILEGED_RUBRIC: Final[str] = (
-    "The privileged pass reads the hidden roles and grades two things the "
-    "supported pass cannot: whether the meeting ejected the IMPOSTOR "
-    "(role-correct) and, separately, whether it did so on ballots the supported "
-    "pass had already graded 'supported' (right for that reason). The support "
-    "labels are computed FIRST and are inputs here; no support label is revised "
-    "after the role is known. Judge information never selects a tactical action, "
-    "fabricates an observation, chooses a reply or supplies an accusation "
-    "target: grading is a pure function over a finished UnitRecord and the run "
-    "path calls no grader at all."
+    "The privileged pass reads the hidden roles and grades what the supported "
+    "pass cannot: whether the meeting ejected the IMPOSTOR (role-correct) and, "
+    "separately, whether it did so on ballots that were both 'supported' by the "
+    "presence pass and RELEVANT to the ejected player under the "
+    "citation-relevance rule (right for that reason). The support labels are "
+    "computed FIRST and are inputs here; no support label is revised after the "
+    "role is known, and relevance reads only the recorded meeting and the "
+    "voter's own prompts — never a role. Judge information never selects a "
+    "tactical action, fabricates an observation, chooses a reply or supplies an "
+    "accusation target: grading is a pure function over a finished UnitRecord "
+    "and the run path calls no grader at all."
+)
+
+#: Frozen with the rest of the analysis and before any held-out outcome exists.
+#: Presence is not aboutness: a ballot that guesses the impostor while citing a
+#: turn about somebody else, or an alibi that has nothing to do with the player
+#: it names, is a lucky guess with a citation stapled to it, and the primary
+#: outcome is supposed to separate those from a supported inference.
+CITATION_RELEVANCE_RUBRIC: Final[str] = (
+    "A citation is RELEVANT to a named player when the evidence it identifies "
+    "bears on that player. For a transcript turn (primary_reason_id): the "
+    "recorded turn is the named player's own — they are its speaker, the case "
+    "the ballot template itself asks a voter to cite when a contradiction broke "
+    "their account — or it names that player anywhere in its recorded content, "
+    "its structured observations, its claims and its free text included. For an "
+    "episodic observation (primary_reason_observation_id): at least one line of "
+    "that voter's OWN prompts carrying the cited id also names that player, "
+    "which is the rendered '[obs ...]' memory line the id was copied from. A "
+    "player id is matched as a whole token, so p-1 does not match p-10. A "
+    "citation naming a turn this meeting did not record is not relevant to "
+    "anyone. A ballot is RELEVANT when every citation it carries is relevant, "
+    "OFF_TARGET when it carries one that is not, and UNCITED when it carries "
+    "none. Relevance reads the recorded meeting and the voter's own prompts "
+    "only: no role, no trajectory and no support label is an input to it."
 )
 
 
@@ -1888,6 +2072,98 @@ def grade_supported(
     return tuple(grades)
 
 
+RelevanceVerdict = Literal["relevant", "off_target", "uncited"]
+
+#: A player id is a whole token: ``p-1`` must not match inside ``p-10``.
+_PLAYER_TOKEN: Final[str] = r"(?<![0-9A-Za-z_-]){player}(?![0-9A-Za-z_-])"
+
+
+def _names_player(text: str, player: str) -> bool:
+    """Whether ``text`` names ``player`` as a whole id rather than as a prefix."""
+
+    return re.search(_PLAYER_TOKEN.format(player=re.escape(player)), text) is not None
+
+
+def _turn_bears_on(turn: MeetingTurn, player: PlayerId) -> bool:
+    """Whether a recorded turn is the player's own or names them in its content.
+
+    The content is walked as the DUMPED STRUCTURE (:func:`_every_string_in`)
+    rather than field by field: a turn carries a dozen observation and claim
+    shapes, each naming players under a different key (``subject``, ``against``,
+    ``supports``, ``body_of``, ``co_present``), and a rule enumerating them would
+    silently stop covering the ones a later schema adds.
+    """
+
+    if turn.speaker == player:
+        return True
+    return any(
+        _names_player(text, player)
+        for text in _every_string_in(turn.model_dump(mode="json"))
+    )
+
+
+def _cited_line_names(
+    prompts: Sequence[str], *, citation: str, player: PlayerId
+) -> bool:
+    """Whether a line of these prompts carrying ``citation`` also names ``player``."""
+
+    return any(
+        citation in line and _names_player(line, player)
+        for prompt in prompts
+        for line in prompt.splitlines()
+    )
+
+
+@dataclass(frozen=True)
+class RelevanceGrade:
+    """One ballot's citation relevance to the player under test."""
+
+    voter: PlayerId
+    target: str
+    verdict: RelevanceVerdict
+
+
+def grade_citation_relevance(
+    ballots: Sequence[VoteBallot],
+    *,
+    subject: PlayerId,
+    turns: Sequence[MeetingTurn],
+    prompts_by_agent: Mapping[str, Sequence[str]],
+) -> tuple[RelevanceGrade, ...]:
+    """Grade each ballot's citations against :data:`CITATION_RELEVANCE_RUBRIC`.
+
+    ``subject`` is the player the relevance is judged against — the ejected one,
+    when :func:`grade_privileged` calls this. Separate from
+    :func:`grade_supported` because they answer different questions: presence
+    ("did this voter see the thing it cited") and aboutness ("does the thing it
+    cited bear on the player it named"). A run is not graded on either alone.
+    """
+
+    by_id = {turn.turn_id: turn for turn in turns}
+    grades: list[RelevanceGrade] = []
+    for ballot in ballots:
+        cited_turn = ballot.primary_reason_id
+        cited_observation = ballot.primary_reason_observation_id
+        if cited_turn is None and cited_observation is None:
+            verdict: RelevanceVerdict = "uncited"
+        else:
+            relevant = True
+            if cited_turn is not None:
+                turn = by_id.get(cited_turn)
+                relevant = turn is not None and _turn_bears_on(turn, subject)
+            if relevant and cited_observation is not None:
+                relevant = _cited_line_names(
+                    tuple(prompts_by_agent.get(ballot.voter, ())),
+                    citation=cited_observation,
+                    player=subject,
+                )
+            verdict = "relevant" if relevant else "off_target"
+        grades.append(
+            RelevanceGrade(voter=ballot.voter, target=ballot.target, verdict=verdict)
+        )
+    return tuple(grades)
+
+
 @dataclass(frozen=True)
 class PrivilegedGrade:
     """The privileged pass: role truth, and the conjunction with support."""
@@ -1896,6 +2172,11 @@ class PrivilegedGrade:
     ejected_role: Role | None
     role_correct: bool
     supported_correct_ejection: bool
+    #: Ballots naming the ejected player, and how many of them cited something
+    #: that does not bear on that player. Reported so a reader can see how often
+    #: relevance, rather than presence, is what the primary outcome turned on.
+    naming_ballots: int = 0
+    off_target_citations: int = 0
 
     @property
     def wrongful_ejection(self) -> bool:
@@ -1912,11 +2193,18 @@ class PrivilegedGrade:
 def grade_privileged(
     record: UnitRecord, *, supported: Sequence[SupportedGrade]
 ) -> PrivilegedGrade:
-    """Score role truth from the hidden roles, after support is already fixed.
+    """Score role truth and citation relevance, after support is already fixed.
 
     Takes the support grades as an argument rather than recomputing them, so the
     ordering the preregistration requires — support first, from entitled inputs
     only; truth second, from privileged state — is a property of the signature.
+
+    Relevance is graded HERE, beside role truth, and it is the half of the
+    primary outcome that presence cannot supply: a ballot naming the impostor
+    while citing a turn about somebody else was right, but not for that reason.
+    It reads no role of its own (:data:`CITATION_RELEVANCE_RUBRIC`); it is in
+    this pass because the player it judges aboutness against — the one the
+    meeting ejected — is only fixed once the unit is finished.
     """
 
     ejected = record.ejected_player_id
@@ -1933,11 +2221,26 @@ def grade_privileged(
     every_naming_ballot_supported = bool(naming) and all(
         grade.verdict == "supported" and grade.voter_authored for grade in naming
     )
+    relevance = grade_citation_relevance(
+        [ballot for ballot in record.ballots if ballot.target == ejected],
+        subject=ejected,
+        turns=record.turns,
+        prompts_by_agent=record.prompts_by_agent,
+    )
+    every_citation_relevant = bool(relevance) and all(
+        grade.verdict == "relevant" for grade in relevance
+    )
     return PrivilegedGrade(
         ejected_player_id=ejected,
         ejected_role=role,
         role_correct=role_correct,
-        supported_correct_ejection=role_correct and every_naming_ballot_supported,
+        supported_correct_ejection=(
+            role_correct and every_naming_ballot_supported and every_citation_relevant
+        ),
+        naming_ballots=len(relevance),
+        off_target_citations=sum(
+            1 for grade in relevance if grade.verdict == "off_target"
+        ),
     )
 
 
@@ -2099,6 +2402,12 @@ class ArmSummary(BaseModel):
     role_correct: int
     wrongful_ejections: int
     supported_correct_ejections: int
+    # Ballots naming the ejected player, and how many of those cited evidence
+    # that does not bear on that player. The pair is what makes the primary
+    # outcome readable: it says how often relevance rather than presence is what
+    # a unit turned on, which a single conjunction cannot.
+    naming_ballots: int
+    off_target_citations: int
     terminal_units: int
     partial_units: int
     ballot_verdicts: Mapping[str, int]
@@ -2147,6 +2456,8 @@ class InstrumentReport(BaseModel):
     limits: RunLimits
     sampling: SamplingConfig
     primary_outcome: str
+    primary_outcome_rubric: str
+    citation_relevance_rubric: str
     decision_rule: str
     wrongful_ejection_tradeoff: str
     stop_rule: str
@@ -2272,6 +2583,10 @@ def _summarize_arm(
             1 for grade in own if grade.privileged.wrongful_ejection
         ),
         supported_correct_ejections=sum(1 for grade in own if grade.primary),
+        naming_ballots=sum(grade.privileged.naming_ballots for grade in own),
+        off_target_citations=sum(
+            grade.privileged.off_target_citations for grade in own
+        ),
         terminal_units=sum(1 for grade in own if grade.stop == "terminal"),
         partial_units=sum(1 for grade in own if grade.stop == "partial"),
         ballot_verdicts=dict(sorted(verdicts.items())),
@@ -2325,10 +2640,15 @@ def run_instrument(
 ) -> InstrumentReport:
     """Run both arms over the frozen set, sequentially, and grade the result.
 
-    Order of operations is load-bearing. The frozen set is verified BEFORE a
-    provider is constructed, so a run against a moved set cannot spend anything;
-    the arms run paired seed by seed; and every grader runs only after the last
-    unit, over finished records.
+    Order of operations is load-bearing. The authorization gate and the
+    client-type check run before anything else, the frozen set is verified before
+    a unit runs, the arms run paired seed by seed, and every grader runs only
+    after the last unit, over finished records.
+
+    On the CLI's live path the frozen set is verified one level up, before the
+    client this function is handed even exists
+    (:func:`assert_ready_for_a_live_run`); the check here is the same one again,
+    and it is cheap and offline.
     """
 
     assert_live_run_is_authorized(
@@ -2339,6 +2659,9 @@ def run_instrument(
         units=units,
         repo_root=repo_root,
     )
+    # The label said what this run is; this says what it actually holds. Both
+    # directions are refused, and both before anything is spent.
+    assert_client_matches_provider(provider=provider, client=client)
     frozen = verify_frozen_set(repo_root)
     prefixes = frozen.prefixes if units is None else frozen.prefixes[:units]
     arms = instrument_arms()
@@ -2433,6 +2756,8 @@ def run_instrument(
         held_out_accepted_seeds=len(frozen.accepted_seeds),
         held_out_skipped_seeds=len(frozen.skipped_seeds),
         primary_outcome=PRIMARY_OUTCOME,
+        primary_outcome_rubric=PRIMARY_OUTCOME_RUBRIC,
+        citation_relevance_rubric=CITATION_RELEVANCE_RUBRIC,
         decision_rule=DECISION_RULE,
         wrongful_ejection_tradeoff=WRONGFUL_EJECTION_TRADEOFF,
         stop_rule=STOP_RULE,
@@ -2509,7 +2834,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--provider", default="fake")
     parser.add_argument("--execution-manifest", type=Path, default=None)
     parser.add_argument(
-        "--i-am-the-runner",
+        LIVE_RUN_FLAG,
+        dest="i_am_the_runner",
         action="store_true",
         help=(
             "the runner's explicit statement that this invocation is the "
@@ -2545,10 +2871,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             provider=args.provider,
             model=AUTHORIZED_MODEL,
         )
-        # Authorized BEFORE a client exists. ``run_instrument`` runs the same
-        # gate, but building the client first would let an unauthorized shape —
-        # a unit override, moved limits — construct a provider it may not use.
-        assert_live_run_is_authorized(
+        # Authorized AND verified before a client exists: an unauthorized shape
+        # — a unit override, moved limits — must not construct a provider it may
+        # not use, and neither must a run whose held-out set has moved. The
+        # verified set is what ``build_authorized_client`` requires, so that
+        # order cannot be reversed by editing these two lines.
+        frozen = assert_ready_for_a_live_run(
             provider=args.provider, invocation=invocation, units=args.units
         )
         report = run_instrument(
@@ -2556,7 +2884,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             # NOT ``build_default_client()``: that reads the ambient environment
             # for both provider and model, so an invocation labelled
             # ``featherless`` would reach whatever the shell happened to name.
-            client=build_authorized_client(),
+            client=build_authorized_client(frozen),
             provider=args.provider,
             live_invocation=invocation,
             units=args.units,

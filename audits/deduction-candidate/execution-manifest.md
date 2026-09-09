@@ -19,8 +19,32 @@ by that ruling, not by this document.
 **What is still not authorized.** #437 authorized LIMITS, not a run. Nothing in
 this manifest is a licence to spend: no live call, pilot, smoke run or retry is
 authorized by it, including on flat-rate service. A call requires an explicit
-runner invocation naming this file, and no test, CI job or dry run performs one
-(see "The live gate" below).
+runner invocation naming this file, carrying the runner flag on the command
+line. No committed file outside this one and the instrument that defines that
+flag carries it — no test, workflow, script or card — and a test scans every
+tracked file for it. Tests do build invocation objects, which is how each
+refusal below is proved; none of them reaches a provider (see "The live gate").
+
+## Amendments before first run
+
+This manifest may still be amended: no held-out outcome has been inspected, no
+unit has been run, and preregistration binds a design before results exist
+rather than after. Every amendment is dated here.
+
+**2026-09-09 — citation relevance joins the primary outcome.** Round-4 review of
+the instrument's pull request (#443) found that the privileged grader checked
+only that a ballot's citation was PRESENT in that voter's prompt, so a ballot
+that guessed the impostor while citing a turn about somebody else scored the
+primary outcome — collapsing the distinction between a supported inference and a
+lucky guess, which is the distinction the primary outcome exists to draw. The
+frozen rubric below ("Evidence privileges and grading", pass 3) now requires the
+cited turn or observation to bear on the ejected player, and the primary outcome
+is the conjunction of role-correctness, presence and relevance. The amendment
+was written before any unit ran; the fake-provider mechanics check it was
+verified on carries no held-out outcome. It lands in the same commit as the
+grader that enforces it, which
+[the instrument card](../../tasks/work/fresh-deduction-instrument.md)'s Results
+names in its round-4 subsection.
 
 ## The instrument
 
@@ -75,14 +99,20 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 
 Copied verbatim from [the authorization card](../../tasks/work/fresh-deduction-authorization.md)'s
 Constraints table, whose reasoning of record is item B of
-[the 2026-09-07 decision memo](../../tasks/owner-decisions-2026-09-07.md).
+[the 2026-09-07 decision memo](../../tasks/owner-decisions-2026-09-07.md) — with
+one row that is NOT from that table and is marked as such. The authorization
+card binds no temperature; the preregistration
+(`preregistration.md:113-115`) requires this manifest to bind the sampling
+configuration, so the sampling-temperature row states the values shipped in
+`meetings/manager.py` and the instrument serves them explicitly rather than
+inheriting them. It moves no owner-authorized number.
 
 | Field | Value |
 | --- | --- |
 | Provider | `featherless` |
 | Model | `Qwen/Qwen3.6-27B` (locked 2026-07-12, Task 16.2). Non-thinking with `enable_thinking=false` pinned on every call, `response_format_mode = json_object`, prompt set `qwen3_6_27b` — all carried from the model lock, not re-decided here |
 | Per-call token cap | turn 2,048 output / vote 1,024, the shipped defaults unchanged. The committed lab rows for this model-and-prompt-set pair ran at `max_tokens=4096` and never exceeded 195 output tokens, so a truncation is a real signal rather than a cap artifact |
-| Sampling temperature | turn temperature 0.4 / vote temperature 0.2 — the shipped values (`meetings/manager.py:211,213`), bound here rather than inherited. The instrument passes an explicit `MeetingConfig` carrying them, records both on every report, and a test asserts they are still the shipped values, so a later edit to those module defaults breaks a test instead of silently moving this frozen design's sampling distribution |
+| Sampling temperature *(not from the authorization card — see the note above)* | turn temperature 0.4 / vote temperature 0.2 — the shipped values (`meetings/manager.py:211,213`), bound here rather than inherited. The instrument passes an explicit `MeetingConfig` carrying them, records both on every report, and a test asserts they are still the shipped values, so a later edit to those module defaults breaks a test instead of silently moving this frozen design's sampling distribution |
 | Total token budget | 2,400,000 input / 200,000 output run-level, and 45,000 input / 4,000 output per unit. Hard stop. Projection for option A: 600 calls; input `repaired_clock` 3,636/call x 300 + `combined_accounts` 2,441/call x 300 = 1,823,100; output 600 x 220 = 132,000 |
 | Wall-clock deadline | 4 h of model work within a 6 h elapsed deadline. The work window comes from the measured 12-23 s/call band; the 2 h margin covers one recorded 3h21m provider-side HTTP 529 stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
 | Dollar limit | $0.00 marginal, recorded as bookkeeping and not as an enforcement mechanism. The provider's zero pre-flight rate disables the USD dimension, so only the token budget and the deadline can stop a run |
@@ -130,7 +160,17 @@ asserts this document quotes each of them.
   `_InstrumentClient` then refuses a RESPONSE whose `model` is not the
   authorized one, on the call that returns it, so a hosted endpoint serving a
   different checkpoint is a stop rather than something noticed in the report
-  afterwards.
+  afterwards. The run also checks the client's real TYPE against the provider it
+  claims to be (`assert_client_matches_provider`): a run labelled `fake` may only
+  hold the offline fake provider, and a live-labelled run may hold neither it nor
+  no client at all, so neither a metered client smuggled in under the offline
+  label nor a fixture's output recorded as a live result is possible.
+- **Cost rates.** `_InstrumentClient` exposes the WRAPPED client's USD
+  pre-flight rates rather than rates of its own, so the budget layer prices
+  whatever this instrument composes. On this provider the pass-through is zero
+  (`llm/featherless_client.py:244-245`), which is exactly what the cost
+  statement above says: the USD dimension is disabled and only the token budget
+  and the wall deadline can stop the run.
 - **Per-call cap.** `_InstrumentClient` refuses a call whose `max_tokens` is not
   one of the two shipped values, and refuses a response whose output reached its
   cap — a truncation is a stop, not a datum.
@@ -223,19 +263,32 @@ override: a live run is the whole frozen set, and a subset is the pilot this
 manifest does not authorize. `LiveRunInvocation.naming` applies the same path
 check when the invocation is built, and additionally refuses a manifest that does
 not name the authorized provider, model and prompt set. `run_dry` refuses a
-`LiveRunInvocation` outright, so the mechanics check cannot become the run. No
-committed test, CI workflow or script passes `--i-am-the-runner`, and a test
-scans the tree to keep it that way.
+`LiveRunInvocation` outright, so the mechanics check cannot become the run.
 
-The gate runs BEFORE the client is constructed, and the client that is then
-constructed is `build_authorized_client`'s, not `build_default_client`'s: an
-invocation labelled `featherless` cannot reach whatever provider and model the
-shell's `AILIBI_LLM_PROVIDER` / `AILIBI_LLM_MEETING_MODEL` happen to name.
+No committed file outside this manifest's command above and
+`experiments/fresh_deduction_instrument.py`, which defines the flag as
+`LIVE_RUN_FLAG`, carries that flag: not a test, a workflow, a script or a card.
+A test scans every tracked file whose suffix a command could be written in for
+the constant itself, so the file doing the scanning carries no copy of the needle
+and needs no exemption. Committed tests DO construct `LiveRunInvocation` objects
+— proving each refusal above is what they are for — and none of them reaches a
+provider.
+
+The gate and the frozen-set check both run BEFORE a client is constructed, and
+that order is a property of the signatures rather than of the order two lines
+happen to sit in: `assert_ready_for_a_live_run` runs the authorization gate and
+then `verify_frozen_set`, and RETURNS the verified set, which
+`build_authorized_client` requires as its first argument. A run whose held-out
+set has moved therefore stops before a credential is read or a connection made.
+The client that is then constructed is `build_authorized_client`'s, not
+`build_default_client`'s: an invocation labelled `featherless` cannot reach
+whatever provider and model the shell's `AILIBI_LLM_PROVIDER` /
+`AILIBI_LLM_MEETING_MODEL` happen to name.
 
 ## Evidence privileges and grading
 
-Two passes, in this order, and the order is a property of the signatures rather
-than a convention.
+Three passes, in this order, and the order is a property of the signatures
+rather than a convention.
 
 1. **Supported (entitled inputs only).** `grade_supported` reads a ballot's
    `primary_reason_id` and `primary_reason_observation_id` and requires each
@@ -245,10 +298,22 @@ than a convention.
    it) and `uncited` (a ballot carrying neither — a SKIP needs no citation).
    Ballots the meeting layer rewrote (`guard_rewrite_reason`) are counted
    separately and never count as the voter's own supported call.
-2. **Privileged (hidden roles).** `grade_privileged` takes the support grades as
+2. **Relevance (recorded meeting, same entitled inputs).**
+   `grade_citation_relevance` asks what the presence check cannot: whether the
+   thing a ballot cited is ABOUT the player it named. Presence is not aboutness,
+   and without this a ballot that guessed the impostor while citing an unrelated
+   alibi, or a turn about somebody else, scored the primary outcome. The rule is
+   frozen in `CITATION_RELEVANCE_RUBRIC` and quoted verbatim below. It reads the
+   recorded turns and the voter's own prompts; no role and no support label is an
+   input to it.
+3. **Privileged (hidden roles).** `grade_privileged` takes the support grades as
    an ARGUMENT rather than recomputing them, so no support label can be revised
    after the role is known. It scores role-correctness (was the ejected player
-   the impostor) and, separately, the conjunction the primary outcome uses.
+   the impostor) and, separately, the three-way conjunction the primary outcome
+   uses: role-correct, every naming ballot supported, every naming ballot's
+   citation relevant. Relevance is computed here because the player it is judged
+   against — the one the meeting ejected — is only fixed once the unit is
+   finished.
 
 Judge information never returns to a listener or a tactic: grading is a pure
 function over a finished `UnitRecord`, the run path calls no grader at all
@@ -271,6 +336,7 @@ Per unit, with counts beside every rate:
 | Role-correct ejections | Per resolved meeting and conditional on an ejection, per arm |
 | Wrongful ejections | Per resolved meeting, per arm: an ejection that landed on a crewmate. A skipped meeting is not wrongful. This is the count the acceptable-tradeoff bound below is computed on |
 | Supported / unsupported / uncited ballots | Per ballot, per arm, with guard-rewritten ballots counted separately |
+| Naming ballots and off-target citations | Per ballot, per arm: `naming_ballots` counts the ballots naming the ejected player and `off_target_citations` how many of those cited evidence that does not bear on that player. The pair says how often relevance rather than presence is what a unit turned on |
 | Meeting-internal defaults | Per attempt, per arm: `defaulted_turns` and `defaulted_votes`, split by trigger into `defaults_by_validation` and `defaults_by_deadline`, plus `degraded_openings`. `units_with_defaults` counts the units carrying at least one, and is the bound on how many of that arm's decisions rest on a partly unauthored meeting |
 | Terminal vs partial units | A unit whose meeting ended the game is terminal; one that stopped at the tick after the report is deliberately partial. Neither is a game-win trial |
 | Provider cost | Calls, input and output tokens, `cost_usd` and model-work seconds, per arm and per run, against the limits above |
@@ -284,11 +350,35 @@ Frozen here and in code (`PRIMARY_OUTCOME`, `DECISION_RULE`,
 `MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF`, `STOP_RULE` in
 `experiments/fresh_deduction_instrument.py`) before any held-out outcome exists.
 
-**Primary outcome — `supported_correct_ejection`.** A unit scores 1 when its
-meeting ejected the player whose hidden role is IMPOSTOR and every ballot naming
-that player carried a citation the supported grader graded `supported`;
-otherwise 0. Role-correctness alone and support alone are reported beside it and
-neither is the primary outcome.
+**Primary outcome — `supported_correct_ejection`.** Quoted verbatim from
+`PRIMARY_OUTCOME_RUBRIC`:
+
+A unit scores 1 when its meeting ejected the player whose hidden role is
+IMPOSTOR and every ballot naming that player carried a citation that is both
+PRESENT in that voter's own prompts (the supported grader) and RELEVANT to the
+ejected player (the citation-relevance rule); otherwise 0. Role-correctness
+alone, support alone and relevance alone are reported beside it and none of
+them is the primary outcome.
+
+**Citation relevance.** Quoted verbatim from `CITATION_RELEVANCE_RUBRIC`, frozen
+with the rest of the analysis and amended into this manifest on 2026-09-09,
+before any unit ran (see "Amendments before first run"):
+
+A citation is RELEVANT to a named player when the evidence it identifies bears
+on that player. For a transcript turn (primary_reason_id): the recorded turn is
+the named player's own — they are its speaker, the case the ballot template
+itself asks a voter to cite when a contradiction broke their account — or it
+names that player anywhere in its recorded content, its structured
+observations, its claims and its free text included. For an episodic
+observation (primary_reason_observation_id): at least one line of that voter's
+OWN prompts carrying the cited id also names that player, which is the rendered
+'[obs ...]' memory line the id was copied from. A player id is matched as a
+whole token, so p-1 does not match p-10. A citation naming a turn this meeting
+did not record is not relevant to anyone. A ballot is RELEVANT when every
+citation it carries is relevant, OFF_TARGET when it carries one that is not,
+and UNCITED when it carries none. Relevance reads the recorded meeting and the
+voter's own prompts only: no role, no trajectory and no support label is an
+input to it.
 
 **Estimator and test.** The two-sided exact binomial McNemar over the discordant
 pairs, `scripts/paired_stats.py::exact_mcnemar_p`, on 50 paired units.
@@ -411,13 +501,20 @@ The offline mechanics check, at commit `5682ea2a` plus this branch's changes:
 100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in a few
 seconds of wall. Both arms carried a non-SKIP decision to a graded outcome: 50 ejections
 each, 19 role-correct, 31 wrongful, 18 supported-correct, 150 supported ballots and 6
-guard-rewritten ones per arm. The report carries the sampling configuration it
+guard-rewritten ones per arm, with 100 ballots naming the ejected player of which
+6 cited evidence that does not bear on that player. The report carries the sampling configuration it
 drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps 2,048 / 1,024). Input tokens by the fake provider's `len // 4`
 heuristic were 886,054 (`repaired_clock`) and 575,251 (`combined_accounts`);
 applying the decision memo's calibrated 1.28x real-input ratio to their sum gives
 about 1.87 M against the 2.4 M ceiling, and the larger arm's 17,721 per unit
 gives about 22,700 against the 45,000 per-unit ceiling — headroom checks, not
 predictions, because a real model writes a different transcript.
+
+The relevance amendment cost this fixture no unit: 18 supported-correct before it
+and 18 after, because its 6 off-target citations all fall in units the primary
+outcome already scored 0. That the rule bites at all is established by its
+planted cases, not by this run — the fixture cites the transcript's last turn
+whatever it says, so what it exercises is the path, not the judgment.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; it establishes

@@ -1,17 +1,23 @@
 """Tests for experiments/fresh_deduction_instrument.py.
 
-The fake provider is the only provider anything here reaches: the instrument's
-own live gate refuses every other one without an explicit invocation, and the
-tree scan below keeps that flag out of every committed test, script and
-workflow.
+The fake provider is the only provider anything here reaches. Three properties
+hold that, and each is tested rather than asserted: the live gate refuses every
+other provider without an explicit invocation AND refuses a client whose real
+type does not match the label it was given; this file carries no occurrence of
+the instrument's live-run flag, so the tree scan below covers it like every
+other committed file; and the one function that builds a real client cannot even
+be called before the frozen set is verified. Invocations ARE constructed here —
+proving each refusal is what they are for — and none of them is ever handed to a
+provider.
 
 Each guard the instrument adds is paired with a planted or perturbed case that
 fails on the defect the guard claims to catch — a moved digest, a changed skip
 list, a call over the cap, a truncated response, an exhausted budget, an expired
 deadline, a model-work window that has to bite while a call is still in flight,
-a mislabelled clock, a citation the voter never saw, a meeting whose turns or
-ballots all fell back to the layer's defaults, a leaked prefix step and a
-planted body handle.
+a mislabelled clock, a citation the voter never saw, a citation about somebody
+other than the player it was cast against, a meeting whose turns or ballots all
+fell back to the layer's defaults, a leaked prefix step and a planted body
+handle.
 """
 
 from __future__ import annotations
@@ -20,10 +26,11 @@ import asyncio
 import hashlib
 import json
 import re
+import subprocess
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import pytest
 from pydantic import BaseModel
@@ -73,7 +80,12 @@ from experiments.held_out_prefixes import (
 )
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import DefaultedCall
-from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot, VoteBallot
+from meetings.schemas import (
+    AccusationClaim,
+    MeetingTurn,
+    ModelAuthoredVoteBallot,
+    VoteBallot,
+)
 
 # The PRODUCER of the ``deadline_default`` message the instrument classifies.
 # Imported private on purpose: pinning the counter's regex against a copy of the
@@ -496,6 +508,20 @@ class TestFrozenSet:
         with pytest.raises(FrozenSetMismatch, match="missing"):
             verify_frozen_set(tmp_path)
 
+    @pytest.mark.parametrize("block", ["accepted", "skipped"])
+    def test_a_manifest_missing_a_row_block_is_a_named_stop(
+        self, tmp_path: Path, block: str
+    ) -> None:
+        """PLANTED: the block removed. This used to be a bare `KeyError` — an
+        unnamed crash where the stop rule promises a refusal that says what
+        differed."""
+
+        manifest = _committed_manifest()
+        del manifest[block]
+        _write_frozen_manifest(tmp_path, manifest)
+        with pytest.raises(FrozenSetMismatch, match=f"no {block!r} block"):
+            verify_frozen_set(tmp_path)
+
 
 class TestLiveGate:
     def test_a_live_provider_without_an_invocation_is_refused(
@@ -629,26 +655,34 @@ class TestLiveGate:
                 provider=AUTHORIZED_PROVIDER, invocation=invocation, units=1
             )
 
-    def test_the_cli_refuses_a_live_unit_override_before_building_a_client(
-        self, tmp_path: Path
+    def test_the_cli_live_path_is_unreachable_without_the_runners_own_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The same refusal through the documented command shape, which is where
-        a runner would actually type it."""
+        """A live provider named on the command line, without the runner's flag,
+        is refused by the parser before anything is constructed.
 
-        with pytest.raises(LiveRunNotAuthorized, match="whole frozen set"):
+        This suite never passes that flag — the tree scan below is what keeps it
+        that way — so this is as far as a test may drive the live branch. The
+        client factory is replaced by a landmine first, so even a CLI perturbed
+        to skip the flag check cannot construct a provider from here.
+        """
+
+        def landmine(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("a client was constructed by the test suite")
+
+        monkeypatch.setattr(instrument, "build_authorized_client", landmine)
+        with pytest.raises(SystemExit) as caught:
             instrument.main(
                 [
                     "--provider",
                     AUTHORIZED_PROVIDER,
                     "--execution-manifest",
                     str(_MANIFEST),
-                    "--i-am-the-runner",
                     "--output-dir",
                     str(tmp_path),
-                    "--units",
-                    "1",
                 ]
             )
+        assert caught.value.code == 2
 
     def test_a_live_run_may_not_move_the_authorized_sampling(self) -> None:
         invocation = LiveRunInvocation.naming(
@@ -701,49 +735,57 @@ class TestLiveGate:
                 provider=AUTHORIZED_PROVIDER, invocation=invocation, limits=widened
             )
 
-    def test_no_committed_test_script_or_workflow_performs_the_live_invocation(
+    def test_no_committed_file_outside_the_module_and_the_manifest_names_the_flag(
         self,
     ) -> None:
-        """The live flag exists in exactly two committed places: here, and the
-        instrument that defines it. Anything else would be a path to a call that
-        no one chose."""
+        """The live flag exists in exactly two committed places: the module that
+        defines it and the manifest's documented command. A third — a test, a
+        script, a workflow, a card — would be a path to a call nobody chose.
 
+        Two things make this scan cover THIS file as well. The needle is
+        ``instrument.LIVE_RUN_FLAG`` itself rather than a second copy of the
+        string, so looking for it writes no occurrence of it here; and the file
+        list is every tracked file with a suffix a command could be written in,
+        taken from the git index rather than from a hand-kept list of roots, so
+        ``tasks/``, the repository root and everything else are in it. The
+        count assertion keeps a listing failure from passing vacuously.
+        """
+
+        listed = subprocess.run(
+            ["git", "ls-files"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+        searchable = {".py", ".sh", ".yml", ".yaml", ".md", ".j2", ".toml", ".txt"}
         allowed = {
-            Path("experiments/fresh_deduction_instrument.py"),
-            Path("tests/experiments/test_fresh_deduction_instrument.py"),
-            Path(EXECUTION_MANIFEST_PATH),
+            "experiments/fresh_deduction_instrument.py",
+            EXECUTION_MANIFEST_PATH,
         }
-        roots = ("tests", "scripts", ".github", "experiments", "audits")
-        offenders: list[str] = []
-        for root in roots:
-            for path in sorted((_REPO_ROOT / root).rglob("*")):
-                if not path.is_file() or path.suffix not in {
-                    ".py",
-                    ".sh",
-                    ".yml",
-                    ".yaml",
-                    ".md",
-                }:
-                    continue
-                relative = path.relative_to(_REPO_ROOT)
-                if relative in allowed:
-                    continue
-                if "--i-am-the-runner" in path.read_text(
-                    encoding="utf-8", errors="ignore"
-                ):
-                    offenders.append(str(relative))
+        candidates = [
+            name
+            for name in listed
+            if Path(name).suffix in searchable and name not in allowed
+        ]
+        assert len(candidates) > 1000, "the tracked-file listing came back short"
+        offenders = [
+            name
+            for name in candidates
+            if instrument.LIVE_RUN_FLAG
+            in (_REPO_ROOT / name).read_text(encoding="utf-8", errors="ignore")
+        ]
         assert offenders == []
 
-    def test_this_test_module_never_reaches_a_live_provider(self) -> None:
-        """The one test file the scan above exempts must not build a real client.
+    def test_this_test_module_neither_names_the_flag_nor_builds_a_client(self) -> None:
+        """The scan above needs no exemption for this file, and this is why.
 
-        The scan lets this file mention the flag so the refusal can be tested;
-        this keeps the exemption from becoming a hole, by refusing any import of
-        the real client factory here.
+        No occurrence of the flag, and no import of the real client factory: the
+        two ways a test file could become a path to a live call.
         """
 
         source = Path(__file__).read_text(encoding="utf-8")
-        assert "--i-am-the-runner" in source
+        assert instrument.LIVE_RUN_FLAG not in source
         assert re.search(r"^\s*(?:from|import)\s+llm\.provider", source, re.M) is None
 
 
@@ -791,7 +833,9 @@ class TestAuthorizedClient:
         hand back a `FakeProvider` for a report labelled `dry_run: false`."""
 
         with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
-            instrument.build_authorized_client(env={"AILIBI_LLM_PROVIDER": "fake"})
+            instrument.build_authorized_client(
+                verify_frozen_set(_REPO_ROOT), env={"AILIBI_LLM_PROVIDER": "fake"}
+            )
 
     def test_the_default_environment_is_the_process_one_and_still_pinned(
         self, monkeypatch: pytest.MonkeyPatch
@@ -799,7 +843,60 @@ class TestAuthorizedClient:
         monkeypatch.setenv("AILIBI_LLM_PROVIDER", "fake")
         monkeypatch.delenv("FEATHERLESS_API_KEY", raising=False)
         with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
-            instrument.build_authorized_client()
+            instrument.build_authorized_client(verify_frozen_set(_REPO_ROOT))
+
+    def test_a_client_cannot_be_built_before_the_frozen_set_is_verified(self) -> None:
+        """PLANTED: the round-3 defect — the CLI evaluated the client factory in
+        an argument list, so a run whose held-out set had moved constructed a
+        provider before anything checked the set.
+
+        The verified `FrozenSet` is now a required argument and `verify_frozen_set`
+        is its only producer, so the ordering is a property of the signature: the
+        call below does not type-check and does not run, and no client is built.
+        """
+
+        build = cast(Callable[..., object], instrument.build_authorized_client)
+        with pytest.raises(TypeError, match="frozen"):
+            build(env={"FEATHERLESS_API_KEY": "unused"})
+
+    def test_the_pre_client_gate_stops_on_a_moved_frozen_set(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a repository root whose execution manifest is the committed
+        one and whose held-out manifest carries a moved digest. The readiness
+        gate refuses there, which is BEFORE the client the CLI builds from its
+        return value exists — the gate itself constructs none."""
+
+        manifest = tmp_path / EXECUTION_MANIFEST_PATH
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(_MANIFEST.read_text(encoding="utf-8"), encoding="utf-8")
+        moved = _committed_manifest()
+        moved["accepted"][0]["sha256"] = "0" * 64
+        _write_frozen_manifest(tmp_path, moved)
+        invocation = LiveRunInvocation.naming(
+            manifest,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=tmp_path,
+        )
+        with pytest.raises(FrozenSetMismatch, match="accepted prefixes"):
+            instrument.assert_ready_for_a_live_run(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=invocation,
+                repo_root=tmp_path,
+            )
+
+    def test_the_pre_client_gate_returns_the_verified_set(self) -> None:
+        """The positive half: on the committed tree it hands back the set the
+        client is then built against, so the two cannot come apart."""
+
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        frozen = instrument.assert_ready_for_a_live_run(
+            provider=AUTHORIZED_PROVIDER, invocation=invocation
+        )
+        assert len(frozen.accepted_seeds) == 50
 
     def test_a_response_from_another_model_stops_the_run(self) -> None:
         """PLANTED: the endpoint serves a different checkpoint. The stop lands on
@@ -861,6 +958,88 @@ class TestAuthorizedClient:
             client.complete(prompt="p", schema=None, max_tokens=1024, temperature=0.2)
         )
         assert [call.model for call in client.calls] == ["stub"]
+
+
+class TestClientType:
+    """The gate reads the client's real type, not the provider label it was told.
+
+    A label is not a client. `provider="fake"` with a metered client handed in
+    would reach that provider with every other refusal in the module satisfied,
+    and a live label served by the offline fixture would write a report labelled
+    live that no model authored.
+    """
+
+    def test_a_non_fake_client_labelled_fake_is_refused_before_any_call(
+        self, tmp_path: Path
+    ) -> None:
+        # PLANTED: the label says fake; the client is not the offline provider.
+        client = _StubClient()
+        with pytest.raises(LiveRunNotAuthorized, match="not the offline fake"):
+            run_instrument(output_dir=tmp_path, client=client, provider="fake")
+        assert client.calls == 0
+
+    def test_a_fake_client_on_a_live_label_is_refused(self) -> None:
+        # PLANTED: a live-labelled run served by the fixture, which would record
+        # `dry_run: false` over output no model wrote.
+        with pytest.raises(LiveRunNotAuthorized, match="offline fake provider"):
+            instrument.assert_client_matches_provider(
+                provider=AUTHORIZED_PROVIDER, client=DryRunProvider()
+            )
+
+    def test_a_live_label_with_no_client_at_all_is_refused(self) -> None:
+        """`None` is the dry-run fallback, so it is a fake by another name."""
+
+        with pytest.raises(LiveRunNotAuthorized, match="no client"):
+            instrument.assert_client_matches_provider(
+                provider=AUTHORIZED_PROVIDER, client=None
+            )
+
+    def test_the_offline_providers_and_their_subclasses_pass(self) -> None:
+        for client in (None, DryRunProvider(), _TruncatingProvider()):
+            instrument.assert_client_matches_provider(provider="fake", client=client)
+
+
+class TestPreflightRates:
+    """The wrapper exposes the WRAPPED client's USD pre-flight rates.
+
+    `BudgetedLLMClient` reads those rates off whatever it is handed, so a
+    hardcoded zero on the wrapper disabled the USD dimension for every client it
+    ever composed — including a metered one, whose $0.00 cap would then stop
+    nothing.
+    """
+
+    def _client(self, inner: Any) -> Any:
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        return instrument._InstrumentClient(inner, work_clock=clock)
+
+    def test_a_metered_clients_rates_pass_through(self) -> None:
+        # PLANTED: a client that bills. Hardcoded zeros made this $0.00.
+        class _Metered(_StubClient):
+            preflight_cost_per_input_token_usd = 6e-6
+            preflight_cost_per_output_token_usd = 30e-6
+
+        client = self._client(_Metered())
+        assert client.preflight_cost_per_input_token_usd == 6e-6
+        assert client.preflight_cost_per_output_token_usd == 30e-6
+
+    def test_a_client_that_states_no_rates_leaves_the_budget_its_defaults(
+        self,
+    ) -> None:
+        """No rate is stated, so the budget layer applies its own calibrated
+        defaults exactly as it would to the unwrapped client."""
+
+        client = self._client(_StubClient())
+        assert not hasattr(client, "preflight_cost_per_input_token_usd")
+
+    def test_the_fake_provider_is_free_by_construction(self) -> None:
+        """Zero is the honest rate for a client whose `cost_usd` is 0.0 by
+        construction — the same statement the authorized provider makes about
+        itself (`llm/featherless_client.py:244-245`), which is why the manifest's
+        $0.00 cap is bookkeeping on both paths."""
+
+        client = self._client(DryRunProvider())
+        assert client.preflight_cost_per_input_token_usd == 0.0
+        assert client.preflight_cost_per_output_token_usd == 0.0
 
 
 class TestPerCallCaps:
@@ -1356,6 +1535,18 @@ class TestGraders:
         )
         assert [grade.verdict for grade in grades] == ["unsupported"]
 
+    def _turn(self, **kwargs: Any) -> MeetingTurn:
+        payload: dict[str, Any] = {
+            "turn_id": "m:turn-0",
+            "turn_index": 0,
+            "speaker": "p-2",
+            "turn_kind": "opening",
+            "reply_to": None,
+            "free_text": "I was in ELECTRICAL the whole time.",
+        }
+        payload.update(kwargs)
+        return MeetingTurn.model_validate(payload)
+
     def _record(self, **kwargs: Any) -> Any:
         payload: dict[str, Any] = {
             "seed": 3000,
@@ -1363,8 +1554,11 @@ class TestGraders:
             "meeting_id": "m",
             "outcome": "EJECTED",
             "ejected_player_id": "p-2",
-            "ballots": (),
-            "turn_ids": (),
+            # The ballot the support grades below describe: the two graders read
+            # the same ballots, and the privileged one needs the citations
+            # themselves to judge what they are about.
+            "ballots": (self._ballot(primary_reason_id="m:turn-0"),),
+            "turns": (self._turn(),),
             "roles": {"p-1": "CREWMATE", "p-2": "IMPOSTOR", "p-3": "CREWMATE"},
             "prompts_by_agent": {},
             "calls": (),
@@ -1394,6 +1588,8 @@ class TestGraders:
             ejected_role="IMPOSTOR",
             role_correct=True,
             supported_correct_ejection=True,
+            naming_ballots=1,
+            off_target_citations=0,
         )
 
     def test_a_role_correct_ejection_on_an_unsupported_ballot_is_not_the_primary(
@@ -1437,6 +1633,142 @@ class TestGraders:
         )
         assert grade.role_correct is False
         assert grade.supported_correct_ejection is False
+
+    # -- citation relevance: right for THAT reason, not just with a citation --
+
+    def _supported(self, **kwargs: Any) -> tuple[SupportedGrade, ...]:
+        payload: dict[str, Any] = {
+            "voter": "p-1",
+            "target": "p-2",
+            "cited_turn_id": "m:turn-0",
+            "cited_observation_id": None,
+            "verdict": "supported",
+            "guard_rewrite_reason": None,
+        }
+        payload.update(kwargs)
+        return (SupportedGrade(**payload),)
+
+    def test_a_citation_about_another_player_is_not_the_primary_outcome(self) -> None:
+        """PLANTED: the exact case the presence check could not see — the ballot
+        names the impostor and cites a turn that is somebody else's, about
+        somebody else. Present in the voter's prompt, so 'supported'; about the
+        wrong player, so not right for THAT reason."""
+
+        elsewhere = self._turn(
+            speaker="p-3",
+            free_text="p-1 was with me in MEDBAY.",
+        )
+        record = self._record(
+            turns=(elsewhere,),
+            ballots=(self._ballot(primary_reason_id="m:turn-0"),),
+        )
+        grade = grade_privileged(record, supported=self._supported())
+        assert grade.role_correct is True
+        assert grade.supported_correct_ejection is False
+        assert (grade.naming_ballots, grade.off_target_citations) == (1, 1)
+
+    def test_a_turn_naming_the_ejected_player_still_scores(self) -> None:
+        """The other half of the same gate: a turn somebody else spoke, ABOUT the
+        ejected player, is exactly the evidence a voter should cite."""
+
+        accusing = self._turn(
+            speaker="p-3",
+            claims=(
+                AccusationClaim(
+                    type="accusation",
+                    against="p-2",
+                    confidence=0.8,
+                    reason="they left ELECTRICAL right after the body was found",
+                ),
+            ),
+            free_text="It was not me.",
+        )
+        record = self._record(turns=(accusing,))
+        grade = grade_privileged(record, supported=self._supported())
+        assert grade.supported_correct_ejection is True
+        assert grade.off_target_citations == 0
+
+    def test_a_cited_turn_this_meeting_never_recorded_is_off_target(self) -> None:
+        record = self._record(
+            ballots=(self._ballot(primary_reason_id="m:turn-9"),),
+        )
+        grade = grade_privileged(
+            record, supported=self._supported(cited_turn_id="m:turn-9")
+        )
+        assert grade.supported_correct_ejection is False
+
+    def test_an_observation_line_naming_the_ejected_player_is_relevant(self) -> None:
+        record = self._record(
+            ballots=(
+                self._ballot(
+                    primary_reason_id=None, primary_reason_observation_id="p-1:4:0"
+                ),
+            ),
+            prompts_by_agent={
+                "p-1": (
+                    "<memory>\n"
+                    "[obs p-1:3:0] tick 3: p-3 in MEDBAY.\n"
+                    "[obs p-1:4:0] tick 4: p-2 left ELECTRICAL.\n"
+                    "</memory>",
+                )
+            },
+        )
+        grade = grade_privileged(
+            record,
+            supported=self._supported(
+                cited_turn_id=None, cited_observation_id="p-1:4:0"
+            ),
+        )
+        assert grade.supported_correct_ejection is True
+
+    def test_an_observation_line_about_another_player_is_off_target(self) -> None:
+        # PLANTED: the voter cites a real line of its own memory that has
+        # nothing to do with the player it voted for.
+        record = self._record(
+            ballots=(
+                self._ballot(
+                    primary_reason_id=None, primary_reason_observation_id="p-1:3:0"
+                ),
+            ),
+            prompts_by_agent={
+                "p-1": (
+                    "<memory>\n"
+                    "[obs p-1:3:0] tick 3: p-3 in MEDBAY.\n"
+                    "[obs p-1:4:0] tick 4: p-2 left ELECTRICAL.\n"
+                    "</memory>",
+                )
+            },
+        )
+        grade = grade_privileged(
+            record,
+            supported=self._supported(
+                cited_turn_id=None, cited_observation_id="p-1:3:0"
+            ),
+        )
+        assert grade.supported_correct_ejection is False
+        assert grade.off_target_citations == 1
+
+    def test_a_longer_id_is_not_the_player_it_starts_with(self) -> None:
+        """PLANTED: a substring match would read `p-10` as naming `p-1`. A ten
+        player table is not this roster, but a rule that cannot tell the two
+        apart is wrong wherever it is applied."""
+
+        assert instrument._names_player("tick 4: p-10 in MEDBAY.", "p-1") is False
+        assert instrument._names_player("tick 4: p-1 in MEDBAY.", "p-1") is True
+
+    def test_relevance_reads_no_role(self) -> None:
+        """The rule is public-information-only: the same ballots and turns grade
+        the same way whoever the hidden impostor is."""
+
+        record = self._record()
+        ballots = list(record.ballots)
+        relevance = instrument.grade_citation_relevance(
+            ballots,
+            subject="p-2",
+            turns=record.turns,
+            prompts_by_agent=record.prompts_by_agent,
+        )
+        assert [grade.verdict for grade in relevance] == ["relevant"]
 
     def test_the_run_path_calls_no_grader(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1683,6 +2015,8 @@ class TestPrefixSecrecy:
             "limits",
             "sampling",
             "primary_outcome",
+            "primary_outcome_rubric",
+            "citation_relevance_rubric",
             "decision_rule",
             "wrongful_ejection_tradeoff",
             "stop_rule",
@@ -1782,6 +2116,37 @@ class TestExecutionManifest:
         assert " ".join(STOP_RULE.split()) in " ".join(text.split())
         assert f"at least {MINIMUM_ACTIONABLE_EFFECT_UNITS} units" in text
 
+    def test_the_manifest_quotes_the_grading_rubrics_verbatim(self) -> None:
+        """The primary outcome and the relevance rule are what a result means, so
+        the manifest carries them word for word rather than in paraphrase."""
+
+        text = " ".join(self._text().split())
+        assert " ".join(instrument.PRIMARY_OUTCOME_RUBRIC.split()) in text
+        assert " ".join(instrument.CITATION_RELEVANCE_RUBRIC.split()) in text
+
+    def test_the_manifest_dates_the_amendment_that_added_relevance(self) -> None:
+        """A preregistration may be amended before results exist, and only if the
+        amendment is on the record with its date and its reason."""
+
+        text = self._text()
+        assert "## Amendments before first run" in text
+        assert "2026-09-09 — citation relevance joins the primary outcome" in text
+
+    def test_the_manifest_marks_the_row_the_authorization_card_does_not_carry(
+        self,
+    ) -> None:
+        """Every other row of that table is the owner's, copied verbatim. The
+        sampling row is not in the authorization card at all, so the claim above
+        the table is qualified and the row itself says so."""
+
+        authorization = (
+            _REPO_ROOT / "tasks" / "work" / "fresh-deduction-authorization.md"
+        ).read_text(encoding="utf-8")
+        assert "Sampling temperature" not in authorization
+        assert (
+            "| Sampling temperature *(not from the authorization card" in self._text()
+        )
+
     def test_the_manifest_binds_the_acceptable_tradeoff(self) -> None:
         """The preregistration names 'acceptable tradeoffs' among the fields a
         manifest must bind, so the wrongful-decision bound is quoted here the
@@ -1800,7 +2165,7 @@ class TestExecutionManifest:
         text = self._text()
         assert "This document authorizes no live call" in text
         assert "#437 authorized LIMITS, not a run" in text
-        assert "--i-am-the-runner" in text
+        assert instrument.LIVE_RUN_FLAG in text
 
     def test_the_manifest_records_the_supersession_of_the_empty_fields(self) -> None:
         text = self._text()
