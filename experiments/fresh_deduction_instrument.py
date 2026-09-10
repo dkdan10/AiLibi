@@ -91,6 +91,7 @@ from experiments.held_out_prefixes import AUTHORIZED_ROSTER as FROZEN_PREFIX_ROS
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
+from llm.provider import extract_parse_failure
 from meetings.manager import (
     DEFAULT_TURN_MAX_TOKENS,
     DEFAULT_VOTE_MAX_TOKENS,
@@ -387,6 +388,20 @@ STOP_RULE: Final[str] = (
     "condition reads an outcome: the 50 paired units are a fixed sample with no "
     "interim analysis and no optional stopping, so nothing here can be tripped "
     "by a result the run has produced."
+)
+
+SPEND_RECONCILIATION: Final[str] = (
+    "After each unit the recorded spend is reconciled against the enforced "
+    "budget snapshot over every call the provider charged: the meeting row's "
+    "resolved calls plus every failed attempt the replay records with usage — a "
+    "payload a real provider validated and refused before the recording client "
+    "could log it, whose tokens the budget charged off the parse-failure "
+    "metadata. A zero-spend default marker is not a charged call, so a "
+    "manager-side validation of a returned payload, whose spend the meeting row "
+    "already carries, is counted once and not twice. This is the token budget's "
+    "accounting check rather than a limit of its own: what it can find is a "
+    "unit whose recorded calls do not add up to what the budget charged, and "
+    "that unit stops the run the way every other unit failure does."
 )
 
 _ANALYSIS_FREEZE_NOTE: Final[str] = (
@@ -1006,7 +1021,11 @@ class _InstrumentClient:
 
     Every stop above records the call FIRST. The response came back, so the
     tokens were spent whether or not they are usable, and the partial accounting
-    the stop rule promises has to carry them.
+    the stop rule promises has to carry them. The same rule reaches a call that
+    never returned a usable response at all: an attempt the provider billed and
+    then refused on its own schema validation is captured with the spend its
+    parse-failure metadata carries, because the meeting layer fail-softs past it
+    and no ``llm_calls`` row will ever hold it.
 
     Not a subclass of anything in ``experiments/``: the committed MECHANICS_ONLY
     harnesses keep their own refusal, and this wrapper composes an arbitrary
@@ -1124,6 +1143,37 @@ class _InstrumentClient:
                 )
             )
             raise self._work_clock.charge_aborted(aborted) from exc
+        except BaseException as exc:
+            # A call the provider BILLED and then refused. A real provider
+            # validates the completion itself and raises before anything
+            # downstream can log it, so this attempt reaches no ``llm_calls``
+            # row and would otherwise be missing from the partial accounting a
+            # stop reports — the same understatement the truncation stop used to
+            # make, and the gap the run of 2026-09-10 stopped on. The
+            # parse-failure metadata riding the exception carries the real spend
+            # (``llm.provider.extract_parse_failure``); an exception without it
+            # bought nothing and is re-raised untouched.
+            failure = extract_parse_failure(exc)
+            if failure is None:
+                raise
+            burned = time.monotonic() - started
+            self._calls.append(
+                CapturedCall(
+                    agent_id=agent_id,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    input_tokens=failure.input_tokens,
+                    output_tokens=failure.output_tokens,
+                    cost_usd=failure.cost_usd,
+                    model=failure.model,
+                    seconds=burned,
+                )
+            )
+            # Charged like a call that returned: the provider held the wall for
+            # it either way, so the work clock and the per-arm
+            # ``model_work_seconds`` keep describing the same seconds.
+            self._work_clock.charge(burned)
+            raise
         seconds = time.monotonic() - started
         # Recorded before any of the three stops below, because the response
         # exists: its tokens were spent and its provider time elapsed, and a
@@ -1850,7 +1900,9 @@ def run_unit(
             "token budget is sized on that"
         )
     _assert_arm_provenance(entries, arm=arm, seed=prefix.seed)
-    _reconcile_recorded_spend(meeting, budget=unit_budget, seed=prefix.seed, arm=arm)
+    _reconcile_recorded_spend(
+        meeting, entries=entries, budget=unit_budget, seed=prefix.seed, arm=arm
+    )
 
     # Read, not drained. Every check below can stop the run, and a stop after
     # the buffer was emptied would hand the abort handler an empty client and
@@ -1913,25 +1965,114 @@ def _assert_arm_provenance(
         )
 
 
+def _charged_failed_attempts(
+    entries: Sequence[ReplayLogEntry], *, meeting_id: str
+) -> tuple[FailedCallReplayEntry, ...]:
+    """This meeting's failed provider attempts that the provider still charged.
+
+    A real provider validates the completion itself and raises BEFORE the
+    recording client can log the call, so the tokens a schema-failed attempt
+    burned never reach :attr:`MeetingReplayEntry.llm_calls` — while the budget
+    layer charges them off the parse-failure metadata riding the exception
+    (``llm/budgeted_client.py``, ``llm.provider.extract_parse_failure``). They
+    reach the replay through the failed-call channel instead: from the
+    recorder's identified ledger (``orchestrator/game.py::_record_captured_failures``)
+    or, for a runner that supplies none, off the surfaced default's
+    ``parse_failures`` (``_record_deadline_defaults``).
+
+    Usage is the discriminator, and the producer is the one that set it. The two
+    attempts whose spend is not the provider's to charge again are both written
+    as ZERO-spend visibility markers: a deadline miss completed nothing, and a
+    manager-side validation of a returned-but-invalid payload has its spend in
+    ``llm_calls`` already (``meetings/manager.py:1712-1720`` states that
+    property). Summing only the rows carrying usage therefore counts every
+    charged call exactly once.
+    """
+
+    return tuple(
+        entry
+        for entry in entries
+        if isinstance(entry, FailedCallReplayEntry)
+        and entry.meeting_id == meeting_id
+        and (
+            entry.input_tokens != 0 or entry.output_tokens != 0 or entry.cost_usd != 0.0
+        )
+    )
+
+
+@dataclass(frozen=True)
+class _RecordedSpend:
+    """One unit's recorded spend over every call the provider charged."""
+
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    resolved_calls: int
+    charged_failures: int
+
+
+def _recorded_spend(
+    meeting: MeetingReplayEntry, entries: Sequence[ReplayLogEntry]
+) -> _RecordedSpend:
+    """Sum the meeting's resolved calls AND its charged failed attempts."""
+
+    failed = _charged_failed_attempts(entries, meeting_id=meeting.meeting_id)
+    return _RecordedSpend(
+        input_tokens=(
+            sum(call.input_tokens for call in meeting.llm_calls)
+            + sum(entry.input_tokens for entry in failed)
+        ),
+        output_tokens=(
+            sum(call.output_tokens for call in meeting.llm_calls)
+            + sum(entry.output_tokens for entry in failed)
+        ),
+        cost_usd=(
+            sum(call.cost_usd for call in meeting.llm_calls)
+            + sum(entry.cost_usd for entry in failed)
+        ),
+        resolved_calls=len(meeting.llm_calls),
+        charged_failures=len(failed),
+    )
+
+
 def _reconcile_recorded_spend(
-    meeting: MeetingReplayEntry, *, budget: GameBudget, seed: int, arm: InstrumentArm
+    meeting: MeetingReplayEntry,
+    *,
+    entries: Sequence[ReplayLogEntry],
+    budget: GameBudget,
+    seed: int,
+    arm: InstrumentArm,
 ) -> None:
-    """Compare the RECORDED per-call spend against the enforced budget snapshot."""
+    """Check that every call the budget charged is one the replay accounts for.
+
+    The token budget is the limit; this is its accounting check. It reads the
+    RECORDED spend — the meeting row's resolved calls plus the failed attempts
+    the replay records with usage (:func:`_charged_failed_attempts`) — against
+    the enforced budget snapshot, so a charged call that reached neither surface
+    is caught on the unit that burned it rather than at the end of a run.
+
+    Summing ``llm_calls`` alone did not do that, and the run of 2026-09-10 is
+    the case: a payload the provider validated and refused burned 2,228 input
+    and 861 output tokens that the budget charged and the meeting row could not
+    carry, so the first of one hundred units stopped on an accounting gap rather
+    than on a limit.
+    """
 
     snapshot = budget.snapshot()
-    recorded_input = sum(call.input_tokens for call in meeting.llm_calls)
-    recorded_output = sum(call.output_tokens for call in meeting.llm_calls)
-    recorded_cost = sum(call.cost_usd for call in meeting.llm_calls)
+    recorded = _recorded_spend(meeting, entries)
     if (
-        recorded_input != snapshot.input_tokens
-        or recorded_output != snapshot.output_tokens
-        or abs(recorded_cost - snapshot.cost_usd) > 1e-9
+        recorded.input_tokens != snapshot.input_tokens
+        or recorded.output_tokens != snapshot.output_tokens
+        or abs(recorded.cost_usd - snapshot.cost_usd) > 1e-9
     ):
         raise InstrumentError(
-            f"seed {seed} on arm {arm.name}: the recorded spend "
-            f"({recorded_input} in / {recorded_output} out / {recorded_cost} USD) "
-            f"differs from the enforced budget ({snapshot.input_tokens} in / "
-            f"{snapshot.output_tokens} out / {snapshot.cost_usd} USD)"
+            f"seed {seed} on arm {arm.name}: the recorded spend over "
+            f"{recorded.resolved_calls} resolved calls and "
+            f"{recorded.charged_failures} charged failed attempts "
+            f"({recorded.input_tokens} in / {recorded.output_tokens} out / "
+            f"{recorded.cost_usd} USD) differs from the enforced budget "
+            f"({snapshot.input_tokens} in / {snapshot.output_tokens} out / "
+            f"{snapshot.cost_usd} USD)"
         )
 
 

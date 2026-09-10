@@ -16,8 +16,8 @@ list, a call over the cap, a truncated response, an exhausted budget, an expired
 deadline, a model-work window that has to bite while a call is still in flight,
 a mislabelled clock, a citation the voter never saw, a citation about somebody
 other than the player it was cast against, a meeting whose turns or ballots all
-fell back to the layer's defaults, a leaked prefix step and a planted body
-handle.
+fell back to the layer's defaults, a call the provider billed and then refused
+on its own schema validation, a leaked prefix step and a planted body handle.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import experiments.fresh_deduction_instrument as instrument
 from experiments.fresh_deduction_instrument import (
@@ -99,6 +99,12 @@ from orchestrator.replay import (
     read_all_entries,
 )
 from orchestrator.run_limits import RunDeadlineExceeded
+from tests.experiments import burned_call_double
+from tests.experiments.burned_call_double import (
+    BURNED_INPUT_TOKENS,
+    BURNED_OUTPUT_TOKENS,
+    BurnedCallProvider,
+)
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _MANIFEST: Final[Path] = _REPO_ROOT / EXECUTION_MANIFEST_PATH
@@ -887,11 +893,29 @@ class TestLiveGate:
 
         No occurrence of the flag, and no import of the real client factory: the
         two ways a test file could become a path to a live call.
+
+        The burned-call double beside this file is held to the same line rather
+        than exempted from it. It has to reach `llm.provider` — the burned spend
+        rides an exception attribute that module owns, and copying the attribute
+        name would pin the double against a copy of the seam instead of the seam
+        — so what it may take from `llm.provider` is enumerated: the failure
+        model and the attach helper, and nothing that builds a client.
         """
 
         source = Path(__file__).read_text(encoding="utf-8")
         assert instrument.LIVE_RUN_FLAG not in source
         assert re.search(r"^\s*(?:from|import)\s+llm\.provider", source, re.M) is None
+
+        double = Path(burned_call_double.__file__).read_text(encoding="utf-8")
+        assert instrument.LIVE_RUN_FLAG not in double
+        assert re.search(r"^\s*import\s+llm\.provider", double, re.M) is None
+        taken = {
+            alias.name
+            for node in ast.parse(double).body
+            if isinstance(node, ast.ImportFrom) and node.module == "llm.provider"
+            for alias in node.names
+        }
+        assert taken == {"LLMCallFailure", "_attach_parse_failure"}
 
 
 class TestAuthorizedClient:
@@ -1553,6 +1577,140 @@ class TestMeetingDefaults:
         assert matched is not None
         assert ("vote" if vote is not None else "turn") == phase
         assert matched.group(1) == trigger
+
+
+class TestChargedCallAccounting:
+    """Every call the provider charged is reconciled, and counted once.
+
+    The run of 2026-09-10 stopped on its first unit of one hundred: the recorded
+    spend summed over `MeetingReplayEntry.llm_calls` was 13,263 in / 1,448 out
+    against an enforced budget of 15,491 / 2,309, and the 2,228 / 861 gap was
+    one paid call whose payload the provider validated and refused before any
+    recording client could log it. Both halves of that are gated here — the
+    charged failure is counted, and a returned-but-invalid payload whose spend
+    `llm_calls` already holds is not counted again.
+    """
+
+    def _failed_rows(
+        self, directory: Path, name: str
+    ) -> tuple[FailedCallReplayEntry, ...]:
+        return tuple(
+            entry
+            for entry in read_all_entries(directory / name)
+            if isinstance(entry, FailedCallReplayEntry)
+        )
+
+    def test_a_burned_call_is_reconciled_instead_of_stopping_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a provider that bills for a ballot and then refuses it, the
+        way a real one does. Summing `llm_calls` alone stops this unit on an
+        accounting gap; summing every charged call resolves it."""
+
+        provider = BurnedCallProvider()
+        report = run_instrument(output_dir=tmp_path, client=provider, units=1)
+
+        assert provider.burned == 1
+        assert [arm.units for arm in report.arms] == [1, 1]
+        charged = [
+            row
+            for row in self._failed_rows(tmp_path, "repaired_clock-seed-3000.jsonl")
+            if row.input_tokens or row.output_tokens or row.cost_usd
+        ]
+        assert len(charged) == 1
+        assert (charged[0].input_tokens, charged[0].output_tokens) == (
+            BURNED_INPUT_TOKENS,
+            BURNED_OUTPUT_TOKENS,
+        )
+        assert report.arms[0].defaulted_votes == 1
+
+    def test_the_burned_calls_spend_reaches_the_partial_accounting(self) -> None:
+        """The client's own ledger, at the seam. A call that raised is absent
+        from every `llm_calls` row there will ever be, so a stop that reported
+        only returned responses would understate what the run had spent."""
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(BurnedCallProvider(), work_clock=clock)
+        with pytest.raises(ValidationError):
+            asyncio.run(
+                client.complete(
+                    prompt="a vote prompt",
+                    schema=ModelAuthoredVoteBallot,
+                    max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens,
+                    temperature=AUTHORIZED_SAMPLING.vote_temperature,
+                    agent_id="p-1",
+                )
+            )
+        assert len(client.calls) == 1
+        assert client.calls[0].input_tokens == BURNED_INPUT_TOKENS
+        assert client.calls[0].output_tokens == BURNED_OUTPUT_TOKENS
+        assert clock.seconds == client.calls[0].seconds
+
+    def test_a_stop_after_a_burned_call_reports_that_spend(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: one billed-and-refused ballot, then a transport failure. The
+        unit never resolves, so the charged call reaches the report through the
+        partial accounting or not at all."""
+
+        provider = BurnedCallProvider(then_transport_failure=True)
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(output_dir=tmp_path, client=provider, units=1)
+        partial = aborted.value.partial
+        assert partial.completed_units == 0
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.input_tokens >= BURNED_INPUT_TOKENS
+        assert usage.output_tokens >= BURNED_OUTPUT_TOKENS
+        assert f"{usage.input_tokens} in" in partial.describe()
+
+    def test_a_returned_invalid_payload_is_charged_once(self, tmp_path: Path) -> None:
+        """PLANTED double-count: `_InvalidBallotProvider` RETURNS an invalid
+        payload with usage, so the recording client logged it and the meeting
+        row carries its spend. The orchestrator writes that default as a
+        zero-spend marker precisely so it is not charged twice; counting every
+        default row regardless of usage would overstate this unit."""
+
+        report = run_instrument(
+            output_dir=tmp_path, client=_InvalidBallotProvider(), units=1
+        )
+        assert report.arms[0].defaulted_votes == 1
+        rows = self._failed_rows(tmp_path, "repaired_clock-seed-3000.jsonl")
+        assert rows, "the defaulted ballot must leave a visible row"
+        assert all(
+            (row.input_tokens, row.output_tokens, row.cost_usd) == (0, 0, 0.0)
+            for row in rows
+        )
+
+    def test_only_the_rows_that_carry_usage_are_charged_calls(self) -> None:
+        """The discriminator, planted row by row: a zero-spend visibility marker
+        is not a charged call, a paid attempt is one whatever error type the
+        producer stamped on it, and another meeting's row is not this unit's."""
+
+        def row(**overrides: Any) -> FailedCallReplayEntry:
+            fields: dict[str, Any] = {
+                "game_id": "g",
+                "meeting_id": "m",
+                "tick": 1,
+                "model": "m",
+                "prompt_length": 0,
+                "raw_response": "",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+                "error_type": "deadline_default",
+                "error_message": "vote defaulted (validation); p-1 submitted no ballot",
+            }
+            fields.update(overrides)
+            return FailedCallReplayEntry(**fields)
+
+        marker = row()
+        captured = row(error_type="ValidationError", input_tokens=7, output_tokens=3)
+        legacy_default = row(input_tokens=5)
+        other_meeting = row(meeting_id="other", input_tokens=9)
+        charged = instrument._charged_failed_attempts(
+            [marker, captured, legacy_default, other_meeting], meeting_id="m"
+        )
+        assert charged == (captured, legacy_default)
 
 
 class TestProvenance:
