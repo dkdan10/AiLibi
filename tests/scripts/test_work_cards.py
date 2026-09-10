@@ -177,6 +177,39 @@ def test_flipped_card_status_breaks_the_index(tmp_path: Path) -> None:
     assert "holds 1 active, 2 done" in errors[0]
 
 
+def test_repeated_status_in_the_breakdown_is_rejected(tmp_path: Path) -> None:
+    # The planted proof for the whole-breakdown parse: scanning for pairs kept
+    # only the LAST '<count> ready', so a README could display 999 ready cards
+    # while the tally it was compared against read 2.
+    tasks = _index_tree(
+        tmp_path,
+        "ready",
+        "ready",
+        "done",
+        index=_INDEX.format(total=3, breakdown="999 ready, 2 ready, 1 done"),
+    )
+    errors: list[str] = []
+    validate_task_docs.validate_card_inventory(tasks, errors)
+    assert len(errors) == 1
+    assert "'ready' is counted more than once" in errors[0]
+
+
+def test_unmatched_text_in_the_breakdown_is_rejected(tmp_path: Path) -> None:
+    # Prose between two valid items was discarded, so anything could sit in the
+    # sentence unread. Each comma-separated item must now match end to end.
+    tasks = _index_tree(
+        tmp_path,
+        "ready",
+        "ready",
+        "done",
+        index=_INDEX.format(total=3, breakdown="2 ready and lots else, 1 done"),
+    )
+    errors: list[str] = []
+    validate_task_docs.validate_card_inventory(tasks, errors)
+    assert len(errors) == 1
+    assert "'2 ready and lots else' is not a '<count> <status>' item" in errors[0]
+
+
 def test_wrong_card_total_is_rejected(tmp_path: Path) -> None:
     tasks = _index_tree(
         tmp_path,

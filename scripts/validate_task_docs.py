@@ -52,7 +52,34 @@ _TASK_INDEX = "README.md"
 _INVENTORY_SENTENCE = re.compile(
     r"As of (\d{4}-\d{2}-\d{2}), `tasks/work/` holds (\d+) cards: ([^.]+)\."
 )
+# One breakdown item, matched END TO END: a search would let a repeated status
+# and any prose between two items pass through unread, so a number the index
+# displays would never reach the tally.
 _INVENTORY_ITEM = re.compile(r"(\d+) ([a-z]+)")
+
+
+def parse_inventory_breakdown(breakdown: str) -> tuple[dict[str, int], str | None]:
+    """The breakdown sentence as ``{status: count}``, or the reason it is not.
+
+    Every number the index displays has to be one this gate compares. Scanning
+    for ``<count> <status>`` pairs did not do that: ``999 ready, 2 ready`` kept
+    only the last pair, and ``2 ready and 900 more, 1 done`` dropped the text
+    between items, so a README could show a fabricated count with the gate
+    green. Each comma-separated item is matched whole instead, and a repeated
+    status is refused rather than merged.
+    """
+
+    claimed: dict[str, int] = {}
+    for item in breakdown.split(","):
+        stripped = item.strip()
+        match = _INVENTORY_ITEM.fullmatch(stripped)
+        if match is None:
+            return claimed, f"{stripped!r} is not a '<count> <status>' item"
+        count, status = match.groups()
+        if status in claimed:
+            return claimed, f"{status!r} is counted more than once"
+        claimed[status] = int(count)
+    return claimed, None
 
 
 def main() -> int:
@@ -170,7 +197,9 @@ def validate_card_inventory(tasks_dir: Path, errors: list[str]) -> None:
 
     Cards whose own Status line is missing or unrecognised are reported by
     :func:`validate_work_cards`; they are absent from this tally, so the
-    numbers here always describe well-formed cards.
+    numbers here always describe well-formed cards. The breakdown is read whole
+    by :func:`parse_inventory_breakdown`, so no displayed number escapes the
+    comparison.
     """
 
     index_path = tasks_dir / _TASK_INDEX
@@ -209,9 +238,15 @@ def validate_card_inventory(tasks_dir: Path, errors: list[str]) -> None:
             f"{_index_label(index_path)}: the card inventory says {total} cards, "
             f"but tasks/work/ holds {sum(tally.values())}."
         )
-    claimed = {
-        status: int(count) for count, status in _INVENTORY_ITEM.findall(breakdown)
-    }
+    claimed, malformed = parse_inventory_breakdown(breakdown)
+    if malformed is not None:
+        errors.append(
+            f"{_index_label(index_path)}: the card inventory breakdown "
+            f"{breakdown!r} is not a comma-separated list of '<count> <status>' "
+            f"items — {malformed}. Every number the index shows has to be one "
+            f"this check derives; expected {expected!r}."
+        )
+        return
     if claimed != {status: count for status, count in tally.items() if count}:
         errors.append(
             f"{_index_label(index_path)}: the card inventory breaks down as "
