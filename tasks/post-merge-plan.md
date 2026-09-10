@@ -57,6 +57,14 @@ and **merged on 2026-09-10** as `161c66f7`, `5f6c49d2`, `f4911571`, `524ff309`,
 `c8b8b46d` and `1165bcfc`; outcome 7 stays blocked on an adopting record for
 evidence reasoning v2. The sequencing below describes how they were built.
 
+**Follow-on cards (2026-09-10).** The first live run of the instrument (PR #445,
+left unmerged by the owner) stopped after one unit on an accounting defect and
+rendered seed 3000 of the first held-out band. Two cards follow:
+[a second held-out freeze](work/held-out-prefix-freeze-2.md) (band 5000-5999,
+the first band marked development) and
+[the instrument's reconciliation fix](work/fresh-deduction-instrument-reconciliation.md),
+stacked on it. A second run needs a new authorization card; none exists yet.
+
 **Sequencing.** Outcome 1 starts immediately and in parallel: it shares no source
 file with any other card. Outcomes 2, 3 and 4 are serialised in that order,
 because 2 and 4 both reach `agents/memory/store.py` and its meeting-layer
