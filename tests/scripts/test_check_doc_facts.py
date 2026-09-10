@@ -637,6 +637,31 @@ def test_active_toggle_export_beside_example_detected(doc_tree: Path) -> None:
     assert "active export of live toggle 'impostor_roll_call'" in errors[0]
 
 
+def test_shell_style_toggle_export_detected(doc_tree: Path) -> None:
+    # The planted proof for the assignment forms: `^AILIBI_X=` matched neither
+    # an `export` prefix nor padding around the `=`, so both slipped past the
+    # rule while setting the toggle exactly as the bare form does.
+    for line in (
+        "export AILIBI_IMPOSTOR_ROLL_CALL=1",
+        "AILIBI_IMPOSTOR_ROLL_CALL = 1",
+    ):
+        _substitute(
+            doc_tree,
+            _ENV_EXAMPLE,
+            _TOGGLE_EXAMPLE_LINE,
+            _TOGGLE_EXAMPLE_LINE + "\n" + line,
+        )
+        errors = check_doc_facts.check_facts(doc_tree)
+        assert len(errors) == 1, line
+        assert "active export of live toggle 'impostor_roll_call'" in errors[0]
+        _substitute(
+            doc_tree,
+            _ENV_EXAMPLE,
+            _TOGGLE_EXAMPLE_LINE + "\n" + line,
+            _TOGGLE_EXAMPLE_LINE,
+        )
+
+
 def test_retired_lever_assignment_detected(doc_tree: Path) -> None:
     # (e) A graduated lever handed back out as a knob this build cannot read.
     _write(
@@ -4473,6 +4498,28 @@ def test_uncommented_experiment_switch_detected(doc_tree: Path) -> None:
     assert "no commented example line" in errors[0]
     assert f"'{_EXPERIMENT_EXAMPLE_LINE}'" in errors[0]
     assert "active export of experiment switch" in errors[1]
+
+
+def test_shell_style_experiment_export_detected(doc_tree: Path) -> None:
+    # A sourced template that carries `export AILIBI_PUBLIC_ACCOUNTS=1` turns a
+    # candidate ON just as the bare line does; the rule that says a switch may
+    # appear only as a commented example has to see both, and the padded form.
+    for line in ("export AILIBI_PUBLIC_ACCOUNTS=1", "AILIBI_PUBLIC_ACCOUNTS = 1"):
+        _substitute(
+            doc_tree,
+            _ENV_EXAMPLE,
+            _EXPERIMENT_EXAMPLE_LINE,
+            _EXPERIMENT_EXAMPLE_LINE + "\n" + line,
+        )
+        errors = check_doc_facts.check_facts(doc_tree)
+        assert len(errors) == 1, line
+        assert "active export of experiment switch AILIBI_PUBLIC_ACCOUNTS" in errors[0]
+        _substitute(
+            doc_tree,
+            _ENV_EXAMPLE,
+            _EXPERIMENT_EXAMPLE_LINE + "\n" + line,
+            _EXPERIMENT_EXAMPLE_LINE,
+        )
 
 
 def test_missing_experiment_section_banner_detected(doc_tree: Path) -> None:

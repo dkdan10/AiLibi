@@ -356,7 +356,15 @@ _LEVER_SECTION_TITLE: Final = "# Belief-substrate levers"
 # whose env switches meetings.evidence_profile owns.
 _EXPERIMENT_SECTION_TITLE: Final = "# Independently versioned experiments"
 _SECTION_RULE: Final = re.compile(r"^# -{20,}[ \t]*$", re.MULTILINE)
-_ENV_ASSIGNMENT: Final = re.compile(r"^#?[ \t]*(AILIBI_[A-Z0-9_]+)=", re.MULTILINE)
+# The forms a .env loader reads as the SAME assignment: an `export` prefix and
+# padding around the `=` are both stripped by python-dotenv and by `set -a;
+# . .env`, so a rule that only saw `AILIBI_X=` let `export AILIBI_X=1` turn a
+# switch on with the gate green.
+_EXPORT_PREFIX: Final = r"(?:export[ \t]+)?"
+_ENV_ASSIGNMENT: Final = re.compile(
+    rf"^#?[ \t]*{_EXPORT_PREFIX}(AILIBI_[A-Z0-9_]+)[ \t]*=", re.MULTILINE
+)
+
 # The graduated note is the contiguous comment block opening with this marker;
 # the graduated/always-ON labels must live IN it, not merely near it.
 _GRADUATED_NOTE_MARKER: Final = "# GRADUATED LEVERS"
@@ -1760,6 +1768,19 @@ def recorded_ladder_tip(repo_root: Path, errors: list[str]) -> str | None:
     return str(recorded[0])
 
 
+def active_assignment(variable: str) -> re.Pattern[str]:
+    """An uncommented assignment of ``variable``, in every form a loader reads.
+
+    Both registry checks allow their switch only as a commented example.
+    ``export AILIBI_X=1`` and ``AILIBI_X = 1`` set it exactly as the bare form
+    does, so both have to be refused for that rule to mean what it says.
+    """
+
+    return re.compile(
+        rf"^[ \t]*{_EXPORT_PREFIX}{re.escape(variable)}[ \t]*=", re.MULTILINE
+    )
+
+
 def check_lever_registry(text: str, errors: list[str]) -> None:
     """``text``, the .env.example body, against the live substrate registry.
 
@@ -1768,6 +1789,10 @@ def check_lever_registry(text: str, errors: list[str]) -> None:
     must be named by their registry key — the recording stamp and the MANIFEST
     ``flags`` cell still carry them — but must never appear as an ``AILIBI_*=``
     assignment: their env gate is gone, so such a line documents nothing.
+
+    "Active" is read through :func:`active_assignment`, so an ``export``
+    prefix or padding around the ``=`` is refused with the bare form; all
+    three are the same assignment to whatever loads the template.
     """
 
     section = lever_section(text)
@@ -1802,7 +1827,7 @@ def check_lever_registry(text: str, errors: list[str]) -> None:
                 "an example elsewhere in the file is not where a reader copying "
                 "the lever section looks."
             )
-        active = re.compile(rf"^[ \t]*{re.escape(variable)}=", re.MULTILINE)
+        active = active_assignment(variable)
         if active.search(text) is not None:
             errors.append(
                 f"{_ENV_EXAMPLE}: active export of live toggle {key!r} — an "
@@ -1887,6 +1912,11 @@ def check_experiment_registry(text: str, errors: list[str]) -> None:
     copied .env that turned a candidate ON would move meeting behaviour that
     stays default-OFF until an adopting record. An ``AILIBI_*=`` line in the
     section that no registry name claims is a knob this build does not read.
+
+    "Active" is read through :func:`active_assignment` and the unregistered-name
+    scan through :data:`_ENV_ASSIGNMENT`, so an ``export`` prefix or padding
+    around the ``=`` is refused with the bare form; all three are the same
+    assignment to whatever loads the template.
     """
 
     section = experiment_section(text)
@@ -1918,7 +1948,7 @@ def check_experiment_registry(text: str, errors: list[str]) -> None:
                 "independently-versioned-experiments section showing the value "
                 "a bare environment resolves for it in this build."
             )
-        active = re.compile(rf"^[ \t]*{re.escape(variable)}=", re.MULTILINE)
+        active = active_assignment(variable)
         if active.search(text) is not None:
             errors.append(
                 f"{_ENV_EXAMPLE}: active export of experiment switch {variable} "
