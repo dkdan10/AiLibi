@@ -1,6 +1,6 @@
 # Authorize the fresh-model deduction evaluation
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -77,25 +77,61 @@ carries the anchors, the arithmetic and the rejected options in full.
 
 ## Acceptance
 
-- [ ] The execution manifest's authorization fields carry exactly the values in
+- [x] The execution manifest's authorization fields carry exactly the values in
   Constraints, copied verbatim, and the cost statement appears verbatim.
-- [ ] The instrument enforces a per-unit `GameBudget` with a run-level parent
+  `audits/deduction-candidate/execution-manifest.md` §"Sampling configuration,
+  caps and limits" copies the table and §"Cost statement" the paragraph;
+  `tests/experiments/test_fresh_deduction_instrument.py` asserts the manifest
+  quotes each `AUTHORIZED_*` constant. The runner reconciled them once more
+  before spending anything — see Results, "Authorized values, reconciled before
+  the run".
+- [x] The instrument enforces a per-unit `GameBudget` with a run-level parent
   and one `RunDeadline` measured against elapsed wall, constructed by the
   instrument itself rather than by the tournament CLI's `--max-total-*` caps,
   which are mutually exclusive with `--attest-unknown-usage`. A planted overrun
   stops the run and reports the partial state, and the recorded spend is
   reconciled against the budget snapshot afterwards.
-- [ ] One per-unit cap sized on the larger arm (`repaired_clock`) is applied
+  `run_instrument` builds both itself
+  (`experiments/fresh_deduction_instrument.py:2681-2690`) and the planted
+  overruns are in the instrument's tests. This run exercised the reconciliation
+  for real: it fired on unit 2 and stopped the run with its partial state, which
+  is the behaviour this box claims. It also fired on a class the manifest's
+  amended `STOP_RULE` exempts — recorded in Results and in
+  [RESULTS.md](../../audits/deduction-candidate/run-2026-09-10/RESULTS.md).
+- [x] One per-unit cap sized on the larger arm (`repaired_clock`) is applied
   identically to both arms, and per-arm usage is recorded separately so the
   asymmetry stays visible. A truncation in either arm is a stop, not a datum.
-- [ ] The held-out prefix generator is bound to the same temporal version as the
+  One `unit_budget` per unit from the same `AUTHORIZED_LIMITS`, with
+  `BUDGET_SIZING_ARM` naming the arm it is sized on. The run recorded 20,512
+  input tokens on `repaired_clock` against 15,491 on `combined_accounts` for the
+  same seed, so the asymmetry is visible in the archived rows. No response
+  reached its cap (largest output 861 against 2,048), so the truncation stop did
+  not fire.
+- [x] The held-out prefix generator is bound to the same temporal version as the
   arms (temporal v2), and a mechanical assertion shows that no rendered prompt
   and no frozen prefix matches `body-p-\d+-\d+`.
-- [ ] The held-out prefixes are prepared, frozen and hashed by the named
+  `assert_no_legacy_body_handles` ran over all 50 regenerated prefixes inside
+  `verify_frozen_set`, before any client existed, and over unit 1's rendered
+  prompts; neither matched. `_assert_arm_provenance` confirmed temporal version
+  2 on both units.
+- [x] The held-out prefixes are prepared, frozen and hashed by the named
   preparer, and the runner never opens them.
-- [ ] The run records actual tokens, elapsed wall and the $0.00 marginal cost
+  Prepared and frozen by the preparer session on
+  [the freeze card](held-out-prefix-freeze.md), merged as `23a23c2d` (#438).
+  This runner opened, printed and reasoned about no prefix before the run: the
+  set was consumed only as `HeldOutPrefix` objects driving the engine, and
+  `verify_frozen_set` matched all 50 digests and the 8 skips against the frozen
+  manifest. Only seed 3000 was ever rendered to the model; the archive reveals
+  that one and seeds 3001-3057 remain unrendered.
+- [x] The run records actual tokens, elapsed wall and the $0.00 marginal cost
   against these limits. An exhausted budget or deadline stops the run and
   authorizes no retry.
+  Actual: 12 paid calls, 36,003 input and 3,401 output tokens, 159.7 s elapsed
+  and 140.2 s of model work, `cost_usd` 0.0 throughout — against 2,400,000 /
+  200,000 tokens, 6 h elapsed and 4 h of model work. No limit came close and
+  none fired; the run stopped on the spend reconciliation instead, and no retry
+  was made. The full table is in
+  [RESULTS.md](../../audits/deduction-candidate/run-2026-09-10/RESULTS.md).
 
 ## Constraints
 
@@ -182,3 +218,170 @@ measurement whose adoption stays a separate decision.
 card as a document. The authorized limits are exercised, not validated, by
 [the instrument card](fresh-deduction-instrument.md)'s own validation; do not
 run the prospective live evaluation as a check.
+
+## Results
+
+Delivered on `work/fresh-deduction-run`, from `origin/main` at `5281e297`. The
+branch name deviates from this card's slug because
+`work/fresh-deduction-authorization` already exists from the merged #437, and a
+second branch on that name would collide with published history.
+
+The limits this card authorized were exercised by the one authorized live run,
+executed once on 2026-09-10 by a runner session separate from the preparer
+(#438) and from the instrument builder (#443). **The run stopped after 1 of 100
+units.** No paired unit completed, the primary outcome was not measured and the
+decision rule is not evaluable. The full record is
+[RESULTS.md](../../audits/deduction-candidate/run-2026-09-10/RESULTS.md); this
+section states what the card itself is accountable for.
+
+### Architecture and design references
+
+`audits/deduction-candidate/execution-manifest.md` is the binding document: its
+"Sampling configuration, caps and limits" table carries this card's Constraints
+verbatim, its "How each limit is enforced" section names the mechanism behind
+each, and its `STOP_RULE` and "Meeting-internal defaults: counted, not stopped"
+sections are the two clauses this run found to disagree.
+`audits/deduction-candidate/preregistration.md:105-122` is the field list the
+manifest answers and the source of the "no live call is authorized by a draft"
+rule. `docs/workflow.md` §"Records and experiments" supplies the standard this
+result is written to: record negative results and stop rules with the same care
+as apparent improvements.
+
+### Authorized values, reconciled before the run
+
+Every authorized value was compared against what the instrument enforces before
+any client was constructed:
+
+```sh
+.venv/bin/python -c "
+import experiments.fresh_deduction_instrument as I
+print(I.AUTHORIZED_PROVIDER, I.AUTHORIZED_MODEL, I.AUTHORIZED_PROMPT_SET, I.AUTHORIZED_EXECUTION_MODE)
+print(I.AUTHORIZED_ROSTER_PLAYERS, I.AUTHORIZED_ROSTER_IMPOSTORS, I.AUTHORIZED_LIVING_VOTERS)
+print(I.AUTHORIZED_LIMITS.model_dump())
+print(I.AUTHORIZED_SAMPLING.model_dump())
+"
+```
+
+```
+featherless Qwen/Qwen3.6-27B qwen3_6_27b sequential
+4 1 3
+{'run_max_input_tokens': 2400000, 'run_max_output_tokens': 200000, 'unit_max_input_tokens': 45000, 'unit_max_output_tokens': 4000, 'max_cost_usd': 0.0, 'elapsed_seconds': 21600.0, 'model_work_seconds': 14400.0}
+{'turn_max_tokens': 2048, 'turn_temperature': 0.4, 'vote_max_tokens': 1024, 'vote_temperature': 0.2}
+```
+
+Each line equals this card's Constraints table: `featherless`,
+`Qwen/Qwen3.6-27B`, 2,048 turn / 1,024 vote, 2,400,000 / 200,000 run-level and
+45,000 / 4,000 per unit, 4 h of model work inside 6 h elapsed, $0.00, 4p1i with
+3 living voters, sequential. Nothing disagreed, so the run proceeded.
+
+### Decisions
+
+**The run was made once and not retried.** It stopped on a manifest stop
+condition, and a stop authorizes no retry and no widening of any limit. The
+diagnosis below is offline and cost $0.00; re-running is a new spending decision
+for the owner on a new card, and this runner did not make it.
+
+**The credential was supplied without a wrapper around the instrument.** The key
+lives in the untracked repo-root `.env` and the instrument carries exactly one
+value over from the ambient environment
+(`authorized_client_environment`). The documented command was run under
+`uv run --env-file <credential-only file>`, which loads that one variable into
+the process environment and execs the command unchanged. The file held only the
+`FEATHERLESS_API_KEY` line, lived outside the repository, and no ambient
+`AILIBI_*` variable reached the run — the instrument pins provider, model and
+prompt set itself. The key was never printed, logged, placed on a command line
+or committed; the archive was scanned for it and holds 0 occurrences.
+
+**The archive publishes seed 3000 and nothing else from the frozen set.** That
+prefix was rendered to the model, so it is no longer held out, and the manifest
+says the prefixes are archived with the results once that is true. Seeds
+3001-3057 were regenerated in process, digest-checked and discarded unrendered.
+
+**The freeze manifest's `status` was not converted.** It still reads
+`held_out`. The manifest's Roles section makes that conversion the consequence
+of a fix informed by a held-out result; the fix does not exist yet and recording
+it is not the runner's job.
+
+### Verification
+
+Pre-flight, before any spend:
+
+```sh
+.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py \
+  tests/experiments/test_held_out_prefixes.py -q
+```
+
+```
+180 passed in 20.73s
+```
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run --units 2 \
+  --output-dir <temp dir>
+```
+
+Green on the fake provider at $0, `b=0, c=0, p=1.0` by construction as the
+manifest says a dry run must be.
+
+The live gate and the frozen-set check were run offline first, which constructs
+no client and reaches no provider:
+
+```sh
+.venv/bin/python -c "
+import experiments.fresh_deduction_instrument as I
+from pathlib import Path
+inv = I.LiveRunInvocation.naming(Path('audits/deduction-candidate/execution-manifest.md'),
+                                 provider='featherless', model=I.AUTHORIZED_MODEL)
+frozen = I.assert_ready_for_a_live_run(provider='featherless', invocation=inv, units=None)
+print(len(frozen.prefixes), len(frozen.skipped_seeds), frozen.manifest_sha256)
+"
+```
+
+```
+50 8 b6a3bdc5b216e1b7b3d6c1eb46e5f416bb23fba77a8087ef025c31819bff1367
+```
+
+The run itself, and its result, are in
+[RESULTS.md](../../audits/deduction-candidate/run-2026-09-10/RESULTS.md), whose
+every figure is reproducible from the archived replays by the commands quoted
+there.
+
+### Outcome summary
+
+| | |
+| --- | --- |
+| Units completed | 1 of 100 |
+| Paired units | 0 of 50 |
+| Primary outcome | not measured |
+| Decision rule | not evaluable; the candidate neither advances nor is rejected |
+| Wrongful ejections | 0 on each arm — neither meeting ejected anyone |
+| Spend | 12 paid calls, 36,003 in / 3,401 out, 159.7 s elapsed, 140.2 s model work, $0.00 |
+| Stop | the post-unit spend reconciliation, on unit 2 |
+
+The stop's cause is a paid provider call whose payload failed `MeetingTurn`
+schema validation. Its tokens are charged to the budget and recorded on a
+`failed_call` row, but never on `MeetingReplayEntry.llm_calls`, which is what
+`_reconcile_recorded_spend` compares the budget against — so the two differ by
+exactly that call (2,228 in / 861 out) and the run stops. The manifest's amended
+`STOP_RULE` explicitly exempts this class ("a schema-validation default is NOT
+[a stop]") and does not list the reconciliation among its stop conditions, while
+its enforcement section says a reconciliation difference is a stop. The two
+clauses disagree and the code follows the enforcement one.
+
+### Limitations
+
+- **This card's Acceptance is about the limits, and the limits held.** None of
+  them was approached, let alone exhausted. That is not evidence the design is
+  sound; it is evidence the run ended too early to test it.
+- **Nothing here measures the candidate.** One unit per arm, both resolving
+  `SKIPPED`, is not a sample. No grader ran.
+- **The 11.7 s per call this run measured is the only projection figure it
+  earned**, and it is drawn from 12 calls.
+- **The instrument's partial accounting understates spend for the failing
+  class**, by exactly the paid call it could not see, so a stop of this kind
+  reports less than was actually spent. On this run the gap is 2,228 input and
+  861 output tokens.
+- **A fix is not in this card's scope and is not attempted here.** It changes
+  `experiments/fresh_deduction_instrument.py`, which this card's Expected scope
+  excludes, and it is informed by a held-out result, which the manifest says
+  marks the set development and requires a new band under a new card.
