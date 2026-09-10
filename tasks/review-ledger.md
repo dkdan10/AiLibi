@@ -280,6 +280,29 @@ discharged here: AGENTS.md, `.github/workflows/ci.yml`, the task index,
 as this section, and delivery for new work is a `work/<card-slug>` branch and
 one pull request per card. Local `main` and `origin/main` are `8161689a`.
 
+## Post-merge queue checkpoint (2026-09-10)
+
+Every card of the post-merge queue except the blocked retirement card is
+implemented, independently verified and delivered as one pull request per card,
+stacked in the order the plan serialised them. None is merged; the owner merges
+each and retargets its successor to `main`.
+
+| Order | Card | PR | Head | Base |
+| --- | --- | --- | --- | --- |
+| 1 | followup-review-dispositions | #439 | `cb788692` | `main` |
+| 2 | evidence-renderer-salience | #440 | `94c76388` | `work/followup-review-dispositions` |
+| 3 | recorded-provenance-gaps | #441 | `42095485` | `work/evidence-renderer-salience` |
+| 4 | accounts-channel-hardening | #442 | `cfbf162f` | `work/recorded-provenance-gaps` |
+| 5 | fresh-deduction-instrument | #443 | `cca2321c` | `work/accounts-channel-hardening` |
+| 6 | nonblocking-followup-improvements | #444 | `60b14244` | `work/fresh-deduction-instrument` |
+
+Each branch carries its predecessors by merge commit, so a PR's diff against
+its base is its own card; the `docs/artifacts.md` inventory rows were recomputed
+at every link and the frozen held-out set's `accepted` and `skipped` blocks are
+byte-identical to `23a23c2d` on every head, with dated `dependency_restamps`
+entries for the four commits that touched a hashed source. The retirement card
+stays blocked until an adopting record for evidence reasoning v2 exists.
+
 ## Owner rulings (2026-09-07)
 
 The two items deferred at the merge were assessed in

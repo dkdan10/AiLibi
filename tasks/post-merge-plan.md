@@ -51,6 +51,10 @@ original severity labels and refuter votes stay intact.
    them. [Card](work/retire-temporal-evidence-v1.md). Blocked until an adopting
    record for evidence v2 exists.
 
+**Delivery (2026-09-10).** Outcomes 1 to 6 are implemented, verified and open as
+stacked pull requests #439, #440, #441, #442, #443 and #444, in that merge order;
+outcome 7 stays blocked. The sequencing below describes how they were built.
+
 **Sequencing.** Outcome 1 starts immediately and in parallel: it shares no source
 file with any other card. Outcomes 2, 3 and 4 are serialised in that order,
 because 2 and 4 both reach `agents/memory/store.py` and its meeting-layer

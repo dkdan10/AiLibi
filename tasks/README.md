@@ -86,8 +86,10 @@ archived follow-up review, with candidates still OFF: id-level
 [held-out prefix freeze](work/held-out-prefix-freeze.md) that prepared its
 inputs (done, #438), the [nonblocking improvements](work/nonblocking-followup-improvements.md), and
 [retiring temporal v1 and evidence v1](work/retire-temporal-evidence-v1.md).
-These are planning documents; none is implemented, and none authorizes a live
-provider call or an experimental adoption. The instrument's provider, token,
+As of 2026-09-10 all of them except the retirement card are implemented,
+independently verified and open as stacked pull requests #439 to #444 awaiting
+the owner's merge; none authorizes a live provider call or an experimental
+adoption. The instrument's provider, token,
 wall-clock and cost limits were authorized by the owner's merge of #437 on
 2026-09-07 through [the authorization card](work/fresh-deduction-authorization.md);
 no run is authorized until the renderer and provenance cards, the execution
