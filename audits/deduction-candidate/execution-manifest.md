@@ -1,6 +1,7 @@
 # Fresh-model deduction evaluation — execution manifest
 
-**Dated 2026-09-09. Status: bound. This document authorizes no live call.**
+**Dated 2026-09-09, amended 2026-09-10. Status: bound.
+This document authorizes no live call.**
 
 [The preregistration](preregistration.md) §"Select a candidate and prepare a
 separate execution manifest" lists what an execution manifest must bind before
@@ -84,6 +85,40 @@ verified on carries no held-out outcome. It lands in the same commit as the
 grader that enforces it, which
 [the instrument card](../../tasks/work/fresh-deduction-instrument.md)'s Results
 names in its round-4 subsection.
+
+## Amendments after the stopped run of 2026-09-10
+
+The first live run stopped after one unit of one hundred and was left unmerged
+by the owner (PR #445, branch `work/fresh-deduction-run`). What stopped it was
+an accounting defect in the instrument rather than a limit, and the repair is
+recorded apart from the pre-run amendments above because it is made after a unit
+ran rather than before any existed. It reaches the enforcement text only. The
+frozen analysis does not move — `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
+are the same bytes the sections below quote — and no held-out outcome informed
+it: the stop the repair reads carries counts and identifiers only.
+
+**2026-09-10 (`d8eb7d36`) — the reconciliation counts every charged call, and
+the enforcement text stops naming a stop the stop rule never carried.**
+`_reconcile_recorded_spend` summed `MeetingReplayEntry.llm_calls` alone. A real
+provider validates the completion itself and raises before the recording client
+can log the call, so a paid call whose payload it refused is charged to the
+budget while its spend rides the parse-failure metadata on the surfaced default
+instead of a meeting row (`meetings/manager.py:1712-1720`). On the stopped run
+that was one call of 2,228 input and 861 output tokens against a unit whose
+meeting row carried 13,263 / 1,448 of an enforced 15,491 / 2,309. The
+reconciliation now sums the meeting's resolved calls plus every failed attempt
+the replay records with usage, and the same call reaches the partial accounting
+a stop reports. Alongside it, this document's "How each limit is enforced"
+section said of that comparison "a difference is a stop" — a stop condition
+`STOP_RULE` does not carry, which is how a run could be stopped by a rule the
+frozen analysis never stated. The reconciliation is the token budget's
+accounting check; a unit whose accounting does not add up stops the run through
+the same clause every other unit failure does. That bullet now quotes
+`SPEND_RECONCILIATION` verbatim, so the code's statement and this document's
+cannot drift apart again. The amendment of 2026-09-09 (`bfd5696b`) reached
+`STOP_RULE` and the default counter but not this comparison; this is the rest of
+it.
 
 ## The instrument
 
@@ -217,9 +252,20 @@ asserts this document quotes each of them.
   explicit `MeetingConfig` built from `AUTHORIZED_SAMPLING`, and a live run whose
   sampling configuration is not that one is refused before any client is built.
 - **Token budget.** One `llm.budget.GameBudget` per unit with a run-level parent,
-  so every charge reaches both ceilings. After each unit the RECORDED per-call
-  spend on the replay row is reconciled against the enforced budget snapshot, and
-  a difference is a stop.
+  so every charge reaches both ceilings. What the run then checks about that
+  accounting is quoted verbatim from `SPEND_RECONCILIATION`:
+
+  After each unit the recorded spend is reconciled against the enforced budget
+  snapshot over every call the provider charged: the meeting row's resolved
+  calls plus every failed attempt the replay records with usage — a payload a
+  real provider validated and refused before the recording client could log
+  it, whose tokens the budget charged off the parse-failure metadata. A
+  zero-spend default marker is not a charged call, so a manager-side
+  validation of a returned payload, whose spend the meeting row already
+  carries, is counted once and not twice. This is the token budget's
+  accounting check rather than a limit of its own: what it can find is a unit
+  whose recorded calls do not add up to what the budget charged, and that unit
+  stops the run the way every other unit failure does.
 - **Wall.** Two clocks, because the authorization names two limits: one
   `orchestrator.run_limits.RunDeadline` for the 6 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the

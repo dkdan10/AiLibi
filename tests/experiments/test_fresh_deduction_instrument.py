@@ -2399,6 +2399,26 @@ class TestExecutionManifest:
         assert " ".join(STOP_RULE.split()) in " ".join(text.split())
         assert f"at least {MINIMUM_ACTIONABLE_EFFECT_UNITS} units" in text
 
+    def _enforcement_section(self) -> str:
+        text = self._text()
+        start = text.index("### How each limit is enforced")
+        return text[start : text.index("\n### ", start + 1)]
+
+    def test_the_enforcement_section_claims_no_stop_the_stop_rule_omits(self) -> None:
+        """The two lists have to be one list.
+
+        This section used to end its token-budget bullet with "a difference is
+        a stop", naming a stop condition `STOP_RULE` does not carry — and the
+        run of 2026-09-10 was then stopped by a rule the frozen analysis never
+        stated. The bullet now quotes `SPEND_RECONCILIATION` verbatim, which is
+        the same string the reconciliation's own module states, so the code's
+        account of the check and this document's cannot drift apart.
+        """
+
+        section = " ".join(self._enforcement_section().split())
+        assert " ".join(instrument.SPEND_RECONCILIATION.split()) in section
+        assert "a difference is a stop" not in section
+
     def test_the_manifest_quotes_the_grading_rubrics_verbatim(self) -> None:
         """The primary outcome and the relevance rule are what a result means, so
         the manifest carries them word for word rather than in paraphrase."""
@@ -2457,6 +2477,37 @@ class TestExecutionManifest:
             if f"`{commit}`" not in section
         }
         assert unlogged == {}, f"amendments missing from the log: {unlogged}"
+
+    def _post_run_amendments_section(self) -> str:
+        text = self._text()
+        start = text.index("## Amendments after the stopped run of 2026-09-10")
+        return text[start : text.index("\n## ", start + 1)]
+
+    def test_the_post_run_amendment_names_its_reason_and_a_real_commit(self) -> None:
+        """An amendment made AFTER a unit ran is a different thing from one made
+        before any existed, so it is logged in its own dated section — with the
+        commit that carried it, resolved against this history rather than taken
+        on the document's word.
+
+        The frozen analysis is not what moved: the enforcement text and the
+        reconciliation behind it are, and the section says so.
+        """
+
+        section = self._post_run_amendments_section()
+        collapsed = " ".join(section.split())
+        assert "the reconciliation counts every charged call" in collapsed
+        assert "2,228 input and 861 output tokens" in collapsed
+        assert "The frozen analysis does not move" in collapsed
+        commits = re.findall(r"\*\*2026-09-10 \(`([0-9a-f]{7,40})`\)", collapsed)
+        assert len(commits) == 1
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commit cannot be resolved")
+        resolved = _git("rev-parse", "--verify", f"{commits[0]}^{{commit}}")
+        assert resolved.returncode == 0, f"{commits[0]} is not a commit here"
+        touched = _git(
+            "show", "--name-only", "--format=", commits[0], "--", _INSTRUMENT_REPO_PATH
+        )
+        assert _INSTRUMENT_REPO_PATH in touched.stdout
 
     def test_the_manifest_marks_the_row_the_authorization_card_does_not_carry(
         self,
