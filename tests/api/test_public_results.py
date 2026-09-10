@@ -318,6 +318,8 @@ def test_public_summary_keeps_actual_candidate_identity(tmp_path: Path) -> None:
     assert identity.experiment_config.public_account_version == 1
     assert identity.experiment_config.attributed_testimony_version == 1
     assert identity.tactical_policy is None
+    # The clock the recording ran under, so a v1 and a v2 arm cannot pool.
+    assert identity.temporal_observation_version == 2
     assert identity.game_ids == ("headless-seed-1",)
 
 
@@ -327,6 +329,9 @@ def test_historical_summary_never_invents_a_default_factory(
     assert canonical_summary.provenance_groups
     assert all(
         group.agent_factory_kind is None
+        # Absent is unknown: the committed sets predate the clock stamp, and
+        # reading them does not relabel them as v1.
+        and group.temporal_observation_version is None
         for group in canonical_summary.provenance_groups
     )
     assert (

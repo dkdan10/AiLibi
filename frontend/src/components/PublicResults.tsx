@@ -19,6 +19,9 @@ function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
     <p><strong>{factory}</strong> · {group.game_ids.length} recording{group.game_ids.length === 1 ? "" : "s"}.</p>
     <p>{mechanisms.length ? `Recorded experiments: ${mechanisms.join(", ")}.` : "No enabled experiments recorded. This alone does not certify the default behavior."}</p>
     <p>Impostor policy: {group.tactical_policy?.method ?? "not recorded"}. Crew policy: {group.crew_tactical_policy?.method ?? "not recorded"}. Rule settings: {group.substrate_flags ? "recorded" : "not recorded"}.</p>
+    {/* Two groups can differ by the observation clock alone; without this line the
+        mixed-configuration banner fires above cards that read identically. */}
+    <p>Observation clock: {group.temporal_observation_version === null ? "not recorded" : `v${group.temporal_observation_version}`}.</p>
   </li>;
 }
 

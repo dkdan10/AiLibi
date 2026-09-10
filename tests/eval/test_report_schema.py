@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from pathlib import Path
+from typing import Final
 
 import pytest
 from pydantic import ValidationError
@@ -21,8 +23,10 @@ from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_rep
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
+    GameProvenance,
     GameReport,
     MeetingReport,
+    ReportProvenanceGroup,
     TournamentReport,
 )
 from meetings.schemas import (
@@ -821,3 +825,87 @@ def test_pre_fields_v2_report_loads_via_json_read_path() -> None:
     restored = TournamentReport.model_validate_json(json.dumps(payload))
     assert restored.format_version == 2
     assert restored.mean_instances_complete_at_win is None
+
+
+_REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+
+# A clock version that is not a plain ``int``. ``True`` / ``False`` are the
+# reason this guard exists: ``bool`` subclasses ``int`` and ``True == 1``, so
+# ``Literal[1, 2]`` alone accepts a JSON boolean and the field reads back as
+# clock v1 — an unresolvable clock silently relabelled as a real one.
+_NON_INTEGER_CLOCKS: Final[tuple[object, ...]] = (True, False, 2.0, "2", "v2")
+
+
+@pytest.mark.parametrize("bad", _NON_INTEGER_CLOCKS)
+def test_provenance_refuses_a_clock_version_that_is_not_an_integer(bad: object) -> None:
+    """A non-int clock is refused, not coerced into a version this build knows.
+
+    Absent means unknown; there is no third state for "the recording claims a
+    clock nobody can read", so the load fails instead of inventing one.
+    """
+
+    with pytest.raises(ValidationError):
+        GameProvenance.model_validate({"temporal_observation_version": bad})
+    with pytest.raises(ValidationError):
+        ReportProvenanceGroup.model_validate(
+            {"temporal_observation_version": bad, "game_ids": ("g-0",)}
+        )
+
+
+def test_provenance_still_accepts_the_two_readable_clocks_and_unknown() -> None:
+    """The guard narrows the type; it does not close it."""
+
+    for good in (None, 1, 2):
+        assert (
+            GameProvenance.model_validate(
+                {"temporal_observation_version": good}
+            ).temporal_observation_version
+            == good
+        )
+    with pytest.raises(ValidationError):
+        GameProvenance.model_validate({"temporal_observation_version": 3})
+
+
+@pytest.mark.parametrize("bad", _NON_INTEGER_CLOCKS)
+def test_game_report_refuses_a_clock_version_that_is_not_an_integer(
+    bad: object,
+) -> None:
+    """``GameReport`` is the model a committed report's JSON is read through.
+
+    ``recorded_provenance()`` only ever sees an already-validated value, so the
+    report leaf is where a hand-edited or corrupted stamp has to be caught.
+    """
+
+    payload = _realistic_tournament().model_dump(mode="json")["games"][0]
+    payload["temporal_observation_version"] = bad
+    with pytest.raises(ValidationError):
+        GameReport.model_validate(payload)
+
+    payload["temporal_observation_version"] = 2
+    assert GameReport.model_validate(payload).temporal_observation_version == 2
+    assert (
+        GameReport.model_validate(payload)
+        .recorded_provenance()
+        .temporal_observation_version
+        == 2
+    )
+
+
+def test_a_committed_report_whose_clock_is_a_json_boolean_is_refused() -> None:
+    """End-to-end on committed bytes: ``true`` does not load as clock v1.
+
+    The unmodified file is the control — it loads, and carries no clock stamp,
+    which is what makes the perturbed copy the only variable.
+    """
+
+    raw = (_REPO_ROOT / "replays/samples/4p1i/tournament-eval-report.json").read_text(
+        encoding="utf-8"
+    )
+    document = json.loads(raw)
+
+    clean = TournamentEvalReport.model_validate(document)
+    assert clean.report.games[0].temporal_observation_version is None
+
+    document["report"]["games"][0]["temporal_observation_version"] = True
+    with pytest.raises(ValidationError):
+        TournamentEvalReport.model_validate(document)

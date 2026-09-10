@@ -297,6 +297,7 @@ class _Generator:
                     ("ReplayMetadataView", "substrate_flags"),
                     ("ReplayMetadataView", "tactical_policy"),
                     ("ReplayMetadataView", "crew_tactical_policy"),
+                    ("ReplayMetadataView", "temporal_observation_version"),
                     ("GateView", "threshold_source"),
                     ("PublicResultsView", "provenance_groups"),
                     ("ObservationReferenceView", "source_tick"),

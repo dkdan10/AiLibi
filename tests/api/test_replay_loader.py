@@ -86,6 +86,7 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
+    TemporalObservationVersion,
     _stable_json,  # noqa: PLC2701
     classify_action_dispositions,
     read_all_entries,
@@ -2473,3 +2474,44 @@ def test_default_loader_cache_revalidates_after_live_substrate_change(
     monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL")
     assert len(loader.list_replays()) == 1
     assert loader.load_replay(expected.game_id).metadata.winner == expected.winner
+
+
+@pytest.mark.parametrize("version", get_args(TemporalObservationVersion))
+def test_served_metadata_carries_the_recorded_observation_clock(
+    tmp_path: Path, version: TemporalObservationVersion
+) -> None:
+    """The clock is served off the recorded rows, so two arms stay two arms.
+
+    ``substrate_flags`` reports only that the temporal lever was on, so a v1 and
+    a v2 recording were indistinguishable in everything the reader served, and
+    the public-results grouping folded them together with no arm label.
+    """
+
+    directory = tmp_path / f"v{version}"
+    directory.mkdir()
+    HeadlessGame(
+        seed=1,
+        game_map=load_canonical_map(),
+        agent_factory=build_default_agent_factory(),
+        replay_path=directory / "replay-seed-1.jsonl",
+        num_players=7,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        scheduler=TickScheduler(max_ticks=3),
+        substrate_flags={**substrate_flag_snapshot(), "temporal_observations": True},
+        temporal_observation_version=version,
+    ).run()
+    _write_roster(directory, num_players=7, num_impostors=1, tasks_per_crewmate=1)
+    metadata = (
+        ReplayLoader(replay_dir=directory).load_replay("headless-seed-1").metadata
+    )
+    assert metadata.temporal_observation_version == version
+    assert (metadata.substrate_flags or {})["temporal_observations"] is True
+
+
+def test_served_metadata_leaves_an_unstamped_recording_unknown(tmp_path: Path) -> None:
+    """Absent is unknown, not v1: a legacy recording is not relabelled."""
+
+    expected = write_meeting_replay(tmp_path / "replay-seed-0.jsonl")
+    metadata = ReplayLoader(replay_dir=tmp_path).load_replay(expected.game_id).metadata
+    assert metadata.temporal_observation_version is None

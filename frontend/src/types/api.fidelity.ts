@@ -366,6 +366,7 @@ export const _fidelityReplay: ReplayView = {
       "witnessed_kill_evidence": true
     },
     "tactical_policy": null,
+    "temporal_observation_version": null,
     "total_cost_usd": 0.0,
     "total_ticks": 10,
     "winner": "IMPOSTORS",

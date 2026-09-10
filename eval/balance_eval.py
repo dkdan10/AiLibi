@@ -107,6 +107,7 @@ from orchestrator.replay import (
     recorded_completion_status,
     recorded_experiment_config,
     recorded_substrate_flags,
+    recorded_temporal_observation_version,
 )
 from orchestrator.replay_integrity import ReplayIntegrityError
 from orchestrator.scheduler import TickScheduler
@@ -939,6 +940,11 @@ _CURRENT_REPORT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
     verify_chronology_and_outcome=True,
+    # Preserves what this profile already did, now as a declared option whose
+    # failure routes through the hook above instead of a bare ValueError. A
+    # format-3 recording claims its actions are what the built-in policies
+    # decided, so a report cannot certify one without re-deciding them.
+    reconstruct_v3_policies=True,
 )
 
 
@@ -1131,6 +1137,10 @@ def _game_report_from_replay(
         substrate_flags=recorded_substrate_flags(entries),
         tactical_policy=end.tactical_policy if end is not None else None,
         crew_tactical_policy=end.crew_tactical_policy if end is not None else None,
+        # Off the recorded rows, never off this process's environment: an
+        # unstamped legacy recording stays unknown rather than being relabelled
+        # v1 by whatever clock happens to be configured here.
+        temporal_observation_version=recorded_temporal_observation_version(entries),
     )
 
 

@@ -97,7 +97,9 @@ from orchestrator.replay import (
     FailedCallReplayEntry,
     LLMCallRecord,
     TacticalPolicyStamp,
+    TemporalObservationVersion,
     WinnerSide,
+    require_integer_temporal_version,
 )
 from orchestrator.experiment_config import RecordedExperimentConfig
 
@@ -227,6 +229,16 @@ class GameProvenance(_FrozenModel):
     A scripted factory describes the built-in policy classes, not a whole-run
     baseline certificate. Engine experiments, substrate and learned policy
     stamps are independent parts of the identity and remain visible together.
+
+    ``temporal_observation_version`` is the observation clock the recording ran
+    under (:func:`orchestrator.replay.recorded_temporal_observation_version`).
+    ``substrate_flags`` only says the temporal lever was on, so without the
+    version a v1 and a v2 recording carry byte-identical provenance and a mixed
+    directory folds into one unlabelled arm. Version 2 is a different
+    source-time perception substrate, so it is a separate arm and grouping must
+    keep it separate. ``None`` means unknown, exactly as it does for every other
+    field here: a recording made before the stamp existed is legacy, not v1, and
+    reading one does not relabel it.
     """
 
     agent_factory_kind: AgentFactoryKind | None = None
@@ -234,6 +246,18 @@ class GameProvenance(_FrozenModel):
     substrate_flags: Mapping[str, bool] | None = None
     tactical_policy: TacticalPolicyStamp | None = None
     crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+    # Narrowed to the versions observation/version.py can resolve rather than a
+    # bare int: a report claiming a clock this build cannot reconstruct under is
+    # a corrupt claim, and the recorded field it mirrors carries the same alias.
+    temporal_observation_version: TemporalObservationVersion | None = None
+
+    # The alias alone would let a JSON ``true`` through as v1 (``bool`` is an
+    # ``int``); the recorded row runs this same check, so a report cannot claim
+    # a clock the recording it summarises would have refused.
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        return require_integer_temporal_version(value)
 
 
 class ReportProvenanceGroup(GameProvenance):
@@ -344,6 +368,15 @@ class GameReport(_FrozenModel):
     substrate_flags: Mapping[str, bool] | None = None
     tactical_policy: TacticalPolicyStamp | None = None
     crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+    temporal_observation_version: TemporalObservationVersion | None = None
+
+    # This is the model a committed report's JSON is read through, so it is the
+    # boundary where a hand-edited or corrupted ``true`` would otherwise become
+    # clock v1 before :meth:`recorded_provenance` ever sees it.
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        return require_integer_temporal_version(value)
 
     def recorded_provenance(self) -> GameProvenance:
         """Project recorded identity without resolving unknowns from this runtime."""
@@ -353,6 +386,7 @@ class GameReport(_FrozenModel):
             substrate_flags=self.substrate_flags,
             tactical_policy=self.tactical_policy,
             crew_tactical_policy=self.crew_tactical_policy,
+            temporal_observation_version=self.temporal_observation_version,
         )
 
     @model_validator(mode="before")

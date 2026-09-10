@@ -57,6 +57,7 @@ export interface ReplayMetadataView {
   substrate_flags?: Record<string, boolean> | null;
   tactical_policy?: TacticalPolicyView | null;
   crew_tactical_policy?: TacticalPolicyView | null;
+  temporal_observation_version?: 1 | 2 | null;
 }
 
 export interface ExperimentConfigView {
@@ -570,6 +571,7 @@ export interface ReportProvenanceGroupView {
   substrate_flags: Record<string, boolean> | null;
   tactical_policy: TacticalPolicyView | null;
   crew_tactical_policy: TacticalPolicyView | null;
+  temporal_observation_version: 1 | 2 | null;
   game_ids: string[];
 }
 

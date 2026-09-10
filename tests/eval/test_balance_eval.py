@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, get_args
 
 import pytest
 
@@ -22,6 +22,7 @@ from eval.balance_eval import (
     run_balance_eval,
     run_tournament_eval,
 )
+from eval.report_schema import build_provenance_groups
 from llm.budget import GameBudget
 from orchestrator.seeder import seed_initial_state
 from observation.action_intent import ActionIntent
@@ -33,7 +34,13 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
-from orchestrator.replay import LLMCallRecord, ReplayLog, compute_cost_usd
+from orchestrator.replay import (
+    LLMCallRecord,
+    ReplayLog,
+    TemporalObservationVersion,
+    compute_cost_usd,
+    substrate_flag_snapshot,
+)
 
 _INTENT_ADAPTER: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 
@@ -663,3 +670,74 @@ def test_aborted_calls_contribute_cost_and_versions_without_a_meeting(
     assert game.winner is None
     assert game.final_tick is None
     assert game.reason == "MEETING_ABORTED"
+
+
+def _record_at_clock(directory: Path, *, version: TemporalObservationVersion) -> Path:
+    """Record one otherwise-identical game under the given observation clock."""
+
+    directory.mkdir(parents=True)
+    path = directory / "replay-seed-1.jsonl"
+    HeadlessGame(
+        seed=1,
+        num_players=7,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        game_map=load_canonical_map(),
+        agent_factory=build_default_agent_factory(),
+        replay_path=path,
+        scheduler=TickScheduler(max_ticks=3),
+        substrate_flags={**substrate_flag_snapshot(), "temporal_observations": True},
+        temporal_observation_version=version,
+    ).run()
+    return path
+
+
+def test_mixed_observation_clocks_do_not_fold_into_one_provenance_group(
+    tmp_path: Path,
+) -> None:
+    """Two clocks are two arms; without the version they were one (NC4-3).
+
+    ``substrate_flags`` says only that the temporal lever was on, so before the
+    clock version joined the identity these two recordings produced byte-equal
+    provenance and grouped together with no arm label. The second half plants
+    exactly that state: clearing the field on both reports collapses them back
+    into one group, so the split above is the field's doing rather than an
+    incidental difference between the two recordings.
+    """
+
+    roles = _seeded_roles(
+        seed=1,
+        game_map=load_canonical_map(),
+        num_players=7,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+    )
+    reports = tuple(
+        _game_report_from_replay(
+            seed=1,
+            roles=roles,
+            fallback_reason="TICK_BUDGET_REACHED",
+            replay_path=_record_at_clock(tmp_path / f"v{version}", version=version),
+        ).model_copy(update={"game_id": f"clock-v{version}"})
+        for version in get_args(TemporalObservationVersion)
+    )
+    assert [game.temporal_observation_version for game in reports] == [1, 2]
+
+    stripped = tuple(
+        game.model_copy(update={"temporal_observation_version": None})
+        for game in reports
+    )
+    assert stripped[0].recorded_provenance() == stripped[1].recorded_provenance()
+
+    groups = build_provenance_groups(reports)
+    assert len(groups) == 2
+    assert {group.temporal_observation_version for group in groups} == {1, 2}
+    assert sorted(group.game_ids for group in groups) == [
+        ("clock-v1",),
+        ("clock-v2",),
+    ]
+
+    folded = build_provenance_groups(stripped)
+    assert len(folded) == 1
+    assert folded[0].game_ids == ("clock-v1", "clock-v2")
+    assert folded[0].temporal_observation_version is None

@@ -33,6 +33,23 @@ from orchestrator.game import (
 from orchestrator.observation_delivery import ingest_event_observations_for_memories
 
 
+class PolicyReconstructionMismatch(ValueError):
+    """The recorded actions disagree with what this tree's policy decides.
+
+    A ``ValueError`` subclass, so a caller that already treats a divergence as a
+    plain value error is unaffected. It exists so a caller that routes failures
+    through its own policy — :mod:`eval.replay_walk`, whose profiles declare
+    what every check does on failure — can recognise this one disagreement
+    without catching every ``ValueError`` the decision path might raise.
+    """
+
+    def __init__(self, tick: int) -> None:
+        super().__init__(
+            f"recorded tactical actions disagree with the version-3 policy at tick {tick}"
+        )
+        self.tick = tick
+
+
 class PolicyReconstruction:
     """Own real policy/FSM, pacing and plan state across one recorded game."""
 
@@ -45,6 +62,15 @@ class PolicyReconstruction:
         service: ObservationService,
         testimony_shapes: bool,
     ) -> None:
+        # Both raises in this constructor are CONSTRUCTION PRECONDITIONS, not
+        # checks over a recording, which is why they stay plain ``ValueError``
+        # and do not route through a caller's violation policy: they say this
+        # object cannot be built at all, before any tick is walked or any
+        # recorded action is compared. The one thing a caller's policy decides
+        # is a disagreement with recorded bytes, and that is
+        # :class:`PolicyReconstructionMismatch`. ``eval.replay_walk`` cannot
+        # reach either raise — it gates on ``format_version == 3`` and pins the
+        # service to version 2 before constructing this.
         if experiment.format_version != 3 or service.temporal_observation_version != 2:
             raise ValueError(
                 "policy reconstruction requires format 3 and temporal version 2"
@@ -87,9 +113,7 @@ class PolicyReconstruction:
             delivered[pid] = memory.recent(since_tick=packet.tick)[before:]
         reproduced = translate_action_intents_for_tick(intents, world_state=state)
         if reproduced != tuple(actions):
-            raise ValueError(
-                f"recorded tactical actions disagree with the version-3 policy at tick {state.tick}"
-            )
+            raise PolicyReconstructionMismatch(state.tick)
         return delivered
 
     def after_tick(

@@ -268,6 +268,7 @@ def _build_public_results(loader: ReplayLoader, fingerprint: str) -> PublicResul
             substrate_flags=meta.substrate_flags,
             tactical_policy=meta.tactical_policy,
             crew_tactical_policy=meta.crew_tactical_policy,
+            temporal_observation_version=meta.temporal_observation_version,
             game_ids=(),
         )
         key = json.dumps(identity.model_dump(mode="json"), sort_keys=True)

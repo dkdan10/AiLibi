@@ -479,6 +479,12 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "substrate_flags",
         "tactical_policy",
         "crew_tactical_policy",
+        # The observation clock the bytes were recorded under, read off the
+        # recorded rows. A single integer version already visible in the
+        # substrate stamp's `temporal_observations` boolean, carrying no role,
+        # player, room or transcript content, so it stays out of
+        # FORBIDDEN_EVAL_ENGINE_FIELDS.
+        "temporal_observation_version",
         "policy_id",
         "method",
         "encoder_version",

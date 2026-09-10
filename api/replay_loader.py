@@ -2450,6 +2450,10 @@ class ReplayLoader:
             )
             if summary.crew_tactical_policy is not None
             else None,
+            # The summary already read this off the recorded rows for the
+            # substrate guard above; serving it makes the arm label visible
+            # instead of leaving two clocks behind one boolean lever.
+            temporal_observation_version=summary.temporal_version,
         )
 
     def _players_view(self, initial_state: WorldState) -> tuple[PlayerView, ...]:
