@@ -281,6 +281,27 @@ def resolve_prompt_set(
 # byte-golden perturbation leg) can retain for the life of the process.
 _ENVIRONMENT_CACHE_SIZE: Final[int] = 32
 
+#: The Jinja filter name :func:`flatten_line_boundaries` is registered under.
+FLATTEN_LINES_FILTER: Final[str] = "flatten_lines"
+
+
+def flatten_line_boundaries(value: str) -> str:
+    """Collapse every line boundary in ``value`` to a single space.
+
+    A template that fences speaker-authored bytes into one quoted line needs
+    the WHOLE alphabet a line boundary can be written in, not the two spellings
+    a model usually picks: ``str.splitlines`` splits on ``\\v``, ``\\f``,
+    ``\\x1c``-``\\x1e``, ``\\x85``, ``\\u2028`` and ``\\u2029`` as well as
+    ``\\n`` and ``\\r``, and a JSON payload can carry any of them (the three
+    above ``\\x1f`` are not even escaped by a JSON serializer). Splitting on
+    exactly that predicate makes the guard and the definition of "starts a
+    line" the same function, so neither can drift. Applied to a serialized
+    JSON row as well as to raw free text: JSON's own structure is ASCII, so a
+    boundary character can only sit inside a string value there.
+    """
+
+    return " ".join(value.splitlines())
+
 
 @lru_cache(maxsize=_ENVIRONMENT_CACHE_SIZE)
 def _environment_for_set(name: str, root: Path) -> Environment:
@@ -292,15 +313,21 @@ def _environment_for_set(name: str, root: Path) -> Environment:
     in :func:`build_prompt_renderers`, not anything the environment carries.
     Reached only through :func:`build_environment`, which resolves the set name
     and validates its directory first. Task 20.19 (finding C-42).
+
+    Every set gets the ``flatten_lines`` filter. It is a pure text primitive,
+    it renders nothing on its own, and only the account transcript uses it
+    today, so no other set's bytes move.
     """
 
-    return Environment(
+    environment = Environment(
         loader=FileSystemLoader(root / name),
         autoescape=False,
         undefined=StrictUndefined,
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    environment.filters[FLATTEN_LINES_FILTER] = flatten_line_boundaries
+    return environment
 
 
 def build_environment(
@@ -1190,13 +1217,35 @@ def _require_testimony_shapes_bodies(
             )
 
 
+#: The revision of the four ``*_accounts.j2`` bodies, carried in every account
+#: stamp ``public_account_prompt_versions`` composes.
+#:
+#: * ``v1`` -- the templates as first authored (Task 21.x accounts channel).
+#:   Recorded by the 2026-09-06 candidate captures under ``audits/``.
+#: * ``v2`` -- the channel hardening: the transcript fences speaker-authored
+#:   bytes into one quoted line with every line boundary flattened, and the
+#:   reply instruction branches with the shape menu instead of demanding a
+#:   placement the attributed-only arm cannot file.
+ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v2"
+
+
 def public_account_prompt_versions(
     prompt_set: str,
     *,
     public_account_version: Literal[1] | None = None,
     attributed_testimony_version: Literal[1] | None = None,
 ) -> dict[str, str] | None:
-    """Name the exact independent account arms; OFF keeps the existing registry."""
+    """Name the exact independent account arms; OFF keeps the existing registry.
+
+    The lever values say WHICH arm; :data:`ACCOUNT_PROMPT_SET_REVISION` says
+    which bodies. The revision advances whenever an account template's bytes
+    change, on the ``qwen3_32b`` vote-ballot precedent in
+    ``orchestrator.game.PROMPT_VERSION_SETS``: two generations of one template
+    must never share a ``MeetingReplayEntry.prompt_versions`` stamp. The four
+    account templates share this one suffix, so they advance as a unit even
+    when a revision edits only some of them -- a unit bump can never let a
+    changed body keep an old stamp, which is the property the field exists for.
+    """
 
     for value in (public_account_version, attributed_testimony_version):
         if value is not None and (type(value) is not int or value != 1):
@@ -1205,7 +1254,11 @@ def public_account_prompt_versions(
         return None
     if prompt_set != OPERATIONAL_BASELINE_PROMPT_SET:
         raise ValueError("public account profiles require qwen3_6_27b prompts")
-    suffix = f"v1.accounts{public_account_version or 0}.attributed{attributed_testimony_version or 0}"
+    suffix = (
+        f"{ACCOUNT_PROMPT_SET_REVISION}"
+        f".accounts{public_account_version or 0}"
+        f".attributed{attributed_testimony_version or 0}"
+    )
     return {
         key: f"{key}_accounts.{prompt_set}.{suffix}"
         for key in (
@@ -1463,6 +1516,7 @@ def build_prompt_renderers(
 
 
 __all__ = [
+    "ACCOUNT_PROMPT_SET_REVISION",
     "ACCUSATION_ROUND_ROLL_CALL_TEMPLATE",
     "ACCUSATION_ROUND_TEMPLATE",
     "CANONICAL_MAP_CARD",
@@ -1472,6 +1526,7 @@ __all__ = [
     "DEFAULT_PROMPT_SET",
     "ENV_IMPOSTOR_ROLL_CALL",
     "ENV_PROMPT_SET",
+    "FLATTEN_LINES_FILTER",
     "IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE",
     "IMPOSTOR_REPORT_TEMPLATE",
     "OPERATIONAL_BASELINE_PROMPT_SET",
@@ -1483,6 +1538,7 @@ __all__ = [
     "build_prompt_renderers",
     "classify_flag_for_prompt",
     "crewmate_report_prompt",
+    "flatten_line_boundaries",
     "impostor_report_prompt",
     "impostor_roll_call_enabled",
     "render_map_card",
