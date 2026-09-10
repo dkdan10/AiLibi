@@ -98,7 +98,7 @@ than its output preserved.
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
 | `replays/records/phase-21-wave2-finding/` — the pin and the per-file digests for a 300-game recording that is NOT one of the canonical replay sets, plus a README saying why it is not | (b) | in git | 2 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
-| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; the bump-in-flight prompt archive is EMPTY, as it is whenever every committed replay renders through the live prompt set — the six `qwen3_6_27b` v4 bodies retired at the baseline-8 record) | (a) | in git | 2,054,135 tracked bytes / 23 files |
+| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; the bump-in-flight prompt archive is EMPTY, as it is whenever every committed replay renders through the live prompt set — the six `qwen3_6_27b` v4 bodies retired at the baseline-8 record) | (a) | in git | 2,085,364 tracked bytes / 27 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
 | `training/artifacts/impostor/`, `crew/`, `anchor_study/` — the **canonical learned genomes** (`weights.json` + `config.json` + `stamp.json` + `weights.json.sha256`) | (a) + (b) | in git | 1.5 MB / 105 files |
 | `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed runner, each with its sidecars and its own committed GO/NO-GO verdict; the two FITTED models additionally carry `fit-corpus.json` provenance, which the composed runner has no weights to need | (a) + (b) | in git | 8.1 KB / 15 files |
@@ -106,7 +106,7 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 14,883,359 tracked bytes / 203 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 14,885,862 tracked bytes / 203 files |
 | `docs/media/` — the README captures, their provenance, and the as-built architecture picture | (a) | in git | 1.4 MB / 7 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
