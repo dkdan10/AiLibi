@@ -20,6 +20,13 @@ This directory records the unadopted follow-through to the owner's independent
   2026-09-07. It authorizes no live call: a call additionally requires an
   explicit runner invocation naming that file, and no test or CI job performs
   one.
+- [Run of 2026-09-10](run-2026-09-10/RESULTS.md) is the one authorized live run
+  under that manifest. It **stopped after 1 of 100 units** on the post-unit
+  spend reconciliation, so no paired unit completed and the primary outcome was
+  not measured. The directory retains the partial evidence and the unresolved
+  accounting the stop rule requires: the two per-unit replays and the
+  instrument's partial-state log. It records a defect in the instrument, not a
+  measurement of the candidate, and no limit was near exhaustion ($0.00, 160 s).
 
 The reproducible development command is:
 

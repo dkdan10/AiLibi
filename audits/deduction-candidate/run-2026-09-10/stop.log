@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/Users/danielkeinan/projects/AiLibi/.claude/worktrees/agent-aabfa9cd46ea323e3/experiments/fresh_deduction_instrument.py", line 2697, in run_instrument
+    record = run_unit(
+             ^^^^^^^^^
+  File "/Users/danielkeinan/projects/AiLibi/.claude/worktrees/agent-aabfa9cd46ea323e3/experiments/fresh_deduction_instrument.py", line 1853, in run_unit
+    _reconcile_recorded_spend(meeting, budget=unit_budget, seed=prefix.seed, arm=arm)
+  File "/Users/danielkeinan/projects/AiLibi/.claude/worktrees/agent-aabfa9cd46ea323e3/experiments/fresh_deduction_instrument.py", line 1930, in _reconcile_recorded_spend
+    raise InstrumentError(
+InstrumentError: seed 3000 on arm combined_accounts: the recorded spend (13263 in / 1448 out / 0.0 USD) differs from the enforced budget (15491 in / 2309 out / 0.0 USD)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/danielkeinan/projects/AiLibi/.claude/worktrees/agent-aabfa9cd46ea323e3/experiments/fresh_deduction_instrument.py", line 2900, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/Users/danielkeinan/projects/AiLibi/.claude/worktrees/agent-aabfa9cd46ea323e3/experiments/fresh_deduction_instrument.py", line 2882, in main
+    report = run_instrument(
+             ^^^^^^^^^^^^^^^
+  File "/Users/danielkeinan/projects/AiLibi/.claude/worktrees/agent-aabfa9cd46ea323e3/experiments/fresh_deduction_instrument.py", line 2730, in run_instrument
+    raise InstrumentAborted(
+InstrumentAborted: InstrumentError: seed 3000 on arm combined_accounts: the recorded spend (13263 in / 1448 out / 0.0 USD) differs from the enforced budget (15491 in / 2309 out / 0.0 USD); 1/100 units completed, 159.7s elapsed, 140.2s model work; combined_accounts: 5 calls, 13263 in, 1448 out, repaired_clock: 6 calls, 20512 in, 1092 out
