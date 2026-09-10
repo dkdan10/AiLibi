@@ -105,9 +105,9 @@ archived follow-up review, with candidates still OFF: id-level
 inputs (done, #438), the [nonblocking improvements](work/nonblocking-followup-improvements.md), and
 [retiring temporal v1 and evidence v1](work/retire-temporal-evidence-v1.md).
 As of 2026-09-10 all of them except the retirement card are implemented,
-independently verified and open as stacked pull requests #439 to #444 awaiting
-the owner's merge; none authorizes a live provider call or an experimental
-adoption. The instrument's provider, token,
+independently verified and merged (pull requests #439 to #444, merge commits
+`161c66f7` to `1165bcfc`); none authorizes a live provider call or an
+experimental adoption, and every candidate stays default-OFF. The instrument's provider, token,
 wall-clock and cost limits were authorized by the owner's merge of #437 on
 2026-09-07 through [the authorization card](work/fresh-deduction-authorization.md);
 no run is authorized until the renderer and provenance cards, the execution

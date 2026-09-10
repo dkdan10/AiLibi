@@ -52,8 +52,10 @@ original severity labels and refuter votes stay intact.
    record for evidence v2 exists.
 
 **Delivery (2026-09-10).** Outcomes 1 to 6 are implemented, verified and open as
-stacked pull requests #439, #440, #441, #442, #443 and #444, in that merge order;
-outcome 7 stays blocked. The sequencing below describes how they were built.
+stacked pull requests #439, #440, #441, #442, #443 and #444, in that merge order,
+and **merged on 2026-09-10** as `161c66f7`, `5f6c49d2`, `f4911571`, `524ff309`,
+`c8b8b46d` and `1165bcfc`; outcome 7 stays blocked on an adopting record for
+evidence reasoning v2. The sequencing below describes how they were built.
 
 **Sequencing.** Outcome 1 starts immediately and in parallel: it shares no source
 file with any other card. Outcomes 2, 3 and 4 are serialised in that order,

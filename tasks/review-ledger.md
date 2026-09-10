@@ -296,6 +296,12 @@ each and retargets its successor to `main`.
 | 5 | fresh-deduction-instrument | #443 | `cca2321c` | `work/accounts-channel-hardening` |
 | 6 | nonblocking-followup-improvements | #444 | `60b14244` | `work/fresh-deduction-instrument` |
 
+**Merged 2026-09-10 (owner's instruction), in order, each as a merge commit with the
+branch retained:** #439 as `161c66f7`, #440 as `5f6c49d2`, #441 as `f4911571`, #442 as `524ff309`, #443 as `c8b8b46d`, #444 as `1165bcfc`. The full gate, the 100 canonical reconstructions and the four derived report
+checks pass on the resulting `main`; no committed recording, report or
+training byte moved, and the held-out set's `accepted` and `skipped` blocks
+are still byte-identical to the freeze.
+
 Each branch carries its predecessors by merge commit, so a PR's diff against
 its base is its own card; the `docs/artifacts.md` inventory rows were recomputed
 at every link and the frozen held-out set's `accepted` and `skipped` blocks are
