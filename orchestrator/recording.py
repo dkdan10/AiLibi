@@ -113,7 +113,24 @@ def prepare_recording_paths(
     Sibling backups also support audits on another filesystem.
 
     This handles ordinary exceptions; it is not a crash-atomic publication
-    protocol or coordination between concurrent writers.
+    protocol or coordination between concurrent writers. That disclaimer covers
+    the rollback's ``remove_empty`` list in particular: a path recorded as
+    absent here and found empty at rollback is removed, and this preparation
+    cannot tell an empty file it left behind from one a peer writer created in
+    the meantime.
+
+    Holding the exclusive probes below open for the recording's lifetime was
+    considered as a way to make that removal safe by construction, and
+    declined. An open descriptor confers no exclusion on POSIX: a peer running
+    with ``force`` replaces the path with :meth:`Path.replace` and creates its
+    own file regardless of who holds a handle, and both writers in the observed
+    race did pass ``force``. Making the retention decisive would take advisory
+    locking that every writer honours -- a multi-process protocol this module
+    deliberately does not have -- and it would also break the recorder's
+    "nothing on disk until the first append" contract, since the probe file
+    would survive as a zero-byte output. The window therefore stays disclaimed
+    rather than half-closed, and a test pins the behaviour so a future change
+    to it is a decision rather than a surprise.
     """
     paths = _recording_paths(replay_path, audit_path)
     for path in paths:

@@ -375,6 +375,66 @@ class _CutoffRunner:
         )
 
 
+class _UnattributedCutoffRunner(_CutoffRunner):
+    """``_CutoffRunner`` that forgets to report the cutoff it resolved under.
+
+    Byte-for-byte the meeting a runner configured with a 0.8 cutoff produces,
+    minus the one field that says so -- the FU-06 shape.
+    """
+
+    async def run_meeting(
+        self,
+        *,
+        meeting_id: str,
+        trigger: MeetingTrigger,
+        state: WorldState,
+        agents: Mapping[PlayerId, AgentInterface],
+    ) -> MeetingArtifacts:
+        artifacts = await super().run_meeting(
+            meeting_id=meeting_id, trigger=trigger, state=state, agents=agents
+        )
+        return MeetingArtifacts(
+            result=artifacts.result,
+            llm_calls=artifacts.llm_calls,
+            prompt_versions=artifacts.prompt_versions,
+        )
+
+
+def test_an_unreported_non_default_cutoff_is_refused_before_it_is_recorded(
+    tmp_path: Path,
+) -> None:
+    """FU-06: the recorder refuses bytes no reader could ever accept.
+
+    Without the field the readers apply the legacy cutoff, at which these
+    ballots eject instead of skipping, so the recording would be refused
+    permanently and only at read time. The write-time refusal names the field
+    and leaves no resolved meeting on disk.
+    """
+
+    game = _game(tmp_path, runner=_UnattributedCutoffRunner(), max_ticks=200)
+    with pytest.raises(ValueError, match="skip_confidence_threshold"):
+        game.run()
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "replay-seed-1.jsonl").read_text().splitlines()
+    ]
+    assert not any(row["kind"] == "meeting" for row in rows)
+    # The meeting's attempts are still accounted for: the abort record keeps
+    # them rather than losing the spend with the refused meeting.
+    assert any(row["kind"] == "meeting_aborted" for row in rows)
+
+
+def test_the_same_runner_records_cleanly_once_it_reports_its_cutoff(
+    tmp_path: Path,
+) -> None:
+    """The control: only the missing field separates refused from recorded."""
+
+    _game(tmp_path, runner=_CutoffRunner(), max_ticks=200).run()
+    meetings = ReplayLoader(tmp_path).load_replay("headless-seed-1").meetings
+    assert meetings
+    assert all(meeting.gate.threshold == 0.8 for meeting in meetings)
+
+
 def _unexpected_tally_violation(violation: WalkViolation) -> NoReturn:
     raise AssertionError(f"valid recorded cutoff was ignored: {violation.kind}")
 

@@ -8,7 +8,8 @@ catches silent drift from an engine change before any Phase 5 metric reads a
 sample and produces a wrong number.
 
 On divergence it reports the sample id, the divergent tick, and the
-expected/actual hashes; a corrupted or unreadable file is reported too.
+expected/actual hashes; an integrity violation reports its rule code at its
+tick, and a corrupted or unreadable file is reported too.
 ``verify_samples`` is importable for unit tests; ``main`` is the CLI behind
 ``scripts/verify_samples.sh``.
 """
@@ -55,11 +56,24 @@ class VerifyFailure:
     reason: str
 
     def render(self) -> str:
-        if self.tick is not None:
+        """One operator line naming what actually failed.
+
+        A state-hash divergence is the only failure that carries the recorded
+        and reconstructed pair, so only it prints them. An integrity violation
+        carries a tick too but no hashes, and printing its tick branch turned
+        every ballot forgery into ``recorded None, reconstructed None`` --
+        hiding the rule code (``ballot_roster_mismatch``,
+        ``ballot_target_mismatch``, ``ballot_tally_mismatch``, ...) that the
+        reason already spells out.
+        """
+
+        if self.tick is not None and self.expected is not None:
             return (
                 f"FAIL: {self.game_id} diverged at tick {self.tick}: "
                 f"recorded {self.expected!r}, reconstructed {self.actual!r}"
             )
+        if self.tick is not None:
+            return f"FAIL: {self.game_id} at tick {self.tick}: {self.reason}"
         return f"FAIL: {self.game_id}: {self.reason}"
 
 

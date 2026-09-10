@@ -119,6 +119,71 @@ def test_outputs_cannot_replace_unselected_recordings(
 
 
 @pytest.mark.parametrize("suffix", ["", ".audit"])
+@pytest.mark.parametrize("destination_flag", ["--report-output", "--progress-output"])
+@pytest.mark.parametrize("seed", ["1", "-1"])
+def test_outputs_cannot_be_named_like_a_recording_in_another_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: str,
+    destination_flag: str,
+    seed: str,
+) -> None:
+    """A recording outside --output-dir is protected by its name (NC4-2, FU-5).
+
+    ``protected_paths`` can only list the selected seeds and the recordings the
+    run's own output directory holds, so a genuine recording one directory over
+    was overwritten by the report. The destination's basename decides here, so
+    the sibling directory never has to be enumerated.
+    """
+
+    output_dir = tmp_path / "games"
+    output_dir.mkdir()
+    elsewhere = tmp_path / "archive"
+    elsewhere.mkdir()
+    recording = elsewhere / f"replay-seed-{seed}{suffix}.jsonl"
+    recording.write_bytes(b"a genuine recording in another directory\n")
+    called = _refuse_evaluator(monkeypatch)
+    with pytest.raises(ValueError, match="names a recording"):
+        rt.main(
+            [
+                "--output-dir",
+                str(output_dir),
+                "--start-seed",
+                "5",
+                "--num-games",
+                "1",
+                "--max-ticks",
+                "2",
+                *(["--force"] if destination_flag == "--progress-output" else []),
+                destination_flag,
+                str(recording),
+            ]
+        )
+    assert called == []
+    assert recording.read_bytes() == b"a genuine recording in another directory\n"
+    assert not (output_dir / "replay-seed-5.jsonl").exists()
+
+
+@pytest.mark.parametrize(
+    "name", ["replay-seed-debug.jsonl", "replay-seed-1.audit.json", "seed-1.jsonl"]
+)
+def test_a_report_name_that_only_resembles_a_recording_still_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """The guard is the recording contract, not everything shaped like it.
+
+    None of these is a filename the recorder writes, so refusing them would
+    take away report destinations no recording can occupy.
+    """
+
+    monkeypatch.setenv("AILIBI_LLM_PROVIDER", "fake")
+    output_dir = tmp_path / "games"
+    report = tmp_path / "summaries" / name
+    assert rt.main(_args(output_dir, report)) == 0
+    assert TournamentEvalReport.model_validate_json(report.read_text())
+
+
+@pytest.mark.parametrize("suffix", ["", ".audit"])
 def test_report_rejects_a_fresh_case_alias_on_insensitive_filesystems(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str
 ) -> None:

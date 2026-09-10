@@ -1396,6 +1396,25 @@ DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = (
             ),
         }
     ),
+    MappingProxyType(
+        {
+            "date": "2026-09-09",
+            "commit": "29393cda",
+            "card": "tasks/work/nonblocking-followup-improvements.md",
+            "sources": (
+                "orchestrator/game.py, experiments/held_out_prefixes.py "
+                "(this record itself)"
+            ),
+            "note": (
+                "The write-time refusal of a meeting whose eject cutoff no "
+                "reader could attribute, plus the two docstrings that state "
+                "the contract. It adds a guard on the recording path and "
+                "changes no engine transition; prefix generation records no "
+                "meeting and never reaches the guard, so all fifty accepted "
+                "digests and the eight skips were unchanged again."
+            ),
+        }
+    ),
 )
 
 

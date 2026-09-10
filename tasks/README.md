@@ -14,21 +14,39 @@ separately budgeted fresh-model decision. The supplied
 The owner's later follow-up report and appendix are archived beside them by the
 [follow-up review archive](work/followup-review-archive.md).
 
-## Active ownership
+## Ownership of the post-merge queue
 
-No card is active. The [post-merge plan](post-merge-plan.md#ownership) holds the
-writer-to-file table for the seven queued cards; it takes effect when the owner
-dispatches one.
+The batch this index describes is the post-merge queue, not the finished
+correction batch: its cards are dispatched on `work/<card-slug>` branches in the
+order [the plan](post-merge-plan.md#ordered-outcomes) sets, and
+[the plan's ownership table](post-merge-plan.md#ownership) is the writer-to-file
+assignment they run under. The card inventory below states how many are still
+open, and it is derived rather than typed, so this section cannot go on
+describing a batch that finished.
 
 Cards own precise acceptance and file boundaries. Each card's worker commits on
 that card's branch; the coordinator serializes shared-file handovers and owns
-the planning commits on `main`.
+the planning commits on `main`. [The review ledger](review-ledger.md) registers
+those commits one row each, as far as the coverage tip it names: a commit cannot
+carry its own row, so the commit that writes the register is the one still
+uncovered, and the register states that residual rather than claiming to be
+complete.
 
 Start with the [review ledger](review-ledger.md) for commits, independent reviews
 and verification. The [roadmap](cleanup-roadmap.md) preserves priority numbers;
 the [current finding dispositions](../docs/cleanup-dispositions.md) account for
 all 104 original findings and the carried close/hardening routes. Historical
 findings and current repairs remain distinct.
+
+## Card inventory
+
+As of 2026-09-09, `tasks/work/` holds 43 cards: 2 ready, 41 done. That sentence
+is derived, not typed: `scripts/validate_task_docs.py` recomputes the total and
+the per-status breakdown from the cards themselves and fails when either drifts,
+so flipping one card's Status is enough to make this paragraph wrong out loud.
+A card's `Status` is its work state; the delivery states each card reached are
+in [the review ledger](review-ledger.md) and defined in
+[the workflow](../docs/workflow.md).
 
 ## Original implementation inventory
 

@@ -39,8 +39,12 @@ invalidate those cached inputs before deriving a new result.
 
 Read docs/architecture.md for privileged reader boundaries. No game/prompt
 changes, providers, dependencies, new threads, asynchronous coalescing, or
-historical evidence replacement. Root owns this card and its runtime/tests;
-other workers own the viewer components and generated type fixture.
+historical evidence replacement. A per-loader lock around the cache's own
+clear-and-install is permitted and was added later (see the 2026-09-09
+subsection in Results); it starts no thread and coalesces no in-flight work,
+which is what this sentence rules out. Root owns this card and its
+runtime/tests; other workers own the viewer components and generated type
+fixture.
 
 ## Expected scope
 
@@ -146,3 +150,25 @@ cold rebuild runs. Concurrent cold requests may still each reconstruct, and
 crash durability and concurrent writers stay outside the contract.
 
 The follow-up correction gate ran on the tree at `93bf7d54`, the last commit before this record; the only edits after that gate are the checkpoint records in the commit that carries this paragraph. `bash scripts/check.sh` passed 7,173 Python tests, 20 optional skips and three expected failures; 514 frontend tests; strict typing on 467 sources; lint/format; four import contracts; document and generated-type checks; and the production build. `bash scripts/verify_samples.sh` verified all 300 canonical recordings (100 under `replays/samples/`, 200 under `replays/ml_corpus/`); all four `scripts/build_sample_report.py --check` runs are consistent; `pytest tests/orchestrator/ --collect-only` collects in a fresh interpreter; the API and static browser journeys passed (13 passed, 3 skipped). No committed recording, report, metric, weight or adoption verdict was rewritten, and every experiment candidate remains default-OFF.
+
+
+### Concurrent clear-and-install correction (2026-09-09)
+
+Amended, not reopened: the constraint sentence above ruled out the repair for
+CONC-6 by reading "no new threads" as "no synchronisation", so the
+[nonblocking improvements card](nonblocking-followup-improvements.md) carries
+the change and this subsection records what it did to this card's contract.
+
+The mitigation these Results describe -- clearing the mtime-keyed playback
+caches on a fingerprint miss, because replacement bytes can preserve their
+mtime -- was single-threaded only. Clearing an LRU does not cancel a walk
+another thread already started, so a peer's PRE-flip walk could land in the
+freshly cleared cache and the builder could read it back under the POST-flip
+fingerprint. `build_public_results` now holds a per-loader lock across the
+clear, the build and the install, and every cached walk is keyed by a
+cache-generation counter that `clear_cache` advances, so a walk that was in
+flight during a clear can never be read afterwards.
+
+Nothing else moves: still one immutable result per loader, still no global
+state, no thread created and no request coalescing, and the retained cold/warm
+measurements stand. Concurrent cold requests may still each reconstruct.

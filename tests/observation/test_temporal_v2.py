@@ -11,7 +11,7 @@ import pytest
 from agents.memory.store import AgentMemory, render_for_prompt
 from agents.perception import ingest_event_observations, ingest_packet
 from engine.tick import advance_tick
-from engine.world import load_canonical_map
+from engine.world import WorldState, load_canonical_map
 from eval.temporal_entitlement import assert_temporal_batch_entitled
 from observation.packet import (
     EventObservationBatch,
@@ -542,5 +542,93 @@ def test_snapshot_gate_rejects_version_clock_or_invented_action(
             )
         with pytest.raises(AssertionError, match="v2"):
             assert_packet_is_leak_clean(forged, context)
+    finally:
+        service.close()
+
+
+def _vented_impostor_world(acting: str) -> WorldState:
+    """``_movement_world`` with the impostor p-4 hidden in a vent in STORAGE.
+
+    The movers p-1 and p-2 stand in STORAGE with it, so an observer that were
+    not entitlement-filtered would resolve everything the room does. For the
+    kill case p-1 becomes the second impostor, so the kill happens in the room
+    p-4 is hidden under.
+    """
+
+    source = _movement_world()
+    players = dict(source.players)
+    players["p-4"] = replace(players["p-4"], in_vent=True)
+    if acting == "kill":
+        players["p-1"] = _player("p-1", "IMPOSTOR", "STORAGE", (0.0, 0.0))
+    return replace(source, players=players, cooldowns={**source.cooldowns, "p-1": 0})
+
+
+@pytest.mark.parametrize("acting", ["move", "kill", "task"])
+def test_a_vented_observer_perceives_nothing_in_the_room_above_it(
+    tmp_path: Path, acting: str
+) -> None:
+    """A player inside a vent witnesses none of the room it is hidden under.
+
+    The v2 entitlement rule is ``observer.alive and not observer.in_vent``, and
+    engine visibility only hides vented SUBJECTS -- a vented observer still
+    resolves the players around it. Without the vent term a hiding impostor
+    would be handed the movements, kills and task attempts happening above it.
+    """
+
+    game_map = load_canonical_map()
+    source = _vented_impostor_world(acting)
+    if acting == "move":
+        actions = [_move("p-2", "ENGINEERING")]
+    elif acting == "kill":
+        actions = [
+            _action({"type": "kill", "actor": "p-1", "payload": {"target": "p-2"}})
+        ]
+    else:
+        actions = [
+            _action(
+                {
+                    "actor": "p-2",
+                    "type": "do_task",
+                    "payload": {"task_id": "upload_logs"},
+                }
+            )
+        ]
+    state, events = advance_tick(source, actions, game_map=game_map)
+    service = ObservationService(
+        game_map=game_map,
+        audit_log_path=tmp_path / "audit",
+        temporal_observation_version=2,
+    )
+    try:
+        assert (
+            service.build_event_observations(
+                world_state=state,
+                source_state=source,
+                submitted_actions=actions,
+                engine_events=events,
+                agent_id="p-4",
+            )
+            is None
+        )
+        # Control: the same tick reaches an entitled participant standing in
+        # STORAGE, so the vented observer's empty batch is the guard, not an
+        # empty tick.
+        entitled = service.build_event_observations(
+            world_state=state,
+            source_state=source,
+            submitted_actions=actions,
+            engine_events=events,
+            agent_id="p-1",
+        )
+        assert entitled is not None
+        assert_temporal_batch_entitled(
+            entitled,
+            agent_id="p-1",
+            source_state=source,
+            state=state,
+            events=events,
+            submitted_actions=actions,
+            game_map=game_map,
+        )
     finally:
         service.close()

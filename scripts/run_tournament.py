@@ -153,6 +153,9 @@ from orchestrator.replay import (  # noqa: E402
     TacticalPolicyStamp,
     fsm_default_tactical_policy_stamp,
 )
+from orchestrator.recording_fingerprint import (  # noqa: E402
+    replay_seed_from_filename,
+)
 from _report_output import atomic_write_report, preflight_report_output  # noqa: E402
 from _tournament_progress import (  # noqa: E402
     TournamentProgress,
@@ -173,6 +176,54 @@ if TYPE_CHECKING:
     from training.crew.scorer import CrewTrackPolicy
 
 _DEFAULT_REPORT_FILENAME = "tournament-eval-report.json"
+
+# The observation sidecar's name is the replay's name with this infix, so the
+# two names a recorder writes for one seed are ``replay-seed-<seed>.jsonl`` and
+# ``replay-seed-<seed>.audit.jsonl`` (see the ``recording_paths`` tuple in
+# ``main``). Spelled once here so the destination guard below and the recording
+# tuple cannot drift apart.
+_AUDIT_SUFFIX: Final[str] = ".audit.jsonl"
+_REPLAY_SUFFIX: Final[str] = ".jsonl"
+
+
+def _names_a_recording(name: str) -> bool:
+    """Whether ``name`` is a filename this recorder writes recording bytes to.
+
+    Decided from the one shared filename contract
+    (:func:`orchestrator.recording_fingerprint.replay_seed_from_filename`) plus
+    the audit sidecar built from the same stem, so a change to what counts as a
+    recording reaches this guard without being restated.
+    """
+
+    if replay_seed_from_filename(name) is not None:
+        return True
+    if not name.endswith(_AUDIT_SUFFIX):
+        return False
+    stem = name[: -len(_AUDIT_SUFFIX)]
+    return replay_seed_from_filename(stem + _REPLAY_SUFFIX) is not None
+
+
+def _refuse_recording_destination(flag: str, destination: Path) -> None:
+    """Refuse a report/progress destination that is named like a recording.
+
+    The preflight above protects the recordings this run can enumerate: the
+    selected seeds and every recording already in ``--output-dir``. It cannot
+    see a directory it was never given, so a recording in a sibling directory,
+    in a committed corpus, or in another run's output directory was overwritten
+    by a report without warning. A destination whose basename parses as a
+    recording is refused wherever it lives: it is never a report name, and the
+    operator slip it catches (aiming a report at a recording path) is the one
+    that destroys evidence.
+    """
+
+    if _names_a_recording(destination.name):
+        raise ValueError(
+            f"{flag} names a recording, not a report: {destination}. A "
+            f"{destination.name!r} basename is refused in any directory, "
+            "because the report would replace the recording it is named after; "
+            "choose a report filename instead."
+        )
+
 
 # ``--agent-factory`` choices (Task 15.21; audits/audit-phase-15-pause.md
 # decision 2, branch A): the scripted FSM stays the default; the learned
@@ -1256,6 +1307,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     preflight_report_output(progress_output, (*protected_paths, report_output))
     preflight_report_output(report_output, (*protected_paths, progress_output))
+    # After the preflight, so a destination inside --output-dir still fails with
+    # the overlap message that names the exact recording it collides with; this
+    # guard is what remains for the recordings no preflight can enumerate.
+    _refuse_recording_destination("--report-output", report_output)
+    _refuse_recording_destination("--progress-output", progress_output)
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
     explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
     # Arm selection (Task 18.19 puts the dual-role co-evo arm FIRST, leaving the

@@ -218,6 +218,14 @@ def build_public_results(loader: ReplayLoader) -> PublicResultsView:
 
     Content hashes include the roster and manifest. On a miss, clear the
     mtime-keyed playback caches too: replacement bytes can preserve their mtime.
+
+    Clearing and installing hold the loader's lock, so two builds cannot
+    interleave their clear with each other's install, and every cached walk is
+    keyed by the loader's cache generation, so a peer read that was already in
+    flight during a clear cannot be read back afterwards. Together those close
+    the window in which a same-length, same-mtime replacement let a build
+    install pre-flip parsed replays under the post-flip fingerprint.
+
     Concurrent cold requests may each reconstruct; this cache does not coalesce
     in-flight work or create threads.
     """
@@ -228,11 +236,17 @@ def build_public_results(loader: ReplayLoader) -> PublicResultsView:
     cached = loader._public_results_cache
     if cached is not None and cached[:2] == (fingerprint, substrate):
         return cached[2]
-    loader.clear_cache()
-    result = _build_public_results(loader, fingerprint)
-    if loader._substrate_cache_key() != substrate:
-        raise ValueError("Substrate changed during public-results generation")
-    loader._public_results_cache = (fingerprint, substrate, result)
+    with loader._results_lock:
+        # Re-read under the lock: a peer build may have installed the very
+        # result this call was about to reconstruct.
+        cached = loader._public_results_cache
+        if cached is not None and cached[:2] == (fingerprint, substrate):
+            return cached[2]
+        loader.clear_cache()
+        result = _build_public_results(loader, fingerprint)
+        if loader._substrate_cache_key() != substrate:
+            raise ValueError("Substrate changed during public-results generation")
+        loader._public_results_cache = (fingerprint, substrate, result)
     return result
 
 
