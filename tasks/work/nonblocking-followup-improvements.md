@@ -34,6 +34,21 @@ descriptors, released before the write) and `:60-67` (the zero-byte rollback).
 One commit per item; each box needs its named planted-failure proof, not merely
 an implementation.
 
+- [x] Review correction: the card-inventory gate reads the whole breakdown, so a
+  repeated status or unmatched text in the index sentence is refused rather than
+  skipped over. Planted proof: `999 ready, 2 ready, 1 done` and
+  `2 ready and lots else, 1 done` both fail where the previous parser reported
+  nothing at all.
+- [x] Review correction: both `.env.example` registry checks read an `export`
+  prefix and padding around the `=` as an active assignment. Planted proof:
+  `export AILIBI_PUBLIC_ACCOUNTS=1` and `AILIBI_PUBLIC_ACCOUNTS = 1` are refused,
+  as are the substrate check's equivalents for `AILIBI_IMPOSTOR_ROLL_CALL`.
+- [x] Review correction: the NC5-03 row states what its command prints on the
+  committed tree — 1,405 passing beside the one new failure — not 1,429.
+- [x] Review correction: the index no longer says every commit a branch carries
+  is registered. It names the register's coverage tip and the one commit that
+  cannot carry its own row, and the register covers the two commits the
+  instrument merge brought in.
 - [x] **NC4-2 / FU-5.** `scripts/run_tournament.py` refuses a `--report-output`
   or `--progress-output` whose basename parses as a recording, regardless of the
   directory it names. Planted proof: a destination outside `--output-dir` whose
@@ -139,7 +154,7 @@ default-OFF. Numbers below were measured on the commit each row names.
 | FU-03 | `db885271` | the pre-repair tick branch restored | `assert 'ballot_roster_mismatch' in 'FAIL: headless-seed-22 diverged at tick 7: recorded None, reconstructed None'` |
 | FU-06 | `29393cda` | the write-time guard call removed | `Failed: DID NOT RAISE <class 'ValueError'>` |
 | NC5-02 | `c8efd12a` | `not observer.in_vent` dropped | all three arms fail; 152 other v2 tests still pass |
-| NC5-03 | `f8a68519` | the off-profile condition disabled | the new case fails; 1,429 other meeting tests still pass |
+| NC5-03 | `f8a68519` | the off-profile condition disabled | the new case fails; the other 1,405 pass (see round 1 below) |
 | P-04 | `666dfbbb` | `AILIBI_PUBLIC_ACCOUNTS` renamed in `.env.example` | exit 1, naming the undocumented switch and the unregistered one |
 | CONC-6 | `54c623e8` | the cache generation frozen | `DID NOT RAISE`; the silent install publishes `crew_wins 1` under the post-flip fingerprint |
 | Probe descriptors | `4a7c0071` | the empty-output removal dropped | the pinned case fails with the peer's file still present |
@@ -228,8 +243,9 @@ The first selection passed 1,389 tests with one warning; the second passed 148.
 Every perturbation in the table above was applied to the working tree, run, and
 restored, on the commit its row names.
 
-Combined, on the tree at `d210c04c` plus the card, index and ledger records in
-the commit that carries this paragraph:
+Combined — the figures in this block are pinned to the tree at `d210c04c` plus
+the card, index and ledger records in the commit that carried this paragraph,
+and the round-1 subsection below re-runs the same gate at the delivered head:
 
 ```sh
 bash scripts/check.sh
@@ -277,3 +293,110 @@ git-derived half of that check skips, with its reason, on a shallow clone,
 where the merge checkpoint is not in the object store — CI checks out at
 `fetch-depth: 1`. No live provider was called, no recorded bytes were rewritten
 and nothing here adopts a candidate.
+
+### Review corrections, round 1 (2026-09-10)
+
+Four corrections: two gate repairs the review reproduced against the committed
+code, one figure that did not reproduce, and one completeness claim two records
+disagreed about at the delivered head.
+
+**The card-inventory gate accepted a fabricated count** (`f23d53cc`).
+`scripts/validate_task_docs.py` built its `{status: count}` map with
+`_INVENTORY_ITEM.findall` over the breakdown, so a repeated status kept only the
+last pair and any text between two pairs was discarded. Reproduced at
+`9ae7d2a1`: rewriting the index sentence to
+`holds 43 cards: 999 ready, 2 ready, 41 done.` left
+`.venv/bin/python scripts/validate_task_docs.py` printing
+`Task docs validation passed: 390 historical phase tasks and 390 prompts; 43 work cards.`
+at exit 0, with the file visibly claiming 999 ready cards. That is the hole
+`P-05 / CMP-01` exists to close, so the sentence the same card added to
+`tasks/README.md` — "recomputes the total and the per-status breakdown ... and
+fails when either drifts" — was ahead of the code. `parse_inventory_breakdown`
+now matches each comma-separated item end to end, refuses a repeated status, and
+reports a malformed breakdown separately from a drifted one. Planted, in
+`tests/scripts/test_work_cards.py`: `999 ready, 2 ready, 1 done` and
+`2 ready and lots else, 1 done` against a tree of 2 ready and 1 done. Restoring
+the `findall` comprehension fails both with `assert 0 == 1` — the previous
+parser reported nothing at all for either.
+
+**A shell `export` bypassed both `.env.example` registry checks** (`7b25ad36`).
+Each check allows its switch only as a commented example, and each read "active"
+as `^[ \t]*<VAR>=`, which matches neither an `export` prefix nor padding around
+the `=` — forms python-dotenv and `set -a; . .env` both read as the same
+assignment. Reproduced in-process at `9ae7d2a1` without editing a file:
+`check_experiment_registry` over `.env.example` plus
+`export AILIBI_PUBLIC_ACCOUNTS=1` returned zero errors where the bare form
+returned the active-export error, and `check_lever_registry` behaved identically
+for `AILIBI_IMPOSTOR_ROLL_CALL`. Both now build the pattern with
+`active_assignment()`, which accepts the `export` prefix and the padding, as does
+`_ENV_ASSIGNMENT` for the unregistered-name scan; both docstrings state which
+forms they cover. Planted, one test per check in
+`tests/scripts/test_check_doc_facts.py`, each running `export <VAR>=1` and
+`<VAR> = 1` beside the required commented example; narrowing the helper back to
+`^[ \t]*<VAR>=` fails both. The committed `.env.example` carries no `export`
+line, so no document moves under the widening.
+
+**The NC5-03 figure did not reproduce, and is restated.** The table above said
+1,429 other meeting tests pass with the guard disabled. Measured on the committed
+tree with `meetings/manager.py`'s off-profile condition disabled in place:
+
+```sh
+.venv/bin/pytest tests/meetings tests/agents/test_public_account_prompts.py \
+  tests/orchestrator/test_public_account_scenario.py -q -p no:randomly
+```
+
+prints `1 failed, 1405 passed`, the failure being
+`test_a_task_account_cannot_enter_a_transcript_recorded_without_the_profile` —
+the new case, and only it. `--collect-only` over the same selection returns 1406.
+The conclusion the row draws was verified and is unchanged; the number was not
+reproducible from any selection, and the row now states 1,405.
+
+**The index claimed a completeness the register did not have.**
+`tasks/README.md` said every commit those branches carry is registered, one row
+each. At `9ae7d2a1` that was false, and that commit's own message said so:
+`git log --no-merges --reverse --abbrev=8 8161689a..9ae7d2a1` printed 106 commits
+against 103 register rows, leaving `5031e735`, `cca2321c` and `9ae7d2a1`
+unregistered — while the register's own paragraph qualified itself and the index
+sentence did not. Both are repaired rather than one. The register's coverage tip
+now sits after the merge `6bcd5e0f`, so the covered range is both lines of
+authorship: it carries 108 rows, adding those three plus this round's two code
+commits, and `.venv/bin/pytest tests/scripts/test_review_ledger_register.py -q`
+passes 3. `5031e735` and `cca2321c` derive a `—` card column because git reads
+trailers only from a message's last paragraph and both put a blank line between
+`Card:` and `Co-Authored-By:`; the register says so and names the card their
+bodies give. The index sentence now names the coverage tip and the residual that
+remains — the commit that writes the register cannot carry its own row, which is
+the commit carrying this paragraph.
+
+No recorded byte changes in this round. The commits touch
+`scripts/validate_task_docs.py`, `scripts/check_doc_facts.py`, their tests, this
+card, `tasks/README.md` and `tasks/review-ledger.md`. No `GENERATOR_SOURCES` file
+moved, so no held-out restamp is due, and no `audits/` byte moved, so the
+`docs/artifacts.md` `audits/` row stands at 14,926,913 tracked bytes / 204 files
+— confirmed against disk, and now the figure PR #444's body states, having
+carried the pre-merge 14,926,477 until this round.
+
+Re-run at this head — the tree at `7b25ad36` plus the card, index and ledger
+records in the commit that carries this paragraph:
+
+```sh
+bash scripts/check.sh
+bash scripts/verify_samples.sh
+AILIBI_SAMPLES_ROOT="$PWD/replays/ml_corpus" bash scripts/verify_samples.sh
+.venv/bin/pytest tests/orchestrator/ --collect-only -q
+.venv/bin/pytest tests/scripts tests/meetings/test_lever_registry.py \
+  tests/api/test_public_results.py -q
+uv run python scripts/build_sample_report.py --sample-dir <set> --check
+```
+
+`scripts/check.sh` exited 0: 7,512 Python tests (the ten previous rows' 7,508
+plus this round's four planted cases), 20 optional skips and three expected
+failures; 515 frontend tests across 19 files; strict typing on 474 sources; ruff
+lint and format; four import contracts kept; task-doc and generated-type checks;
+and the production build. `verify_samples.sh` verified all 300 canonical
+recordings — 100 under `replays/samples/` and 200 under `replays/ml_corpus/` —
+without modifying their bytes. `tests/orchestrator/` collects 586 tests in a
+fresh interpreter. The card's targeted selection passed 1,393 with one warning,
+four more than the 1,389 of round 0. All four `--check` runs report their
+committed report consistent with its replays. The browser journeys were not run:
+no served DTO changed, and no frontend byte moved this round.

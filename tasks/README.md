@@ -26,8 +26,11 @@ describing a batch that finished.
 
 Cards own precise acceptance and file boundaries. Each card's worker commits on
 that card's branch; the coordinator serializes shared-file handovers and owns
-the planning commits on `main`. Every commit those branches carry is registered,
-one row each, in [the review ledger](review-ledger.md).
+the planning commits on `main`. [The review ledger](review-ledger.md) registers
+those commits one row each, as far as the coverage tip it names: a commit cannot
+carry its own row, so the commit that writes the register is the one still
+uncovered, and the register states that residual rather than claiming to be
+complete.
 
 Start with the [review ledger](review-ledger.md) for commits, independent reviews
 and verification. The [roadmap](cleanup-roadmap.md) preserves priority numbers;
