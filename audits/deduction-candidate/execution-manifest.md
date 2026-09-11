@@ -122,26 +122,37 @@ it.
 
 **2026-09-10 (`6215fda1`) — the stops a charged failure has to meet.** Round-1
 review of this repair's pull request (#447) found that the amendment above had
-made a refused call countable without making it judgeable. Three stops
-`STOP_RULE` carries were reachable only on the success path, so counting the
-burned call — which is what stopped the run of 2026-09-10 — let it through all
-three: a response that reached its output cap ("a truncation is a stop, not a
-datum") was fail-softed to a SKIP when the truncated body also failed schema
-validation, which is the usual reason it fails; a checkpoint this run does not
-authorize reached `InstrumentReport.model_ids` instead of stopping the run; and
-"a token budget exhausted at either the per-unit or the run level" was left
-unenforced for a charge applied after the fact, whose overrun
+made a refused call countable without making it judgeable. Two stops `STOP_RULE`
+carries, plus one limit this manifest binds of its own, were reachable only on
+the success path, so counting the burned call — which is what stopped the run of
+2026-09-10 — let it through all three. The two frozen clauses: a response that
+reached its output cap ("a truncation is a stop, not a datum") was fail-softed to
+a SKIP when the truncated body also failed schema validation, which is the usual
+reason it fails; and "a token budget exhausted at either the per-unit or the run
+level" was left unenforced for a charge applied after the fact, whose overrun
 `llm/budgeted_client.py` downgrades to a note on the exception the meeting layer
 fail-softs — on a unit's last call, with the budget then discarded, no later
-pre-flight existed to find it. The client now judges a billed-and-refused
+pre-flight existed to find it. The third is this manifest's own: a checkpoint
+this run does not authorize reached `InstrumentReport.model_ids` instead of
+stopping the run. Provider identity is not a clause of the frozen rule and this
+entry does not claim it is; it is the "Provider and model" row of the authorized
+values above, whose enforcement bullet has bound `_InstrumentClient` to refuse a
+response whose `model` is not the authorized one since before the first run, and
+the amendment only extends that refusal from a response the provider returned to
+one it billed for and then refused. The client now judges a billed-and-refused
 completion by the `model` and `output_tokens` its parse-failure metadata
 carries, and both budgets are read back against their caps after each unit
 (`BUDGET_CAP_READBACK`, quoted verbatim in "How each limit is enforced"). This
-amendment adds no stop condition and relaxes none: `STOP_RULE` is byte-identical
-and each of these three is a clause it already carried. Every planted case is
-red without the check it proves, and each is listed in
+amendment adds no stop condition and relaxes none: `STOP_RULE` is byte-identical,
+the two clauses quoted above are ones it already carried, and the checkpoint
+refusal is the manifest limit just named. Every planted case is red without the
+check it proves, and each is listed in
 [the reconciliation card](../../tasks/work/fresh-deduction-instrument-reconciliation.md)'s
-round-1 subsection.
+round-1 subsection. Round-2 review of the same pull request corrected this
+entry's attribution, which as first written counted the checkpoint refusal as a
+third clause `STOP_RULE` carries; a gate now checks that every clause this
+section credits to the frozen rule is one the rule states, and that the count it
+claims is the number it quotes.
 
 ## The instrument
 

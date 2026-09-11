@@ -2809,6 +2809,61 @@ class TestExecutionManifest:
         ]
         assert orphaned == [], f"named but not an ancestor of HEAD: {orphaned}"
 
+    def test_the_post_run_amendments_credit_no_clause_the_stop_rule_omits(
+        self,
+    ) -> None:
+        """The enforcement-section gate above, pointed at the log instead.
+
+        The second entry first read "Three stops `STOP_RULE` carries were
+        reachable only on the success path" and closed "each of these three is a
+        clause it already carried". Two of the three are quoted from the rule;
+        the third, a checkpoint this run does not authorize, is nowhere in it —
+        which is why it was the only member with no quotation. Crediting the
+        frozen rule with a stop it omits is the defect this card retired from the
+        enforcement section, in mirror image, so the log is held to the same
+        rule: every phrase this section quotes is a clause of `STOP_RULE`, a
+        heading or bullet of this document, or one the section says in so many
+        words that the rule does NOT carry; and the count it claims the rule
+        carried is the number of clauses it actually quotes.
+
+        The checkpoint refusal is the manifest's own "Provider and model" limit,
+        which is why the last assertion here is that provider identity appears
+        nowhere in the frozen rule: adding it there would move the frozen
+        analysis, and that is the owner's to make rather than this card's.
+        """
+
+        text = self._text()
+        section = " ".join(self._post_run_amendments_section().split())
+        rule = " ".join(instrument.STOP_RULE.split())
+
+        quoted = re.findall(r'"([^"]+)"', section)
+        carried = [phrase for phrase in quoted if phrase in rule]
+        for phrase in quoted:
+            if phrase in carried:
+                continue
+            assert (
+                f'"{phrase}" — a stop condition `STOP_RULE` does not carry' in section
+                or f"## {phrase}" in text
+                or f"**{phrase}.**" in text
+            ), f"quoted as the frozen rule's, but it does not state it: {phrase!r}"
+
+        words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+        claimed = re.findall(r"([A-Za-z]+) stops? `STOP_RULE` carries", section)
+        assert claimed, "the section states how many of the rule's clauses it reached"
+        for word in claimed:
+            assert word.lower() in words, f"count not spelled out: {word!r}"
+        assert {words[word.lower()] for word in claimed} == {
+            len(dict.fromkeys(carried))
+        }
+
+        lowered = instrument.STOP_RULE.lower()
+        named = [
+            word
+            for word in ("checkpoint", "identity", "provider", "endpoint", "served")
+            if word in lowered
+        ]
+        assert named == [], f"the frozen rule now names provider identity: {named}"
+
     def test_the_manifest_marks_the_row_the_authorization_card_does_not_carry(
         self,
     ) -> None:
