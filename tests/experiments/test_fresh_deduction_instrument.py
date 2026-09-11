@@ -1923,6 +1923,34 @@ class TestChargedSpendAgainstCaps:
         assert (
             f"against a {AUTHORIZED_LIMITS.unit_max_input_tokens} cap" in partial.reason
         )
+        # The charge the budget applied is also in the client's own ledger, so
+        # the accounting the stop reports names the call that crossed the cap
+        # rather than only the cap.
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.input_tokens >= AUTHORIZED_LIMITS.unit_max_input_tokens
+
+    def test_an_overrun_that_only_the_run_budget_can_see_stops_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED end to end at the RUN level: 20,000 burned input tokens leave
+        the unit inside its own 45,000 ceiling and the run past a 30,000 one. The
+        per-unit read-back is blind to this by construction, so it is the run
+        budget's read-back or nothing."""
+
+        starved = AUTHORIZED_LIMITS.model_copy(update={"run_max_input_tokens": 30_000})
+        provider = BurnedCallProvider(
+            input_tokens=20_000,
+            output_tokens=7,
+            burn_on_ballot=instrument.AUTHORIZED_LIVING_VOTERS,
+        )
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(
+                output_dir=tmp_path, client=provider, units=1, limits=starved
+            )
+        partial = aborted.value.partial
+        assert provider.burned == 1
+        assert "the run token budget is exhausted on input tokens" in partial.reason
+        assert "against a 30000 cap" in partial.reason
 
 
 class TestProvenance:
@@ -2631,6 +2659,34 @@ class TestExecutionManifest:
         assert " ".join(instrument.SPEND_RECONCILIATION.split()) in section
         assert "a difference is a stop" not in section
 
+    def test_the_enforcement_section_quotes_the_budget_read_back(self) -> None:
+        """The other direction of the same requirement: a stop `STOP_RULE`
+        carries has to be one the code applies. "A token budget exhausted at
+        either the per-unit or the run level" is a stop, and a charge applied
+        without a pre-flight to refuse it — a billed-and-refused call on a
+        unit's last ballot — reaches no pre-flight at all, so the bullet states
+        the post-unit read-back that does, in the module's own words."""
+
+        section = " ".join(self._enforcement_section().split())
+        assert " ".join(instrument.BUDGET_CAP_READBACK.split()) in section
+
+    def test_the_enforcement_section_applies_both_response_stops_to_a_refusal(
+        self,
+    ) -> None:
+        """The truncation and identity stops read a completion, not a parse.
+
+        Both used to be described — and applied — on the success path only,
+        which put a body truncated at the output cap past the truncation stop:
+        a cut-off body is the usual reason a payload then fails schema
+        validation, and the meeting layer fail-softs that failure."""
+
+        section = " ".join(self._enforcement_section().split())
+        assert "off the `model` its parse-failure metadata carries" in section
+        assert (
+            "the same check is applied to the `output_tokens` a refused call's "
+            "parse-failure metadata reports" in section
+        )
+
     def test_the_manifest_quotes_the_grading_rubrics_verbatim(self) -> None:
         """The primary outcome and the relevance rule are what a result means, so
         the manifest carries them word for word rather than in paraphrase."""
@@ -2695,7 +2751,9 @@ class TestExecutionManifest:
         start = text.index("## Amendments after the stopped run of 2026-09-10")
         return text[start : text.index("\n## ", start + 1)]
 
-    def test_the_post_run_amendment_names_its_reason_and_a_real_commit(self) -> None:
+    def test_the_post_run_amendments_name_their_reason_and_a_real_commit(
+        self,
+    ) -> None:
         """An amendment made AFTER a unit ran is a different thing from one made
         before any existed, so it is logged in its own dated section — with the
         commit that carried it, resolved against this history rather than taken
@@ -2703,6 +2761,12 @@ class TestExecutionManifest:
 
         The frozen analysis is not what moved: the enforcement text and the
         reconciliation behind it are, and the section says so.
+
+        Two entries carry that date. The first is the reconciliation; the second
+        is the review round that put the truncation, identity and budget stops on
+        the charged-failure path the first one opened. Every entry is resolved,
+        not just the first — a log whose later lines are unchecked is the same
+        document asking to be trusted that the walk above refuses to be.
         """
 
         section = self._post_run_amendments_section()
@@ -2710,16 +2774,40 @@ class TestExecutionManifest:
         assert "the reconciliation counts every charged call" in collapsed
         assert "2,228 input and 861 output tokens" in collapsed
         assert "The frozen analysis does not move" in collapsed
+        assert "the stops a charged failure has to meet" in collapsed
         commits = re.findall(r"\*\*2026-09-10 \(`([0-9a-f]{7,40})`\)", collapsed)
-        assert len(commits) == 1
+        assert len(commits) == 2
         if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
-            pytest.skip("no full history here; the named commit cannot be resolved")
-        resolved = _git("rev-parse", "--verify", f"{commits[0]}^{{commit}}")
-        assert resolved.returncode == 0, f"{commits[0]} is not a commit here"
-        touched = _git(
-            "show", "--name-only", "--format=", commits[0], "--", _INSTRUMENT_REPO_PATH
-        )
-        assert _INSTRUMENT_REPO_PATH in touched.stdout
+            pytest.skip("no full history here; the named commits cannot be resolved")
+        for commit in commits:
+            resolved = _git("rev-parse", "--verify", f"{commit}^{{commit}}")
+            assert resolved.returncode == 0, f"{commit} is not a commit here"
+            touched = _git(
+                "show", "--name-only", "--format=", commit, "--", _INSTRUMENT_REPO_PATH
+            )
+            assert _INSTRUMENT_REPO_PATH in touched.stdout
+
+    def test_every_named_post_run_commit_is_in_this_branchs_history(self) -> None:
+        """Reachable from HEAD, not merely present in some local object store.
+
+        A reviewer read the pull request as a squash onto `c12ec85a` and warned
+        that the commit the log names would be orphaned. It is not — this branch
+        is delivered by merge or fast-forward and never squashed, so every named
+        commit is an ancestor — but "the object exists here" was the weaker claim
+        the check above made, and ancestry is the one worth making.
+        """
+
+        collapsed = " ".join(self._post_run_amendments_section().split())
+        commits = re.findall(r"\*\*2026-09-10 \(`([0-9a-f]{7,40})`\)", collapsed)
+        assert commits
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; ancestry cannot be walked")
+        orphaned = [
+            commit
+            for commit in commits
+            if _git("merge-base", "--is-ancestor", commit, "HEAD").returncode != 0
+        ]
+        assert orphaned == [], f"named but not an ancestor of HEAD: {orphaned}"
 
     def test_the_manifest_marks_the_row_the_authorization_card_does_not_carry(
         self,

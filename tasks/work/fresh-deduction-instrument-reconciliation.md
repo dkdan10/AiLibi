@@ -36,6 +36,23 @@ authorized budget, at $0.00 marginal.
 
 ## Acceptance
 
+- [x] Review correction: the two stops the client applies to a response — the
+  output cap and the served checkpoint — also reach a call the provider billed
+  and then refused on its own schema validation, read off that call's
+  parse-failure metadata. Planted: a ballot burned at its 1,024-token cap stops
+  the run instead of being fail-softed to a SKIP, and one served by a checkpoint
+  this run does not authorize raises rather than reaching
+  `InstrumentReport.model_ids`.
+- [x] Review correction: a charge applied with no pre-flight left to refuse it
+  stops the run. Both budgets are read back against their own caps after each
+  unit, so the per-unit and run exhaustion `STOP_RULE` names is enforced for a
+  burned call on a unit's last ballot, whose overrun `llm/budgeted_client.py`
+  downgrades to a note. Planted at each dimension and end to end.
+- [x] Review correction: the manifest's enforcement section states both, quoting
+  the module's `BUDGET_CAP_READBACK` verbatim, and the post-run amendment
+  section names this round's commit. Every Codex P1 thread on `ff575da8` is
+  dispositioned in Results, the three valid ones by a fix and the fourth by a
+  refutation that the delivery is not a squash.
 - [x] `_reconcile_recorded_spend` sums the recorded per-call spend over
   `llm_calls` AND over every defaulted call whose parse-failure metadata
   carries usage, and the partial accounting a stop reports uses the same sum. A
@@ -267,3 +284,162 @@ card will record are not in it yet. The 100-unit dry run in the manifest's
 "Verification of this manifest" section still describes the first band and is
 left untouched for that reason; it is re-measured with the Inputs table in the
 later round.
+
+### Review corrections, round 1 (2026-09-10)
+
+Three of the four Codex P1 threads on `ff575da8` name three sides of one
+omission, and review found it independently: the round above made a
+billed-and-refused call COUNTABLE without making it JUDGEABLE. The accounting
+stop it retired had been standing in for three real ones, and nothing replaced
+them. `6215fda1` puts all three on that path.
+
+**The two stops a completion has to meet, whatever its body did.** The client's
+truncation stop and its provider-identity refusal read a response. A call the
+provider billed and then refused on its own schema validation was captured and
+re-raised without either, and the meeting layer fail-softs the `ValidationError`
+to a SKIP — so the usual CAUSE of a schema-invalid body, a completion cut off at
+the output cap, was exactly the case that walked past "a truncation is a stop,
+not a datum", and a hosted endpoint serving an unauthorized checkpoint reached
+`InstrumentReport.model_ids` instead of stopping the run. Both stops now read the
+`output_tokens` and `model` the parse-failure metadata carries, through one
+`_InstrumentClient._unusable_response` the success path calls too, so the two
+paths cannot enforce different lists again. The client's docstring claim about
+job 3 — which the review noted had become false — is true again as written.
+
+**The budget's missing arrival.** `llm/budget.py::GameBudget.charge` applies a
+charge before reporting an overrun, and `llm/budgeted_client.py:331-349`
+downgrades that overrun to `exc.add_note` on the parse failure, which the meeting
+layer then fail-softs. Every other call meets a pre-flight, so an overrun is
+found on the call that would cross the cap; a burned call meets none. On a unit's
+LAST call the unit budget is then discarded and nothing ever finds it, and at the
+run level the next unit's first pre-flight finds it one unit late — or never, on
+the run's last call. `_assert_charged_spend_is_within_caps` reads both budgets
+back against their own caps after each unit, raising the new `BudgetExhausted`;
+`BUDGET_CAP_READBACK` is the module's statement of it and the manifest quotes it
+verbatim. No stop condition is added: `STOP_RULE`'s "a token budget exhausted at
+either the per-unit or the run level" is the clause this enforces, and
+`STOP_RULE` is byte-identical.
+
+**One consequence, stated rather than left to be found.** Raising a stop in place
+of the provider's `ValidationError` means `BudgetedLLMClient` no longer charges
+that call: it reads the burned spend off the parse-failure metadata, and the
+metadata rides the exception this client replaced. The tokens are not lost from
+the record — the call was appended to the client's own ledger first, which is
+what `PartialRun.usage_by_arm` is built from, and the truncation case asserts
+the stopped arm carries it — but on those two stops the budget snapshot
+under-counts by that call. It is a snapshot of a run that is over, and the
+alternative (re-attaching the metadata to the stop) would mean copying a private
+attribute of `llm.provider` into this module.
+
+**What the reviewed head did, probe by probe.** Each case is a
+`BurnedCallProvider` through `run_instrument(units=1)` on the fake provider, at
+`$0.00`, into a temporary directory — the same double the committed tests use.
+The middle column restores `git show ff575da8:experiments/fresh_deduction_instrument.py`
+over the module and runs the identical probe.
+
+| Probe | At `ff575da8` | At `6215fda1` |
+| --- | --- | --- |
+| A ballot burned at its 1,024-token output cap | completes: units [1, 1], arm output 1,361 | `PerCallCapExceeded: a response reached its 1024-token output cap (1024 tokens); a truncation is a stop, not a datum` |
+| 45,000 input burned on the unit's LAST ballot | completes: units [1, 1], arm input 59,519 against a 45,000 per-unit cap | `BudgetExhausted: seed 3000 on arm repaired_clock: the per-unit token budget is exhausted on input tokens (59519 charged against a 45000 cap)` |
+| 20,000 input burned on the LAST ballot, run cap 30,000 | stops one unit late, on the NEXT pre-flight: `current=34519.0 + delta=2088.0 > cap=30000.0` | stops on the unit that crossed it: `the run token budget is exhausted on input tokens (34519 charged against a 30000 cap)` |
+
+The identity case has no `run_instrument` probe by construction: `expected_model`
+is bound only by a live invocation, which this card may not make, so it is
+planted at the client seam instead. From the committed tree the right-hand
+column is
+`uv run pytest tests/experiments/test_fresh_deduction_instrument.py -q -k "TestBurnedCallStopConditions or TestChargedSpendAgainstCaps"`
+— 12 passed; the probes are those same cases with the stop printed rather than
+asserted.
+
+**Planted failures.** Each perturbation was applied to the tree at `6215fda1`,
+run, and reverted.
+
+1. The burned-path stops, deleted (the `except BaseException` branch re-raises
+   without calling `_unusable_response`) — all three stop cases in
+   `TestBurnedCallStopConditions` fail: the two at the client seam on the
+   provider's own `pydantic_core._pydantic_core.ValidationError: 6 validation
+   errors for ModelAuthoredVoteBallot` arriving where a stop was expected, and
+   the end-to-end truncation on
+   `Failed: DID NOT RAISE <class 'experiments.fresh_deduction_instrument.InstrumentAborted'>`.
+   The fourth case — one token under the cap — stays green, which is what says
+   the gate is the cap and not the refusal.
+2. The identity half alone, disabled (`_unusable_response`'s `_expected_model`
+   comparison made unreachable) — only
+   `test_a_burned_call_from_another_checkpoint_stops_the_run` fails, and the
+   truncation cases stay green: the two are separate gates, not one.
+3. The read-back, returned from early — six of the eight cases in
+   `TestChargedSpendAgainstCaps` fail: four on
+   `Failed: DID NOT RAISE <class 'experiments.fresh_deduction_instrument.BudgetExhausted'>`
+   (three dimensions and the run-level parent, at the seam), one on
+   `DID NOT RAISE ... InstrumentAborted` (the burned last ballot end to end), and
+   the run-level end-to-end case on the pre-flight message quoted in 4 below. The
+   two that stay green are the boundary cases: a budget charged exactly to its
+   cap, and a USD total inside the budget's own slack.
+4. The RUN-level call site alone, deleted from `run_unit` —
+   `test_an_overrun_that_only_the_run_budget_can_see_stops_the_run` fails:
+   `assert 'the run token budget is exhausted on input tokens' in 'BudgetExceededError: LLM budget exceeded on input_tokens: current=34519.0 + delta=2088.0 > cap=30000.0'`.
+   That is the leak's exact shape at the run level — the next unit's pre-flight,
+   one unit late — and it is why the two call sites are both planted.
+5. The manifest's read-back quotation, removed —
+   `TestExecutionManifest::test_the_enforcement_section_quotes_the_budget_read_back`
+   fails on the missing `BUDGET_CAP_READBACK` string.
+6. The manifest's two refusal sentences, removed —
+   `test_the_enforcement_section_applies_both_response_stops_to_a_refusal` fails.
+7. This round's amendment commit, replaced with `0000000` —
+   `test_the_post_run_amendments_name_their_reason_and_a_real_commit` fails:
+   `AssertionError: 0000000 is not a commit here`.
+8. The same entry, given a real commit that is NOT an ancestor of this branch
+   (`884257b8`, the stopped run's branch tip) —
+   `test_every_named_post_run_commit_is_in_this_branchs_history` fails:
+   `assert ['884257b8'] == []`. That check is new this round, and item 4 of the
+   dispositions below is why.
+
+**Codex dispositions.** All four P1 threads on `ff575da8`, none of which had a
+reply.
+
+1. `experiments/fresh_deduction_instrument.py:1167` — "Stop on capped outputs
+   even when schema validation fails". VALID, fixed. Probe A above.
+2. `:1168` — "Reject the wrong model on failed structured responses". VALID,
+   fixed. `test_a_burned_call_from_another_checkpoint_stops_the_run`.
+3. `:2066` — "Preserve the budget stop for charged validation failures". VALID,
+   fixed. Probes B and C above; the comment's "especially in the final unit"
+   reading is right at the run level and understates the per-unit one, where the
+   budget is discarded after every unit and the leak needs no final unit at all.
+4. `audits/deduction-candidate/execution-manifest.md:101` — "Keep the cited
+   implementation commit in this history". REFUTED on its premise, and a gate
+   added anyway. The premise is that this delivery is "a squash directly onto
+   `c12ec85`", which would orphan `d8eb7d36`. It is not: AGENTS.md's delivery
+   rule is a merge commit or fast-forward and never a squash, and `d8eb7d36` is
+   an ancestor of both `ff575da8` and this round's head —
+   `git merge-base --is-ancestor d8eb7d36 HEAD` exits 0, and
+   `git log --oneline c12ec85a..HEAD` lists it. The `27f264b` the comment
+   resolves against is not a commit on this branch. The reviewer's underlying
+   point about the CHECK was fair, though — the committed test asked only whether
+   the object existed locally — so ancestry from `HEAD` is now asserted directly
+   (planted failure 8).
+
+**Verification, round 1.** Run on the tree at this round's second commit; this
+card's own bytes are the only later ones, and no gate below reads it except
+`validate_task_docs.py`, re-run after that edit.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 249 passed |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed; 390 phase tasks, 390 prompts, 45 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets all verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5` |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0: ruff clean over 504 files, import-linter 4 contracts kept / 0 broken, mypy clean over 475 source files, 7534 passed / 20 skipped / 3 xfailed, frontend 515 tests in 19 files |
+
+No live provider call of any kind was made, and `--complete` was not run on
+`verify_ml_evidence.py`. An earlier run of `bash scripts/check.sh` on these same
+bytes exited 1 on
+`tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`
+(`assert 0 == 2`) while eight suites shared this machine and the run took 18m48s
+rather than 3m52s: that test builds a `RunDeadline(0.25)` and the window closed
+before its provider was reached. It passes on its own and in the clean run above,
+and it reads no byte this card moves.
+
+**Still open.** Acceptance items 3 and 4 are untouched by this round and the
+card stays `active` for the same reason as above: the second freeze has not
+merged into this branch, so there is no new band to bind or to run.

@@ -120,6 +120,29 @@ cannot drift apart again. The amendment of 2026-09-09 (`bfd5696b`) reached
 `STOP_RULE` and the default counter but not this comparison; this is the rest of
 it.
 
+**2026-09-10 (`6215fda1`) — the stops a charged failure has to meet.** Round-1
+review of this repair's pull request (#447) found that the amendment above had
+made a refused call countable without making it judgeable. Three stops
+`STOP_RULE` carries were reachable only on the success path, so counting the
+burned call — which is what stopped the run of 2026-09-10 — let it through all
+three: a response that reached its output cap ("a truncation is a stop, not a
+datum") was fail-softed to a SKIP when the truncated body also failed schema
+validation, which is the usual reason it fails; a checkpoint this run does not
+authorize reached `InstrumentReport.model_ids` instead of stopping the run; and
+"a token budget exhausted at either the per-unit or the run level" was left
+unenforced for a charge applied after the fact, whose overrun
+`llm/budgeted_client.py` downgrades to a note on the exception the meeting layer
+fail-softs — on a unit's last call, with the budget then discarded, no later
+pre-flight existed to find it. The client now judges a billed-and-refused
+completion by the `model` and `output_tokens` its parse-failure metadata
+carries, and both budgets are read back against their caps after each unit
+(`BUDGET_CAP_READBACK`, quoted verbatim in "How each limit is enforced"). This
+amendment adds no stop condition and relaxes none: `STOP_RULE` is byte-identical
+and each of these three is a clause it already carried. Every planted case is
+red without the check it proves, and each is listed in
+[the reconciliation card](../../tasks/work/fresh-deduction-instrument-reconciliation.md)'s
+round-1 subsection.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -234,7 +257,11 @@ asserts this document quotes each of them.
   `_InstrumentClient` then refuses a RESPONSE whose `model` is not the
   authorized one, on the call that returns it, so a hosted endpoint serving a
   different checkpoint is a stop rather than something noticed in the report
-  afterwards. The run also checks the client's real TYPE against the provider it
+  afterwards. A completion the provider billed for and then refused on its own
+  schema validation is judged the same way, off the `model` its parse-failure
+  metadata carries: a checkpoint swap does not become acceptable because the
+  body it served failed to parse. The run also checks the client's real TYPE
+  against the provider it
   claims to be (`assert_client_matches_provider`): a run labelled `fake` may only
   hold the offline fake provider, and a live-labelled run may hold neither it nor
   no client at all, so neither a metered client smuggled in under the offline
@@ -247,7 +274,10 @@ asserts this document quotes each of them.
   and the wall deadline can stop the run.
 - **Per-call cap.** `_InstrumentClient` refuses a call whose `max_tokens` is not
   one of the two shipped values, and refuses a response whose output reached its
-  cap — a truncation is a stop, not a datum.
+  cap — a truncation is a stop, not a datum. That reading is taken off the
+  completion, not off the parse: a body cut off at the cap is the usual reason a
+  payload then fails schema validation, so the same check is applied to the
+  `output_tokens` a refused call's parse-failure metadata reports.
 - **Sampling.** The two temperatures and the two caps are served through an
   explicit `MeetingConfig` built from `AUTHORIZED_SAMPLING`, and a live run whose
   sampling configuration is not that one is refused before any client is built.
@@ -266,6 +296,21 @@ asserts this document quotes each of them.
   accounting check rather than a limit of its own: what it can find is a unit
   whose recorded calls do not add up to what the budget charged, and that unit
   stops the run the way every other unit failure does.
+
+  The ceiling itself is enforced by the budget's pre-flight, on the call that
+  would cross it, and — for the one charge that never meets a pre-flight — by a
+  post-unit read-back quoted verbatim from `BUDGET_CAP_READBACK`:
+
+  After each unit both budgets are also read back against the caps they were
+  built with, because one kind of charge never meets a pre-flight: a call the
+  provider billed and then refused on its own schema validation is charged
+  after the fact, off the parse-failure metadata, and the resulting overrun is
+  downgraded to a note on the exception the meeting layer then fail-softs. On
+  a unit's last call the per-unit ceiling would otherwise be crossed with the
+  budget then discarded, and on a run's last call the run ceiling with nothing
+  further to pre-flight. A budget found past its cap stops the run on the unit
+  that crossed it: the tokens are already spent, and the stop is what keeps
+  the next unit from spending more.
 - **Wall.** Two clocks, because the authorization names two limits: one
   `orchestrator.run_limits.RunDeadline` for the 6 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
