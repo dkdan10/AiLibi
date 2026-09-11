@@ -1,6 +1,6 @@
 # Reconcile every paid call in the fresh-model deduction instrument
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -77,14 +77,14 @@ authorized budget, at $0.00 marginal.
   "Amendments after the stopped run of 2026-09-10" records the change, the
   reason and the commit. A test asserts the manifest quotes the frozen rule
   strings verbatim.
-- [ ] The execution manifest's Inputs table binds the second held-out band
+- [x] The execution manifest's Inputs table binds the second held-out band
   frozen by [the second freeze card](held-out-prefix-freeze-2.md): the band,
   the accepted-seed range and skip count from the new
   `audits/deduction-candidate/held-out/manifest.json`, and a sentence stating
   that the 3000-3999 band is development data since 2026-09-10 and lives in
   `manifest-band-3000-3999.json`. Nothing else in the manifest's authorized
   values changes.
-- [ ] `assert_live_run_is_authorized` refuses a live run whose execution
+- [x] `assert_live_run_is_authorized` refuses a live run whose execution
   manifest does not bind the band `verify_frozen_set` would regenerate: the
   band the committed manifest's Inputs row names is read from the manifest text
   and compared against the record at
@@ -93,7 +93,7 @@ authorized budget, at $0.00 marginal.
   a client exists, and a planted stale binding — an Inputs row naming a band
   the live record does not hold — proves it. Raised as a P1 on PR #446, which
   could not close it: the freeze card may not edit this file.
-- [ ] The fake-provider dry run of the full pipeline completes at $0 on the new
+- [x] The fake-provider dry run of the full pipeline completes at $0 on the new
   band with the defaulted-call double in the loop for at least one unit, and
   Results records its aggregate counts only.
 - [x] Every new gate has a planted failure proving it detects the claimed
@@ -138,12 +138,14 @@ scripts/validate_task_docs.py`, `uv run python scripts/check_doc_facts.py`,
 
 ## Results
 
-**Status is `active`, not `done`.** Acceptance items 3 and 4 need the second
-held-out band, which [the second freeze card](held-out-prefix-freeze-2.md) has
-not delivered into this branch yet. Re-binding the Inputs table to a band that
-does not exist would bind a fiction, and the dry run item 4 asks for is a run on
-that band. Both are closed in a later round, after the freeze is verified and
-merged in; this round is items 1, 2 and 5.
+**Every acceptance item is closed.** The card was delivered in rounds because
+three of its items needed a held-out band that did not exist yet: rounds 1 and 2
+below carry the reconciliation, the stops a charged failure has to meet and the
+record corrections, and each of them ends by saying which items were still open
+and why. [The second freeze](held-out-prefix-freeze-2.md) merged into this
+branch in the stacking round of 2026-09-10, the last section below, which
+re-bound the Inputs table, closed the runtime gate that freeze's review routed
+here, and ran the dry run on the new band.
 
 ### The accounting defect and the fix (2026-09-10, `d8eb7d36`)
 
@@ -297,11 +299,15 @@ reading — the voter was handed those bytes — but it is a change in what
 discovered: a defaulted ballot carries no citation, so no grade in the dry run
 moves, and no live unit exists to compare against.
 
-Item 4's dry run has not been run on the new band, so the aggregate counts this
-card will record are not in it yet. The 100-unit dry run in the manifest's
-"Verification of this manifest" section still describes the first band and is
-left untouched for that reason; it is re-measured with the Inputs table in the
-later round.
+*(As written in this round, this paragraph said item 4's dry run had not been
+run on the new band and that the manifest's "Verification of this manifest"
+section still described the first one. Both were closed in the stacking round
+below, whose aggregates and re-measurement supersede it.)*
+
+What no dry run can limit is what a dry run says. The fake provider chooses the
+same target in both arms, so the paired result is `b=0, c=0, p=1.0` by
+construction on either band; the run establishes that the pipeline carries a
+decision through to a graded outcome, and nothing about judgment.
 
 ### Review corrections, round 1 (2026-09-10)
 
@@ -561,3 +567,118 @@ was not run on `verify_ml_evidence.py`.
 The card stays `active` for the reason it has stayed active throughout: the
 second freeze has not merged into this branch, so there is no new band to bind
 or to run.
+
+### Stacking and re-binding (2026-09-10)
+
+The round the card was held open for. [The second freeze](held-out-prefix-freeze-2.md)
+is verified at `f9ab0024` on `work/held-out-prefix-freeze-2` (PR #446), so it is
+merged in here — `git merge --no-ff`, never a rebase — and acceptance items 3, 4
+and the gate that freeze's own review routed to this card are closed on it.
+
+**The merge (`f3b700a6`).** Two conflicts, both resolved by recomputing rather
+than by choosing a side: `docs/artifacts.md`'s `audits/` row, re-summed over the
+merged tree, and `tasks/README.md`'s derived card-inventory sentence, re-derived
+from the merged set of cards. The held-out manifests came from the freeze side
+untouched. Two tests of this card's own named the first band's first seed in a
+replay filename and went red on the merge; they read `_first_accepted_seed()`
+now, which is the helper the freeze side added for exactly that.
+
+**The defect the re-binding closes, reproduced.** `verify_frozen_set` regenerates
+whatever record sits at `MANIFEST_PATH` and holds it to the generator's
+`PREREGISTERED_BAND`. Neither reads the execution manifest, and the live gate
+checked that document's path and digest but not the inputs it names — so on the
+merge commit the manifest authorized 3000-3999 while the run would have drawn
+5000-5999, with every gate green. On the tree at `ee37cb06` with the Inputs row
+put back to the first band:
+
+```text
+LiveRunNotAuthorized: audits/deduction-candidate/execution-manifest.md binds
+seed band 3000-3999, but the held-out record at
+audits/deduction-candidate/held-out/manifest.json holds 5000-5999: the
+authorization was written for one band and this run would spend another
+```
+
+**What moved (`08aee9cc`, `f77b524d`).** The Inputs table binds 5000–5999,
+accepted seeds 5000–5052, 3 `witnessed_kill` skips, each number read off
+`audits/deduction-candidate/held-out/manifest.json`, and says that the first band
+is development data since 2026-09-10 and where its record now lives. The Roles
+table names the second preparer session beside the first.
+`assert_manifest_binds_the_live_band` reads the band out of the Inputs row and
+refuses a live run whose freeze record holds another; it runs inside
+`assert_live_run_is_authorized`, the first call `assert_ready_for_a_live_run`
+makes, so the refusal lands before a provider, a credential or a connection
+exists, and a dry run returns before it. `manifest_bound_band` is the single
+reader of that row — the gate and the binding test both use it, so the document
+and the check cannot reach different conclusions, and a document with no such row
+or two of them is refused rather than resolved by taking the first. The post-run
+amendment log gains its third entry, and the manifest's
+"Verification of this manifest" section is re-measured on the new band with the
+first band's figures named as superseded rather than quietly replaced.
+
+`ee37cb06` is a repair to this round's own first commit: the new test class had
+been inserted above three `TestAuthorizedClient` cases, which were then collected
+under it. Every case still ran and still passed — which is why it would have gone
+unnoticed — but they belong to the class whose docstring describes them.
+
+**The dry runs (item 4).** Both on the tree at `08aee9cc`, fake provider, `$0.00`,
+into a temporary directory; no prefix was printed, opened or written anywhere but
+there, and the aggregates are all that is recorded.
+
+| Run | Units | Calls | Cost | Per-arm outcome |
+| --- | --- | --- | --- | --- |
+| `--dry-run` | 100 (50 × 2) | 600 | `0.0` | 49 ejections, 22 role-correct, 27 wrongful, 22 supported-correct, 150 supported ballots, 4 guard-rewritten, 98 naming ballots, 0 off-target citations, 1 partial unit |
+| `run_instrument` with `BurnedCallProvider` | 100 (50 × 2) | 600 | `0.0` | as above, plus one defaulted vote and one unit with defaults on `repaired_clock` |
+
+The double burns the run's first ballot, so it is in the loop for the first unit
+of the reference arm: that arm's output tokens rise by the 861 the burned call
+carried (19,800 → 20,602) and its input falls by the one prompt that was never
+re-sent, and the unit still resolves to the same graded outcome. Both runs report
+`held_out_accepted_seeds` 50 and `held_out_skipped_seeds` 3, which is the new
+record. The paired result is `b=0, c=0, p=1.0` in both, by construction.
+
+**Planted failures.** Each perturbation was applied to the tree at `ee37cb06`,
+run, and reverted.
+
+1. The gate's call site, deleted from `assert_live_run_is_authorized` —
+   `test_a_stale_binding_stops_the_run_before_a_client_exists` fails:
+   `Failed: DID NOT RAISE <class 'experiments.fresh_deduction_instrument.LiveRunNotAuthorized'>`.
+   One case, and only that one, which is what says the gate is the call and not
+   something else on the path.
+2. The row anchor, dropped (`manifest_bound_band` reads a bare pair of numbers
+   anywhere in the document) — 9 cases fail, on
+   `LiveRunNotAuthorized: ... carries 46 'Seed band' rows naming a band`. The
+   document names many ranges in prose, including the band it supersedes; without
+   the anchor the reader cannot say which one is bound.
+3. The Inputs row, put back to the first band —
+   `test_the_committed_manifest_binds_the_live_band` and
+   `TestAuthorizedClient::test_the_pre_client_gate_returns_the_verified_set` fail
+   on the refusal quoted above, and
+   `test_the_manifest_binds_a_committed_held_out_record` on
+   `assert 'accepted seeds run 3000–3057' in ...`. That is the state the merge
+   commit was in, turned red.
+4. The new amendment entry's commit, replaced with `0000000` —
+   `test_the_post_run_amendments_name_their_reason_and_a_real_commit` fails:
+   `AssertionError: 0000000 is not a commit here`.
+5. The same entry, given a real commit that is not an ancestor of this branch
+   (`884257b8`, the stopped run's branch tip) —
+   `test_every_named_post_run_commit_is_in_this_branchs_history` fails:
+   `named but not an ancestor of HEAD: ['884257b8']`.
+
+**Verification, stacking round.** Run on the tree at `ee37cb06`; this card's own
+bytes and `tasks/README.md` are the only later ones, and no gate below reads them
+except `validate_task_docs.py`, re-run after that edit.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 260 passed |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed; 390 phase tasks, 390 prompts, 45 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets all verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5` |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0 |
+
+`docs/artifacts.md`'s `audits/` row is recomputed twice on this round, once per
+commit that moved `audits/` bytes: 205 files and 14,948,022 tracked bytes at
+`08aee9cc`, 205 files and 14,950,280 at `f77b524d` (`git ls-files audits/` summed
+on disk, with the change staged). No live provider call of any kind was made, and
+`--complete` was not run on `verify_ml_evidence.py`.
