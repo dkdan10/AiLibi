@@ -630,11 +630,13 @@ there, and the aggregates are all that is recorded.
 | `run_instrument` with `BurnedCallProvider` | 100 (50 × 2) | 600 | `0.0` | as above, plus one defaulted vote and one unit with defaults on `repaired_clock` |
 
 The double burns the run's first ballot, so it is in the loop for the first unit
-of the reference arm: that arm's output tokens rise by the 861 the burned call
-carried (19,800 → 20,602) and its input falls by the one prompt that was never
-re-sent, and the unit still resolves to the same graded outcome. Both runs report
-`held_out_accepted_seeds` 50 and `held_out_skipped_seeds` 3, which is the new
-record. The paired result is `b=0, c=0, p=1.0` in both, by construction.
+of the reference arm, and that unit still resolves to the same graded outcome.
+The only figures that move are that arm's token totals, and they move because the
+double bills a fixed 2,228 in / 861 out for the ballot it burns rather than
+whatever the prompt it replaced would have measured: input 889,373 → 888,344,
+output 19,800 → 20,602. Both runs report `held_out_accepted_seeds` 50 and
+`held_out_skipped_seeds` 3, which is the new record, and the paired result is
+`b=0, c=0, p=1.0` in both, by construction.
 
 **Planted failures.** Each perturbation was applied to the tree at `ee37cb06`,
 run, and reverted.
@@ -665,8 +667,8 @@ run, and reverted.
    `named but not an ancestor of HEAD: ['884257b8']`.
 
 **Verification, stacking round.** Every command below was re-run on the tree at
-`8d1e6ac3`, this round's head; this card's own bytes are the only later ones, and
-no gate reads them except `validate_task_docs.py`, re-run after that edit.
+`8d1e6ac3`; this card's own bytes are the only ones that move after it, and no
+gate reads them except `validate_task_docs.py`, re-run after each edit.
 
 | Command | Result |
 | --- | --- |
