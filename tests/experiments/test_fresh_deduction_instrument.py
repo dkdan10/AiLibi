@@ -1071,6 +1071,67 @@ class TestAuthorizedClient:
         )
         assert len(frozen.accepted_seeds) == 50
 
+    def test_a_response_from_another_model_stops_the_run(self) -> None:
+        """PLANTED: the endpoint serves a different checkpoint. The stop lands on
+        the call that returned it, not in the report afterwards."""
+
+        import asyncio
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(
+            _StubClient(), work_clock=clock, expected_model=AUTHORIZED_MODEL
+        )
+        with pytest.raises(instrument.ProviderIdentityMismatch, match="'stub'"):
+            asyncio.run(
+                client.complete(
+                    prompt="p", schema=None, max_tokens=1024, temperature=0.2
+                )
+            )
+        # Spent, therefore retained: the response came back before it was refused.
+        assert [call.model for call in client.calls] == ["stub"]
+
+    def test_a_live_run_binds_the_client_to_the_invocations_model(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The wiring, not just the gate: the run must hand the client the model
+        it is authorized for. Nothing is called — the spy stops the run at the
+        moment the client is built, so no unit and no provider is reached."""
+
+        seen: dict[str, Any] = {}
+
+        class _Stop(RuntimeError):
+            pass
+
+        def spy(inner: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            raise _Stop("stopped before any unit ran")
+
+        monkeypatch.setattr(instrument, "_InstrumentClient", spy)
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        with pytest.raises(_Stop):
+            run_instrument(
+                output_dir=tmp_path,
+                client=_StubClient(),
+                provider=AUTHORIZED_PROVIDER,
+                live_invocation=invocation,
+            )
+        assert seen["expected_model"] == AUTHORIZED_MODEL
+
+    def test_the_dry_run_binds_no_served_model(self) -> None:
+        """The check is a live-run one: the dry run's fixture model is its own
+        marker, so binding it would be a fiction rather than a gate."""
+
+        import asyncio
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(_StubClient(), work_clock=clock)
+        asyncio.run(
+            client.complete(prompt="p", schema=None, max_tokens=1024, temperature=0.2)
+        )
+        assert [call.model for call in client.calls] == ["stub"]
+
 
 class TestTheManifestBindsTheBandTheRunWouldDraw:
     """The authorization document and the inputs, held together at run time.
@@ -1173,67 +1234,6 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
         )
         with pytest.raises(LiveRunNotAuthorized, match=f"carries {rows} 'Seed band'"):
             instrument.manifest_bound_band(planted)
-
-    def test_a_response_from_another_model_stops_the_run(self) -> None:
-        """PLANTED: the endpoint serves a different checkpoint. The stop lands on
-        the call that returned it, not in the report afterwards."""
-
-        import asyncio
-
-        clock = instrument._ModelWorkClock(max_seconds=3600.0)
-        client = instrument._InstrumentClient(
-            _StubClient(), work_clock=clock, expected_model=AUTHORIZED_MODEL
-        )
-        with pytest.raises(instrument.ProviderIdentityMismatch, match="'stub'"):
-            asyncio.run(
-                client.complete(
-                    prompt="p", schema=None, max_tokens=1024, temperature=0.2
-                )
-            )
-        # Spent, therefore retained: the response came back before it was refused.
-        assert [call.model for call in client.calls] == ["stub"]
-
-    def test_a_live_run_binds_the_client_to_the_invocations_model(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The wiring, not just the gate: the run must hand the client the model
-        it is authorized for. Nothing is called — the spy stops the run at the
-        moment the client is built, so no unit and no provider is reached."""
-
-        seen: dict[str, Any] = {}
-
-        class _Stop(RuntimeError):
-            pass
-
-        def spy(inner: Any, **kwargs: Any) -> Any:
-            seen.update(kwargs)
-            raise _Stop("stopped before any unit ran")
-
-        monkeypatch.setattr(instrument, "_InstrumentClient", spy)
-        invocation = LiveRunInvocation.naming(
-            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
-        )
-        with pytest.raises(_Stop):
-            run_instrument(
-                output_dir=tmp_path,
-                client=_StubClient(),
-                provider=AUTHORIZED_PROVIDER,
-                live_invocation=invocation,
-            )
-        assert seen["expected_model"] == AUTHORIZED_MODEL
-
-    def test_the_dry_run_binds_no_served_model(self) -> None:
-        """The check is a live-run one: the dry run's fixture model is its own
-        marker, so binding it would be a fiction rather than a gate."""
-
-        import asyncio
-
-        clock = instrument._ModelWorkClock(max_seconds=3600.0)
-        client = instrument._InstrumentClient(_StubClient(), work_clock=clock)
-        asyncio.run(
-            client.complete(prompt="p", schema=None, max_tokens=1024, temperature=0.2)
-        )
-        assert [call.model for call in client.calls] == ["stub"]
 
 
 class TestClientType:
