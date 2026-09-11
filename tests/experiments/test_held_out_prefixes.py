@@ -10,8 +10,9 @@ against the committed manifest.
 
 from __future__ import annotations
 
+import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import get_args
 
@@ -23,10 +24,13 @@ from experiments import held_out_prefixes
 from experiments.deduction_scenarios import ScenarioDefinition
 from experiments.held_out_prefixes import (
     AUTHORIZED_ROSTER,
+    CONVERTED_BANDS,
+    DEPENDENCY_RESTAMPS,
     MANIFEST_PATH,
     MAX_TICKS,
     PREREGISTERED_BAND,
     TEMPORAL_OBSERVATION_VERSION,
+    ConvertedRecord,
     HeldOutPrefix,
     HeldOutPrefixError,
     PrefixRoster,
@@ -62,6 +66,12 @@ _INTENTS: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 #: band, so inspecting them converts nothing.
 _PLANT_SEED = 1
 _DEBUG_SEEDS = (9001, 9002)
+
+#: The first band's freeze record after the second freeze moved it. Development
+#: data since 2026-09-10, kept for the digests it froze.
+_CONVERTED_MANIFEST_PATH = (
+    "audits/deduction-candidate/held-out/manifest-band-3000-3999.json"
+)
 
 
 def _step(tick: int, actor: str, kind: str, payload: dict[str, object]) -> PrefixStep:
@@ -531,11 +541,25 @@ def test_the_skip_role_split_reaches_the_band_only_through_the_published_skips()
 
 
 def test_the_preregistered_band_is_the_one_the_card_froze() -> None:
+    """The second freeze's band, and the first one kept as a converted band."""
+
     assert (
         PREREGISTERED_BAND.first_seed,
         PREREGISTERED_BAND.last_seed,
         PREREGISTERED_BAND.size,
-    ) == (3000, 3999, 50)
+    ) == (5000, 5999, 50)
+    assert [
+        (
+            converted.band.first_seed,
+            converted.band.last_seed,
+            converted.band.size,
+            converted.manifest_path,
+        )
+        for converted in CONVERTED_BANDS
+    ] == [(3000, 3999, 50, _CONVERTED_MANIFEST_PATH)]
+    assert MANIFEST_PATH not in {
+        converted.manifest_path for converted in CONVERTED_BANDS
+    }
     assert AUTHORIZED_ROSTER == PrefixRoster(
         num_players=4, num_impostors=1, tasks_per_crewmate=1
     )
@@ -785,3 +809,167 @@ def test_the_manifest_records_the_flip_rather_than_a_deletion() -> None:
     manifest = _committed_manifest()
     assert manifest["status"] == "held_out"
     assert "never by deleting this file" in str(manifest["status_note"])
+
+
+def _converted_manifest() -> dict[str, object]:
+    manifest = json.loads(
+        (REPO_ROOT / _CONVERTED_MANIFEST_PATH).read_text(encoding="utf-8")
+    )
+    assert isinstance(manifest, dict)
+    return manifest
+
+
+def _block_digest(block: object) -> str:
+    """The sha256 of one manifest block, serialised the way a prefix is."""
+
+    return hashlib.sha256(
+        json.dumps(block, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+#: The ``accepted`` and ``skipped`` blocks of the 3000-3999 record as the owner's
+#: merge froze them at ``23a23c2d``, hashed by :func:`_block_digest`. Pinning the
+#: two digests rather than fifty rows keeps the assertion exact without copying a
+#: frozen set's contents into a second file: the converting edit may move the
+#: record's status and add its ``converted`` block, and nothing else.
+_BAND_3000_BLOCKS_AT_23A23C2D: Mapping[str, str] = {
+    "accepted": "88ae6211483aa83900c61a44460504b96455f1a1d570c733746e2b3e7bfa0ca7",
+    "skipped": "b243d9c8d1214932c9878094609ba4ec8c3dd2f1045ddc5a80cdd480988c56d3",
+}
+
+
+def test_the_range_walks_refuse_a_converted_band_as_well() -> None:
+    """A frozen band's seeds are not an out-of-band range, converted or not.
+
+    The 3000-3999 prefixes are development data since 2026-09-10, so a walk over
+    them would leak nothing; what the refusal protects is the meaning of the
+    number both commands print. The freeze cards quote it as the OUT-OF-BAND
+    rejection rate, and a range covering seeds an earlier freeze already
+    screened is not that rate.
+    """
+
+    walks: tuple[Callable[[int, int], object], ...] = (
+        tally_reasons,
+        skip_witness_roles_over_range,
+    )
+    assert CONVERTED_BANDS
+    for converted in CONVERTED_BANDS:
+        band = converted.band
+        for first, last in (
+            (band.first_seed, band.first_seed),
+            (band.first_seed - 1, band.first_seed),
+            (band.last_seed, band.last_seed + 1),
+            (band.first_seed + 7, band.last_seed - 7),
+        ):
+            for walk in walks:
+                with pytest.raises(HeldOutPrefixError) as refusal:
+                    walk(first, last)
+                assert "intersect the converted band" in str(refusal.value)
+                assert converted.manifest_path in str(refusal.value)
+
+
+def test_the_converted_band_keeps_the_blocks_it_was_frozen_with() -> None:
+    """The first band is marked development in place, never regenerated or deleted.
+
+    The manifest's own ``status_note`` says the flip is recorded by setting
+    ``status``; the digests underneath it are the stopped run's input identity,
+    so this compares both blocks against the bytes the owner's merge froze at
+    ``23a23c2d`` rather than trusting the moved file's prose.
+    """
+
+    manifest = _converted_manifest()
+    assert manifest["status"] == "development"
+    assert "never by deleting this file" in str(manifest["status_note"])
+    assert manifest["card"] == "tasks/work/held-out-prefix-freeze.md"
+    assert manifest["band"] == {
+        "draw_order": "ascending",
+        "first_seed": 3000,
+        "last_seed": 3999,
+        "size": 50,
+    }
+    for block, digest in _BAND_3000_BLOCKS_AT_23A23C2D.items():
+        assert _block_digest(manifest[block]) == digest
+    accepted = manifest["accepted"]
+    assert isinstance(accepted, list)
+    assert len(accepted) == 50
+
+    record = ConvertedRecord.model_validate(manifest["converted"])
+    assert record.date == "2026-09-10"
+    assert record.pull_request == "#445"
+    assert record.branch == "work/fresh-deduction-run"
+    assert record.rendered_seeds == (3000,)
+    assert record.informed == "tasks/work/fresh-deduction-instrument-reconciliation.md"
+    assert record.superseded_by == MANIFEST_PATH
+    unmodelled = dict(_converted_manifest()["converted"])  # type: ignore[call-overload]
+    unmodelled["reason"] = "a field no reader of this module would find"
+    with pytest.raises(ValidationError):
+        ConvertedRecord.model_validate(unmodelled)
+
+
+def test_the_current_freeze_is_the_second_band_and_starts_without_restamps() -> None:
+    """The live record is the new band; the old one sits beside it, not under it."""
+
+    manifest = _committed_manifest()
+    converted = _converted_manifest()
+    assert manifest["status"] == "held_out"
+    assert "converted" not in manifest
+    assert manifest["card"] == "tasks/work/held-out-prefix-freeze-2.md"
+    assert manifest["band"] == {
+        "draw_order": "ascending",
+        "first_seed": PREREGISTERED_BAND.first_seed,
+        "last_seed": PREREGISTERED_BAND.last_seed,
+        "size": PREREGISTERED_BAND.size,
+    }
+    assert DEPENDENCY_RESTAMPS == ()
+    restamps = manifest["dependency_restamps"]
+    assert isinstance(restamps, dict)
+    assert restamps["entries"] == []
+
+    accepted = manifest["accepted"]
+    old_accepted = converted["accepted"]
+    assert isinstance(accepted, list)
+    assert isinstance(old_accepted, list)
+    assert {row["seed"] for row in accepted}.isdisjoint(
+        row["seed"] for row in old_accepted
+    )
+    assert {row["sha256"] for row in accepted}.isdisjoint(
+        row["sha256"] for row in old_accepted
+    )
+
+
+def test_a_converted_record_flips_the_status_and_changes_nothing_else() -> None:
+    """The shape ``build_manifest`` gives a converted record, on an out-of-band set.
+
+    A freeze passes no record and gets exactly the manifest it got before this
+    parameter existed -- no ``converted`` key at all. Passing one moves
+    ``status`` and adds that key, and nothing else in the record moves, which is
+    what lets this module describe the in-place edit of a committed manifest
+    instead of leaving the shape to the converting session's prose.
+    """
+
+    generated = generate(
+        SeedBand(first_seed=_DEBUG_SEEDS[0], last_seed=_DEBUG_SEEDS[0] + 99, size=2)
+    )
+    card = "tasks/work/held-out-prefix-freeze-2.md"
+    frozen = build_manifest(generated, repo_root=REPO_ROOT, card=card)
+    assert frozen["status"] == "held_out"
+    assert "converted" not in frozen
+
+    record = ConvertedRecord(
+        date="2026-09-10",
+        pull_request="#445",
+        branch="work/fresh-deduction-run",
+        rendered_seeds=(_DEBUG_SEEDS[0],),
+        informed="tasks/work/fresh-deduction-instrument-reconciliation.md",
+        superseded_by=MANIFEST_PATH,
+        note="A planted flip over two out-of-band debugging seeds.",
+    )
+    flipped = build_manifest(
+        generated, repo_root=REPO_ROOT, card=card, converted=record
+    )
+    assert flipped["status"] == "development"
+    assert flipped["converted"] == record.model_dump(mode="json")
+    assert {key: value for key, value in flipped.items() if key != "converted"} == {
+        **frozen,
+        "status": "development",
+    }

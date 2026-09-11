@@ -84,6 +84,15 @@ authorized budget, at $0.00 marginal.
   that the 3000-3999 band is development data since 2026-09-10 and lives in
   `manifest-band-3000-3999.json`. Nothing else in the manifest's authorized
   values changes.
+- [ ] `assert_live_run_is_authorized` refuses a live run whose execution
+  manifest does not bind the band `verify_frozen_set` would regenerate: the
+  band the committed manifest's Inputs row names is read from the manifest text
+  and compared against the record at
+  `experiments.held_out_prefixes.MANIFEST_PATH`, so authorization written for
+  one band cannot spend another. The gate raises `LiveRunNotAuthorized` before
+  a client exists, and a planted stale binding — an Inputs row naming a band
+  the live record does not hold — proves it. Raised as a P1 on PR #446, which
+  could not close it: the freeze card may not edit this file.
 - [ ] The fake-provider dry run of the full pipeline completes at $0 on the new
   band with the defaulted-call double in the loop for at least one unit, and
   Results records its aggregate counts only.

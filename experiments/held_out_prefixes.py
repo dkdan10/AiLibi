@@ -342,11 +342,44 @@ class HeldOutPrefix(BaseModel):
         return self
 
 
-#: The band preregistered by ``tasks/work/held-out-prefix-freeze.md``. Seeds 3000
-#: to 3999 drawn ascending; the first fifty that pass the filter are the set. The
-#: preparer may not widen it: a band that cannot fill fifty is a stop, not a
-#: bigger band.
-PREREGISTERED_BAND: Final[SeedBand] = SeedBand(first_seed=3000, last_seed=3999, size=50)
+#: The band preregistered by ``tasks/work/held-out-prefix-freeze-2.md``. Seeds
+#: 5000 to 5999 drawn ascending; the first fifty that pass the filter are the
+#: set. The preparer may not widen it: a band that cannot fill fifty is a stop,
+#: not a bigger band. The first band this constant named, 3000-3999, is
+#: :data:`CONVERTED_BANDS`.
+PREREGISTERED_BAND: Final[SeedBand] = SeedBand(first_seed=5000, last_seed=5999, size=50)
+
+
+@dataclass(frozen=True)
+class ConvertedBand:
+    """A band this generator once froze and that is now development data.
+
+    ``manifest_path`` is where that band's freeze record lives after the flip.
+    It is NOT :data:`MANIFEST_PATH`: the current held-out record keeps that path
+    so the runner's ``verify_frozen_set`` and the regeneration test read the
+    live band without an instrument change, and a converted band's record moves
+    beside it under its own name.
+    """
+
+    band: SeedBand
+    manifest_path: str
+
+
+#: Every band that was frozen and has since been converted to development data,
+#: oldest first. The range guard keeps refusing them
+#: (:func:`_refuse_a_seed_range_that_touches_a_frozen_band`). What that refusal
+#: protects is NOT secrecy -- a converted band's prefixes are development data,
+#: so walking them would leak nothing -- but the meaning of the tally, which the
+#: freeze cards quote as the OUT-OF-BAND rejection rate: a range that swept in
+#: seeds either freeze already screened would no longer be that number.
+CONVERTED_BANDS: Final[tuple[ConvertedBand, ...]] = (
+    ConvertedBand(
+        band=SeedBand(first_seed=3000, last_seed=3999, size=50),
+        manifest_path=(
+            "audits/deduction-candidate/held-out/manifest-band-3000-3999.json"
+        ),
+    ),
+)
 
 #: The roster the authorization card binds: 4p1i with three living voters at
 #: meeting open, one task per crewmate (the flat determinism reference).
@@ -1133,16 +1166,22 @@ class ReasonTally:
     reasons: Mapping[RejectionReason, int]
 
 
-def _refuse_a_seed_range_that_touches_the_band(
+def _refuse_a_seed_range_that_touches_a_frozen_band(
     first_seed: int, last_seed: int, *, walked: str
 ) -> None:
-    """Guard every EXPLICIT seed range this module walks. Never the band.
+    """Guard every EXPLICIT seed range this module walks. Never a frozen band.
 
     A count is aggregate, but a per-range count over band seeds is still a probe
     of the held-out set -- narrow the range and it becomes a per-seed read -- so
     the band is out of reach of a range walk rather than merely discouraged.
     ``walked`` names what the caller would have done, so each command's refusal
     says what it will not do to the set.
+
+    A converted band (:data:`CONVERTED_BANDS`) is refused too, for a different
+    and smaller reason: its prefixes are development data, so a walk would leak
+    nothing, but the ranges these commands take are quoted as the out-of-band
+    rejection rate and a range covering seeds an earlier freeze already screened
+    would not be that number.
 
     The one path that may name band seeds is :func:`manifest_skipped_seeds`,
     which reads the seeds the committed manifest already publishes rather than
@@ -1160,6 +1199,17 @@ def _refuse_a_seed_range_that_touches_the_band(
             f"{PREREGISTERED_BAND.first_seed}-{PREREGISTERED_BAND.last_seed}; "
             f"the held-out set is not {walked}, only regenerated and hashed"
         )
+    for converted in CONVERTED_BANDS:
+        if (
+            first_seed <= converted.band.last_seed
+            and converted.band.first_seed <= last_seed
+        ):
+            raise HeldOutPrefixError(
+                f"seeds {first_seed}-{last_seed} intersect the converted band "
+                f"{converted.band.first_seed}-{converted.band.last_seed}, whose "
+                f"freeze record is {converted.manifest_path}; a frozen band's "
+                f"seeds are not {walked} as an out-of-band range"
+            )
 
 
 def tally_reasons(
@@ -1188,7 +1238,9 @@ def tally_reasons(
     of them drops.
     """
 
-    _refuse_a_seed_range_that_touches_the_band(first_seed, last_seed, walked="tallied")
+    _refuse_a_seed_range_that_touches_a_frozen_band(
+        first_seed, last_seed, walked="tallied"
+    )
     game_map = load_canonical_map()
     public_map = public_map_from_engine_map(game_map)
     reasons: Counter[RejectionReason] = Counter()
@@ -1271,7 +1323,7 @@ def skip_witness_roles_over_range(
     those seeds are published rather than chosen.
     """
 
-    _refuse_a_seed_range_that_touches_the_band(
+    _refuse_a_seed_range_that_touches_a_frozen_band(
         first_seed, last_seed, walked="walked seed by seed"
     )
     return skip_witness_roles(range(first_seed, last_seed + 1), roster)
@@ -1330,102 +1382,71 @@ _RESTAMP_NOTE: Final[str] = (
     "(tasks/post-merge-plan.md, 'Sequencing')."
 )
 
-#: Every post-freeze restamp of :func:`source_digests`, oldest first. Each entry
-#: names the date, the commit whose edit moved a dependency digest, the files it
-#: moved and the card that authorised it. The list is part of the manifest
-#: ``build_manifest`` produces, so the regeneration test compares it like every
-#: other field and an undocumented restamp cannot pass quietly.
-DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = (
-    MappingProxyType(
-        {
-            "date": "2026-09-08",
-            "commit": "7bcc79ed",
-            "card": "tasks/work/evidence-renderer-salience.md",
-            "sources": (
-                "agents/memory/store.py, experiments/held_out_prefixes.py "
-                "(this record itself)"
-            ),
-            "note": (
-                "The evidence-reasoning v2 salience repair. It changes rendered "
-                "prompt bytes on the default-OFF v2 path only; prefix generation "
-                "reads episodic memory and engine state, not the render, so all "
-                "fifty accepted digests and the eight skips were unchanged. "
-                "held_out_prefixes.py moved in the restamp commit that follows "
-                "this one, because this record was added to it there; that edit "
-                "generates no prefix and changes none."
-            ),
-        }
-    ),
-    MappingProxyType(
-        {
-            "date": "2026-09-08",
-            "commit": "56d3e5fd",
-            "card": "tasks/work/evidence-renderer-salience.md",
-            "sources": (
-                "agents/memory/store.py, experiments/held_out_prefixes.py "
-                "(this record itself)"
-            ),
-            "note": (
-                "The round-1 review corrections to the same repair: the withheld "
-                "caveat count is computed after the token budget instead of "
-                "before it, and the own-routine demotion's justification was "
-                "corrected. Both touch the prompt render on the default-OFF v2 "
-                "path only, which prefix generation does not read, so all fifty "
-                "accepted digests and the eight skips were unchanged again."
-            ),
-        }
-    ),
-    MappingProxyType(
-        {
-            "date": "2026-09-08",
-            "commit": "00ac7fbb",
-            "card": "tasks/work/evidence-renderer-salience.md",
-            "sources": (
-                "agents/memory/store.py, experiments/held_out_prefixes.py "
-                "(this record itself)"
-            ),
-            "note": (
-                "The closeout round-1 correction to the same repair: the "
-                "withheld-subjects notice is reserved before any caveat is "
-                "selected, so a render that hides claim subjects always states "
-                "how many, and the reserve's guard raises a named error instead "
-                "of asserting. Both are prompt-render changes on the "
-                "default-OFF evidence-v2 path, which prefix generation does not "
-                "read, so all fifty accepted digests and the eight skips were "
-                "unchanged a third time."
-            ),
-        }
-    ),
-    MappingProxyType(
-        {
-            "date": "2026-09-09",
-            "commit": "29393cda",
-            "card": "tasks/work/nonblocking-followup-improvements.md",
-            "sources": (
-                "orchestrator/game.py, experiments/held_out_prefixes.py "
-                "(this record itself)"
-            ),
-            "note": (
-                "The write-time refusal of a meeting whose eject cutoff no "
-                "reader could attribute, plus the two docstrings that state "
-                "the contract. It adds a guard on the recording path and "
-                "changes no engine transition; prefix generation records no "
-                "meeting and never reaches the guard, so all fifty accepted "
-                "digests and the eight skips were unchanged again."
-            ),
-        }
-    ),
-)
+#: Every post-freeze restamp of :func:`source_digests` for the band
+#: :data:`PREREGISTERED_BAND` names, oldest first. Each entry names the date,
+#: the commit whose edit moved a dependency digest, the files it moved and the
+#: card that authorised it. The list is part of the manifest ``build_manifest``
+#: produces, so the regeneration test compares it like every other field and an
+#: undocumented restamp cannot pass quietly. It starts EMPTY at a freeze: the
+#: 3000-3999 band's four restamps are history and stay in that band's own
+#: record (:data:`CONVERTED_BANDS`), which this list does not carry forward.
+DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = ()
+
+
+class ConvertedRecord(BaseModel):
+    """Why a frozen band stopped being held-out data, as its manifest records it.
+
+    The preregistration treats a rendered or inspected prefix as development
+    data, and the execution manifest's Roles section says such a result marks
+    the set development by setting the freeze manifest's ``status`` -- never by
+    deleting the file. This model is the shape of the record that flip writes,
+    so a converted manifest stays describable by this module rather than by
+    whatever prose the converting session happened to type.
+
+    It does not itself convert anything: :func:`build_manifest` takes one and
+    writes it beside a ``development`` status, and a manifest already committed
+    is edited in place so its digests keep the bytes they were frozen with.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The date the set became development data (ISO ``YYYY-MM-DD``).
+    date: str
+    #: The pull request the converting run was delivered on, e.g. ``"#445"``.
+    pull_request: str
+    #: The branch that ran it.
+    branch: str
+    #: Every band seed whose prefix was rendered to a model. Ascending.
+    rendered_seeds: tuple[int, ...]
+    #: The card the result informed, as a repository path.
+    informed: str
+    #: Where the band that replaced this one is recorded.
+    superseded_by: str
+    #: What happened, in the converting session's own words.
+    note: str
 
 
 def build_manifest(
-    generated: GeneratedSet, *, repo_root: Path, card: str
+    generated: GeneratedSet,
+    *,
+    repo_root: Path,
+    card: str,
+    converted: ConvertedRecord | None = None,
 ) -> dict[str, object]:
     """Assemble the freeze record: band, roster, hashes and skips -- never prefixes.
 
     ``dependency_restamps`` states every post-freeze commit that moved a
     :data:`GENERATOR_SOURCES` digest without moving the set, so the record shows
     WHY ``source_sha256`` no longer matches the freeze commit's tree.
+
+    ``converted`` is what a set that has stopped being held-out data carries: the
+    status reads ``development`` instead of ``held_out`` and the record is
+    written beside it. Left ``None`` -- which is what a freeze passes -- the
+    output carries no ``converted`` key at all, so a held-out record has exactly
+    the shape it had before this parameter existed. Passing one here does NOT
+    convert an already committed manifest: that file is edited in place so its
+    accepted digests keep the bytes they were frozen with, and this shape is
+    what makes the edited file describable by this module.
     """
 
     development = development_definition_digests()
@@ -1436,9 +1457,9 @@ def build_manifest(
             + ", ".join(collisions)
         )
     reasons = Counter(skip.reason for skip in generated.skipped)
-    return {
+    manifest: dict[str, object] = {
         "version": 1,
-        "status": "held_out",
+        "status": "held_out" if converted is None else "development",
         "status_note": _STATUS_NOTE,
         "card": card,
         "prefix_bytes": _PREFIX_BYTES_NOTE,
@@ -1492,6 +1513,9 @@ def build_manifest(
             ),
         },
     }
+    if converted is not None:
+        manifest["converted"] = converted.model_dump(mode="json")
+    return manifest
 
 
 def write_manifest(repo_root: Path, *, card: str) -> Path:
@@ -1506,6 +1530,10 @@ def write_manifest(repo_root: Path, *, card: str) -> Path:
 
 __all__ = [
     "AUTHORIZED_ROSTER",
+    "CONVERTED_BANDS",
+    "ConvertedBand",
+    "ConvertedRecord",
+    "DEPENDENCY_RESTAMPS",
     "GENERATOR_SOURCES",
     "GeneratedSet",
     "HeldOutPrefix",
@@ -1563,7 +1591,7 @@ if __name__ == "__main__":  # pragma: no cover - the freeze and tally commands
     if not _argv:
         written = write_manifest(
             Path(__file__).resolve().parents[1],
-            card="tasks/work/held-out-prefix-freeze.md",
+            card="tasks/work/held-out-prefix-freeze-2.md",
         )
         print(f"wrote {written}")
     elif _argv[0] == "--tally" and len(_argv) == 3:
