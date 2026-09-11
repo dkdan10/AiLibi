@@ -66,8 +66,9 @@ the first band marked development) and
 stacked on it. Both are delivered and verified as PR #446 (freeze, base `main`,
 head `f9ab0024`; band 5000-5999, 50 accepted, 3 skips, last seed 5052) and
 PR #447 (reconciliation, stacked on the freeze, head `2d927d80`; the live gate
-now also binds the manifest's Inputs band to the frozen record), merge order
-#446 then #447. A second run needs a new authorization card; none exists yet.
+now also binds the manifest's Inputs band to the frozen record), merged on
+2026-09-11 as `ca6e97d6` and `7353ff88`; #445 was closed unmerged. A second run
+needs a new authorization card; none exists yet.
 
 **Sequencing.** Outcome 1 starts immediately and in parallel: it shares no source
 file with any other card. Outcomes 2, 3 and 4 are serialised in that order,

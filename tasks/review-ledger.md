@@ -323,8 +323,14 @@ and moves the first band's record to `held-out/manifest-band-3000-3999.json`
 with `status: development`; PR #447, stacked on it, reconciles every charged
 call, adds a real-provider-shaped test double, amends the execution manifest
 after the stopped run, re-binds its Inputs table to the new band and makes the
-live gate refuse a manifest whose band is not the frozen record's. Merge order
-#446 then #447. A second live run needs a new authorization card.
+live gate refuse a manifest whose band is not the frozen record's.
+
+**Merged 2026-09-11 on the owner's instruction:** #446 as `ca6e97d6` (the
+second freeze) and #447 as `7353ff88`, branches retained; #445 closed unmerged,
+its branch kept as the archive of the stopped run. On the resulting `main` the
+full gate, the 100 canonical reconstructions and the four derived report checks
+pass, and the converted record's accepted and skipped blocks are byte-identical
+to the 2026-09-08 freeze. A second live run needs a new authorization card.
 
 ## Owner rulings (2026-09-07)
 
