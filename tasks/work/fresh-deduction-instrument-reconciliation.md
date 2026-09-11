@@ -36,6 +36,14 @@ authorized budget, at $0.00 marginal.
 
 ## Acceptance
 
+- [x] Review correction: the burned-call dry run is recorded by its own
+  aggregates. That row no longer reads "as above": it carries the reference
+  arm's ballot mix (149 supported, 5 guard-rewritten, 1 uncited) beside the
+  defaulted vote and the unit with defaults, and the claim that only that arm's
+  token totals move is replaced by what does move — the ballot mix and the
+  tokens — with `combined_accounts` and every graded count named as unchanged.
+  Both rows are re-measured on this branch's head by the command Results quotes,
+  and the pull request body carries the same correction.
 - [x] Review correction: the post-run amendment log credits `STOP_RULE` with no
   stop it omits. The checkpoint refusal is attributed to the limit that grounds
   it — this manifest's own "Provider and model" row and the model the
@@ -627,16 +635,24 @@ there, and the aggregates are all that is recorded.
 | Run | Units | Calls | Cost | Per-arm outcome |
 | --- | --- | --- | --- | --- |
 | `--dry-run` | 100 (50 × 2) | 600 | `0.0` | 49 ejections, 22 role-correct, 27 wrongful, 22 supported-correct, 150 supported ballots, 4 guard-rewritten, 98 naming ballots, 0 off-target citations, 1 partial unit |
-| `run_instrument` with `BurnedCallProvider` | 100 (50 × 2) | 600 | `0.0` | as above, plus one defaulted vote and one unit with defaults on `repaired_clock` |
+| `run_instrument` with `BurnedCallProvider` | 100 (50 × 2) | 600 | `0.0` | `combined_accounts` as above; on `repaired_clock` every graded count above is unchanged but the ballots are 149 supported, 5 guard-rewritten and 1 uncited, with one defaulted vote and one unit with defaults |
 
 The double burns the run's first ballot, so it is in the loop for the first unit
-of the reference arm, and that unit still resolves to the same graded outcome.
-The only figures that move are that arm's token totals, and they move because the
-double bills a fixed 2,228 in / 861 out for the ballot it burns rather than
-whatever the prompt it replaced would have measured: input 889,373 → 888,344,
+of the reference arm, and that unit still resolves to the same graded outcome:
+ejections, role-correct, wrongful, supported-correct, naming ballots, off-target
+citations and the partial unit are identical on both arms, and `combined_accounts`
+is untouched end to end. Two things move, both on `repaired_clock`. Its ballot
+mix, because the burned ballot is fail-softed to a marked SKIP that cites nothing
+and is not voter-authored, so it lands as one `uncited` verdict and one more
+`guard_rewritten` — a count taken over the same ballots the verdicts partition,
+not a fourth bucket — while the ballot it replaced is no longer `supported`:
+supported 150 → 149, uncited 0 → 1, guard-rewritten 4 → 5. And its token totals,
+because the double bills a fixed 2,228 in / 861 out for the ballot it burns rather
+than whatever the prompt it replaced would have measured: input 889,373 → 888,344,
 output 19,800 → 20,602. Both runs report `held_out_accepted_seeds` 50 and
 `held_out_skipped_seeds` 3, which is the new record, and the paired result is
-`b=0, c=0, p=1.0` in both, by construction.
+`b=0, c=0, p=1.0` in both, by construction. The burned run's aggregates above are
+the round-5 re-measurement below, which quotes the command that prints them.
 
 **Planted failures.** Each perturbation was applied to the tree at `ee37cb06`,
 run, and reverted.
@@ -690,3 +706,53 @@ at `f77b524d`, and 14,950,292 on the last commit of this round, which spells the
 first band's numbers into the Inputs row (`git ls-files audits/` summed on disk,
 with the change staged). No live provider call of any kind was made, and
 `--complete` was not run on `verify_ml_evidence.py`.
+
+### Review corrections, round 5 (2026-09-10)
+
+Two review threads, one defect, both valid: the stacking round recorded the
+burned-call dry run as "as above, plus one defaulted vote", and said "the only
+figures that move are that arm's token totals". The reference arm's ballot
+verdicts move as well. Re-measured on this branch's head, `7ce801b6`, fake
+provider, `$0.00`, into a temporary directory the command removes — aggregates
+only, no prefix printed, opened or written anywhere else:
+
+```text
+.venv/bin/python -c "import json,pathlib,shutil,tempfile;from experiments.fresh_deduction_instrument import run_instrument;from tests.experiments.burned_call_double import BurnedCallProvider;d=tempfile.mkdtemp();report=run_instrument(output_dir=pathlib.Path(d),provider='fake',client=BurnedCallProvider());shutil.rmtree(d);print(json.dumps([a.model_dump(include={'arm','ballot_verdicts','defaulted_votes','units_with_defaults','input_tokens','output_tokens'}) for a in report.arms],sort_keys=True))"
+
+[{"arm": "repaired_clock", "ballot_verdicts": {"guard_rewritten": 5, "supported": 149, "uncited": 1, "unsupported": 0}, "defaulted_votes": 1, "input_tokens": 888344, "output_tokens": 20602, "units_with_defaults": 1}, {"arm": "combined_accounts", "ballot_verdicts": {"guard_rewritten": 4, "supported": 150, "uncited": 0, "unsupported": 0}, "defaulted_votes": 0, "input_tokens": 585214, "output_tokens": 19800, "units_with_defaults": 0}]
+```
+
+`.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run` on the same
+head reproduces the table's first row exactly, including the 889,373 and 585,214
+input tokens, so the two rows differ by the double and by nothing else.
+
+The move is the behaviour the module already states
+(`experiments/fresh_deduction_instrument.py:1846-1850`): without the failed-call
+rows a defaulted ballot "reaches the report as one more `uncited` or
+`guard_rewritten` verdict". It is both at once here, because
+`UnitGrade.verdict_counts` (`:2613`) counts `guard_rewritten` over the same
+ballots whose verdicts it partitions — the marked SKIP cites nothing and is not
+voter-authored. What the run was recorded FOR is unaffected and is now said
+rather than implied: 49 ejections, 22 role-correct, 27 wrongful, 22
+supported-correct, 98 naming ballots, 0 off-target citations and 1 partial unit
+on each arm, `b=0, c=0, p=1.0`, and `combined_accounts` identical to its
+`--dry-run` self.
+
+The table row and the paragraph under it are corrected in place, because this is
+a wrong enumeration of a run and not a superseded measurement, and the pull
+request body's sentence with them. No code, test or `audits/` byte moves this
+round — this card's own bytes are the only ones — so the `audits/` row in
+`docs/artifacts.md` is unchanged at 205 files and 14,950,292 tracked bytes, and
+no live provider call of any kind was made.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 260 passed |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed; 390 phase tasks, 390 prompts, 45 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets all verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5` |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0: ruff clean over 504 files, import-linter 4 contracts kept / 0 broken, mypy clean over 475 source files, 7545 passed / 20 skipped / 3 xfailed, frontend 515 tests in 19 files |
+
+Every row above was run on the corrected tree, `frontend/node_modules` installed
+by `npm ci` first, as in the stacking round.
