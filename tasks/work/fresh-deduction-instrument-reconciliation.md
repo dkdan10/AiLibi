@@ -664,9 +664,9 @@ run, and reverted.
    `test_every_named_post_run_commit_is_in_this_branchs_history` fails:
    `named but not an ancestor of HEAD: ['884257b8']`.
 
-**Verification, stacking round.** The first five commands were run on the tree at
-`ee37cb06` and re-run after this card and `tasks/README.md` moved; `check.sh` was
-run on `6a0f0dfd`, which carries those bytes.
+**Verification, stacking round.** Every command below was re-run on the tree at
+`8d1e6ac3`, this round's head; this card's own bytes are the only later ones, and
+no gate reads them except `validate_task_docs.py`, re-run after that edit.
 
 | Command | Result |
 | --- | --- |
