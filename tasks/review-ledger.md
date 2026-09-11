@@ -309,6 +309,23 @@ byte-identical to `23a23c2d` on every head, with dated `dependency_restamps`
 entries for the four commits that touched a hashed source. The retirement card
 stays blocked until an adopting record for evidence reasoning v2 exists.
 
+## Stopped run and follow-on checkpoint (2026-09-11)
+
+The first live run of the fresh-model deduction instrument (PR #445, branch
+`work/fresh-deduction-run`, head `884257b8`, left unmerged by the owner) stopped
+after one of one hundred units: the post-unit spend reconciliation summed only
+the meeting's recorded calls while a real provider's schema-failed call carried
+its usage on the surfaced default. Twelve paid calls, 36,003 input and 3,401
+output tokens, $0.00 marginal; no retry. Seed 3000 of the first held-out band
+was rendered, so that band is development data. Two follow-on cards are
+delivered and verified: PR #446 freezes band 5000-5999 (50 accepted, 3 skips)
+and moves the first band's record to `held-out/manifest-band-3000-3999.json`
+with `status: development`; PR #447, stacked on it, reconciles every charged
+call, adds a real-provider-shaped test double, amends the execution manifest
+after the stopped run, re-binds its Inputs table to the new band and makes the
+live gate refuse a manifest whose band is not the frozen record's. Merge order
+#446 then #447. A second live run needs a new authorization card.
+
 ## Owner rulings (2026-09-07)
 
 The two items deferred at the merge were assessed in
