@@ -682,8 +682,9 @@ on `sh: eslint: command not found`: this worktree had no `frontend/node_modules`
 yet. `npm ci` in `frontend/` installs nothing the Python gates read, and the run
 above is after it.
 
-`docs/artifacts.md`'s `audits/` row is recomputed twice on this round, once per
-commit that moved `audits/` bytes: 205 files and 14,948,022 tracked bytes at
-`08aee9cc`, 205 files and 14,950,280 at `f77b524d` (`git ls-files audits/` summed
-on disk, with the change staged). No live provider call of any kind was made, and
+`docs/artifacts.md`'s `audits/` row is recomputed once per commit that moved
+`audits/` bytes: 205 files and 14,948,022 tracked bytes at `08aee9cc`, 14,950,280
+at `f77b524d`, and 14,950,292 on the last commit of this round, which spells the
+first band's numbers into the Inputs row (`git ls-files audits/` summed on disk,
+with the change staged). No live provider call of any kind was made, and
 `--complete` was not run on `verify_ml_evidence.py`.
