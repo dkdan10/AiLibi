@@ -154,6 +154,35 @@ third clause `STOP_RULE` carries; a gate now checks that every clause this
 section credits to the frozen rule is one the rule states, and that the count it
 claims is the number it quotes.
 
+**2026-09-10 (`08aee9cc`) — the Inputs table is re-bound to the second held-out
+band, and a gate holds a live run to it.** The stopped run rendered the first
+seed of the 3000-3999 band to the model, which the preregistration and the Roles
+section below make development data. A second band was frozen under
+[the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md), and the
+first band's record was marked `development` and kept beside it rather than
+deleted, which is what that section requires. The Inputs table now binds
+5000-5999 — accepted seeds 5000-5052, three `witnessed_kill` skips, every number
+read off [the freeze record](held-out/manifest.json) — and says where the first
+band's record now lives; the Roles table names the second preparer session
+beside the first. Nothing the owner authorized moves with it: the limits, the
+sampling configuration, the provider and model, the measures and the frozen
+analysis are the same bytes as before this entry.
+
+Re-binding a document does not bind a run, so the amendment carries a gate with
+it. `verify_frozen_set` regenerates whatever record sits at the generator's
+`MANIFEST_PATH` and never reads this file, and the live gate checked this file's
+path and digest but not the inputs it names — which is how a band could move
+under an unchanged authorization with every check green.
+`assert_manifest_binds_the_live_band` reads the band out of the Inputs row and
+refuses a live run whose freeze record holds another one. It runs inside
+`assert_live_run_is_authorized`, the first thing `assert_ready_for_a_live_run`
+calls, so a stale binding stops the run before a provider, a credential or a
+connection exists. It adds no stop condition and relaxes none: a run it refuses
+never starts, and `STOP_RULE` is byte-identical. Every planted case is red
+without the check it proves, and each is listed in
+[the reconciliation card](../../tasks/work/fresh-deduction-instrument-reconciliation.md)'s
+stacking subsection.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -636,35 +665,41 @@ longer held out.
 
 ## Verification of this manifest
 
-The offline mechanics check, run on this branch's merged tree — the stacked
-predecessor chain came in as merge `73e4b476` and no source byte moves after it,
-so the figures below are what the command prints at the branch head:
+The offline mechanics check, on the second held-out band. Run on this branch at
+`08aee9cc`, the commit that re-bound the Inputs table above; only this document
+moves after it, and the dry run reads none of it:
 
 ```sh
 .venv/bin/python -m experiments.fresh_deduction_instrument --dry-run
 ```
 
-100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in a few
-seconds of wall. Both arms carried a non-SKIP decision to a graded outcome: 50 ejections
-each, 19 role-correct, 31 wrongful, 18 supported-correct, 150 supported ballots and 6
-guard-rewritten ones per arm, with 100 ballots naming the ejected player of which
-6 cited evidence that does not bear on that player. The report carries the sampling configuration it
-drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps 2,048 / 1,024). Input tokens by the fake provider's `len // 4`
-heuristic were 886,054 (`repaired_clock`) and 577,228 (`combined_accounts`);
-applying the decision memo's calibrated 1.28x real-input ratio to their sum
-(1,463,282) gives about 1.87 M against the 2.4 M ceiling, and the larger arm's
-17,721 per unit gives about 22,700 against the 45,000 per-unit ceiling — headroom
-checks, not predictions, because a real model writes a different transcript. The
-candidate arm's figure was 577,228 only after the merge: on the pre-merge tree at
-`44f0b99e` it was 575,251, and `73e4b476` brought the accounts-channel templates
-and `meetings/public_accounts.py` that only that arm renders, which is why the
-reference arm did not move.
+100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in about two
+and a half seconds of wall. Both arms carried a non-SKIP decision to a graded
+outcome on 49 of their 50 units: 49 ejections each, 22 role-correct, 27
+wrongful, 22 supported-correct, 150 supported ballots and 4 guard-rewritten ones
+per arm, with 98 ballots naming the ejected player, none of which cited evidence
+that does not bear on that player. The fiftieth is the same prefix in both arms:
+its meeting reached no ejection, so its game reached no terminal outcome and it
+is one partial unit per arm rather than a stop. The report carries the sampling
+configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
+2,048 / 1,024). Input tokens by the fake provider's `len // 4` heuristic were
+889,373 (`repaired_clock`) and 585,214 (`combined_accounts`); applying the
+decision memo's calibrated 1.28x real-input ratio to their sum (1,474,587) gives
+about 1.89 M against the 2.4 M ceiling, and the larger arm's 17,787 per unit
+gives about 22,800 against the 45,000 per-unit ceiling — headroom checks, not
+predictions, because a real model writes a different transcript.
 
-The relevance amendment cost this fixture no unit: 18 supported-correct before it
-and 18 after, because its 6 off-target citations all fall in units the primary
-outcome already scored 0. That the rule bites at all is established by its
-planted cases, not by this run — the fixture cites the transcript's last turn
-whatever it says, so what it exercises is the path, not the judgment.
+The figures this section carried before the re-binding of 2026-09-10 were
+measured on the 3000-3999 band. They are superseded with it and are not re-run:
+that band is development data, and a dry run over it would measure a set this
+manifest no longer authorizes.
+
+The relevance amendment costs this fixture no unit on this band either, for a
+simpler reason than on the first: the dry-run provider produced no off-target
+citation at all, so the rule removed nothing from the 22 role-correct ejections
+and supported-correct is the same 22. That the rule bites at all is established
+by its planted cases, not by this run — the fixture cites the transcript's last
+turn whatever it says, so what it exercises is the path, not the judgment.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; it establishes

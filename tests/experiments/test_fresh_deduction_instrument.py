@@ -2916,11 +2916,13 @@ class TestExecutionManifest:
         The frozen analysis is not what moved: the enforcement text and the
         reconciliation behind it are, and the section says so.
 
-        Two entries carry that date. The first is the reconciliation; the second
-        is the review round that put the truncation, identity and budget stops on
-        the charged-failure path the first one opened. Every entry is resolved,
-        not just the first — a log whose later lines are unchecked is the same
-        document asking to be trusted that the walk above refuses to be.
+        Three entries carry that date. The first is the reconciliation; the
+        second is the review round that put the truncation, identity and budget
+        stops on the charged-failure path the first one opened; the third is the
+        re-binding of the Inputs table to the second held-out band, with the gate
+        that holds a live run to it. Every entry is resolved, not just the first
+        — a log whose later lines are unchecked is the same document asking to be
+        trusted that the walk above refuses to be.
         """
 
         section = self._post_run_amendments_section()
@@ -2929,8 +2931,9 @@ class TestExecutionManifest:
         assert "2,228 input and 861 output tokens" in collapsed
         assert "The frozen analysis does not move" in collapsed
         assert "the stops a charged failure has to meet" in collapsed
+        assert "the Inputs table is re-bound to the second held-out band" in collapsed
         commits = re.findall(r"\*\*2026-09-10 \(`([0-9a-f]{7,40})`\)", collapsed)
-        assert len(commits) == 2
+        assert len(commits) == 3
         if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
             pytest.skip("no full history here; the named commits cannot be resolved")
         for commit in commits:
