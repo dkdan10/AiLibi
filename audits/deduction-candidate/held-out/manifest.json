@@ -1,210 +1,210 @@
 {
   "accepted": [
     {
-      "seed": 3000,
-      "sha256": "ab8db76d824c7fa5856f8b60dbda1e43c569c418f5861080a71ce6aef5915cc9"
+      "seed": 5000,
+      "sha256": "d636c9037be2ab6afd9ded097b01c0ad7e3dff2f8829b9766f7637a02e1091f6"
     },
     {
-      "seed": 3001,
-      "sha256": "ae62b447508d14809a3674eb744f1861998e2f25a4ea38e20c14efaf96f13794"
+      "seed": 5001,
+      "sha256": "9adf4717d8cc802daa1f686c305758f3243643ac48dbf99798a6fd2a04799d52"
     },
     {
-      "seed": 3002,
-      "sha256": "26a67328bab61a4c398edb9ae651aac574445465bca0cdc490a7a3059a9681b1"
+      "seed": 5002,
+      "sha256": "c92418822e42c392b8ea286edcabac1127facad4eefc27d01b92dfa9d05a78c0"
     },
     {
-      "seed": 3003,
-      "sha256": "0c33cae71f54b426094cd7ff137af778e76b304ca17795af8845b6db3bc6ee0b"
+      "seed": 5003,
+      "sha256": "21397283a1e80eefd95e18bccf4792a5b59243e965b612197a6dac8a6128df61"
     },
     {
-      "seed": 3004,
-      "sha256": "d1759e75d7b9f715ca9bb1858dcbc1e0fd0e785742c0d0192184ea63dc6b1f27"
+      "seed": 5004,
+      "sha256": "8e5b548336960694bea7891e49da5ff6ef3a4a59c84fc9860f7de5d3e2fd79c0"
     },
     {
-      "seed": 3005,
-      "sha256": "65a68d51bf82e82f5a7286a6611ec0c32cfcd723eca1dde90b69cbdf510eb25c"
+      "seed": 5005,
+      "sha256": "b8ad412483339eacbe37bb107bce4a5749186d307e2c3d0c5af7df5c50a8d071"
     },
     {
-      "seed": 3006,
-      "sha256": "e5f91066084e4aa433d0c072174a65c8a5f99e00493b166e9227a0ef2e79274d"
+      "seed": 5006,
+      "sha256": "ab939e06ab1b39cb66aa18d870c64aab0688e81e069c4ca1cd6d259343f73e9d"
     },
     {
-      "seed": 3007,
-      "sha256": "3acf604f5a3ca80eec2072c1e50208197161024fdd96f1dfd96440ea596bfe2a"
+      "seed": 5007,
+      "sha256": "d9e3d2e549269ee59ebb36d6655c05e36095d87166dd490f8384c8332bb307fd"
     },
     {
-      "seed": 3008,
-      "sha256": "fbb9a4849d2cab054f04adcf2c6dae474658d1d69ea0ea3aa0dadaa22e723968"
+      "seed": 5008,
+      "sha256": "ea5f14b26db4720e3e9a7cdeab1b95cb21964b7811d9eb320dc74b76cea29b21"
     },
     {
-      "seed": 3010,
-      "sha256": "7b0b740aa140d5ee46f86d8ab89ea653b28dbeaab966d31a90966a82eba2deba"
+      "seed": 5009,
+      "sha256": "8ff4f296ae3fd15652159df1a4775fb2923ec00d2917ba9554bbadbc6abadf25"
     },
     {
-      "seed": 3011,
-      "sha256": "e8f33d227db7dc3c541b8d5aec30daf0e893d1fbf56b03f928d68c5c2abf6399"
+      "seed": 5010,
+      "sha256": "76d770c434739d19b0588630dd101c0973be998472d9efdffa14f505372b3ca9"
     },
     {
-      "seed": 3012,
-      "sha256": "587a328dc10aa35c03b778f48e809337ba2c2d7cdddc376c4755515585684574"
+      "seed": 5012,
+      "sha256": "6d81654061216b180d77c8b269ec9bcf5cb2f2982b4497d0528d1409a83f6d75"
     },
     {
-      "seed": 3015,
-      "sha256": "1f11ba37e23e57d4f0d339e29c0d8962f4d663d239e807f1415536e549393bd8"
+      "seed": 5013,
+      "sha256": "ec8cce6cdcd5a4120580eac607b114a87d76beae29625440407140eb7f9c37bd"
     },
     {
-      "seed": 3016,
-      "sha256": "bc7d65027d26bdd91e3ded75d0e5e5e2fd55d28504ae3068fe2ba715127ae311"
+      "seed": 5014,
+      "sha256": "bb5038dfcdd5f218a5c8ffefc5c6df0d3769c769ad005bc1ec56584cc38da86e"
     },
     {
-      "seed": 3017,
-      "sha256": "c57fc8a13c88a3ef284d6aba3f4bb751640ea775035fccc348bc4703b6099448"
+      "seed": 5015,
+      "sha256": "0b5b94996155be9a88de948c07ca3b48701369fd981bccb4b1f35d5cc67a221b"
     },
     {
-      "seed": 3018,
-      "sha256": "d1f561a897f96b525fc75c61724b16f15da30b9c338b71383fa33e5cd985d5da"
+      "seed": 5016,
+      "sha256": "f3473466b19b8635f8847882cbbce8281e1ab0c15830b812dbcecbdcb6a734d3"
     },
     {
-      "seed": 3019,
-      "sha256": "76deb9d86c6afba71885ecbf17cb94d3c369928dcdd93f314c9556128ab01af1"
+      "seed": 5017,
+      "sha256": "71c65a3b5e48f0bf589183de8008c1a9ae36067765f8ab5d4ba6d18fd3945fd6"
     },
     {
-      "seed": 3021,
-      "sha256": "50f5756e06ce10c558a8515c062ace7cc5b861de623fa7a2200d555f0a8816d6"
+      "seed": 5018,
+      "sha256": "25fe0ce438ceb3edde7615ca81d2b6ef2adff987425c3c0267936f16b81ffcb3"
     },
     {
-      "seed": 3022,
-      "sha256": "340b344e94832721344866d284829e0fc92d39e7a1b772ee34e7b4fdd127e95f"
+      "seed": 5019,
+      "sha256": "0f14f7e85daae4e8307c9d5fb94f83fd9d59c0bf35ed0010b3ba1bbabf04bec1"
     },
     {
-      "seed": 3023,
-      "sha256": "8e24b77707a6ef2cdba1198cc65dc012c4a7e40b3ede308c295b845188e2682d"
+      "seed": 5020,
+      "sha256": "4fbb1c62610f7c123f2a6254075758a1da11fde4d0738fa5ef9ecc522dadd1c8"
     },
     {
-      "seed": 3025,
-      "sha256": "45884b752badaad5be938056e33973a07d453b04af9e196a995484dd4e61793f"
+      "seed": 5021,
+      "sha256": "3f26a4a92ad06026d8544a74b73de5b2b1859a0a067921477ea9aef46f9448ed"
     },
     {
-      "seed": 3026,
-      "sha256": "d7a734590793b1ad2b4a58a76aca22bdef549b8e34089f8aa14f151470e9bb10"
+      "seed": 5022,
+      "sha256": "a2316b52f568609fe61a196902d191fc3d2aec2c874839b865f5636728ba2927"
     },
     {
-      "seed": 3028,
-      "sha256": "26e47d29b4edff71306bff9831ff7dce17a07d82c74e6792b86086282ee4b1cb"
+      "seed": 5023,
+      "sha256": "e872e94dbea4ab5535a07443933ae9f223256f688afed901a8062358a2250eb1"
     },
     {
-      "seed": 3030,
-      "sha256": "ed1d4f2d27f6015909b00e91e08c7626cc23e1d300328743fc91bc7dc53d7cb6"
+      "seed": 5024,
+      "sha256": "601e1a8f34c6fbfd38d1fa2421f7ccaa98acbfdd618ec0b59188ea9511dd0112"
     },
     {
-      "seed": 3031,
-      "sha256": "66b608a45d40c3332310537844a48137f23595588d15dd5e67ca32955755bb10"
+      "seed": 5025,
+      "sha256": "61ee32683703893a40677d40f83d106c4e10ce224e0f024656a450717386bd9f"
     },
     {
-      "seed": 3032,
-      "sha256": "d57b9c8622266b2831557b405e47c435776a95887a4283f80e98efc9178fdf09"
+      "seed": 5026,
+      "sha256": "5ae9db4140f3e15189d751ac463fee8f208343005d9e926f632d32a272cc0011"
     },
     {
-      "seed": 3033,
-      "sha256": "b9467fe7ddd497328c1f045ad8faabf55d0bc9f26b1e3c47e9ea0a4afceb8cd0"
+      "seed": 5027,
+      "sha256": "683e445023bf862172a17f2e7702a70439cd00fbd07f0f7af66694a0843edf04"
     },
     {
-      "seed": 3034,
-      "sha256": "09224189e2455f4e9fcd32474b6261277812480d92ccf98154a8de4b1aaf053e"
+      "seed": 5028,
+      "sha256": "ce6b4af10c839aab2d57e4d07d2a2abbb34b9074c84194b14781288aee2fdad3"
     },
     {
-      "seed": 3035,
-      "sha256": "9b8f857486735f2c939621744a0aa1095029bc100f7b0580587ba95524274d26"
+      "seed": 5030,
+      "sha256": "7d3be4c7164fc1f7e88f5b02b8004a34eecee20917a3a2587f2466e697d2b483"
     },
     {
-      "seed": 3036,
-      "sha256": "bee602e0c4fa7c1c995602aaedc429f6ab8bde52cea89e79ac97f10885345089"
+      "seed": 5031,
+      "sha256": "708096ae656da5c12bb9cad6dd94e1087b36e95b8d107ceb284a312e33f46993"
     },
     {
-      "seed": 3037,
-      "sha256": "b4b25f2bfcbbb2aa780965b7b095163a97909112886681189d9d4583ef647414"
+      "seed": 5032,
+      "sha256": "af091ca826b786feeceeb7b70ccfff4ccc6ed4e7b231bcb29570445884ab597c"
     },
     {
-      "seed": 3038,
-      "sha256": "1d1f364ada76dd4167b11ca9e9e17c14e9b691a2c9dc06b28094c0436d59c2a8"
+      "seed": 5033,
+      "sha256": "8aa19f39cd65ac742cfaa5c6e9ae3a552ddde6e3092357ac3a4c428b6e7bcd45"
     },
     {
-      "seed": 3039,
-      "sha256": "76ef063d8a9f0d0a7bb52b08a3028502117e9a337fa58af82c41306ee049e358"
+      "seed": 5034,
+      "sha256": "062efc42a16a69773d2ef1df2bb4ede474c1da11072dc4e7dfa6cf7b45082328"
     },
     {
-      "seed": 3040,
-      "sha256": "b1f7946ae79921a52ac790b2672f1b7deeb655eeed2648b32fdd206efa11e149"
+      "seed": 5035,
+      "sha256": "683abb412a5704450dd2feebbd0ec79727a25410ca0705263b9753b659819b16"
     },
     {
-      "seed": 3042,
-      "sha256": "fe109f7bd25d78be78c11e46187bdfeb9d78e3c30c5ca7140e101d34f45034b2"
+      "seed": 5036,
+      "sha256": "c930dd4f8eb38318ed72d08e0f7edda9714be97e3bc1c2920b8f71e262177342"
     },
     {
-      "seed": 3043,
-      "sha256": "b1ad9da6ead8485b9d68a8f31d29c2b138e0bd2f71a54c8eda4029a230672da3"
+      "seed": 5037,
+      "sha256": "3a16e10fb720b05c1ba44af69b3d8b6b8185d3722d045b90759e0e6d88758ac2"
     },
     {
-      "seed": 3044,
-      "sha256": "dbd5e2b4c8cb563e48d45f5596a6e8fde47999c4f3efa264b57b1958172a180d"
+      "seed": 5038,
+      "sha256": "8c3953678f6745ffc42ea09d8803def1ef5922d57bd1266395527f62f1e349fc"
     },
     {
-      "seed": 3045,
-      "sha256": "d598bb226ca33115af8e2ecffdf83681e5da556a8af31c34a230c3fcdf2e0bd2"
+      "seed": 5039,
+      "sha256": "0209e414f8b7cccb40ceba0e94778c354ee47c7e9b16ee6d0f3c70adfcb5c70e"
     },
     {
-      "seed": 3046,
-      "sha256": "7e7ddc319f6b386e283a3332b57b5c6aeec05affff2562872782e505e08ed789"
+      "seed": 5040,
+      "sha256": "81be106c92eda180f48a768e0e4b35e258d7c6d0033581e9aa638b9608a7899e"
     },
     {
-      "seed": 3047,
-      "sha256": "33014bb866f9dd2ae7c9f818a844a7d2f227ae7a0f90a99c3041e7d0047428a5"
+      "seed": 5041,
+      "sha256": "e72ad1e74369f0c2eca0d3378c4d1b140ebd69d9e2ccd5fa2aa0c2991cd45e2b"
     },
     {
-      "seed": 3048,
-      "sha256": "1cb4f090e71aee58eef492432d0ff591282b0fb22bea8ebc57a6f30135cd2c0b"
+      "seed": 5042,
+      "sha256": "20bb80bf2d1105892670f008925fef8006a543c7f73e20dbb18cb1fb67b3c670"
     },
     {
-      "seed": 3049,
-      "sha256": "2e1b018d9c16e410d19fcda7aca14e8fff7ce32c0df473655cc09977f9a5bd61"
+      "seed": 5043,
+      "sha256": "fc03f77d0f579c4c75061961c86aeb2cd40c578a037013744f2dccafafa64735"
     },
     {
-      "seed": 3050,
-      "sha256": "61990046f31b6a8a9b741abceaccee26cb1ada156a084233cd5ab946a1694583"
+      "seed": 5044,
+      "sha256": "25738c11fff364a396c465ed558d419b80d36cba3d5ddbf00331b75ace9704ec"
     },
     {
-      "seed": 3051,
-      "sha256": "ee096c40be1118fcf3a76c05e6733da74281b443b474ff92bb946d4555361301"
+      "seed": 5046,
+      "sha256": "ac6ebbfc0b5ad34a6dc63be152018bd8f62430656121ea304422a727c51cd028"
     },
     {
-      "seed": 3052,
-      "sha256": "de21d8a8c0991ed581156be96585872192985eb6d7a0b928a4dd0ac746feebe6"
+      "seed": 5047,
+      "sha256": "61fa574b023a5d2ec42df0d5afd3fa5e27d9b220a9c47a0587b94a65f39ce2b2"
     },
     {
-      "seed": 3053,
-      "sha256": "330d3887c16d9c24858c902b0192f71d92194d9bc34b5283b8782df5e503f068"
+      "seed": 5048,
+      "sha256": "287f4fa158599a831efefa2cc4d1f7a2dae252ef0c2b50450d8082f4b4fab179"
     },
     {
-      "seed": 3054,
-      "sha256": "1494d1d2d837a5806cb8b7e2096284df840b28fecb20a4acf68927a962bc15e1"
+      "seed": 5049,
+      "sha256": "1f5d5c960e74c6afb895c5b885fb02d0955df54d5014e8e3fcfddf07b17dd607"
     },
     {
-      "seed": 3055,
-      "sha256": "c99f43ac41bd09e8f1c6912c642270e3daf30305445e17f7d9214a3ae7e87761"
+      "seed": 5050,
+      "sha256": "d52a314bce96fa30d02630d320b2221f926641e835f2aeff7d7aa558579a7006"
     },
     {
-      "seed": 3056,
-      "sha256": "b6fc57566efa7c60fd27de5314f46c51b0b6cb234c62c2f6aa77ed997900e3fe"
+      "seed": 5051,
+      "sha256": "e438af90ba241933e64d7d74b9467b6b1eb5ddbc12e139ee29afcf210a30a51e"
     },
     {
-      "seed": 3057,
-      "sha256": "3e1799387370d6d6463150e7a5a368e82b766a0667036a9f66fd7cf12e2984c3"
+      "seed": 5052,
+      "sha256": "548ed82bf98903855c73508391155ff81cf34ad9c59731ee6a4c9e73ba43405d"
     }
   ],
   "band": {
     "draw_order": "ascending",
-    "first_seed": 3000,
-    "last_seed": 3999,
+    "first_seed": 5000,
+    "last_seed": 5999,
     "size": 50
   },
   "body_handle_assertion": {
@@ -212,38 +212,9 @@
     "pattern": "body-p-\\d+-\\d+"
   },
   "canonical_json": "json.dumps(prefix.model_dump(mode='json'), sort_keys=True, separators=(',', ':')) encoded as UTF-8, hashed with sha256",
-  "card": "tasks/work/held-out-prefix-freeze.md",
+  "card": "tasks/work/held-out-prefix-freeze-2.md",
   "dependency_restamps": {
-    "entries": [
-      {
-        "card": "tasks/work/evidence-renderer-salience.md",
-        "commit": "7bcc79ed",
-        "date": "2026-09-08",
-        "note": "The evidence-reasoning v2 salience repair. It changes rendered prompt bytes on the default-OFF v2 path only; prefix generation reads episodic memory and engine state, not the render, so all fifty accepted digests and the eight skips were unchanged. held_out_prefixes.py moved in the restamp commit that follows this one, because this record was added to it there; that edit generates no prefix and changes none.",
-        "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
-      },
-      {
-        "card": "tasks/work/evidence-renderer-salience.md",
-        "commit": "56d3e5fd",
-        "date": "2026-09-08",
-        "note": "The round-1 review corrections to the same repair: the withheld caveat count is computed after the token budget instead of before it, and the own-routine demotion's justification was corrected. Both touch the prompt render on the default-OFF v2 path only, which prefix generation does not read, so all fifty accepted digests and the eight skips were unchanged again.",
-        "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
-      },
-      {
-        "card": "tasks/work/evidence-renderer-salience.md",
-        "commit": "00ac7fbb",
-        "date": "2026-09-08",
-        "note": "The closeout round-1 correction to the same repair: the withheld-subjects notice is reserved before any caveat is selected, so a render that hides claim subjects always states how many, and the reserve's guard raises a named error instead of asserting. Both are prompt-render changes on the default-OFF evidence-v2 path, which prefix generation does not read, so all fifty accepted digests and the eight skips were unchanged a third time.",
-        "sources": "agents/memory/store.py, experiments/held_out_prefixes.py (this record itself)"
-      },
-      {
-        "card": "tasks/work/nonblocking-followup-improvements.md",
-        "commit": "29393cda",
-        "date": "2026-09-09",
-        "note": "The write-time refusal of a meeting whose eject cutoff no reader could attribute, plus the two docstrings that state the contract. It adds a guard on the recording path and changes no engine transition; prefix generation records no meeting and never reaches the guard, so all fifty accepted digests and the eight skips were unchanged again.",
-        "sources": "orchestrator/game.py, experiments/held_out_prefixes.py (this record itself)"
-      }
-    ],
+    "entries": [],
     "note": "One entry per commit that edited a GENERATOR_SOURCES file after the freeze WITHOUT moving the set: source_sha256 was regenerated only after test_the_committed_manifest_regenerates_from_its_own_band showed accepted[] and skipped[] identical to the committed record. A commit that moves any prefix digest or skip is not restamped here: the set becomes development data and a new band is frozen under a new card (tasks/post-merge-plan.md, 'Sequencing')."
   },
   "development_definitions": {
@@ -264,7 +235,7 @@
     "AILIBI_LLM_PROVIDER": "fake",
     "AILIBI_TEMPORAL_OBSERVATIONS": "2"
   },
-  "last_accepted_seed": 3057,
+  "last_accepted_seed": 5052,
   "max_ticks": 14,
   "prefix_bytes": "No prefix bytes are committed. The runner regenerates the set from experiments/held_out_prefixes.py and the band below and refuses to proceed if any digest differs from accepted[].sha256.",
   "roster": {
@@ -275,39 +246,19 @@
   "skipped": [
     {
       "reason": "witnessed_kill",
-      "seed": 3009
+      "seed": 5011
     },
     {
       "reason": "witnessed_kill",
-      "seed": 3013
+      "seed": 5029
     },
     {
       "reason": "witnessed_kill",
-      "seed": 3014
-    },
-    {
-      "reason": "witnessed_kill",
-      "seed": 3020
-    },
-    {
-      "reason": "witnessed_kill",
-      "seed": 3024
-    },
-    {
-      "reason": "witnessed_kill",
-      "seed": 3027
-    },
-    {
-      "reason": "witnessed_kill",
-      "seed": 3029
-    },
-    {
-      "reason": "witnessed_kill",
-      "seed": 3041
+      "seed": 5045
     }
   ],
   "skipped_reason_counts": {
-    "witnessed_kill": 8
+    "witnessed_kill": 3
   },
   "source_sha256": {
     "agents/memory/beliefs.py": "d9c946867abf74152b332b9331bdec000f20069703c6ef67c2c7c1d8956e63ce",
@@ -322,7 +273,7 @@
     "engine/tick.py": "655d29d07724c984b32681b00756ee6b759b34469dfc4483addf5b61f3b49459",
     "engine/visibility.py": "90773592a071c60767ba18933315f0aed96c21716996e74649a6fbc4fd7833f3",
     "engine/world.py": "8367cd422ffb9503e91c3a90931efc21803f47307f6f6b61f7a62fe6ae8bd4bb",
-    "experiments/held_out_prefixes.py": "90eec7081a4a7c831cd2b21ae2d0c5a93040295a51b83efd5e3711831648954d",
+    "experiments/held_out_prefixes.py": "18e7c269dc01971db581e2379e7ef2dc6a96ad406d31a211c7b153fa40a7be7a",
     "observation/action_intent.py": "4b0b9893a52597b96054c982acf9b17d16f3f631bc06058efdf0d62e09b564f3",
     "observation/body_ids.py": "6287e915e7538080f21ae053b92ca78089235dab2642aa14a3288aa948504ab3",
     "observation/service.py": "58e0a2b816287a7de154ea735fc4fe974b7976e8fb9291de883cc8fc10dac326",

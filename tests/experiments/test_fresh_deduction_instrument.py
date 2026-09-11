@@ -72,8 +72,10 @@ from experiments.fresh_deduction_instrument import (
     verify_frozen_set,
 )
 from experiments.held_out_prefixes import (
+    CONVERTED_BANDS,
     LEGACY_BODY_HANDLE_PATTERN,
     MANIFEST_PATH,
+    PREREGISTERED_BAND,
     TEMPORAL_OBSERVATION_VERSION,
     HeldOutPrefixError,
     assert_no_legacy_body_handles,
@@ -232,6 +234,32 @@ def _committed_manifest() -> dict[str, Any]:
     loaded = json.loads((_REPO_ROOT / MANIFEST_PATH).read_text(encoding="utf-8"))
     assert isinstance(loaded, dict)
     return loaded
+
+
+def _converted_manifest_paths() -> tuple[Path, ...]:
+    """Every freeze record that has been converted to development data.
+
+    A converted band keeps its record beside the live one under its own name
+    (``experiments.held_out_prefixes.CONVERTED_BANDS``); the execution manifest
+    still cites the 3000-3999 record until the reconciliation card re-binds its
+    Inputs table.
+    """
+
+    return tuple(_REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS)
+
+
+def _first_accepted_seed() -> int:
+    """The first seed of the committed freeze; the unit files are named for it.
+
+    Derived rather than written down: the band has moved once already -- the
+    3000-3999 set became development data on 2026-09-10 and 5000-5999 was
+    frozen in its place -- and a literal here would only re-pin these names to
+    whichever band was current when it was typed.
+    """
+
+    accepted = _committed_manifest()["accepted"]
+    assert isinstance(accepted, list)
+    return int(accepted[0]["seed"])
 
 
 class _StubClient:
@@ -526,11 +554,25 @@ class _FailingProvider(DryRunProvider):
 
 class TestFrozenSet:
     def test_the_regenerated_set_matches_the_committed_freeze(self) -> None:
+        """The set the run would use is the one the committed manifest records.
+
+        The seeds are read from that manifest rather than written down here: a
+        literal would pin this test to one band, and the band moves when a
+        result converts a set to development data.
+        """
+
+        manifest = _committed_manifest()
+        accepted = manifest["accepted"]
+        skipped = manifest["skipped"]
+        assert isinstance(accepted, list)
+        assert isinstance(skipped, list)
         frozen = verify_frozen_set(_REPO_ROOT)
+        assert frozen.accepted_seeds == tuple(int(row["seed"]) for row in accepted)
+        assert frozen.skipped_seeds == tuple(int(row["seed"]) for row in skipped)
         assert len(frozen.accepted_seeds) == 50
-        assert len(frozen.skipped_seeds) == 8
-        assert frozen.accepted_seeds[0] == 3000
         assert len(frozen.prefixes) == 50
+        assert frozen.accepted_seeds[0] >= PREREGISTERED_BAND.first_seed
+        assert list(frozen.accepted_seeds) == sorted(set(frozen.accepted_seeds))
 
     def test_a_moved_digest_stops_the_run(self, tmp_path: Path) -> None:
         # PLANTED: one accepted digest is flipped. The regenerated prefix
@@ -1489,7 +1531,11 @@ class TestMeetingDefaults:
         counts are no longer evidence, so it is a stop rather than a zero."""
 
         run_instrument(output_dir=tmp_path, units=1)
-        entries = list(self._entries(tmp_path, "repaired_clock-seed-3000.jsonl"))
+        entries = list(
+            self._entries(
+                tmp_path, f"repaired_clock-seed-{_first_accepted_seed()}.jsonl"
+            )
+        )
         meeting = next(e for e in entries if isinstance(e, MeetingReplayEntry))
         foreign = FailedCallReplayEntry(
             game_id="g",
@@ -2351,13 +2397,94 @@ class TestExecutionManifest:
         assert "23a23c2d" in text
         assert "It ran no arm" in text
 
-    def test_the_manifest_binds_the_held_out_set_it_regenerates(self) -> None:
-        manifest = _committed_manifest()
+    def _bound_held_out_record(self) -> tuple[Path, dict[str, Any]]:
+        """The one freeze record on disk whose band the Inputs row names.
+
+        Which record that is moves with the row: the live freeze at
+        ``MANIFEST_PATH``, or -- while a re-binding is outstanding -- the
+        converted record beside it. The 3000-3999 set became development data on
+        2026-09-10 and the row still cites it; ``tasks/work/
+        fresh-deduction-instrument-reconciliation.md`` re-binds the row to the
+        second band, and these tests follow it there without being rewritten.
+        """
+
         text = self._text()
-        assert str(manifest["band"]["first_seed"]) in text
-        assert str(manifest["band"]["last_seed"]) in text
-        assert f"accepted seeds run 3000–{manifest['last_accepted_seed']}" in text
+        candidates: list[tuple[Path, dict[str, Any]]] = [
+            (_REPO_ROOT / MANIFEST_PATH, _committed_manifest())
+        ]
+        for path in _converted_manifest_paths():
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            assert isinstance(loaded, dict)
+            candidates.append((path, loaded))
+        bound = [
+            (path, record)
+            for path, record in candidates
+            if f"{record['band']['first_seed']}–{record['band']['last_seed']}" in text
+        ]
+        assert len(bound) == 1, "the Inputs row names exactly one frozen band"
+        return bound[0]
+
+    def test_the_manifest_binds_a_committed_held_out_record(self) -> None:
+        """Every number in the Inputs row comes from a freeze record on disk."""
+
+        text = self._text()
+        _, manifest = self._bound_held_out_record()
+        first_accepted = manifest["accepted"][0]["seed"]
+        assert (
+            f"accepted seeds run {first_accepted}–"
+            f"{manifest['last_accepted_seed']}" in text
+        )
         assert f"{manifest['skipped_reason_counts']['witnessed_kill']} skips" in text
+
+    def test_a_binding_to_a_converted_record_stays_an_open_obligation(self) -> None:
+        """A development record may be bound only while the re-binding is open.
+
+        ``verify_frozen_set`` regenerates whatever ``MANIFEST_PATH`` holds, and
+        ``assert_live_run_is_authorized`` checks this document's path and digest
+        but not its band -- so while the Inputs row cites the 3000-3999 set the
+        authorization document names one band and the runner would draw another.
+        Closing that at the runtime gate edits the instrument, which the freeze
+        card may not; it is an acceptance item of the card that re-binds the row.
+
+        What is enforced here is narrower and exact: the stale binding cannot go
+        silent or become permanent. A bound development record has to name the
+        record that replaced it; that record has to be the live held-out freeze
+        of another band; and the card the conversion named has to be still open
+        and still name the record it owes the row. A held-out binding is the
+        settled state, and then it has to be the live freeze itself.
+        """
+
+        path, record = self._bound_held_out_record()
+        if record["status"] == "held_out":
+            assert path == _REPO_ROOT / MANIFEST_PATH
+            return
+        assert record["status"] == "development", (
+            f"the execution manifest binds {path.name}, whose status is "
+            f"{record['status']!r}: a freeze record is held out or converted"
+        )
+        converted = record["converted"]
+        assert converted["superseded_by"] == MANIFEST_PATH, (
+            f"{path.name} is bound while development and names "
+            f"{converted['superseded_by']!r} as its replacement, not the live "
+            f"freeze {MANIFEST_PATH}"
+        )
+        live = _committed_manifest()
+        assert live["status"] == "held_out"
+        assert live["band"] != record["band"]
+        rebinding = _REPO_ROOT / converted["informed"]
+        # Read into booleans rather than asserting on the membership directly:
+        # a failure here should name the card, not print it.
+        rebinding_text = rebinding.read_text(encoding="utf-8")
+        still_open = "**Status:** done" not in rebinding_text
+        names_the_live_record = MANIFEST_PATH in rebinding_text
+        assert still_open, (
+            f"{rebinding.name} is closed while the execution manifest still "
+            f"binds the converted {path.name}"
+        )
+        assert names_the_live_record, (
+            f"{rebinding.name} owes the Inputs row a binding to {MANIFEST_PATH} "
+            "and no longer names it"
+        )
 
 
 class TestHarnessesUntouched:
@@ -2411,9 +2538,10 @@ class TestDryRun:
         written = sorted(path.name for path in tmp_path.iterdir())
         # The replays and nothing else: the observation audit, which restates
         # the prefix packet by packet, goes to the null device instead.
+        seed = _first_accepted_seed()
         assert written == [
-            "combined_accounts-seed-3000.jsonl",
-            "repaired_clock-seed-3000.jsonl",
+            f"combined_accounts-seed-{seed}.jsonl",
+            f"repaired_clock-seed-{seed}.jsonl",
         ]
 
     def test_the_dry_run_provider_reads_only_its_prompt(self) -> None:
