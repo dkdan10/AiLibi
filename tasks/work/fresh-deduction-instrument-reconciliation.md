@@ -36,6 +36,15 @@ authorized budget, at $0.00 marginal.
 
 ## Acceptance
 
+- [x] Review correction: the post-run amendment log credits `STOP_RULE` with no
+  stop it omits. The checkpoint refusal is attributed to the limit that grounds
+  it — this manifest's own "Provider and model" row and the model the
+  authorization card locks — rather than to the frozen rule, which enumerates no
+  provider-identity stop; the pull request body carries the same correction. A
+  gate holds the log to the rule the enforcement section is already held to,
+  pointing the other way: every clause the section credits to `STOP_RULE` is one
+  the rule states, the count it claims is the number it quotes, and provider
+  identity stays absent from the frozen string.
 - [x] Review correction: the two stops the client applies to a response — the
   output cap and the served checkpoint — also reach a call the provider billed
   and then refused on its own schema validation, read off that call's
@@ -443,3 +452,103 @@ and it reads no byte this card moves.
 **Still open.** Acceptance items 3 and 4 are untouched by this round and the
 card stays `active` for the same reason as above: the second freeze has not
 merged into this branch, so there is no new band to bind or to run.
+
+### Review corrections, round 2 (2026-09-10)
+
+One blocking finding, and it is valid: the round-1 amendment entry was refuted
+by its own quotation of the rule it quotes.
+
+**The claim and what the rule says.** The entry for `6215fda1` opened "Three
+stops `STOP_RULE` carries were reachable only on the success path" and closed
+"each of these three is a clause it already carried". Two of the three are
+quoted from the rule verbatim — "a truncation is a stop, not a datum" and "a
+token budget exhausted at either the per-unit or the run level". The third, a
+checkpoint this run does not authorize, is not in `STOP_RULE` at all, which is
+why it was the only member with no quotation. On the committed tree at
+`70a5c826`:
+
+```console
+$ .venv/bin/python -c "from experiments.fresh_deduction_instrument import STOP_RULE
+s = STOP_RULE.lower()
+print({w: w in s for w in ('checkpoint','identity','provider','endpoint','served','model')})"
+{'checkpoint': False, 'identity': False, 'provider': False, 'endpoint': False,
+ 'served': False, 'model': True}
+```
+
+and the one `model` is "the model-work window". The frozen string has not moved
+— the byte-identity walk
+(`test_the_amendment_log_names_every_commit_that_moved_the_frozen_analysis`) is
+green on this branch — so the document was wrong about a constant it carries in
+full.
+
+**What it is instead.** The refusal is the manifest's own limit, not a
+borrowed one. The "Provider and model" row of the authorized values binds
+`featherless` / `Qwen/Qwen3.6-27B` from the authorization card, and its
+enforcement bullet has said since before the first run (`c12ec85a:195-202`)
+that `_InstrumentClient` refuses a response whose `model` is not the authorized
+one. `6215fda1` extended that refusal to a completion the provider billed for
+and then refused, off the `model` its parse-failure metadata carries. The entry
+now attributes it there, keeps the two frozen clauses quoted, and records that
+its own attribution was corrected. Nothing else in the entry changes, and
+`STOP_RULE` is untouched: adding a provider-identity clause to it would move the
+frozen analysis, which is the owner's to do and not this card's.
+
+**The code was right; the record was not.** The finding says so, and this round
+changed no line of `experiments/fresh_deduction_instrument.py`. The identity
+half of `_unusable_response` stays load-bearing: round-1's planted failure 2,
+re-run on this round's tree with the `_expected_model` comparison made
+unreachable, turns exactly two of the module's 175 cases red —
+`TestBurnedCallStopConditions::test_a_burned_call_from_another_checkpoint_stops_the_run`
+and `TestAuthorizedClient::test_a_response_from_another_model_stops_the_run`,
+`2 failed, 173 passed` — with every truncation case green.
+
+**The gate.** This round retired "a difference is a stop" from the enforcement
+section and gated that direction; the same round then credited the frozen rule
+with a stop it omits, and nothing watched that direction.
+`TestExecutionManifest::test_the_post_run_amendments_credit_no_clause_the_stop_rule_omits`
+now does: every phrase the post-run log quotes is a clause of `STOP_RULE`, a
+heading or bullet of this document, or one the section says in so many words
+that the rule does not carry; the count it credits to the rule equals the number
+of clauses it quotes; and provider identity stays absent from the frozen string.
+
+**Planted failures.** Each perturbation was applied to the tree at `75eeb6e3`,
+run, and reverted.
+
+1. The retired count, restored ("Two stops `STOP_RULE` carries" → "Three") —
+   `test_the_post_run_amendments_credit_no_clause_the_stop_rule_omits` fails:
+   `assert {3} == {2}`. That is the finding's defect exactly: a claim of three
+   clauses against two quotations.
+2. The checkpoint refusal, quoted as if it were a clause ("a checkpoint this run
+   does not authorize" put in quotation marks in the same entry) — the same test
+   fails:
+   `AssertionError: quoted as the frozen rule's, but it does not state it: 'a checkpoint this run does not authorize'`.
+   The two plants cover both ways the document can credit the rule with a stop
+   it omits — by counting and by quoting.
+3. The rule itself, given the clause (a `; a response served by a checkpoint
+   this run does not authorize` inserted into `STOP_RULE`) — the same test fails
+   `the frozen rule now names provider identity: ['checkpoint', 'served']`. That
+   perturbation also reddens the frozen-analysis quotation and byte-identity
+   gates, which is the point: it is the owner's amendment, not a document edit.
+
+**Verification, round 2.** Run on the tree at `75eeb6e3`; this card's own bytes
+are the only later ones, and no gate below reads it except
+`validate_task_docs.py`, re-run after that edit.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 250 passed |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed; 390 phase tasks, 390 prompts, 45 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets all verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5` |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0: ruff clean over 504 files, import-linter 4 contracts kept / 0 broken, mypy clean over 475 source files, 7535 passed / 20 skipped / 3 xfailed, frontend 515 tests in 19 files |
+
+`docs/artifacts.md`'s `audits/` row is recomputed for the moved manifest bytes:
+204 files, 14,933,995 tracked bytes (`git ls-files audits/` summed on disk, with
+the change staged). No live provider call of any kind was made, and `--complete`
+was not run on `verify_ml_evidence.py`.
+
+**Still open.** Acceptance items 3 and 4 are untouched by this round as well.
+The card stays `active` for the reason it has stayed active throughout: the
+second freeze has not merged into this branch, so there is no new band to bind
+or to run.
