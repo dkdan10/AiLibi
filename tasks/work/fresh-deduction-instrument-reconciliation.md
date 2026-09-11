@@ -664,9 +664,9 @@ run, and reverted.
    `test_every_named_post_run_commit_is_in_this_branchs_history` fails:
    `named but not an ancestor of HEAD: ['884257b8']`.
 
-**Verification, stacking round.** Run on the tree at `ee37cb06`; this card's own
-bytes and `tasks/README.md` are the only later ones, and no gate below reads them
-except `validate_task_docs.py`, re-run after that edit.
+**Verification, stacking round.** The first five commands were run on the tree at
+`ee37cb06` and re-run after this card and `tasks/README.md` moved; `check.sh` was
+run on `6a0f0dfd`, which carries those bytes.
 
 | Command | Result |
 | --- | --- |
@@ -675,7 +675,12 @@ except `validate_task_docs.py`, re-run after that edit.
 | `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets all verified |
 | `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5` |
 | `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
-| `bash scripts/check.sh` | exit 0 |
+| `bash scripts/check.sh` | exit 0: ruff clean over 504 files, import-linter 4 contracts kept / 0 broken, mypy clean over 475 source files, 7545 passed / 20 skipped / 3 xfailed, frontend 515 tests in 19 files |
+
+An earlier invocation of `bash scripts/check.sh` on these same bytes exited 127
+on `sh: eslint: command not found`: this worktree had no `frontend/node_modules`
+yet. `npm ci` in `frontend/` installs nothing the Python gates read, and the run
+above is after it.
 
 `docs/artifacts.md`'s `audits/` row is recomputed twice on this round, once per
 commit that moved `audits/` bytes: 205 files and 14,948,022 tracked bytes at
