@@ -609,6 +609,77 @@ BUDGET_SIZING_ARM: Final[ArmName] = "repaired_clock"
 # ---------------------------------------------------------------------------
 
 
+#: The Inputs table's "Seed band" row of the execution manifest, whose first two
+#: numbers are the band that document binds. Anchored on the row label rather
+#: than on a bare pair of numbers: the same document names the CONVERTED band in
+#: prose beside it, and a looser reader would take whichever came first.
+_MANIFEST_SEED_BAND_ROW: Final = re.compile(
+    r"^\|\s*Seed band\s*\|\s*(\d+)[–-](\d+)\b", re.MULTILINE
+)
+
+
+def manifest_bound_band(manifest_text: str) -> tuple[int, int]:
+    """The seed band the execution manifest's Inputs table binds.
+
+    Exactly one "Seed band" row may state one, because the band is what the
+    authorization is written against: no row, or two of them, is a document that
+    does not say which inputs it authorizes, and that is refused rather than
+    resolved by picking one.
+    """
+
+    rows = _MANIFEST_SEED_BAND_ROW.findall(manifest_text)
+    if len(rows) != 1:
+        raise LiveRunNotAuthorized(
+            f"{EXECUTION_MANIFEST_PATH} carries {len(rows)} 'Seed band' rows "
+            "naming a band; exactly one says which inputs this run is "
+            "authorized to spend"
+        )
+    first, last = rows[0]
+    return int(first), int(last)
+
+
+def assert_manifest_binds_the_live_band(repo_root: Path = _REPO_ROOT) -> None:
+    """Refuse a live run whose authorization names a band the runner would not draw.
+
+    :func:`verify_frozen_set` regenerates whatever record sits at
+    :data:`~experiments.held_out_prefixes.MANIFEST_PATH` and holds it to the
+    generator's own :data:`~experiments.held_out_prefixes.PREREGISTERED_BAND`.
+    Neither of those reads this document, so a band that moves — the 3000-3999
+    set became development data on 2026-09-10 and 5000-5999 was frozen in its
+    place — leaves the manifest authorizing one band while the run draws
+    another, with every other gate green. That gap is closed here, by comparing
+    the band the Inputs row states with the band the live record holds.
+
+    It is part of the authorization, not of the frozen-set check: it runs inside
+    :func:`assert_live_run_is_authorized`, which is the first thing
+    :func:`assert_ready_for_a_live_run` calls, so a stale binding stops the run
+    before a provider, a credential or a connection exists.
+    """
+
+    manifest = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
+    if not manifest.is_file():
+        raise LiveRunNotAuthorized(f"execution manifest is missing: {manifest}")
+    bound = manifest_bound_band(manifest.read_text(encoding="utf-8"))
+    record_file = repo_root / MANIFEST_PATH
+    if not record_file.is_file():
+        raise LiveRunNotAuthorized(f"the freeze manifest is missing: {MANIFEST_PATH}")
+    record = json.loads(record_file.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or not isinstance(record.get("band"), Mapping):
+        raise LiveRunNotAuthorized(
+            f"{MANIFEST_PATH} carries no band block; it does not describe the "
+            "set this run would draw"
+        )
+    band = record["band"]
+    live = (band.get("first_seed"), band.get("last_seed"))
+    if bound != live:
+        raise LiveRunNotAuthorized(
+            f"{EXECUTION_MANIFEST_PATH} binds seed band {bound[0]}-{bound[1]}, "
+            f"but the held-out record at {MANIFEST_PATH} holds "
+            f"{live[0]}-{live[1]}: the authorization was written for one band "
+            "and this run would spend another"
+        )
+
+
 @dataclass(frozen=True)
 class LiveRunInvocation:
     """The explicit, per-run statement that a live provider may be reached.
@@ -698,6 +769,11 @@ def assert_live_run_is_authorized(
     whole frozen set. A subset is the pilot the authorization card, this card
     and the manifest all refuse — and it would spend part of the held-out set
     outside the 50-pair design while leaving the rest held out.
+
+    The last check is on the inputs rather than the run: the band the manifest's
+    Inputs table binds has to be the band the live freeze record holds
+    (:func:`assert_manifest_binds_the_live_band`), so an authorization written
+    for one band cannot spend another.
     """
 
     if provider == "fake":
@@ -763,6 +839,10 @@ def assert_live_run_is_authorized(
             f"manifest's: invocation {invocation.manifest_sha256}, file "
             f"{committed}"
         )
+    # The digest above says WHICH document authorized this run; this says the
+    # document authorized THESE inputs. A held-out band that moves under a
+    # manifest nobody re-bound passes every check above it.
+    assert_manifest_binds_the_live_band(repo_root)
 
 
 def assert_client_matches_provider(*, provider: str, client: object | None) -> None:

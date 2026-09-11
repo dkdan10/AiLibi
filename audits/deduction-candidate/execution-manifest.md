@@ -194,8 +194,8 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 
 | Field | Value |
 | --- | --- |
-| Held-out inputs | The 50 proof-free scripted physical prefixes frozen by the owner's merge of #438 as `23a23c2d` on 2026-09-08, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json) |
-| Seed band | 3000–3999 drawn ascending, first 50 passing prefixes; accepted seeds run 3000–3057 with 8 skips, all `witnessed_kill` |
+| Held-out inputs | The 50 proof-free scripted physical prefixes drawn on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) by a preparer session that ran no arm, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json). The owner's merge of PR #446 is that freeze, and this re-binding is stacked on it |
+| Seed band | 5000–5999 drawn ascending, first 50 passing prefixes; accepted seeds run 5000–5052 with 3 skips, all `witnessed_kill`. The first band is development data since 2026-09-10 — the stopped run of that date rendered its first seed — and its freeze record is kept beside this one, marked `development`, as [held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json) |
 | Seed list | Published in the freeze manifest's `accepted[]`. The prefixes themselves are NOT committed anywhere: the runner regenerates them with `experiments.held_out_prefixes.generate()` and refuses to proceed if any digest or skip differs |
 | Development inputs | The seven hand-authored cases in `experiments/deduction_scenarios.py`, seed 1 by construction. Their digests are recorded in the freeze manifest and asserted absent from `accepted[]` |
 | Legal schedules | Each prefix is replayed through the engine, which accepts or rejects every step; a prefix whose hashed steps the engine did not resolve step for step never gets a digest |
@@ -624,7 +624,7 @@ rendered prompt after each unit, and over the emitted report; a match is a stop.
 
 | Role | Session |
 | --- | --- |
-| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm |
+| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm. A second session, dispatched on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) after the stopped run of 2026-09-10 rendered a prefix of the first band, drew 5000-5999 with the same generator, marked the first record `development` rather than deleting it, and opened PR #446; it ran no arm either |
 | Runner | A separate session dispatched on [the instrument card](../../tasks/work/fresh-deduction-instrument.md), started after that merge. It regenerates the set from the frozen band, verifies the committed hashes, and opens no prefix: no prefix is printed, logged or written into any report, and `assert_report_holds_no_prefix_bytes` refuses a report that carries one |
 | Coordinator | Dispatches both and runs neither |
 

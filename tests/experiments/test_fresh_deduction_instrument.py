@@ -247,9 +247,10 @@ def _converted_manifest_paths() -> tuple[Path, ...]:
     """Every freeze record that has been converted to development data.
 
     A converted band keeps its record beside the live one under its own name
-    (``experiments.held_out_prefixes.CONVERTED_BANDS``); the execution manifest
-    still cites the 3000-3999 record until the reconciliation card re-binds its
-    Inputs table.
+    (``experiments.held_out_prefixes.CONVERTED_BANDS``). The execution manifest
+    binds the live freeze; these records are what it may bind INSTEAD while a
+    re-binding is an open obligation, which is the state the binding tests below
+    allow and bound.
     """
 
     return tuple(_REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS)
@@ -1070,6 +1071,109 @@ class TestAuthorizedClient:
         )
         assert len(frozen.accepted_seeds) == 50
 
+
+class TestTheManifestBindsTheBandTheRunWouldDraw:
+    """The authorization document and the inputs, held together at run time.
+
+    `verify_frozen_set` regenerates whatever record sits at `MANIFEST_PATH` and
+    holds it to the generator's own `PREREGISTERED_BAND`; neither reads the
+    execution manifest. So when the 3000-3999 band became development data on
+    2026-09-10 and 5000-5999 was frozen in its place, the manifest went on
+    authorizing a band the runner would no longer draw, with every other gate
+    green. Nothing but the re-binding closed that, and a document is not a gate.
+    """
+
+    def _planted_root(self, root: Path, *, band: tuple[int, int]) -> Path:
+        """A repository root whose Inputs row names `band` and whose freeze
+        record is the committed one. Everything else is the committed document,
+        so the digest and the required-string checks above this one all pass."""
+
+        manifest = root / EXECUTION_MANIFEST_PATH
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        text = re.sub(
+            r"^(\|\s*Seed band\s*\|\s*)\d+–\d+",
+            rf"\g<1>{band[0]}–{band[1]}",
+            _MANIFEST.read_text(encoding="utf-8"),
+            count=1,
+            flags=re.MULTILINE,
+        )
+        manifest.write_text(text, encoding="utf-8")
+        _write_frozen_manifest(root, _committed_manifest())
+        return manifest
+
+    def test_the_committed_manifest_binds_the_live_band(self) -> None:
+        """The settled state: the Inputs row and the freeze record agree."""
+
+        record_band = _committed_manifest()["band"]
+        assert instrument.manifest_bound_band(
+            _MANIFEST.read_text(encoding="utf-8")
+        ) == (record_band["first_seed"], record_band["last_seed"])
+        instrument.assert_manifest_binds_the_live_band()
+
+    def test_a_stale_binding_stops_the_run_before_a_client_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the exact state this branch inherited — an Inputs row naming
+        the converted 3000-3999 band while the live record holds 5000-5999.
+
+        The refusal comes out of `assert_ready_for_a_live_run`, which is the
+        call the CLI makes before it builds anything: the gate constructs no
+        client, and `LiveRunNotAuthorized` names both bands so the reader is
+        told which document to move rather than which check to delete.
+        """
+
+        converted = CONVERTED_BANDS[0].band
+        manifest = self._planted_root(
+            tmp_path, band=(converted.first_seed, converted.last_seed)
+        )
+        invocation = LiveRunInvocation.naming(
+            manifest,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=tmp_path,
+        )
+        with pytest.raises(LiveRunNotAuthorized) as refused:
+            instrument.assert_ready_for_a_live_run(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=invocation,
+                repo_root=tmp_path,
+            )
+        message = str(refused.value)
+        assert (
+            f"binds seed band {converted.first_seed}-{converted.last_seed}" in message
+        )
+        assert f"holds {PREREGISTERED_BAND.first_seed}-" in message
+
+    def test_a_dry_run_is_not_gated_on_the_binding(self, tmp_path: Path) -> None:
+        """The fake path takes no invocation and spends nothing, so a stale
+        binding is not its business: it returns before this check, and the run
+        that would spend the wrong band is the only one refused."""
+
+        self._planted_root(tmp_path, band=(1, 2))
+        instrument.assert_live_run_is_authorized(
+            provider="fake", invocation=None, repo_root=tmp_path
+        )
+
+    @pytest.mark.parametrize("rows", [0, 2])
+    def test_a_document_that_does_not_say_which_band_is_refused(
+        self, rows: int
+    ) -> None:
+        """PLANTED both ways: a manifest with no Seed band row, and one with two.
+
+        Neither states which inputs the owner authorized, and resolving the
+        ambiguity by taking the first row would let a second row be added
+        without a reader ever seeing the run change bands.
+        """
+
+        text = _MANIFEST.read_text(encoding="utf-8")
+        row = re.search(r"^\|\s*Seed band\s*\|.*$", text, re.MULTILINE)
+        assert row is not None
+        planted = text.replace(
+            row.group(0), "" if rows == 0 else f"{row.group(0)}\n{row.group(0)}"
+        )
+        with pytest.raises(LiveRunNotAuthorized, match=f"carries {rows} 'Seed band'"):
+            instrument.manifest_bound_band(planted)
+
     def test_a_response_from_another_model_stops_the_run(self) -> None:
         """PLANTED: the endpoint serves a different checkpoint. The stop lands on
         the call that returned it, not in the report afterwards."""
@@ -1661,7 +1765,9 @@ class TestChargedCallAccounting:
         assert [arm.units for arm in report.arms] == [1, 1]
         charged = [
             row
-            for row in self._failed_rows(tmp_path, "repaired_clock-seed-3000.jsonl")
+            for row in self._failed_rows(
+                tmp_path, f"repaired_clock-seed-{_first_accepted_seed()}.jsonl"
+            )
             if row.input_tokens or row.output_tokens or row.cost_usd
         ]
         assert len(charged) == 1
@@ -1721,7 +1827,9 @@ class TestChargedCallAccounting:
             output_dir=tmp_path, client=_InvalidBallotProvider(), units=1
         )
         assert report.arms[0].defaulted_votes == 1
-        rows = self._failed_rows(tmp_path, "repaired_clock-seed-3000.jsonl")
+        rows = self._failed_rows(
+            tmp_path, f"repaired_clock-seed-{_first_accepted_seed()}.jsonl"
+        )
         assert rows, "the defaulted ballot must leave a visible row"
         assert all(
             (row.input_tokens, row.output_tokens, row.cost_usd) == (0, 0, 0.0)
@@ -2965,14 +3073,20 @@ class TestExecutionManifest:
         """The one freeze record on disk whose band the Inputs row names.
 
         Which record that is moves with the row: the live freeze at
-        ``MANIFEST_PATH``, or -- while a re-binding is outstanding -- the
-        converted record beside it. The 3000-3999 set became development data on
-        2026-09-10 and the row still cites it; ``tasks/work/
-        fresh-deduction-instrument-reconciliation.md`` re-binds the row to the
-        second band, and these tests follow it there without being rewritten.
+        ``MANIFEST_PATH``, or -- while a re-binding is outstanding -- a
+        converted record beside it. These tests follow the row rather than a
+        band written down here.
+
+        The row is read with ``instrument.manifest_bound_band``, the same reader
+        the run-time gate uses, so this test and
+        ``assert_manifest_binds_the_live_band`` cannot come to different
+        conclusions about which band the document binds. Reading the whole text
+        instead -- which is what this helper did while the row was stale -- would
+        also match the converted band the row now NAMES in prose, and the
+        document would be unable to say what it supersedes.
         """
 
-        text = self._text()
+        bound = instrument.manifest_bound_band(self._text())
         candidates: list[tuple[Path, dict[str, Any]]] = [
             (_REPO_ROOT / MANIFEST_PATH, _committed_manifest())
         ]
@@ -2980,13 +3094,16 @@ class TestExecutionManifest:
             loaded = json.loads(path.read_text(encoding="utf-8"))
             assert isinstance(loaded, dict)
             candidates.append((path, loaded))
-        bound = [
+        matched = [
             (path, record)
             for path, record in candidates
-            if f"{record['band']['first_seed']}–{record['band']['last_seed']}" in text
+            if (record["band"]["first_seed"], record["band"]["last_seed"]) == bound
         ]
-        assert len(bound) == 1, "the Inputs row names exactly one frozen band"
-        return bound[0]
+        assert len(matched) == 1, (
+            f"the Inputs row binds seed band {bound[0]}-{bound[1]}, which is "
+            "the band of no committed freeze record"
+        )
+        return matched[0]
 
     def test_the_manifest_binds_a_committed_held_out_record(self) -> None:
         """Every number in the Inputs row comes from a freeze record on disk."""
@@ -3003,19 +3120,20 @@ class TestExecutionManifest:
     def test_a_binding_to_a_converted_record_stays_an_open_obligation(self) -> None:
         """A development record may be bound only while the re-binding is open.
 
-        ``verify_frozen_set`` regenerates whatever ``MANIFEST_PATH`` holds, and
-        ``assert_live_run_is_authorized`` checks this document's path and digest
-        but not its band -- so while the Inputs row cites the 3000-3999 set the
-        authorization document names one band and the runner would draw another.
-        Closing that at the runtime gate edits the instrument, which the freeze
-        card may not; it is an acceptance item of the card that re-binds the row.
+        ``verify_frozen_set`` regenerates whatever ``MANIFEST_PATH`` holds, so a
+        document bound to some other band authorizes inputs the run would not
+        draw. A live run is refused outright for that now
+        (``assert_manifest_binds_the_live_band``, in
+        ``TestTheManifestBindsTheBandTheRunWouldDraw`` above).
 
-        What is enforced here is narrower and exact: the stale binding cannot go
-        silent or become permanent. A bound development record has to name the
-        record that replaced it; that record has to be the live held-out freeze
-        of another band; and the card the conversion named has to be still open
-        and still name the record it owes the row. A held-out binding is the
-        settled state, and then it has to be the live freeze itself.
+        What is enforced here is the other half, and it holds with no live run in
+        sight: a binding to a converted record cannot go silent or become
+        permanent. Such a record has to name the record that replaced it; that
+        record has to be the live held-out freeze of another band; and the card
+        the conversion named has to be still open and still name the record it
+        owes the row. A held-out binding is the settled state -- the state this
+        document is in since the re-binding of 2026-09-10 -- and then it has to
+        be the live freeze itself.
         """
 
         path, record = self._bound_held_out_record()
