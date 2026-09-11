@@ -404,6 +404,19 @@ SPEND_RECONCILIATION: Final[str] = (
     "that unit stops the run the way every other unit failure does."
 )
 
+BUDGET_CAP_READBACK: Final[str] = (
+    "After each unit both budgets are also read back against the caps they were "
+    "built with, because one kind of charge never meets a pre-flight: a call the "
+    "provider billed and then refused on its own schema validation is charged "
+    "after the fact, off the parse-failure metadata, and the resulting overrun is "
+    "downgraded to a note on the exception the meeting layer then fail-softs. On "
+    "a unit's last call the per-unit ceiling would otherwise be crossed with the "
+    "budget then discarded, and on a run's last call the run ceiling with nothing "
+    "further to pre-flight. A budget found past its cap stops the run on the unit "
+    "that crossed it: the tokens are already spent, and the stop is what keeps "
+    "the next unit from spending more."
+)
+
 _ANALYSIS_FREEZE_NOTE: Final[str] = (
     "PRIMARY_OUTCOME, DECISION_RULE, MINIMUM_ACTIONABLE_EFFECT_UNITS, "
     "WRONGFUL_EJECTION_TRADEOFF and STOP_RULE are module constants and the "
@@ -440,6 +453,19 @@ class ProviderIdentityMismatch(InstrumentError):
     says what was ASKED for: a hosted endpoint that silently serves a different
     checkpoint would otherwise be discovered in the report's ``model_ids`` after
     the whole run had been spent.
+    """
+
+
+class BudgetExhausted(InstrumentError):
+    """A charge already applied left a token budget past its authorized cap.
+
+    Distinct from :class:`~llm.budget.BudgetExceededError`, which the budget
+    raises on the PRE-FLIGHT that would cross a cap and which stops the call
+    before it is made. This one is raised on a charge that was applied without a
+    pre-flight to refuse it — a call the provider billed and then refused on its
+    own schema validation, whose overrun ``llm/budgeted_client.py`` downgrades to
+    a note — so the tokens are already spent when it fires. Both are the same
+    stop condition in ``STOP_RULE``; only the moment differs.
     """
 
 
@@ -1025,7 +1051,11 @@ class _InstrumentClient:
     never returned a usable response at all: an attempt the provider billed and
     then refused on its own schema validation is captured with the spend its
     parse-failure metadata carries, because the meeting layer fail-softs past it
-    and no ``llm_calls`` row will ever hold it.
+    and no ``llm_calls`` row will ever hold it. Jobs 2 and 3 reach that attempt
+    too, off the parse-failure metadata's own ``output_tokens`` and ``model``
+    (:meth:`_unusable_response`): the completion the provider billed for is the
+    thing they judge, and whether its body then parsed is not what makes a
+    truncation or a foreign checkpoint a stop.
 
     Not a subclass of anything in ``experiments/``: the committed MECHANICS_ONLY
     harnesses keep their own refusal, and this wrapper composes an arbitrary
@@ -1173,9 +1203,28 @@ class _InstrumentClient:
             # it either way, so the work clock and the per-arm
             # ``model_work_seconds`` keep describing the same seconds.
             self._work_clock.charge(burned)
+            # The identity and truncation stops read the SAME two facts off the
+            # parse-failure metadata that they read off a response, because both
+            # describe the completion the provider produced and billed for.
+            # Skipping them here would make a refused payload the one way past
+            # them: a body truncated at the output cap is exactly the body that
+            # then fails schema validation, and an endpoint serving a different
+            # checkpoint would be recorded and reported rather than stopping the
+            # run. Raising here also replaces the ``ValidationError`` the meeting
+            # layer fail-softs with a stop it does not, which is the point — the
+            # call is already in this client's ledger, so the partial accounting
+            # a stop reports carries its spend even though the budget layer's own
+            # charge (keyed on the parse-failure metadata) no longer fires.
+            stop = self._unusable_response(
+                model=failure.model,
+                output_tokens=failure.output_tokens,
+                max_tokens=max_tokens,
+            )
+            if stop is not None:
+                raise stop from exc
             raise
         seconds = time.monotonic() - started
-        # Recorded before any of the three stops below, because the response
+        # Recorded before either of the stops below, because the response
         # exists: its tokens were spent and its provider time elapsed, and a
         # stop that dropped them would understate its own partial accounting.
         self._calls.append(
@@ -1191,18 +1240,40 @@ class _InstrumentClient:
             )
         )
         self._work_clock.charge(seconds)
-        if self._expected_model is not None and response.model != self._expected_model:
-            raise ProviderIdentityMismatch(
-                f"a response came back from model {response.model!r}; this run "
+        stop = self._unusable_response(
+            model=response.model,
+            output_tokens=response.usage.output_tokens,
+            max_tokens=max_tokens,
+        )
+        if stop is not None:
+            raise stop
+        return response
+
+    def _unusable_response(
+        self, *, model: str, output_tokens: int, max_tokens: int
+    ) -> InstrumentError | None:
+        """The stop a completed call earns, or ``None`` if it earns none.
+
+        Returned rather than raised so the two callers can chain it: a call the
+        provider refused on its own schema validation raises this ``from`` the
+        provider's exception, and a call that returned raises it bare. One
+        function so the two paths cannot enforce different lists — the run of
+        2026-09-10's lesson was a check that reached one surface and not the
+        other.
+        """
+
+        if self._expected_model is not None and model != self._expected_model:
+            return ProviderIdentityMismatch(
+                f"a response came back from model {model!r}; this run "
                 f"is authorized for {self._expected_model!r} only"
             )
-        if response.usage.output_tokens >= max_tokens:
-            raise PerCallCapExceeded(
+        if output_tokens >= max_tokens:
+            return PerCallCapExceeded(
                 f"a response reached its {max_tokens}-token output cap "
-                f"({response.usage.output_tokens} tokens); a truncation is a "
+                f"({output_tokens} tokens); a truncation is a "
                 "stop, not a datum"
             )
-        return response
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1903,6 +1974,12 @@ def run_unit(
     _reconcile_recorded_spend(
         meeting, entries=entries, budget=unit_budget, seed=prefix.seed, arm=arm
     )
+    _assert_charged_spend_is_within_caps(
+        unit_budget, level="per-unit", seed=prefix.seed, arm=arm
+    )
+    _assert_charged_spend_is_within_caps(
+        run_budget, level="run", seed=prefix.seed, arm=arm
+    )
 
     # Read, not drained. Every check below can stop the run, and a stop after
     # the buffer was emptied would hand the abort handler an empty client and
@@ -2073,6 +2150,59 @@ def _reconcile_recorded_spend(
             f"{recorded.cost_usd} USD) differs from the enforced budget "
             f"({snapshot.input_tokens} in / {snapshot.output_tokens} out / "
             f"{snapshot.cost_usd} USD)"
+        )
+
+
+#: Mirrors ``llm/budget.py``'s ``_COST_USD_CAP_SLACK``. The budget tolerates a
+#: millionth of a dollar of binary-rounding noise before it calls a USD total an
+#: overrun, and a check that re-reads its totals has to tolerate the same or it
+#: would stop a run the budget itself considers inside its cap.
+_COST_CAP_SLACK_USD: Final[float] = 1e-6
+
+
+def _assert_charged_spend_is_within_caps(
+    budget: GameBudget, *, level: str, seed: int, arm: InstrumentArm
+) -> None:
+    """Stop the run when a charge already applied left a budget past its cap.
+
+    ``STOP_RULE`` makes "a token budget exhausted at either the per-unit or the
+    run level" a stop, and the budget's PRE-FLIGHT is what normally delivers it,
+    on the call that would cross the cap. One class of charge never reaches a
+    pre-flight, though: a call the provider billed and then refused on its own
+    schema validation is charged from its parse-failure metadata AFTER the fact
+    (``llm/budgeted_client.py``), and the resulting
+    :class:`~llm.budget.BudgetExceededError` is downgraded there to a note on
+    the propagating exception, which the meeting layer then fail-softs. On the
+    unit's last call the budget object is discarded with the overrun still on it
+    and no later pre-flight exists to find it, so the ceiling would be crossed
+    and the run would carry on.
+
+    This is that missing arrival, and :data:`BUDGET_CAP_READBACK` is the
+    statement of it the execution manifest quotes: after each unit both budgets
+    are read back against the caps they were built with. It is a check on
+    RECORDED spend and reports it as such — the tokens are gone either way, and
+    the stop is what keeps the next unit from spending more.
+    """
+
+    snapshot = budget.snapshot()
+    over = [
+        f"{name} ({charged} charged against a {cap} cap)"
+        for name, charged, cap in (
+            ("input tokens", snapshot.input_tokens, snapshot.max_input_tokens),
+            ("output tokens", snapshot.output_tokens, snapshot.max_output_tokens),
+        )
+        if charged > cap
+    ]
+    if snapshot.cost_usd > snapshot.max_cost_usd + _COST_CAP_SLACK_USD:
+        over.append(
+            f"cost ({snapshot.cost_usd} USD charged against a "
+            f"{snapshot.max_cost_usd} USD cap)"
+        )
+    if over:
+        raise BudgetExhausted(
+            f"seed {seed} on arm {arm.name}: the {level} token budget is "
+            f"exhausted on {', and '.join(over)}; the charge that crossed it is "
+            "already spent, so the run stops here"
         )
 
 

@@ -79,6 +79,7 @@ from experiments.held_out_prefixes import (
     assert_no_legacy_body_handles,
     canonical_prefix_json,
 )
+from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import DefaultedCall
 from meetings.schemas import (
@@ -1711,6 +1712,217 @@ class TestChargedCallAccounting:
             [marker, captured, legacy_default, other_meeting], meeting_id="m"
         )
         assert charged == (captured, legacy_default)
+
+
+class TestBurnedCallStopConditions:
+    """A refused payload is still a completion, and the stops read it as one.
+
+    Recording a billed-and-refused call is not the same as judging it. Both
+    stops the client applies to a response — the truncation cap and the served
+    checkpoint — read facts the parse-failure metadata carries, and a body
+    truncated at the output cap is precisely the body that then fails schema
+    validation, so skipping them on this path would put the usual cause of a
+    truncation past the truncation stop.
+    """
+
+    def _client(self, inner: Any, *, expected_model: str | None = None) -> Any:
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        return instrument._InstrumentClient(
+            inner, work_clock=clock, expected_model=expected_model
+        )
+
+    def _vote(self, client: Any) -> None:
+        asyncio.run(
+            client.complete(
+                prompt="a vote prompt",
+                schema=ModelAuthoredVoteBallot,
+                max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens,
+                temperature=AUTHORIZED_SAMPLING.vote_temperature,
+                agent_id="p-1",
+            )
+        )
+
+    def test_a_burned_call_that_reached_its_output_cap_stops_the_run(self) -> None:
+        """PLANTED: the provider bills for a ballot that ran to its 1,024-token
+        cap and then refuses the truncated body. Without the cap check on this
+        path the meeting fail-softs the `ValidationError` to a SKIP and the run
+        carries on with a truncation in its evidence."""
+
+        provider = BurnedCallProvider(output_tokens=AUTHORIZED_SAMPLING.vote_max_tokens)
+        client = self._client(provider)
+        with pytest.raises(PerCallCapExceeded, match="a truncation is a stop"):
+            self._vote(client)
+        assert [call.output_tokens for call in client.calls] == [
+            AUTHORIZED_SAMPLING.vote_max_tokens
+        ]
+
+    def test_a_burned_call_under_its_output_cap_is_not_a_truncation(self) -> None:
+        """The boundary the other way: one token under the cap is a refused
+        payload and nothing more, so it raises the provider's own error."""
+
+        client = self._client(
+            BurnedCallProvider(output_tokens=AUTHORIZED_SAMPLING.vote_max_tokens - 1)
+        )
+        with pytest.raises(ValidationError):
+            self._vote(client)
+
+    def test_a_burned_call_from_another_checkpoint_stops_the_run(self) -> None:
+        """PLANTED: the endpoint bills for a ballot, refuses it, and names a
+        checkpoint this run is not authorized for. Reported rather than stopped,
+        that model id would reach `InstrumentReport.model_ids` after the whole
+        run had been spent."""
+
+        client = self._client(
+            BurnedCallProvider(served_model="some-other-checkpoint"),
+            expected_model=AUTHORIZED_MODEL,
+        )
+        with pytest.raises(
+            instrument.ProviderIdentityMismatch, match="some-other-checkpoint"
+        ):
+            self._vote(client)
+        # Recorded first, like every other stop in this client: the endpoint
+        # billed for the attempt whatever it served.
+        assert [(call.model, call.input_tokens) for call in client.calls] == [
+            ("some-other-checkpoint", BURNED_INPUT_TOKENS)
+        ]
+
+    def test_the_burned_call_stop_reaches_the_run(self, tmp_path: Path) -> None:
+        """The same truncation through the whole pipeline: a stop with the
+        capped call's spend in its partial accounting, not a completed run."""
+
+        provider = BurnedCallProvider(output_tokens=AUTHORIZED_SAMPLING.vote_max_tokens)
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(output_dir=tmp_path, client=provider, units=1)
+        partial = aborted.value.partial
+        assert "a truncation is a stop" in partial.reason
+        assert partial.completed_units == 0
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.output_tokens >= AUTHORIZED_SAMPLING.vote_max_tokens
+
+
+class TestChargedSpendAgainstCaps:
+    """A charge applied without a pre-flight still has to meet the ceiling.
+
+    `llm/budgeted_client.py` charges a refused call's usage off its
+    parse-failure metadata AFTER the fact and downgrades the resulting
+    `BudgetExceededError` to a note, which the meeting layer then fail-softs. On
+    a unit's last call no later pre-flight exists to find that overrun, so
+    without the post-unit read-back the per-unit ceiling is crossed and the run
+    continues.
+    """
+
+    def _arm(self) -> Any:
+        return instrument_arms()[0]
+
+    def _budget(self, **caps: Any) -> GameBudget:
+        limits: dict[str, Any] = {
+            "max_cost_usd": 1.0,
+            "max_input_tokens": 1_000,
+            "max_output_tokens": 1_000,
+        }
+        limits.update(caps)
+        return GameBudget(**limits)
+
+    def _check(self, budget: GameBudget, *, level: str = "per-unit") -> None:
+        instrument._assert_charged_spend_is_within_caps(
+            budget, level=level, seed=1, arm=self._arm()
+        )
+
+    def _charge_over(self, budget: GameBudget, **spend: Any) -> None:
+        """Charge past a cap the way the budgeted client does: the overrun is
+        raised AFTER the spend is applied, and that raise is what the failed-call
+        path swallows."""
+
+        with pytest.raises(BudgetExceededError):
+            budget.charge(
+                usage=TokenUsage(
+                    input_tokens=spend.get("input_tokens", 0),
+                    output_tokens=spend.get("output_tokens", 0),
+                ),
+                cost_usd=spend.get("cost_usd", 0.0),
+            )
+
+    def test_a_budget_inside_its_caps_is_not_a_stop(self) -> None:
+        budget = self._budget()
+        budget.charge(
+            usage=TokenUsage(input_tokens=1_000, output_tokens=1_000), cost_usd=1.0
+        )
+        # The boundary: charged EQUALS the cap, which the budget's own pre-flight
+        # allows, so a read-back that stopped here would refuse a run the
+        # authorization permits.
+        self._check(budget)
+
+    @pytest.mark.parametrize(
+        ("spend", "quoted"),
+        [
+            ({"input_tokens": 1_001}, "input tokens (1001 charged against a 1000"),
+            ({"output_tokens": 1_001}, "output tokens (1001 charged against a 1000"),
+            ({"cost_usd": 1.5}, "cost (1.5 USD charged against a 1.0 USD cap)"),
+        ],
+    )
+    def test_a_charge_past_any_cap_stops_the_run(
+        self, spend: dict[str, Any], quoted: str
+    ) -> None:
+        # PLANTED, one dimension at a time: spend the budget recorded and then
+        # reported as an overrun nobody acted on.
+        budget = self._budget()
+        self._charge_over(budget, **spend)
+        with pytest.raises(instrument.BudgetExhausted, match=re.escape(quoted)):
+            self._check(budget)
+
+    def test_the_run_level_cap_is_read_back_too(self) -> None:
+        """A unit inside its own ceiling whose parent is past the run one. The
+        per-unit read-back cannot see this, which is why both budgets are read."""
+
+        run_budget = self._budget(max_input_tokens=1_500)
+        unit_budget = GameBudget(
+            max_cost_usd=1.0,
+            max_input_tokens=1_000,
+            max_output_tokens=1_000,
+            parent=run_budget,
+        )
+        run_budget.charge(
+            usage=TokenUsage(input_tokens=900, output_tokens=0), cost_usd=0.0
+        )
+        self._charge_over(unit_budget, input_tokens=900)
+        self._check(unit_budget)
+        with pytest.raises(instrument.BudgetExhausted, match="the run token budget"):
+            self._check(run_budget, level="run")
+
+    def test_a_cost_within_the_budgets_own_slack_is_not_a_stop(self) -> None:
+        """The USD cap is $0.00 on this run and floats do not add exactly, so
+        the read-back tolerates the same millionth of a dollar the budget does —
+        otherwise it would stop a run the budget considers inside its cap."""
+
+        budget = self._budget(max_cost_usd=0.0)
+        budget.charge(usage=TokenUsage(input_tokens=0, output_tokens=0), cost_usd=1e-9)
+        self._check(budget)
+
+    def test_an_overrun_burned_on_a_units_last_call_stops_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED end to end: the provider bills 45,000 input tokens for the
+        unit's LAST ballot and then refuses the payload. The charge lands with no
+        pre-flight left to refuse it and the unit budget is discarded straight
+        after, so the post-unit read-back is the only thing between that overrun
+        and a hundred further units."""
+
+        provider = BurnedCallProvider(
+            input_tokens=AUTHORIZED_LIMITS.unit_max_input_tokens,
+            output_tokens=7,
+            burn_on_ballot=instrument.AUTHORIZED_LIVING_VOTERS,
+        )
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(output_dir=tmp_path, client=provider, units=1)
+        partial = aborted.value.partial
+        assert provider.burned == 1
+        assert partial.completed_units == 0
+        assert "the per-unit token budget is exhausted on input tokens" in (
+            partial.reason
+        )
+        assert (
+            f"against a {AUTHORIZED_LIMITS.unit_max_input_tokens} cap" in partial.reason
+        )
 
 
 class TestProvenance:

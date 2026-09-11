@@ -40,7 +40,12 @@ BURNED_OUTPUT_TOKENS: Final[int] = 861
 
 
 def charged_parse_failure(
-    schema: type[BaseModel], *, prompt: str, input_tokens: int, output_tokens: int
+    schema: type[BaseModel],
+    *,
+    prompt: str,
+    input_tokens: int,
+    output_tokens: int,
+    model: str = instrument.DRY_RUN_MODEL,
 ) -> ValidationError:
     """The exception a real provider raises after billing for a refused payload.
 
@@ -48,6 +53,10 @@ def charged_parse_failure(
     `_attach_parse_failure` is used rather than a copy of the attribute name it
     sets, so this double cannot drift from the seam
     `llm.provider.extract_parse_failure` reads.
+
+    `model` is what the endpoint says it served. It is settable because that is
+    the one fact the metadata carries which a hosted endpoint can get wrong on
+    its own: a checkpoint swap shows up here just as it shows up on a response.
     """
 
     try:
@@ -56,7 +65,7 @@ def charged_parse_failure(
         _attach_parse_failure(
             exc,
             LLMCallFailure(
-                model=instrument.DRY_RUN_MODEL,
+                model=model,
                 prompt_length=len(prompt),
                 raw_response=BURNED_RESPONSE,
                 input_tokens=input_tokens,
@@ -78,6 +87,14 @@ class BurnedCallProvider(DryRunProvider):
     `then_transport_failure` follows the burned call with an ordinary transport
     failure, which is a stop — the case that shows whether the burned call
     reached the partial accounting a stop reports.
+
+    `burn_on_ballot` chooses WHICH ballot burns, 1-based. The unit's last ballot
+    (`instrument.AUTHORIZED_LIVING_VOTERS`) is the position that matters for a
+    budget overrun: an overrun charged on any earlier call is found by the next
+    call's pre-flight, and on the last one the unit budget is discarded with the
+    overrun still on it, so only the post-unit read-back can find it.
+    `served_model` is what the endpoint claims to have served, for the checkpoint
+    swap a refused payload carries in its metadata like any other.
     """
 
     def __init__(
@@ -86,12 +103,17 @@ class BurnedCallProvider(DryRunProvider):
         input_tokens: int = BURNED_INPUT_TOKENS,
         output_tokens: int = BURNED_OUTPUT_TOKENS,
         then_transport_failure: bool = False,
+        burn_on_ballot: int = 1,
+        served_model: str = instrument.DRY_RUN_MODEL,
     ) -> None:
         super().__init__()
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.burned = 0
+        self.ballots = 0
         self._then_transport_failure = then_transport_failure
+        self._burn_on_ballot = burn_on_ballot
+        self._served_model = served_model
 
     async def complete(
         self,
@@ -104,14 +126,17 @@ class BurnedCallProvider(DryRunProvider):
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is ModelAuthoredVoteBallot and self.burned == 0:
-            self.burned += 1
-            raise charged_parse_failure(
-                schema,
-                prompt=prompt,
-                input_tokens=self.input_tokens,
-                output_tokens=self.output_tokens,
-            )
+        if schema is ModelAuthoredVoteBallot:
+            self.ballots += 1
+            if self.ballots == self._burn_on_ballot:
+                self.burned += 1
+                raise charged_parse_failure(
+                    schema,
+                    prompt=prompt,
+                    input_tokens=self.input_tokens,
+                    output_tokens=self.output_tokens,
+                    model=self._served_model,
+                )
         if self._then_transport_failure and self.burned == 1:
             self._then_transport_failure = False
             raise RuntimeError("transport failure: connection reset by peer")
