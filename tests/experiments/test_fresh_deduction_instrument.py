@@ -16,8 +16,8 @@ list, a call over the cap, a truncated response, an exhausted budget, an expired
 deadline, a model-work window that has to bite while a call is still in flight,
 a mislabelled clock, a citation the voter never saw, a citation about somebody
 other than the player it was cast against, a meeting whose turns or ballots all
-fell back to the layer's defaults, a leaked prefix step and a planted body
-handle.
+fell back to the layer's defaults, a call the provider billed and then refused
+on its own schema validation, a leaked prefix step and a planted body handle.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import experiments.fresh_deduction_instrument as instrument
 from experiments.fresh_deduction_instrument import (
@@ -81,6 +81,7 @@ from experiments.held_out_prefixes import (
     assert_no_legacy_body_handles,
     canonical_prefix_json,
 )
+from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import DefaultedCall
 from meetings.schemas import (
@@ -101,6 +102,12 @@ from orchestrator.replay import (
     read_all_entries,
 )
 from orchestrator.run_limits import RunDeadlineExceeded
+from tests.experiments import burned_call_double
+from tests.experiments.burned_call_double import (
+    BURNED_INPUT_TOKENS,
+    BURNED_OUTPUT_TOKENS,
+    BurnedCallProvider,
+)
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _MANIFEST: Final[Path] = _REPO_ROOT / EXECUTION_MANIFEST_PATH
@@ -240,9 +247,10 @@ def _converted_manifest_paths() -> tuple[Path, ...]:
     """Every freeze record that has been converted to development data.
 
     A converted band keeps its record beside the live one under its own name
-    (``experiments.held_out_prefixes.CONVERTED_BANDS``); the execution manifest
-    still cites the 3000-3999 record until the reconciliation card re-binds its
-    Inputs table.
+    (``experiments.held_out_prefixes.CONVERTED_BANDS``). The execution manifest
+    binds the live freeze; these records are what it may bind INSTEAD while a
+    re-binding is an open obligation, which is the state the binding tests below
+    allow and bound.
     """
 
     return tuple(_REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS)
@@ -929,11 +937,29 @@ class TestLiveGate:
 
         No occurrence of the flag, and no import of the real client factory: the
         two ways a test file could become a path to a live call.
+
+        The burned-call double beside this file is held to the same line rather
+        than exempted from it. It has to reach `llm.provider` — the burned spend
+        rides an exception attribute that module owns, and copying the attribute
+        name would pin the double against a copy of the seam instead of the seam
+        — so what it may take from `llm.provider` is enumerated: the failure
+        model and the attach helper, and nothing that builds a client.
         """
 
         source = Path(__file__).read_text(encoding="utf-8")
         assert instrument.LIVE_RUN_FLAG not in source
         assert re.search(r"^\s*(?:from|import)\s+llm\.provider", source, re.M) is None
+
+        double = Path(burned_call_double.__file__).read_text(encoding="utf-8")
+        assert instrument.LIVE_RUN_FLAG not in double
+        assert re.search(r"^\s*import\s+llm\.provider", double, re.M) is None
+        taken = {
+            alias.name
+            for node in ast.parse(double).body
+            if isinstance(node, ast.ImportFrom) and node.module == "llm.provider"
+            for alias in node.names
+        }
+        assert taken == {"LLMCallFailure", "_attach_parse_failure"}
 
 
 class TestAuthorizedClient:
@@ -1105,6 +1131,109 @@ class TestAuthorizedClient:
             client.complete(prompt="p", schema=None, max_tokens=1024, temperature=0.2)
         )
         assert [call.model for call in client.calls] == ["stub"]
+
+
+class TestTheManifestBindsTheBandTheRunWouldDraw:
+    """The authorization document and the inputs, held together at run time.
+
+    `verify_frozen_set` regenerates whatever record sits at `MANIFEST_PATH` and
+    holds it to the generator's own `PREREGISTERED_BAND`; neither reads the
+    execution manifest. So when the 3000-3999 band became development data on
+    2026-09-10 and 5000-5999 was frozen in its place, the manifest went on
+    authorizing a band the runner would no longer draw, with every other gate
+    green. Nothing but the re-binding closed that, and a document is not a gate.
+    """
+
+    def _planted_root(self, root: Path, *, band: tuple[int, int]) -> Path:
+        """A repository root whose Inputs row names `band` and whose freeze
+        record is the committed one. Everything else is the committed document,
+        so the digest and the required-string checks above this one all pass."""
+
+        manifest = root / EXECUTION_MANIFEST_PATH
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        text = re.sub(
+            r"^(\|\s*Seed band\s*\|\s*)\d+–\d+",
+            rf"\g<1>{band[0]}–{band[1]}",
+            _MANIFEST.read_text(encoding="utf-8"),
+            count=1,
+            flags=re.MULTILINE,
+        )
+        manifest.write_text(text, encoding="utf-8")
+        _write_frozen_manifest(root, _committed_manifest())
+        return manifest
+
+    def test_the_committed_manifest_binds_the_live_band(self) -> None:
+        """The settled state: the Inputs row and the freeze record agree."""
+
+        record_band = _committed_manifest()["band"]
+        assert instrument.manifest_bound_band(
+            _MANIFEST.read_text(encoding="utf-8")
+        ) == (record_band["first_seed"], record_band["last_seed"])
+        instrument.assert_manifest_binds_the_live_band()
+
+    def test_a_stale_binding_stops_the_run_before_a_client_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the exact state this branch inherited — an Inputs row naming
+        the converted 3000-3999 band while the live record holds 5000-5999.
+
+        The refusal comes out of `assert_ready_for_a_live_run`, which is the
+        call the CLI makes before it builds anything: the gate constructs no
+        client, and `LiveRunNotAuthorized` names both bands so the reader is
+        told which document to move rather than which check to delete.
+        """
+
+        converted = CONVERTED_BANDS[0].band
+        manifest = self._planted_root(
+            tmp_path, band=(converted.first_seed, converted.last_seed)
+        )
+        invocation = LiveRunInvocation.naming(
+            manifest,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=tmp_path,
+        )
+        with pytest.raises(LiveRunNotAuthorized) as refused:
+            instrument.assert_ready_for_a_live_run(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=invocation,
+                repo_root=tmp_path,
+            )
+        message = str(refused.value)
+        assert (
+            f"binds seed band {converted.first_seed}-{converted.last_seed}" in message
+        )
+        assert f"holds {PREREGISTERED_BAND.first_seed}-" in message
+
+    def test_a_dry_run_is_not_gated_on_the_binding(self, tmp_path: Path) -> None:
+        """The fake path takes no invocation and spends nothing, so a stale
+        binding is not its business: it returns before this check, and the run
+        that would spend the wrong band is the only one refused."""
+
+        self._planted_root(tmp_path, band=(1, 2))
+        instrument.assert_live_run_is_authorized(
+            provider="fake", invocation=None, repo_root=tmp_path
+        )
+
+    @pytest.mark.parametrize("rows", [0, 2])
+    def test_a_document_that_does_not_say_which_band_is_refused(
+        self, rows: int
+    ) -> None:
+        """PLANTED both ways: a manifest with no Seed band row, and one with two.
+
+        Neither states which inputs the owner authorized, and resolving the
+        ambiguity by taking the first row would let a second row be added
+        without a reader ever seeing the run change bands.
+        """
+
+        text = _MANIFEST.read_text(encoding="utf-8")
+        row = re.search(r"^\|\s*Seed band\s*\|.*$", text, re.MULTILINE)
+        assert row is not None
+        planted = text.replace(
+            row.group(0), "" if rows == 0 else f"{row.group(0)}\n{row.group(0)}"
+        )
+        with pytest.raises(LiveRunNotAuthorized, match=f"carries {rows} 'Seed band'"):
+            instrument.manifest_bound_band(planted)
 
 
 class TestClientType:
@@ -1599,6 +1728,383 @@ class TestMeetingDefaults:
         assert matched is not None
         assert ("vote" if vote is not None else "turn") == phase
         assert matched.group(1) == trigger
+
+
+class TestChargedCallAccounting:
+    """Every call the provider charged is reconciled, and counted once.
+
+    The run of 2026-09-10 stopped on its first unit of one hundred: the recorded
+    spend summed over `MeetingReplayEntry.llm_calls` was 13,263 in / 1,448 out
+    against an enforced budget of 15,491 / 2,309, and the 2,228 / 861 gap was
+    one paid call whose payload the provider validated and refused before any
+    recording client could log it. Both halves of that are gated here — the
+    charged failure is counted, and a returned-but-invalid payload whose spend
+    `llm_calls` already holds is not counted again.
+    """
+
+    def _failed_rows(
+        self, directory: Path, name: str
+    ) -> tuple[FailedCallReplayEntry, ...]:
+        return tuple(
+            entry
+            for entry in read_all_entries(directory / name)
+            if isinstance(entry, FailedCallReplayEntry)
+        )
+
+    def test_a_burned_call_is_reconciled_instead_of_stopping_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a provider that bills for a ballot and then refuses it, the
+        way a real one does. Summing `llm_calls` alone stops this unit on an
+        accounting gap; summing every charged call resolves it."""
+
+        provider = BurnedCallProvider()
+        report = run_instrument(output_dir=tmp_path, client=provider, units=1)
+
+        assert provider.burned == 1
+        assert [arm.units for arm in report.arms] == [1, 1]
+        charged = [
+            row
+            for row in self._failed_rows(
+                tmp_path, f"repaired_clock-seed-{_first_accepted_seed()}.jsonl"
+            )
+            if row.input_tokens or row.output_tokens or row.cost_usd
+        ]
+        assert len(charged) == 1
+        assert (charged[0].input_tokens, charged[0].output_tokens) == (
+            BURNED_INPUT_TOKENS,
+            BURNED_OUTPUT_TOKENS,
+        )
+        assert report.arms[0].defaulted_votes == 1
+
+    def test_the_burned_calls_spend_reaches_the_partial_accounting(self) -> None:
+        """The client's own ledger, at the seam. A call that raised is absent
+        from every `llm_calls` row there will ever be, so a stop that reported
+        only returned responses would understate what the run had spent."""
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        client = instrument._InstrumentClient(BurnedCallProvider(), work_clock=clock)
+        with pytest.raises(ValidationError):
+            asyncio.run(
+                client.complete(
+                    prompt="a vote prompt",
+                    schema=ModelAuthoredVoteBallot,
+                    max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens,
+                    temperature=AUTHORIZED_SAMPLING.vote_temperature,
+                    agent_id="p-1",
+                )
+            )
+        assert len(client.calls) == 1
+        assert client.calls[0].input_tokens == BURNED_INPUT_TOKENS
+        assert client.calls[0].output_tokens == BURNED_OUTPUT_TOKENS
+        assert clock.seconds == client.calls[0].seconds
+
+    def test_a_stop_after_a_burned_call_reports_that_spend(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: one billed-and-refused ballot, then a transport failure. The
+        unit never resolves, so the charged call reaches the report through the
+        partial accounting or not at all."""
+
+        provider = BurnedCallProvider(then_transport_failure=True)
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(output_dir=tmp_path, client=provider, units=1)
+        partial = aborted.value.partial
+        assert partial.completed_units == 0
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.input_tokens >= BURNED_INPUT_TOKENS
+        assert usage.output_tokens >= BURNED_OUTPUT_TOKENS
+        assert f"{usage.input_tokens} in" in partial.describe()
+
+    def test_a_returned_invalid_payload_is_charged_once(self, tmp_path: Path) -> None:
+        """PLANTED double-count: `_InvalidBallotProvider` RETURNS an invalid
+        payload with usage, so the recording client logged it and the meeting
+        row carries its spend. The orchestrator writes that default as a
+        zero-spend marker precisely so it is not charged twice; counting every
+        default row regardless of usage would overstate this unit."""
+
+        report = run_instrument(
+            output_dir=tmp_path, client=_InvalidBallotProvider(), units=1
+        )
+        assert report.arms[0].defaulted_votes == 1
+        rows = self._failed_rows(
+            tmp_path, f"repaired_clock-seed-{_first_accepted_seed()}.jsonl"
+        )
+        assert rows, "the defaulted ballot must leave a visible row"
+        assert all(
+            (row.input_tokens, row.output_tokens, row.cost_usd) == (0, 0, 0.0)
+            for row in rows
+        )
+
+    def test_only_the_rows_that_carry_usage_are_charged_calls(self) -> None:
+        """The discriminator, planted row by row: a zero-spend visibility marker
+        is not a charged call, a paid attempt is one whatever error type the
+        producer stamped on it, and another meeting's row is not this unit's."""
+
+        def row(**overrides: Any) -> FailedCallReplayEntry:
+            fields: dict[str, Any] = {
+                "game_id": "g",
+                "meeting_id": "m",
+                "tick": 1,
+                "model": "m",
+                "prompt_length": 0,
+                "raw_response": "",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+                "error_type": "deadline_default",
+                "error_message": "vote defaulted (validation); p-1 submitted no ballot",
+            }
+            fields.update(overrides)
+            return FailedCallReplayEntry(**fields)
+
+        marker = row()
+        captured = row(error_type="ValidationError", input_tokens=7, output_tokens=3)
+        legacy_default = row(input_tokens=5)
+        other_meeting = row(meeting_id="other", input_tokens=9)
+        charged = instrument._charged_failed_attempts(
+            [marker, captured, legacy_default, other_meeting], meeting_id="m"
+        )
+        assert charged == (captured, legacy_default)
+
+
+class TestBurnedCallStopConditions:
+    """A refused payload is still a completion, and the stops read it as one.
+
+    Recording a billed-and-refused call is not the same as judging it. Both
+    stops the client applies to a response — the truncation cap and the served
+    checkpoint — read facts the parse-failure metadata carries, and a body
+    truncated at the output cap is precisely the body that then fails schema
+    validation, so skipping them on this path would put the usual cause of a
+    truncation past the truncation stop.
+    """
+
+    def _client(self, inner: Any, *, expected_model: str | None = None) -> Any:
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        return instrument._InstrumentClient(
+            inner, work_clock=clock, expected_model=expected_model
+        )
+
+    def _vote(self, client: Any) -> None:
+        asyncio.run(
+            client.complete(
+                prompt="a vote prompt",
+                schema=ModelAuthoredVoteBallot,
+                max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens,
+                temperature=AUTHORIZED_SAMPLING.vote_temperature,
+                agent_id="p-1",
+            )
+        )
+
+    def test_a_burned_call_that_reached_its_output_cap_stops_the_run(self) -> None:
+        """PLANTED: the provider bills for a ballot that ran to its 1,024-token
+        cap and then refuses the truncated body. Without the cap check on this
+        path the meeting fail-softs the `ValidationError` to a SKIP and the run
+        carries on with a truncation in its evidence."""
+
+        provider = BurnedCallProvider(output_tokens=AUTHORIZED_SAMPLING.vote_max_tokens)
+        client = self._client(provider)
+        with pytest.raises(PerCallCapExceeded, match="a truncation is a stop"):
+            self._vote(client)
+        assert [call.output_tokens for call in client.calls] == [
+            AUTHORIZED_SAMPLING.vote_max_tokens
+        ]
+
+    def test_a_burned_call_under_its_output_cap_is_not_a_truncation(self) -> None:
+        """The boundary the other way: one token under the cap is a refused
+        payload and nothing more, so it raises the provider's own error."""
+
+        client = self._client(
+            BurnedCallProvider(output_tokens=AUTHORIZED_SAMPLING.vote_max_tokens - 1)
+        )
+        with pytest.raises(ValidationError):
+            self._vote(client)
+
+    def test_a_burned_call_from_another_checkpoint_stops_the_run(self) -> None:
+        """PLANTED: the endpoint bills for a ballot, refuses it, and names a
+        checkpoint this run is not authorized for. Reported rather than stopped,
+        that model id would reach `InstrumentReport.model_ids` after the whole
+        run had been spent."""
+
+        client = self._client(
+            BurnedCallProvider(served_model="some-other-checkpoint"),
+            expected_model=AUTHORIZED_MODEL,
+        )
+        with pytest.raises(
+            instrument.ProviderIdentityMismatch, match="some-other-checkpoint"
+        ):
+            self._vote(client)
+        # Recorded first, like every other stop in this client: the endpoint
+        # billed for the attempt whatever it served.
+        assert [(call.model, call.input_tokens) for call in client.calls] == [
+            ("some-other-checkpoint", BURNED_INPUT_TOKENS)
+        ]
+
+    def test_the_burned_call_stop_reaches_the_run(self, tmp_path: Path) -> None:
+        """The same truncation through the whole pipeline: a stop with the
+        capped call's spend in its partial accounting, not a completed run."""
+
+        provider = BurnedCallProvider(output_tokens=AUTHORIZED_SAMPLING.vote_max_tokens)
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(output_dir=tmp_path, client=provider, units=1)
+        partial = aborted.value.partial
+        assert "a truncation is a stop" in partial.reason
+        assert partial.completed_units == 0
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.output_tokens >= AUTHORIZED_SAMPLING.vote_max_tokens
+
+
+class TestChargedSpendAgainstCaps:
+    """A charge applied without a pre-flight still has to meet the ceiling.
+
+    `llm/budgeted_client.py` charges a refused call's usage off its
+    parse-failure metadata AFTER the fact and downgrades the resulting
+    `BudgetExceededError` to a note, which the meeting layer then fail-softs. On
+    a unit's last call no later pre-flight exists to find that overrun, so
+    without the post-unit read-back the per-unit ceiling is crossed and the run
+    continues.
+    """
+
+    def _arm(self) -> Any:
+        return instrument_arms()[0]
+
+    def _budget(self, **caps: Any) -> GameBudget:
+        limits: dict[str, Any] = {
+            "max_cost_usd": 1.0,
+            "max_input_tokens": 1_000,
+            "max_output_tokens": 1_000,
+        }
+        limits.update(caps)
+        return GameBudget(**limits)
+
+    def _check(self, budget: GameBudget, *, level: str = "per-unit") -> None:
+        instrument._assert_charged_spend_is_within_caps(
+            budget, level=level, seed=1, arm=self._arm()
+        )
+
+    def _charge_over(self, budget: GameBudget, **spend: Any) -> None:
+        """Charge past a cap the way the budgeted client does: the overrun is
+        raised AFTER the spend is applied, and that raise is what the failed-call
+        path swallows."""
+
+        with pytest.raises(BudgetExceededError):
+            budget.charge(
+                usage=TokenUsage(
+                    input_tokens=spend.get("input_tokens", 0),
+                    output_tokens=spend.get("output_tokens", 0),
+                ),
+                cost_usd=spend.get("cost_usd", 0.0),
+            )
+
+    def test_a_budget_inside_its_caps_is_not_a_stop(self) -> None:
+        budget = self._budget()
+        budget.charge(
+            usage=TokenUsage(input_tokens=1_000, output_tokens=1_000), cost_usd=1.0
+        )
+        # The boundary: charged EQUALS the cap, which the budget's own pre-flight
+        # allows, so a read-back that stopped here would refuse a run the
+        # authorization permits.
+        self._check(budget)
+
+    @pytest.mark.parametrize(
+        ("spend", "quoted"),
+        [
+            ({"input_tokens": 1_001}, "input tokens (1001 charged against a 1000"),
+            ({"output_tokens": 1_001}, "output tokens (1001 charged against a 1000"),
+            ({"cost_usd": 1.5}, "cost (1.5 USD charged against a 1.0 USD cap)"),
+        ],
+    )
+    def test_a_charge_past_any_cap_stops_the_run(
+        self, spend: dict[str, Any], quoted: str
+    ) -> None:
+        # PLANTED, one dimension at a time: spend the budget recorded and then
+        # reported as an overrun nobody acted on.
+        budget = self._budget()
+        self._charge_over(budget, **spend)
+        with pytest.raises(instrument.BudgetExhausted, match=re.escape(quoted)):
+            self._check(budget)
+
+    def test_the_run_level_cap_is_read_back_too(self) -> None:
+        """A unit inside its own ceiling whose parent is past the run one. The
+        per-unit read-back cannot see this, which is why both budgets are read."""
+
+        run_budget = self._budget(max_input_tokens=1_500)
+        unit_budget = GameBudget(
+            max_cost_usd=1.0,
+            max_input_tokens=1_000,
+            max_output_tokens=1_000,
+            parent=run_budget,
+        )
+        run_budget.charge(
+            usage=TokenUsage(input_tokens=900, output_tokens=0), cost_usd=0.0
+        )
+        self._charge_over(unit_budget, input_tokens=900)
+        self._check(unit_budget)
+        with pytest.raises(instrument.BudgetExhausted, match="the run token budget"):
+            self._check(run_budget, level="run")
+
+    def test_a_cost_within_the_budgets_own_slack_is_not_a_stop(self) -> None:
+        """The USD cap is $0.00 on this run and floats do not add exactly, so
+        the read-back tolerates the same millionth of a dollar the budget does —
+        otherwise it would stop a run the budget considers inside its cap."""
+
+        budget = self._budget(max_cost_usd=0.0)
+        budget.charge(usage=TokenUsage(input_tokens=0, output_tokens=0), cost_usd=1e-9)
+        self._check(budget)
+
+    def test_an_overrun_burned_on_a_units_last_call_stops_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED end to end: the provider bills 45,000 input tokens for the
+        unit's LAST ballot and then refuses the payload. The charge lands with no
+        pre-flight left to refuse it and the unit budget is discarded straight
+        after, so the post-unit read-back is the only thing between that overrun
+        and a hundred further units."""
+
+        provider = BurnedCallProvider(
+            input_tokens=AUTHORIZED_LIMITS.unit_max_input_tokens,
+            output_tokens=7,
+            burn_on_ballot=instrument.AUTHORIZED_LIVING_VOTERS,
+        )
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(output_dir=tmp_path, client=provider, units=1)
+        partial = aborted.value.partial
+        assert provider.burned == 1
+        assert partial.completed_units == 0
+        assert "the per-unit token budget is exhausted on input tokens" in (
+            partial.reason
+        )
+        assert (
+            f"against a {AUTHORIZED_LIMITS.unit_max_input_tokens} cap" in partial.reason
+        )
+        # The charge the budget applied is also in the client's own ledger, so
+        # the accounting the stop reports names the call that crossed the cap
+        # rather than only the cap.
+        usage = partial.usage_by_arm["repaired_clock"]
+        assert usage.input_tokens >= AUTHORIZED_LIMITS.unit_max_input_tokens
+
+    def test_an_overrun_that_only_the_run_budget_can_see_stops_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED end to end at the RUN level: 20,000 burned input tokens leave
+        the unit inside its own 45,000 ceiling and the run past a 30,000 one. The
+        per-unit read-back is blind to this by construction, so it is the run
+        budget's read-back or nothing."""
+
+        starved = AUTHORIZED_LIMITS.model_copy(update={"run_max_input_tokens": 30_000})
+        provider = BurnedCallProvider(
+            input_tokens=20_000,
+            output_tokens=7,
+            burn_on_ballot=instrument.AUTHORIZED_LIVING_VOTERS,
+        )
+        with pytest.raises(InstrumentAborted) as aborted:
+            run_instrument(
+                output_dir=tmp_path, client=provider, units=1, limits=starved
+            )
+        partial = aborted.value.partial
+        assert provider.burned == 1
+        assert "the run token budget is exhausted on input tokens" in partial.reason
+        assert "against a 30000 cap" in partial.reason
 
 
 class TestProvenance:
@@ -2287,6 +2793,54 @@ class TestExecutionManifest:
         assert " ".join(STOP_RULE.split()) in " ".join(text.split())
         assert f"at least {MINIMUM_ACTIONABLE_EFFECT_UNITS} units" in text
 
+    def _enforcement_section(self) -> str:
+        text = self._text()
+        start = text.index("### How each limit is enforced")
+        return text[start : text.index("\n### ", start + 1)]
+
+    def test_the_enforcement_section_claims_no_stop_the_stop_rule_omits(self) -> None:
+        """The two lists have to be one list.
+
+        This section used to end its token-budget bullet with "a difference is
+        a stop", naming a stop condition `STOP_RULE` does not carry — and the
+        run of 2026-09-10 was then stopped by a rule the frozen analysis never
+        stated. The bullet now quotes `SPEND_RECONCILIATION` verbatim, which is
+        the same string the reconciliation's own module states, so the code's
+        account of the check and this document's cannot drift apart.
+        """
+
+        section = " ".join(self._enforcement_section().split())
+        assert " ".join(instrument.SPEND_RECONCILIATION.split()) in section
+        assert "a difference is a stop" not in section
+
+    def test_the_enforcement_section_quotes_the_budget_read_back(self) -> None:
+        """The other direction of the same requirement: a stop `STOP_RULE`
+        carries has to be one the code applies. "A token budget exhausted at
+        either the per-unit or the run level" is a stop, and a charge applied
+        without a pre-flight to refuse it — a billed-and-refused call on a
+        unit's last ballot — reaches no pre-flight at all, so the bullet states
+        the post-unit read-back that does, in the module's own words."""
+
+        section = " ".join(self._enforcement_section().split())
+        assert " ".join(instrument.BUDGET_CAP_READBACK.split()) in section
+
+    def test_the_enforcement_section_applies_both_response_stops_to_a_refusal(
+        self,
+    ) -> None:
+        """The truncation and identity stops read a completion, not a parse.
+
+        Both used to be described — and applied — on the success path only,
+        which put a body truncated at the output cap past the truncation stop:
+        a cut-off body is the usual reason a payload then fails schema
+        validation, and the meeting layer fail-softs that failure."""
+
+        section = " ".join(self._enforcement_section().split())
+        assert "off the `model` its parse-failure metadata carries" in section
+        assert (
+            "the same check is applied to the `output_tokens` a refused call's "
+            "parse-failure metadata reports" in section
+        )
+
     def test_the_manifest_quotes_the_grading_rubrics_verbatim(self) -> None:
         """The primary outcome and the relevance rule are what a result means, so
         the manifest carries them word for word rather than in paraphrase."""
@@ -2346,6 +2900,127 @@ class TestExecutionManifest:
         }
         assert unlogged == {}, f"amendments missing from the log: {unlogged}"
 
+    def _post_run_amendments_section(self) -> str:
+        text = self._text()
+        start = text.index("## Amendments after the stopped run of 2026-09-10")
+        return text[start : text.index("\n## ", start + 1)]
+
+    def test_the_post_run_amendments_name_their_reason_and_a_real_commit(
+        self,
+    ) -> None:
+        """An amendment made AFTER a unit ran is a different thing from one made
+        before any existed, so it is logged in its own dated section — with the
+        commit that carried it, resolved against this history rather than taken
+        on the document's word.
+
+        The frozen analysis is not what moved: the enforcement text and the
+        reconciliation behind it are, and the section says so.
+
+        Three entries carry that date. The first is the reconciliation; the
+        second is the review round that put the truncation, identity and budget
+        stops on the charged-failure path the first one opened; the third is the
+        re-binding of the Inputs table to the second held-out band, with the gate
+        that holds a live run to it. Every entry is resolved, not just the first
+        — a log whose later lines are unchecked is the same document asking to be
+        trusted that the walk above refuses to be.
+        """
+
+        section = self._post_run_amendments_section()
+        collapsed = " ".join(section.split())
+        assert "the reconciliation counts every charged call" in collapsed
+        assert "2,228 input and 861 output tokens" in collapsed
+        assert "The frozen analysis does not move" in collapsed
+        assert "the stops a charged failure has to meet" in collapsed
+        assert "the Inputs table is re-bound to the second held-out band" in collapsed
+        commits = re.findall(r"\*\*2026-09-10 \(`([0-9a-f]{7,40})`\)", collapsed)
+        assert len(commits) == 3
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commits cannot be resolved")
+        for commit in commits:
+            resolved = _git("rev-parse", "--verify", f"{commit}^{{commit}}")
+            assert resolved.returncode == 0, f"{commit} is not a commit here"
+            touched = _git(
+                "show", "--name-only", "--format=", commit, "--", _INSTRUMENT_REPO_PATH
+            )
+            assert _INSTRUMENT_REPO_PATH in touched.stdout
+
+    def test_every_named_post_run_commit_is_in_this_branchs_history(self) -> None:
+        """Reachable from HEAD, not merely present in some local object store.
+
+        A reviewer read the pull request as a squash onto `c12ec85a` and warned
+        that the commit the log names would be orphaned. It is not — this branch
+        is delivered by merge or fast-forward and never squashed, so every named
+        commit is an ancestor — but "the object exists here" was the weaker claim
+        the check above made, and ancestry is the one worth making.
+        """
+
+        collapsed = " ".join(self._post_run_amendments_section().split())
+        commits = re.findall(r"\*\*2026-09-10 \(`([0-9a-f]{7,40})`\)", collapsed)
+        assert commits
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; ancestry cannot be walked")
+        orphaned = [
+            commit
+            for commit in commits
+            if _git("merge-base", "--is-ancestor", commit, "HEAD").returncode != 0
+        ]
+        assert orphaned == [], f"named but not an ancestor of HEAD: {orphaned}"
+
+    def test_the_post_run_amendments_credit_no_clause_the_stop_rule_omits(
+        self,
+    ) -> None:
+        """The enforcement-section gate above, pointed at the log instead.
+
+        The second entry first read "Three stops `STOP_RULE` carries were
+        reachable only on the success path" and closed "each of these three is a
+        clause it already carried". Two of the three are quoted from the rule;
+        the third, a checkpoint this run does not authorize, is nowhere in it —
+        which is why it was the only member with no quotation. Crediting the
+        frozen rule with a stop it omits is the defect this card retired from the
+        enforcement section, in mirror image, so the log is held to the same
+        rule: every phrase this section quotes is a clause of `STOP_RULE`, a
+        heading or bullet of this document, or one the section says in so many
+        words that the rule does NOT carry; and the count it claims the rule
+        carried is the number of clauses it actually quotes.
+
+        The checkpoint refusal is the manifest's own "Provider and model" limit,
+        which is why the last assertion here is that provider identity appears
+        nowhere in the frozen rule: adding it there would move the frozen
+        analysis, and that is the owner's to make rather than this card's.
+        """
+
+        text = self._text()
+        section = " ".join(self._post_run_amendments_section().split())
+        rule = " ".join(instrument.STOP_RULE.split())
+
+        quoted = re.findall(r'"([^"]+)"', section)
+        carried = [phrase for phrase in quoted if phrase in rule]
+        for phrase in quoted:
+            if phrase in carried:
+                continue
+            assert (
+                f'"{phrase}" — a stop condition `STOP_RULE` does not carry' in section
+                or f"## {phrase}" in text
+                or f"**{phrase}.**" in text
+            ), f"quoted as the frozen rule's, but it does not state it: {phrase!r}"
+
+        words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+        claimed = re.findall(r"([A-Za-z]+) stops? `STOP_RULE` carries", section)
+        assert claimed, "the section states how many of the rule's clauses it reached"
+        for word in claimed:
+            assert word.lower() in words, f"count not spelled out: {word!r}"
+        assert {words[word.lower()] for word in claimed} == {
+            len(dict.fromkeys(carried))
+        }
+
+        lowered = instrument.STOP_RULE.lower()
+        named = [
+            word
+            for word in ("checkpoint", "identity", "provider", "endpoint", "served")
+            if word in lowered
+        ]
+        assert named == [], f"the frozen rule now names provider identity: {named}"
+
     def test_the_manifest_marks_the_row_the_authorization_card_does_not_carry(
         self,
     ) -> None:
@@ -2401,14 +3076,20 @@ class TestExecutionManifest:
         """The one freeze record on disk whose band the Inputs row names.
 
         Which record that is moves with the row: the live freeze at
-        ``MANIFEST_PATH``, or -- while a re-binding is outstanding -- the
-        converted record beside it. The 3000-3999 set became development data on
-        2026-09-10 and the row still cites it; ``tasks/work/
-        fresh-deduction-instrument-reconciliation.md`` re-binds the row to the
-        second band, and these tests follow it there without being rewritten.
+        ``MANIFEST_PATH``, or -- while a re-binding is outstanding -- a
+        converted record beside it. These tests follow the row rather than a
+        band written down here.
+
+        The row is read with ``instrument.manifest_bound_band``, the same reader
+        the run-time gate uses, so this test and
+        ``assert_manifest_binds_the_live_band`` cannot come to different
+        conclusions about which band the document binds. Reading the whole text
+        instead -- which is what this helper did while the row was stale -- would
+        also match the converted band the row now NAMES in prose, and the
+        document would be unable to say what it supersedes.
         """
 
-        text = self._text()
+        bound = instrument.manifest_bound_band(self._text())
         candidates: list[tuple[Path, dict[str, Any]]] = [
             (_REPO_ROOT / MANIFEST_PATH, _committed_manifest())
         ]
@@ -2416,13 +3097,16 @@ class TestExecutionManifest:
             loaded = json.loads(path.read_text(encoding="utf-8"))
             assert isinstance(loaded, dict)
             candidates.append((path, loaded))
-        bound = [
+        matched = [
             (path, record)
             for path, record in candidates
-            if f"{record['band']['first_seed']}–{record['band']['last_seed']}" in text
+            if (record["band"]["first_seed"], record["band"]["last_seed"]) == bound
         ]
-        assert len(bound) == 1, "the Inputs row names exactly one frozen band"
-        return bound[0]
+        assert len(matched) == 1, (
+            f"the Inputs row binds seed band {bound[0]}-{bound[1]}, which is "
+            "the band of no committed freeze record"
+        )
+        return matched[0]
 
     def test_the_manifest_binds_a_committed_held_out_record(self) -> None:
         """Every number in the Inputs row comes from a freeze record on disk."""
@@ -2439,19 +3123,20 @@ class TestExecutionManifest:
     def test_a_binding_to_a_converted_record_stays_an_open_obligation(self) -> None:
         """A development record may be bound only while the re-binding is open.
 
-        ``verify_frozen_set`` regenerates whatever ``MANIFEST_PATH`` holds, and
-        ``assert_live_run_is_authorized`` checks this document's path and digest
-        but not its band -- so while the Inputs row cites the 3000-3999 set the
-        authorization document names one band and the runner would draw another.
-        Closing that at the runtime gate edits the instrument, which the freeze
-        card may not; it is an acceptance item of the card that re-binds the row.
+        ``verify_frozen_set`` regenerates whatever ``MANIFEST_PATH`` holds, so a
+        document bound to some other band authorizes inputs the run would not
+        draw. A live run is refused outright for that now
+        (``assert_manifest_binds_the_live_band``, in
+        ``TestTheManifestBindsTheBandTheRunWouldDraw`` above).
 
-        What is enforced here is narrower and exact: the stale binding cannot go
-        silent or become permanent. A bound development record has to name the
-        record that replaced it; that record has to be the live held-out freeze
-        of another band; and the card the conversion named has to be still open
-        and still name the record it owes the row. A held-out binding is the
-        settled state, and then it has to be the live freeze itself.
+        What is enforced here is the other half, and it holds with no live run in
+        sight: a binding to a converted record cannot go silent or become
+        permanent. Such a record has to name the record that replaced it; that
+        record has to be the live held-out freeze of another band; and the card
+        the conversion named has to be still open and still name the record it
+        owes the row. A held-out binding is the settled state -- the state this
+        document is in since the re-binding of 2026-09-10 -- and then it has to
+        be the live freeze itself.
         """
 
         path, record = self._bound_held_out_record()

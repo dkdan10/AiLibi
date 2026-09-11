@@ -1,6 +1,7 @@
 # Fresh-model deduction evaluation — execution manifest
 
-**Dated 2026-09-09. Status: bound. This document authorizes no live call.**
+**Dated 2026-09-09, amended 2026-09-10. Status: bound.
+This document authorizes no live call.**
 
 [The preregistration](preregistration.md) §"Select a candidate and prepare a
 separate execution manifest" lists what an execution manifest must bind before
@@ -85,6 +86,103 @@ grader that enforces it, which
 [the instrument card](../../tasks/work/fresh-deduction-instrument.md)'s Results
 names in its round-4 subsection.
 
+## Amendments after the stopped run of 2026-09-10
+
+The first live run stopped after one unit of one hundred and was left unmerged
+by the owner (PR #445, branch `work/fresh-deduction-run`). What stopped it was
+an accounting defect in the instrument rather than a limit, and the repair is
+recorded apart from the pre-run amendments above because it is made after a unit
+ran rather than before any existed. It reaches the enforcement text only. The
+frozen analysis does not move — `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
+are the same bytes the sections below quote — and no held-out outcome informed
+it: the stop the repair reads carries counts and identifiers only.
+
+**2026-09-10 (`d8eb7d36`) — the reconciliation counts every charged call, and
+the enforcement text stops naming a stop the stop rule never carried.**
+`_reconcile_recorded_spend` summed `MeetingReplayEntry.llm_calls` alone. A real
+provider validates the completion itself and raises before the recording client
+can log the call, so a paid call whose payload it refused is charged to the
+budget while its spend rides the parse-failure metadata on the surfaced default
+instead of a meeting row (`meetings/manager.py:1712-1720`). On the stopped run
+that was one call of 2,228 input and 861 output tokens against a unit whose
+meeting row carried 13,263 / 1,448 of an enforced 15,491 / 2,309. The
+reconciliation now sums the meeting's resolved calls plus every failed attempt
+the replay records with usage, and the same call reaches the partial accounting
+a stop reports. Alongside it, this document's "How each limit is enforced"
+section said of that comparison "a difference is a stop" — a stop condition
+`STOP_RULE` does not carry, which is how a run could be stopped by a rule the
+frozen analysis never stated. The reconciliation is the token budget's
+accounting check; a unit whose accounting does not add up stops the run through
+the same clause every other unit failure does. That bullet now quotes
+`SPEND_RECONCILIATION` verbatim, so the code's statement and this document's
+cannot drift apart again. The amendment of 2026-09-09 (`bfd5696b`) reached
+`STOP_RULE` and the default counter but not this comparison; this is the rest of
+it.
+
+**2026-09-10 (`6215fda1`) — the stops a charged failure has to meet.** Round-1
+review of this repair's pull request (#447) found that the amendment above had
+made a refused call countable without making it judgeable. Two stops `STOP_RULE`
+carries, plus one limit this manifest binds of its own, were reachable only on
+the success path, so counting the burned call — which is what stopped the run of
+2026-09-10 — let it through all three. The two frozen clauses: a response that
+reached its output cap ("a truncation is a stop, not a datum") was fail-softed to
+a SKIP when the truncated body also failed schema validation, which is the usual
+reason it fails; and "a token budget exhausted at either the per-unit or the run
+level" was left unenforced for a charge applied after the fact, whose overrun
+`llm/budgeted_client.py` downgrades to a note on the exception the meeting layer
+fail-softs — on a unit's last call, with the budget then discarded, no later
+pre-flight existed to find it. The third is this manifest's own: a checkpoint
+this run does not authorize reached `InstrumentReport.model_ids` instead of
+stopping the run. Provider identity is not a clause of the frozen rule and this
+entry does not claim it is; it is the "Provider and model" row of the authorized
+values above, whose enforcement bullet has bound `_InstrumentClient` to refuse a
+response whose `model` is not the authorized one since before the first run, and
+the amendment only extends that refusal from a response the provider returned to
+one it billed for and then refused. The client now judges a billed-and-refused
+completion by the `model` and `output_tokens` its parse-failure metadata
+carries, and both budgets are read back against their caps after each unit
+(`BUDGET_CAP_READBACK`, quoted verbatim in "How each limit is enforced"). This
+amendment adds no stop condition and relaxes none: `STOP_RULE` is byte-identical,
+the two clauses quoted above are ones it already carried, and the checkpoint
+refusal is the manifest limit just named. Every planted case is red without the
+check it proves, and each is listed in
+[the reconciliation card](../../tasks/work/fresh-deduction-instrument-reconciliation.md)'s
+round-1 subsection. Round-2 review of the same pull request corrected this
+entry's attribution, which as first written counted the checkpoint refusal as a
+third clause `STOP_RULE` carries; a gate now checks that every clause this
+section credits to the frozen rule is one the rule states, and that the count it
+claims is the number it quotes.
+
+**2026-09-10 (`08aee9cc`) — the Inputs table is re-bound to the second held-out
+band, and a gate holds a live run to it.** The stopped run rendered the first
+seed of the 3000-3999 band to the model, which the preregistration and the Roles
+section below make development data. A second band was frozen under
+[the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md), and the
+first band's record was marked `development` and kept beside it rather than
+deleted, which is what that section requires. The Inputs table now binds
+5000-5999 — accepted seeds 5000-5052, three `witnessed_kill` skips, every number
+read off [the freeze record](held-out/manifest.json) — and says where the first
+band's record now lives; the Roles table names the second preparer session
+beside the first. Nothing the owner authorized moves with it: the limits, the
+sampling configuration, the provider and model, the measures and the frozen
+analysis are the same bytes as before this entry.
+
+Re-binding a document does not bind a run, so the amendment carries a gate with
+it. `verify_frozen_set` regenerates whatever record sits at the generator's
+`MANIFEST_PATH` and never reads this file, and the live gate checked this file's
+path and digest but not the inputs it names — which is how a band could move
+under an unchanged authorization with every check green.
+`assert_manifest_binds_the_live_band` reads the band out of the Inputs row and
+refuses a live run whose freeze record holds another one. It runs inside
+`assert_live_run_is_authorized`, the first thing `assert_ready_for_a_live_run`
+calls, so a stale binding stops the run before a provider, a credential or a
+connection exists. It adds no stop condition and relaxes none: a run it refuses
+never starts, and `STOP_RULE` is byte-identical. Every planted case is red
+without the check it proves, and each is listed in
+[the reconciliation card](../../tasks/work/fresh-deduction-instrument-reconciliation.md)'s
+stacking subsection.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -125,8 +223,8 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 
 | Field | Value |
 | --- | --- |
-| Held-out inputs | The 50 proof-free scripted physical prefixes frozen by the owner's merge of #438 as `23a23c2d` on 2026-09-08, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json) |
-| Seed band | 3000–3999 drawn ascending, first 50 passing prefixes; accepted seeds run 3000–3057 with 8 skips, all `witnessed_kill` |
+| Held-out inputs | The 50 proof-free scripted physical prefixes drawn on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) by a preparer session that ran no arm, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json). The owner's merge of PR #446 is that freeze, and this re-binding is stacked on it |
+| Seed band | 5000–5999 drawn ascending, first 50 passing prefixes; accepted seeds run 5000–5052 with 3 skips, all `witnessed_kill`. The first band, 3000-3999, is development data since 2026-09-10 — the stopped run of that date rendered its first seed — and its freeze record is kept beside this one, marked `development`, as [held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json) |
 | Seed list | Published in the freeze manifest's `accepted[]`. The prefixes themselves are NOT committed anywhere: the runner regenerates them with `experiments.held_out_prefixes.generate()` and refuses to proceed if any digest or skip differs |
 | Development inputs | The seven hand-authored cases in `experiments/deduction_scenarios.py`, seed 1 by construction. Their digests are recorded in the freeze manifest and asserted absent from `accepted[]` |
 | Legal schedules | Each prefix is replayed through the engine, which accepts or rejects every step; a prefix whose hashed steps the engine did not resolve step for step never gets a digest |
@@ -199,7 +297,11 @@ asserts this document quotes each of them.
   `_InstrumentClient` then refuses a RESPONSE whose `model` is not the
   authorized one, on the call that returns it, so a hosted endpoint serving a
   different checkpoint is a stop rather than something noticed in the report
-  afterwards. The run also checks the client's real TYPE against the provider it
+  afterwards. A completion the provider billed for and then refused on its own
+  schema validation is judged the same way, off the `model` its parse-failure
+  metadata carries: a checkpoint swap does not become acceptable because the
+  body it served failed to parse. The run also checks the client's real TYPE
+  against the provider it
   claims to be (`assert_client_matches_provider`): a run labelled `fake` may only
   hold the offline fake provider, and a live-labelled run may hold neither it nor
   no client at all, so neither a metered client smuggled in under the offline
@@ -212,14 +314,43 @@ asserts this document quotes each of them.
   and the wall deadline can stop the run.
 - **Per-call cap.** `_InstrumentClient` refuses a call whose `max_tokens` is not
   one of the two shipped values, and refuses a response whose output reached its
-  cap — a truncation is a stop, not a datum.
+  cap — a truncation is a stop, not a datum. That reading is taken off the
+  completion, not off the parse: a body cut off at the cap is the usual reason a
+  payload then fails schema validation, so the same check is applied to the
+  `output_tokens` a refused call's parse-failure metadata reports.
 - **Sampling.** The two temperatures and the two caps are served through an
   explicit `MeetingConfig` built from `AUTHORIZED_SAMPLING`, and a live run whose
   sampling configuration is not that one is refused before any client is built.
 - **Token budget.** One `llm.budget.GameBudget` per unit with a run-level parent,
-  so every charge reaches both ceilings. After each unit the RECORDED per-call
-  spend on the replay row is reconciled against the enforced budget snapshot, and
-  a difference is a stop.
+  so every charge reaches both ceilings. What the run then checks about that
+  accounting is quoted verbatim from `SPEND_RECONCILIATION`:
+
+  After each unit the recorded spend is reconciled against the enforced budget
+  snapshot over every call the provider charged: the meeting row's resolved
+  calls plus every failed attempt the replay records with usage — a payload a
+  real provider validated and refused before the recording client could log
+  it, whose tokens the budget charged off the parse-failure metadata. A
+  zero-spend default marker is not a charged call, so a manager-side
+  validation of a returned payload, whose spend the meeting row already
+  carries, is counted once and not twice. This is the token budget's
+  accounting check rather than a limit of its own: what it can find is a unit
+  whose recorded calls do not add up to what the budget charged, and that unit
+  stops the run the way every other unit failure does.
+
+  The ceiling itself is enforced by the budget's pre-flight, on the call that
+  would cross it, and — for the one charge that never meets a pre-flight — by a
+  post-unit read-back quoted verbatim from `BUDGET_CAP_READBACK`:
+
+  After each unit both budgets are also read back against the caps they were
+  built with, because one kind of charge never meets a pre-flight: a call the
+  provider billed and then refused on its own schema validation is charged
+  after the fact, off the parse-failure metadata, and the resulting overrun is
+  downgraded to a note on the exception the meeting layer then fail-softs. On
+  a unit's last call the per-unit ceiling would otherwise be crossed with the
+  budget then discarded, and on a run's last call the run ceiling with nothing
+  further to pre-flight. A budget found past its cap stops the run on the unit
+  that crossed it: the tokens are already spent, and the stop is what keeps
+  the next unit from spending more.
 - **Wall.** Two clocks, because the authorization names two limits: one
   `orchestrator.run_limits.RunDeadline` for the 6 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
@@ -522,7 +653,7 @@ rendered prompt after each unit, and over the emitted report; a match is a stop.
 
 | Role | Session |
 | --- | --- |
-| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm |
+| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm. A second session, dispatched on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) after the stopped run of 2026-09-10 rendered a prefix of the first band, drew 5000-5999 with the same generator, marked the first record `development` rather than deleting it, and opened PR #446; it ran no arm either |
 | Runner | A separate session dispatched on [the instrument card](../../tasks/work/fresh-deduction-instrument.md), started after that merge. It regenerates the set from the frozen band, verifies the committed hashes, and opens no prefix: no prefix is printed, logged or written into any report, and `assert_report_holds_no_prefix_bytes` refuses a report that carries one |
 | Coordinator | Dispatches both and runs neither |
 
@@ -534,35 +665,41 @@ longer held out.
 
 ## Verification of this manifest
 
-The offline mechanics check, run on this branch's merged tree — the stacked
-predecessor chain came in as merge `73e4b476` and no source byte moves after it,
-so the figures below are what the command prints at the branch head:
+The offline mechanics check, on the second held-out band. Run on this branch at
+`08aee9cc`, the commit that re-bound the Inputs table above; only this document
+moves after it, and the dry run reads none of it:
 
 ```sh
 .venv/bin/python -m experiments.fresh_deduction_instrument --dry-run
 ```
 
-100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in a few
-seconds of wall. Both arms carried a non-SKIP decision to a graded outcome: 50 ejections
-each, 19 role-correct, 31 wrongful, 18 supported-correct, 150 supported ballots and 6
-guard-rewritten ones per arm, with 100 ballots naming the ejected player of which
-6 cited evidence that does not bear on that player. The report carries the sampling configuration it
-drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps 2,048 / 1,024). Input tokens by the fake provider's `len // 4`
-heuristic were 886,054 (`repaired_clock`) and 577,228 (`combined_accounts`);
-applying the decision memo's calibrated 1.28x real-input ratio to their sum
-(1,463,282) gives about 1.87 M against the 2.4 M ceiling, and the larger arm's
-17,721 per unit gives about 22,700 against the 45,000 per-unit ceiling — headroom
-checks, not predictions, because a real model writes a different transcript. The
-candidate arm's figure was 577,228 only after the merge: on the pre-merge tree at
-`44f0b99e` it was 575,251, and `73e4b476` brought the accounts-channel templates
-and `meetings/public_accounts.py` that only that arm renders, which is why the
-reference arm did not move.
+100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in about two
+and a half seconds of wall. Both arms carried a non-SKIP decision to a graded
+outcome on 49 of their 50 units: 49 ejections each, 22 role-correct, 27
+wrongful, 22 supported-correct, 150 supported ballots and 4 guard-rewritten ones
+per arm, with 98 ballots naming the ejected player, none of which cited evidence
+that does not bear on that player. The fiftieth is the same prefix in both arms:
+its meeting reached no ejection, so its game reached no terminal outcome and it
+is one partial unit per arm rather than a stop. The report carries the sampling
+configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
+2,048 / 1,024). Input tokens by the fake provider's `len // 4` heuristic were
+889,373 (`repaired_clock`) and 585,214 (`combined_accounts`); applying the
+decision memo's calibrated 1.28x real-input ratio to their sum (1,474,587) gives
+about 1.89 M against the 2.4 M ceiling, and the larger arm's 17,787 per unit
+gives about 22,800 against the 45,000 per-unit ceiling — headroom checks, not
+predictions, because a real model writes a different transcript.
 
-The relevance amendment cost this fixture no unit: 18 supported-correct before it
-and 18 after, because its 6 off-target citations all fall in units the primary
-outcome already scored 0. That the rule bites at all is established by its
-planted cases, not by this run — the fixture cites the transcript's last turn
-whatever it says, so what it exercises is the path, not the judgment.
+The figures this section carried before the re-binding of 2026-09-10 were
+measured on the 3000-3999 band. They are superseded with it and are not re-run:
+that band is development data, and a dry run over it would measure a set this
+manifest no longer authorizes.
+
+The relevance amendment costs this fixture no unit on this band either, for a
+simpler reason than on the first: the dry-run provider produced no off-target
+citation at all, so the rule removed nothing from the 22 role-correct ejections
+and supported-correct is the same 22. That the rule bites at all is established
+by its planted cases, not by this run — the fixture cites the transcript's last
+turn whatever it says, so what it exercises is the path, not the judgment.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; it establishes

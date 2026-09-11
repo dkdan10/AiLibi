@@ -91,6 +91,7 @@ from experiments.held_out_prefixes import AUTHORIZED_ROSTER as FROZEN_PREFIX_ROS
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
+from llm.provider import extract_parse_failure
 from meetings.manager import (
     DEFAULT_TURN_MAX_TOKENS,
     DEFAULT_VOTE_MAX_TOKENS,
@@ -389,6 +390,33 @@ STOP_RULE: Final[str] = (
     "by a result the run has produced."
 )
 
+SPEND_RECONCILIATION: Final[str] = (
+    "After each unit the recorded spend is reconciled against the enforced "
+    "budget snapshot over every call the provider charged: the meeting row's "
+    "resolved calls plus every failed attempt the replay records with usage — a "
+    "payload a real provider validated and refused before the recording client "
+    "could log it, whose tokens the budget charged off the parse-failure "
+    "metadata. A zero-spend default marker is not a charged call, so a "
+    "manager-side validation of a returned payload, whose spend the meeting row "
+    "already carries, is counted once and not twice. This is the token budget's "
+    "accounting check rather than a limit of its own: what it can find is a "
+    "unit whose recorded calls do not add up to what the budget charged, and "
+    "that unit stops the run the way every other unit failure does."
+)
+
+BUDGET_CAP_READBACK: Final[str] = (
+    "After each unit both budgets are also read back against the caps they were "
+    "built with, because one kind of charge never meets a pre-flight: a call the "
+    "provider billed and then refused on its own schema validation is charged "
+    "after the fact, off the parse-failure metadata, and the resulting overrun is "
+    "downgraded to a note on the exception the meeting layer then fail-softs. On "
+    "a unit's last call the per-unit ceiling would otherwise be crossed with the "
+    "budget then discarded, and on a run's last call the run ceiling with nothing "
+    "further to pre-flight. A budget found past its cap stops the run on the unit "
+    "that crossed it: the tokens are already spent, and the stop is what keeps "
+    "the next unit from spending more."
+)
+
 _ANALYSIS_FREEZE_NOTE: Final[str] = (
     "PRIMARY_OUTCOME, DECISION_RULE, MINIMUM_ACTIONABLE_EFFECT_UNITS, "
     "WRONGFUL_EJECTION_TRADEOFF and STOP_RULE are module constants and the "
@@ -425,6 +453,19 @@ class ProviderIdentityMismatch(InstrumentError):
     says what was ASKED for: a hosted endpoint that silently serves a different
     checkpoint would otherwise be discovered in the report's ``model_ids`` after
     the whole run had been spent.
+    """
+
+
+class BudgetExhausted(InstrumentError):
+    """A charge already applied left a token budget past its authorized cap.
+
+    Distinct from :class:`~llm.budget.BudgetExceededError`, which the budget
+    raises on the PRE-FLIGHT that would cross a cap and which stops the call
+    before it is made. This one is raised on a charge that was applied without a
+    pre-flight to refuse it — a call the provider billed and then refused on its
+    own schema validation, whose overrun ``llm/budgeted_client.py`` downgrades to
+    a note — so the tokens are already spent when it fires. Both are the same
+    stop condition in ``STOP_RULE``; only the moment differs.
     """
 
 
@@ -568,6 +609,77 @@ BUDGET_SIZING_ARM: Final[ArmName] = "repaired_clock"
 # ---------------------------------------------------------------------------
 
 
+#: The Inputs table's "Seed band" row of the execution manifest, whose first two
+#: numbers are the band that document binds. Anchored on the row label rather
+#: than on a bare pair of numbers: the same document names the CONVERTED band in
+#: prose beside it, and a looser reader would take whichever came first.
+_MANIFEST_SEED_BAND_ROW: Final = re.compile(
+    r"^\|\s*Seed band\s*\|\s*(\d+)[–-](\d+)\b", re.MULTILINE
+)
+
+
+def manifest_bound_band(manifest_text: str) -> tuple[int, int]:
+    """The seed band the execution manifest's Inputs table binds.
+
+    Exactly one "Seed band" row may state one, because the band is what the
+    authorization is written against: no row, or two of them, is a document that
+    does not say which inputs it authorizes, and that is refused rather than
+    resolved by picking one.
+    """
+
+    rows = _MANIFEST_SEED_BAND_ROW.findall(manifest_text)
+    if len(rows) != 1:
+        raise LiveRunNotAuthorized(
+            f"{EXECUTION_MANIFEST_PATH} carries {len(rows)} 'Seed band' rows "
+            "naming a band; exactly one says which inputs this run is "
+            "authorized to spend"
+        )
+    first, last = rows[0]
+    return int(first), int(last)
+
+
+def assert_manifest_binds_the_live_band(repo_root: Path = _REPO_ROOT) -> None:
+    """Refuse a live run whose authorization names a band the runner would not draw.
+
+    :func:`verify_frozen_set` regenerates whatever record sits at
+    :data:`~experiments.held_out_prefixes.MANIFEST_PATH` and holds it to the
+    generator's own :data:`~experiments.held_out_prefixes.PREREGISTERED_BAND`.
+    Neither of those reads this document, so a band that moves — the 3000-3999
+    set became development data on 2026-09-10 and 5000-5999 was frozen in its
+    place — leaves the manifest authorizing one band while the run draws
+    another, with every other gate green. That gap is closed here, by comparing
+    the band the Inputs row states with the band the live record holds.
+
+    It is part of the authorization, not of the frozen-set check: it runs inside
+    :func:`assert_live_run_is_authorized`, which is the first thing
+    :func:`assert_ready_for_a_live_run` calls, so a stale binding stops the run
+    before a provider, a credential or a connection exists.
+    """
+
+    manifest = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
+    if not manifest.is_file():
+        raise LiveRunNotAuthorized(f"execution manifest is missing: {manifest}")
+    bound = manifest_bound_band(manifest.read_text(encoding="utf-8"))
+    record_file = repo_root / MANIFEST_PATH
+    if not record_file.is_file():
+        raise LiveRunNotAuthorized(f"the freeze manifest is missing: {MANIFEST_PATH}")
+    record = json.loads(record_file.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or not isinstance(record.get("band"), Mapping):
+        raise LiveRunNotAuthorized(
+            f"{MANIFEST_PATH} carries no band block; it does not describe the "
+            "set this run would draw"
+        )
+    band = record["band"]
+    live = (band.get("first_seed"), band.get("last_seed"))
+    if bound != live:
+        raise LiveRunNotAuthorized(
+            f"{EXECUTION_MANIFEST_PATH} binds seed band {bound[0]}-{bound[1]}, "
+            f"but the held-out record at {MANIFEST_PATH} holds "
+            f"{live[0]}-{live[1]}: the authorization was written for one band "
+            "and this run would spend another"
+        )
+
+
 @dataclass(frozen=True)
 class LiveRunInvocation:
     """The explicit, per-run statement that a live provider may be reached.
@@ -657,6 +769,11 @@ def assert_live_run_is_authorized(
     whole frozen set. A subset is the pilot the authorization card, this card
     and the manifest all refuse — and it would spend part of the held-out set
     outside the 50-pair design while leaving the rest held out.
+
+    The last check is on the inputs rather than the run: the band the manifest's
+    Inputs table binds has to be the band the live freeze record holds
+    (:func:`assert_manifest_binds_the_live_band`), so an authorization written
+    for one band cannot spend another.
     """
 
     if provider == "fake":
@@ -722,6 +839,10 @@ def assert_live_run_is_authorized(
             f"manifest's: invocation {invocation.manifest_sha256}, file "
             f"{committed}"
         )
+    # The digest above says WHICH document authorized this run; this says the
+    # document authorized THESE inputs. A held-out band that moves under a
+    # manifest nobody re-bound passes every check above it.
+    assert_manifest_binds_the_live_band(repo_root)
 
 
 def assert_client_matches_provider(*, provider: str, client: object | None) -> None:
@@ -1006,7 +1127,15 @@ class _InstrumentClient:
 
     Every stop above records the call FIRST. The response came back, so the
     tokens were spent whether or not they are usable, and the partial accounting
-    the stop rule promises has to carry them.
+    the stop rule promises has to carry them. The same rule reaches a call that
+    never returned a usable response at all: an attempt the provider billed and
+    then refused on its own schema validation is captured with the spend its
+    parse-failure metadata carries, because the meeting layer fail-softs past it
+    and no ``llm_calls`` row will ever hold it. Jobs 2 and 3 reach that attempt
+    too, off the parse-failure metadata's own ``output_tokens`` and ``model``
+    (:meth:`_unusable_response`): the completion the provider billed for is the
+    thing they judge, and whether its body then parsed is not what makes a
+    truncation or a foreign checkpoint a stop.
 
     Not a subclass of anything in ``experiments/``: the committed MECHANICS_ONLY
     harnesses keep their own refusal, and this wrapper composes an arbitrary
@@ -1124,8 +1253,58 @@ class _InstrumentClient:
                 )
             )
             raise self._work_clock.charge_aborted(aborted) from exc
+        except BaseException as exc:
+            # A call the provider BILLED and then refused. A real provider
+            # validates the completion itself and raises before anything
+            # downstream can log it, so this attempt reaches no ``llm_calls``
+            # row and would otherwise be missing from the partial accounting a
+            # stop reports — the same understatement the truncation stop used to
+            # make, and the gap the run of 2026-09-10 stopped on. The
+            # parse-failure metadata riding the exception carries the real spend
+            # (``llm.provider.extract_parse_failure``); an exception without it
+            # bought nothing and is re-raised untouched.
+            failure = extract_parse_failure(exc)
+            if failure is None:
+                raise
+            burned = time.monotonic() - started
+            self._calls.append(
+                CapturedCall(
+                    agent_id=agent_id,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    input_tokens=failure.input_tokens,
+                    output_tokens=failure.output_tokens,
+                    cost_usd=failure.cost_usd,
+                    model=failure.model,
+                    seconds=burned,
+                )
+            )
+            # Charged like a call that returned: the provider held the wall for
+            # it either way, so the work clock and the per-arm
+            # ``model_work_seconds`` keep describing the same seconds.
+            self._work_clock.charge(burned)
+            # The identity and truncation stops read the SAME two facts off the
+            # parse-failure metadata that they read off a response, because both
+            # describe the completion the provider produced and billed for.
+            # Skipping them here would make a refused payload the one way past
+            # them: a body truncated at the output cap is exactly the body that
+            # then fails schema validation, and an endpoint serving a different
+            # checkpoint would be recorded and reported rather than stopping the
+            # run. Raising here also replaces the ``ValidationError`` the meeting
+            # layer fail-softs with a stop it does not, which is the point — the
+            # call is already in this client's ledger, so the partial accounting
+            # a stop reports carries its spend even though the budget layer's own
+            # charge (keyed on the parse-failure metadata) no longer fires.
+            stop = self._unusable_response(
+                model=failure.model,
+                output_tokens=failure.output_tokens,
+                max_tokens=max_tokens,
+            )
+            if stop is not None:
+                raise stop from exc
+            raise
         seconds = time.monotonic() - started
-        # Recorded before any of the three stops below, because the response
+        # Recorded before either of the stops below, because the response
         # exists: its tokens were spent and its provider time elapsed, and a
         # stop that dropped them would understate its own partial accounting.
         self._calls.append(
@@ -1141,18 +1320,40 @@ class _InstrumentClient:
             )
         )
         self._work_clock.charge(seconds)
-        if self._expected_model is not None and response.model != self._expected_model:
-            raise ProviderIdentityMismatch(
-                f"a response came back from model {response.model!r}; this run "
+        stop = self._unusable_response(
+            model=response.model,
+            output_tokens=response.usage.output_tokens,
+            max_tokens=max_tokens,
+        )
+        if stop is not None:
+            raise stop
+        return response
+
+    def _unusable_response(
+        self, *, model: str, output_tokens: int, max_tokens: int
+    ) -> InstrumentError | None:
+        """The stop a completed call earns, or ``None`` if it earns none.
+
+        Returned rather than raised so the two callers can chain it: a call the
+        provider refused on its own schema validation raises this ``from`` the
+        provider's exception, and a call that returned raises it bare. One
+        function so the two paths cannot enforce different lists — the run of
+        2026-09-10's lesson was a check that reached one surface and not the
+        other.
+        """
+
+        if self._expected_model is not None and model != self._expected_model:
+            return ProviderIdentityMismatch(
+                f"a response came back from model {model!r}; this run "
                 f"is authorized for {self._expected_model!r} only"
             )
-        if response.usage.output_tokens >= max_tokens:
-            raise PerCallCapExceeded(
+        if output_tokens >= max_tokens:
+            return PerCallCapExceeded(
                 f"a response reached its {max_tokens}-token output cap "
-                f"({response.usage.output_tokens} tokens); a truncation is a "
+                f"({output_tokens} tokens); a truncation is a "
                 "stop, not a datum"
             )
-        return response
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1850,7 +2051,15 @@ def run_unit(
             "token budget is sized on that"
         )
     _assert_arm_provenance(entries, arm=arm, seed=prefix.seed)
-    _reconcile_recorded_spend(meeting, budget=unit_budget, seed=prefix.seed, arm=arm)
+    _reconcile_recorded_spend(
+        meeting, entries=entries, budget=unit_budget, seed=prefix.seed, arm=arm
+    )
+    _assert_charged_spend_is_within_caps(
+        unit_budget, level="per-unit", seed=prefix.seed, arm=arm
+    )
+    _assert_charged_spend_is_within_caps(
+        run_budget, level="run", seed=prefix.seed, arm=arm
+    )
 
     # Read, not drained. Every check below can stop the run, and a stop after
     # the buffer was emptied would hand the abort handler an empty client and
@@ -1913,25 +2122,167 @@ def _assert_arm_provenance(
         )
 
 
+def _charged_failed_attempts(
+    entries: Sequence[ReplayLogEntry], *, meeting_id: str
+) -> tuple[FailedCallReplayEntry, ...]:
+    """This meeting's failed provider attempts that the provider still charged.
+
+    A real provider validates the completion itself and raises BEFORE the
+    recording client can log the call, so the tokens a schema-failed attempt
+    burned never reach :attr:`MeetingReplayEntry.llm_calls` — while the budget
+    layer charges them off the parse-failure metadata riding the exception
+    (``llm/budgeted_client.py``, ``llm.provider.extract_parse_failure``). They
+    reach the replay through the failed-call channel instead: from the
+    recorder's identified ledger (``orchestrator/game.py::_record_captured_failures``)
+    or, for a runner that supplies none, off the surfaced default's
+    ``parse_failures`` (``_record_deadline_defaults``).
+
+    Usage is the discriminator, and the producer is the one that set it. The two
+    attempts whose spend is not the provider's to charge again are both written
+    as ZERO-spend visibility markers: a deadline miss completed nothing, and a
+    manager-side validation of a returned-but-invalid payload has its spend in
+    ``llm_calls`` already (``meetings/manager.py:1712-1720`` states that
+    property). Summing only the rows carrying usage therefore counts every
+    charged call exactly once.
+    """
+
+    return tuple(
+        entry
+        for entry in entries
+        if isinstance(entry, FailedCallReplayEntry)
+        and entry.meeting_id == meeting_id
+        and (
+            entry.input_tokens != 0 or entry.output_tokens != 0 or entry.cost_usd != 0.0
+        )
+    )
+
+
+@dataclass(frozen=True)
+class _RecordedSpend:
+    """One unit's recorded spend over every call the provider charged."""
+
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    resolved_calls: int
+    charged_failures: int
+
+
+def _recorded_spend(
+    meeting: MeetingReplayEntry, entries: Sequence[ReplayLogEntry]
+) -> _RecordedSpend:
+    """Sum the meeting's resolved calls AND its charged failed attempts."""
+
+    failed = _charged_failed_attempts(entries, meeting_id=meeting.meeting_id)
+    return _RecordedSpend(
+        input_tokens=(
+            sum(call.input_tokens for call in meeting.llm_calls)
+            + sum(entry.input_tokens for entry in failed)
+        ),
+        output_tokens=(
+            sum(call.output_tokens for call in meeting.llm_calls)
+            + sum(entry.output_tokens for entry in failed)
+        ),
+        cost_usd=(
+            sum(call.cost_usd for call in meeting.llm_calls)
+            + sum(entry.cost_usd for entry in failed)
+        ),
+        resolved_calls=len(meeting.llm_calls),
+        charged_failures=len(failed),
+    )
+
+
 def _reconcile_recorded_spend(
-    meeting: MeetingReplayEntry, *, budget: GameBudget, seed: int, arm: InstrumentArm
+    meeting: MeetingReplayEntry,
+    *,
+    entries: Sequence[ReplayLogEntry],
+    budget: GameBudget,
+    seed: int,
+    arm: InstrumentArm,
 ) -> None:
-    """Compare the RECORDED per-call spend against the enforced budget snapshot."""
+    """Check that every call the budget charged is one the replay accounts for.
+
+    The token budget is the limit; this is its accounting check. It reads the
+    RECORDED spend — the meeting row's resolved calls plus the failed attempts
+    the replay records with usage (:func:`_charged_failed_attempts`) — against
+    the enforced budget snapshot, so a charged call that reached neither surface
+    is caught on the unit that burned it rather than at the end of a run.
+
+    Summing ``llm_calls`` alone did not do that, and the run of 2026-09-10 is
+    the case: a payload the provider validated and refused burned 2,228 input
+    and 861 output tokens that the budget charged and the meeting row could not
+    carry, so the first of one hundred units stopped on an accounting gap rather
+    than on a limit.
+    """
 
     snapshot = budget.snapshot()
-    recorded_input = sum(call.input_tokens for call in meeting.llm_calls)
-    recorded_output = sum(call.output_tokens for call in meeting.llm_calls)
-    recorded_cost = sum(call.cost_usd for call in meeting.llm_calls)
+    recorded = _recorded_spend(meeting, entries)
     if (
-        recorded_input != snapshot.input_tokens
-        or recorded_output != snapshot.output_tokens
-        or abs(recorded_cost - snapshot.cost_usd) > 1e-9
+        recorded.input_tokens != snapshot.input_tokens
+        or recorded.output_tokens != snapshot.output_tokens
+        or abs(recorded.cost_usd - snapshot.cost_usd) > 1e-9
     ):
         raise InstrumentError(
-            f"seed {seed} on arm {arm.name}: the recorded spend "
-            f"({recorded_input} in / {recorded_output} out / {recorded_cost} USD) "
-            f"differs from the enforced budget ({snapshot.input_tokens} in / "
-            f"{snapshot.output_tokens} out / {snapshot.cost_usd} USD)"
+            f"seed {seed} on arm {arm.name}: the recorded spend over "
+            f"{recorded.resolved_calls} resolved calls and "
+            f"{recorded.charged_failures} charged failed attempts "
+            f"({recorded.input_tokens} in / {recorded.output_tokens} out / "
+            f"{recorded.cost_usd} USD) differs from the enforced budget "
+            f"({snapshot.input_tokens} in / {snapshot.output_tokens} out / "
+            f"{snapshot.cost_usd} USD)"
+        )
+
+
+#: Mirrors ``llm/budget.py``'s ``_COST_USD_CAP_SLACK``. The budget tolerates a
+#: millionth of a dollar of binary-rounding noise before it calls a USD total an
+#: overrun, and a check that re-reads its totals has to tolerate the same or it
+#: would stop a run the budget itself considers inside its cap.
+_COST_CAP_SLACK_USD: Final[float] = 1e-6
+
+
+def _assert_charged_spend_is_within_caps(
+    budget: GameBudget, *, level: str, seed: int, arm: InstrumentArm
+) -> None:
+    """Stop the run when a charge already applied left a budget past its cap.
+
+    ``STOP_RULE`` makes "a token budget exhausted at either the per-unit or the
+    run level" a stop, and the budget's PRE-FLIGHT is what normally delivers it,
+    on the call that would cross the cap. One class of charge never reaches a
+    pre-flight, though: a call the provider billed and then refused on its own
+    schema validation is charged from its parse-failure metadata AFTER the fact
+    (``llm/budgeted_client.py``), and the resulting
+    :class:`~llm.budget.BudgetExceededError` is downgraded there to a note on
+    the propagating exception, which the meeting layer then fail-softs. On the
+    unit's last call the budget object is discarded with the overrun still on it
+    and no later pre-flight exists to find it, so the ceiling would be crossed
+    and the run would carry on.
+
+    This is that missing arrival, and :data:`BUDGET_CAP_READBACK` is the
+    statement of it the execution manifest quotes: after each unit both budgets
+    are read back against the caps they were built with. It is a check on
+    RECORDED spend and reports it as such — the tokens are gone either way, and
+    the stop is what keeps the next unit from spending more.
+    """
+
+    snapshot = budget.snapshot()
+    over = [
+        f"{name} ({charged} charged against a {cap} cap)"
+        for name, charged, cap in (
+            ("input tokens", snapshot.input_tokens, snapshot.max_input_tokens),
+            ("output tokens", snapshot.output_tokens, snapshot.max_output_tokens),
+        )
+        if charged > cap
+    ]
+    if snapshot.cost_usd > snapshot.max_cost_usd + _COST_CAP_SLACK_USD:
+        over.append(
+            f"cost ({snapshot.cost_usd} USD charged against a "
+            f"{snapshot.max_cost_usd} USD cap)"
+        )
+    if over:
+        raise BudgetExhausted(
+            f"seed {seed} on arm {arm.name}: the {level} token budget is "
+            f"exhausted on {', and '.join(over)}; the charge that crossed it is "
+            "already spent, so the run stops here"
         )
 
 
