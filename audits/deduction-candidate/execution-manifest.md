@@ -443,21 +443,24 @@ asserts this document quotes each of them.
   verbatim from `TRANSPORT_RETRY`:
 
   A call whose attempt came back with no completion at all is sent again by
-  this instrument's own client wrapper rather than by the provider client, so
-  no recorded campaign changes behaviour: at most 4 attempts, one send and 3
-  retries, on an empty or choices-less body, a transport failure, a retryable
-  HTTP status, or an attempt that outran the 180 s per-attempt wall this
-  wrapper bounds each send by — each retry after a short exponential backoff,
-  and each attempt still bounded by what is left of the model-work window,
-  which no retry may outlive. The last failure stops the run with the same
-  partial accounting every other unit failure reports. Nothing that produced a
-  completion is retried: a response that reached its output cap, a returned
-  payload that failed schema validation, an exhausted budget or deadline and a
-  refused live run are all left exactly as they were. Every failed attempt is
-  recorded with whatever usage the provider reported for it, and as an
-  unaccounted attempt when it reported none, and the attempts are counted per
-  arm and per unit — retried calls, unaccounted attempts and the trigger class
-  of each — beside the meeting-internal defaults.
+  this instrument's own client wrapper rather than by the provider client,
+  so no recorded campaign changes behaviour: at most 4 attempts, one send
+  and 3 retries, on an empty or choices-less body, a transport failure, a
+  retryable HTTP status, or an attempt that outran the 180 s per-attempt
+  wall this wrapper bounds each send by — each retry after a short
+  exponential backoff, and each attempt still bounded by what is left of the
+  model-work window, which no retry may outlive. The last failure stops the
+  run with the same partial accounting every other unit failure reports.
+  Nothing that produced a completion is retried: a response that reached its
+  output cap, a returned payload that failed schema validation, an exhausted
+  budget or deadline and a refused live run are all left exactly as they
+  were. Every retried attempt is recorded as an unaccounted attempt carrying
+  zero tokens, which may have been billed for tokens this side cannot see:
+  the provider client raises on a body with no completion in it before it
+  reads that body's usage block, so no usage rides any of these four classes
+  and this wrapper has none to charge. The attempts are counted per arm and
+  per unit — retried calls, unaccounted attempts and the trigger class of
+  each — beside the meeting-internal defaults.
 - **Dollar.** `max_cost_usd=0.0` on both budgets, which the provider's zero
   pre-flight rate makes bookkeeping rather than a brake — exactly as the cost
   statement says.
@@ -605,7 +608,7 @@ Per unit, with counts beside every rate:
 | Supported / unsupported / uncited ballots | Per ballot, per arm, with guard-rewritten ballots counted separately |
 | Naming ballots and off-target citations | Per ballot, per arm: `naming_ballots` counts the ballots naming the ejected player and `off_target_citations` how many of those cited evidence that does not bear on that player. The pair says how often relevance rather than presence is what a unit turned on |
 | Meeting-internal defaults | Per attempt, per arm: `defaulted_turns` and `defaulted_votes`, split by trigger into `defaults_by_validation` and `defaults_by_deadline`, plus `degraded_openings`. `units_with_defaults` counts the units carrying at least one, and is the bound on how many of that arm's decisions rest on a partly unauthored meeting |
-| Retried provider attempts | Per attempt, per arm: `retried_calls` counts the calls this run had to send more than once and `unaccounted_attempts` the attempts that bought no completion and no usage, split by trigger into `attempts_by_trigger`. `units_with_retries` counts the units carrying at least one. Every unaccounted attempt is also a row in the per-arm `calls` total, carrying zero tokens and the `no-completion-returned` marker, so the completions are `calls` minus `unaccounted_attempts` |
+| Retried provider attempts | Per attempt, per arm: `retried_calls` counts the calls this run had to send more than once and `unaccounted_attempts` the attempts that bought no completion and carried no usage this side can see, split by trigger into `attempts_by_trigger`. `units_with_retries` counts the units carrying at least one. Every unaccounted attempt is also a row in the per-arm `calls` total, carrying the `no-completion-returned` marker and zero tokens — what is known about it, not what it was billed — so the completions are `calls` minus `unaccounted_attempts` |
 | Terminal vs partial units | A unit whose meeting ended the game is terminal; one that stopped at the tick after the report is deliberately partial. Neither is a game-win trial |
 | Provider cost | Calls, input and output tokens, `cost_usd` and model-work seconds, per arm and per run, against the limits above |
 

@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import hashlib
+import inspect
 import json
 import re
 import subprocess
@@ -1495,13 +1496,34 @@ class TestBudgetAndDeadline:
 
 
 class TestModelWorkWindow:
-    """The 4 h window is a limit on model work, so it has to bind IN FLIGHT.
+    """The work window is a limit on model work, so it has to bind IN FLIGHT.
 
     Charged only on return it is a one-call-granular limit, and one call on the
     authorized provider is six sends at a 600 s timeout with backoff — close to
-    an hour. A run at 3 h 59 m could then spend a fifth hour against an
-    authorization of four, with only the separate 6 h elapsed clock behind it.
+    an hour. A run at 5 h 59 m could then spend a seventh hour against an
+    authorization of six, with only the separate 8 h elapsed clock behind it.
     """
+
+    def test_the_work_clock_docstring_states_the_authorized_window(self) -> None:
+        """PLANTED: the docstring left at the authorization it used to enforce.
+
+        `_ModelWorkClock` is the mechanism the manifest sends an auditor to
+        read, so a widened authorization that moved the constants and the record
+        but not the class's own account of them would leave the enforcing code
+        stating a limit no longer authorized — which is what happened when
+        4 h / 6 h became 6 h / 8 h. The figures are derived from the constants
+        here, never retyped.
+        """
+
+        doc = " ".join((inspect.getdoc(instrument._ModelWorkClock) or "").split())
+        work_hours = int(instrument.AUTHORIZED_MODEL_WORK_SECONDS // 3600)
+        elapsed_hours = int(instrument.AUTHORIZED_ELAPSED_SECONDS // 3600)
+        assert f"{work_hours} h of model work" in doc
+        assert f"{elapsed_hours} h elapsed window" in doc
+        # The boundary illustration is one minute short of the work window and
+        # names the hour past it, so it cannot survive a widening either.
+        assert f"{work_hours - 1} h 59 m of model work" in doc
+        assert f"separate {elapsed_hours} h elapsed clock" in doc
 
     def test_the_window_stops_during_the_call_that_exhausts_it(self) -> None:
         """PLANTED: a 0.2 s window and a call that stays in flight for 5 s.
@@ -1843,6 +1865,112 @@ class TestTransportRetry:
             ModelAuthoredVoteBallot.model_validate_json(planted)
         assert "HTTP 503" in str(caught.value)
         assert instrument.transport_trigger(caught.value) is None
+
+    def test_an_unaccounted_attempt_says_what_it_cannot_know(self) -> None:
+        """The record may not claim a charge this side never sees.
+
+        `_raw_from_response_body` refuses a body with no completion in it BEFORE
+        it reads that body's `usage` block, so a 2xx the provider billed for and
+        then answered emptily reaches this wrapper as a bare `RuntimeError` with
+        nothing riding it. The ledger row is zero tokens — what is KNOWN, not
+        what was spent — and `TRANSPORT_RETRY`, which the manifest quotes
+        verbatim, says so instead of claiming the usage was recorded. Moving the
+        usage read ahead of the refusal is a change to the provider client and
+        would turn this red, which is the point: the wording would then be
+        wrong.
+        """
+
+        function = (
+            (_REPO_ROOT / "llm" / "featherless_client.py")
+            .read_text(encoding="utf-8")
+            .split("def _raw_from_response_body")[1]
+        )
+        refuses = function.index("refusing to record an empty completion")
+        reads_usage = function.index('usage = body.get("usage")')
+        assert refuses < reads_usage
+        assert (
+            "may have been billed for tokens this side cannot see"
+            in instrument.TRANSPORT_RETRY
+        )
+        assert "recorded as an unaccounted attempt carrying zero tokens" in (
+            instrument.TRANSPORT_RETRY
+        )
+        # And the ledger row the run actually writes is that zero.
+        inner = NoCompletionProvider(mode="empty_body", failures=1)
+        client = self._client(inner)
+        self._call(client)
+        unaccounted = [
+            call
+            for call in client.calls
+            if call.model == instrument.UNACCOUNTED_ATTEMPT_MODEL
+        ]
+        assert [(call.input_tokens, call.output_tokens) for call in unaccounted] == [
+            (0, 0)
+        ]
+
+    def test_a_permanent_status_outranks_the_body_it_quotes(self) -> None:
+        """PLANTED: a 400 whose response body contains the empty-completion
+        phrase, and one whose body contains the transport-failure phrase.
+
+        `_format_send_error` writes the status first and quotes the body after
+        it, so both markers and the status live in one message. Read body-first
+        the wrapper would send a request the endpoint has permanently refused
+        four times over; only `_RETRYABLE_STATUS_CODES` are retryable at all,
+        and the status is the half the adapter wrote rather than the half the
+        endpoint returned.
+        """
+
+        for body in (
+            "refusing to record an empty completion",
+            "on a transport/parse error",
+        ):
+            permanent = RuntimeError(
+                "Featherless chat-completions POST failed: HTTP 400 "
+                f"(model='Qwen/Qwen3.6-27B'): {body}"
+            )
+            assert instrument.transport_trigger(permanent) is None, body
+        # The same message with a status that IS retryable stays a retry.
+        assert (
+            instrument.transport_trigger(RuntimeError(RETRYABLE_STATUS_ERROR))
+            == "retryable_status"
+        )
+        # And an empty body, which carries no status at all, is unaffected.
+        assert (
+            instrument.transport_trigger(RuntimeError(EMPTY_BODY_ERROR))
+            == "empty_completion"
+        )
+
+    def test_a_retry_is_counted_only_once_the_next_send_begins(self) -> None:
+        """PLANTED: the elapsed deadline cancels the call DURING the backoff.
+
+        `RunDeadline` cancels the coroutine it bounds, and the cancellation can
+        land in the wait between two attempts. Counted before the wait, the stop
+        would report one retried call for a call that was only ever sent once;
+        the attempt that produced nothing is still counted, because it happened.
+        """
+
+        class _CancellingSleep:
+            def __init__(self) -> None:
+                self.waits: list[float] = []
+
+            async def __call__(self, seconds: float) -> None:
+                self.waits.append(seconds)
+                raise asyncio.CancelledError
+
+        inner = NoCompletionProvider(mode="empty_body", failures=99)
+        sleep = _CancellingSleep()
+        client = instrument._InstrumentClient(
+            inner,
+            work_clock=instrument._ModelWorkClock(max_seconds=3600.0),
+            sleep=sleep,
+        )
+        with pytest.raises(asyncio.CancelledError):
+            self._call(client)
+        assert inner.attempts == 1
+        assert sleep.waits == [instrument.TRANSPORT_BACKOFF_BASE_SECONDS]
+        attempts = client.attempts()
+        assert attempts.retried_calls == 0
+        assert attempts.unaccounted_attempts == 1
 
     def test_the_classifier_keys_on_wording_the_adapter_still_uses(self) -> None:
         """The empty-completion class has no type of its own to match on.
@@ -3420,8 +3548,12 @@ class TestExecutionManifest:
             "WRONGFUL_EJECTION_TRADEOFF",
         ):
             assert unmoved in collapsed
-        commits = re.findall(r"\*\*2026-09-13 \(`([0-9a-f]{7,40})`\)", collapsed)
-        assert len(commits) == 1
+        # Every dated entry of this section, however it is qualified, names the
+        # commit that carried it; exactly one of them is the entry that moved
+        # the frozen analysis, and a second one would be a second unlogged move.
+        commits = re.findall(r"\*\*2026-09-13[^(*]*\(`([0-9a-f]{7,40})`\)", collapsed)
+        assert commits, "an amendment entry names no commit"
+        assert collapsed.count("`STOP_RULE` gains a transport clause") == 1
         if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
             pytest.skip("no full history here; the named commit cannot be resolved")
         for commit in commits:
