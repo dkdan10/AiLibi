@@ -1,4 +1,11 @@
-"""A provider double that BILLS for a call and then refuses its own payload.
+"""Provider doubles shaped like the real endpoint's own failures.
+
+Two families live here. :class:`BurnedCallProvider` BILLS for a call and then
+refuses its own payload; :class:`NoCompletionProvider` answers with nothing at
+all — the class the run of 2026-09-13 stopped on. Both exist for the same
+reason: the failure they plant is produced by the provider adapter, before any
+client downstream can log it, so neither was reachable offline until a double
+wore the adapter's own shape.
 
 Every other double in `tests/experiments/test_fresh_deduction_instrument.py`
 RETURNS an invalid payload. That is the manager-side case: the recording client
@@ -19,13 +26,14 @@ the same line — the two names below are the parse-failure seam and nothing els
 
 from __future__ import annotations
 
-from typing import Final
+import asyncio
+from typing import Final, Literal
 
 from pydantic import BaseModel, ValidationError
 
 import experiments.fresh_deduction_instrument as instrument
 from experiments.fresh_deduction_instrument import DryRunProvider
-from llm.client import CallKind, LLMResponse
+from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.provider import LLMCallFailure, _attach_parse_failure
 from meetings.schemas import ModelAuthoredVoteBallot
 
@@ -149,3 +157,120 @@ class BurnedCallProvider(DryRunProvider):
             model=model,
             agent_id=agent_id,
         )
+
+
+#: The message `llm/featherless_client.py::_raw_from_response_body` raises on a
+#: 2xx body with no `choices` — the response that stopped the run of 2026-09-13.
+#: Copied in shape rather than paraphrased: the instrument classifies this
+#: failure off the adapter's own wording, so a double that invented a message of
+#: its own would prove the classifier against itself. A test holds the fragment
+#: the classifier keys on to that module's source.
+EMPTY_BODY_ERROR: Final[str] = (
+    "Featherless response carried no choices (model='Qwen/Qwen3.6-27B'); "
+    "refusing to record an empty completion."
+)
+
+#: What the same module raises once its own sends are exhausted on a dropped or
+#: half-read connection (`_send_with_retry`).
+TRANSPORT_ERROR: Final[str] = (
+    "Featherless chat-completions POST failed after 6 attempt(s) on a "
+    "transport/parse error (model='Qwen/Qwen3.6-27B'): "
+    "RemoteProtocolError: incomplete chunked read"
+)
+
+#: And what it raises on a retryable status it could not get past
+#: (`_format_send_error`).
+RETRYABLE_STATUS_ERROR: Final[str] = (
+    "Featherless chat-completions POST failed: HTTP 503 "
+    "(model='Qwen/Qwen3.6-27B'): model is busy"
+)
+
+#: What one of these doubles does to the calls it spoils. The first three return
+#: no completion and are the wrapper's retry classes; `stall` holds the
+#: connection open past the per-attempt wall, which is the fourth; `truncation`
+#: and `invalid_schema` DO produce a completion and are the control cases — a
+#: sample the run may not re-draw.
+NoCompletionMode = Literal[
+    "empty_body",
+    "transport_error",
+    "retryable_status",
+    "stall",
+    "truncation",
+    "invalid_schema",
+]
+
+
+class NoCompletionProvider(DryRunProvider):
+    """A dry-run provider whose first `failures` calls come back with nothing.
+
+    `failures` is how many consecutive attempts are spoiled, counted in
+    ATTEMPTS rather than in calls, so `failures=1` is a call the wrapper's retry
+    recovers and `failures=4` is one it cannot. `attempts` counts every send
+    this double received, which is what a test asserting "not retried" reads.
+
+    `stall` sleeps for `stall_seconds` instead of answering, so a wrapper given
+    a short per-attempt wall cuts it off exactly the way a stalled endpoint is
+    cut off. `truncation` and `invalid_schema` return a completion — the first
+    at its output cap, the second a body no schema accepts — and are here to
+    prove the wrapper leaves a sample alone.
+    """
+
+    def __init__(
+        self,
+        *,
+        mode: NoCompletionMode = "empty_body",
+        failures: int = 1,
+        stall_seconds: float = 5.0,
+    ) -> None:
+        super().__init__()
+        self.mode: NoCompletionMode = mode
+        self.failures = failures
+        self.stall_seconds = stall_seconds
+        self.attempts = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        self.attempts += 1
+        if self.attempts <= self.failures:
+            if self.mode == "empty_body":
+                raise RuntimeError(EMPTY_BODY_ERROR)
+            if self.mode == "transport_error":
+                raise RuntimeError(TRANSPORT_ERROR)
+            if self.mode == "retryable_status":
+                raise RuntimeError(RETRYABLE_STATUS_ERROR)
+            if self.mode == "stall":
+                await asyncio.sleep(self.stall_seconds)
+            if self.mode == "invalid_schema" and schema is not None:
+                # The adapter validated and re-raised WITHOUT usage: nothing
+                # rides this exception, so nothing is charged — and it is still
+                # a payload the endpoint produced, which is why it is not a
+                # retry class.
+                schema.model_validate_json('{"not_a_payload": true}')
+        response = await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+        if self.mode == "truncation" and self.attempts <= self.failures:
+            return LLMResponse(
+                text=response.text,
+                usage=TokenUsage(
+                    input_tokens=response.usage.input_tokens, output_tokens=max_tokens
+                ),
+                cost_usd=response.cost_usd,
+                model=response.model,
+            )
+        return response
