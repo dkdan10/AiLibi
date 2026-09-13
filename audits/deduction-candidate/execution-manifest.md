@@ -243,6 +243,33 @@ both cards and is not re-cut here: its "2.0 M tokens over a 6-hour elapsed
 window" is the first authorization's projection sentence, and the elapsed limit
 this manifest binds is the 8 h row above it.
 
+**2026-09-13, review round 1 (`4591cc17`) — the enforcement text says only what
+this side can see.** Review of the entry above found `TRANSPORT_RETRY` claiming
+more than the mechanism can do: it said every failed attempt is recorded "with
+whatever usage the provider reported for it". None of the four retried classes
+can carry usage. `llm/featherless_client.py::_raw_from_response_body` refuses a
+body with no completion in it BEFORE it reads that body's `usage` block, and a
+failure that does carry parse-failure metadata is a completion the provider
+billed for and is never retried at all — so an attempt of these classes reaches
+the wrapper with nothing on it to charge. The constant, the quotation of it
+under "How each limit is enforced" and the measures row now say what is true: an
+unaccounted attempt is recorded as zero tokens, which is what is KNOWN about it
+rather than what it was billed, and it may have been billed for tokens this side
+cannot see — the phrasing the model-work cut-off already used for the same
+reason. Reading the usage first would be a change to
+`llm/featherless_client.py`, which
+[the transport-resilience card](../../tasks/work/fresh-deduction-instrument-transport-resilience.md)'s
+Constraints exclude precisely so that no recorded campaign's behaviour moves;
+the gap is carried as a limitation on that card instead. The frozen analysis
+does not move here: the stop rule and the four constants named above are the
+same bytes this document quotes below. The same commit makes two smaller
+corrections to the wrapper — the status the adapter reported is read before any
+response body it quotes, so a permanent 4xx is never re-sent, and a retried call
+is counted once its next send begins rather than before the backoff, so a run
+cancelled mid-wait cannot report a send it never made — and repairs the
+`_ModelWorkClock` docstring, which still described the 4 h / 6 h authorization
+the entry above widened.
+
 Two obligations stay open and are not claimed by this entry: the Inputs table
 below still binds the 5000-5999 band, which the stopped run of 2026-09-13
 rendered the first seed of and which
@@ -773,7 +800,7 @@ longer held out.
 ## Verification of this manifest
 
 The offline mechanics check, on the second held-out band. Run on this branch at
-`0eb0a514`, the last commit that moves an instrument byte; only this document
+`4591cc17`, the last commit that moves an instrument byte; only this document
 and the card move after it, and the dry run reads neither:
 
 ```sh
@@ -799,8 +826,9 @@ predictions, because a real model writes a different transcript.
 The bounded retry costs this fixture nothing and is not exercised by it: the
 dry-run provider answers every call, so both arms report `retried_calls` 0,
 `unaccounted_attempts` 0 and no trigger at all, and the figures above are the
-same ones this section carried at `08aee9cc`. That the retry bound works at all
-is established by its planted cases, not by this run.
+same ones this section carried at `08aee9cc` — re-run at `4591cc17` into a
+temporary directory, unchanged. That the retry bound works at all is established
+by its planted cases, not by this run.
 
 The figures this section carried before the re-binding of 2026-09-10 were
 measured on the 3000-3999 band. They are superseded with it and are not re-run:
