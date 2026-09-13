@@ -1,6 +1,6 @@
 # Authorize the fresh-model deduction evaluation
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -77,23 +77,23 @@ carries the anchors, the arithmetic and the rejected options in full.
 
 ## Acceptance
 
-- [ ] The execution manifest's authorization fields carry exactly the values in
+- [x] The execution manifest's authorization fields carry exactly the values in
   Constraints, copied verbatim, and the cost statement appears verbatim.
-- [ ] The instrument enforces a per-unit `GameBudget` with a run-level parent
+- [x] The instrument enforces a per-unit `GameBudget` with a run-level parent
   and one `RunDeadline` measured against elapsed wall, constructed by the
   instrument itself rather than by the tournament CLI's `--max-total-*` caps,
   which are mutually exclusive with `--attest-unknown-usage`. A planted overrun
   stops the run and reports the partial state, and the recorded spend is
   reconciled against the budget snapshot afterwards.
-- [ ] One per-unit cap sized on the larger arm (`repaired_clock`) is applied
+- [x] One per-unit cap sized on the larger arm (`repaired_clock`) is applied
   identically to both arms, and per-arm usage is recorded separately so the
   asymmetry stays visible. A truncation in either arm is a stop, not a datum.
-- [ ] The held-out prefix generator is bound to the same temporal version as the
+- [x] The held-out prefix generator is bound to the same temporal version as the
   arms (temporal v2), and a mechanical assertion shows that no rendered prompt
   and no frozen prefix matches `body-p-\d+-\d+`.
-- [ ] The held-out prefixes are prepared, frozen and hashed by the named
+- [x] The held-out prefixes are prepared, frozen and hashed by the named
   preparer, and the runner never opens them.
-- [ ] The run records actual tokens, elapsed wall and the $0.00 marginal cost
+- [x] The run records actual tokens, elapsed wall and the $0.00 marginal cost
   against these limits. An exhausted budget or deadline stops the run and
   authorizes no retry.
 
@@ -182,3 +182,13 @@ measurement whose adoption stays a separate decision.
 card as a document. The authorized limits are exercised, not validated, by
 [the instrument card](fresh-deduction-instrument.md)'s own validation; do not
 run the prospective live evaluation as a check.
+
+## Results
+
+### Closed on main (2026-09-13)
+
+The first authorized run stopped after one of one hundred units on 2026-09-10 on the instrument's spend reconciliation (repaired by #447), spending 36,003 input and 3,401 output tokens at $0.00 marginal, with no retry. The run's record — its RESULTS.md, per-unit rows and stop log under
+`audits/deduction-candidate/run-2026-09-10` — lives on the closed pull request #445's branch
+`work/fresh-deduction-run`, which the owner chose not to merge; the acceptance boxes are
+checked against that record, not against a completed measurement. A later
+card carries the next attempt.

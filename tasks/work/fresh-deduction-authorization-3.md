@@ -1,65 +1,62 @@
-# Second run of the fresh-model deduction evaluation
+# Third run of the fresh-model deduction evaluation
 
-**Status:** done
+**Status:** active
 
 ## Outcome
 
-The fresh-model deduction instrument runs once more, on the second held-out
-band, under the limits the owner authorized for the first run, with the
-reconciliation defect that stopped the first attempt repaired. The run's actual
-tokens, wall and cost are recorded against every limit, the paired result is
-evaluated under the frozen decision rule, and the outcome is written down as a
-measurement that adopts nothing.
+The fresh-model deduction instrument runs once more, on the third held-out
+band, with the provider's empty completions retried within a stated bound and
+the wall window widened to the pace the second attempt measured. The run's
+actual tokens, wall and cost are recorded against every limit, the paired
+result is evaluated under the frozen decision rule, and the outcome is written
+down as a measurement that adopts nothing.
 
 ## Evidence
 
-The first run (PR #445, closed unmerged; branch `work/fresh-deduction-run`
-kept as its archive) stopped after one of one hundred units on the instrument's
-spend reconciliation, spending 36,003 input and 3,401 output tokens at $0.00
-marginal; seed 3000 of the first band was rendered and that band is development
-data since 2026-09-10. The execution manifest's own rule says more evidence is
-not an automatic spending authorization, so a second run needed a new owner
-decision. That decision is recorded here: on 2026-09-13, in the coordinator's
-session, after the merges of [the second freeze](held-out-prefix-freeze-2.md)
-(#446, `ca6e97d6`) and [the reconciliation fix](fresh-deduction-instrument-reconciliation.md)
-(#447, `7353ff88`), the owner instructed "Dispatch it" in reply to the
-coordinator's statement that the remaining step was a new authorization card
-with the same limits followed by a runner session. This card is that
-authorization's record, committed directly to `main` as a contract document
-under the delivery policy; the limits below are the first card's, unchanged.
-
-The instrument is `experiments/fresh_deduction_instrument.py` at `7353ff88` or
-later; the execution manifest `audits/deduction-candidate/execution-manifest.md`
-binds the second band (5000-5999, accepted seeds 5000-5052, 3 skips) and carries
-the dated amendments after the stopped run; the live gate refuses a manifest
-whose band is not the frozen record's, a live client under the offline label,
-and any invocation without the runner flag and the manifest's own path.
+Two attempts have stopped inside their first unit: the first (PR #445, closed)
+on an accounting defect repaired by #447, the second (PR #448, closed) on a
+provider response that carried no completion, which the instrument treated as
+a stop with no retry. Each rendered one held-out seed, so bands 3000-3999 and
+5000-5999 are development data. On 2026-09-13, in the coordinator's session,
+the owner instructed "Perform all of the recommended steps and close 448" in
+reply to the coordinator's four-step recommendation: a bounded retry for
+provider failures that return nothing, a third band, a third authorization
+with the model-work window widened to 6 h within 8 h elapsed, and a fresh
+runner. This card is the record of that authorization; the limits below are
+the first authorization's with only the wall row changed. The run is
+dispatched after [the third freeze](held-out-prefix-freeze-3.md) and
+[the transport-resilience card](fresh-deduction-instrument-transport-resilience.md)
+are merged, so that the execution manifest carries the retry bound, the widened
+window and the third band's binding before any call is made.
 
 ## Acceptance
 
-- [x] The execution manifest's authorization fields carry exactly the values in
+- [ ] The execution manifest's authorization fields carry exactly the values in
   Constraints, and the instrument enforces them: the per-unit `GameBudget` with
-  a run-level parent, the `RunDeadline`, the per-call caps, sequential order.
-- [x] The runner regenerates the frozen set from the band in the manifest and
+  a run-level parent, the `RunDeadline` at 8 h elapsed, the 6 h model-work
+  window, the per-call caps, sequential order, the transport retry bound.
+- [ ] The runner regenerates the frozen set from the band in the manifest and
   the instrument verifies every digest and the skip list before any client is
   constructed; the runner opens no prefix before the run.
-- [x] The run records actual tokens, elapsed wall, model-work time and the
-  $0.00 marginal cost against these limits, per arm and for the run; an
-  exhausted budget or deadline stops the run and authorizes no retry.
-- [x] The paired result is evaluated under the frozen decision rule (exact
+- [ ] The run records actual tokens, elapsed wall, model-work time, retried and
+  unaccounted attempts, and the $0.00 marginal cost against these limits, per
+  arm and for the run; an exhausted budget or deadline stops the run and
+  authorizes no retry beyond the stated per-call bound.
+- [ ] The paired result is evaluated under the frozen decision rule (exact
   McNemar p over the discordant pairs, the net difference bar, the
   wrongful-ejection bound) and written down in the preregistration's own
   vocabulary as a measurement; every stop condition is checked and reported.
-- [x] The results, the per-unit records, the usage reconciliation and the
-  archived prefixes (development data once archived) land under
-  `audits/deduction-candidate/run-2026-09-13/`, indexed from the candidate's
+- [ ] The results, the per-unit records, the usage reconciliation and the
+  rendered prefixes (development data once archived) land under
+  `audits/deduction-candidate/run-<date>/`, indexed from the candidate's
   README, with the `docs/artifacts.md` audits row recomputed.
 
 ## Constraints
 
-Authorized limits, identical to those the owner authorized by merging #437 on
-2026-09-07 (merge commit `0f49d8e6`), and re-authorized for a second run by the
-owner's instruction on 2026-09-13 (see Evidence):
+Authorized limits: the token, per-call, cost, roster and execution values the
+owner authorized by merging #437 on 2026-09-07 (merge commit `0f49d8e6`),
+unchanged, with the wall window widened by the owner's instruction of
+2026-09-13 (see Evidence):
 
 | Field | Value |
 | --- | --- |
@@ -67,12 +64,12 @@ owner's instruction on 2026-09-13 (see Evidence):
 | Model | `Qwen/Qwen3.6-27B` (locked 2026-07-12, Task 16.2). Non-thinking with `enable_thinking=false` pinned on every call, `response_format_mode = json_object`, prompt set `qwen3_6_27b` — all carried from the model lock, not re-decided here |
 | Per-call token cap | turn 2,048 output / vote 1,024, the shipped defaults unchanged. The committed lab rows for this model-and-prompt-set pair ran at `max_tokens=4096` and never exceeded 195 output tokens, so a truncation is a real signal rather than a cap artifact |
 | Total token budget | 2,400,000 input / 200,000 output run-level, and 45,000 input / 4,000 output per unit. Hard stop. Projection for option A: 600 calls; input `repaired_clock` 3,636/call x 300 + `combined_accounts` 2,441/call x 300 = 1,823,100; output 600 x 220 = 132,000 |
-| Wall-clock deadline | 4 h of model work within a 6 h elapsed deadline. The work window comes from the measured 12-23 s/call band; the 2 h margin covers one recorded 3h21m provider-side HTTP 529 stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
+| Wall-clock deadline | 6 h of model work within an 8 h elapsed deadline. Widened from 4 h / 6 h on 2026-09-13: the second attempt measured 26.6 s/call over its four resolved calls against 11.7 s/call on 2026-09-10, and six hundred calls at the slower pace need about 4 h 26 m; the 2 h elapsed margin still covers one recorded 3h21m provider-side stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
 | Dollar limit | $0.00 marginal, recorded as bookkeeping and not as an enforcement mechanism. The provider's zero pre-flight rate disables the USD dimension, so only the token budget and the deadline can stop a run |
 | Cost statement | The paragraph quoted below, verbatim |
 | Roster | 4p1i with 3 living voters at meeting open. A change of roster invalidates the token budget above and requires a new authorization |
 | Execution mode | sequential |
-| Held-out preparer | The second freeze's preparer session (PR #446, merged as `ca6e97d6`; band 5000-5999). Runner: a fresh session dispatched by the coordinator on this card on 2026-09-13, after the merges of #446 and #447; it opens no prefix before the run and regenerates the set from the frozen band, verifying every digest. The coordinator dispatches and runs nothing |
+| Held-out preparer | The third freeze's preparer session (the pull request of [the third freeze card](held-out-prefix-freeze-3.md); band 6000-6999). Runner: a fresh session dispatched by the coordinator on this card after that freeze and [the transport-resilience card](fresh-deduction-instrument-transport-resilience.md) are merged; it opens no prefix before the run and regenerates the set from the frozen band, verifying every digest. The coordinator dispatches and runs nothing |
 | Death-tick body handle | Left as temporal v2 renders it in both arms, stated in the manifest, and asserted by the regex over the rendered prompts and the frozen prefixes |
 
 The cost statement the manifest carries, verbatim:
@@ -124,18 +121,18 @@ authorizes a retry.
 
 ## Expected scope
 
-`audits/deduction-candidate/run-2026-09-13/` (new), the candidate's
-`README.md` index and one dated line in its `checkpoint.md`, `docs/artifacts.md`
-(the `audits/` row), `tasks/README.md`'s derived inventory sentence, this card.
-No instrument, generator, manifest or frozen-analysis byte moves. Delivered on
-`work/fresh-deduction-run-2` and one pull request into `main`.
+`audits/deduction-candidate/run-<date>/` (new), the candidate's `README.md`
+index and one dated line in its `checkpoint.md`, `docs/artifacts.md` (the
+`audits/` row), `tasks/README.md`'s derived inventory sentence, this card. No
+instrument, generator, manifest or frozen-analysis byte moves. Delivered on
+`work/fresh-deduction-run-3` and one pull request into `main`.
 
 ## Record impact
 
 Adds a measurement record under `audits/`; adopts nothing; no recording,
 report, DTO or weight byte moves; every candidate stays default-OFF. If the
-result later informs a fix, the second band's freeze record is marked
-development the same way the first was.
+result later informs a fix, the third band's freeze record is marked
+development the same way the first two were.
 
 ## Validation
 
@@ -145,13 +142,3 @@ single authorized live invocation the manifest documents, then
 scripts/check_doc_facts.py`, `uv run python scripts/verify_ml_evidence.py`
 (offline; never `--complete`), `uv run pytest
 tests/scripts/test_verify_ml_evidence.py -q`, and `bash scripts/check.sh`.
-
-## Results
-
-### Closed on main (2026-09-13)
-
-The second authorized run stopped inside its first unit on 2026-09-13 when the provider returned a completion body with no choices (repaired by the transport-resilience card), spending 13,182 input and 993 output tokens at $0.00 marginal, with no retry. The run's record — its RESULTS.md, per-unit rows and stop log under
-`audits/deduction-candidate/run-2026-09-13` — lives on the closed pull request #448's branch
-`work/fresh-deduction-run-2`, which the owner chose not to merge; the acceptance boxes are
-checked against that record, not against a completed measurement. A later
-card carries the next attempt.
