@@ -188,19 +188,25 @@ carried.
 - **An unaccounted attempt occupies a row.** It enters the call ledger with
   `UNACCOUNTED_ATTEMPT_MODEL`, zero tokens and its real wall, which is charged
   to the work clock, so the per-arm `model_work_seconds` and the clock keep
-  describing the same seconds and a stop cannot understate itself. The arm's
+  describing the same seconds and a stop cannot understate itself. An attempt
+  the model-work WINDOW cut off keeps its own older marker,
+  `ABORTED_ATTEMPT_MODEL`, because the two cut-offs mean different things and
+  only one of them is retried (`0eb0a514`; both markers are asserted). The arm's
   completions are `calls` minus `unaccounted_attempts`; the marker is in the
   report's `model_ids`, so a retried run cannot read as a clean one.
-- **Three commits, in that order.** `0fa2a3e5` moves `STOP_RULE`, so the
-  amendment log that must name it can only be written afterwards — a commit
-  cannot carry its own hash. `55132350` is that log plus the rest of the record
-  and the recomputed `audits/` row; `7689c01c` adds the two planted cases that
-  make the classifier's guards load-bearing. Only this card moves after
-  `7689c01c`.
+- **The commit order is forced at one point.** `0fa2a3e5` moves `STOP_RULE`,
+  so the amendment log that must name it can only be written afterwards — a
+  commit cannot carry its own hash. `55132350` is that log plus the rest of the
+  record; `7689c01c` adds the two planted cases that make the classifier's
+  guards load-bearing; `0eb0a514` separates the two cut-off markers. The record
+  commits re-pin the manifest's verification section and recompute the
+  `audits/` row to the tree they land on.
 
 ### Verification
 
-Run at `7689c01c`, the last commit that moves a Python or record byte.
+Run at `0eb0a514`, the last commit that moves an instrument byte; the record
+commit after it re-pins the manifest's verification section and the `audits/`
+row, and nothing else moves.
 
 ```sh
 uv run pytest tests/experiments -q
@@ -229,7 +235,7 @@ git ls-files audits | wc -l
 git ls-files -z audits | xargs -0 -n1 -I{} stat -f%z {} | awk '{s+=$1} END {print s}'
 ```
 
-205 files, 14,958,344 bytes — the row now reads `14,958,344 tracked bytes / 205
+205 files, 14,958,353 bytes — the row now reads `14,958,353 tracked bytes / 205
 files` against 14,950,292 before.
 
 The fake-provider mechanics check, re-run and re-pinned in the manifest's
@@ -253,7 +259,9 @@ is planted.
 ### The planted cases
 
 Each is `edit, run, restore` on the committed tree at `7689c01c`, and each
-turns red exactly the tests that claim the behaviour.
+turns red exactly the tests that claim the behaviour. The counts below are that
+tree's; `0eb0a514` adds two marker assertions to two of the same tests and
+changes none of these outcomes.
 
 1. **No retry at all** — the pre-fix behaviour, planted as
    `MAX_TRANSPORT_ATTEMPTS = 1`:

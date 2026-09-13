@@ -770,8 +770,8 @@ longer held out.
 ## Verification of this manifest
 
 The offline mechanics check, on the second held-out band. Run on this branch at
-`0fa2a3e5`, the commit that added the bounded retry above; only this document
-moves after it, and the dry run reads none of it:
+`0eb0a514`, the last commit that moves an instrument byte; only this document
+and the card move after it, and the dry run reads neither:
 
 ```sh
 .venv/bin/python -m experiments.fresh_deduction_instrument --dry-run
