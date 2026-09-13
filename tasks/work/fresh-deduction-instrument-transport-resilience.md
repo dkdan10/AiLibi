@@ -68,9 +68,14 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
   that pins the table to the constants updated.
 - [ ] The Inputs table binds the third band frozen by
   [the third freeze](held-out-prefix-freeze-3.md) (band, accepted range, skip
-  count from the new `held-out/manifest.json`), names the 5000-5999 band as
-  development data since 2026-09-13, and `assert_manifest_binds_the_live_band`
-  passes against the merged record.
+  count read off `audits/deduction-candidate/held-out/manifest.json`), names the
+  5000-5999 band as development data since 2026-09-13 and links its record at
+  `audits/deduction-candidate/held-out/manifest-band-5000-5999.json`, and
+  `assert_manifest_binds_the_live_band` passes against the merged record. Until
+  this item lands the committed Inputs row is the open obligation the converted
+  record's `converted.informed` names, and
+  `TestExecutionManifest::test_a_binding_to_a_converted_record_stays_an_open_obligation`
+  fails the moment this card closes with the row still stale.
 - [ ] A fake-provider dry run of the full pipeline on the new band completes at
   $0 with the empty-body double active for at least one call, and Results
   records its aggregate counts only.
