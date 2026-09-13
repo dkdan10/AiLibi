@@ -1589,26 +1589,34 @@ class _InstrumentClient:
                     max_tokens=max_tokens,
                     agent_id=agent_id,
                 ) from exc
-            aborted = time.monotonic() - started
-            # Recorded like every other stop in this client: the attempt bought
-            # no response, but it held the provider for ``aborted`` seconds and
-            # may have been billed for tokens this side cannot see, so it enters
-            # the partial accounting as a call with unknown (zero) usage rather
-            # than vanishing.
-            self._record(
-                agent_id=agent_id,
+            if window_binds:
+                aborted = time.monotonic() - started
+                # Recorded like every other stop in this client: the attempt
+                # bought no response, but it held the provider for ``aborted``
+                # seconds and may have been billed for tokens this side cannot
+                # see, so it enters the partial accounting as a call with
+                # unknown (zero) usage rather than vanishing. Its own marker,
+                # because the limit that cut it off is the run's window.
+                self._record(
+                    agent_id=agent_id,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    input_tokens=0,
+                    output_tokens=0,
+                    cost_usd=0.0,
+                    model=ABORTED_ATTEMPT_MODEL,
+                    seconds=aborted,
+                )
+                raise self._work_clock.charge_aborted(aborted) from exc
+            # The per-attempt wall was the tighter of the two: an endpoint that
+            # stopped answering, recorded and retried like the other classes.
+            raise self._nothing_came_back(
+                trigger="attempt_timeout",
+                started=started,
                 prompt=prompt,
                 max_tokens=max_tokens,
-                input_tokens=0,
-                output_tokens=0,
-                cost_usd=0.0,
-                model=ABORTED_ATTEMPT_MODEL,
-                seconds=aborted,
-            )
-            if window_binds:
-                raise self._work_clock.charge_aborted(aborted) from exc
-            self._work_clock.charge(aborted)
-            raise _NoCompletion("attempt_timeout") from exc
+                agent_id=agent_id,
+            ) from exc
         except BaseException as exc:
             # A call the provider BILLED and then refused. A real provider
             # validates the completion itself and raises before anything

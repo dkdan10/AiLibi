@@ -1724,6 +1724,13 @@ class TestTransportRetry:
         )
         assert inner.attempts == 2
         assert dict(client.attempts().by_trigger) == {"attempt_timeout": 1}
+        # The wall that cut it off is this wrapper's, not the run's window, so
+        # the row it left carries the unaccounted marker rather than the one a
+        # limit being reached leaves behind.
+        assert [call.model for call in client.calls][0] == (
+            instrument.UNACCOUNTED_ATTEMPT_MODEL
+        )
+        assert len(client.calls) == 2
 
     def test_the_model_work_window_still_stops_a_stalled_attempt(self) -> None:
         """The two walls are not the same wall. When what is LEFT of the
@@ -1738,6 +1745,9 @@ class TestTransportRetry:
             self._call(client)
         assert inner.attempts == 1
         assert client.attempts().unaccounted_attempts == 0
+        assert [call.model for call in client.calls] == [
+            instrument.ABORTED_ATTEMPT_MODEL
+        ]
 
     def test_a_truncated_response_is_not_retried(self) -> None:
         """PLANTED: a response at its output cap. It is a completion the model
