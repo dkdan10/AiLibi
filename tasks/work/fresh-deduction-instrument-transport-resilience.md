@@ -37,6 +37,11 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
 
 ## Acceptance
 
+- [x] Review correction: the Codex disposition count in this card and in the pull
+  request is the count `gh api repos/dkdan10/AiLibi/pulls/450/comments --paginate`
+  prints — eight P1 comments, six repaired and two refuted — and the one bullet
+  that neither repairs nor refutes a comment of its own says which repaired
+  comment's reach it narrows, so the arithmetic adds up on its face.
 - [x] Review correction: `TRANSPORT_RETRY`, the manifest's verbatim quotation of
   it and the measures row state what this side can actually see — an unaccounted
   attempt is recorded as zero tokens, which is what is KNOWN about it, and may
@@ -62,9 +67,9 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
   quoted beside it on the committed tree, each perturbation states the exact
   pytest selection it was measured under, and the `audits/` byte count uses the
   repo's portable command rather than a BSD-only `stat`.
-- [x] Review correction: all seven Codex P1 comments on this pull request are
-  dispositioned in the dated subsection of Results — four repaired, three
-  refuted with reasons.
+- [x] Review correction: all eight Codex P1 comments on this pull request are
+  dispositioned in the dated subsection of Results — six repaired, two refuted
+  with reasons.
 - [x] `_InstrumentClient` retries a call up to `MAX_TRANSPORT_ATTEMPTS = 4`
   attempts (three retries) only when the attempt produced no completion: an
   empty or `choices`-less body, a transport error, a retryable HTTP status, or a
@@ -72,9 +77,9 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
   measured 12-27 s/call band justifies, e.g. 180 s) — each with a short
   backoff, each attempt charged to the budget with whatever usage rides the
   failure and counted as an unaccounted attempt when none does — which the
-  provider client makes every one of these four classes, as review correction 1
-  below records. A fourth failure is a stop with the same partial accounting as
-  today.
+  provider client makes every one of these four classes, as round 1's first
+  repaired entry in Results records. A fourth failure is a stop with the same
+  partial accounting as today.
 - [x] Never retried: a response that reached its output cap (a truncation stays
   a stop), a returned payload that fails schema validation (the meeting layer's
   default path keeps handling it and the reconciliation counts its spend), an
@@ -147,7 +152,7 @@ scripts/validate_task_docs.py`, `uv run python scripts/check_doc_facts.py`,
 
 ## Results
 
-Round 1 of two, reopened once for review. The six review corrections and the
+Round 1 of two, reopened twice for review. The seven review corrections and the
 first five original acceptance items are met and evidenced below; the last two
 — re-binding the Inputs table to the third band, and a dry run over it —
 stay unchecked and this card stays `active`, because
@@ -416,14 +421,17 @@ tests; cases 6 to 9 are round 1's own.
 
 ### Review corrections, round 1 (2026-09-13)
 
-Eleven blocking findings across three lenses, and the seven Codex P1 comments on
-`e13bec01`. Four of the Codex comments were valid and are repaired; three are
-refuted below. Code and planted cases are `4591cc17`; this record is the commit
+Eleven blocking findings across three lenses, and the eight Codex P1 comments on
+`e13bec01`, all of them from review `5192491997`. Six of the eight were valid and
+are repaired; two are refuted below. (Round 2 corrected the counts, which first
+read seven, four and three; every comment was already dispositioned.) Code and
+planted cases are `4591cc17`; this record is the commit
 after it. Nothing about the design moved: the frozen analysis is the same bytes,
 no limit was widened, and acceptance items 6 and 7 stay open for the stacking
 round.
 
-**Repaired.**
+**Repaired.** Six of the seven entries carry a Codex id; entry 5 is the lenses'
+own finding and no Codex comment.
 
 1. *The enforcement text claimed usage it never sees* (Codex `4001070464`, and
    the same finding from two lenses). `TRANSPORT_RETRY` said every failed
@@ -467,7 +475,9 @@ round.
    intent and names its source in one trailing line; the history it dropped is
    in the manifest's amendment log, which is where the record lives.
 
-**Refuted.**
+**Refuted.** Two Codex comments, `4001070467` and `4001070474`; the third bullet
+narrows the reach of `4001070464`, which is repaired above as entry 1 and is not
+a ninth comment.
 
 - *"Retain retry counts for each unit"* (Codex `4001070467`). The report is
   aggregate-only by contract — `InstrumentReport`'s docstring and
@@ -490,7 +500,8 @@ round.
   the point untested: it now resolves EVERY dated entry's commit in the section,
   so the round-1 entry is held to the same standard as the first.
 - *The empty-completion retry "potentially allows the authorized live run to
-  cross a token cap without stopping"* (the reach of Codex `4001070464`). The
+  cross a token cap without stopping"* (the wider reach of Codex `4001070464`,
+  whose narrow claim is repaired as entry 1 above). The
   under-count is real and is the limitation above; "without stopping" is not.
   The run-level budget is charged for every completion that arrives, the
   per-unit and run caps are read back after each unit, and the unseen quantity
@@ -498,3 +509,49 @@ round.
   continue: nothing in this wrapper widens a limit, and an exhausted budget is
   never a retry class.
 
+
+### Review corrections, round 2 (2026-09-13)
+
+One blocking finding, raised independently by two lenses: the Codex disposition
+counts stated above and in the pull request did not reproduce. This round moves
+no code, no test, no `audits/` byte and no `docs/artifacts.md` row — only this
+card and the pull-request body — so every figure under Verification and every
+planted case still stands as measured at `4591cc17`, the `audits/` inventory row
+is untouched at 14,960,636 bytes over 205 files, and `tasks/README.md` keeps `2
+ready, 2 active, 45 done` because no card's Status moved.
+
+**Repaired.** *The Codex comment counts were wrong.* The review left eight P1
+comments, not seven, and this card repairs six of them and refutes two, not four
+and three:
+
+```sh
+gh api repos/dkdan10/AiLibi/pulls/450/comments --paginate \
+  -q '.[] | "\(.id) \(.pull_request_review_id) \(.original_commit_id[0:8])"'
+```
+
+prints eight lines — `4001070464`, `4001070465`, `4001070467`, `4001070469`,
+`4001070471`, `4001070472`, `4001070474`, `4001070475` — every one of them from
+review `5192491997` on `e13bec01`, which is the only review this pull request
+carries. The round-1 lists above already named all eight: six ids under
+**Repaired**, two under **Refuted**. What miscounted was the summary sentence,
+which read the lists' lengths instead of their ids — **Repaired** has a seventh
+entry that is the lenses' own finding and no Codex comment, and **Refuted** has a
+third bullet that narrows the reach of `4001070464`, repaired above, rather than
+answering a ninth comment. The acceptance item, the round-1 lead sentence, both
+list headings and the pull-request body now say eight, six and two, and each list
+says which of its entries is not a comment of its own, so the arithmetic reads
+straight off the page. No disposition changed and no comment was left unanswered:
+this is a counting repair, which is why it carries no planted case — the claim it
+fixes is a number about this pull request, and the command that prints it is
+quoted above.
+
+Nothing refuted.
+
+Re-run on the tree this round delivers, in the card's Validation order: `uv run
+pytest tests/experiments -q` 287 passed; `uv run python
+scripts/validate_task_docs.py` `Task docs validation passed: 390 historical phase
+tasks and 390 prompts; 49 work cards.`; `uv run python scripts/check_doc_facts.py`
+its four verified lines; `uv run python scripts/verify_ml_evidence.py` `checks: 60
+| OK 48 | FAIL 0 | ABSENT 7 | INFO 5` with `--complete` not run; `uv run pytest
+tests/scripts/test_verify_ml_evidence.py -q` 80 passed; `bash scripts/check.sh`
+exit 0, with its counts in the pull request.
