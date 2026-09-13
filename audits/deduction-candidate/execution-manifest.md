@@ -243,6 +243,12 @@ both cards and is not re-cut here: its "2.0 M tokens over a 6-hour elapsed
 window" is the first authorization's projection sentence, and the elapsed limit
 this manifest binds is the 8 h row above it.
 
+Two obligations stay open and are not claimed by this entry: the Inputs table
+below still binds the 5000-5999 band, which the stopped run of 2026-09-13
+rendered the first seed of and which
+[the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) replaces,
+and the re-binding to the third band is the same card's later round.
+
 **2026-09-13, review round 1 (`4591cc17`) — the enforcement text says only what
 this side can see.** Review of the entry above found `TRANSPORT_RETRY` claiming
 more than the mechanism can do: it said every failed attempt is recorded "with
@@ -269,12 +275,6 @@ is counted once its next send begins rather than before the backoff, so a run
 cancelled mid-wait cannot report a send it never made — and repairs the
 `_ModelWorkClock` docstring, which still described the 4 h / 6 h authorization
 the entry above widened.
-
-Two obligations stay open and are not claimed by this entry: the Inputs table
-below still binds the 5000-5999 band, which the stopped run of 2026-09-13
-rendered the first seed of and which
-[the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) replaces,
-and the re-binding to the third band is the same card's later round.
 
 ## The instrument
 
