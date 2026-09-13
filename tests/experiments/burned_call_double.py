@@ -87,6 +87,39 @@ def charged_parse_failure(
     raise RuntimeError("the planted payload has to fail this schema")
 
 
+def charged_no_completion(
+    message: str,
+    *,
+    input_tokens: int = BURNED_INPUT_TOKENS,
+    output_tokens: int = BURNED_OUTPUT_TOKENS,
+    model: str = instrument.DRY_RUN_MODEL,
+) -> RuntimeError:
+    """A failure the adapter BILLED for, wearing an empty body's wording.
+
+    The awkward case for a classifier that reads messages: an adapter that
+    charged for a call and then refused it can word the refusal any way it
+    likes, including the way it words a body with nothing in it. The spend is
+    real either way, so this one is a sample and not a retry — which is a
+    decision about the CLASS of the failure, taken before any wording is read.
+    """
+
+    exc = RuntimeError(message)
+    _attach_parse_failure(
+        exc,
+        LLMCallFailure(
+            model=model,
+            prompt_length=0,
+            raw_response="",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=0.0,
+            error_type=type(exc).__name__,
+            error_message=message[:200],
+        ),
+    )
+    return exc
+
+
 class BurnedCallProvider(DryRunProvider):
     """A dry-run provider that bills for one ballot and then refuses it.
 

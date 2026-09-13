@@ -106,10 +106,12 @@ from tests.experiments import burned_call_double
 from tests.experiments.burned_call_double import (
     BURNED_INPUT_TOKENS,
     BURNED_OUTPUT_TOKENS,
+    EMPTY_BODY_ERROR,
     RETRYABLE_STATUS_ERROR,
     TRANSPORT_ERROR,
     BurnedCallProvider,
     NoCompletionProvider,
+    charged_no_completion,
 )
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
@@ -1800,6 +1802,37 @@ class TestTransportRetry:
         """
 
         assert instrument.transport_trigger(failure) is None
+
+    def test_a_billed_failure_is_not_retried_however_it_is_worded(self) -> None:
+        """PLANTED: a refusal the endpoint CHARGED for, worded like an empty body.
+
+        The wording is the only handle the empty-completion class has, so a
+        classifier that reached for it first would re-send a call whose spend is
+        already in the ledger and in the budget — a second charge on one unit of
+        a frozen design. What decides is the class of the failure: usage rides
+        this one, so it is a completion that was produced and refused.
+        """
+
+        billed = charged_no_completion(EMPTY_BODY_ERROR)
+        assert instrument.transport_trigger(billed) is None
+
+    def test_a_refused_payload_quoting_a_status_is_not_a_status_from_the_endpoint(
+        self,
+    ) -> None:
+        """PLANTED: the body the model wrote mentions an HTTP 503.
+
+        A `ValidationError` renders the input it rejected, so a status the MODEL
+        wrote appears in the message exactly where a status the ENDPOINT
+        returned would. Reading the wording of a payload that arrived is the
+        defect; the class is checked first, and a refused payload is a sample
+        whatever it says.
+        """
+
+        planted = '{"rationale_text": "HTTP 503"}'
+        with pytest.raises(ValidationError) as caught:
+            ModelAuthoredVoteBallot.model_validate_json(planted)
+        assert "HTTP 503" in str(caught.value)
+        assert instrument.transport_trigger(caught.value) is None
 
     def test_the_classifier_keys_on_wording_the_adapter_still_uses(self) -> None:
         """The empty-completion class has no type of its own to match on.
