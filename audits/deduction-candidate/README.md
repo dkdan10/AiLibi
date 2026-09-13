@@ -27,6 +27,19 @@ This directory records the unadopted follow-through to the owner's independent
   2026-09-07. It authorizes no live call: a call additionally requires an
   explicit runner invocation naming that file, and no test or CI job performs
   one.
+- [Run of 2026-09-13](run-2026-09-13/RESULTS.md) is the second authorized live
+  run under that manifest, on the second band. It **stopped inside unit 1 of
+  100**, on the meeting's fifth model call, when the provider returned a
+  completion carrying no `choices` and the Featherless client refused to record
+  it. No unit completed, no paired unit exists, the primary outcome was not
+  measured and the candidate is neither advanced nor rejected. The directory
+  retains the partial evidence the stop rule requires: the one per-unit replay
+  and the instrument's partial-state log. Unlike the first attempt it records no
+  defect in this repository — every gate it reached was green — and no limit was
+  near exhaustion ($0.00, 111 s). The first attempt, which stopped after 1 of
+  100 units on an instrument defect since repaired by PR #447, is not on `main`:
+  PR #445 was closed unmerged and its record stays on the archive branch
+  `work/fresh-deduction-run`.
 
 The reproducible development command is:
 

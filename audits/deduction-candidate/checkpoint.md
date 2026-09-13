@@ -59,3 +59,11 @@ comparison. Fresh model decisions require the [preregistration](preregistration.
 a frozen execution manifest and an explicitly authorized provider/token/wall/cost
 budget. Neither this capture nor completion of offline implementation authorizes
 spending, adoption or merging into main.
+
+**2026-09-13.** A second authorized fresh-model run, on the second held-out
+band, was executed once and
+[stopped inside unit 1 of 100](run-2026-09-13/RESULTS.md) when the provider
+returned a completion carrying no `choices`; no unit completed, no paired unit
+exists, the primary outcome was not measured, and the candidate is neither
+advanced nor rejected. The stop is the provider's rather than this repository's,
+and the reconciliation repaired after the first attempt was never reached.
