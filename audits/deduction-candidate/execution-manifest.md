@@ -1,6 +1,6 @@
 # Fresh-model deduction evaluation — execution manifest
 
-**Dated 2026-09-09, amended 2026-09-10. Status: bound.
+**Dated 2026-09-09, amended 2026-09-10 and 2026-09-13. Status: bound.
 This document authorizes no live call.**
 
 [The preregistration](preregistration.md) §"Select a candidate and prepare a
@@ -36,8 +36,10 @@ that completeness is a mechanism rather than a promise:
 walks this branch's history from the commit that first bound this document,
 reads the frozen-analysis constants out of every later revision of
 `experiments/fresh_deduction_instrument.py`, and requires each commit whose
-values differ from its parent's to be named in this section. A pre-run change to
-the frozen analysis that nobody logged here fails that test.
+values differ from its parent's to be named in one of this document's dated
+amendment logs — this section, or one of the post-run sections below, which is
+where an amendment made after a unit ran belongs. A change to the frozen
+analysis that nobody logged fails that test wherever it was made.
 
 **2026-09-09 (`2dde0c91`) — the decision rule gains its third condition, and
 the sampling configuration is bound.** Round-1 review of the instrument's pull
@@ -183,6 +185,70 @@ without the check it proves, and each is listed in
 [the reconciliation card](../../tasks/work/fresh-deduction-instrument-reconciliation.md)'s
 stacking subsection.
 
+## Amendments after the stopped run of 2026-09-13
+
+The second live run stopped inside its first unit as well (PR #448, closed
+unmerged; branch `work/fresh-deduction-run-2` is its archive). On its fifth
+call the endpoint answered a 2xx with no `choices`, which
+`llm/featherless_client.py::_raw_from_response_body` refuses with a bare
+`RuntimeError` that none of that client's own retry classes carries, so the
+attempt reached the instrument as a failure and the run stopped with four
+resolved calls of a projected six hundred. This section is dated apart from the
+one above for the same reason that one is: it is written after a unit ran. It
+reaches the transport clause of the frozen rule, the enforcement text and the
+wall row; no held-out outcome informed it, because the stop it reads carries
+counts and identifiers only, and the four calls it resolved were seed 5000 of a
+band this document no longer binds.
+
+**2026-09-13 (`0fa2a3e5`) — an attempt that produced nothing is retried
+within a stated bound, and the wall window carries the third authorization's
+numbers.** Three things move together.
+
+`STOP_RULE` gains a transport clause and is quoted below in its new bytes. It is
+the one amendment in this document that reaches the frozen analysis after a unit
+ran, and it is written down as such: a call that came back with no completion at
+all is retried up to three times and then a stop, with every attempt counted per
+arm and per unit. It widens no limit and adds no stop — the run stops on the
+same conditions it stopped on before, one of them later — and it draws no second
+sample, because the attempts it re-sends produced nothing to sample. The clause
+says the other half in the same breath: a body that reached its output cap and a
+returned payload that failed schema validation ARE samples and are never
+retried, and neither is an exhausted budget or deadline. The other four frozen
+constants — `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS` and `WRONGFUL_EJECTION_TRADEOFF` — are the
+same bytes the sections below quote.
+
+The retry itself lives in the instrument's own client wrapper and not in
+`llm/featherless_client.py`, which is what keeps every recorded campaign's
+behaviour where it was; `TRANSPORT_RETRY` states it and "How each limit is
+enforced" quotes that constant verbatim. Its bound is four attempts at a 180 s
+per-attempt wall, sized off the measured per-call band rather than chosen: this
+evaluation's calls have run at 11.7 s and 26.6 s, so a healthy call cannot reach
+the wall, and four attempts at it cost at most 12 minutes of the work window
+against the better part of an hour one stalled call could otherwise hold. Every
+attempt is still bounded by what is left of that window, so no retry outlives
+the authorization. Each case is planted and red without the code it proves, and
+each is listed in
+[the transport-resilience card](../../tasks/work/fresh-deduction-instrument-transport-resilience.md)'s
+Results.
+
+The wall row of the authorized table now reads 6 h of model work within an 8 h
+elapsed deadline, copied verbatim from
+[the third authorization card](../../tasks/work/fresh-deduction-authorization-3.md)'s
+Constraints table, and `AUTHORIZED_MODEL_WORK_SECONDS` /
+`AUTHORIZED_ELAPSED_SECONDS` carry the same numbers. That row is the owner's,
+widened by the instruction of 2026-09-13 that card records; every other row of
+that table is #437's, unchanged. The cost statement is the same paragraph in
+both cards and is not re-cut here: its "2.0 M tokens over a 6-hour elapsed
+window" is the first authorization's projection sentence, and the elapsed limit
+this manifest binds is the 8 h row above it.
+
+Two obligations stay open and are not claimed by this entry: the Inputs table
+below still binds the 5000-5999 band, which the stopped run of 2026-09-13
+rendered the first seed of and which
+[the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) replaces,
+and the re-binding to the third band is the same card's later round.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -230,14 +296,19 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 | Legal schedules | Each prefix is replayed through the engine, which accepts or rejects every step; a prefix whose hashed steps the engine did not resolve step for step never gets a digest |
 | Provider-response repetitions | One. Each unit is one prefix and one meeting; no response is sampled twice and no unit is repeated |
 | Run order | Sequential, seed ascending, both arms per seed before the next seed |
-| Maximum opportunities | 50 prefixes × 2 arms = 100 meeting units, ~600 model calls. An attempt that never resolves — a transport failure, a truncation, an exhausted limit — is a stop, and the partial state is reported rather than replaced. An attempt whose payload failed schema validation is NOT a stop: the meeting layer substitutes a placeholder turn or a marked SKIP ballot for it at an accepted ~1-in-50 rate, and the instrument counts every such substitution per unit and per arm (see "Meeting-internal defaults" below) so it stays visible instead of being silently replaced |
+| Maximum opportunities | 50 prefixes × 2 arms = 100 meeting units, ~600 model calls. An attempt that came back with no completion at all — an empty body, a transport failure, a retryable status, a send that outran the per-attempt wall — is retried up to three times and then a stop; a truncation and an exhausted limit are stops with no retry. The partial state is reported rather than replaced, and every retried attempt is counted per arm and per unit. An attempt whose payload failed schema validation is NOT a stop: the meeting layer substitutes a placeholder turn or a marked SKIP ballot for it at an accepted ~1-in-50 rate, and the instrument counts every such substitution per unit and per arm (see "Meeting-internal defaults" below) so it stays visible instead of being silently replaced |
 
 ## Sampling configuration, caps and limits — the owner's authorized values
 
 Copied verbatim from [the authorization card](../../tasks/work/fresh-deduction-authorization.md)'s
 Constraints table, whose reasoning of record is item B of
 [the 2026-09-07 decision memo](../../tasks/owner-decisions-2026-09-07.md) — with
-one row that is NOT from that table and is marked as such. The authorization
+one row that is NOT from that table and is marked as such, and one the owner
+later widened. The wall row is copied verbatim from
+[the third authorization card](../../tasks/work/fresh-deduction-authorization-3.md)'s
+Constraints table instead, which restates #437's other values unchanged and
+carries the owner's instruction of 2026-09-13; see "Amendments after the stopped
+run of 2026-09-13". The authorization
 card binds no temperature; the preregistration
 (`preregistration.md:113-115`) requires this manifest to bind the sampling
 configuration, so the sampling-temperature row states the values shipped in
@@ -251,7 +322,7 @@ inheriting them. It moves no owner-authorized number.
 | Per-call token cap | turn 2,048 output / vote 1,024, the shipped defaults unchanged. The committed lab rows for this model-and-prompt-set pair ran at `max_tokens=4096` and never exceeded 195 output tokens, so a truncation is a real signal rather than a cap artifact |
 | Sampling temperature *(not from the authorization card — see the note above)* | turn temperature 0.4 / vote temperature 0.2 — the shipped values (`meetings/manager.py:211,213`), bound here rather than inherited. The instrument passes an explicit `MeetingConfig` carrying them, records both on every report, and a test asserts they are still the shipped values, so a later edit to those module defaults breaks a test instead of silently moving this frozen design's sampling distribution |
 | Total token budget | 2,400,000 input / 200,000 output run-level, and 45,000 input / 4,000 output per unit. Hard stop. Projection for option A: 600 calls; input `repaired_clock` 3,636/call x 300 + `combined_accounts` 2,441/call x 300 = 1,823,100; output 600 x 220 = 132,000 |
-| Wall-clock deadline | 4 h of model work within a 6 h elapsed deadline. The work window comes from the measured 12-23 s/call band; the 2 h margin covers one recorded 3h21m provider-side HTTP 529 stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
+| Wall-clock deadline *(widened 2026-09-13 — from the third authorization card)* | 6 h of model work within an 8 h elapsed deadline. Widened from 4 h / 6 h on 2026-09-13: the second attempt measured 26.6 s/call over its four resolved calls against 11.7 s/call on 2026-09-10, and six hundred calls at the slower pace need about 4 h 26 m; the 2 h elapsed margin still covers one recorded 3h21m provider-side stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
 | Dollar limit | $0.00 marginal, recorded as bookkeeping and not as an enforcement mechanism. The provider's zero pre-flight rate disables the USD dimension, so only the token budget and the deadline can stop a run |
 | Roster | 4p1i with 3 living voters at meeting open. A change of roster invalidates the token budget above and requires a new authorization |
 | Execution mode | sequential |
@@ -352,18 +423,41 @@ asserts this document quotes each of them.
   that crossed it: the tokens are already spent, and the stop is what keeps
   the next unit from spending more.
 - **Wall.** Two clocks, because the authorization names two limits: one
-  `orchestrator.run_limits.RunDeadline` for the 6 h elapsed window, checked
+  `orchestrator.run_limits.RunDeadline` for the 8 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
-  4 h of model work. The work clock bounds each provider await by what is LEFT
+  6 h of model work. The work clock bounds each provider await by what is LEFT
   of its window, the way `RunDeadline.run` bounds meeting work by what is left
   of the elapsed one, so the run stops DURING the call that exhausts the window.
   A clock charged only when a call returns would be a one-call-granular limit,
   and one call on this provider is not small: `llm/featherless_client.py` retries
   a send six times at a 600 s timeout with exponential backoff, so a run at
-  3 h 59 m of model work could otherwise spend a fifth hour against an
-  authorization of four. The cut-off attempt's elapsed wall is charged to the
-  clock and its call recorded in the partial accounting with unknown (zero)
-  usage before the stop is raised.
+  5 h 59 m of model work could otherwise spend a seventh hour against an
+  authorization of six. Each attempt is bounded by the tighter of that remaining
+  window and the 180 s per-attempt wall below, and which of the two expired is
+  what the cut-off means: the window is a limit reached and a stop, the
+  per-attempt wall is an attempt that stopped answering and a retry. The cut-off
+  attempt's elapsed wall is charged to the clock and its call recorded in the
+  partial accounting with unknown (zero) usage before the stop is raised.
+- **Transport.** A call that produced no completion is sent again by the
+  instrument's own client wrapper, within a bound this document states, quoted
+  verbatim from `TRANSPORT_RETRY`:
+
+  A call whose attempt came back with no completion at all is sent again by
+  this instrument's own client wrapper rather than by the provider client, so
+  no recorded campaign changes behaviour: at most 4 attempts, one send and 3
+  retries, on an empty or choices-less body, a transport failure, a retryable
+  HTTP status, or an attempt that outran the 180 s per-attempt wall this
+  wrapper bounds each send by — each retry after a short exponential backoff,
+  and each attempt still bounded by what is left of the model-work window,
+  which no retry may outlive. The last failure stops the run with the same
+  partial accounting every other unit failure reports. Nothing that produced a
+  completion is retried: a response that reached its output cap, a returned
+  payload that failed schema validation, an exhausted budget or deadline and a
+  refused live run are all left exactly as they were. Every failed attempt is
+  recorded with whatever usage the provider reported for it, and as an
+  unaccounted attempt when it reported none, and the attempts are counted per
+  arm and per unit — retried calls, unaccounted attempts and the trigger class
+  of each — beside the meeting-internal defaults.
 - **Dollar.** `max_cost_usd=0.0` on both budgets, which the provider's zero
   pre-flight rate makes bookkeeping rather than a brake — exactly as the cost
   statement says.
@@ -511,6 +605,7 @@ Per unit, with counts beside every rate:
 | Supported / unsupported / uncited ballots | Per ballot, per arm, with guard-rewritten ballots counted separately |
 | Naming ballots and off-target citations | Per ballot, per arm: `naming_ballots` counts the ballots naming the ejected player and `off_target_citations` how many of those cited evidence that does not bear on that player. The pair says how often relevance rather than presence is what a unit turned on |
 | Meeting-internal defaults | Per attempt, per arm: `defaulted_turns` and `defaulted_votes`, split by trigger into `defaults_by_validation` and `defaults_by_deadline`, plus `degraded_openings`. `units_with_defaults` counts the units carrying at least one, and is the bound on how many of that arm's decisions rest on a partly unauthored meeting |
+| Retried provider attempts | Per attempt, per arm: `retried_calls` counts the calls this run had to send more than once and `unaccounted_attempts` the attempts that bought no completion and no usage, split by trigger into `attempts_by_trigger`. `units_with_retries` counts the units carrying at least one. Every unaccounted attempt is also a row in the per-arm `calls` total, carrying zero tokens and the `no-completion-returned` marker, so the completions are `calls` minus `unaccounted_attempts` |
 | Terminal vs partial units | A unit whose meeting ended the game is terminal; one that stopped at the tick after the report is deliberately partial. Neither is a game-win trial |
 | Provider cost | Calls, input and output tokens, `cost_usd` and model-work seconds, per arm and per run, against the limits above |
 
@@ -617,23 +712,32 @@ token and wall limits above.
 
 The run stops, retains its partial evidence and unresolved accounting, and
 authorizes no retry and no widening of any limit, on any of: a token budget
-exhausted at either the per-unit or the run level; the elapsed wall deadline or
-the model-work window, the latter cutting off the attempt in flight rather than
-one call later; a per-call response that reached its output cap (a truncation
-is a stop, not a datum); a held-out digest or skip that differs from the frozen
-manifest; a rendered prompt or regenerated prefix matching the legacy body
-handle; a unit whose recorded observation clock or experiment config is not the
-arm's; or a recorded meeting default whose phase and trigger this instrument
-cannot classify. A meeting-internal default is NOT itself a stop. The meeting
-layer's shipped fail-soft substitutes a placeholder turn or a marked SKIP
-ballot for a payload that failed schema validation, at an accepted rate of
-about 1 in 50 calls, and a fixed 50-unit paired sample cannot be abandoned for
-a substitution the engine is designed to make. Every such substitution is
-instead counted per arm and per unit — turns and votes separately, by trigger,
-with the units carrying any — and reported beside decision coverage, so it is
-visible rather than silently replaced. No stop condition reads an outcome: the
-50 paired units are a fixed sample with no interim analysis and no optional
-stopping, so nothing here can be tripped by a result the run has produced.
+exhausted at either the per-unit or the run level; the elapsed wall deadline
+or the model-work window, the latter cutting off the attempt in flight
+rather than one call later; a per-call response that reached its output cap
+(a truncation is a stop, not a datum); a held-out digest or skip that
+differs from the frozen manifest; a rendered prompt or regenerated prefix
+matching the legacy body handle; a unit whose recorded observation clock or
+experiment config is not the arm's; or a recorded meeting default whose
+phase and trigger this instrument cannot classify. A call that came back
+with no completion at all — an empty body, a transport failure, a retryable
+status, or an attempt that outran the per-attempt wall each send is bounded
+by — is retried up to three times, then a stop carrying the same partial
+accounting, with every attempt counted per arm and per unit. Retrying one of
+those buys no new draw: an attempt that produced nothing is not a sample. A
+body that reached its output cap and a returned payload that failed schema
+validation ARE samples and are never retried, and neither is an exhausted
+budget or deadline. A meeting-internal default is NOT itself a stop. The
+meeting layer's shipped fail-soft substitutes a placeholder turn or a marked
+SKIP ballot for a payload that failed schema validation, at an accepted rate
+of about 1 in 50 calls, and a fixed 50-unit paired sample cannot be
+abandoned for a substitution the engine is designed to make. Every such
+substitution is instead counted per arm and per unit — turns and votes
+separately, by trigger, with the units carrying any — and reported beside
+decision coverage, so it is visible rather than silently replaced. No stop
+condition reads an outcome: the 50 paired units are a fixed sample with no
+interim analysis and no optional stopping, so nothing here can be tripped by
+a result the run has produced.
 
 **Possible decisions**, per the preregistration: advance for an explicitly scoped
 adopting review, revise and evaluate a new version, reject, or gather more
@@ -666,7 +770,7 @@ longer held out.
 ## Verification of this manifest
 
 The offline mechanics check, on the second held-out band. Run on this branch at
-`08aee9cc`, the commit that re-bound the Inputs table above; only this document
+`0fa2a3e5`, the commit that added the bounded retry above; only this document
 moves after it, and the dry run reads none of it:
 
 ```sh
@@ -688,6 +792,12 @@ decision memo's calibrated 1.28x real-input ratio to their sum (1,474,587) gives
 about 1.89 M against the 2.4 M ceiling, and the larger arm's 17,787 per unit
 gives about 22,800 against the 45,000 per-unit ceiling — headroom checks, not
 predictions, because a real model writes a different transcript.
+
+The bounded retry costs this fixture nothing and is not exercised by it: the
+dry-run provider answers every call, so both arms report `retried_calls` 0,
+`unaccounted_attempts` 0 and no trigger at all, and the figures above are the
+same ones this section carried at `08aee9cc`. That the retry bound works at all
+is established by its planted cases, not by this run.
 
 The figures this section carried before the re-binding of 2026-09-10 were
 measured on the 3000-3999 band. They are superseded with it and are not re-run:
