@@ -1104,9 +1104,7 @@ class TestAuthorizedClient:
                 repo_root=tmp_path,
             )
 
-    def test_the_pre_client_gate_returns_the_verified_set(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_pre_client_gate_returns_the_verified_set(self, tmp_path: Path) -> None:
         """The positive half: it hands back the set the client is then built
         against, so the two cannot come apart. The root is the committed tree
         whenever the Inputs row binds the live band, and a copy of it with that

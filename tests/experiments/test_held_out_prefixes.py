@@ -872,14 +872,10 @@ def test_the_range_walks_refuse_a_converted_band_as_well() -> None:
     # Derived from the records on disk, not from the list under test: a band
     # dropped out of CONVERTED_BANDS would otherwise take its own case with it
     # and the walk would quietly reopen on a set an earlier freeze screened.
-    on_disk = sorted(
-        (REPO_ROOT / MANIFEST_PATH).parent.glob("manifest-band-*.json")
-    )
+    on_disk = sorted((REPO_ROOT / MANIFEST_PATH).parent.glob("manifest-band-*.json"))
     assert on_disk, "no converted freeze record is committed"
     listed = {converted.manifest_path for converted in CONVERTED_BANDS}
-    assert {
-        str(path.relative_to(REPO_ROOT)) for path in on_disk
-    } == listed, (
+    assert {str(path.relative_to(REPO_ROOT)) for path in on_disk} == listed, (
         "every committed manifest-band-*.json is a band CONVERTED_BANDS names, "
         "or the range guard no longer refuses it"
     )
@@ -1045,9 +1041,7 @@ def test_a_converted_record_flips_the_status_and_changes_nothing_else() -> None:
         pull_request="#448",
         branch="work/fresh-deduction-run-2",
         rendered_seeds=(_DEBUG_SEEDS[0],),
-        informed=(
-            "tasks/work/fresh-deduction-instrument-transport-resilience.md"
-        ),
+        informed="tasks/work/fresh-deduction-instrument-transport-resilience.md",
         superseded_by=MANIFEST_PATH,
         note="A planted flip over two out-of-band debugging seeds.",
     )
