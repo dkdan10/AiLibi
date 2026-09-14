@@ -529,14 +529,20 @@ RESERVATION_POLICY: Final[str] = (
     "it cannot pay for, and refuses one of them by arithmetic rather than by "
     "spend; the instrument therefore refuses such a ceiling before a live run "
     "starts, rather than discovering it partway through one. The run-level "
-    "ceilings are the same question one level up and are checked against the "
+    "ceilings are the same question one level up, because the pre-flight "
+    "recurses into the parent budget, and are checked against the "
     "largest per-unit spend the live archives have charged — "
     f"{CALIBRATED_UNIT_INPUT_TOKENS:,} input and "
     f"{CALIBRATED_UNIT_OUTPUT_TOKENS:,} output — rather than against a mean "
     "projection: a hundred units at the largest unit this evaluation has "
     "measured is what a run ceiling has to be able to pay for, because a "
     "ceiling that cannot is a stop rule that fires on arithmetic near the end "
-    "of a run it has already paid for."
+    "of a run it has already paid for. The run-level OUTPUT ceiling carries "
+    f"one further {AUTHORIZED_TURN_MAX_TOKENS:,}-token turn cap on top of that "
+    "product, because the last call of the run is reserved against the run "
+    "budget after the run has charged everything before it; the input "
+    "dimension carries no such term, its pre-flight being the prompt's own "
+    "estimated length rather than a cap."
 )
 
 
@@ -1212,10 +1218,18 @@ def assert_limits_are_feasible(
     * the per-unit INPUT ceiling against the largest unit the live archives
       charged, because a ceiling below a unit this evaluation has already run
       refuses a unit it has already seen;
-    * both RUN ceilings against that same per-unit figure times the unit count.
-      A run ceiling below what its own units are authorized to spend stops the
-      run near its end on arithmetic rather than on a real overrun, which is
-      the same two-units-of-account defect one level up.
+    * both RUN ceilings against that same per-unit figure times the unit count,
+      and the OUTPUT one against one further per-call turn cap on top of that
+      product. ``GameBudget.preflight`` recurses into its parent
+      (``llm/budget.py``), so the RUN budget sees a call's full output cap added
+      to everything the run has already charged, exactly as the unit budget
+      does; a run ceiling sized at exactly what its units charge therefore
+      cannot pay for its own last call. A run ceiling below what its own units
+      are authorized to spend stops the run near its end on arithmetic rather
+      than on a real overrun, which is the same two-units-of-account defect one
+      level up. The INPUT dimension takes no such term: a call's input side is
+      pre-flighted at the prompt's own estimated length
+      (``llm/budgeted_client.py``'s ``estimate``), not at a cap.
 
     It runs first in :func:`assert_ready_for_a_live_run` and again inside
     :func:`assert_live_run_is_authorized`, so neither the CLI's path nor a
@@ -1247,17 +1261,29 @@ def assert_limits_are_feasible(
             f"{CALIBRATED_UNIT_INPUT_TOKENS:,}: this ceiling refuses a unit "
             "this evaluation has already run"
         )
-    for dimension, ceiling, calibrated in (
-        ("output", limits.run_max_output_tokens, CALIBRATED_UNIT_OUTPUT_TOKENS),
-        ("input", limits.run_max_input_tokens, CALIBRATED_UNIT_INPUT_TOKENS),
+    for dimension, ceiling, calibrated, in_flight in (
+        (
+            "output",
+            limits.run_max_output_tokens,
+            CALIBRATED_UNIT_OUTPUT_TOKENS,
+            sampling.turn_max_tokens,
+        ),
+        ("input", limits.run_max_input_tokens, CALIBRATED_UNIT_INPUT_TOKENS, 0),
     ):
-        needed = calibrated * planned
+        needed = calibrated * planned + in_flight
         if ceiling < needed:
+            reserved_here = (
+                f", plus the {in_flight:,} its last call reserves against the "
+                "run budget on top of them,"
+                if in_flight
+                else ""
+            )
             raise LimitsInfeasible(
                 f"the run-level {dimension} ceiling is {ceiling:,} tokens and "
                 f"{planned} units at the largest unit the live archives "
-                f"charged ({calibrated:,}) need {needed:,}: a run this long "
-                "would stop on the run ceiling rather than on its own evidence"
+                f"charged ({calibrated:,}){reserved_here} need {needed:,}: a "
+                "run this long would stop on the run ceiling rather than on "
+                "its own evidence"
             )
 
 

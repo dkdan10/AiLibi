@@ -663,6 +663,21 @@ that draws at 4,096 would need a calibration that draws at 4,096 under ceilings
 that can pay for it; neither is authorized here, and no second calibration is
 authorized at all.
 
+**Round-1 review correction, same date.** The entry above moved the per-unit
+output ceiling to clear the reservation schedule but left the run-level check
+comparing against charged spend alone. `GameBudget.preflight`
+recurses into its parent, so the RUN budget sees a call's full output cap on
+top of everything the run has charged, exactly as the unit budget does: a
+run-level output ceiling of 311,600 — a hundred units at the largest archived
+unit, which is how the card sized 459,000 — could not have paid for its own
+last call. `assert_limits_are_feasible` now adds one turn cap to the run-level
+OUTPUT comparison and the reservation-policy quotation above says so; the input
+dimension takes no such term, its pre-flight being the prompt's own estimated
+length rather than a cap. No authorized figure moves: the corrected bound is
+315,696 and this table already binds 459,000. The correction is recorded on
+[the limits card](../../tasks/work/fresh-deduction-limits-4.md) with its
+planted case and the commit its commands are pinned to.
+
 Nothing else moves. The primary outcome, the decision rule, the minimum
 actionable effect, the tradeoff bound and the stop rule are the same bytes the
 sections below quote, and a test holds them so. The provider, the model, the
@@ -873,21 +888,29 @@ asserts this document quotes each of them.
   calls it cannot pay for, and refuses one of them by arithmetic rather than
   by spend; the instrument therefore refuses such a ceiling before a live
   run starts, rather than discovering it partway through one. The run-level
-  ceilings are the same question one level up and are checked against the
-  largest per-unit spend the live archives have charged — 24,282 input and
-  3,116 output — rather than against a mean projection: a hundred units at
-  the largest unit this evaluation has measured is what a run ceiling has to
-  be able to pay for, because a ceiling that cannot is a stop rule that
-  fires on arithmetic near the end of a run it has already paid for.
+  ceilings are the same question one level up, because the pre-flight
+  recurses into the parent budget, and are checked against the largest
+  per-unit spend the live archives have charged — 24,282 input and 3,116
+  output — rather than against a mean projection: a hundred units at the
+  largest unit this evaluation has measured is what a run ceiling has to be
+  able to pay for, because a ceiling that cannot is a stop rule that fires
+  on arithmetic near the end of a run it has already paid for. The run-level
+  OUTPUT ceiling carries one further 4,096-token turn cap on top of that
+  product, because the last call of the run is reserved against the run
+  budget after the run has charged everything before it; the input dimension
+  carries no such term, its pre-flight being the prompt's own estimated
+  length rather than a cap.
 
   `assert_limits_are_feasible` is where it bites, before a credential, a client
   or a held-out prefix exists: it refuses a per-unit output ceiling below the
   reservation schedule above, a per-unit input ceiling below the largest unit
-  the live archives charged, and either run-level ceiling below a hundred units
-  at that figure. Under the limits merged on 2026-09-07 it REFUSES — 4,000
-  per-unit output against a schedule of 9,216 then and 15,360 now — which is
-  deliberate and is the live gate failing closed: those numbers authorize six
-  calls a unit cannot pay for. It ACCEPTS the ceilings in the table above,
+  the live archives charged, either run-level ceiling below a hundred units at
+  that figure, and a run-level OUTPUT ceiling that does not also clear the one
+  turn cap its last call reserves against the run budget — 315,696 tokens
+  against the 459,000 authorized. Under the limits merged on 2026-09-07 it
+  REFUSES — 4,000 per-unit output against a schedule of 9,216 then and 15,360
+  now — which is deliberate and is the live gate failing closed: those numbers
+  authorize six calls a unit cannot pay for. It ACCEPTS the ceilings in the table above,
   which is what the fourth authorization card re-sized them to do and what
   `test_the_gate_accepts_the_fourth_authorizations_limits` holds; the refusal
   of the 2026-09-07 ceilings is still planted beside it. Nothing about noticing

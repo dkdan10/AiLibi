@@ -4507,21 +4507,30 @@ class TestFeasibility:
         instrument.assert_limits_are_feasible(limits=feasible_limits())
 
     @pytest.mark.parametrize(
-        ("field", "dimension"),
+        ("field", "dimension", "in_flight"),
         [
-            ("run_max_output_tokens", "output"),
-            ("run_max_input_tokens", "input"),
+            (
+                "run_max_output_tokens",
+                "output",
+                AUTHORIZED_SAMPLING.turn_max_tokens,
+            ),
+            ("run_max_input_tokens", "input", 0),
         ],
     )
     def test_a_run_ceiling_below_its_own_units_is_refused(
-        self, field: str, dimension: str
+        self, field: str, dimension: str, in_flight: int
     ) -> None:
-        """PLANTED: a run ceiling one token below a hundred measured units.
+        """PLANTED: a run ceiling one token below what its own run reserves.
 
         The per-unit mismatch one level up. A run whose ceiling cannot pay for
         the units it plans stops near its end on arithmetic rather than on its
         own evidence, which is what two of the four authorized ceilings would
-        have done to a complete run even with the per-unit one fixed.
+        have done to a complete run even with the per-unit one fixed. The
+        OUTPUT bound carries one further turn cap, for the reason
+        `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused`
+        plants; the INPUT bound carries none, because an input pre-flight is
+        the prompt's own estimated length rather than a cap, and the pair of
+        cases here is what holds those two shapes apart.
         """
 
         calibrated = (
@@ -4529,7 +4538,7 @@ class TestFeasibility:
             if dimension == "output"
             else instrument.CALIBRATED_UNIT_INPUT_TOKENS
         )
-        needed = calibrated * instrument.planned_units()
+        needed = calibrated * instrument.planned_units() + in_flight
         feasible = feasible_limits()
         planted = feasible.model_copy(update={field: needed - 1})
         with pytest.raises(instrument.LimitsInfeasible, match=f"run-level {dimension}"):
@@ -4537,6 +4546,41 @@ class TestFeasibility:
         instrument.assert_limits_are_feasible(
             limits=feasible.model_copy(update={field: needed})
         )
+
+    def test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused(
+        self,
+    ) -> None:
+        """PLANTED: the run ceiling this evaluation's own sizing rule produces.
+
+        `GameBudget.preflight` recurses into its parent (`llm/budget.py`), so
+        the RUN budget is pre-flighted at a call's full output cap on top of
+        everything the run has already charged -- the same two units of account
+        the per-unit ceiling was re-sized for, one level up. A run-level output
+        ceiling set to exactly a hundred units at the largest measured unit
+        therefore cannot pay for its own last call: the run reaches the end of
+        its hundredth unit and is refused on the reservation rather than on the
+        spend. Until this correction the gate compared against that product
+        alone and accepted it, which is the defect planted here; the authorized
+        459,000 clears the corrected bound with room, so nothing the fourth
+        authorization carries moves.
+        """
+
+        turn_cap = AUTHORIZED_SAMPLING.turn_max_tokens
+        charged = instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * instrument.planned_units()
+        planted = feasible_limits().model_copy(
+            update={"run_max_output_tokens": charged}
+        )
+        with pytest.raises(instrument.LimitsInfeasible) as refused:
+            instrument.assert_limits_are_feasible(limits=planted)
+        assert f"{charged:,}" in str(refused.value)
+        assert f"{turn_cap:,}" in str(refused.value)
+        assert f"{charged + turn_cap:,}" in str(refused.value)
+        instrument.assert_limits_are_feasible(
+            limits=feasible_limits().model_copy(
+                update={"run_max_output_tokens": charged + turn_cap}
+            )
+        )
+        assert AUTHORIZED_LIMITS.run_max_output_tokens >= charged + turn_cap
 
     def test_a_per_unit_ceiling_below_a_unit_already_run_is_refused(self) -> None:
         """PLANTED: a per-unit input ceiling under the largest archived unit."""
