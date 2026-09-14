@@ -34,6 +34,20 @@ a per-unit checkpoint as owed (`tasks/owner-decisions-2026-09-07.md`, B.4).
 
 ## Acceptance
 
+- [x] Review correction: the execution manifest's dated log no longer credits
+  `78b136bd` with mechanisms that arrived in `0185182d`. The abandoned-spend,
+  fresh-output-directory and arm-surface paragraph moves into its own
+  **2026-09-14 (`0185182d`)** entry; the `78b136bd` entry's closing sentence
+  names `808b5070` as the record commit that wrote it and stops there; and a
+  gate now holds every entry's named symbols to the commit it names
+  (`TestExecutionManifest::test_each_diagnosis_entry_names_a_commit_that_carries_what_it_claims`,
+  planted by `::test_the_entry_check_is_red_when_the_later_work_is_folded_back`).
+- [x] Review correction: the Results' first Verification table is pinned to the
+  commit it was measured at (`808b5070`) and restates at HEAD the two rows that
+  have moved; the delivery sentence names four commits rather than two and says
+  `0185182d` carries behaviour; and the round-1 parenthetical names 337 at
+  `808b5070` with 327 at `78b136bd`, both reproduced with `uv run pytest
+  tests/experiments --collect-only -q` at those commits.
 - [x] Review correction: a stop that lands INSIDE a pair carries what it
   charged. The stop path writes one final checkpoint whose `AbandonedSpend`
   rows hold that pair's tokens, cost and model-work seconds per arm, and a
@@ -150,12 +164,16 @@ Do not run the live evaluation as a check.
 
 ## Results
 
-Delivered on `work/fresh-deduction-instrument-realism` in two commits: the
+Delivered on `work/fresh-deduction-instrument-realism` in four commits: the
 instrument, its doubles, the committed usage profile and the enforcement text
-(`78b136bd`), then this record with the manifest's dated amendment, the
-verification figures and the derived counts. No live provider call of any kind
-was made; every figure below comes from the fake provider or the replay double,
-at `total_cost_usd` 0.0.
+(`78b136bd`); the record with the manifest's first dated amendment, the
+verification figures and the derived counts (`808b5070`); the round-1 repairs
+to the resume and the arm-surface identity, which carry behaviour as well as
+record (`0185182d`); and the round-2 record correction below. Each of the three
+Verification tables names the commit its figures were measured at, and the
+round-2 one is the state of this branch. No live provider call of any kind was made; every figure
+below comes from the fake provider or the replay double, at `total_cost_usd`
+0.0.
 
 ### What was built, and against which sections
 
@@ -234,10 +252,13 @@ mutable state is added, and every new refusal is an explicit `raise`.
 
 ### Verification
 
-Run on this branch's tree with the whole change in place. `78b136bd` carries
-the behaviour; the record commit beside it moves this card, the manifest, the
-derived counts and one docstring the amendment corrects. The planted
-demonstrations below were applied to the same tree and reversed.
+**Measured at `808b5070`, and superseded by the round-1 table below.** At
+that commit `78b136bd` carried the behaviour and `808b5070` moved this card,
+the manifest, the derived counts and one docstring the amendment corrects. Two
+rows have moved since, because `0185182d` added behaviour and nine cases and
+this round adds two more: `uv run pytest tests/experiments -q` is 348 passed at
+HEAD, and `bash scripts/check.sh` is 7,633 passed / 20 skipped / 3 xfailed. The
+planted demonstrations below were applied to the `808b5070` tree and reversed.
 
 | Command | Result |
 | --- | --- |
@@ -403,11 +424,12 @@ freeze test, and `_one_prompt_version_set` at report-build time.
 
 #### Verification of the corrections
 
-Run on this branch's tree with the whole change in place.
+**Measured at `0185182d`**, on the whole change in place; superseded in two rows
+by the round-2 table below.
 
 | Command | Result |
 | --- | --- |
-| `uv run pytest tests/experiments -q` | 346 passed (337 at `78b136bd`, which this round adds nine cases to) |
+| `uv run pytest tests/experiments -q` | 346 passed (337 at `808b5070`, which this round adds nine cases to; 327 at `78b136bd`) |
 | `bash scripts/check.sh` | exit 0 — ruff, ruff format over 505 files, 4 import contracts kept, validate_task_docs (51 work cards), generate_prompts --check, mypy over 476 files, then 7,631 passed / 20 skipped / 3 xfailed, then 515 frontend tests over 19 files and the build |
 | `uv run python scripts/validate_task_docs.py` | ok |
 | `uv run python scripts/check_doc_facts.py` | ok |
@@ -439,3 +461,109 @@ sharper than it was: a resumed run's per-arm `calls`, `input_tokens` and
 resumed run says what the RUN spent rather than what its graded units cost. That
 is the honest reading of a ceiling that bounds spending, and the checkpoint
 names the difference so either figure can be recovered.
+
+### Review corrections, round 2 (2026-09-14)
+
+Two blocking findings from two independent lenses, both valid, both about the
+RECORD rather than the mechanism. No instrument byte moves in this round: the
+feasibility gate, the usage profile, the retry enumeration, the checkpoint and
+the resume are the bytes `0185182d` left, and no constant, limit or frozen
+string moved. Still no live provider call of any kind.
+
+**1. The manifest's dated log credited one commit with another's work.** The
+only entry under "Amendments after the diagnosis of 2026-09-13" was headed
+**2026-09-13 (`78b136bd`)**, and `0185182d` inserted a seventeen-line paragraph
+INSIDE it describing abandoned spend, the final checkpoint on the stop path,
+the fresh-output-directory refusal, the narrower-resume refusal and an arm
+surface widened to the prompt loader — none of which `78b136bd` carries
+(`git show 78b136bd:experiments/fresh_deduction_instrument.py | grep -c
+AbandonedSpend` is 0 against 7 at HEAD, and the same for
+`assert_the_tail_can_be_recorded`, `charged_usage_by_arm`,
+`charged_model_work_seconds` and `agents/strategic/prompts/loader.py`). The
+entry also closed by saying "the record commit beside it changes this document,
+the derived counts and one docstring ... and no behaviour", which was true of
+`808b5070` and false of `0185182d`, whose diff is 457 lines of the instrument.
+
+The paragraph now sits in its own **2026-09-14 (`0185182d`)** entry, which says
+what that commit repaired and names the symbols it introduced. The `78b136bd`
+entry's closing sentence names `808b5070` explicitly as the record commit that
+wrote it and hands the rest to the entry below.
+
+The guard the round-1 document passed asserted only that exactly one commit was
+named, resolved, touched the instrument and was an ancestor of HEAD.
+`test_each_diagnosis_entry_names_a_commit_that_carries_what_it_claims` adds
+three checks over the same text: every backticked name an entry uses that the
+instrument carries today must exist in the instrument AT that entry's commit;
+each entry must name at least one thing its own commit INTRODUCED (present at
+the commit, absent at its parent), so an entry cannot anchor itself by naming
+only what was already there; and the section's entries are the dates it
+carries, so folding one into another is red.
+`test_the_entry_check_is_red_when_the_later_work_is_folded_back` is the planted
+case: it deletes the 2026-09-14 heading so the body falls back inside the
+2026-09-13 entry, and the same pure check then returns
+`{"78b136bd": ["AbandonedSpend", "agents/strategic/prompts/loader.py",
+"assert_the_tail_can_be_recorded", ...]}`.
+
+Two things this repair deliberately does not do, both stated rather than left
+to be rediscovered:
+
+- The live gate's own paragraph on what a second sitting must do
+  (`audits/deduction-candidate/execution-manifest.md`, "The live gate") stays
+  where it is rather than moving into the dated entry. It credits no commit, it
+  is the operational text a runner reads before a second sitting, and
+  `test_the_manifest_states_what_a_second_sitting_must_do` holds it there. The
+  new dated entry says in one sentence that `0185182d` wrote it, which is the
+  attribution the finding is about.
+- The gate reads NAMES, so it cannot attribute a mechanism described only in
+  prose — which is what the round-1 paragraph did, and why the document had to
+  be read to find this. What the gate guarantees is narrower and durable: once
+  an entry names a symbol, that name is pinned to the commit the entry claims.
+  The entry-list assertion is what catches an entry folded away.
+
+**2. The card's first Verification block was stale and its round-1 supersession
+named the wrong commit.** The Results opened "in two commits" for a branch with
+three; the undated Verification table's two measured rows were `808b5070`'s
+(337 passed; 7,622 passed / 20 skipped / 3 xfailed) and neither reproduces at
+HEAD; and the round-1 subsection pinned 337 to `78b136bd`, where
+`uv run pytest tests/experiments --collect-only -q` collects 327. Reproduced
+here by checking each commit out in this worktree and collecting: 327 at
+`78b136bd` and 337 at `808b5070`; 348 pass at HEAD, which is `0185182d`'s 346
+plus the two cases this round adds. The delivery
+sentence now names four commits and says which carry behaviour, the first
+Verification table is headed as measured at `808b5070` with its two moved rows
+restated at HEAD, and the round-1 parenthetical reads "337 at `808b5070` ...;
+327 at `78b136bd`".
+
+#### Verification of the round-2 corrections
+
+Measured on this branch's tree at the commit this round pushes, with the whole
+change in place. This round moves
+`audits/deduction-candidate/execution-manifest.md`,
+`tasks/work/fresh-deduction-instrument-realism.md` and
+`tests/experiments/test_fresh_deduction_instrument.py`, and `docs/artifacts.md`
+for the recomputed row; `experiments/` is untouched.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/experiments -q` | 348 passed |
+| `bash scripts/check.sh` | exit 0 — ruff, ruff format over 505 files, 4 import contracts kept, validate_task_docs (51 work cards), generate_prompts --check over 390 prompts, mypy over 476 files, then 7,633 passed / 20 skipped / 3 xfailed in 204 s, then 515 frontend tests over 19 files and the build |
+| `uv run python scripts/validate_task_docs.py` | ok |
+| `uv run python scripts/check_doc_facts.py` | ok |
+| `uv run python scripts/verify_ml_evidence.py` | 60 checks, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/verify_samples.sh` | exit 0 |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` over the four sets | each report is consistent with its replays |
+
+| Planted defect | Selector | Result |
+| --- | --- | --- |
+| the manifest restored to its `0185182d` bytes | `entry_check or names_a_commit_that_carries` | 2 failed — the section carries no 2026-09-14 entry, and the planted case finds no heading to fold |
+| the 2026-09-14 entry's `AbandonedSpend` mention moved back under the 2026-09-13 heading | `names_a_commit_that_carries` | 1 failed — `entries crediting commits that lack them: {'78b136bd': ['AbandonedSpend']}` |
+
+#### Record impact of this round
+
+The `audits/` row of `docs/artifacts.md` moves with the manifest a third time:
+206 files / 14,990,456 bytes after round 1, 206 files / 14,991,980 bytes after
+this one, recomputed with `git ls-files audits/` and the change staged. No file
+the held-out freeze manifest hashes moved, so no restamp is needed and no
+prefix was printed, opened or committed. No recording, report, DTO or weight
+byte moves; no experiment becomes ON; the three run archives are untouched.

@@ -201,6 +201,71 @@ def _frozen_analysis_at(revision: str) -> dict[str, str] | None:
     return values
 
 
+_DATED_AMENDMENT_ENTRY: Final[re.Pattern[str]] = re.compile(
+    r"\*\*(\d{4}-\d{2}-\d{2}) \(`([0-9a-f]{7,40})`\)"
+)
+_NAME_IN_BACKTICKS: Final[re.Pattern[str]] = re.compile(
+    r"`([a-z][a-z0-9_]*(?:/[a-z0-9_]+)*\.py|[A-Za-z_][A-Za-z0-9_]{3,})`"
+)
+
+
+def _entries_and_the_names_they_attribute(
+    section: str,
+) -> list[tuple[str, str, frozenset[str]]]:
+    """``(date, commit, the backticked names)`` of each dated entry of a log.
+
+    An entry runs from its own bold heading to the next one, so every name
+    inside it is a name that entry attributes to the commit its heading names.
+    Pure over the text, so the check below can be run against a perturbed
+    section as well as the committed one.
+    """
+
+    headings = list(_DATED_AMENDMENT_ENTRY.finditer(section))
+    entries: list[tuple[str, str, frozenset[str]]] = []
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(section)
+        body = section[heading.start() : end]
+        entries.append(
+            (
+                heading.group(1),
+                heading.group(2),
+                frozenset(_NAME_IN_BACKTICKS.findall(body)),
+            )
+        )
+    return entries
+
+
+def _names_an_entry_credits_to_a_commit_without_them(
+    section: str,
+    source_at: Callable[[str], str],
+    carried_now: str,
+) -> dict[str, list[str]]:
+    """``{commit: the names its entry claims that the commit does not carry}``.
+
+    Only names the instrument carries TODAY are checked, so ordinary prose in
+    backticks — a flag, a date, a file this module never mentions — is not
+    mistaken for a symbol. What is left is the claim that matters: an entry
+    dated against one commit describing a mechanism that arrived in another.
+    """
+
+    offenders: dict[str, list[str]] = {}
+    for _date, commit, named in _entries_and_the_names_they_attribute(section):
+        source = source_at(commit)
+        missing = sorted(
+            name for name in named if name in carried_now and name not in source
+        )
+        if missing:
+            offenders[commit] = missing
+    return offenders
+
+
+def _instrument_source_at(revision: str) -> str:
+    """The instrument's bytes at one revision, or "" where it does not exist."""
+
+    shown = _git("show", f"{revision}:{_INSTRUMENT_REPO_PATH}")
+    return shown.stdout if shown.returncode == 0 else ""
+
+
 def _frozen_analysis_amendments() -> dict[str, list[str]] | None:
     """``{abbreviated commit: the constants it moved}`` since the manifest froze.
 
@@ -3798,6 +3863,79 @@ class TestExecutionManifest:
         text = self._text()
         start = text.index("## Amendments after the diagnosis of 2026-09-13")
         return text[start : text.index("\n## ", start + 1)]
+
+    def test_each_diagnosis_entry_names_a_commit_that_carries_what_it_claims(
+        self,
+    ) -> None:
+        """An entry does not merely name a commit that exists; it names the one
+        its own mechanisms arrived in.
+
+        The check above resolves the named commit and asserts it touched the
+        instrument, which a review found is not enough: a later commit's work
+        was described inside an earlier commit's entry, and every assertion
+        still passed. Three things here instead. Each entry's backticked names
+        are looked up in the instrument AT the commit that entry names, so a
+        mechanism logged against a commit that predates it is red; each entry
+        must name at least one thing its own commit INTRODUCED, so an entry
+        cannot be anchored to a commit by naming only what was already there;
+        and the section's entries are the dates this log carries, so folding one
+        into another is red rather than silent. Only names the instrument
+        carries today are checked, so prose in backticks is not read as a
+        symbol — which is also the limit of this gate: a mechanism described
+        without naming it cannot be attributed by any check over the text.
+        """
+
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commits cannot be read")
+        section = self._diagnosis_amendments_section()
+        offenders = _names_an_entry_credits_to_a_commit_without_them(
+            section,
+            _instrument_source_at,
+            _instrument_source_at("HEAD"),
+        )
+        assert offenders == {}, f"entries crediting commits that lack them: {offenders}"
+        carried_now = _instrument_source_at("HEAD")
+        entries = _entries_and_the_names_they_attribute(section)
+        for _date, commit, named in entries:
+            before = _instrument_source_at(f"{commit}^")
+            introduced = sorted(
+                name for name in named if name in carried_now and name not in before
+            )
+            assert introduced, f"{commit}'s entry names nothing that commit introduced"
+        assert [date for date, _commit, _named in entries] == [
+            "2026-09-13",
+            "2026-09-14",
+        ]
+
+    def test_the_entry_check_is_red_when_the_later_work_is_folded_back(
+        self,
+    ) -> None:
+        """The planted case, which is the arrangement a review actually found.
+
+        Delete the 2026-09-14 heading and its body falls inside the 2026-09-13
+        entry — exactly what the committed document said before this round, with
+        `AbandonedSpend`, the tail check and the widened arm surface all credited
+        to a commit that carries none of them. The same pure check over the same
+        history then names that commit and the symbols it lacks.
+        """
+
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commits cannot be read")
+        section = self._diagnosis_amendments_section()
+        heading = next(
+            line for line in section.splitlines() if line.startswith("**2026-09-14 (`")
+        )
+        folded = section.replace(heading, "The commit above also:")
+        assert _entries_and_the_names_they_attribute(folded)[0][0] == "2026-09-13"
+        offenders = _names_an_entry_credits_to_a_commit_without_them(
+            folded,
+            _instrument_source_at,
+            _instrument_source_at("HEAD"),
+        )
+        assert list(offenders) == ["78b136bd"], offenders
+        assert "AbandonedSpend" in offenders["78b136bd"]
+        assert "assert_the_tail_can_be_recorded" in offenders["78b136bd"]
+        assert "agents/strategic/prompts/loader.py" in offenders["78b136bd"]
 
     def test_the_enforcement_section_quotes_the_reservation_policy(self) -> None:
         """The units of account are a thing the code enforces, so this document

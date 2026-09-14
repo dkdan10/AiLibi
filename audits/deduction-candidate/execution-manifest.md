@@ -376,23 +376,6 @@ owner's to take. The resume is outcome-blind by construction: it reads the
 checkpoint's completed seeds and its identity digests, and nothing in the run
 path reads a grade.
 
-A resumed sitting carries the whole of what the earlier ones spent, not the
-graded part of it. The checkpoint is written at PAIR boundaries, so a stop
-part-way through a pair charges calls that no unit row accounts for; one final
-checkpoint is written on the stop path and records them as abandoned spend, per
-arm, with the model-work seconds they burned, and the next sitting charges them
-against the same ceilings before it makes a call. It accumulates across stops.
-Two other rules follow from the same file: a resumed sitting writes into an
-output directory of its own — a replay already on disk for a seed still to run
-is refused by name rather than overwritten, because a stop leaves the unit it
-was inside half-recorded — and a resume may not be narrower than the checkpoint
-it continues, so a unit count that would drop a finished seed is refused instead
-of reported. The identity a resume is held to is a NAMED set of files
-(`ARM_SURFACE_SOURCES` plus every file of the prompt directory), which this
-amendment widens to the prompt loader and `orchestrator/game.py`; the constant
-states where the rest of the run path is covered instead, rather than claiming
-the digests cover every byte an arm renders through.
-
 The frozen analysis does not move here. `PRIMARY_OUTCOME`, `DECISION_RULE`,
 `MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
 are the same bytes the sections below quote, and a test holds them to the
@@ -400,9 +383,50 @@ revision the last logged amendment names. The feasibility gate adds no stop to
 the frozen rule: it is a refusal before a run, like the band binding and the
 sampling check, not a condition that can stop one in flight. As with the
 entries above, this one cannot name the commit that carries the document
-change, so it names the commit that carries the behaviour it records; the
-record commit beside it changes this document, the derived counts and one
-docstring this amendment corrects, and no behaviour.
+change, so it names the commit that carries the behaviour it records,
+`78b136bd`; the record commit that wrote this entry, `808b5070`, changed this
+document, the derived counts and one docstring this amendment corrects, and no
+behaviour. This entry records that commit and stops there: what a review then
+found wrong with the mechanism above, and what was changed to repair it, is the
+entry below.
+
+**2026-09-14 (`0185182d`) — a stopped sitting carries its whole spend into the
+next one, and the identity a resume is held to is named rather than claimed.**
+An independent review of the commit above found the resume forgiving what a
+stop had already bought and holding a resumed sitting to a set of files that
+omitted the code rendering its prompts. Nothing the entry above records is
+retracted; this entry records what changed in the mechanism it describes.
+
+A resumed sitting carries the whole of what the earlier ones spent, not the
+graded part of it. The checkpoint is written at PAIR boundaries, so a stop
+part-way through a pair charges calls that no unit row accounts for; one final
+checkpoint is written on the stop path and records them as abandoned spend
+(`AbandonedSpend`), per arm, with the model-work seconds they burned, and the
+next sitting charges them — `charged_usage_by_arm` and
+`charged_model_work_seconds`, the graded rows plus the abandoned ones — against
+the same ceilings before it makes a call. It accumulates across stops. Two
+other rules follow from the same file: a resumed sitting writes into an output
+directory of its own, and `assert_the_tail_can_be_recorded` refuses by name a
+replay already on disk for a seed still to run rather than overwriting it,
+because a stop leaves the unit it was inside half-recorded; and a resume may
+not be narrower than the checkpoint it continues, so a unit count that would
+drop a finished seed is refused instead of reported. The identity a resume is
+held to is a NAMED set of files (`ARM_SURFACE_SOURCES` plus every file of the
+prompt directory), which this amendment widens to
+`agents/strategic/prompts/loader.py`, which builds the Jinja environment and
+selects the renderers, and to `orchestrator/game.py`; the constant states where
+the rest of the run path is covered instead, rather than claiming the digests
+cover every byte an arm renders through. The live gate's own paragraph on what
+a second sitting must do is written by this commit as well, and states the same
+rules where a runner reads them.
+
+The frozen analysis does not move here either. The five constants the entry
+above lists are the same bytes at `0185182d` as at `78b136bd`, and the test
+that holds them compares the tree against the revision the log names rather
+than trusting this sentence. As with the entries above, this entry cannot name
+the commit that writes it; the record commit that does changes this document,
+the card and the tests that hold this section to the history, and no instrument
+byte.
 
 ## The instrument
 
