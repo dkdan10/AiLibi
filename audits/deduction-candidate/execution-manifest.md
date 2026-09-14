@@ -521,7 +521,7 @@ read on this path at all: `verify_frozen_set` is never called by it.
 | Calibration per-unit token ceiling | 60,000 input / 12,000 output |
 | Calibration run-level token ceiling | 600,000 input / 120,000 output |
 | Calibration wall-clock deadline | 1 h of model work within a 1.5 h elapsed deadline |
-| Calibration per-call token cap | turn 2,048 output / vote 1,024 — the run's own, unchanged |
+| Calibration per-call token cap | turn 2,048 output / vote 1,024 — the run's own on 2026-09-14, unchanged for it. The fourth authorization below raised the RUN's turn cap to 4,096 on the strength of what this calibration measured; the calibration's own ceilings were approved against the 9,216-token schedule these caps reserve, so they are frozen together as `CALIBRATION_SAMPLING` and this spent mode reproduces the draw it made. A calibration sizing a run that draws at 4,096 would have to draw at 4,096 and would need its own ceilings on its own card |
 | Calibration sampling temperature | turn 0.4 / vote 0.2 — the run's own, unchanged |
 | Calibration transport bound | 4 attempts per call at a 180 s per-attempt wall — the run's own, unchanged |
 | Calibration units | 5 paired seeds x 2 arms = 10 units, about 60 model calls |
@@ -533,7 +533,13 @@ The four ceilings that are re-sized are the calibration's own — they are
 `CALIBRATION_LIMITS` in the instrument, `assert_calibration_is_authorized`
 refuses a live calibration under any other limits, `assert_live_run_is_authorized`
 refuses the held-out run under these, and `assert_limits_are_feasible` accepts
-these for ten units while still refusing the 2026-09-07 ceilings for a hundred.
+these for ten units at the caps this calibration drew at while still refusing
+the 2026-09-07 ceilings for a hundred at either cap. That last qualification is
+the fourth authorization's doing and is stated rather than absorbed: since the
+run's turn cap moved to 4,096 these ceilings pay for ten units of the 2,048
+draw they were approved against and not for ten units of the run's, and
+`assert_calibration_is_authorized` now holds a live calibration to
+`CALIBRATION_SAMPLING` for exactly that reason.
 
 **What it writes.** One aggregate JSON committed under
 `audits/deduction-candidate/calibration-<date>/`: per arm and per call type the
@@ -555,7 +561,12 @@ measured where the mean rule falls below it, because that product is the floor
 `assert_limits_are_feasible` enforces; every figure is rounded up to the next
 1,000 tokens. The proposal authorizes nothing — a ceiling is the owner's, on a
 card — and the output states in the gate's own words whether the instrument
-would accept it.
+would accept it. The reservation schedule it clears is the schedule of the caps
+it DREW at, which is why its 14,000 per-unit output figure is not the 16,000
+the fourth authorization wrote down: the card raised the run's turn cap on the
+strength of the same measurement, and a ceiling for a run that draws at 4,096
+has to clear 15,360. That step is the owner's judgment, made on the card, and
+it is the one figure in the table above that is not the proposal's.
 
 **The commands.** The live calibration, which is the runner's and nobody
 else's:
@@ -645,12 +656,17 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 Copied verbatim from [the authorization card](../../tasks/work/fresh-deduction-authorization.md)'s
 Constraints table, whose reasoning of record is item B of
 [the 2026-09-07 decision memo](../../tasks/owner-decisions-2026-09-07.md) — with
-one row that is NOT from that table and is marked as such, and one the owner
-later widened. The wall row is copied verbatim from
+one row that is NOT from that table and is marked as such, and three the owner
+later moved. The wall row is copied verbatim from
 [the third authorization card](../../tasks/work/fresh-deduction-authorization-3.md)'s
 Constraints table instead, which restates #437's other values unchanged and
 carries the owner's instruction of 2026-09-13; see "Amendments after the stopped
-run of 2026-09-13". The authorization
+run of 2026-09-13". The per-call token cap and the total token budget are
+copied verbatim from
+[the fourth authorization card](../../tasks/work/fresh-deduction-authorization-4.md)'s
+Constraints table, which re-sizes them from the live development calibration of
+2026-09-14 and restates #437's other values unchanged; see "Fourth
+authorization (2026-09-14)". The authorization
 card binds no temperature; the preregistration
 (`preregistration.md:113-115`) requires this manifest to bind the sampling
 configuration, so the sampling-temperature row states the values shipped in
@@ -661,9 +677,9 @@ inheriting them. It moves no owner-authorized number.
 | --- | --- |
 | Provider | `featherless` |
 | Model | `Qwen/Qwen3.6-27B` (locked 2026-07-12, Task 16.2). Non-thinking with `enable_thinking=false` pinned on every call, `response_format_mode = json_object`, prompt set `qwen3_6_27b` — all carried from the model lock, not re-decided here |
-| Per-call token cap | turn 2,048 output / vote 1,024, the shipped defaults unchanged. The committed lab rows for this model-and-prompt-set pair ran at `max_tokens=4096` and never exceeded 195 output tokens, so a truncation is a real signal rather than a cap artifact |
+| Per-call token cap *(raised 2026-09-14 — from the fourth authorization card)* | turn 4,096 output / vote 1,024. The turn cap is raised from the shipped 2,048 on 2026-09-14: the calibration's largest candidate-arm turn charged 2,036 output tokens against 2,048 (1 of 15 candidate turns), a truncation is a stop with no retry, and the committed lab rows for this model ran at `max_tokens=4096`; the vote cap is unchanged (largest measured ballot 237) |
 | Sampling temperature *(not from the authorization card — see the note above)* | turn temperature 0.4 / vote temperature 0.2 — the shipped values (`meetings/manager.py:211,213`), bound here rather than inherited. The instrument passes an explicit `MeetingConfig` carrying them, records both on every report, and a test asserts they are still the shipped values, so a later edit to those module defaults breaks a test instead of silently moving this frozen design's sampling distribution |
-| Total token budget | 2,400,000 input / 200,000 output run-level, and 45,000 input / 4,000 output per unit. Hard stop. Projection for option A: 600 calls; input `repaired_clock` 3,636/call x 300 + `combined_accounts` 2,441/call x 300 = 1,823,100; output 600 x 220 = 132,000 |
+| Total token budget *(re-sized 2026-09-14 — from the fourth authorization card)* | 3,710,000 input / 459,000 output run-level, and 106,000 input / 16,000 output per unit. Hard stop. Basis, from `audits/deduction-candidate/calibration-2026-09-14/calibration.json`: per unit, 3x the largest measured unit (35,232 input; 4,590 output gives 13,770) with the output ceiling lifted to clear the reservation schedule under the raised turn cap (3 x 4,096 + 3 x 1,024 = 15,360), rounded up to 16,000; run-level, the larger of 100 units x the measured mean x 1.5 and 100 units x the largest measured unit on each dimension (input 3,710,000; output 459,000). Both provider pre-flight rates are zero, so these ceilings are a stop rule sized as an anomaly detector at about three times the measured maximum, not a budget |
 | Wall-clock deadline *(widened 2026-09-13 — from the third authorization card)* | 6 h of model work within an 8 h elapsed deadline. Widened from 4 h / 6 h on 2026-09-13: the second attempt measured 26.6 s/call over its four resolved calls against 11.7 s/call on 2026-09-10, and six hundred calls at the slower pace need about 4 h 26 m; the 2 h elapsed margin still covers one recorded 3h21m provider-side stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
 | Dollar limit | $0.00 marginal, recorded as bookkeeping and not as an enforcement mechanism. The provider's zero pre-flight rate disables the USD dimension, so only the token budget and the deadline can stop a run |
 | Roster | 4p1i with 3 living voters at meeting open. A change of roster invalidates the token budget above and requires a new authorization |
@@ -726,8 +742,9 @@ asserts this document quotes each of them.
   statement above says: the USD dimension is disabled and only the token budget
   and the wall deadline can stop the run.
 - **Per-call cap.** `_InstrumentClient` refuses a call whose `max_tokens` is not
-  one of the two shipped values, and refuses a response whose output reached its
-  cap — a truncation is a stop, not a datum. That reading is taken off the
+  one of the two values the table above binds — the authorized turn cap of
+  4,096 and the shipped vote cap of 1,024 — and refuses a response whose output
+  reached its cap — a truncation is a stop, not a datum. That reading is taken off the
   completion, not off the parse: a body cut off at the cap is the usual reason a
   payload then fails schema validation, so the same check is applied to the
   `output_tokens` a refused call's parse-failure metadata reports.
@@ -771,8 +788,8 @@ asserts this document quotes each of them.
 
   The token ceilings are enforced on RESERVED spend and were sized on
   CHARGED spend. Every call is pre-flighted against its full per-call output
-  cap before it is sent, so one unit reserves 3 x 2,048 for its turns and 3
-  x 1,024 for its ballots — 9,216 output tokens — whatever it is then
+  cap before it is sent, so one unit reserves 3 x 4,096 for its turns and 3
+  x 1,024 for its ballots — 15,360 output tokens — whatever it is then
   billed. A per-unit output ceiling below that schedule authorizes six legal
   calls it cannot pay for, and refuses one of them by arithmetic rather than
   by spend; the instrument therefore refuses such a ceiling before a live
@@ -788,11 +805,15 @@ asserts this document quotes each of them.
   or a held-out prefix exists: it refuses a per-unit output ceiling below the
   reservation schedule above, a per-unit input ceiling below the largest unit
   the live archives charged, and either run-level ceiling below a hundred units
-  at that figure. Under the limits merged on 2026-09-07 it REFUSES, which is
+  at that figure. Under the limits merged on 2026-09-07 it REFUSES — 4,000
+  per-unit output against a schedule of 9,216 then and 15,360 now — which is
   deliberate and is the live gate failing closed: those numbers authorize six
-  calls a unit cannot pay for, and a fourth authorization card has to re-size
-  them before any live run. Nothing about noticing this needed a provider —
-  it is arithmetic over the module constants this table binds.
+  calls a unit cannot pay for. It ACCEPTS the ceilings in the table above,
+  which is what the fourth authorization card re-sized them to do and what
+  `test_the_gate_accepts_the_fourth_authorizations_limits` holds; the refusal
+  of the 2026-09-07 ceilings is still planted beside it. Nothing about noticing
+  either needed a provider — it is arithmetic over the module constants this
+  table binds.
 - **Wall.** Two clocks, because the authorization names two limits: one
   `orchestrator.run_limits.RunDeadline` for the 8 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
@@ -1198,13 +1219,19 @@ units — 50 terminal units and no partial one — with 50 ejections each, 15
 role-correct, 35 wrongful, 15 supported-correct, 150 supported ballots and 5
 guard-rewritten ones per arm, and 100 ballots naming the ejected player. The
 report carries the sampling configuration it drew at (`turn_temperature` 0.4,
-`vote_temperature` 0.2, caps 2,048 / 1,024). Input tokens by the fake
+`vote_temperature` 0.2, caps 2,048 / 1,024 — the caps this manifest bound until
+the fourth authorization below raised the turn cap to 4,096). Input tokens by
+the fake
 provider's `len // 4` heuristic were 894,018 (`repaired_clock`) and 587,054
 (`combined_accounts`); applying the decision memo's calibrated 1.28x real-input
-ratio to their sum (1,481,072) gives about 1.90 M against the 2.4 M ceiling,
+ratio to their sum (1,481,072) gives about 1.90 M against the 2.4 M ceiling of
+the day (51% of the 3,710,000 this manifest now binds),
 and the larger arm's 17,880 per unit gives about 22,900 against the 45,000
-per-unit ceiling — headroom checks, not predictions, because a real model
-writes a different transcript.
+per-unit ceiling of the day (22% of the 106,000 now) — headroom checks, not
+predictions, because a real model writes a different transcript. The dry run is
+re-made on the fourth band, at the raised cap, by the round of this card that
+re-binds the Inputs table; the figures above are the third band's and are the
+ones this section carried when they were measured.
 
 **The output dimension, measured rather than assumed (2026-09-13).** The
 paragraph above is an INPUT headroom check, and until this amendment it was the
@@ -1219,26 +1246,36 @@ uv run pytest tests/experiments/test_fresh_deduction_instrument.py \
 ```
 
 Under the re-sizing [the diagnosis](../../tasks/diagnosis-2026-09-13-live-run-stops.md)
-puts to the owner (per unit 60,000 in / 12,000 out, run 3,600,000 / 350,000),
+puts to the owner (per unit 60,000 in / 12,000 out, run 3,600,000 / 350,000 —
+the per-unit output figure is 16,000 here since the fourth authorization, which
+is what clears the raised turn cap's schedule; it changes no figure below,
+because what the double charges does not depend on a cap it never reaches),
 the rehearsal runs all 100 units and 600 calls at $0.00 in about seven seconds:
 `repaired_clock` charges 1,072,642 input and 66,105 output (21,453 and 1,322 a
 unit), `combined_accounts` 1,015,417 and 145,889 (20,308 and 2,918 a unit). The
-candidate arm's mean unit is therefore 72.9% of the per-unit output ceiling
-this manifest binds and 31.7% of the schedule its six calls reserve, and the
-run total of 211,994 output tokens is **106.0% of the 200,000 run-level
-ceiling** — a complete run would have stopped near its end on that ceiling even
-with the per-unit one fixed, which is what the diagnosis projected from four
-units and what this measures over a hundred. Input is 2,088,059, 87.0% of the
-2.4 M ceiling. The candidate arm also replays the refusal rate its archives
-carry — two of its nine archived turns — as 33 defaulted turns across its 150,
-against none on the reference arm.
+candidate arm's mean unit is therefore 18.2% of the per-unit output ceiling
+this manifest now binds and 19.0% of the schedule its six calls reserve, and the
+run total of 211,994 output tokens is 46.2% of the 459,000 run-level ceiling.
+Measured against the ceilings this manifest bound before the fourth
+authorization, the same totals read the other way: that mean unit was 72.9% of
+a 4,000 per-unit ceiling and 31.7% of a 9,216-token schedule, and the run total
+was **106.0% of the 200,000 run-level ceiling** — a complete run would have
+stopped near its end on that ceiling even with the per-unit one fixed, which is
+what the diagnosis projected from four units, what this measured over a hundred,
+and what the re-sizing of 2026-09-14 answers. Input is 2,088,059: 56.3% of the
+3,710,000 ceiling now, 87.0% of the 2.4 M one then. The candidate arm also
+replays the refusal rate its archives carry — two of its nine archived turns —
+as 33 defaulted turns across its 150, against none on the reference arm.
 
-Under the limits this manifest binds, the same rehearsal stops where the live
+Under the limits and the turn cap this manifest bound until the fourth
+authorization, the same rehearsal stops where the live
 run of 2026-09-13 stopped and says the same thing: `LLM budget exceeded on
 output_tokens: current=3116.0 + delta=1024.0 > cap=4000.0`, on the candidate
 arm, 5 of 100 units completed. The figure is the archived unit's own, because
 the rehearsal replays that unit's calls including the turn the provider billed
-and refused.
+and refused. Both halves of that day are planted to reproduce it — the four
+ceilings and the 2,048 turn cap — because at 4,096 the first call of the first
+unit is refused instead, which is a different stop.
 
 Nothing graded in either rehearsal is reported here, and none of it is
 evidence about the arms. The double's decision does not depend on the arm, and

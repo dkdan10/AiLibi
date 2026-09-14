@@ -369,11 +369,16 @@ class CallTypeBlindReplayProvider(UsageReplayProvider):
 
 
 def feasible_limits() -> instrument.RunLimits:
-    """Limits the feasibility gate accepts: the diagnosis's provisional re-sizing.
+    """Limits the feasibility gate accepts that are NOT the authorized ones.
 
     The numbers decision 3 of `tasks/diagnosis-2026-09-13-live-run-stops.md`
     puts to the owner, used here as the rehearsal's "what a re-sized
-    authorization would look like". They are not authorized for a live run, and
+    authorization would look like", with one figure moved: the per-unit output
+    ceiling, 12,000 in that proposal, would no longer clear the 15,360-token
+    schedule the fourth authorization's turn cap reserves, so it is raised to
+    16,000 and the three other ceilings are left where the diagnosis put them.
+    They remain unauthorized for a live run — they differ from
+    `AUTHORIZED_LIMITS` on both run ceilings and on the per-unit input one — and
     `assert_live_run_is_authorized` refuses them there for exactly that reason.
     """
 
@@ -381,7 +386,7 @@ def feasible_limits() -> instrument.RunLimits:
         run_max_input_tokens=3_600_000,
         run_max_output_tokens=350_000,
         unit_max_input_tokens=60_000,
-        unit_max_output_tokens=12_000,
+        unit_max_output_tokens=16_000,
         max_cost_usd=instrument.AUTHORIZED_MAX_COST_USD,
         elapsed_seconds=instrument.AUTHORIZED_ELAPSED_SECONDS,
         model_work_seconds=instrument.AUTHORIZED_MODEL_WORK_SECONDS,
