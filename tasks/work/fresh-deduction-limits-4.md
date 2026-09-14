@@ -32,6 +32,13 @@ converts to development.
 
 ## Acceptance
 
+- [x] Review correction: the re-measured mechanics paragraph no longer calls
+  150 ballots 300. An arm casts 150 (three per unit over 50 units) and
+  `guard_rewritten` is an overlay on the verdict columns rather than a fourth
+  bucket, so the paragraph carries 150 an arm, says what the overlay is, and
+  keeps 300 only as the two-arm total; the gate that pins the paragraph to the
+  run now DERIVES the per-arm total from `supported + unsupported + uncited`,
+  with the two-arm figure planted to show it red.
 - [x] Review correction: the two items this card owed after the stacking are
   delivered rather than deferred again. The Inputs table binds 7000-7999 off
   the merged freeze record, the row names all three converted bands with their
@@ -300,17 +307,18 @@ than a silent second distribution.
 
 ### Verification
 
-Every command below was re-run on this branch at `b5028a6d`, round 3's commit,
+Every command below was re-run on this branch at `244d9aa0`, round 5's commit,
 which carries the whole change: the merge of
 [the fourth freeze](held-out-prefix-freeze-4.md), every instrument, test and
-manifest byte including the re-bound Inputs table, and the recomputed
-`docs/artifacts.md` audits row. The ONLY bytes that move after it are this
-card's `## Acceptance` and `## Results` and the task index's derived sentence,
-which this card's Status flip moves; so every figure in the table reproduces at
-`b5028a6d` and again at the head, and `validate_task_docs.py` and `check.sh`
-were re-run after this card's own commit and returned the same results. The two
-counts that moved from round 2's table are the three cases round 3 adds (393 to
-396 in `tests/experiments`, 7,705 to 7,708 under `check.sh`). No command below
+manifest byte including the re-bound Inputs table and round 5's corrected
+ballot total, and the recomputed `docs/artifacts.md` audits row. The ONLY bytes
+that move after it are this card's `## Acceptance` and `## Results`; the task
+index's derived sentence does not move in this round, because the Status stays
+`done`. So every figure in the table reproduces at `244d9aa0` and again at the
+head, and `validate_task_docs.py` and `check.sh` were re-run after this card's
+own commit and returned the same results. No count in the table moved from
+round 3's: round 5 extends an existing case rather than adding one, so
+`tests/experiments` is still 396 and `check.sh` still 7,708. No command below
 reads a held-out prefix, and none of them makes a provider call.
 
 | Command | Result |
@@ -325,14 +333,15 @@ reads a held-out prefix, and none of them makes a provider call.
 | `bash scripts/check.sh` | exit 0: 7,708 passed / 20 skipped / 3 xfailed, 515 frontend tests, strict mypy over 477 files, ruff clean, production build |
 
 `docs/artifacts.md`'s `audits/` row is recomputed for the merged tree and every
-round's manifest bytes: 15,095,913 tracked bytes over 211 files. The file count
+round's manifest bytes: 15,096,108 tracked bytes over 211 files. The file count
 moved in round 1, because the freeze merged in adds
 `held-out/manifest-band-6000-6999.json`; the byte count moved again in round 2
-with the paragraph the manifest's dated section gained and in round 3 with the
+with the paragraph the manifest's dated section gained, in round 3 with the
 re-bound Inputs table, the round-3 entry and the re-measured verification
-section. The task index's derived inventory moves in round 3, because this
-card's Status flips: 1 ready, 1 active, 53 done, recomputed by
-`validate_task_docs.py` after the flip.
+section, and in round 5 with the corrected ballot total. The task index's
+derived inventory moved in round 3, when this card's Status flipped: 1 ready,
+1 active, 53 done, recomputed by `validate_task_docs.py` after the flip and
+unchanged since, because the Status does not move again.
 
 ### Limitations
 
@@ -633,3 +642,54 @@ prefix of any band is printed, logged, opened or committed, and both runs wrote
 to temporary directories. `docs/artifacts.md`'s `audits/` row is recomputed for
 the manifest's new bytes and the Verification section above is re-run and
 repinned to `b5028a6d`.
+
+### Review corrections, round 5 (2026-09-14)
+
+One blocking finding, and it holds.
+
+**The re-measured mechanics paragraph called 150 ballots 300.** The sentence
+this card added at `b5028a6d` read "Every one of the 300 ballots an arm cast
+was a non-SKIP decision — 150 supported ballots and 2 guard-rewritten ones per
+arm", and it was wrong twice. An arm casts 150 ballots — three per unit over 50
+units — so 300 is the TWO-arm total, one ballot for each of the 600 calls that
+is not a turn. And `guard_rewritten` is an OVERLAY on the verdict columns
+rather than a fourth bucket (`UnitGrade.verdict_counts`
+counts `not grade.voter_authored` over the same grades the three columns
+already hold), so the 2 do not add to the 150 either. The sentence therefore
+contradicted its own figures: 150 supported + 0 unsupported + 0 uncited is not
+"every one of 300". Re-derived from the run the paragraph describes, both arms
+report `{supported: 150, unsupported: 0, uncited: 0, guard_rewritten: 2}`.
+
+**What moved.** The paragraph now says 150 an arm, names the overlay for what
+it is, and keeps 300 in a parenthetical as the two-arm total tied to the 600
+calls. No measured figure is restated: the correction is arithmetic on figures
+the run already reported.
+
+**The gate now derives the total instead of leaving it unchecked.** This was
+the one number in the paragraph that no assertion covered, because it is not a
+single verdict column — it is `supported + unsupported + uncited`, the sum the
+overlay must stay out of.
+`test_the_mechanics_check_paragraph_quotes_the_run_it_describes` computes it
+from `arm.ballot_verdicts` and requires the paragraph to carry it, so both
+wrong arithmetics — the two-arm total and the columns-plus-overlay sum — are
+now red. Planted at `244d9aa0`, the 300 put back:
+
+```
+.venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -q -p no:randomly -k test_the_mechanics_check_paragraph_quotes_the_run_it_describes
+```
+
+```
+E  AssertionError: repaired_clock
+E  assert '150 ballots an arm cast' in "## Verification of this manifest The offline mechanics check, re-made on the FOURTH held-out band under the ceilings ..."
+1 failed, 314 deselected
+```
+
+Nothing else in this round moves: no authorized figure, no ceiling, no cap, no
+constant, no recording, report, DTO or weight byte, no default-path byte, no
+experiment to ON, `experiments/held_out_prefixes.py` unedited, and no provider
+call — the dry run behind the re-derivation is the fake provider's, at $0, into
+a temporary directory. No prefix of any band is printed, logged, opened or
+committed; only aggregate counts are. `docs/artifacts.md`'s `audits/` row is
+recomputed for the manifest's new bytes and the Verification section above is
+re-run and repinned to `244d9aa0`.
