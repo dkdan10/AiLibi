@@ -1327,6 +1327,22 @@ class ArmUsage:
             model_work_seconds=self.model_work_seconds + sum(c.seconds for c in calls),
         )
 
+    def merged(self, other: ArmUsage) -> ArmUsage:
+        """Two tallies of the SAME arm, summed.
+
+        What a resumed run needs and :meth:`plus` cannot give it: a sitting
+        carries totals forward, not the calls they came from, because the calls
+        themselves are gone with the process that made them.
+        """
+
+        return ArmUsage(
+            calls=self.calls + other.calls,
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cost_usd=self.cost_usd + other.cost_usd,
+            model_work_seconds=self.model_work_seconds + other.model_work_seconds,
+        )
+
 
 #: The four failure classes this wrapper retries, all of them ways for an
 #: attempt to produce no completion at all. Written as a closed set so the
@@ -2708,7 +2724,7 @@ def run_unit(
         agents[agent_id] = agent
         return agent
 
-    replay_path = output_dir / f"{arm.name}-seed-{prefix.seed}.jsonl"
+    replay_path = unit_replay_path(output_dir, arm=arm.name, seed=prefix.seed)
     result = HeadlessGame(
         seed=prefix.seed,
         num_players=prefix.roster.num_players,
@@ -3683,18 +3699,31 @@ def _summarize_arm(
 #: refused rather than migrated: a resumed run has to be the same run.
 CHECKPOINT_SCHEMA: Final[str] = "fresh-deduction-checkpoint/1"
 
-#: The files whose bytes decide what an arm SHOWS a model and what a payload may
-#: say. A resume across a change to any of them would pair units drawn from two
-#: different instruments, so the checkpoint records their digests and
-#: :func:`assert_checkpoint_matches` refuses a mismatch. The frozen INPUTS are
-#: covered separately by the held-out manifest's own digest, and the generator's
-#: 22 sources by that manifest's ``source_sha256`` block.
+#: The files this module NAMES as deciding what an arm shows a model and what a
+#: payload may say: this instrument, the meeting layer that drives the turns and
+#: the ballots, the memory store the prompts render from, the loader that builds
+#: the Jinja environment and selects the renderers, and the game module the
+#: instrument drives a prefix and its meeting through. A resume across a change
+#: to any of them would pair units drawn from two different instruments, so the
+#: checkpoint records their digests and :func:`assert_checkpoint_matches`
+#: refuses a mismatch.
+#:
+#: A NAMED set, not a transitive import closure, and the rest of the run path is
+#: covered elsewhere rather than here: the frozen INPUTS by the held-out
+#: manifest's own digest, the 22 generator sources by that manifest's
+#: ``source_sha256`` block and the freeze test that regenerates it
+#: (``verify_frozen_set`` deliberately does not re-compare it), and a rendering
+#: change that bumped a prompt version by :func:`_one_prompt_version_set` when
+#: the report is built. ``orchestrator/game.py`` is in both sets, because the
+#: freeze covers it only for changes that move a generated prefix.
 ARM_SURFACE_SOURCES: Final[tuple[str, ...]] = (
+    "agents/memory/store.py",
+    "agents/strategic/prompts/loader.py",
     "experiments/fresh_deduction_instrument.py",
     "meetings/manager.py",
-    "meetings/schemas.py",
     "meetings/public_accounts.py",
-    "agents/memory/store.py",
+    "meetings/schemas.py",
+    "orchestrator/game.py",
 )
 
 #: The prompt directory both arms render from; every file in it is hashed.
@@ -3702,11 +3731,14 @@ ARM_SURFACE_PROMPT_DIR: Final[str] = "agents/strategic/prompts/qwen3_6_27b"
 
 
 def arm_surface_digests(repo_root: Path = _REPO_ROOT) -> Mapping[str, str]:
-    """``{repository path: sha256}`` for every byte an arm renders through.
+    """``{repository path: sha256}`` over the NAMED arm surface.
 
-    Sorted and complete: a template ADDED to the prompt directory changes this
-    mapping as surely as one edited, because a family that gained a file is a
-    family that renders differently.
+    The named surface is :data:`ARM_SURFACE_SOURCES` plus every file of the
+    prompt directory both arms render from — the constant says what it covers
+    and where the rest of the run path is covered instead. Sorted and complete
+    over that set: a template ADDED to the prompt directory changes this mapping
+    as surely as one edited, because a family that gained a file is a family
+    that renders differently.
     """
 
     digests: dict[str, str] = {}
@@ -3920,6 +3952,110 @@ def checkpoint_unit(grade: UnitGrade, telemetry: UnitTelemetry) -> CheckpointUni
     )
 
 
+class AbandonedArm(BaseModel):
+    """One arm's charged-but-ungraded spend, as the checkpoint carries it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    arm: ArmName
+    usage: CarriedUsage = CarriedUsage()
+    retried_calls: int = 0
+    unaccounted_attempts: int = 0
+    attempts_by_trigger: Mapping[str, int] = {}
+
+    def attempts(self) -> TransportAttempts:
+        return TransportAttempts(
+            retried_calls=self.retried_calls,
+            unaccounted_attempts=self.unaccounted_attempts,
+            by_trigger=MappingProxyType(dict(sorted(self.attempts_by_trigger.items()))),
+        )
+
+
+class AbandonedSpend(BaseModel):
+    """The calls a stop charged inside the pair it interrupted.
+
+    A checkpoint is written at PAIR boundaries, so calls made after the last
+    boundary belong to no graded unit: the arm the stop landed in, and the arm
+    of the same prefix that finished beside it without its partner. They bought
+    nothing and they were still billed, which is exactly the case a resume
+    exists for — the stops the diagnosis of 2026-09-13 records were transport
+    exhaustion and a budget refusal, and both land mid-pair.
+
+    So a resumed run charges them again against the run ceilings: the ceilings
+    bound what the RUN spends, the stopped sitting spent these, and a resume
+    that dropped them would run its tail under a budget larger than the
+    authorization by up to one pair per stop — unboundedly, because nothing
+    bounds how often a provider may drop.
+
+    It accumulates. A checkpoint written by a resumed sitting carries the
+    earlier sittings' abandoned calls beside its own, so the third sitting of a
+    run charges what the first two abandoned as well as what they graded.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    arms: tuple[AbandonedArm, ...] = ()
+    #: The model-work seconds those calls burned. Not the sum of the rows above:
+    #: the clock is charged per ATTEMPT, and an attempt that returned nothing is
+    #: on no captured call.
+    model_work_seconds: float = 0.0
+
+    def usage_by_arm(self) -> Mapping[str, ArmUsage]:
+        return MappingProxyType({row.arm: row.usage.arm_usage() for row in self.arms})
+
+    def attempts_by_arm(self) -> Mapping[str, TransportAttempts]:
+        return MappingProxyType({row.arm: row.attempts() for row in self.arms})
+
+
+def abandoned_spend(
+    carried: AbandonedSpend,
+    *,
+    arms: Sequence[ArmName],
+    usage_by_arm: Mapping[str, ArmUsage],
+    attempts_by_arm: Mapping[str, TransportAttempts],
+    model_work_seconds: float,
+) -> AbandonedSpend:
+    """``carried`` plus one more stop's ungraded calls, summed per arm.
+
+    ``arms`` supplies the names, so a row is only ever built for an arm this run
+    knows; an arm carried in but not run here keeps its row.
+    """
+
+    names: list[ArmName] = list(arms)
+    names.extend(row.arm for row in carried.arms if row.arm not in names)
+    usage = dict(carried.usage_by_arm())
+    attempts = dict(carried.attempts_by_arm())
+    rows: list[AbandonedArm] = []
+    for name in names:
+        spend = usage.get(name, ArmUsage()).merged(
+            usage_by_arm.get(name, ArmUsage()),
+        )
+        tally = attempts.get(name, TransportAttempts()).plus(
+            attempts_by_arm.get(name, TransportAttempts()),
+        )
+        if spend == ArmUsage() and tally == TransportAttempts():
+            continue
+        rows.append(
+            AbandonedArm(
+                arm=name,
+                usage=CarriedUsage(
+                    calls=spend.calls,
+                    input_tokens=spend.input_tokens,
+                    output_tokens=spend.output_tokens,
+                    cost_usd=spend.cost_usd,
+                    model_work_seconds=spend.model_work_seconds,
+                ),
+                retried_calls=tally.retried_calls,
+                unaccounted_attempts=tally.unaccounted_attempts,
+                attempts_by_trigger=dict(tally.by_trigger),
+            )
+        )
+    return AbandonedSpend(
+        arms=tuple(rows),
+        model_work_seconds=carried.model_work_seconds + model_work_seconds,
+    )
+
+
 class RunCheckpoint(BaseModel):
     """What a stopped run may be continued from, and nothing more.
 
@@ -3928,6 +4064,12 @@ class RunCheckpoint(BaseModel):
     stop. It carries the identity of everything a resumed run must still be
     (the execution manifest, the frozen set, the arm surface), the budgets the
     first sitting spent, and the graded results of the units it finished.
+
+    The budgets are the whole of what was spent, not the graded part of it. A
+    stop lands mid-pair, and the calls it made there are on
+    :attr:`abandoned` rather than on any unit row; one final checkpoint is
+    written on the stop path to record them. :meth:`usage_by_arm` is the graded
+    half alone, and :func:`run_instrument` charges both.
 
     It is not an interim analysis. Nothing in the run path reads a grade off it:
     :func:`next_seeds_after` takes the SEEDS it lists and nothing else, and no
@@ -3949,24 +4091,40 @@ class RunCheckpoint(BaseModel):
     units: tuple[CheckpointUnit, ...]
     elapsed_seconds: float
     model_work_seconds: float
+    #: What the stops charged inside the pairs they interrupted. Defaulted
+    #: empty, because a checkpoint written at a pair boundary has abandoned
+    #: nothing yet.
+    abandoned: AbandonedSpend = AbandonedSpend()
 
     def usage_by_arm(self) -> Mapping[str, ArmUsage]:
-        """The spend to carry into the next sitting, per arm."""
+        """The GRADED spend, per arm.
+
+        The units this file carries, and only those. What a stop abandoned
+        mid-pair is on :attr:`abandoned`, which a resume charges beside this:
+        the two are kept apart because one of them bought units and the other
+        bought nothing, and a report that summed them silently could not say
+        which.
+        """
 
         totals: dict[str, ArmUsage] = {}
         for unit in self.units:
-            carried = unit.telemetry.usage
-            running = totals.get(unit.arm, ArmUsage())
-            totals[unit.arm] = ArmUsage(
-                calls=running.calls + carried.calls,
-                input_tokens=running.input_tokens + carried.input_tokens,
-                output_tokens=running.output_tokens + carried.output_tokens,
-                cost_usd=running.cost_usd + carried.cost_usd,
-                model_work_seconds=(
-                    running.model_work_seconds + carried.model_work_seconds
-                ),
+            totals[unit.arm] = totals.get(unit.arm, ArmUsage()).merged(
+                unit.telemetry.usage.arm_usage()
             )
         return MappingProxyType(totals)
+
+    def charged_usage_by_arm(self) -> Mapping[str, ArmUsage]:
+        """Everything the earlier sittings spent: graded plus abandoned."""
+
+        totals = dict(self.usage_by_arm())
+        for arm, spend in self.abandoned.usage_by_arm().items():
+            totals[arm] = totals.get(arm, ArmUsage()).merged(spend)
+        return MappingProxyType(totals)
+
+    def charged_model_work_seconds(self) -> float:
+        """The clock the earlier sittings burned, graded attempts and abandoned."""
+
+        return self.model_work_seconds + self.abandoned.model_work_seconds
 
 
 def write_checkpoint(path: Path, checkpoint: RunCheckpoint) -> None:
@@ -4001,12 +4159,14 @@ def read_checkpoint(path: Path) -> RunCheckpoint:
         loaded = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ResumeNotAuthorized(f"{path} is not a checkpoint: {exc}") from exc
-    if (
-        not isinstance(loaded, dict)
-        or loaded.get("schema_version") != CHECKPOINT_SCHEMA
-    ):
+    # Bound before the refusal, not inside it: a file holding a JSON list or a
+    # bare string is exactly the shape this guard exists for, and reading
+    # ``.get`` off it while wording the refusal would raise AttributeError
+    # instead — an incidental failure where AGENTS.md requires a named one.
+    schema = loaded.get("schema_version") if isinstance(loaded, dict) else None
+    if schema != CHECKPOINT_SCHEMA:
         raise ResumeNotAuthorized(
-            f"{path} carries schema {loaded.get('schema_version')!r}, not "
+            f"{path} carries schema {schema!r}, not "
             f"{CHECKPOINT_SCHEMA!r}; a resumed run is the same run"
         )
     try:
@@ -4092,15 +4252,30 @@ def next_seeds_after(
 ) -> tuple[HeldOutPrefix, ...]:
     """The unrendered tail of the ascending list, and only the tail.
 
-    Outcome-blind by construction: it reads ``completed_seeds`` and the order
-    the run draws in, and nothing else on the checkpoint. A completed seed that
-    is not a PREFIX of the ascending list is refused rather than skipped — the
-    run order is part of the design, and a hole in it is a checkpoint this
-    module did not write.
+    Outcome-blind by construction: it reads the SEEDS the checkpoint lists — the
+    completed ones and the ones its unit rows name — and the order the run draws
+    in, and nothing else on it. A completed seed that is not a PREFIX of the
+    ascending list is refused rather than skipped: the run order is part of the
+    design, and a hole in it is a checkpoint this module did not write.
+
+    A seed the checkpoint carries but this run would not draw is refused too,
+    rather than ignored. ``prefixes`` is truncated by ``--units``, so a resume
+    asked for fewer units than the checkpoint finished would otherwise return an
+    empty tail and report every carried unit anyway — a report naming more units
+    than were requested, with no run behind the difference.
     """
 
     done = set(checkpoint.completed_seeds)
+    carried = done | {unit.seed for unit in checkpoint.units}
     seeds = [prefix.seed for prefix in prefixes]
+    outside = sorted(seed for seed in carried if seed not in set(seeds))
+    if outside:
+        raise ResumeNotAuthorized(
+            "the checkpoint carries seeds this run would not draw: "
+            + ", ".join(str(seed) for seed in outside)
+            + "; a resumed run reports the units the stopped one finished, so "
+            "it cannot be narrower than the checkpoint it continues"
+        )
     finished = [seed for seed in seeds if seed in done]
     if finished != seeds[: len(finished)]:
         raise ResumeNotAuthorized(
@@ -4109,6 +4284,54 @@ def next_seeds_after(
             "the next unrendered one"
         )
     return tuple(prefixes[len(finished) :])
+
+
+def unit_replay_path(output_dir: Path, *, arm: ArmName, seed: int) -> Path:
+    """Where one unit's replay is recorded.
+
+    Named once: :func:`run_unit` writes it and
+    :func:`assert_the_tail_can_be_recorded` looks for it, and a gate that
+    guessed the other's spelling would pass a directory it should refuse.
+    """
+
+    return output_dir / f"{arm}-seed-{seed}.jsonl"
+
+
+def assert_the_tail_can_be_recorded(
+    *,
+    output_dir: Path,
+    prefixes: Sequence[HeldOutPrefix],
+    arms: Sequence[ArmName],
+) -> None:
+    """Refuse a resume whose directory already holds a replay of a seed to come.
+
+    A stop inside a unit leaves that unit's partial recording behind, so a
+    second sitting pointed at the first one's ``--output-dir`` reaches the
+    recorder's own refusal (``orchestrator/recording.py``:
+    :class:`~orchestrator.replay.ReplayLog.AlreadyExistsError`) — but only after
+    the resume gates have passed and, on a metered provider, after the tail has
+    begun to spend. This says so first, names the file, and costs one ``stat``
+    per unit. A resumed sitting writes into a fresh directory; ``force`` is not
+    offered, because replacing a held-out unit's replay is a decision, not a
+    default.
+    """
+
+    occupied: list[str] = []
+    for prefix in prefixes:
+        for arm in arms:
+            path = unit_replay_path(output_dir, arm=arm, seed=prefix.seed)
+            if path.exists():
+                occupied.append(path.name)
+    if occupied:
+        raise ResumeNotAuthorized(
+            "the output directory already holds a recording for a seed this "
+            "sitting has still to run: "
+            + ", ".join(sorted(occupied))
+            + f" under {output_dir}. A resumed sitting writes into a fresh "
+            "directory: the stop left the unit it was inside half-recorded, and "
+            "that file is evidence of the stop rather than something to "
+            "overwrite"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -4127,6 +4350,13 @@ class _RunState:
     usage_by_arm: dict[str, ArmUsage] = field(default_factory=dict)
     attempts_by_arm: dict[str, TransportAttempts] = field(default_factory=dict)
     completed: int = 0
+    #: The same two tallies restricted to the calls made SINCE the last
+    #: checkpoint was written. A stop writes these into the checkpoint as
+    #: abandoned spend: the pair they belong to was never graded, so no unit row
+    #: carries them, and a resumed run that did not charge them would run its
+    #: tail under a budget the stopped sitting had already eaten into.
+    pending_usage_by_arm: dict[str, ArmUsage] = field(default_factory=dict)
+    pending_attempts_by_arm: dict[str, TransportAttempts] = field(default_factory=dict)
 
     def charge(
         self,
@@ -4138,6 +4368,18 @@ class _RunState:
         self.attempts_by_arm[arm] = self.attempts_by_arm.get(
             arm, TransportAttempts()
         ).plus(attempts)
+        self.pending_usage_by_arm[arm] = self.pending_usage_by_arm.get(
+            arm, ArmUsage()
+        ).plus(calls)
+        self.pending_attempts_by_arm[arm] = self.pending_attempts_by_arm.get(
+            arm, TransportAttempts()
+        ).plus(attempts)
+
+    def pair_completed(self) -> None:
+        """The pair boundary has passed, so nothing is ungraded any more."""
+
+        self.pending_usage_by_arm.clear()
+        self.pending_attempts_by_arm.clear()
 
 
 def run_instrument(
@@ -4162,11 +4404,15 @@ def run_instrument(
     checkpoint is being written, after both arms of a completed pair.
 
     ``checkpoint_path`` writes the per-unit checkpoint a stopped run may be
-    continued from; ``resume`` is one, already read and already matched against
-    this tree (:func:`assert_checkpoint_matches`). A resumed run continues at
-    the next unrendered seed, carries the first sitting's spend into both the
-    run budget and the model-work clock, and reports the finished units beside
-    the fresh ones.
+    continued from — after every completed pair, and once more on the stop path
+    so the pair a stop interrupted leaves its spend behind. ``resume`` is one,
+    already read and already matched against this tree
+    (:func:`assert_checkpoint_matches`). A resumed run continues at the next
+    unrendered seed, carries the earlier sittings' whole spend — graded units
+    and abandoned pairs alike — into both the run budget and the model-work
+    clock, and reports the finished units beside the fresh ones. It writes into
+    a directory of its own: a replay already on disk for a seed still to run is
+    refused rather than overwritten.
 
     On the CLI's live path the frozen set is verified one level up, before the
     client this function is handed even exists
@@ -4204,6 +4450,11 @@ def run_instrument(
             repo_root=repo_root,
         )
         remaining = next_seeds_after(resume, prefixes)
+        assert_the_tail_can_be_recorded(
+            output_dir=output_dir,
+            prefixes=remaining,
+            arms=[arm.name for arm in arms],
+        )
         completed_seeds = list(resume.completed_seeds)
         carried_grades = [unit.grade() for unit in resume.units]
         carried_telemetry = [unit.telemetry for unit in resume.units]
@@ -4238,13 +4489,19 @@ def run_instrument(
     # what the record reports is the run's total, so the two are kept apart
     # here rather than conflated.
     carried_elapsed = 0.0 if resume is None else resume.elapsed_seconds
+    # What the earlier sittings spent on pairs they never finished. Carried
+    # forward through every checkpoint this sitting writes, so a run stopped
+    # twice charges both stops rather than only the last.
+    carried_abandoned = AbandonedSpend() if resume is None else resume.abandoned
     if resume is not None:
-        # The first sitting's spend, carried before the second one's first call:
-        # a resumed run continues under the same ceilings, so what the stopped
-        # run charged is charged again here rather than forgotten. A carried
-        # total already past a cap raises out of ``charge`` — a run that
-        # exhausted its budget is not resumable, which is the correct answer.
-        for arm_name, carried in resume.usage_by_arm().items():
+        # The earlier sittings' spend, charged before this one's first call: a
+        # resumed run continues under the same ceilings, so what the stopped run
+        # charged is charged again here rather than forgotten. BOTH halves —
+        # the units it graded and the pair its stop abandoned — because the
+        # ceilings bound what the run spent and it spent both. A carried total
+        # already past a cap raises out of ``charge``: a run that exhausted its
+        # budget is not resumable, which is the correct answer.
+        for arm_name, carried in resume.charged_usage_by_arm().items():
             state.usage_by_arm[arm_name] = carried
             run_budget.charge(
                 usage=TokenUsage(
@@ -4257,8 +4514,42 @@ def run_instrument(
             state.attempts_by_arm[unit.arm] = state.attempts_by_arm.get(
                 unit.arm, TransportAttempts()
             ).plus(unit.attempts())
+        for arm_name, tally in resume.abandoned.attempts_by_arm().items():
+            state.attempts_by_arm[arm_name] = state.attempts_by_arm.get(
+                arm_name, TransportAttempts()
+            ).plus(tally)
         state.completed = len(carried_telemetry)
-        work_clock.charge(resume.model_work_seconds)
+        work_clock.charge(resume.charged_model_work_seconds())
+    # The clock reading at the last checkpoint — or at the start of this sitting,
+    # which is the same thing for a resume. What the clock has run past it is
+    # what a stop would abandon.
+    work_at_boundary = work_clock.seconds
+
+    def _checkpoint_now(abandoned: AbandonedSpend, *, graded_seconds: float) -> None:
+        if checkpoint_path is None:
+            return
+        write_checkpoint(
+            checkpoint_path,
+            RunCheckpoint(
+                provider=provider,
+                manifest_sha256=hashlib.sha256(
+                    (repo_root / EXECUTION_MANIFEST_PATH).read_bytes()
+                ).hexdigest(),
+                held_out_manifest_sha256=frozen.manifest_sha256,
+                arm_surface_sha256=dict(arm_surface_digests(repo_root)),
+                limits=limits,
+                sampling=sampling,
+                completed_seeds=tuple(completed_seeds),
+                units=tuple(
+                    checkpoint_unit(grade, unit)
+                    for grade, unit in zip(grades, telemetry, strict=True)
+                ),
+                elapsed_seconds=carried_elapsed + time.monotonic() - started,
+                model_work_seconds=graded_seconds,
+                abandoned=abandoned,
+            ),
+        )
+
     for prefix in remaining:
         for arm in arms:
             try:
@@ -4300,6 +4591,23 @@ def run_instrument(
                     instrument_client.take(),
                     instrument_client.take_attempts(),
                 )
+                # And into the checkpoint, as the spend of a pair no unit row
+                # will ever carry. Without this final write the next sitting
+                # would rebuild its run budget from the last PAIR boundary and
+                # silently forgive everything the stop had already charged
+                # against the ceilings — up to one whole pair per stop, and a
+                # transport that drops can stop a run again and again.
+                _checkpoint_now(
+                    abandoned_spend(
+                        carried_abandoned,
+                        arms=[each.name for each in arms],
+                        usage_by_arm=state.pending_usage_by_arm,
+                        attempts_by_arm=state.pending_attempts_by_arm,
+                        model_work_seconds=work_clock.seconds - work_at_boundary,
+                    ),
+                    graded_seconds=work_at_boundary
+                    - carried_abandoned.model_work_seconds,
+                )
                 raise InstrumentAborted(
                     PartialRun(
                         reason=f"{type(exc).__name__}: {exc}",
@@ -4324,27 +4632,15 @@ def run_instrument(
         for record in records[-len(arms) :]:
             grades.append(grade_unit(record))
             telemetry.append(unit_telemetry(record))
-        if checkpoint_path is not None:
-            write_checkpoint(
-                checkpoint_path,
-                RunCheckpoint(
-                    provider=provider,
-                    manifest_sha256=hashlib.sha256(
-                        (repo_root / EXECUTION_MANIFEST_PATH).read_bytes()
-                    ).hexdigest(),
-                    held_out_manifest_sha256=frozen.manifest_sha256,
-                    arm_surface_sha256=dict(arm_surface_digests(repo_root)),
-                    limits=limits,
-                    sampling=sampling,
-                    completed_seeds=tuple(completed_seeds),
-                    units=tuple(
-                        checkpoint_unit(grade, unit)
-                        for grade, unit in zip(grades, telemetry, strict=True)
-                    ),
-                    elapsed_seconds=carried_elapsed + time.monotonic() - started,
-                    model_work_seconds=work_clock.seconds,
-                ),
-            )
+        # Nothing is abandoned at a pair boundary, so the file carries only what
+        # the earlier sittings abandoned, and the clock it records is the graded
+        # one: total minus what those stops burned.
+        _checkpoint_now(
+            carried_abandoned,
+            graded_seconds=work_clock.seconds - carried_abandoned.model_work_seconds,
+        )
+        work_at_boundary = work_clock.seconds
+        state.pair_completed()
 
     report = InstrumentReport(
         provider=provider,
@@ -4479,8 +4775,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help=(
             "write the per-unit checkpoint here after every completed paired "
-            "seed; a run stopped by an environmental cause can be continued "
-            "from it with --resume"
+            "seed, and once more where a stop lands; a run stopped by an "
+            "environmental cause can be continued from it with --resume. "
+            "Defaults to the --resume path, so a resumed sitting keeps "
+            "advancing the checkpoint it continues"
         ),
     )
     parser.add_argument(
@@ -4489,20 +4787,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help=(
             "continue the run this checkpoint stopped, at the next unrendered "
-            "seed. Refused unless the manifest, the frozen set, the arm "
-            "surface, the limits and the sampling configuration are still the "
-            "ones it was written under — and, on a live provider, unless the "
-            "execution manifest carries the owner's resumption clause"
+            "seed, into an output directory of its own. Refused unless the "
+            "manifest, the frozen set, the arm surface, the limits and the "
+            "sampling configuration are still the ones it was written under — "
+            "and, on a live provider, unless the execution manifest carries "
+            "the owner's resumption clause"
         ),
     )
     args = parser.parse_args(argv)
 
     resume = None if args.resume is None else read_checkpoint(args.resume)
+    # A resumed sitting that wrote no checkpoint would lose its own progress to
+    # the next stop and re-spend held-out calls a third sitting had already
+    # bought, so --resume implies --checkpoint at the same path unless one is
+    # named. Continuing a run is what the file is for; advancing it is the same
+    # act.
+    checkpoint_path = args.checkpoint if args.checkpoint is not None else args.resume
     if args.dry_run or args.provider == "fake":
         report = run_dry(
             output_dir=args.output_dir,
             units=args.units,
-            checkpoint_path=args.checkpoint,
+            checkpoint_path=checkpoint_path,
             resume=resume,
         )
     else:
@@ -4538,7 +4843,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             provider=args.provider,
             live_invocation=invocation,
             units=args.units,
-            checkpoint_path=args.checkpoint,
+            checkpoint_path=checkpoint_path,
             resume=resume,
         )
     payload = report.model_dump_json(indent=2)

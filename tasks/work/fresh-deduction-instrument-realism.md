@@ -34,6 +34,42 @@ a per-unit checkpoint as owed (`tasks/owner-decisions-2026-09-07.md`, B.4).
 
 ## Acceptance
 
+- [x] Review correction: a stop that lands INSIDE a pair carries what it
+  charged. The stop path writes one final checkpoint whose `AbandonedSpend`
+  rows hold that pair's tokens, cost and model-work seconds per arm, and a
+  resume charges them against the run ceilings and the clock beside the graded
+  units (`TestCheckpointAndResume::test_a_stop_inside_a_unit_carries_its_spend`,
+  `::test_the_abandoned_spend_is_charged_against_the_run_ceiling`,
+  `::test_a_second_stop_carries_the_first_ones_abandoned_calls`).
+- [x] Review correction: the claims that said so are now true rather than
+  corrected away — `RunCheckpoint`'s docstring, the resume comment in
+  `run_instrument` and the Results below all name the graded and the abandoned
+  halves, and `charged_usage_by_arm` / `charged_model_work_seconds` are what the
+  resume reads (`::test_a_stop_inside_a_unit_carries_its_spend` asserts the file
+  accounts for every token the stopped run reported).
+- [x] Review correction: a resume narrower than its checkpoint is refused by
+  name instead of returning an empty tail and reporting units it did not run
+  (`::test_a_resume_narrower_than_its_checkpoint_is_refused`, planted with
+  `--units 1` against a two-unit checkpoint).
+- [x] Review correction: a checkpoint file holding JSON that is not an object
+  raises the named `ResumeNotAuthorized`, not an incidental `AttributeError`
+  (`::test_a_file_that_is_not_a_checkpoint_is_refused`, three non-object
+  plants).
+- [x] Review correction: a resume into the stopped sitting's own output
+  directory is refused before anything runs, naming the half-recorded replay,
+  and the manifest states the fresh-directory rule
+  (`::test_a_resume_into_the_stopped_sittings_directory_is_refused`,
+  `TestExecutionManifest::test_the_manifest_states_what_a_second_sitting_must_do`).
+- [x] Review correction: `--resume` implies `--checkpoint` at the same path, so
+  a resumed sitting keeps advancing the file a third sitting would need
+  (`::test_the_cli_takes_the_checkpoint_and_the_resume`, which now drives
+  `--resume` end to end and asserts the checkpoint advanced).
+- [x] Review correction: the arm-surface identity names the prompt loader and
+  `orchestrator/game.py`, and says what the NAMED set covers instead of
+  claiming every byte an arm renders through
+  (`::test_the_named_arm_surface_carries_the_code_that_renders`,
+  `::test_a_moved_arm_surface_byte_refuses_the_resume` over a template, the
+  loader and the game module).
 - [x] `assert_ready_for_a_live_run` gains a feasibility gate, pure arithmetic
   over module constants: it refuses a per-unit output ceiling below the
   reservation schedule one unit makes (turns x turn cap + living voters x vote
@@ -59,8 +95,9 @@ a per-unit checkpoint as owed (`tasks/owner-decisions-2026-09-07.md`, B.4).
   and the instrument source digests), and `--resume <checkpoint>` continues
   at the next unrendered seed of the ascending list under the same manifest
   with the budgets carried; a resumed rehearsal produces a report identical to
-  the uninterrupted one, and a planted change to any arm-surface byte, the
-  manifest or the frozen set is refused. The live gate keeps refusing a resume
+  the uninterrupted one apart from the calls the stop itself abandoned, which
+  the first correction above carries; and a planted change to any arm-surface
+  byte, the manifest or the frozen set is refused. The live gate keeps refusing a resume
   until the manifest carries the owner's resumption clause (a test proves the
   refusal).
 - [x] The manifest's "How each limit is enforced" section states the units of
@@ -157,13 +194,15 @@ mutable state is added, and every new refusal is an explicit `raise`.
    listing them, so a fifth refusal shape is red here instead of an unretried
    stop mid-run.
 4. **The checkpoint and the resume.** `RunCheckpoint` is written after every
-   completed paired seed with the graded units, their telemetry, the execution
-   manifest's digest, the frozen set's digest and the digests of every
-   arm-surface source (`ARM_SURFACE_SOURCES` plus every file of the prompt set).
-   `--resume` continues at the next unrendered seed with the run budget and the
-   model-work clock carried. It is outcome-blind: `next_seeds_after` reads the
-   completed seeds and the run order, and no stop condition anywhere reads a
-   grade. A live resume is refused until the manifest carries the owner's
+   completed paired seed — and once more where a stop lands, carrying the spend
+   of the pair it interrupted (round-1 correction below) — with the graded
+   units, their telemetry, the execution manifest's digest, the frozen set's
+   digest and the digests of every arm-surface source (`ARM_SURFACE_SOURCES`
+   plus every file of the prompt set). `--resume` continues at the next
+   unrendered seed with the run budget and the model-work clock carried, into
+   an output directory of its own. It is outcome-blind: `next_seeds_after`
+   reads the seeds the file lists and the run order, and no stop condition
+   anywhere reads a grade. A live resume is refused until the manifest carries the owner's
    `RESUMPTION_CLAUSE`, which it does not.
 
 ### Decisions
@@ -254,8 +293,10 @@ refusal wording the marker tuple does not carry).
 ### Record impact and limitations
 
 The `audits/` row of `docs/artifacts.md` moves with the manifest: 206 files /
-14,978,051 bytes before, 206 files / 14,988,404 bytes after, recomputed with
-`git ls-files audits/` and the change staged. The held-out freeze manifest is
+14,978,051 bytes before this card, 206 files / 14,990,456 bytes after it,
+recomputed with `git ls-files audits/` and the change staged. (The figure
+`78b136bd` alone produced, 14,988,404, is superseded: the round-1 corrections
+below amend the manifest a second time.) The held-out freeze manifest is
 untouched — no file it hashes moved, so no restamp was needed, and no prefix
 was printed, opened or committed. No recording, report, DTO or weight byte
 moves; no experiment becomes ON; the three run archives are not touched.
@@ -277,3 +318,124 @@ Limitations:
 - **The feasibility gate leaves the run unrunnable.** That is the intended
   state: no live run can start until the fourth authorization re-sizes the
   limits from a calibration the owner authorizes.
+
+### Review corrections, round 1 (2026-09-14)
+
+Seven blocking findings from two independent lenses, all valid, all repaired on
+this branch. Six of them are one mechanism — the resume — and the seventh is the
+identity that mechanism compares two sittings on. Nothing above is retracted
+except the `audits/` byte count, which this round's second manifest amendment
+moves and Record impact restates: the feasibility gate, the usage profile and
+the retry enumeration are unchanged, and no constant, limit or frozen string
+moved. Still no live provider call of
+any kind, and every figure below is the fake provider or the replay double at
+`total_cost_usd` 0.0.
+
+**1-2. A stop inside a pair used to forget what it had charged.** The checkpoint
+is written at PAIR boundaries, so the calls a stop makes after the last boundary
+belong to no unit row. The stop path deliberately charges them into the partial
+accounting, and unit budgets are children of the run budget, so they were
+already spent against the run ceilings — but the next sitting rebuilt its budget
+from the file and never saw them. Both lenses reproduced it the same way, and so
+does this branch: a four-unit replay rehearsal stopped by transport exhaustion
+on its 28th call, i.e. mid-unit, really spent `repaired_clock` 51,815 in /
+3,579 out over 19 calls while the checkpoint accounted for 40,970 / 2,294 over
+12 — 10,845 input and 1,285 output tokens forgiven per stop, unboundedly often,
+because nothing bounds how many times a transport may drop.
+
+The repair is to record them rather than to document the gap. `AbandonedSpend`
+is a new checkpoint field holding, per arm, the tokens, cost, model-work seconds
+and retry counts of the pair a stop interrupted; `run_instrument` writes one
+final checkpoint on the stop path to carry it, and a resume charges
+`charged_usage_by_arm()` (graded plus abandoned) into the run budget and
+`charged_model_work_seconds()` into the clock before its first call. It
+accumulates, so a run stopped twice charges both stops. On the same rehearsal
+the checkpoint now accounts for the stopped sitting's spend exactly — 51,815 /
+3,579 charged, of which 40,970 / 2,294 graded — and the resumed report's
+per-arm totals are the uninterrupted run's plus exactly the abandoned rows
+(`repaired_clock` 85,186 / 5,310 over 24 calls uninterrupted, 96,031 / 6,595
+over 31 resumed; `combined_accounts` identical at 78,435 / 11,154). Every
+figure in this paragraph is asserted by
+`::test_a_stop_inside_a_unit_carries_its_spend`, so the record cannot drift
+from the rehearsal that produced it; reproduce them with `uv run pytest
+tests/experiments/test_fresh_deduction_instrument.py -k
+test_a_stop_inside_a_unit_carries_its_spend -q`. The comment and the
+`RunCheckpoint` docstring that claimed the carry now describe it, and
+`usage_by_arm()` says in its own docstring that it is the graded half alone.
+
+**3. A resume narrower than its checkpoint reported units it had not run.**
+`next_seeds_after` computed the finished prefix over the TRUNCATED prefix list,
+so a completed seed outside it was ignored rather than refused: `run_dry(units=2,
+checkpoint_path=...)` then `run_dry(units=1, resume=...)` returned two units an
+arm for a one-unit request, with no tail run and no refusal. It now refuses any
+seed the checkpoint carries that this run would not draw, naming the extras.
+
+**4. A checkpoint file that was not a JSON object raised `AttributeError`.**
+The guard short-circuited on `not isinstance(loaded, dict)` and then formatted
+the refusal with `loaded.get(...)`, so `[]` or `"hello"` reached an incidental
+exception where AGENTS.md requires a named one. The schema is bound before the
+raise.
+
+**5. A resume into the stopped sitting's directory aborted on the partial
+replay.** A mid-unit stop leaves that seed's half-written JSONL behind, so a
+second sitting pointed at the same `--output-dir` reached the recorder's
+`AlreadyExistsError` — after the resume gates passed and, live, after the tail
+had begun to spend. `assert_the_tail_can_be_recorded` refuses first, names the
+file, and says a resumed sitting writes into a fresh directory; the manifest
+says so too.
+
+**6. A resumed sitting wrote no checkpoint unless `--checkpoint` was repeated.**
+The CLI passed `args.checkpoint` on both paths, so `--resume cp.json` alone
+advanced nothing and a third sitting would have re-spent held-out calls already
+bought. `--checkpoint` now defaults to the `--resume` path, and the CLI test
+drives the flag combination end to end instead of only writing a checkpoint.
+
+**7. The arm-surface identity omitted the code that renders the prompts.**
+`agents/strategic/prompts/loader.py` builds the Jinja environment and selects
+the renderers and was in neither the named set nor the freeze's comparison;
+`orchestrator/game.py` was in the freeze's `source_sha256` block, which
+`verify_frozen_set` deliberately does not re-compare. Both are now in
+`ARM_SURFACE_SOURCES` (7 named files, 20 entries in the mapping with the 13
+prompt files), and the docstring no longer says "every byte an arm renders
+through": it says the set is NAMED and points at where the rest of the run path
+is covered — the held-out manifest's digest, its `source_sha256` block and the
+freeze test, and `_one_prompt_version_set` at report-build time.
+
+#### Verification of the corrections
+
+Run on this branch's tree with the whole change in place.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/experiments -q` | 346 passed (337 at `78b136bd`, which this round adds nine cases to) |
+| `bash scripts/check.sh` | exit 0 — ruff, ruff format over 505 files, 4 import contracts kept, validate_task_docs (51 work cards), generate_prompts --check, mypy over 476 files, then 7,631 passed / 20 skipped / 3 xfailed, then 515 frontend tests over 19 files and the build |
+| `uv run python scripts/validate_task_docs.py` | ok |
+| `uv run python scripts/check_doc_facts.py` | ok |
+| `uv run python scripts/verify_ml_evidence.py` | 60 checks, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/verify_samples.sh` | exit 0 |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` over the four sets | each report is consistent with its replays |
+
+Each repair carries a planted proof, applied to this tree and reversed
+(`pytest tests/experiments/test_fresh_deduction_instrument.py -k <selector>`):
+
+| Planted defect | Selector | Result |
+| --- | --- | --- |
+| the resume charges only `usage_by_arm()` and `model_work_seconds` | `carries_its_spend or charged_against_the_run_ceiling or second_stop_carries` | 2 failed, 1 passed |
+| the stop path writes no final checkpoint | same selector | 3 failed |
+| the out-of-list seed refusal removed from `next_seeds_after` | `narrower_than_its_checkpoint` | 1 failed |
+| `schema_version` read off the payload before the shape check | `not_a_checkpoint_is_refused` | 1 failed |
+| the output-directory check removed from the resume path | `stopped_sittings_directory` | 1 failed |
+| `--checkpoint` no longer defaulting to `--resume` | `cli_takes_the_checkpoint_and_the_resume` | 1 failed |
+| the loader and the game module removed from `ARM_SURFACE_SOURCES` | `named_arm_surface_carries or moved_arm_surface_byte` | 3 failed, 1 passed |
+
+#### What these corrections do not change
+
+The live gate still fails closed under the limits merged on 2026-09-07, the
+resume is still refused on a live provider until the manifest carries the
+owner's clause, and the elapsed wall is still per sitting. One limitation is
+sharper than it was: a resumed run's per-arm `calls`, `input_tokens` and
+`output_tokens` now include the calls its stops abandoned, so a report of a
+resumed run says what the RUN spent rather than what its graded units cost. That
+is the honest reading of a ceiling that bounds spending, and the checkpoint
+names the difference so either figure can be recovered.

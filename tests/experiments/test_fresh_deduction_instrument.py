@@ -30,7 +30,7 @@ import json
 import re
 import subprocess
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -359,6 +359,52 @@ def _without_wall(report: InstrumentReport) -> dict[str, Any]:
     payload.pop("model_work_seconds")
     for arm in payload["arms"]:
         arm.pop("model_work_seconds")
+    return payload
+
+
+def _token_rows(
+    usage_by_arm: Mapping[str, instrument.ArmUsage],
+) -> dict[str, tuple[int, int, int]]:
+    """``{arm: (input, output, calls)}`` — the three figures a record quotes."""
+
+    return {
+        arm: (usage.input_tokens, usage.output_tokens, usage.calls)
+        for arm, usage in usage_by_arm.items()
+    }
+
+
+def _arm_rows(report: InstrumentReport) -> dict[str, tuple[int, int, int]]:
+    """The same three figures off a finished report's arm summaries."""
+
+    return {
+        arm.arm: (arm.input_tokens, arm.output_tokens, arm.calls) for arm in report.arms
+    }
+
+
+def _less_the_stops_own_calls(
+    report: InstrumentReport, checkpoint: instrument.RunCheckpoint
+) -> dict[str, Any]:
+    """A resumed report with the calls its stop abandoned taken back out.
+
+    A resumed run reports what an uninterrupted one does PLUS what the stop
+    itself spent inside the pair it interrupted: those calls were billed, the
+    resume charges them against the same ceilings, and they belong to no graded
+    unit. Subtracting exactly the rows the checkpoint names is how the two runs
+    are compared without pretending the stop was free — and it fails loudly if
+    the abandoned rows are not the whole of the difference.
+    """
+
+    payload = _without_wall(report)
+    rows = {row.arm: row for row in checkpoint.abandoned.arms}
+    for arm in payload["arms"]:
+        row = rows.get(arm["arm"])
+        if row is None:
+            continue
+        arm["calls"] -= row.usage.calls
+        arm["input_tokens"] -= row.usage.input_tokens
+        arm["output_tokens"] -= row.usage.output_tokens
+        arm["cost_usd"] -= row.usage.cost_usd
+        payload["total_cost_usd"] -= row.usage.cost_usd
     return payload
 
 
@@ -3850,6 +3896,27 @@ class TestExecutionManifest:
         assert "assert_resume_is_authorized" in text
         assert "no live run may be resumed" in text
 
+    def test_the_manifest_states_what_a_second_sitting_must_do(self) -> None:
+        """Four operational rules, each of them a refusal in the code.
+
+        A runner reads this document and not the module, so a rule the code
+        enforces and the document omits is a stop discovered live. Each sentence
+        here has a test behind it in `TestCheckpointAndResume`: the fresh output
+        directory, the unit count no narrower than the checkpoint, the
+        checkpoint that keeps advancing, and the spend a stop abandons mid-pair
+        that the next sitting is charged for.
+        """
+
+        collapsed = " ".join(self._text().split())
+        for stated in (
+            "pass a NEW `--output-dir`",
+            "a resume narrower than its checkpoint is refused",
+            "`--checkpoint` defaults to the `--resume` path",
+            "the pair its stop abandoned",
+            "one final checkpoint is written on the stop path",
+        ):
+            assert stated in collapsed, stated
+
     def test_the_enforcement_section_quotes_the_transport_retry(self) -> None:
         """The retry is a thing the instrument DOES, so this document states it
         in the module's own words rather than in a paraphrase that could drift
@@ -4640,7 +4707,11 @@ class TestCheckpointAndResume:
         a second sitting continues at the third and produces the same report —
         the same graded units, the same verdicts, the same per-arm token totals
         — apart from the two wall clocks, which measure real time and cannot be
-        the same twice.
+        the same twice, and apart from the calls the stop ITSELF made, which a
+        resumed run charges rather than forgets. Here the stop lands on a unit's
+        first call, so what it abandoned is four attempts that bought no tokens;
+        `test_a_stop_inside_a_unit_carries_its_spend` plants the case where the
+        abandoned calls carry real usage.
         """
 
         limits = feasible_limits()
@@ -4677,7 +4748,263 @@ class TestCheckpointAndResume:
             client=UsageReplayProvider(seed=6),
             resume=checkpoint,
         )
-        assert _without_wall(resumed) == _without_wall(whole)
+        assert _less_the_stops_own_calls(resumed, checkpoint) == _without_wall(whole)
+
+    def test_a_stop_inside_a_unit_carries_its_spend(self, tmp_path: Path) -> None:
+        """PLANTED: the stop lands mid-unit, where the resume's own cause lands.
+
+        The checkpoint is written at PAIR boundaries, so a stop part-way through
+        a pair charges calls that no unit row carries. Before this was fixed the
+        second sitting rebuilt its run budget from the last boundary and forgave
+        them — once per stop, unboundedly often, because nothing bounds how many
+        times a transport may drop.
+
+        Three statements, each a different way the spend has to survive: the
+        checkpoint's abandoned rows ARE the difference between what the stopped
+        sitting really spent and what its graded units account for; the resumed
+        report's totals are the uninterrupted run's plus exactly those rows; and
+        the model-work clock carries them too.
+        """
+
+        limits = feasible_limits()
+        checkpoint_path = tmp_path / "checkpoint.json"
+        stopper = UsageReplayProvider(
+            spoil_call=28,
+            spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+            mode="transport_error",
+        )
+        with pytest.raises(InstrumentAborted) as stopped:
+            run_dry(
+                output_dir=tmp_path / "stopped",
+                units=4,
+                limits=limits,
+                client=stopper,
+                checkpoint_path=checkpoint_path,
+            )
+        partial = stopped.value.partial
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+
+        # The interrupted unit really did buy tokens before the transport went.
+        abandoned = checkpoint.abandoned.usage_by_arm()
+        assert abandoned, "a mid-unit stop abandoned no spend at all"
+        assert any(row.output_tokens > 0 for row in abandoned.values())
+        # And the file accounts for every token the stopped run reported.
+        assert {arm: usage for arm, usage in partial.usage_by_arm.items()} == dict(
+            checkpoint.charged_usage_by_arm()
+        )
+        # The rotation is deterministic, so the figures the card's round-1
+        # record quotes are pinned here rather than described: the record
+        # cannot drift from the rehearsal that produced it.
+        assert _token_rows(partial.usage_by_arm) == {
+            "repaired_clock": (51_815, 3_579, 19),
+            "combined_accounts": (39_773, 5_365, 12),
+        }
+        assert _token_rows(checkpoint.usage_by_arm()) == {
+            "repaired_clock": (40_970, 2_294, 12),
+            "combined_accounts": (39_773, 5_365, 12),
+        }
+        assert _token_rows(abandoned) == {"repaired_clock": (10_845, 1_285, 7)}
+        assert checkpoint.charged_model_work_seconds() == pytest.approx(
+            partial.model_work_seconds
+        )
+        assert checkpoint.model_work_seconds < partial.model_work_seconds
+
+        whole = run_dry(
+            output_dir=tmp_path / "whole",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(),
+        )
+        resumed = run_dry(
+            output_dir=tmp_path / "resumed",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(seed=6),
+            resume=checkpoint,
+        )
+        assert _less_the_stops_own_calls(resumed, checkpoint) == _without_wall(whole)
+        spent = {arm.arm: arm.output_tokens for arm in resumed.arms}
+        uninterrupted = {arm.arm: arm.output_tokens for arm in whole.arms}
+        assert spent != uninterrupted
+        for arm, tokens in abandoned.items():
+            assert spent[arm] == uninterrupted[arm] + tokens.output_tokens
+        assert _arm_rows(whole) == {
+            "repaired_clock": (85_186, 5_310, 24),
+            "combined_accounts": (78_435, 11_154, 24),
+        }
+        assert _arm_rows(resumed) == {
+            "repaired_clock": (96_031, 6_595, 31),
+            "combined_accounts": (78_435, 11_154, 24),
+        }
+
+    def test_the_abandoned_spend_is_charged_against_the_run_ceiling(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a ceiling only the abandoned calls cross.
+
+        The stronger half of the statement above. The run ceiling here sits one
+        token above what the checkpoint's GRADED units spent and below what the
+        stopped sitting actually spent, so a resume that carried only the graded
+        half would start happily and one that carries the whole spend refuses
+        before a unit runs. The refusal is the correct answer: a run that has
+        already spent its authorization is finished, not resumable.
+        """
+
+        limits = feasible_limits()
+        checkpoint_path = tmp_path / "checkpoint.json"
+        with pytest.raises(InstrumentAborted):
+            run_dry(
+                output_dir=tmp_path / "stopped",
+                units=4,
+                limits=limits,
+                client=UsageReplayProvider(
+                    spoil_call=28,
+                    spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+                    mode="transport_error",
+                ),
+                checkpoint_path=checkpoint_path,
+            )
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+        graded = sum(
+            usage.output_tokens for usage in checkpoint.usage_by_arm().values()
+        )
+        charged = sum(
+            usage.output_tokens for usage in checkpoint.charged_usage_by_arm().values()
+        )
+        assert charged > graded
+        tight = limits.model_copy(update={"run_max_output_tokens": graded + 1})
+        with pytest.raises(BudgetExceededError):
+            run_dry(
+                output_dir=tmp_path / "resumed",
+                units=4,
+                limits=tight,
+                client=UsageReplayProvider(seed=6),
+                resume=checkpoint.model_copy(update={"limits": tight}),
+            )
+
+    def test_a_second_stop_carries_the_first_ones_abandoned_calls(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: two stops in a row, the second inside a later pair.
+
+        The accounting accumulates or it leaks once per sitting. The checkpoint
+        the second stop writes carries the first stop's abandoned calls beside
+        its own, so a third sitting charges both.
+        """
+
+        limits = feasible_limits()
+        checkpoint_path = tmp_path / "checkpoint.json"
+        with pytest.raises(InstrumentAborted):
+            run_dry(
+                output_dir=tmp_path / "first",
+                units=6,
+                limits=limits,
+                client=UsageReplayProvider(
+                    spoil_call=28,
+                    spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+                    mode="transport_error",
+                ),
+                checkpoint_path=checkpoint_path,
+            )
+        first = instrument.read_checkpoint(checkpoint_path)
+        first_abandoned = sum(
+            usage.input_tokens for usage in first.abandoned.usage_by_arm().values()
+        )
+        assert first_abandoned > 0
+        with pytest.raises(InstrumentAborted):
+            run_dry(
+                output_dir=tmp_path / "second",
+                units=6,
+                limits=limits,
+                client=UsageReplayProvider(
+                    seed=6,
+                    spoil_call=16,
+                    spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+                    mode="transport_error",
+                ),
+                checkpoint_path=checkpoint_path,
+                resume=first,
+            )
+        second = instrument.read_checkpoint(checkpoint_path)
+        second_abandoned = sum(
+            usage.input_tokens for usage in second.abandoned.usage_by_arm().values()
+        )
+        assert second_abandoned > first_abandoned
+        assert len(second.completed_seeds) > len(first.completed_seeds)
+
+    def test_a_resume_narrower_than_its_checkpoint_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: `--units 1` against a checkpoint that finished two.
+
+        `next_seeds_after` computed the finished prefix over the TRUNCATED list,
+        so a completed seed outside it was ignored rather than refused: the tail
+        came back empty, every carried unit was still reported, and a one-unit
+        request produced a two-unit report with no run behind the difference.
+        """
+
+        checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
+        frozen = verify_frozen_set(_REPO_ROOT)
+        with pytest.raises(
+            instrument.ResumeNotAuthorized, match="would not draw"
+        ) as refused:
+            instrument.next_seeds_after(checkpoint, frozen.prefixes[:1])
+        assert str(frozen.accepted_seeds[1]) in str(refused.value)
+        with pytest.raises(instrument.ResumeNotAuthorized, match="would not draw"):
+            run_dry(
+                output_dir=tmp_path / "narrow",
+                units=1,
+                limits=feasible_limits(),
+                client=UsageReplayProvider(seed=6),
+                resume=checkpoint,
+            )
+
+    def test_a_resume_into_the_stopped_sittings_directory_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a mid-unit stop, then a resume pointed at its own directory.
+
+        The stop leaves the interrupted unit's partial replay behind, so the
+        second sitting used to reach the recorder's AlreadyExists refusal — after
+        the resume gates had passed, and on a metered provider after the tail had
+        begun to spend. It is refused before anything runs now, by name, and a
+        fresh directory still works.
+        """
+
+        limits = feasible_limits()
+        checkpoint_path = tmp_path / "checkpoint.json"
+        with pytest.raises(InstrumentAborted):
+            run_dry(
+                output_dir=tmp_path / "sitting-1",
+                units=4,
+                limits=limits,
+                client=UsageReplayProvider(
+                    spoil_call=28,
+                    spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+                    mode="transport_error",
+                ),
+                checkpoint_path=checkpoint_path,
+            )
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+        with pytest.raises(
+            instrument.ResumeNotAuthorized, match="already holds a recording"
+        ) as refused:
+            run_dry(
+                output_dir=tmp_path / "sitting-1",
+                units=4,
+                limits=limits,
+                client=UsageReplayProvider(seed=6),
+                resume=checkpoint,
+            )
+        assert ".jsonl" in str(refused.value)
+        assert "fresh directory" in str(refused.value)
+        run_dry(
+            output_dir=tmp_path / "sitting-2",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(seed=6),
+            resume=checkpoint,
+        )
 
     def test_a_resume_continues_at_the_next_unrendered_seed(
         self, tmp_path: Path
@@ -4718,18 +5045,52 @@ class TestCheckpointAndResume:
                 frozen=verify_frozen_set(_REPO_ROOT),
             )
 
-    def test_a_moved_arm_surface_byte_refuses_the_resume(self, tmp_path: Path) -> None:
-        """PLANTED: one template of the prompt set, one byte different.
+    def test_the_named_arm_surface_carries_the_code_that_renders(self) -> None:
+        """The set covers the renderer and the game the meeting runs inside.
+
+        `arm_surface_digests` is what a resume compares two sittings on, so a
+        file that decides what a model SEES and is not in it is a change a resume
+        would accept. The loader builds the Jinja environment and picks the
+        renderers; `orchestrator/game.py` drives the prefix and its meeting, and
+        the held-out freeze covers it only for changes that move a generated
+        prefix (`verify_frozen_set` deliberately does not re-compare
+        `source_sha256`). Both are in the named set, and the constant's own
+        comment says where the rest of the run path is covered instead.
+        """
+
+        surface = instrument.arm_surface_digests()
+        assert "agents/strategic/prompts/loader.py" in surface
+        assert "orchestrator/game.py" in surface
+        source = _INSTRUMENT_SOURCE.read_text(encoding="utf-8")
+        assert "A NAMED set, not a transitive import closure" in source
+        # And the claim it replaced is gone: the docstring no longer says the
+        # mapping covers every byte an arm renders through.
+        assert "every byte an arm renders through" not in source
+
+    @pytest.mark.parametrize(
+        "moved_path",
+        [
+            f"{instrument.ARM_SURFACE_PROMPT_DIR}/vote_ballot.j2",
+            "agents/strategic/prompts/loader.py",
+            "orchestrator/game.py",
+        ],
+    )
+    def test_a_moved_arm_surface_byte_refuses_the_resume(
+        self, tmp_path: Path, moved_path: str
+    ) -> None:
+        """PLANTED: one arm-surface file, one byte different.
 
         The digest is recomputed from the tree at resume time, so this is the
         real check: a second sitting whose prompts render differently would pair
         units drawn from two instruments, and the arms are what the design
-        compares.
+        compares. Planted on a template, on the loader that selects the
+        renderers and on the game module the meeting runs inside — the last two
+        were outside the set until this card's review.
         """
 
         checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
         moved = dict(checkpoint.arm_surface_sha256)
-        template = f"{instrument.ARM_SURFACE_PROMPT_DIR}/vote_ballot.j2"
+        template = moved_path
         assert template in moved
         moved[template] = "0" * 64
         planted = checkpoint.model_copy(update={"arm_surface_sha256": moved})
@@ -4843,7 +5204,14 @@ class TestCheckpointAndResume:
             instrument.arm_surface_digests(tmp_path)
 
     def test_a_file_that_is_not_a_checkpoint_is_refused(self, tmp_path: Path) -> None:
-        """Two plants: not JSON, and JSON of another schema."""
+        """Four plants: not JSON, JSON of another schema, and JSON that is not an
+        object at all.
+
+        The last two are what AGENTS.md's "invalid input raises" means here: a
+        file holding `[]` or a bare string used to reach `loaded.get` while the
+        refusal was being worded and raise `AttributeError` instead — an
+        incidental failure where a named one is owed.
+        """
 
         broken = tmp_path / "broken.json"
         broken.write_text("{not json", encoding="utf-8")
@@ -4853,11 +5221,24 @@ class TestCheckpointAndResume:
         foreign.write_text('{"schema_version": "something/9"}', encoding="utf-8")
         with pytest.raises(instrument.ResumeNotAuthorized, match="carries schema"):
             instrument.read_checkpoint(foreign)
+        for body in ("[]", '"hello"', "7"):
+            shapeless = tmp_path / "shapeless.json"
+            shapeless.write_text(body, encoding="utf-8")
+            with pytest.raises(instrument.ResumeNotAuthorized, match="carries schema"):
+                instrument.read_checkpoint(shapeless)
         with pytest.raises(instrument.ResumeNotAuthorized, match="no checkpoint at"):
             instrument.read_checkpoint(tmp_path / "absent.json")
 
     def test_the_cli_takes_the_checkpoint_and_the_resume(self, tmp_path: Path) -> None:
-        """The operator's own path: write one, then continue from it."""
+        """The operator's own path, driven end to end: write one, then continue.
+
+        The second invocation passes `--resume` and NO `--checkpoint`, which is
+        what an operator continuing a stopped run types. That used to write no
+        checkpoint at all, so a second interruption lost the resumed sitting's
+        progress and a third sitting would re-spend held-out calls already
+        bought; `--resume` now implies a checkpoint at the same path, and the
+        assertion is that the file advanced.
+        """
 
         checkpoint = tmp_path / "cp.json"
         assert (
@@ -4876,7 +5257,31 @@ class TestCheckpointAndResume:
             )
             == 0
         )
-        assert instrument.read_checkpoint(checkpoint).completed_seeds
+        first = instrument.read_checkpoint(checkpoint)
+        assert len(first.completed_seeds) == 2
+        assert (
+            instrument.main(
+                [
+                    "--dry-run",
+                    "--units",
+                    "3",
+                    "--output-dir",
+                    str(tmp_path / "second"),
+                    "--resume",
+                    str(checkpoint),
+                    "--json",
+                    str(tmp_path / "second.json"),
+                ]
+            )
+            == 0
+        )
+        advanced = instrument.read_checkpoint(checkpoint)
+        assert len(advanced.completed_seeds) == 3
+        assert advanced.completed_seeds[:2] == first.completed_seeds
+        report = InstrumentReport.model_validate_json(
+            (tmp_path / "second.json").read_text(encoding="utf-8")
+        )
+        assert [arm.units for arm in report.arms] == [3, 3]
 
 
 class TestHarnessesUntouched:

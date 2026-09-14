@@ -376,6 +376,23 @@ owner's to take. The resume is outcome-blind by construction: it reads the
 checkpoint's completed seeds and its identity digests, and nothing in the run
 path reads a grade.
 
+A resumed sitting carries the whole of what the earlier ones spent, not the
+graded part of it. The checkpoint is written at PAIR boundaries, so a stop
+part-way through a pair charges calls that no unit row accounts for; one final
+checkpoint is written on the stop path and records them as abandoned spend, per
+arm, with the model-work seconds they burned, and the next sitting charges them
+against the same ceilings before it makes a call. It accumulates across stops.
+Two other rules follow from the same file: a resumed sitting writes into an
+output directory of its own — a replay already on disk for a seed still to run
+is refused by name rather than overwritten, because a stop leaves the unit it
+was inside half-recorded — and a resume may not be narrower than the checkpoint
+it continues, so a unit count that would drop a finished seed is refused instead
+of reported. The identity a resume is held to is a NAMED set of files
+(`ARM_SURFACE_SOURCES` plus every file of the prompt directory), which this
+amendment widens to the prompt loader and `orchestrator/game.py`; the constant
+states where the rest of the run path is covered instead, rather than claiming
+the digests cover every byte an arm renders through.
+
 The frozen analysis does not move here. `PRIMARY_OUTCOME`, `DECISION_RULE`,
 `MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
 are the same bytes the sections below quote, and a test holds them to the
@@ -725,6 +742,18 @@ which is the owner's to take on a fourth authorization card. A resume is also
 refused, on any provider, unless the checkpoint's execution manifest, held-out
 freeze, arm-surface digests, limits and sampling configuration are still this
 tree's: a resumed run is the same run or it is none.
+
+What a runner has to do differently on a second sitting, and what the code does
+for them: pass a NEW `--output-dir`, because the first sitting's directory holds
+the half-recorded replay of the unit its stop was inside and a resume that would
+land on it is refused by name; pass the same `--units` or more, because a resume
+narrower than its checkpoint is refused rather than silently reporting units it
+did not run; and pass `--resume` alone if the checkpoint is to keep advancing in
+place, since `--checkpoint` defaults to the `--resume` path and a sitting that
+wrote no checkpoint would lose its own progress to the next stop. The budgets
+the second sitting starts from are the first one's whole spend: the units it
+graded and the pair its stop abandoned, the latter recorded by a final
+checkpoint written on the stop path.
 
 The gate and the frozen-set check both run BEFORE a client is constructed, and
 that order is a property of the signatures rather than of the order two lines
