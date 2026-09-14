@@ -1253,8 +1253,15 @@ def assert_client_matches_provider(*, provider: str, client: object | None) -> N
 #: carries the interrupted unit's spend and model-work seconds
 #: (:class:`AbandonedSpend`, written on the stop path) and the next sitting
 #: charges them before its first call, so "with the interrupted unit's spend and
-#: model-work time carried" is arithmetic rather than a promise. The once-per-
-#: stop bound and the final-stop list are the runner's, not this module's: a
+#: model-work time carried" is arithmetic rather than a promise. That write is
+#: reached by every stop that unwinds this process, interrupts included
+#: (``run_instrument`` catches ``BaseException`` for the accounting and re-raises
+#: an interrupt unchanged). It is NOT reached by a stop that runs no code at
+#: all — a SIGKILL, an OOM kill, a power loss — which leaves the last checkpoint
+#: at the previous pair boundary and carries that pair's spend nowhere; the
+#: runner reads the abandoned sitting's output directory before resuming from a
+#: stop of that class, and the manifest's dated section says so. The once-per-
+#: stop bound and the final-stop list are the runner's too, not this module's: a
 #: checkpoint records no stop class, so a resume cannot be refused on one, and
 #: the run's record states which stop each sitting followed.
 RESUMPTION_CLAUSE: Final[str] = (
@@ -5095,9 +5102,10 @@ def run_instrument(
             # swallowed either way:
             # the class and message are copied into ``reason`` and the original
             # is chained, so a stop is louder than the raw exception, not
-            # quieter. ``BaseException`` is deliberately not caught — an
-            # interrupt is not a run stop.
-            except Exception as exc:
+            # quieter. ``BaseException`` IS caught, but only far enough to
+            # account for what the interrupted pair had already bought: see the
+            # re-raise below.
+            except BaseException as exc:
                 # The stopped unit's calls are still in the client. They were
                 # spent, so they are charged into the partial accounting before
                 # it is reported — "retains partial evidence and unresolved
@@ -5124,6 +5132,22 @@ def run_instrument(
                     graded_seconds=work_at_boundary
                     - carried_abandoned.model_work_seconds,
                 )
+                if not isinstance(exc, Exception):
+                    # An interrupt is still NOT a run stop: it is not reported
+                    # as a PartialRun, it is not given a ``reason``, and it
+                    # leaves this function as itself. What it now also does is
+                    # leave the two lines above behind it. The owner's
+                    # resumption clause names "a process crash" as resumable
+                    # "with the interrupted unit's spend and model-work time
+                    # carried", and a Ctrl-C, a SIGTERM or a SystemExit that
+                    # unwinds this frame spent exactly as much as a transport
+                    # failure did; forgiving it would be the same silent
+                    # forgiveness the final write exists to prevent. The stop
+                    # classes that run no code at all — SIGKILL, an OOM kill, a
+                    # power loss — write nothing and carry nothing, which is the
+                    # limitation the manifest's dated clause section states in
+                    # the runner's own terms.
+                    raise
                 raise InstrumentAborted(
                     PartialRun(
                         reason=f"{type(exc).__name__}: {exc}",
@@ -5269,6 +5293,9 @@ CALIBRATION_SCHEMA: Final[str] = "fresh-deduction-calibration/1"
 #: rehearsal double, which is a test module this one may not depend on.
 CallType = Literal["turn", "ballot"]
 
+#: The two schedules, in the order a summary reports them.
+CALL_TYPES: Final[tuple[CallType, ...]] = ("turn", "ballot")
+
 #: The dispositions that are SAMPLES of what a call costs: a completion that
 #: came back, and one the provider billed for and then refused. The other two
 #: carry zero tokens because nothing was reported, so averaging them in would
@@ -5367,7 +5394,7 @@ class CallTypeUsage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     arm: str
-    call_type: str
+    call_type: CallType
     #: Completions only (:data:`COMPLETED_DISPOSITIONS`); the attempts that
     #: reported nothing are counted on the arm rather than averaged in here.
     completions: int
@@ -5388,10 +5415,17 @@ class CalibrationCall(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     arm: str
-    call_type: str
+    #: The two boundary fields are the module's own Literals rather than plain
+    #: strings, because this model is a PARSE boundary: ``--refresh-usage-profile``
+    #: validates a calibration JSON through it and the rehearsal double keys a
+    #: refusal off ``disposition == "billed_and_refused"`` exactly. A misspelled
+    #: or later value typed as ``str`` would parse clean and replay a billed
+    #: refusal as a resolved call, into the committed profile the feasibility
+    #: gate's two calibrated constants are held to. Invalid input raises here.
+    call_type: CallType
     input_tokens: int
     output_tokens: int
-    disposition: str
+    disposition: CallDisposition
 
 
 class CalibrationUnitUsage(BaseModel):
@@ -5607,7 +5641,7 @@ def _summarize_calibration_arm(
         )
     rows = _unit_rows(own)
     by_call_type: list[CallTypeUsage] = []
-    for call_type in ("turn", "ballot"):
+    for call_type in CALL_TYPES:
         sample = [
             call
             for record in own
@@ -6009,6 +6043,46 @@ def write_usage_profile(report: CalibrationReport, path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _preflight_json_destination(
+    path: Path | None, parser: argparse.ArgumentParser
+) -> None:
+    """Make the ``--json`` destination's directory BEFORE the first call.
+
+    The manifest's documented live command writes into a dated archive
+    directory — ``audits/deduction-candidate/calibration-<date>/`` — that
+    nothing has created yet, and :meth:`Path.write_text` does not create it.
+    Discovering that after the run is the one ordering that loses the
+    measurement: the calibration this manifest authorizes is a once-only spend,
+    and its whole record is the payload written at the end. So the directory is
+    made, or the path refused, before a provider is reached rather than after
+    it is paid.
+    """
+
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        parser.error(
+            f"--json {path} cannot be written: {exc}. A run whose output has "
+            "nowhere to land is refused before it spends, not after"
+        )
+
+
+def _emit_report(payload: str, path: Path | None) -> None:
+    """stdout first, then the file: a failed write must not eat the payload.
+
+    The pair with :func:`_preflight_json_destination`. The preflight makes the
+    write overwhelmingly likely to succeed; this ordering makes the failure it
+    cannot rule out (a full disk, a revoked permission) cost the operator a
+    copy-paste rather than the measurement.
+    """
+
+    print(payload)
+    if path is not None:
+        path.write_text(payload + "\n", encoding="utf-8")
+
+
 def _run_calibration_from_args(
     args: argparse.Namespace, parser: argparse.ArgumentParser
 ) -> int:
@@ -6062,10 +6136,7 @@ def _run_calibration_from_args(
             provider=args.provider,
             live_invocation=invocation,
         )
-    payload = report.model_dump_json(indent=2)
-    if args.json is not None:
-        args.json.write_text(payload + "\n", encoding="utf-8")
-    print(payload)
+    _emit_report(report.model_dump_json(indent=2), args.json)
     return 0
 
 
@@ -6173,6 +6244,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    # Before the dispatch, so both modes that write one get the same guarantee:
+    # a destination that cannot be written is a refusal now, at exit 2, and not
+    # a traceback after the spend.
+    _preflight_json_destination(args.json, parser)
 
     if args.refresh_usage_profile is not None:
         if args.profile_out is None:
@@ -6237,10 +6312,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             checkpoint_path=checkpoint_path,
             resume=resume,
         )
-    payload = report.model_dump_json(indent=2)
-    if args.json is not None:
-        args.json.write_text(payload + "\n", encoding="utf-8")
-    print(payload)
+    _emit_report(report.model_dump_json(indent=2), args.json)
     return 0
 
 

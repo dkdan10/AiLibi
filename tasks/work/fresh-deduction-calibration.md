@@ -36,6 +36,24 @@ whose provider is not the authorized one, carries a per-unit checkpoint and a
 
 ## Acceptance
 
+- [x] Review correction: the `--json` destination is made before the first
+  call, not after the last one. `_preflight_json_destination` creates the
+  parent of `--json` — the manifest's documented
+  `calibration-<date>/calibration.json` — or refuses the path at exit 2 before
+  a unit runs, and `_emit_report` prints the payload before it writes it. Two
+  planted tests: the dated directory that does not exist, and a parent that is
+  a file.
+- [x] Review correction: an interrupt carries the spend of the pair it landed
+  in. `run_instrument` catches `BaseException` for the final checkpoint and
+  re-raises an interrupt unchanged, so the clause's "process crash" is
+  arithmetic for every stop that unwinds this process; the stop class that runs
+  no handler at all (a SIGKILL, an OOM kill, a power loss) writes nothing and
+  is stated as the runner's step in the manifest's dated section and in
+  Limitations below. A planted test each.
+- [x] Review correction: `CalibrationCall.call_type` and `.disposition` are the
+  module's own `CallType` and `CallDisposition` Literals, so an unknown value
+  raises where `--refresh-usage-profile` parses it instead of being counted as
+  a resolved call into the committed profile. One planted test per field.
 - [x] A `--calibrate` mode: it accepts only a freeze record whose `status` is
   `development` and whose band is in `CONVERTED_BANDS`, takes the first
   `CALIBRATION_PAIRED_SEEDS = 5` accepted seeds ascending, rebuilds each prefix
@@ -203,7 +221,8 @@ signatures rather than of the order of two lines.
 All on this branch, offline, with the fake provider and the replay double; no
 provider was reached and nothing was spent.
 
-- `uv run pytest tests/experiments -q` — **378 passed** (348 before this card):
+- `uv run pytest tests/experiments -q` — **378 passed** (348 before this card;
+  385 after the round-1 corrections recorded below):
   28 new across `TestCalibrationInputs`, `TestCalibrationGate`,
   `TestCalibrationRun` and `TestCalibrationProfileRefresh`, and two more in
   `TestExecutionManifest`, where the one test that asserted the manifest did
@@ -314,8 +333,9 @@ ordering: `test_the_calibration_never_reads_the_held_out_record` mines
 
 `audits/deduction-candidate/execution-manifest.md` is the only `audits/` byte
 that moves. The `docs/artifacts.md` row is recomputed from the tracked `audits/`
-inventory with the change staged: 14,992,123 → **15,001,060 tracked bytes / 206
-files**, the file count unchanged, and `scripts/verify_ml_evidence.py` and
+inventory with the change staged: 14,992,123 → **15,002,830 tracked bytes / 206
+files** (15,001,060 at the round-0 head, before the round-1 corrections below),
+the file count unchanged, and `scripts/verify_ml_evidence.py` and
 `tests/scripts/test_verify_ml_evidence.py` both pass on it. No recording,
 report, DTO or weight byte moves; no experiment becomes ON; the held-out record
 at `MANIFEST_PATH` is untouched; and the frozen analysis strings are the same
@@ -337,6 +357,14 @@ Limitations, stated rather than implied:
   no stop class, so a second resume after the same stop, or a resume after a
   limit stop, is refused by the runner reading the clause and not by the
   instrument.
+- **A stop that runs no handler carries nothing** (round-1 correction 2): the
+  final checkpoint is written by every stop that unwinds the process, an
+  interrupt included, and by no SIGKILL, OOM kill or power loss. After one of
+  those the last checkpoint is the previous PAIR boundary and up to one pair's
+  spend is missing from it, so the runner reads the abandoned sitting's output
+  directory and stdout for what it had charged and records that beside the stop
+  before resuming. Making this arithmetic would take a durable pre-call spend
+  journal, which is a larger change than this card carries.
 - **`tests/experiments/deduction_usage_profile.json` is unchanged.** Refreshing
   it is the runner's step on the live output, and it moves
   `CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` with it —
@@ -345,3 +373,95 @@ Limitations, stated rather than implied:
 - **A calibration has no resume.** Ten units inside a ninety-minute window are
   re-run rather than continued, which spends development data the evaluation is
   not holding in reserve.
+
+### Review corrections, round 1 (2026-09-14)
+
+Three blocking findings from the round-1 review of PR #454 at `4bb46030`, all
+three raised by Codex as well and none of them previously dispositioned. Each
+is repaired in code, each repair has a planted failure, and the two documents
+that carried the claims now carry what the code does. No live call was made and
+nothing was spent; the fake provider and the replay double are still the only
+providers this branch reaches.
+
+**1. The manifest's documented live command destroyed the measurement it was
+authorizing.** `_run_calibration_from_args` wrote `--json` with
+`Path.write_text` and no `mkdir`, and printed the payload afterwards, so the
+dated archive directory the manifest's command names —
+`audits/deduction-candidate/calibration-<date>/`, which nothing creates — meant
+a `FileNotFoundError` raised after every unit had run and before the payload
+reached stdout. On a once-only spend the whole record is lost. Reproduced at
+`4bb46030`:
+
+```sh
+git checkout 4bb46030 && uv run python -m experiments.fresh_deduction_instrument \
+  --calibrate --json "$(mktemp -d)/calibration-2026-09-14/calibration.json"
+```
+
+— exit 1, `FileNotFoundError`, nothing on stdout. Repaired by
+`_preflight_json_destination`, called in `main` before the mode dispatch: it
+makes the parent (`parents=True, exist_ok=True`) or refuses the path through
+`parser.error` at exit 2, before a provider exists; and by `_emit_report`,
+which prints before it writes, so a write that fails anyway costs a copy-paste
+rather than the measurement. Both halves are planted:
+`test_the_json_destination_is_made_before_the_run_not_after_it` (the dated
+directory nothing made, plus the payload on stdout) and
+`test_an_unwritable_json_destination_refuses_before_it_spends` (a parent that
+is a file, with `run_calibration` mined so a single unit running is a failure).
+The manifest's command section now states that the invocation makes the
+directory and refuses ahead of the spend.
+
+**2. The newly activated clause promised a carry the crash path did not make.**
+`RESUMPTION_CLAUSE` names "a process crash" as resumable "with the interrupted
+unit's spend and model-work time carried", and the manifest asserted the final
+checkpoint unconditionally — but `run_instrument`'s stop path was
+`except Exception`, so an interrupt wrote nothing and the next sitting rebuilt
+its budget without the interrupted pair. The fix splits the class in two. The
+stops that unwind this process, interrupts included, now reach the write: the
+handler is `except BaseException`, the accounting (`state.charge` and
+`_checkpoint_now`) runs, and a non-`Exception` is then re-raised as itself — an
+interrupt is still not a run stop, gets no `PartialRun` and no `reason`. The
+stops that run no handler at all — a SIGKILL, an OOM kill, a power loss — write
+nothing, and that is now stated in the manifest's dated clause section, in the
+second-sitting paragraph, in `RESUMPTION_CLAUSE`'s own comment and in
+Limitations above, as the runner's step rather than the instrument's. Planted:
+`test_an_interrupt_leaves_the_pairs_spend_in_the_checkpoint_and_reraises` (a
+Ctrl-C on the 28th call; narrowing the handler back to `Exception` fails it on
+`assert mappingproxy({})` — the pair forgiven) and
+`test_the_resumption_section_names_the_stop_it_cannot_carry`, which holds the
+document to naming the class it cannot carry.
+
+**3. The refresh boundary accepted dispositions and call types it cannot
+read.** `CalibrationCall.call_type` and `.disposition` were plain `str` while
+the ledger's `CallDisposition` and this module's `CallType` Literals sat beside
+them, so `--refresh-usage-profile` validated a JSON carrying
+`billed_and_refused_` or `turnn` without complaint;
+`usage_profile_from_calibration` counts a refusal by exact string equality and
+`tests/experiments/usage_replay_double.py` keys its replayed refusal off the
+same string, so a misspelled refusal replays as a resolved call into the
+committed profile the two `CALIBRATED_*` constants are held to. Both fields are
+now the Literals (`extra="forbid"` never constrained values), and
+`CALL_TYPES` gives the summary loop the typed pair it iterates. Planted:
+`test_a_refresh_refuses_a_call_row_it_cannot_read`, parametrized over both
+fields, which asserts the `ValidationError` and that no profile was written;
+and `test_the_dispositions_the_boundary_accepts_are_the_ledgers_own`, which
+holds the boundary's two annotations to the ledger's own and to `CALL_TYPES`.
+
+**Verification of this round**, all offline at `7998bff5` (this commit):
+
+- `uv run pytest tests/experiments -q` — **385 passed** (378 at `4bb46030`):
+  seven new, two per correction plus the parametrized pair in correction 3.
+- `uv run python scripts/validate_task_docs.py`,
+  `uv run python scripts/check_doc_facts.py`,
+  `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`),
+  `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` and
+  `bash scripts/check.sh` — all passed.
+- `audits/deduction-candidate/execution-manifest.md` is again the only `audits/`
+  byte that moves, so the `docs/artifacts.md` row is recomputed a second time:
+  **15,002,830 tracked bytes / 206 files**, the file count unchanged.
+- The fake-provider and replay-double calibrations are unchanged by this round:
+  the aggregate counts quoted above still reproduce with the commands above, at
+  `total_cost_usd 0.0`.
+
+The frozen analysis strings, `experiments/held_out_prefixes.py`, the held-out
+record at `MANIFEST_PATH` and `tests/experiments/deduction_usage_profile.json`
+are all untouched by this round.

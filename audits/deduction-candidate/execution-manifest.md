@@ -450,12 +450,26 @@ module's `RESUMPTION_CLAUSE` byte for byte identical.
 
 What of it the code enforces, and what it does not:
 
-- **The carried spend is arithmetic.** A stop writes one final checkpoint on
-  the stop path recording the interrupted pair's spend and its model-work
-  seconds as `AbandonedSpend`, and the next sitting charges those — with every
-  graded unit's — against the same ceilings before it makes a call. This is the
-  mechanism the entry of `0185182d` above describes and the tests in
-  `TestCheckpointAndResume` hold.
+- **The carried spend is arithmetic — for a stop that unwinds.** A stop writes
+  one final checkpoint on the stop path recording the interrupted pair's spend
+  and its model-work seconds as `AbandonedSpend`, and the next sitting charges
+  those — with every graded unit's — against the same ceilings before it makes
+  a call. This is the mechanism the entry of `0185182d` above describes and the
+  tests in `TestCheckpointAndResume` hold. It is reached by every stop that
+  unwinds the process, an interrupt included: `run_instrument` catches
+  `BaseException` for that write and re-raises an interrupt unchanged, so a
+  Ctrl-C or a SIGTERM carries its pair's spend like a transport failure does.
+- **A stop that runs no code carries nothing, and the runner closes it.** A
+  SIGKILL, an OOM kill or a power loss writes no final checkpoint, because no
+  handler runs. The last checkpoint is then the previous PAIR boundary, and the
+  interrupted pair's spend — up to one pair — is not in it, so a resume would
+  rebuild its run budget without it. The clause above still authorizes that
+  resume; carrying the spend across it is the runner's step, not the
+  instrument's: before resuming from a stop of that class the runner reads the
+  abandoned sitting's output directory and its stdout for what the pair had
+  already charged, and records it in the run's own record beside the stop. This
+  is stated rather than claimed because the alternative — a document asserting
+  a carry the code cannot make for this class — is the more dangerous error.
 - **The same run, or none.** A resume is refused on any provider unless the
   checkpoint's execution manifest, held-out freeze, arm-surface digests, limits
   and sampling configuration are still this tree's, it continues at the next
@@ -556,7 +570,13 @@ else's:
   --json audits/deduction-candidate/calibration-<date>/calibration.json
 ```
 
-and the refresh of the rehearsal double's committed usage profile from that
+The dated directory in that `--json` path does not exist beforehand and the
+invocation makes it: the destination is created — or the path refused, at exit
+2, before a single call — by `_preflight_json_destination`, and the payload is
+printed to stdout before it is written. A once-only measurement may not be lost
+to its own output path, in either direction.
+
+Then the refresh of the rehearsal double's committed usage profile from that
 output, which makes no call:
 
 ```sh
@@ -927,7 +947,10 @@ place, since `--checkpoint` defaults to the `--resume` path and a sitting that
 wrote no checkpoint would lose its own progress to the next stop. The budgets
 the second sitting starts from are the first one's whole spend: the units it
 graded and the pair its stop abandoned, the latter recorded by a final
-checkpoint written on the stop path.
+checkpoint written on the stop path — on every stop that unwinds the process,
+interrupts included, and on none that does not. After a SIGKILL, an OOM kill or
+a power loss there is no such write, so the runner carries the abandoned pair
+themselves, as "Resumption clause (2026-09-14)" above states.
 
 The gate and the frozen-set check both run BEFORE a client is constructed, and
 that order is a property of the signatures rather than of the order two lines

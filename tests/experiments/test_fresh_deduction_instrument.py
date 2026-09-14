@@ -32,7 +32,7 @@ import subprocess
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, Final, cast, get_args
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -4056,6 +4056,36 @@ class TestExecutionManifest:
         assert "assert_resume_is_authorized" in text
         assert "assert_calibration_is_authorized" in text
 
+    def test_the_resumption_section_names_the_stop_it_cannot_carry(self) -> None:
+        """The half of the clause the code cannot make true, stated as such.
+
+        The clause names "a process crash" as resumable with the interrupted
+        unit's spend carried. `run_instrument` makes that arithmetic for every
+        stop that unwinds the process, interrupts included
+        (`test_an_interrupt_leaves_the_pairs_spend_in_the_checkpoint_and_reraises`);
+        a SIGKILL, an OOM kill or a power loss runs no handler and writes no
+        checkpoint, so the interrupted pair's spend is carried by the runner or
+        by nobody. A document that asserted the carry for that class too would
+        be claiming a mechanism this tree does not have, which is the error this
+        test exists to keep out.
+        """
+
+        text = self._text()
+        section = text.split("## Resumption clause (2026-09-14)", 1)[1].split("\n## ")[
+            0
+        ]
+        # Reflowed, because these are sentences a hard wrap may break anywhere
+        # and what is asserted is what the section SAYS.
+        section = " ".join(section.split())
+        for stated in (
+            "SIGKILL",
+            "power loss",
+            "writes no final checkpoint",
+            "is the runner's step, not the instrument's",
+        ):
+            assert stated in section, stated
+        assert "BaseException" in section
+
     def test_the_calibration_section_states_its_own_limits(self) -> None:
         """Each calibration ceiling is in the document a runner reads.
 
@@ -4846,6 +4876,45 @@ class TestEmptyResponseShapes:
             assert marker in source, marker
 
 
+class _InterruptedProvider(UsageReplayProvider):
+    """The replay double with an operator's Ctrl-C planted on the nth call.
+
+    An interrupt is not a provider fault, so it is not one of the double's
+    `ReplayMode` faults: it is raised above the archived draw, so every call
+    before it replayed real usage and the pair it lands in has really bought
+    tokens. `KeyboardInterrupt` stands here for the whole class the owner's
+    clause calls "a process crash" that still unwinds this process — a Ctrl-C, a
+    SIGTERM, a `SystemExit`.
+    """
+
+    def __init__(self, *, interrupt_at: int, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.interrupt_at = interrupt_at
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is not None and self.attempts + 1 == self.interrupt_at:
+            raise KeyboardInterrupt("the operator stopped the sitting")
+        return await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+
+
 class TestCheckpointAndResume:
     """A stopped run continues where it stopped, or is refused for not being it."""
 
@@ -5034,6 +5103,66 @@ class TestCheckpointAndResume:
             "repaired_clock": (96_031, 6_595, 31),
             "combined_accounts": (78_435, 11_154, 24),
         }
+
+    def test_an_interrupt_leaves_the_pairs_spend_in_the_checkpoint_and_reraises(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a Ctrl-C mid-pair, the stop class the clause's "crash" covers.
+
+        The owner's `RESUMPTION_CLAUSE` names a process crash as resumable "with
+        the interrupted unit's spend and model-work time carried". A stop that
+        unwinds this process has to reach the final checkpoint for that to be
+        arithmetic rather than a promise, so the run loop catches
+        `BaseException` for the accounting — and only for it: the interrupt is
+        re-raised as itself, it is not reported as a `PartialRun`, and it is not
+        given a stop `reason`. Narrow the handler back to `Exception` and this
+        goes red on the abandoned rows, with the pair's spend forgiven exactly
+        as a transport stop's used to be.
+
+        What this test cannot cover is the rest of the class: a SIGKILL, an OOM
+        kill or a power loss runs no handler at all, so it writes nothing and
+        carries nothing. That gap is stated in the manifest's dated clause
+        section and held by
+        `test_the_resumption_section_names_the_stop_it_cannot_carry`.
+        """
+
+        limits = feasible_limits()
+        checkpoint_path = tmp_path / "checkpoint.json"
+        with pytest.raises(KeyboardInterrupt):
+            run_dry(
+                output_dir=tmp_path / "stopped",
+                units=4,
+                limits=limits,
+                client=_InterruptedProvider(interrupt_at=28),
+                checkpoint_path=checkpoint_path,
+            )
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+        abandoned = checkpoint.abandoned.usage_by_arm()
+        assert abandoned, "an interrupt inside a pair carried no spend at all"
+        assert any(row.output_tokens > 0 for row in abandoned.values())
+        # The two completed pairs are graded and the third is not: an interrupt
+        # is a stop between pairs for the resume, and a charge for the budget.
+        assert len(checkpoint.completed_seeds) == 2
+        assert len(checkpoint.units) == 4
+        resumed = run_dry(
+            output_dir=tmp_path / "resumed",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(seed=6),
+            resume=checkpoint,
+        )
+        for arm, tokens in abandoned.items():
+            spent = {row.arm: row.output_tokens for row in resumed.arms}[arm]
+            whole = run_dry(
+                output_dir=tmp_path / f"whole-{arm}",
+                units=4,
+                limits=limits,
+                client=UsageReplayProvider(),
+            )
+            assert spent == (
+                {row.arm: row.output_tokens for row in whole.arms}[arm]
+                + tokens.output_tokens
+            )
 
     def test_the_abandoned_spend_is_charged_against_the_run_ceiling(
         self, tmp_path: Path
@@ -6001,6 +6130,75 @@ class TestCalibrationRun:
         assert "TransportAttemptsExhausted" in partial.reason
         assert partial.usage_by_arm["repaired_clock"].calls > 0
 
+    def test_the_json_destination_is_made_before_the_run_not_after_it(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """PLANTED: the manifest's own command, into a directory nothing made.
+
+        The live command the execution manifest documents writes to
+        `audits/deduction-candidate/calibration-<date>/calibration.json`, whose
+        dated parent does not exist until something creates it. `write_text`
+        does not, and it ran AFTER the units and BEFORE the print — so the once-
+        only spend the manifest authorizes would have completed and then lost
+        its whole record to a FileNotFoundError with nothing on stdout. Neuter
+        the mkdir in `_preflight_json_destination` and this goes red exactly
+        there.
+        """
+
+        destination = tmp_path / "calibration-2026-09-14" / "calibration.json"
+        assert not destination.parent.exists()
+        assert (
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--output-dir",
+                    str(tmp_path / "units"),
+                    "--json",
+                    str(destination),
+                ]
+            )
+            == 0
+        )
+        payload = json.loads(destination.read_text(encoding="utf-8"))
+        assert payload["report_schema"] == instrument.CALIBRATION_SCHEMA
+        # And on stdout as well, written there first: a write that fails anyway
+        # costs the operator a copy-paste, not the measurement.
+        assert instrument.CALIBRATION_SCHEMA in capsys.readouterr().out
+
+    def test_an_unwritable_json_destination_refuses_before_it_spends(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a destination whose parent is a FILE, so no directory can be.
+
+        The preflight's other half. A path that cannot be written is refused at
+        the argument parser, before a unit runs — which is the whole point of
+        moving the check ahead of the calls: a refusal that arrives after the
+        spend is not a refusal.
+        """
+
+        blocked = tmp_path / "not-a-directory"
+        blocked.write_text("", encoding="utf-8")
+        marker = tmp_path / "a-unit-ran"
+
+        def landmine(*args: object, **kwargs: object) -> object:
+            marker.write_text("", encoding="utf-8")
+            raise AssertionError("the calibration ran before its output had a home")
+
+        with pytest.raises(SystemExit) as refused:
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(instrument, "run_calibration", landmine)
+                instrument.main(
+                    [
+                        "--calibrate",
+                        "--output-dir",
+                        str(tmp_path / "units"),
+                        "--json",
+                        str(blocked / "calibration.json"),
+                    ]
+                )
+        assert refused.value.code == 2
+        assert not marker.exists()
+
 
 class TestCalibrationProfileRefresh:
     """The rehearsal double's profile, rebuilt from a calibration output."""
@@ -6093,6 +6291,89 @@ class TestCalibrationProfileRefresh:
         planted = report.model_copy(update={"report_schema": "something-else/9"})
         with pytest.raises(ValueError, match="not a calibration"):
             instrument.usage_profile_from_calibration(planted)
+
+    def _measured(self, tmp_path: Path) -> Path:
+        """One calibration output on disk, as `--calibrate --json` writes it."""
+
+        measurement = tmp_path / "calibration.json"
+        assert (
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--output-dir",
+                    str(tmp_path / "units"),
+                    "--json",
+                    str(measurement),
+                ]
+            )
+            == 0
+        )
+        return measurement
+
+    @pytest.mark.parametrize(
+        ("field", "planted"),
+        [("disposition", "billed_and_refused_"), ("call_type", "turnn")],
+    )
+    def test_a_refresh_refuses_a_call_row_it_cannot_read(
+        self, tmp_path: Path, field: str, planted: str
+    ) -> None:
+        """PLANTED: one misspelled value in one of the sixty call rows.
+
+        These two fields are a parse boundary, and the refresh rewrites the
+        profile the feasibility gate's two calibrated constants are held to.
+        Typed as `str` they parsed clean and went silently wrong twice over:
+        `usage_profile_from_calibration` counts a refusal by exact equality with
+        `billed_and_refused`, and the rehearsal double keys its refusal off the
+        same string, so a misspelled refusal replays as a resolved call and the
+        committed profile carries it. Retype either field `str` and this goes
+        red. Invalid input raises; there is no third disposition to fall back
+        to.
+        """
+
+        measurement = self._measured(tmp_path)
+        payload = json.loads(measurement.read_text(encoding="utf-8"))
+        payload["calls"][0][field] = planted
+        measurement.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        profile_path = tmp_path / "profile.json"
+        with pytest.raises(ValidationError, match=field):
+            instrument.main(
+                [
+                    "--refresh-usage-profile",
+                    str(measurement),
+                    "--profile-out",
+                    str(profile_path),
+                ]
+            )
+        assert not profile_path.exists(), "a refused refresh wrote a profile anyway"
+
+    def test_the_dispositions_the_boundary_accepts_are_the_ledgers_own(self) -> None:
+        """One list of dispositions, not two that drift.
+
+        The boundary model's field and the ledger's `CapturedCall.disposition`
+        are the same `CallDisposition`, so a value the run can record is a value
+        the refresh can read and nothing else is. The same for the two call
+        schedules.
+        """
+
+        fields = instrument.CalibrationCall.model_fields
+        # Compared by members rather than by identity: what has to hold is the
+        # SET of values the boundary accepts, and a plain `str` annotation
+        # carries none, which is the defect this pins.
+        assert get_args(fields["disposition"].annotation) == get_args(
+            instrument.CallDisposition
+        )
+        assert get_args(fields["call_type"].annotation) == get_args(instrument.CallType)
+        assert (
+            instrument.CapturedCall.__dataclass_fields__["disposition"].type
+            == "CallDisposition"
+        )
+        assert set(get_args(instrument.CallDisposition)) == {
+            "resolved",
+            "billed_and_refused",
+            "unaccounted",
+            "aborted",
+        }
+        assert set(get_args(instrument.CallType)) == set(instrument.CALL_TYPES)
 
 
 class TestHarnessesUntouched:
