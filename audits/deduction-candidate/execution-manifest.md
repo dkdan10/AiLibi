@@ -376,6 +376,11 @@ owner's to take. The resume is outcome-blind by construction: it reads the
 checkpoint's completed seeds and its identity digests, and nothing in the run
 path reads a grade.
 
+*(Superseded 2026-09-14 as to its current-state sentence only: the owner took
+decision 2 on that date and this document now carries the clause, under
+"Resumption clause (2026-09-14)" below. What this entry records about the
+mechanism stands unchanged.)*
+
 The frozen analysis does not move here. `PRIMARY_OUTCOME`, `DECISION_RULE`,
 `MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
 are the same bytes the sections below quote, and a test holds them to the
@@ -429,6 +434,142 @@ than trusting this sentence. As with the entries above, this entry cannot name
 the commit that writes it; the record commit that does changes this document,
 the card and the tests that hold this section to the history, and no instrument
 byte.
+
+## Resumption clause (2026-09-14)
+
+The owner's decision 2 of
+[the diagnosis of 2026-09-13](../../tasks/diagnosis-2026-09-13-live-run-stops.md),
+approved on 2026-09-14 in the coordinator's session and recorded in
+[the calibration card](../../tasks/work/fresh-deduction-calibration.md). It is
+quoted here verbatim, which is what authorizes a live resume:
+`assert_resume_is_authorized` looks for these bytes in this file and refuses a
+live `--resume` without them, and a test holds the sentence below and the
+module's `RESUMPTION_CLAUSE` byte for byte identical.
+
+> A run stopped by transport exhaustion, a credential failure or a process crash may be resumed once per stop, from its last checkpoint and under this manifest, with the interrupted unit's spend and model-work time carried into the next sitting; a stop by a limit, a truncation, a digest or provenance mismatch, or the legacy body handle is final.
+
+What of it the code enforces, and what it does not:
+
+- **The carried spend is arithmetic.** A stop writes one final checkpoint on
+  the stop path recording the interrupted pair's spend and its model-work
+  seconds as `AbandonedSpend`, and the next sitting charges those — with every
+  graded unit's — against the same ceilings before it makes a call. This is the
+  mechanism the entry of `0185182d` above describes and the tests in
+  `TestCheckpointAndResume` hold.
+- **The same run, or none.** A resume is refused on any provider unless the
+  checkpoint's execution manifest, held-out freeze, arm-surface digests, limits
+  and sampling configuration are still this tree's, it continues at the next
+  unrendered seed, and it writes into an output directory of its own.
+- **"Once per stop" and the final-stop list are the runner's.** A checkpoint
+  records no stop class, so no code refuses a second resume or a resume after a
+  limit stop: the runner applies those two rules and the run's record states
+  which stop each sitting followed. Recorded here as discipline rather than as
+  a gate, because a document that claimed a refusal the code does not make
+  would be the more dangerous of the two errors.
+
+## Development calibration (2026-09-14)
+
+The owner's decision 1 of the same diagnosis, approved in the same session and
+recorded in the same card: a bounded live measurement on DEVELOPMENT inputs,
+which the first authorization forbade
+(`tasks/work/fresh-deduction-authorization.md:159-160`). Its purpose is the
+root the diagnosis names — this evaluation was sized in charged tokens,
+enforced in reserved ones, and only ever met the real provider on the held-out
+run itself — so the ceilings a fourth authorization is written from come off
+this endpoint instead of off a projection. The clause, quoted verbatim and
+checked for by `assert_calibration_is_authorized`, which refuses a live
+calibration without these bytes in this file:
+
+> A development calibration may spend on the first five accepted seeds of a converted band, both arms, once and under the calibration limits; it grades nothing, reads no held-out prefix, and writes aggregates only.
+
+**The mode.** `experiments/fresh_deduction_instrument.py --calibrate`. It runs
+both arms of each drawn seed sequentially through the same path the evaluation
+runs — `run_unit`, the same client wrapper, the same budgets, the same arms in
+the same order — because what it measures is what THAT path costs. It grades
+nothing: no grader is called, no paired statistic is computed and no meeting
+outcome is reported, so no unit of it can reach the frozen analysis. The
+analysis below is untouched by it, and a test holds those strings byte for byte.
+
+**The inputs.** The first `CALIBRATION_PAIRED_SEEDS = 5` accepted seeds,
+ascending, of a CONVERTED band's freeze record — by default
+[held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json),
+whose first seed a stopped run rendered on 2026-09-10 and whose set has been
+development data since. Each prefix is rebuilt with the unchanged generator
+(`experiments.held_out_prefixes.build_prefix`, driven with the record's own
+roster and map) and held to the digest that record froze; a mismatch is a stop.
+`verify_calibration_set` refuses [the held-out record](held-out/manifest.json)
+by name, refuses any path that is not one of `CONVERTED_BANDS`' records, and
+refuses a record whose `status` is not `development`. The held-out set is not
+read on this path at all: `verify_frozen_set` is never called by it.
+
+| Field | Value |
+| --- | --- |
+| Calibration per-unit token ceiling | 60,000 input / 12,000 output |
+| Calibration run-level token ceiling | 600,000 input / 120,000 output |
+| Calibration wall-clock deadline | 1 h of model work within a 1.5 h elapsed deadline |
+| Calibration per-call token cap | turn 2,048 output / vote 1,024 — the run's own, unchanged |
+| Calibration sampling temperature | turn 0.4 / vote 0.2 — the run's own, unchanged |
+| Calibration transport bound | 4 attempts per call at a 180 s per-attempt wall — the run's own, unchanged |
+| Calibration units | 5 paired seeds x 2 arms = 10 units, about 60 model calls |
+| Calibration dollar limit | $0.00 marginal, on the same flat-rate subscription and for the same reason as the run's cost statement above |
+
+The three caps that are NOT re-sized are the point: a calibration that drew
+differently would measure a distribution the run it sizes never draws from.
+The four ceilings that are re-sized are the calibration's own — they are
+`CALIBRATION_LIMITS` in the instrument, `assert_calibration_is_authorized`
+refuses a live calibration under any other limits, `assert_live_run_is_authorized`
+refuses the held-out run under these, and `assert_limits_are_feasible` accepts
+these for ten units while still refusing the 2026-09-07 ceilings for a hundred.
+
+**What it writes.** One aggregate JSON committed under
+`audits/deduction-candidate/calibration-<date>/`: per arm and per call type the
+completion count, mean, p95 and max of input and output tokens; the defaults,
+the provider-billed refusals and the retried and unaccounted attempts per arm;
+per-unit usage rows; the pace in model-work seconds per attempt; and a re-sized
+ceiling proposal. It carries no prompt, no prefix, no step and no outcome, and
+the evaluation's own `assert_report_holds_no_prefix_bytes` runs over it. The
+rendered prompts of a calibration are development data and are still not
+committed: its replays go to the `--output-dir` the runner names, which is not
+under version control.
+
+**The proposal rule**, computed by `ceiling_proposal` and quoted in every
+output: the per-unit output ceiling is max(the 9,216-token reservation
+schedule, 3 x the largest unit measured); the per-unit input ceiling is 3 x the
+largest unit measured; each run-level ceiling is the whole design's unit count
+x the measured mean unit x 1.5, raised to that unit count x the largest unit
+measured where the mean rule falls below it, because that product is the floor
+`assert_limits_are_feasible` enforces; every figure is rounded up to the next
+1,000 tokens. The proposal authorizes nothing — a ceiling is the owner's, on a
+card — and the output states in the gate's own words whether the instrument
+would accept it.
+
+**The commands.** The live calibration, which is the runner's and nobody
+else's:
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument \
+  --calibrate \
+  --provider featherless \
+  --execution-manifest audits/deduction-candidate/execution-manifest.md \
+  --i-am-the-runner \
+  --output-dir <a directory outside version control> \
+  --json audits/deduction-candidate/calibration-<date>/calibration.json
+```
+
+and the refresh of the rehearsal double's committed usage profile from that
+output, which makes no call:
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument \
+  --refresh-usage-profile audits/deduction-candidate/calibration-<date>/calibration.json \
+  --profile-out tests/experiments/deduction_usage_profile.json
+```
+
+Refreshing that profile moves what the feasibility gate is calibrated against:
+`CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` are held
+equal to the profile's largest charged unit by
+`test_the_calibration_is_the_largest_unit_the_archives_charged`, so the two
+constants move with it in the same commit or that test is red.
 
 ## The instrument
 
@@ -759,15 +900,22 @@ A run may also write a per-unit checkpoint (`--checkpoint`) and be continued
 from one (`--resume`), and the second of those is gated on this document rather
 than on the code. `assert_resume_is_authorized` refuses a live resume unless
 this manifest carries the owner's resumption clause — the sentence
-`RESUMPTION_CLAUSE` holds, which this document deliberately does not reproduce,
-so describing the mechanism cannot authorize it. It does not carry that
-sentence today, so no live run may be resumed: the mechanism is built and
-rehearsed on the fake provider, and a second sitting on the held-out set is
-decision 2 of [the diagnosis](../../tasks/diagnosis-2026-09-13-live-run-stops.md),
-which is the owner's to take on a fourth authorization card. A resume is also
-refused, on any provider, unless the checkpoint's execution manifest, held-out
-freeze, arm-surface digests, limits and sampling configuration are still this
-tree's: a resumed run is the same run or it is none.
+`RESUMPTION_CLAUSE` holds. It carries that sentence since 2026-09-14, under
+"Resumption clause (2026-09-14)" above, which is where the owner's decision and
+its limits are stated; a describing paraphrase authorizes nothing, because the
+gate looks for those bytes. A resume is also refused, on any provider, unless
+the checkpoint's execution manifest, held-out freeze, arm-surface digests,
+limits and sampling configuration are still this tree's: a resumed run is the
+same run or it is none.
+
+The calibration mode (`--calibrate`) is gated the same way and separately:
+`assert_calibration_is_authorized` refuses a live calibration unless this
+manifest carries `CALIBRATION_CLAUSE`, which it does since 2026-09-14 under
+"Development calibration (2026-09-14)" above, and refuses it under any limits
+but `CALIBRATION_LIMITS`, any sampling configuration but the authorized one,
+any provider but `featherless`, and any seed count but five. Neither
+authorization is the other's: the run's gate refuses the calibration's limits
+and the calibration's gate refuses the run's.
 
 What a runner has to do differently on a second sitting, and what the code does
 for them: pass a NEW `--output-dir`, because the first sitting's directory holds

@@ -43,6 +43,23 @@ development/operational checks"), so a prefix is consumed only as a
 :class:`~experiments.held_out_prefixes.HeldOutPrefix` object driving the engine,
 and :func:`assert_report_holds_no_prefix_bytes` refuses to emit a report that
 carries one.
+
+The second mode: the development calibration
+--------------------------------------------
+
+:func:`run_calibration` measures what the provider CHARGES, on the first
+:data:`CALIBRATION_PAIRED_SEEDS` accepted seeds of a band a stopped run already
+converted to development data. It exists because this evaluation was sized in
+charged tokens, enforced in reserved ones, and only ever met the real provider
+on the held-out run itself (``tasks/diagnosis-2026-09-13-live-run-stops.md``).
+It shares the run's path — :func:`run_unit`, the same wrapper, the same budgets,
+the same arms — and shares none of its authorization: its own limits
+(:data:`CALIBRATION_LIMITS`), its own clause in the manifest
+(:data:`CALIBRATION_CLAUSE`), its own gate
+(:func:`assert_calibration_is_authorized`) and its own inputs
+(:func:`verify_calibration_set`, which refuses the held-out record by name). It
+grades nothing: no grader runs, no paired statistic is computed and no meeting
+outcome is reported, so nothing it measures can reach the frozen analysis.
 """
 
 from __future__ import annotations
@@ -51,6 +68,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -74,15 +92,18 @@ from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import PlayerId, Role
 from engine.world import load_canonical_map
 from experiments.held_out_prefixes import (
+    CONVERTED_BANDS,
     MANIFEST_PATH,
     MAX_TICKS,
     PREREGISTERED_BAND,
     TEMPORAL_OBSERVATION_VERSION,
+    ConvertedBand,
     GeneratedSet,
     HeldOutPrefix,
     PrefixRoster,
     SeedBand,
     assert_no_legacy_body_handles,
+    build_prefix,
     canonical_prefix_json,
     generate,
     legacy_body_handles,
@@ -281,6 +302,52 @@ AUTHORIZED_LIMITS: Final[RunLimits] = RunLimits(
 )
 
 
+# ---------------------------------------------------------------------------
+# The development calibration (tasks/work/fresh-deduction-calibration.md)
+# ---------------------------------------------------------------------------
+#
+# A second, much smaller authorization, approved by the owner on 2026-09-14 and
+# recorded in that card: five paired seeds of a CONVERTED band — development
+# data, already rendered once — measured for what the provider charges, so the
+# ceilings a fourth held-out authorization is sized from come off this endpoint
+# rather than off a projection. Everything below is the size of that spend. The
+# per-call caps, the temperatures and the transport bound are NOT re-sized: the
+# calibration measures the run it is sizing, so it has to draw the way that run
+# draws.
+
+#: Paired seeds the calibration renders: five prefixes, both arms, thirty calls
+#: an arm. Small on purpose — the quantity being measured is what one call and
+#: one unit cost, and thirty calls of each arm measure that.
+CALIBRATION_PAIRED_SEEDS: Final[int] = 5
+
+#: The per-unit ceilings of a calibration unit. The output figure clears the
+#: 9,216-token reservation schedule with room for a unit that runs long; the
+#: input figure is about 2.5x the largest unit the live archives charged.
+CALIBRATION_UNIT_MAX_INPUT_TOKENS: Final[int] = 60_000
+CALIBRATION_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 12_000
+
+#: The run-level ceilings, ten units at those per-unit figures.
+CALIBRATION_RUN_MAX_INPUT_TOKENS: Final[int] = 600_000
+CALIBRATION_RUN_MAX_OUTPUT_TOKENS: Final[int] = 120_000
+
+#: One hour of model work inside a ninety-minute elapsed window. Thirty units of
+#: six calls is sixty calls; at the slowest pace this evaluation has measured
+#: (26.6 s/call) sixty calls are about 27 minutes, so the work window is twice
+#: the slowest projection and the elapsed margin covers one stalled attempt.
+CALIBRATION_MODEL_WORK_SECONDS: Final[float] = 60 * 60
+CALIBRATION_ELAPSED_SECONDS: Final[float] = 1.5 * 60 * 60
+
+CALIBRATION_LIMITS: Final[RunLimits] = RunLimits(
+    run_max_input_tokens=CALIBRATION_RUN_MAX_INPUT_TOKENS,
+    run_max_output_tokens=CALIBRATION_RUN_MAX_OUTPUT_TOKENS,
+    unit_max_input_tokens=CALIBRATION_UNIT_MAX_INPUT_TOKENS,
+    unit_max_output_tokens=CALIBRATION_UNIT_MAX_OUTPUT_TOKENS,
+    max_cost_usd=AUTHORIZED_MAX_COST_USD,
+    elapsed_seconds=CALIBRATION_ELAPSED_SECONDS,
+    model_work_seconds=CALIBRATION_MODEL_WORK_SECONDS,
+)
+
+
 class SamplingConfig(BaseModel):
     """The draw itself: the two caps and the two temperatures, as one value.
 
@@ -360,6 +427,21 @@ def planned_units() -> int:
     """How many units a whole run is: one per frozen prefix per arm."""
 
     return PREREGISTERED_BAND.size * len(instrument_arms())
+
+
+def calibration_units(paired_seeds: int = CALIBRATION_PAIRED_SEEDS) -> int:
+    """How many units a calibration is: one per drawn seed per arm.
+
+    Separate from :func:`planned_units` because the two are different runs:
+    the feasibility gate checks a run-level ceiling against the units that run
+    will make, and a calibration's ten units against the held-out run's hundred
+    is the difference between a ceiling that pays for its own run and one that
+    does not.
+    """
+
+    if paired_seeds < 1:
+        raise ValueError(f"a calibration draws at least one seed, got {paired_seeds}")
+    return paired_seeds * len(instrument_arms())
 
 
 def unit_output_reservation(
@@ -581,6 +663,18 @@ class InstrumentError(RuntimeError):
 
 class FrozenSetMismatch(InstrumentError):
     """The regenerated held-out set differs from the frozen manifest."""
+
+
+class CalibrationInputsRejected(InstrumentError):
+    """The calibration was pointed at inputs it may not draw, or they moved.
+
+    One class for both because they are one rule: a calibration draws a
+    CONVERTED band's record and nothing else, and it draws exactly the prefixes
+    that record froze. A held-out record, a band no freeze has converted, a
+    record whose status still says ``held_out``, and a seed that rebuilds to a
+    different digest are all "these are not the development inputs the owner
+    authorized", and each of them is a refusal before any call.
+    """
 
 
 class LiveRunNotAuthorized(InstrumentError):
@@ -1148,16 +1242,39 @@ def assert_client_matches_provider(*, provider: str, client: object | None) -> N
         )
 
 
-#: The sentence the owner's resumption clause has to put in the execution
-#: manifest before a LIVE run may be resumed. Held here as the thing the gate
-#: looks for rather than as a paraphrase, so a manifest that merely discusses
-#: resuming does not authorize one: the words below are the authorization, and
-#: the document that describes this mechanism deliberately does not carry them.
-#: Decision 2 of the diagnosis of 2026-09-13 is the clause's substance; writing
-#: it into the manifest is the fourth authorization card's, not this one's.
+#: The owner's resumption clause, approved on 2026-09-14
+#: (``tasks/work/fresh-deduction-calibration.md``) and quoted verbatim by the
+#: execution manifest's dated "Resumption clause (2026-09-14)" section. Held
+#: here as the thing the gate looks for rather than as a paraphrase, and held to
+#: the manifest byte for byte by a test, so the code's account of what the owner
+#: authorized and the document's cannot drift apart.
+#:
+#: What the code enforces of it, and where: the checkpoint a stop leaves behind
+#: carries the interrupted unit's spend and model-work seconds
+#: (:class:`AbandonedSpend`, written on the stop path) and the next sitting
+#: charges them before its first call, so "with the interrupted unit's spend and
+#: model-work time carried" is arithmetic rather than a promise. The once-per-
+#: stop bound and the final-stop list are the runner's, not this module's: a
+#: checkpoint records no stop class, so a resume cannot be refused on one, and
+#: the run's record states which stop each sitting followed.
 RESUMPTION_CLAUSE: Final[str] = (
-    "A run stopped by an environmental cause may be resumed under this "
-    "manifest, at the next unrendered seed, under the same budgets."
+    "A run stopped by transport exhaustion, a credential failure or a process "
+    "crash may be resumed once per stop, from its last checkpoint and under "
+    "this manifest, with the interrupted unit's spend and model-work time "
+    "carried into the next sitting; a stop by a limit, a truncation, a digest "
+    "or provenance mismatch, or the legacy body handle is final."
+)
+
+#: The owner's calibration clause, approved in the same session and quoted
+#: verbatim by the manifest's dated "Development calibration (2026-09-14)"
+#: section. The same shape as the clause above and for the same reason: the
+#: manifest authorizes the spend, so the gate reads the manifest rather than a
+#: flag, and a document that merely describes a calibration does not authorize
+#: one.
+CALIBRATION_CLAUSE: Final[str] = (
+    "A development calibration may spend on the first five accepted seeds of a "
+    "converted band, both arms, once and under the calibration limits; it "
+    "grades nothing, reads no held-out prefix, and writes aggregates only."
 )
 
 
@@ -1182,6 +1299,116 @@ def assert_resume_is_authorized(*, provider: str, repo_root: Path = _REPO_ROOT) 
             "built and rehearsed offline, and authorizing a second sitting on "
             "the held-out set is the owner's decision, not this runner's"
         )
+
+
+def assert_calibration_is_authorized(
+    *,
+    provider: str,
+    invocation: LiveRunInvocation | None,
+    limits: RunLimits = CALIBRATION_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
+    repo_root: Path = _REPO_ROOT,
+) -> None:
+    """Refuse a calibration that is not the one the owner authorized.
+
+    The live-run gate's sibling, not a relaxation of it: the two authorize
+    different spends, so they check different limits, different inputs and a
+    different clause, and neither passes the other's run.
+
+    * ``fake`` passes without an invocation, and refuses one, exactly as
+      :func:`assert_live_run_is_authorized` does — a rehearsal is not a run.
+    * a live calibration runs under :data:`CALIBRATION_LIMITS` exactly, so the
+      held-out run's own ceilings are refused here as firmly as the
+      calibration's are refused there;
+    * it draws at the authorized sampling configuration, because a calibration
+      that drew differently would measure a distribution the run it sizes does
+      not draw from;
+    * it draws :data:`CALIBRATION_PAIRED_SEEDS` seeds, not more: the spend the
+      owner approved is five paired seeds;
+    * and the manifest has to carry :data:`CALIBRATION_CLAUSE`. That is the
+      authorization itself, the way the resumption clause is: this gate reads
+      the committed document rather than a flag.
+
+    :func:`assert_manifest_binds_the_live_band` is deliberately NOT applied. It
+    binds the Inputs table's band to the held-out record, and a calibration
+    draws neither — its inputs are a converted band's record, checked by
+    :func:`verify_calibration_set` against :data:`CONVERTED_BANDS`.
+    """
+
+    if provider == "fake":
+        if invocation is not None:
+            raise LiveRunNotAuthorized(
+                "a fake-provider calibration takes no live invocation; the "
+                "rehearsal is the mechanics check and never the authorized run"
+            )
+        return
+    if invocation is None:
+        raise LiveRunNotAuthorized(
+            f"provider {provider!r} is a live provider and this calibration "
+            f"carries no LiveRunInvocation naming {EXECUTION_MANIFEST_PATH}. "
+            "The manifest authorizes limits; only an explicit runner invocation "
+            "authorizes a call."
+        )
+    if invocation.provider != provider:
+        raise LiveRunNotAuthorized(
+            f"the live invocation names provider {invocation.provider!r} but the "
+            f"calibration asks for {provider!r}"
+        )
+    if provider != AUTHORIZED_PROVIDER:
+        raise LiveRunNotAuthorized(
+            f"provider {provider!r} is not the authorized provider "
+            f"{AUTHORIZED_PROVIDER!r}; a different provider needs its own "
+            "authorization and its own manifest"
+        )
+    if invocation.model != AUTHORIZED_MODEL:
+        raise LiveRunNotAuthorized(
+            f"the live invocation names model {invocation.model!r}, not the "
+            f"authorized {AUTHORIZED_MODEL!r}"
+        )
+    if limits != CALIBRATION_LIMITS:
+        raise LiveRunNotAuthorized(
+            "a live calibration runs under the calibration limits exactly; the "
+            "limits this calibration carries are not the ones the owner "
+            "authorized on 2026-09-14"
+        )
+    if sampling != AUTHORIZED_SAMPLING:
+        raise LiveRunNotAuthorized(
+            "a calibration draws at the authorized sampling configuration "
+            "exactly; a different cap or temperature measures a distribution "
+            "the run it sizes will not draw from"
+        )
+    if paired_seeds != CALIBRATION_PAIRED_SEEDS:
+        raise LiveRunNotAuthorized(
+            f"a live calibration draws {CALIBRATION_PAIRED_SEEDS} paired seeds; "
+            f"this one asks for {paired_seeds}"
+        )
+    manifest = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
+    if invocation.manifest_path.resolve() != manifest:
+        raise LiveRunNotAuthorized(
+            f"the live invocation names {invocation.manifest_path}, not the "
+            f"committed execution manifest {manifest}"
+        )
+    if not manifest.is_file():
+        raise LiveRunNotAuthorized(f"execution manifest is missing: {manifest}")
+    text = manifest.read_text(encoding="utf-8")
+    committed = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    if invocation.manifest_sha256 != committed:
+        raise LiveRunNotAuthorized(
+            "the live invocation's manifest digest is not the committed "
+            f"manifest's: invocation {invocation.manifest_sha256}, file "
+            f"{committed}"
+        )
+    if CALIBRATION_CLAUSE not in text:
+        raise LiveRunNotAuthorized(
+            f"{EXECUTION_MANIFEST_PATH} carries no calibration clause, so no "
+            "live calibration is authorized: the mode is built and rehearsed "
+            "offline, and spending on development inputs is recorded in the "
+            "manifest or it is not authorized"
+        )
+    assert_limits_are_feasible(
+        limits=limits, sampling=sampling, units=calibration_units(paired_seeds)
+    )
 
 
 def assert_ready_for_a_live_run(
@@ -1261,7 +1488,7 @@ def authorized_client_environment(env: Mapping[str, str]) -> dict[str, str]:
 
 
 def build_authorized_client(
-    frozen: FrozenSet, env: Mapping[str, str] | None = None
+    frozen: FrozenSet | CalibrationSet, env: Mapping[str, str] | None = None
 ) -> LLMClient:
     """Construct the ONE client a live run may use, from the pinned environment.
 
@@ -1269,11 +1496,14 @@ def build_authorized_client(
     :func:`authorized_client_environment` keeps only the credential.
 
     ``frozen`` is evidence rather than an input: it is unused below, and it is
-    required so that no client can be constructed before the held-out set has
-    been verified. The only producer of a :class:`FrozenSet` is
-    :func:`verify_frozen_set`, so "the frozen set is checked before a provider
-    exists" is a property of this signature instead of an ordering a later edit
-    to :func:`main` could quietly reverse.
+    required so that no client can be constructed before the inputs have been
+    verified. The only producer of a :class:`FrozenSet` is
+    :func:`verify_frozen_set` and the only producer of a
+    :class:`CalibrationSet` is :func:`verify_calibration_set`, so "the inputs
+    are checked before a provider exists" is a property of this signature
+    instead of an ordering a later edit to :func:`main` could quietly reverse.
+    Both types are accepted and neither can stand in for the other anywhere
+    else: which one a caller holds is what decides which record it verified.
     """
 
     del frozen  # see the docstring: proof of ordering, not an input
@@ -1287,6 +1517,17 @@ def build_authorized_client(
 # ---------------------------------------------------------------------------
 # The client wrapper: per-call caps, prompt capture, model-work clock
 # ---------------------------------------------------------------------------
+
+
+#: What one attempt in the client's ledger DID, as the ledger's own row says.
+#: Four values because :meth:`_InstrumentClient._record` has four callers and
+#: they mean four different things: a completion that came back, one the
+#: provider billed for and then refused on its own schema validation, an attempt
+#: that produced nothing at all, and an attempt the model-work window cut off.
+#: Only the first two are samples of what a call costs — the other two carry
+#: zero tokens because zero is what is KNOWN, not what was spent — so a summary
+#: that averaged all four would report a cheaper call than the provider serves.
+CallDisposition = Literal["resolved", "billed_and_refused", "unaccounted", "aborted"]
 
 
 @dataclass(frozen=True)
@@ -1306,6 +1547,9 @@ class CapturedCall:
     cost_usd: float
     model: str
     seconds: float
+    #: Defaulted so a row built without one reads as an ordinary completion,
+    #: which is what every caller that predates this field recorded.
+    disposition: CallDisposition = "resolved"
 
 
 @dataclass(frozen=True)
@@ -1866,6 +2110,7 @@ class _InstrumentClient:
                     cost_usd=0.0,
                     model=ABORTED_ATTEMPT_MODEL,
                     seconds=aborted,
+                    disposition="aborted",
                 )
                 raise self._work_clock.charge_aborted(aborted) from exc
             # The per-attempt wall was the tighter of the two: an endpoint that
@@ -1912,6 +2157,7 @@ class _InstrumentClient:
                 cost_usd=failure.cost_usd,
                 model=failure.model,
                 seconds=burned,
+                disposition="billed_and_refused",
             )
             # Charged like a call that returned: the provider held the wall for
             # it either way, so the work clock and the per-arm
@@ -1972,6 +2218,7 @@ class _InstrumentClient:
         cost_usd: float,
         model: str,
         seconds: float,
+        disposition: CallDisposition = "resolved",
     ) -> None:
         """Put one attempt in the ledger, with whatever it actually cost.
 
@@ -1981,6 +2228,11 @@ class _InstrumentClient:
         that usage and an attempt it reported none for still occupies a row. A
         row that vanished would understate the partial accounting a stop
         reports, which is the defect the run of 2026-09-10 stopped on.
+
+        ``disposition`` is which of the four this row is. Recorded rather than
+        re-derived downstream from the model marker: two of the four carry a
+        marker for a model and the other two carry the served one, so a
+        summary would have to guess which of THOSE two it was looking at.
         """
 
         self._calls.append(
@@ -1993,6 +2245,7 @@ class _InstrumentClient:
                 cost_usd=cost_usd,
                 model=model,
                 seconds=seconds,
+                disposition=disposition,
             )
         )
 
@@ -2035,6 +2288,7 @@ class _InstrumentClient:
             cost_usd=0.0,
             model=UNACCOUNTED_ATTEMPT_MODEL,
             seconds=elapsed,
+            disposition="unaccounted",
         )
         self._work_clock.charge(elapsed)
         return _NoCompletion(trigger)
@@ -2445,6 +2699,227 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
         manifest_sha256=hashlib.sha256(manifest_file.read_bytes()).hexdigest(),
         accepted_seeds=tuple(seed for seed, _ in expected_accepted),
         skipped_seeds=tuple(seed for seed, _ in expected_skipped),
+    )
+
+
+# ---------------------------------------------------------------------------
+# The calibration's inputs: a CONVERTED band's record, never the held-out one
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CalibrationSet:
+    """The rebuilt development prefixes a calibration draws, and their record.
+
+    A different type from :class:`FrozenSet` on purpose. The two are produced by
+    different functions from different records and authorize different spends,
+    so a value of one cannot be passed where the other is required: the
+    calibration path cannot be handed the held-out set by a later edit, and the
+    held-out run cannot be handed development inputs.
+
+    Holds the prefixes because the calibration renders them, and nothing else
+    that a report could carry: the digests are the record's own published ones.
+    """
+
+    record_path: Path
+    record_sha256: str
+    band: SeedBand
+    roster: PrefixRoster
+    prefixes: tuple[HeldOutPrefix, ...]
+    digests: tuple[str, ...]
+    accepted_in_record: int
+    skipped_in_record: int
+
+    @property
+    def seeds(self) -> tuple[int, ...]:
+        return tuple(prefix.seed for prefix in self.prefixes)
+
+
+def _converted_band_for(record: Path, repo_root: Path) -> ConvertedBand:
+    """The converted band whose record this path is, or a refusal naming it.
+
+    Matched on the PATH rather than on what the file says its band is: a record
+    is the freeze it was written as, and a document that names a converted band
+    from somewhere else on disk is not that freeze. The held-out record is
+    refused first and by name, because pointing the calibration at it is the one
+    mistake that would convert a held-out prefix.
+    """
+
+    resolved = record.resolve()
+    held_out = (repo_root / MANIFEST_PATH).resolve()
+    if resolved == held_out:
+        raise CalibrationInputsRejected(
+            f"{MANIFEST_PATH} is the HELD-OUT record; a calibration draws "
+            "development data only, and rendering a held-out prefix to the "
+            "model would convert the set this evaluation has still to spend"
+        )
+    for converted in CONVERTED_BANDS:
+        if (repo_root / converted.manifest_path).resolve() == resolved:
+            return converted
+    raise CalibrationInputsRejected(
+        f"{record} is not a converted band's freeze record; the calibration "
+        "draws one of "
+        + ", ".join(converted.manifest_path for converted in CONVERTED_BANDS)
+        + " and nothing else"
+    )
+
+
+def verify_calibration_set(
+    record: Path,
+    *,
+    repo_root: Path = _REPO_ROOT,
+    paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
+) -> CalibrationSet:
+    """Rebuild the calibration's prefixes from a converted record, or refuse.
+
+    The development-data counterpart of :func:`verify_frozen_set`, and it
+    differs from it in exactly two ways, both of them because a converted band
+    is not the band the generator's own constants describe:
+
+    * the band comes from :data:`CONVERTED_BANDS` rather than from
+      :data:`~experiments.held_out_prefixes.PREREGISTERED_BAND`, so a record the
+      generator would no longer draw is still checkable;
+    * only the first ``paired_seeds`` accepted seeds are rebuilt, with
+      :func:`~experiments.held_out_prefixes.build_prefix` seed by seed, because
+      re-running the whole filter over a thousand seeds to reach five prefixes
+      is a minute of replay for no evidence. Everything the filter decided is
+      already in the record, and what the calibration needs from it is that the
+      five prefixes it renders are the five that record froze — which their
+      digests say.
+
+    The generator is unchanged and is not asked to change: ``build_prefix``
+    already takes its seed, roster and map, so drawing a converted band needs
+    nothing of it but the arguments this function passes.
+    """
+
+    if paired_seeds < 1:
+        raise ValueError(f"a calibration draws at least one seed, got {paired_seeds}")
+    converted = _converted_band_for(record, repo_root)
+    resolved = record.resolve()
+    if not resolved.is_file():
+        raise CalibrationInputsRejected(f"the calibration record is missing: {record}")
+    payload = json.loads(resolved.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise CalibrationInputsRejected(f"{record} does not hold a JSON object")
+    status = payload.get("status")
+    if status != "development":
+        raise CalibrationInputsRejected(
+            f"{converted.manifest_path} is marked {status!r}, not 'development'; "
+            "a calibration spends on data a stopped run already rendered, and "
+            "on nothing else"
+        )
+    if payload.get("temporal_observation_version") != TEMPORAL_OBSERVATION_VERSION:
+        raise CalibrationInputsRejected(
+            "the calibration record was screened under observation clock "
+            f"{payload.get('temporal_observation_version')!r}, but both arms "
+            f"run clock {TEMPORAL_OBSERVATION_VERSION}"
+        )
+    if payload.get("max_ticks") != MAX_TICKS:
+        raise CalibrationInputsRejected(
+            f"the calibration record names a {payload.get('max_ticks')!r}-tick "
+            f"budget; the generator builds every prefix inside {MAX_TICKS}"
+        )
+    raw_roster = payload.get("roster")
+    if not isinstance(raw_roster, Mapping):
+        raise CalibrationInputsRejected(
+            f"{converted.manifest_path} carries no roster block; it does not "
+            "describe the set this calibration would draw"
+        )
+    # The three parsers below are the freeze record's, shared with the held-out
+    # check so one reader decides what a record field means. Their refusal class
+    # is re-raised as this path's, because what a runner needs told here is that
+    # the CALIBRATION's inputs were rejected, not that a frozen set was.
+    try:
+        roster = _parsed_roster(raw_roster)
+        band = _parsed_band(payload.get("band"))
+        rows = _manifest_rows(payload, "accepted")
+        accepted = [(_as_int(row, "seed"), _as_str(row, "sha256")) for row in rows]
+        skipped_in_record = len(_manifest_rows(payload, "skipped"))
+    except FrozenSetMismatch as mismatch:
+        raise CalibrationInputsRejected(
+            f"{converted.manifest_path} is not a readable freeze record: {mismatch}"
+        ) from mismatch
+    if roster != FROZEN_PREFIX_ROSTER:
+        raise CalibrationInputsRejected(
+            f"the calibration record's roster is {roster!r}; the generator draws "
+            f"{FROZEN_PREFIX_ROSTER!r} and a change of roster invalidates both "
+            "the screening and the token budget this calibration measures"
+        )
+    if band != converted.band:
+        raise CalibrationInputsRejected(
+            f"{converted.manifest_path} names band {band.first_seed}-"
+            f"{band.last_seed} size {band.size}; the converted band it is the "
+            f"record of is {converted.band.first_seed}-{converted.band.last_seed} "
+            f"size {converted.band.size}"
+        )
+    seeds = [seed for seed, _ in accepted]
+    if seeds != sorted(seeds):
+        raise CalibrationInputsRejected(
+            "the calibration record's accepted seeds are not ascending; the "
+            "first five of a different order are a different five prefixes"
+        )
+    if len(accepted) < paired_seeds:
+        raise CalibrationInputsRejected(
+            f"{converted.manifest_path} accepts {len(accepted)} seeds and this "
+            f"calibration draws {paired_seeds}"
+        )
+    game_map = load_canonical_map()
+    prefixes: list[HeldOutPrefix] = []
+    for seed, digest in accepted[:paired_seeds]:
+        prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
+        rebuilt = prefix_sha256(prefix)
+        if rebuilt != digest:
+            raise CalibrationInputsRejected(
+                f"seed {seed} rebuilds to {rebuilt}, and "
+                f"{converted.manifest_path} froze {digest}: the generator no "
+                "longer produces the prefix this record describes, so the "
+                "calibration would measure inputs nobody froze"
+            )
+        assert_no_legacy_body_handles([canonical_prefix_json(prefix)])
+        prefixes.append(prefix)
+    return CalibrationSet(
+        record_path=resolved,
+        record_sha256=hashlib.sha256(resolved.read_bytes()).hexdigest(),
+        band=band,
+        roster=roster,
+        prefixes=tuple(prefixes),
+        digests=tuple(digest for _, digest in accepted[:paired_seeds]),
+        accepted_in_record=len(accepted),
+        skipped_in_record=skipped_in_record,
+    )
+
+
+def assert_ready_for_a_calibration(
+    record: Path,
+    *,
+    provider: str,
+    invocation: LiveRunInvocation | None,
+    limits: RunLimits = CALIBRATION_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
+    repo_root: Path = _REPO_ROOT,
+) -> CalibrationSet:
+    """Everything a calibration must satisfy BEFORE a client exists, in order.
+
+    The same ordering rule as :func:`assert_ready_for_a_live_run`: arithmetic
+    and the authorization first, the inputs next, and the verified inputs are
+    what :func:`build_authorized_client` requires as its first argument, so a
+    credential is never made for a calibration that may not run.
+    """
+
+    assert_limits_are_feasible(
+        limits=limits, sampling=sampling, units=calibration_units(paired_seeds)
+    )
+    assert_calibration_is_authorized(
+        provider=provider,
+        invocation=invocation,
+        limits=limits,
+        sampling=sampling,
+        paired_seeds=paired_seeds,
+        repo_root=repo_root,
+    )
+    return verify_calibration_set(
+        record, repo_root=repo_root, paired_seeds=paired_seeds
     )
 
 
@@ -3603,7 +4078,7 @@ def _every_string_in(value: object) -> list[str]:
 
 
 def assert_report_holds_no_prefix_bytes(
-    report: InstrumentReport, prefixes: Iterable[HeldOutPrefix]
+    report: BaseModel, prefixes: Iterable[HeldOutPrefix]
 ) -> None:
     """Refuse a report that carries any held-out prefix content.
 
@@ -3611,6 +4086,10 @@ def assert_report_holds_no_prefix_bytes(
     and for each of its steps' canonical JSON — the step is the smaller unit and
     the one a careless summary would reach for. This is the guard behind "the
     runner opens no prefix, prints none".
+
+    Takes any report model rather than the evaluation's, so the calibration's
+    goes through the same check. One guard, because a second payload shape with
+    its own guard is how the first one's rule stops applying.
     """
 
     strings = _every_string_in(report.model_dump(mode="json"))
@@ -4382,6 +4861,54 @@ class _RunState:
         self.pending_attempts_by_arm.clear()
 
 
+@dataclass(frozen=True)
+class _RunHarness:
+    """The four objects that bound a sitting: one wiring, two callers.
+
+    :func:`run_instrument` and :func:`run_calibration` spend under different
+    ceilings on different inputs, and they must spend them the same WAY — one
+    wrapper enforcing the per-call caps and the model-work window, one run-level
+    budget, one elapsed deadline. Built here so the calibration cannot measure a
+    run wired differently from the one it is sizing.
+    """
+
+    client: _InstrumentClient
+    run_budget: GameBudget
+    deadline: RunDeadline
+    work_clock: _ModelWorkClock
+
+
+def _build_harness(
+    *,
+    client: LLMClient | None,
+    limits: RunLimits,
+    sampling: SamplingConfig,
+    invocation: LiveRunInvocation | None,
+) -> _RunHarness:
+    """Wire one sitting's client, budget and two clocks from its limits."""
+
+    work_clock = _ModelWorkClock(max_seconds=limits.model_work_seconds)
+    return _RunHarness(
+        client=_InstrumentClient(
+            client if client is not None else DryRunProvider(),
+            work_clock=work_clock,
+            turn_max_tokens=sampling.turn_max_tokens,
+            vote_max_tokens=sampling.vote_max_tokens,
+            # A live run is bound to the model the invocation names; a dry run
+            # has no served model to bind, and its fixture says so in the
+            # report's ``model_ids`` and its caveat.
+            expected_model=None if invocation is None else invocation.model,
+        ),
+        run_budget=GameBudget(
+            max_cost_usd=limits.max_cost_usd,
+            max_input_tokens=limits.run_max_input_tokens,
+            max_output_tokens=limits.run_max_output_tokens,
+        ),
+        deadline=RunDeadline(seconds=limits.elapsed_seconds),
+        work_clock=work_clock,
+    )
+
+
 def run_instrument(
     *,
     output_dir: Path,
@@ -4459,24 +4986,13 @@ def run_instrument(
         carried_grades = [unit.grade() for unit in resume.units]
         carried_telemetry = [unit.telemetry for unit in resume.units]
 
-    inner = client if client is not None else DryRunProvider()
-    work_clock = _ModelWorkClock(max_seconds=limits.model_work_seconds)
-    instrument_client = _InstrumentClient(
-        inner,
-        work_clock=work_clock,
-        turn_max_tokens=sampling.turn_max_tokens,
-        vote_max_tokens=sampling.vote_max_tokens,
-        # A live run is bound to the model the invocation names; a dry run has
-        # no served model to bind, and its fixture says so in the report's
-        # ``model_ids`` and its caveat.
-        expected_model=None if live_invocation is None else live_invocation.model,
+    harness = _build_harness(
+        client=client, limits=limits, sampling=sampling, invocation=live_invocation
     )
-    run_budget = GameBudget(
-        max_cost_usd=limits.max_cost_usd,
-        max_input_tokens=limits.run_max_input_tokens,
-        max_output_tokens=limits.run_max_output_tokens,
-    )
-    deadline = RunDeadline(seconds=limits.elapsed_seconds)
+    work_clock = harness.work_clock
+    instrument_client = harness.client
+    run_budget = harness.run_budget
+    deadline = harness.deadline
     output_dir.mkdir(parents=True, exist_ok=True)
 
     state = _RunState()
@@ -4737,15 +5253,877 @@ def run_dry(
 
 
 # ---------------------------------------------------------------------------
+# The development calibration: what the provider actually charges
+# ---------------------------------------------------------------------------
+#
+# Everything below measures SPEND and nothing else. No grader runs, no paired
+# test is computed and no meeting outcome is reported: the five seeds are a
+# converted band's, already rendered once by a stopped run, and what they are
+# asked is what a call and a unit cost on this endpoint.
+
+#: The payload version of a calibration output, so a reader — the profile
+#: refresh below, or a later card — knows what it is holding.
+CALIBRATION_SCHEMA: Final[str] = "fresh-deduction-calibration/1"
+
+#: What a call of a unit is. Spelled here rather than imported from the
+#: rehearsal double, which is a test module this one may not depend on.
+CallType = Literal["turn", "ballot"]
+
+#: The dispositions that are SAMPLES of what a call costs: a completion that
+#: came back, and one the provider billed for and then refused. The other two
+#: carry zero tokens because nothing was reported, so averaging them in would
+#: describe a cheaper endpoint than the one being measured.
+COMPLETED_DISPOSITIONS: Final[frozenset[str]] = frozenset(
+    {"resolved", "billed_and_refused"}
+)
+
+PERCENTILE_RULE: Final[str] = (
+    "p95 is the nearest-rank percentile of the sample sorted ascending: the "
+    "value at index ceil(0.95 x n) - 1. No interpolation, because every value "
+    "in the sample is a token count some call was actually charged and a "
+    "number between two of them is not one of those."
+)
+
+#: The multiple of the largest measured unit a proposed per-unit ceiling leaves.
+CEILING_PROPOSAL_UNIT_MULTIPLE: Final[int] = 3
+
+#: The margin a proposed run-level ceiling leaves over the measured mean.
+CEILING_PROPOSAL_RUN_MARGIN: Final[float] = 1.5
+
+#: Proposed ceilings are rounded UP to this granularity, so the numbers an
+#: authorization card would carry read as decisions rather than as residues.
+CEILING_PROPOSAL_ROUNDING: Final[int] = 1_000
+
+CEILING_PROPOSAL_RULE: Final[str] = (
+    "The per-unit OUTPUT ceiling is max(the reservation schedule, "
+    f"{CEILING_PROPOSAL_UNIT_MULTIPLE} x the largest unit measured): it is "
+    "enforced on what a unit RESERVES, so it has to clear that schedule before "
+    "anything else. The per-unit INPUT ceiling is "
+    f"{CEILING_PROPOSAL_UNIT_MULTIPLE} x the largest unit measured — the same "
+    "multiple with no reservation floor to clear, because no pre-flight "
+    "reserves an input cap. Each run-level ceiling is the whole design's unit "
+    f"count x the measured MEAN unit x {CEILING_PROPOSAL_RUN_MARGIN}, raised to "
+    "that unit count x the largest unit measured where the mean rule falls "
+    "below it: that product is the floor `assert_limits_are_feasible` enforces, "
+    "and a proposed ceiling the instrument would refuse is not a proposal. "
+    f"Every figure is rounded up to the next {CEILING_PROPOSAL_ROUNDING:,} "
+    "tokens. This is a proposal and authorizes nothing: the ceilings a run "
+    "spends under are the owner's, on a card, and this instrument keeps "
+    "refusing any limits but the ones it is handed."
+)
+
+CALIBRATION_CAVEAT: Final[str] = (
+    "A spend measurement on development inputs, not an evaluation. No grader "
+    "ran, no paired statistic was computed and no meeting outcome is reported: "
+    "the primary outcome, the decision rule and the minimum actionable effect "
+    "are untouched, and no unit of this calibration counts towards them."
+)
+
+
+def _percentile(values: Sequence[int], fraction: float) -> int:
+    """The nearest-rank percentile of ``values``. See :data:`PERCENTILE_RULE`."""
+
+    if not values:
+        raise ValueError("a percentile of no samples is not a number")
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError(f"a percentile fraction is in (0, 1], got {fraction}")
+    ordered = sorted(values)
+    return ordered[math.ceil(fraction * len(ordered)) - 1]
+
+
+def _rounded_up(value: float, granularity: int = CEILING_PROPOSAL_ROUNDING) -> int:
+    """``value`` rounded up to the next whole ``granularity``."""
+
+    if granularity < 1:
+        raise ValueError(f"a rounding granularity is at least 1, got {granularity}")
+    return math.ceil(value / granularity) * granularity
+
+
+def calibration_call_type(call: CapturedCall, sampling: SamplingConfig) -> CallType:
+    """Which kind of call one ledger row is, from the cap it asked for.
+
+    The two caps differ and :class:`_InstrumentClient` refuses any other, so the
+    request's own cap says which schedule a call belongs to without the ledger
+    carrying a second copy of what the meeting layer already decided. Anything
+    else raises rather than defaulting to a kind: a row filed under the wrong
+    schedule moves both of that schedule's statistics.
+    """
+
+    if call.max_tokens == sampling.turn_max_tokens:
+        return "turn"
+    if call.max_tokens == sampling.vote_max_tokens:
+        return "ballot"
+    raise InstrumentError(
+        f"a captured call asked for {call.max_tokens} output tokens, which is "
+        f"neither the turn cap {sampling.turn_max_tokens} nor the ballot cap "
+        f"{sampling.vote_max_tokens}; this calibration cannot say which "
+        "schedule it belongs to"
+    )
+
+
+class CallTypeUsage(BaseModel):
+    """One arm's one call kind: how many completions, and how big they ran."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    arm: str
+    call_type: str
+    #: Completions only (:data:`COMPLETED_DISPOSITIONS`); the attempts that
+    #: reported nothing are counted on the arm rather than averaged in here.
+    completions: int
+    input_mean: float
+    input_p95: int
+    input_max: int
+    output_mean: float
+    output_p95: int
+    output_max: int
+    #: The cap these calls were drawn under, so a maximum can be read against
+    #: the ceiling it was approaching.
+    max_tokens: int
+
+
+class CalibrationCall(BaseModel):
+    """One completion, as the four counts a rehearsal needs to replay it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    arm: str
+    call_type: str
+    input_tokens: int
+    output_tokens: int
+    disposition: str
+
+
+class CalibrationUnitUsage(BaseModel):
+    """One unit's spend. Counts and identifiers only, and no outcome.
+
+    The seed is here because the converted band's own committed record already
+    publishes it. What is deliberately absent is what the meeting DID: this
+    calibration measures cost, and publishing outcomes on inputs nothing may be
+    tuned to is how a development set becomes a training set.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seed: int
+    arm: str
+    attempts: int
+    completions: int
+    input_tokens: int
+    output_tokens: int
+    model_work_seconds: float
+    defaulted_turns: int
+    defaulted_votes: int
+    charged_failed_attempts: int
+    retried_calls: int
+    unaccounted_attempts: int
+
+
+class CalibrationArmUsage(BaseModel):
+    """One arm's totals over the calibration, with its two call schedules."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    arm: str
+    units: int
+    attempts: int
+    completions: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    model_work_seconds: float
+    #: Model-work seconds per ATTEMPT, retries and cut-off attempts included:
+    #: a wall-clock limit is spent on the attempts the provider is held for,
+    #: not only on the ones that answered.
+    seconds_per_attempt: float
+    by_call_type: tuple[CallTypeUsage, ...]
+    mean_unit_input_tokens: float
+    mean_unit_output_tokens: float
+    max_unit_input_tokens: int
+    max_unit_output_tokens: int
+    # The meeting-internal fail-soft substitutions, off the replay rows the
+    # runner wrote (:func:`count_defaulted_attempts`).
+    defaulted_turns: int
+    defaulted_votes: int
+    defaults_by_validation: int
+    defaults_by_deadline: int
+    degraded_openings: int
+    units_with_defaults: int
+    #: Attempts the provider BILLED and then refused on its own schema
+    #: validation, off this instrument's own call ledger. The same event also
+    #: raises ``defaults_by_validation`` when the meeting layer substituted for
+    #: it: the two count it at two layers rather than counting two things.
+    charged_failed_attempts: int
+    charged_failed_input_tokens: int
+    charged_failed_output_tokens: int
+    # The bounded retry's counts, and the attempts that bought nothing.
+    retried_calls: int
+    unaccounted_attempts: int
+    aborted_attempts: int
+    attempts_by_trigger: Mapping[str, int]
+
+
+class CeilingProposal(BaseModel):
+    """Re-sized ceilings, computed from what was measured by a stated rule."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule: str
+    #: The run the proposal is FOR: the whole held-out design's unit count, not
+    #: the calibration's own ten.
+    units: int
+    reservation_schedule: int
+    measured_max_unit_input_tokens: int
+    measured_max_unit_output_tokens: int
+    measured_mean_unit_input_tokens: float
+    measured_mean_unit_output_tokens: float
+    unit_max_input_tokens: int
+    unit_max_output_tokens: int
+    run_max_input_tokens: int
+    run_max_output_tokens: int
+    #: Whether :func:`assert_limits_are_feasible` accepts these four figures for
+    #: the whole run, checked against the CALIBRATED constants this tree
+    #: carries. False on a fixture-driven rehearsal, whose 66-token calls are a
+    #: serialisation length rather than a measurement, and the refusal below
+    #: says so in the gate's own words rather than leaving a reader to infer it.
+    clears_the_feasibility_gate: bool
+    feasibility_refusal: str | None
+
+
+class CalibrationInputs(BaseModel):
+    """Which development record the calibration drew, and how much of it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    record: str
+    record_sha256: str
+    status: str
+    band_first_seed: int
+    band_last_seed: int
+    seeds: tuple[int, ...]
+    accepted_in_record: int
+    skipped_in_record: int
+
+
+class CalibrationReport(BaseModel):
+    """Aggregate spend only. No prompt, no prefix, no step, no outcome.
+
+    ``extra="forbid"`` for the same reason :class:`InstrumentReport` carries it:
+    a field that arrived unnoticed is a field nobody decided was publishable.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    report_schema: str
+    provider: str
+    model_ids: tuple[str, ...]
+    execution_mode: str
+    instrument_sha256: str
+    prompt_set: str
+    inputs: CalibrationInputs
+    limits: RunLimits
+    sampling: SamplingConfig
+    paired_seeds: int
+    units: int
+    arms: tuple[CalibrationArmUsage, ...]
+    #: Every completion, as four counts each: the distribution rather than its
+    #: summary, because the rehearsal double replays individual calls and a
+    #: bucket collapsed to its mean would hand a 1,024-capped ballot a turn's
+    #: length. Four counts are not a prompt and not a prefix.
+    calls: tuple[CalibrationCall, ...]
+    unit_usage: tuple[CalibrationUnitUsage, ...]
+    proposal: CeilingProposal
+    percentile_rule: str
+    elapsed_seconds: float
+    model_work_seconds: float
+    seconds_per_attempt: float
+    total_cost_usd: float
+    dry_run: bool
+    caveat: str
+
+
+def _call_rows(
+    records: Sequence[UnitRecord], sampling: SamplingConfig
+) -> tuple[CalibrationCall, ...]:
+    """Every completion of every unit, in the order the units made them."""
+
+    return tuple(
+        CalibrationCall(
+            arm=record.arm,
+            call_type=calibration_call_type(call, sampling),
+            input_tokens=call.input_tokens,
+            output_tokens=call.output_tokens,
+            disposition=call.disposition,
+        )
+        for record in records
+        for call in record.calls
+        if call.disposition in COMPLETED_DISPOSITIONS
+    )
+
+
+def _unit_rows(
+    records: Sequence[UnitRecord],
+) -> tuple[CalibrationUnitUsage, ...]:
+    """One row per unit, in run order."""
+
+    return tuple(
+        CalibrationUnitUsage(
+            seed=record.seed,
+            arm=record.arm,
+            attempts=len(record.calls),
+            completions=sum(
+                1 for call in record.calls if call.disposition in COMPLETED_DISPOSITIONS
+            ),
+            input_tokens=sum(call.input_tokens for call in record.calls),
+            output_tokens=sum(call.output_tokens for call in record.calls),
+            model_work_seconds=sum(call.seconds for call in record.calls),
+            defaulted_turns=record.defaults.defaulted_turns,
+            defaulted_votes=record.defaults.defaulted_votes,
+            charged_failed_attempts=sum(
+                1 for call in record.calls if call.disposition == "billed_and_refused"
+            ),
+            retried_calls=record.transport_attempts.retried_calls,
+            unaccounted_attempts=record.transport_attempts.unaccounted_attempts,
+        )
+        for record in records
+    )
+
+
+def _summarize_calibration_arm(
+    arm: ArmName,
+    *,
+    records: Sequence[UnitRecord],
+    usage: ArmUsage,
+    attempts: TransportAttempts,
+    sampling: SamplingConfig,
+) -> CalibrationArmUsage:
+    """One arm's totals and its two call schedules, over the units it ran."""
+
+    own = [record for record in records if record.arm == arm]
+    if not own:
+        raise InstrumentError(
+            f"arm {arm} ran no unit; a calibration measures both arms or it "
+            "measures neither"
+        )
+    rows = _unit_rows(own)
+    by_call_type: list[CallTypeUsage] = []
+    for call_type in ("turn", "ballot"):
+        sample = [
+            call
+            for record in own
+            for call in record.calls
+            if call.disposition in COMPLETED_DISPOSITIONS
+            and calibration_call_type(call, sampling) == call_type
+        ]
+        if not sample:
+            # Every unit schedules three of each, so an empty bucket means every
+            # one of them produced nothing at all — a fact, and not one to
+            # average over.
+            continue
+        inputs = [call.input_tokens for call in sample]
+        outputs = [call.output_tokens for call in sample]
+        by_call_type.append(
+            CallTypeUsage(
+                arm=arm,
+                call_type=call_type,
+                completions=len(sample),
+                input_mean=sum(inputs) / len(inputs),
+                input_p95=_percentile(inputs, 0.95),
+                input_max=max(inputs),
+                output_mean=sum(outputs) / len(outputs),
+                output_p95=_percentile(outputs, 0.95),
+                output_max=max(outputs),
+                max_tokens=(
+                    sampling.turn_max_tokens
+                    if call_type == "turn"
+                    else sampling.vote_max_tokens
+                ),
+            )
+        )
+    defaults = DefaultedAttempts()
+    for record in own:
+        defaults = defaults.plus(record.defaults)
+    refused = [
+        call
+        for record in own
+        for call in record.calls
+        if call.disposition == "billed_and_refused"
+    ]
+    return CalibrationArmUsage(
+        arm=arm,
+        units=len(own),
+        attempts=usage.calls,
+        completions=sum(row.completions for row in rows),
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cost_usd=usage.cost_usd,
+        model_work_seconds=usage.model_work_seconds,
+        seconds_per_attempt=(
+            usage.model_work_seconds / usage.calls if usage.calls else 0.0
+        ),
+        by_call_type=tuple(by_call_type),
+        mean_unit_input_tokens=sum(row.input_tokens for row in rows) / len(rows),
+        mean_unit_output_tokens=sum(row.output_tokens for row in rows) / len(rows),
+        max_unit_input_tokens=max(row.input_tokens for row in rows),
+        max_unit_output_tokens=max(row.output_tokens for row in rows),
+        defaulted_turns=defaults.defaulted_turns,
+        defaulted_votes=defaults.defaulted_votes,
+        defaults_by_validation=defaults.by_validation,
+        defaults_by_deadline=defaults.by_deadline,
+        degraded_openings=defaults.degraded_openings,
+        units_with_defaults=sum(1 for record in own if record.defaults.total > 0),
+        charged_failed_attempts=len(refused),
+        charged_failed_input_tokens=sum(call.input_tokens for call in refused),
+        charged_failed_output_tokens=sum(call.output_tokens for call in refused),
+        retried_calls=attempts.retried_calls,
+        unaccounted_attempts=attempts.unaccounted_attempts,
+        aborted_attempts=sum(
+            1
+            for record in own
+            for call in record.calls
+            if call.disposition == "aborted"
+        ),
+        attempts_by_trigger=dict(attempts.by_trigger),
+    )
+
+
+def ceiling_proposal(
+    arms: Sequence[CalibrationArmUsage],
+    *,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    units: int | None = None,
+) -> CeilingProposal:
+    """The re-sized ceilings :data:`CEILING_PROPOSAL_RULE` states, as numbers.
+
+    Computed over BOTH arms together, on the worst arm's maximum and on the
+    mean across every unit: one run spends one pair of ceilings, so a proposal
+    sized on the cheaper arm would authorize a run the dearer one cannot pay
+    for.
+    """
+
+    if not arms:
+        raise ValueError("a proposal needs at least one measured arm")
+    planned = planned_units() if units is None else units
+    if planned < 1:
+        raise ValueError(f"a run has at least one unit, got {planned}")
+    measured_units = sum(arm.units for arm in arms)
+    max_input = max(arm.max_unit_input_tokens for arm in arms)
+    max_output = max(arm.max_unit_output_tokens for arm in arms)
+    mean_input = (
+        sum(arm.mean_unit_input_tokens * arm.units for arm in arms) / measured_units
+    )
+    mean_output = (
+        sum(arm.mean_unit_output_tokens * arm.units for arm in arms) / measured_units
+    )
+    reserved = unit_output_reservation(sampling=sampling)
+    proposed = RunLimits(
+        run_max_input_tokens=_rounded_up(
+            max(planned * mean_input * CEILING_PROPOSAL_RUN_MARGIN, planned * max_input)
+        ),
+        run_max_output_tokens=_rounded_up(
+            max(
+                planned * mean_output * CEILING_PROPOSAL_RUN_MARGIN,
+                planned * max_output,
+            )
+        ),
+        unit_max_input_tokens=_rounded_up(max_input * CEILING_PROPOSAL_UNIT_MULTIPLE),
+        unit_max_output_tokens=_rounded_up(
+            max(reserved, max_output * CEILING_PROPOSAL_UNIT_MULTIPLE)
+        ),
+        max_cost_usd=AUTHORIZED_MAX_COST_USD,
+        elapsed_seconds=AUTHORIZED_ELAPSED_SECONDS,
+        model_work_seconds=AUTHORIZED_MODEL_WORK_SECONDS,
+    )
+    # Run the gate on the proposal rather than describing it. The comparison is
+    # against the CALIBRATED constants this tree carries — the largest unit the
+    # committed profile holds — so a rehearsal whose fixture reports a tenth of
+    # a real call's tokens is told it proposes ceilings this tree would refuse,
+    # instead of publishing them as if they were sized on a measurement.
+    refusal: str | None = None
+    try:
+        assert_limits_are_feasible(limits=proposed, sampling=sampling, units=planned)
+    except LimitsInfeasible as infeasible:
+        refusal = str(infeasible)
+    return CeilingProposal(
+        rule=CEILING_PROPOSAL_RULE,
+        units=planned,
+        reservation_schedule=reserved,
+        measured_max_unit_input_tokens=max_input,
+        measured_max_unit_output_tokens=max_output,
+        measured_mean_unit_input_tokens=mean_input,
+        measured_mean_unit_output_tokens=mean_output,
+        unit_max_input_tokens=proposed.unit_max_input_tokens,
+        unit_max_output_tokens=proposed.unit_max_output_tokens,
+        run_max_input_tokens=proposed.run_max_input_tokens,
+        run_max_output_tokens=proposed.run_max_output_tokens,
+        clears_the_feasibility_gate=refusal is None,
+        feasibility_refusal=refusal,
+    )
+
+
+def proposed_limits(proposal: CeilingProposal) -> RunLimits:
+    """The proposal's four ceilings as a :class:`RunLimits`, walls unchanged.
+
+    The proposal re-sizes TOKENS. The elapsed and model-work windows are a
+    separate decision the owner took on 2026-09-13 and this rule says nothing
+    about them, so they come through as the authorized ones rather than being
+    quietly re-sized by a function nobody asked to touch them.
+    """
+
+    return RunLimits(
+        run_max_input_tokens=proposal.run_max_input_tokens,
+        run_max_output_tokens=proposal.run_max_output_tokens,
+        unit_max_input_tokens=proposal.unit_max_input_tokens,
+        unit_max_output_tokens=proposal.unit_max_output_tokens,
+        max_cost_usd=AUTHORIZED_MAX_COST_USD,
+        elapsed_seconds=AUTHORIZED_ELAPSED_SECONDS,
+        model_work_seconds=AUTHORIZED_MODEL_WORK_SECONDS,
+    )
+
+
+def run_calibration(
+    record: Path,
+    *,
+    output_dir: Path,
+    client: LLMClient | None = None,
+    provider: str = "fake",
+    live_invocation: LiveRunInvocation | None = None,
+    repo_root: Path = _REPO_ROOT,
+    limits: RunLimits = CALIBRATION_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
+) -> CalibrationReport:
+    """Measure what the provider charges, on a converted band's first seeds.
+
+    The same public-API path as the evaluation — :func:`run_unit`, the same
+    wrapper, the same budgets, the same arms in the same order — because the
+    number being measured is what THAT path costs. What it does not do is grade:
+    no grader is called, no paired statistic is computed and no outcome is
+    reported, so nothing here can inform the frozen analysis.
+
+    The held-out record is never read. :func:`verify_frozen_set` is not called
+    on this path at all, and :func:`verify_calibration_set` refuses
+    :data:`~experiments.held_out_prefixes.MANIFEST_PATH` by name.
+
+    No checkpoint and no resume. A calibration is ten units inside a ninety
+    minute window; a stop is reported with its partial accounting and the
+    calibration is re-run, which spends development data the evaluation is not
+    holding in reserve.
+    """
+
+    assert_calibration_is_authorized(
+        provider=provider,
+        invocation=live_invocation,
+        limits=limits,
+        sampling=sampling,
+        paired_seeds=paired_seeds,
+        repo_root=repo_root,
+    )
+    assert_client_matches_provider(provider=provider, client=client)
+    inputs = verify_calibration_set(
+        record, repo_root=repo_root, paired_seeds=paired_seeds
+    )
+    arms = instrument_arms()
+    harness = _build_harness(
+        client=client, limits=limits, sampling=sampling, invocation=live_invocation
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    state = _RunState()
+    records: list[UnitRecord] = []
+    planned = len(inputs.prefixes) * len(arms)
+    started = time.monotonic()
+    for prefix in inputs.prefixes:
+        for arm in arms:
+            try:
+                harness.deadline.check()
+                unit = run_unit(
+                    prefix,
+                    arm=arm,
+                    client=harness.client,
+                    run_budget=harness.run_budget,
+                    deadline=harness.deadline,
+                    work_clock=harness.work_clock,
+                    output_dir=output_dir,
+                    provider=provider,
+                    limits=limits,
+                    sampling=sampling,
+                )
+            # The run path's stop discipline, unchanged: the stopped unit's
+            # calls are still in the client, they were spent, and they are
+            # charged into the partial accounting before it is reported.
+            except Exception as exc:
+                state.charge(
+                    arm.name, harness.client.take(), harness.client.take_attempts()
+                )
+                raise InstrumentAborted(
+                    PartialRun(
+                        reason=f"{type(exc).__name__}: {exc}",
+                        completed_units=state.completed,
+                        planned_units=planned,
+                        usage_by_arm=dict(state.usage_by_arm),
+                        elapsed_seconds=time.monotonic() - started,
+                        model_work_seconds=harness.work_clock.seconds,
+                        attempts_by_arm=dict(state.attempts_by_arm),
+                    )
+                ) from exc
+            state.charge(arm.name, unit.calls, unit.transport_attempts)
+            state.completed += 1
+            records.append(unit)
+    summaries = tuple(
+        _summarize_calibration_arm(
+            arm.name,
+            records=records,
+            usage=state.usage_by_arm.get(arm.name, ArmUsage()),
+            attempts=state.attempts_by_arm.get(arm.name, TransportAttempts()),
+            sampling=sampling,
+        )
+        for arm in arms
+    )
+    attempts = sum(summary.attempts for summary in summaries)
+    report = CalibrationReport(
+        report_schema=CALIBRATION_SCHEMA,
+        provider=provider,
+        model_ids=tuple(
+            sorted({call.model for unit in records for call in unit.calls})
+        ),
+        execution_mode=AUTHORIZED_EXECUTION_MODE,
+        instrument_sha256=instrument_sha256(),
+        prompt_set=AUTHORIZED_PROMPT_SET,
+        inputs=CalibrationInputs(
+            record=str(inputs.record_path.relative_to(repo_root.resolve())),
+            record_sha256=inputs.record_sha256,
+            status="development",
+            band_first_seed=inputs.band.first_seed,
+            band_last_seed=inputs.band.last_seed,
+            seeds=inputs.seeds,
+            accepted_in_record=inputs.accepted_in_record,
+            skipped_in_record=inputs.skipped_in_record,
+        ),
+        limits=limits,
+        sampling=sampling,
+        paired_seeds=paired_seeds,
+        units=len(records),
+        arms=summaries,
+        calls=_call_rows(records, sampling),
+        unit_usage=_unit_rows(records),
+        proposal=ceiling_proposal(summaries, sampling=sampling),
+        percentile_rule=PERCENTILE_RULE,
+        elapsed_seconds=time.monotonic() - started,
+        model_work_seconds=harness.work_clock.seconds,
+        seconds_per_attempt=(
+            harness.work_clock.seconds / attempts if attempts else 0.0
+        ),
+        total_cost_usd=sum(summary.cost_usd for summary in summaries),
+        dry_run=provider == "fake",
+        caveat=CALIBRATION_CAVEAT,
+    )
+    # The same guard the evaluation's report passes. A calibration's inputs are
+    # development data and leaking them would convert nothing, but the rule
+    # this instrument is built on is that a REPORT carries counts, and one rule
+    # applied on one path only is a rule that has already started to drift.
+    assert_report_holds_no_prefix_bytes(report, inputs.prefixes)
+    return report
+
+
+def usage_profile_from_calibration(report: CalibrationReport) -> dict[str, object]:
+    """A rehearsal usage profile built from one calibration's measurements.
+
+    The double replays individual calls keyed by (arm, call type), so the rows
+    here are the calibration's own completions in the order they were made,
+    carrying the four counts and nothing else. The unit rows are what
+    :meth:`UsageProfile.largest_unit` reads, which is what the feasibility
+    gate's two calibrated constants are held to — so refreshing the profile
+    moves those constants, and the test that compares them is where that shows
+    up.
+    """
+
+    if report.report_schema != CALIBRATION_SCHEMA:
+        raise ValueError(
+            f"{report.report_schema!r} is not a calibration this refresh reads"
+        )
+    complete = UNIT_TURN_CALLS + UNIT_BALLOT_CALLS
+    calls = [
+        {
+            "arm": call.arm,
+            "call_type": call.call_type,
+            "input_tokens": call.input_tokens,
+            "output_tokens": call.output_tokens,
+            "disposition": call.disposition,
+        }
+        for call in report.calls
+    ]
+    units = [
+        {
+            "arm": unit.arm,
+            "complete": unit.completions >= complete,
+            "charged_input_tokens": unit.input_tokens,
+            "charged_output_tokens": unit.output_tokens,
+            "resolved_calls": unit.completions - unit.charged_failed_attempts,
+            "refused_calls": unit.charged_failed_attempts,
+        }
+        for unit in report.unit_usage
+    ]
+    refused = sum(1 for call in calls if call["disposition"] == "billed_and_refused")
+    return {
+        "schema": "fresh-deduction-usage-profile/1",
+        "built_from": {
+            "calibration": CALIBRATION_SCHEMA,
+            "provider": report.provider,
+            "record": report.inputs.record,
+            "band": f"{report.inputs.band_first_seed}-{report.inputs.band_last_seed}",
+            "instrument_sha256": report.instrument_sha256,
+            "note": (
+                "Token counts only, measured by the development calibration on "
+                "a converted band. No prompt, no prefix, no response text."
+            ),
+        },
+        "calls": calls,
+        "units": units,
+        "totals": {
+            "units": len(units),
+            "resolved_calls": len(calls) - refused,
+            "refused_calls_with_usage": refused,
+            "largest_charged_unit_input_tokens": max(
+                (int(str(unit["charged_input_tokens"])) for unit in units), default=0
+            ),
+            "largest_charged_unit_output_tokens": max(
+                (int(str(unit["charged_output_tokens"])) for unit in units), default=0
+            ),
+        },
+    }
+
+
+def write_usage_profile(report: CalibrationReport, path: Path) -> None:
+    """Write :func:`usage_profile_from_calibration`'s payload to ``path``."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(usage_profile_from_calibration(report), indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 
+def _run_calibration_from_args(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> int:
+    """The ``--calibrate`` path of :func:`main`, live or rehearsed.
+
+    Split out because it is a second run mode rather than a second branch: it
+    has its own gate, its own limits and its own inputs, and reading them beside
+    the evaluation's flags was what made the CLI hard to hold in the head.
+    """
+
+    record = (
+        _REPO_ROOT / DEFAULT_CALIBRATION_RECORD
+        if args.calibration_record is None
+        else args.calibration_record
+    )
+    if args.dry_run or args.provider == "fake":
+        with TemporaryDirectory() as directory:
+            report = run_calibration(
+                record,
+                # A rehearsal renders development prompts too, and they belong
+                # nowhere on disk once it is over.
+                output_dir=Path(directory)
+                if args.output_dir is None
+                else args.output_dir,
+                provider="fake",
+            )
+    else:
+        if args.execution_manifest is None or not args.i_am_the_runner:
+            parser.error(
+                "a live calibration needs --execution-manifest and the runner "
+                "flag; the manifest authorizes the spend, the invocation "
+                "authorizes the call"
+            )
+        if args.output_dir is None:
+            parser.error("a live calibration writes its replays; pass --output-dir")
+        invocation = LiveRunInvocation.naming(
+            args.execution_manifest,
+            provider=args.provider,
+            model=AUTHORIZED_MODEL,
+        )
+        # Authorized and verified before a client exists, exactly as the live
+        # run's path is: the verified inputs are what build_authorized_client
+        # requires, so the order cannot be reversed by editing these lines.
+        inputs = assert_ready_for_a_calibration(
+            record, provider=args.provider, invocation=invocation
+        )
+        report = run_calibration(
+            record,
+            output_dir=args.output_dir,
+            client=build_authorized_client(inputs),
+            provider=args.provider,
+            live_invocation=invocation,
+        )
+    payload = report.model_dump_json(indent=2)
+    if args.json is not None:
+        args.json.write_text(payload + "\n", encoding="utf-8")
+    print(payload)
+    return 0
+
+
+#: The calibration's default input: the first band a stopped run converted. A
+#: default rather than a required argument because the record is part of the
+#: authorized shape — the owner approved a calibration on the converted
+#: 3000-3999 band — and :func:`verify_calibration_set` refuses anything that is
+#: not a converted band's record anyway.
+DEFAULT_CALIBRATION_RECORD: Final[str] = CONVERTED_BANDS[0].manifest_path
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """``--dry-run`` is the only mode any gate uses; a live run needs three flags."""
+    """``--dry-run`` is the only mode any gate uses; a live run needs three flags.
+
+    Three modes, in the order they are dispatched: ``--refresh-usage-profile``
+    rewrites the rehearsal double's profile from a calibration output and makes
+    no call; ``--calibrate`` measures spend on a converted band; the default is
+    the evaluation, dry by default and live only with the manifest, the runner
+    flag and an output directory.
+    """
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        help=(
+            "measure what the provider charges on the first "
+            f"{CALIBRATION_PAIRED_SEEDS} accepted seeds of a CONVERTED band, "
+            "both arms, under the calibration limits. Grades nothing and reads "
+            "no held-out prefix"
+        ),
+    )
+    parser.add_argument(
+        "--calibration-record",
+        type=Path,
+        default=None,
+        help=(
+            "the converted band's freeze record the calibration draws from "
+            f"(default: {DEFAULT_CALIBRATION_RECORD})"
+        ),
+    )
+    parser.add_argument(
+        "--refresh-usage-profile",
+        type=Path,
+        default=None,
+        help=(
+            "read a calibration output written by --calibrate and write the "
+            "rehearsal double's usage profile from it to --profile-out. Makes "
+            "no call and reads no input record"
+        ),
+    )
+    parser.add_argument(
+        "--profile-out",
+        type=Path,
+        default=None,
+        help="where --refresh-usage-profile writes the profile",
+    )
     parser.add_argument("--provider", default="fake")
     parser.add_argument("--execution-manifest", type=Path, default=None)
     parser.add_argument(
@@ -4795,6 +6173,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+
+    if args.refresh_usage_profile is not None:
+        if args.profile_out is None:
+            parser.error("--refresh-usage-profile writes somewhere; pass --profile-out")
+        calibration = CalibrationReport.model_validate_json(
+            args.refresh_usage_profile.read_text(encoding="utf-8")
+        )
+        write_usage_profile(calibration, args.profile_out)
+        print(f"wrote {args.profile_out} from {args.refresh_usage_profile}")
+        return 0
+
+    if args.calibrate:
+        return _run_calibration_from_args(args, parser)
 
     resume = None if args.resume is None else read_checkpoint(args.resume)
     # A resumed sitting that wrote no checkpoint would lose its own progress to
