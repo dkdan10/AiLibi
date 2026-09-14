@@ -446,7 +446,10 @@ fields, which asserts the `ValidationError` and that no profile was written;
 and `test_the_dispositions_the_boundary_accepts_are_the_ledgers_own`, which
 holds the boundary's two annotations to the ledger's own and to `CALL_TYPES`.
 
-**Verification of this round**, all offline at `7998bff5` (this commit):
+**Verification of this round**, all offline on the tree of `ee4e1678`, the
+commit that carries these corrections (this subsection cannot name the commit
+that writes it, so it names the one whose behaviour it records — the same rule
+the execution manifest's amendment log follows):
 
 - `uv run pytest tests/experiments -q` — **385 passed** (378 at `4bb46030`):
   seven new, two per correction plus the parametrized pair in correction 3.
