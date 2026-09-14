@@ -28,6 +28,15 @@ This directory records the unadopted follow-through to the owner's independent
   empty completion and the run stopped in its first unit. Its `converted` block
   names that run and the transport-resilience fix it informed; its digests are
   the bytes frozen at `ca6e97d6`.
+- [The run of 2026-09-13](run-2026-09-13-3/RESULTS.md), the third attempt and
+  the first whose record reaches `main`, stopped in its fourth unit of one
+  hundred on the per-unit output token budget — an authorized stop condition
+  rather than a defect. Three units completed and one seed carried both arms,
+  so the primary outcome was never graded and the decision rule is not
+  evaluable; `combined_accounts` neither advanced nor was rejected. The
+  directory holds the partial evidence and the unresolved accounting the stop
+  rule requires: the stop log, the four per-unit replays, the usage
+  reconciliation and the two prefixes the run rendered. It adopts nothing.
 - [Execution manifest](execution-manifest.md) binds every preregistration field
   for the fresh-model comparison, including the limits the owner authorized on
   2026-09-07. It authorizes no live call: a call additionally requires an

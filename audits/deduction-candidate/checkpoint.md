@@ -59,3 +59,10 @@ comparison. Fresh model decisions require the [preregistration](preregistration.
 a frozen execution manifest and an explicitly authorized provider/token/wall/cost
 budget. Neither this capture nor completion of offline implementation authorizes
 spending, adoption or merging into main.
+
+2026-09-13 — the third authorized live run stopped in unit 4 of 100 on the
+per-unit output token budget (3,116 charged plus a 1,024 ballot reservation
+against a cap of 4,000); 3 units completed, 1 paired seed, nothing graded, the
+decision rule not evaluable, $0.00 marginal, and the candidate neither advanced
+nor rejected. [The record](run-2026-09-13-3/RESULTS.md) holds the partial
+evidence and the accounting.
