@@ -385,8 +385,10 @@ sampling check, not a condition that can stop one in flight. As with the
 entries above, this one cannot name the commit that carries the document
 change, so it names the commit that carries the behaviour it records,
 `78b136bd`; the record commit that wrote this entry, `808b5070`, changed this
-document, the derived counts and one docstring this amendment corrects, and no
-behaviour. This entry records that commit and stops there: what a review then
+document, the derived counts, one docstring this amendment corrects, and one
+guard: `arm_surface_digests` refuses a missing prompt-set directory instead of
+hashing nothing (corrected 2026-09-14; the entry first said "no behaviour").
+This entry records that commit and stops there: what a review then
 found wrong with the mechanism above, and what was changed to repair it, is the
 entry below.
 

@@ -314,10 +314,13 @@ refusal wording the marker tuple does not carry).
 ### Record impact and limitations
 
 The `audits/` row of `docs/artifacts.md` moves with the manifest: 206 files /
-14,978,051 bytes before this card, 206 files / 14,990,456 bytes after it,
-recomputed with `git ls-files audits/` and the change staged. (The figure
-`78b136bd` alone produced, 14,988,404, is superseded: the round-1 corrections
-below amend the manifest a second time.) The held-out freeze manifest is
+14,978,051 bytes before this card, 206 files / 14,992,123 bytes at the head this card
+is closed on, recomputed with `git ls-files audits/` and the change staged.
+(Earlier figures on this branch are superseded, each attributed to the tree it
+measures: 14,981,241 at `78b136bd`, 14,988,404 at `808b5070`, 14,990,456 at
+`0185182d`, 14,991,980 at `6d8749fd`; the manifest was amended in each of the
+branch's commits and once more in the closeout that corrected the `78b136bd`
+entry's closing sentence.) The held-out freeze manifest is
 untouched — no file it hashes moved, so no restamp was needed, and no prefix
 was printed, opened or committed. No recording, report, DTO or weight byte
 moves; no experiment becomes ON; the three run archives are not touched.
@@ -481,8 +484,11 @@ AbandonedSpend` is 0 against 7 at HEAD, and the same for
 `assert_the_tail_can_be_recorded`, `charged_usage_by_arm`,
 `charged_model_work_seconds` and `agents/strategic/prompts/loader.py`). The
 entry also closed by saying "the record commit beside it changes this document,
-the derived counts and one docstring ... and no behaviour", which was true of
-`808b5070` and false of `0185182d`, whose diff is 457 lines of the instrument.
+the derived counts and one docstring ... and no behaviour", which was false of
+`808b5070` as well — that commit also added the `arm_surface_digests` guard
+against a missing prompt-set directory (corrected in the closeout of
+2026-09-14) — and false of `0185182d`, whose diff is 457 lines of the
+instrument.
 
 The paragraph now sits in its own **2026-09-14 (`0185182d`)** entry, which says
 what that commit repaired and names the symbols it introduced. The `78b136bd`
@@ -567,3 +573,19 @@ this one, recomputed with `git ls-files audits/` and the change staged. No file
 the held-out freeze manifest hashes moved, so no restamp is needed and no
 prefix was printed, opened or committed. No recording, report, DTO or weight
 byte moves; no experiment becomes ON; the three run archives are untouched.
+
+### Closeout (2026-09-14)
+
+The third verification round (head `6d8749fd`) left two documentation findings,
+both corrected here by the coordinator after merging `main` (which by then
+carried the accounts turn-schema alignment, #452) into this branch: the
+`78b136bd` amendment entry's closing sentence said the record commit `808b5070`
+changed "no behaviour" while it also added the `arm_surface_digests` guard
+(`git show 78b136bd:experiments/fresh_deduction_instrument.py | grep -c 'prompt
+set both arms render from is missing'` prints 0 and the same grep at `808b5070`
+prints 1); and the record-impact paragraph attributed 14,988,404 bytes to
+`78b136bd` alone, which is the tree at `808b5070` (`git ls-tree -r -l 78b136bd
+audits/ | awk '{s+=$4;n++} END {print n, s}'` prints `206 14981241`). Both
+sentences now name the tree each figure measures; the audits row is recomputed
+to 14,992,123 bytes / 206 files with the manifest correction staged. No code, test
+or held-out byte moves in this closeout.
