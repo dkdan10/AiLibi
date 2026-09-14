@@ -14,8 +14,8 @@ This directory records the unadopted follow-through to the owner's independent
   candidate and budget before live execution.
 - [Held-out freeze](held-out/manifest.json) records fifty proof-free scripted
   prefixes as HASHES ONLY, drawn from a preregistered seed band by a session
-  that runs no arm. No prefix bytes are committed anywhere. It holds the third
-  band, 6000–6999, frozen on 2026-09-13.
+  that runs no arm. No prefix bytes are committed anywhere. It holds the fourth
+  band, 7000–7999, frozen on 2026-09-14.
 - [The first held-out band](held-out/manifest-band-3000-3999.json), 3000–3999,
   is development data since 2026-09-10: the run of that date rendered seed 3000
   to the model before stopping on an instrument defect, and the preregistration
@@ -28,6 +28,12 @@ This directory records the unadopted follow-through to the owner's independent
   empty completion and the run stopped in its first unit. Its `converted` block
   names that run and the transport-resilience fix it informed; its digests are
   the bytes frozen at `ca6e97d6`.
+- [The third held-out band](held-out/manifest-band-6000-6999.json), 6000–6999,
+  is development data since 2026-09-13 as well, for the same reason and kept
+  the same way: the run of that date rendered seeds 6000 and 6001 before the
+  per-unit output ceiling stopped it in its fourth unit. Its `converted` block
+  names that run and the re-sized ceilings the stop informed; its digests are
+  the bytes frozen at `c06ee085`.
 - [Execution manifest](execution-manifest.md) binds every preregistration field
   for the fresh-model comparison, including the limits the owner authorized on
   2026-09-07. It authorizes no live call: a call additionally requires an

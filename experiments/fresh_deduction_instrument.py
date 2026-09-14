@@ -933,11 +933,11 @@ def assert_manifest_binds_the_live_band(repo_root: Path = _REPO_ROOT) -> None:
     :data:`~experiments.held_out_prefixes.MANIFEST_PATH` and holds it to the
     generator's own :data:`~experiments.held_out_prefixes.PREREGISTERED_BAND`.
     Neither of those reads this document, so a band that moves — 3000-3999
-    became development data on 2026-09-10 and 5000-5999 on 2026-09-13, each
-    replaced by a fresh freeze — leaves the manifest authorizing one band while
-    the run draws another, with every other gate green. That gap is closed here,
-    by comparing the band the Inputs row states with the band the live record
-    holds.
+    became development data on 2026-09-10, 5000-5999 on 2026-09-13 and
+    6000-6999 on 2026-09-13 as well, each replaced by a fresh freeze — leaves
+    the manifest authorizing one band while the run draws another, with every
+    other gate green. That gap is closed here, by comparing the band the Inputs
+    row states with the band the live record holds.
 
     It is part of the authorization, not of the frozen-set check: it runs inside
     :func:`assert_live_run_is_authorized`, which is the first thing

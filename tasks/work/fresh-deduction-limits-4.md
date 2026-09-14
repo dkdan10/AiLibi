@@ -49,8 +49,11 @@ converts to development.
   constants passes and the frozen analysis strings are byte-identical (test).
 - [ ] After [the fourth freeze](held-out-prefix-freeze-4.md) is merged into
   this branch, the Inputs table binds band 7000-7999 (band, accepted range,
-  skip count from the new `held-out/manifest.json`), names all three converted
-  bands as development data with their dates, and
+  skip count from the new `audits/deduction-candidate/held-out/manifest.json`),
+  names all three converted bands as development data with their dates and
+  their record paths, including
+  `audits/deduction-candidate/held-out/manifest-band-6000-6999.json`, which
+  this row binds until then, and
   `assert_manifest_binds_the_live_band` passes against the merged record.
 - [ ] The replay-double rehearsal of the full pipeline under the new limits
   clears the feasibility gate and completes at $0, and Results records its
