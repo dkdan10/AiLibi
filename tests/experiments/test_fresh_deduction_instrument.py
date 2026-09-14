@@ -4164,6 +4164,49 @@ class TestExecutionManifest:
         ):
             assert stated in collapsed, stated
 
+    def _fourth_authorization_section(self) -> str:
+        text = self._text()
+        start = text.index("## Fourth authorization (2026-09-14)")
+        return text[start : text.index("\n## ", start + 1)]
+
+    def test_the_fourth_authorization_section_records_the_change_and_its_basis(
+        self,
+    ) -> None:
+        """The dated entry for the re-sizing, held to the same bar as the rest.
+
+        A limits change is a spending decision, so the section that records it
+        has to name the card that authorized it, the measurement it was sized
+        from, the one observation that forced the turn cap, and the arithmetic
+        the raise moves — not just the numbers, which the table already carries.
+        The commit it names is resolved against this history rather than taken
+        on the document's word, and is required to have moved the instrument.
+        """
+
+        section = " ".join(self._fourth_authorization_section().split())
+        for stated in (
+            "fresh-deduction-authorization-4.md",
+            "calibration-2026-09-14/calibration.json",
+            "2,036 output tokens against the 2,048 cap",
+            "3 x 4,096 + 3 x 1,024 = 15,360",
+            "the per-unit output ceiling is 16,000 and not the 14,000",
+            "`CALIBRATION_SAMPLING` freezes the calibration's draw",
+            "still binds the 6000-6999 band",
+        ):
+            assert stated in section, stated
+        assert f"turn {instrument.AUTHORIZED_TURN_MAX_TOKENS:,} output" in section
+        commits = re.findall(r"\*\*2026-09-14[^(*]*\(`([0-9a-f]{7,40})`\)", section)
+        assert len(commits) == 1
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commit cannot be resolved")
+        for commit in commits:
+            assert (
+                _git("rev-parse", "--verify", f"{commit}^{{commit}}").returncode == 0
+            ), f"{commit} is not a commit here"
+            touched = _git(
+                "show", "--name-only", "--format=", commit, "--", _INSTRUMENT_REPO_PATH
+            )
+            assert _INSTRUMENT_REPO_PATH in touched.stdout
+
     def test_the_enforcement_section_quotes_the_transport_retry(self) -> None:
         """The retry is a thing the instrument DOES, so this document states it
         in the module's own words rather than in a paraphrase that could drift

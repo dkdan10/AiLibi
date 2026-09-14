@@ -1,7 +1,7 @@
 # Fresh-model deduction evaluation — execution manifest
 
-**Dated 2026-09-09, amended 2026-09-10 and 2026-09-13. Status: bound.
-This document authorizes no live call.**
+**Dated 2026-09-09, amended 2026-09-10, 2026-09-13 and 2026-09-14. Status:
+bound. This document authorizes no live call.**
 
 [The preregistration](preregistration.md) §"Select a candidate and prepare a
 separate execution manifest" lists what an execution manifest must bind before
@@ -601,6 +601,85 @@ Refreshing that profile moves what the feasibility gate is calibrated against:
 equal to the profile's largest charged unit by
 `test_the_calibration_is_the_largest_unit_the_archives_charged`, so the two
 constants move with it in the same commit or that test is red.
+
+## Fourth authorization (2026-09-14)
+
+The owner's decision 3 of
+[the diagnosis of 2026-09-13](../../tasks/diagnosis-2026-09-13-live-run-stops.md),
+approved in the same session as the two clauses above and written up as
+[the fourth authorization card](../../tasks/work/fresh-deduction-authorization-4.md):
+ceilings re-sized from a live measurement rather than from a projection. This
+section is dated apart from the three above because it follows a measurement
+rather than a stop or a diagnosis. It reaches the per-call cap row, the token
+budget row, the enforcement text and the verification section; no held-out
+outcome informed it, because the calibration it rests on drew five paired seeds
+of a CONVERTED band and graded nothing.
+
+**2026-09-14 (`b80cb92e`) — the turn cap is raised and the four token ceilings
+are re-sized from the calibration.** The per-call token cap row now reads turn
+4,096 output / vote 1,024, and the total token budget row 3,710,000 input /
+459,000 output run-level with 106,000 / 16,000 per unit; both are copied
+verbatim from that card's Constraints table and
+`AUTHORIZED_TURN_MAX_TOKENS`, `AUTHORIZED_RUN_MAX_*` and `AUTHORIZED_UNIT_MAX_*`
+carry the same numbers. Every other row of the table is #437's or the third
+authorization card's, unchanged.
+
+The basis is
+[the development calibration of 2026-09-14](calibration-2026-09-14/calibration.json),
+the section above this one. Sixty calls on five paired seeds measured, per
+unit, a reference mean of 21,026 input / 1,108 output and a candidate mean of
+28,430 / 3,137, with a largest unit of 35,232 / 4,590; the ceilings are three
+times that largest unit per dimension and, run-level, the larger of a hundred
+units at the measured mean x 1.5 and a hundred units at that largest unit. The
+turn cap is the one value the three approved decisions did not name, and one
+observation forced it: the largest candidate-arm turn charged 2,036 output
+tokens against the 2,048 cap — 1 of 15 candidate turns — a truncation is a stop
+with no retry, and the committed lab rows for this model ran at
+`max_tokens=4096`. The vote cap is unchanged; the largest ballot measured was
+237.
+
+Raising the turn cap moves what a unit RESERVES, which is the unit of account
+the three stopped runs were enforced in: `unit_output_reservation` is now
+3 x 4,096 + 3 x 1,024 = 15,360, and the reservation-policy quotation under "How
+each limit is enforced" carries those bytes. That is why the per-unit output
+ceiling is 16,000 and not the 14,000 the calibration's own `ceiling_proposal`
+printed: a proposal reserves against the caps it MEASURED, and lifting it to
+the schedule of a raised cap is a judgment, made on the card. With that lift,
+`assert_limits_are_feasible` accepts `AUTHORIZED_LIMITS` — the first time the
+gate the diagnosis of 2026-09-13 installed has passed on the committed numbers.
+The refusal it was built for is kept as a plant rather than retired with the
+defect: the 4,000 ceiling merged on 2026-09-07 is still refused, now against
+the wider schedule, and the two gate tests that used to rely on the committed
+limits being infeasible plant those ceilings as the authorized set instead.
+
+The calibration mode keeps the caps it drew at, and the section above says so
+in its own table. Its ceilings were approved against the 9,216-token schedule
+those caps reserve; following the run to 4,096 would authorize six calls they
+cannot pay for, which is the defect this gate exists to refuse. So
+`CALIBRATION_SAMPLING` freezes the calibration's draw,
+`assert_calibration_is_authorized` holds a live calibration to it, and the
+committed calibration output stays re-derivable from this tree. Sizing a run
+that draws at 4,096 would need a calibration that draws at 4,096 under ceilings
+that can pay for it; neither is authorized here, and no second calibration is
+authorized at all.
+
+Nothing else moves. The primary outcome, the decision rule, the minimum
+actionable effect, the tradeoff bound and the stop rule are the same bytes the
+sections below quote, and a test holds them so. The provider, the model, the
+prompt set, the temperatures, the roster, the wall windows, the transport bound
+and the dollar limit are unchanged. No recording, report, DTO or weight byte
+moves and no experiment becomes ON.
+
+Two obligations are left open by this entry and are not claimed by it: the
+Inputs table below still binds the 6000-6999 band, which
+[the fourth freeze card](../../tasks/work/held-out-prefix-freeze-4.md) replaces
+with 7000-7999 and marks development, and the replay-double rehearsal of the
+whole pipeline under these limits on that band is the same card's later round.
+Until that round the verification section's figures are the third band's, and
+they are labelled as such. This entry names the code commit it is written
+against rather than the commit that carries it, for the reason the entries
+above record — a commit cannot carry its own hash — and the record commit that
+writes it moves no instrument byte.
 
 ## The instrument
 
