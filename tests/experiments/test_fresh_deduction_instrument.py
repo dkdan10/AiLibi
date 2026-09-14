@@ -6820,6 +6820,14 @@ class TestDryRun:
         The command the paragraph names is this run without the temporary
         directory (`run_dry` makes its own), under the same authorized limits
         and caps, which is why it is measured here rather than described.
+
+        The per-arm ballot TOTAL is derived here too, and it is the one figure
+        of the paragraph that cannot be read off a single verdict column:
+        `UnitGrade.verdict_counts` reports `guard_rewritten` as an OVERLAY on
+        `supported`/`unsupported`/`uncited` rather than as a fourth bucket, so
+        an arm's ballots are those three summed and nothing else. Quoting the
+        two-arm total, or the three columns plus the overlay, is the arithmetic
+        this assertion refuses.
         """
 
         report = run_dry(output_dir=tmp_path)
@@ -6850,6 +6858,11 @@ class TestDryRun:
             assert (
                 f"{arm.ballot_verdicts['guard_rewritten']} guard-rewritten" in paragraph
             ), arm.arm
+            ballots = sum(
+                arm.ballot_verdicts[verdict]
+                for verdict in ("supported", "unsupported", "uncited")
+            )
+            assert f"{ballots:,} ballots an arm cast" in paragraph, arm.arm
             assert (
                 f"{arm.terminal_units} of each arm's {arm.units} units" in paragraph
             ), arm.arm

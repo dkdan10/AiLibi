@@ -1370,11 +1370,13 @@ uv run python -m experiments.fresh_deduction_instrument --dry-run
 
 100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in about two
 seconds of wall, written to the temporary directory the run makes for itself.
-Every one of the 300 ballots an arm cast was a non-SKIP decision — 150 supported
-ballots and 2 guard-rewritten ones per arm — and 49 of each arm's 50 units
-reached a graded terminal outcome: 49 ejections each, 13 role-correct, 36
-wrongful, 13 supported-correct, and 98 ballots naming the ejected player, two
-per ejection. The remaining unit of each arm is graded `partial`, and that is a
+Every one of the 150 ballots an arm cast was a non-SKIP decision — 150 supported
+ballots an arm, 2 guard-rewritten ones among them rather than beside them,
+because the guard column overlays the verdict columns rather than adding to
+them (300 ballots over the two arms, one for each of the 600 calls that is not
+a turn) — and 49 of each arm's 50 units reached a graded terminal outcome: 49
+ejections each, 13 role-correct, 36 wrongful, 13 supported-correct, and 98
+ballots naming the ejected player, two per ejection. The remaining unit of each arm is graded `partial`, and that is a
 fixture outcome rather than a stop: its three ballots named three different
 players, so no majority formed, nobody was ejected and the game did not end at
 the meeting. The run completed all 100 units. The report carries the sampling
