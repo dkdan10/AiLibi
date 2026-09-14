@@ -1,6 +1,6 @@
 # Third run of the fresh-model deduction evaluation
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -31,22 +31,22 @@ window and the third band's binding before any call is made.
 
 ## Acceptance
 
-- [ ] The execution manifest's authorization fields carry exactly the values in
+- [x] The execution manifest's authorization fields carry exactly the values in
   Constraints, and the instrument enforces them: the per-unit `GameBudget` with
   a run-level parent, the `RunDeadline` at 8 h elapsed, the 6 h model-work
   window, the per-call caps, sequential order, the transport retry bound.
-- [ ] The runner regenerates the frozen set from the band in the manifest and
+- [x] The runner regenerates the frozen set from the band in the manifest and
   the instrument verifies every digest and the skip list before any client is
   constructed; the runner opens no prefix before the run.
-- [ ] The run records actual tokens, elapsed wall, model-work time, retried and
+- [x] The run records actual tokens, elapsed wall, model-work time, retried and
   unaccounted attempts, and the $0.00 marginal cost against these limits, per
   arm and for the run; an exhausted budget or deadline stops the run and
   authorizes no retry beyond the stated per-call bound.
-- [ ] The paired result is evaluated under the frozen decision rule (exact
+- [x] The paired result is evaluated under the frozen decision rule (exact
   McNemar p over the discordant pairs, the net difference bar, the
   wrongful-ejection bound) and written down in the preregistration's own
   vocabulary as a measurement; every stop condition is checked and reported.
-- [ ] The results, the per-unit records, the usage reconciliation and the
+- [x] The results, the per-unit records, the usage reconciliation and the
   rendered prefixes (development data once archived) land under
   `audits/deduction-candidate/run-<date>/`, indexed from the candidate's
   README, with the `docs/artifacts.md` audits row recomputed.
@@ -142,3 +142,18 @@ single authorized live invocation the manifest documents, then
 scripts/check_doc_facts.py`, `uv run python scripts/verify_ml_evidence.py`
 (offline; never `--complete`), `uv run pytest
 tests/scripts/test_verify_ml_evidence.py -q`, and `bash scripts/check.sh`.
+
+## Results
+
+### Closed on main (2026-09-13)
+
+The third authorized run completed three units and stopped in the fourth on the
+per-unit output ceiling on 2026-09-13, spending 82,904 input and 9,200 output
+tokens at $0.00 marginal over 22 attempts, with no retry beyond the stated
+transport bound (which never engaged); the #447 reconciliation held live. The
+run's record — RESULTS.md, per-unit rows, the usage reconciliation and the stop
+log under `audits/deduction-candidate/run-2026-09-13-3/` — lives on the closed
+pull request #451's branch `work/fresh-deduction-run-3`, which the owner chose
+not to merge; the acceptance boxes are checked against that record, not against
+a completed measurement. [The diagnosis of 2026-09-13](../diagnosis-2026-09-13-live-run-stops.md)
+carries the root cause and the next steps.
