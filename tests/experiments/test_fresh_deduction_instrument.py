@@ -4582,6 +4582,56 @@ class TestFeasibility:
         )
         assert AUTHORIZED_LIMITS.run_max_output_tokens >= charged + turn_cap
 
+    def test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: the usage profile refreshed to the calibration's own figures.
+
+        The authorized run-level OUTPUT ceiling is a hundred units at the
+        largest unit the calibration of 2026-09-14 measured — 100 x 4,590 =
+        459,000 — which is exactly the shape
+        `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused`
+        plants and the corrected gate refuses. The gate accepts
+        `AUTHORIZED_LIMITS` on this tree only because
+        `deduction_usage_profile.json` still carries the three stopped live
+        runs' 3,116: the stale profile is LOAD-BEARING here rather than
+        neutral, and this case is what says so. The INPUT dimension clears
+        either figure, so the residual is one comparison wide. Nothing here
+        moves an authorized number — 459,000 is the owner's, on the fourth
+        authorization card — and the hand-back is recorded in the limits
+        card's Results.
+        """
+
+        measured = json.loads(
+            (
+                _REPO_ROOT
+                / "audits"
+                / "deduction-candidate"
+                / "calibration-2026-09-14"
+                / "calibration.json"
+            ).read_text(encoding="utf-8")
+        )["proposal"]
+        largest_output = int(measured["measured_max_unit_output_tokens"])
+        largest_input = int(measured["measured_max_unit_input_tokens"])
+        units = instrument.planned_units()
+        turn_cap = AUTHORIZED_SAMPLING.turn_max_tokens
+        # As committed, on the archived profile: the gate passes.
+        instrument.assert_limits_are_feasible()
+        archived = instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units + turn_cap
+        assert archived <= AUTHORIZED_LIMITS.run_max_output_tokens
+        # The ceiling is the calibration's largest unit times the unit count,
+        # to the token, which is the bound this gate refuses.
+        assert largest_output * units == AUTHORIZED_LIMITS.run_max_output_tokens
+        monkeypatch.setattr(instrument, "CALIBRATED_UNIT_OUTPUT_TOKENS", largest_output)
+        monkeypatch.setattr(instrument, "CALIBRATED_UNIT_INPUT_TOKENS", largest_input)
+        with pytest.raises(instrument.LimitsInfeasible) as refused:
+            instrument.assert_limits_are_feasible()
+        message = str(refused.value)
+        assert "run-level output" in message
+        assert f"{largest_output * units + turn_cap:,}" in message
+        # One dimension only: the input side clears the refreshed figure.
+        assert largest_input * units <= AUTHORIZED_LIMITS.run_max_input_tokens
+
     def test_a_per_unit_ceiling_below_a_unit_already_run_is_refused(self) -> None:
         """PLANTED: a per-unit input ceiling under the largest archived unit."""
 

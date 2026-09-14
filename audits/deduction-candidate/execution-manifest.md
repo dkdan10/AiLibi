@@ -678,6 +678,31 @@ length rather than a cap. No authorized figure moves: the corrected bound is
 [the limits card](../../tasks/work/fresh-deduction-limits-4.md) with its
 planted case and the commit its commands are pinned to.
 
+**Round-2 review correction, same date — a residual this entry does NOT
+close.** The corrected run-level bound is 315,696 only because the instrument's
+calibrated per-unit output figure is the three stopped runs' archived 3,116.
+The run ceiling this table binds was sized from a DIFFERENT figure: the
+calibration's largest measured unit, 4,590 output tokens, times a hundred
+units — 459,000 to the token. That is exactly the shape the corrected gate
+refuses. Were
+`tests/experiments/deduction_usage_profile.json` refreshed to the calibration's
+own figures, `assert_limits_are_feasible` would refuse `AUTHORIZED_LIMITS`:
+100 x 4,590 plus the 4,096 the last call reserves is 463,096 against a 459,000
+ceiling. The input dimension clears either figure (100 x 35,232 = 3,523,200
+against 3,710,000), so the residual is one comparison wide. It is recorded
+rather than repaired here for one reason: 459,000 is an owner-authorized number
+on
+[the fourth authorization card](../../tasks/work/fresh-deduction-authorization-4.md),
+and a card that may not move it may not close a gap that only a move can close.
+Handed back to that card and to the owner, with the profile refresh
+[the calibration card](../../tasks/work/fresh-deduction-calibration.md) already
+left open: whichever is done first, the other has to follow, because the
+ceiling and the profile are the two sides of one comparison. Nothing in the run
+this document authorizes changes meanwhile — the gate passes on the profile
+this tree carries, and
+`test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit`
+holds the residual so it cannot be lost.
+
 Nothing else moves. The primary outcome, the decision rule, the minimum
 actionable effect, the tradeoff bound and the stop rule are the same bytes the
 sections below quote, and a test holds them so. The provider, the model, the
