@@ -424,8 +424,19 @@ def _root_binding_the_live_band(tmp_path: Path) -> Path:
     passes, so in that window they run against a copy of the committed document
     whose Seed band row is moved to the live band and in which nothing else
     changes.
+
+    The COPY is the point, so being handed the repository is refused rather than
+    obeyed. Outside a freeze window the early return below makes such a call
+    look harmless; inside one it would rewrite the committed execution manifest
+    -- silently re-binding the document a live run is authorized against -- as a
+    side effect of running the test suite.
     """
 
+    assert tmp_path.resolve() != _REPO_ROOT.resolve(), (
+        "_root_binding_the_live_band writes a rebound copy of the execution "
+        "manifest into tmp_path; handed the repository it would rewrite the "
+        "committed document"
+    )
     live = _live_band()
     if instrument.manifest_bound_band(_MANIFEST.read_text(encoding="utf-8")) == live:
         return _REPO_ROOT
@@ -444,6 +455,10 @@ def _root_without_the_clause_binding_the_live_band(tmp_path: Path, clause: str) 
     is the committed one, and the owner's sentence is the only thing missing.
     """
 
+    assert tmp_path.resolve() != _REPO_ROOT.resolve(), (
+        "this helper writes a planted copy of the execution manifest into "
+        "tmp_path; handed the repository it would rewrite the committed document"
+    )
     text = _manifest_text_bound_to(_live_band())
     assert clause in text, "the committed manifest does not carry the clause"
     manifest = tmp_path / EXECUTION_MANIFEST_PATH
@@ -5897,12 +5912,19 @@ class TestCalibrationGate:
                 repo_root=root,
             )
 
-    def test_the_two_authorizations_refuse_each_others_limits(self) -> None:
+    def test_the_two_authorizations_refuse_each_others_limits(
+        self, tmp_path: Path
+    ) -> None:
         """PLANTED both ways: each gate refuses the other's ceilings.
 
         The calibration's limits are not a relaxation of the run's — they are a
         different authorization for a different spend, and neither one may be
         run under the other's numbers.
+
+        The live half needs a root whose Inputs row binds the live band, and it
+        takes ``tmp_path`` for it: handed the repository, the helper would
+        rewrite the committed document during a freeze window rather than plant
+        a copy.
         """
 
         with pytest.raises(LiveRunNotAuthorized, match="calibration limits"):
@@ -5911,7 +5933,7 @@ class TestCalibrationGate:
                 invocation=self._invocation(_REPO_ROOT),
                 limits=AUTHORIZED_LIMITS,
             )
-        root = _root_binding_the_live_band(_REPO_ROOT)
+        root = _root_binding_the_live_band(tmp_path)
         with pytest.raises(LiveRunNotAuthorized, match="authorized limits exactly"):
             assert_live_run_is_authorized(
                 provider=AUTHORIZED_PROVIDER,

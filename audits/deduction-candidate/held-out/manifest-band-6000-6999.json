@@ -1,0 +1,327 @@
+{
+  "accepted": [
+    {
+      "seed": 6000,
+      "sha256": "abd2fe04936956444dd50ddd4e007823f5a904936b57bfec485ca65488f2ab68"
+    },
+    {
+      "seed": 6001,
+      "sha256": "0d5939654f77bf2c4221fc94bd159576eaff6aac8189d8867d961b05d7704ddc"
+    },
+    {
+      "seed": 6003,
+      "sha256": "b85b64b725cab3fdd97110db2acce28468dd6ef30fbc8b9c8ae58f8de5ea7749"
+    },
+    {
+      "seed": 6004,
+      "sha256": "686c4b8d9351f02ce2f61b25ef6572bbf93f83614fda860cf87fa4708562f8fb"
+    },
+    {
+      "seed": 6005,
+      "sha256": "2f5deaf6f9de260c335a033fb374486b2d91d8fb325a9b9bf4c68163e1b61d43"
+    },
+    {
+      "seed": 6006,
+      "sha256": "7c29d65966e40f98df98cb6de08c8dd95f9e5b041b4c5bc99cb78478f64d68e5"
+    },
+    {
+      "seed": 6007,
+      "sha256": "704eb368da195be73d8d97626d2463cc758de4c646ef01b0d5bad60498a57645"
+    },
+    {
+      "seed": 6008,
+      "sha256": "b8949e281e752165adbb4aa658b72b286c4dba9be74bdbde1db366f0a7f4489e"
+    },
+    {
+      "seed": 6009,
+      "sha256": "a2b683f9b8e8159a00520c8cc333b189276af08911d5b2111fe8cb65d4c9c33b"
+    },
+    {
+      "seed": 6010,
+      "sha256": "1e92cfc136b0635958bb9d366e1e356a583869db8005b24f2c41dc5dfd6555ef"
+    },
+    {
+      "seed": 6011,
+      "sha256": "2d226e5f6cd5547b00813a16409b9abb402120336815c11e97b9dfbd51ca84e9"
+    },
+    {
+      "seed": 6012,
+      "sha256": "86ccbf754dafa95af30d9e0d33c2f669ecd62ab30c41745c9c2f3c39d87fcff7"
+    },
+    {
+      "seed": 6014,
+      "sha256": "12dafec77f7a93347bd83e8f02c93b4dfdf532ec65c4c3f1fd71fca9d9c627ab"
+    },
+    {
+      "seed": 6015,
+      "sha256": "d9b9ac424369f7ac1fb6894d415d288a0c3ebfd5183af6e2b060a3d18c962a1b"
+    },
+    {
+      "seed": 6016,
+      "sha256": "1d2362effcb449f0d970ace4ce3c4fd102597b805d364575843eca4fa8988ad6"
+    },
+    {
+      "seed": 6017,
+      "sha256": "e88399197c3024a3a015e5569871d89bf827fa309cbcfe310da2229464eb205c"
+    },
+    {
+      "seed": 6018,
+      "sha256": "d2f3937b75e1376daca6ba790dcf27f46ac284739552bf38c3f0a582d655dddf"
+    },
+    {
+      "seed": 6020,
+      "sha256": "6bca1517de18713835d799dd445ba27ca724d0b28d33d8692cacceafcb80649c"
+    },
+    {
+      "seed": 6021,
+      "sha256": "b54aba409f1b403ee4190ce0a6dc90f1365f817c12d7cddab3d8f880adbaabe0"
+    },
+    {
+      "seed": 6022,
+      "sha256": "81e89bd8c2471cf3b353ba3cddd87d7d0989c54615edd47737df41bcd76e280e"
+    },
+    {
+      "seed": 6023,
+      "sha256": "48229f3957a4192167f63c725918e7966a4f3156abaa14c6626a12c629a1fa1a"
+    },
+    {
+      "seed": 6024,
+      "sha256": "c407e5b46d7393a9407050b63daa9c6e6711ac2038591a8ebcdca20fb2989bc5"
+    },
+    {
+      "seed": 6025,
+      "sha256": "1565d83de86e9b322076f6121623ffc93f2cc12b74461db8c5faccddc5771242"
+    },
+    {
+      "seed": 6027,
+      "sha256": "b2d23f9fe40f9033e5f5d30da5ebffb9e8b554135b39cd42ec4f5d307bf9594e"
+    },
+    {
+      "seed": 6028,
+      "sha256": "949e07504a7c1e881764760f9782ccab938a9af2cb2b5506a838540d85d57d18"
+    },
+    {
+      "seed": 6029,
+      "sha256": "075c29839098ffadd222f3a65fcd606290808978884551ca467d4c61d1908f2b"
+    },
+    {
+      "seed": 6032,
+      "sha256": "91ce18c3c508fc70050f87896631b6afa1e8b334ac4c189765b938d221bd1824"
+    },
+    {
+      "seed": 6033,
+      "sha256": "0a29f2f654c71929139e759cdc95654de880abe77ac80bc96704bb15938f38d2"
+    },
+    {
+      "seed": 6034,
+      "sha256": "e0a5712b4fe9af005f1c0135ebdd3486b41d9df3c83aeaf509d87305f06a5e66"
+    },
+    {
+      "seed": 6035,
+      "sha256": "8116ab305f3a183c6d05aef4af5d87f9caef7a945089d33a8ed15dacb0cdf830"
+    },
+    {
+      "seed": 6036,
+      "sha256": "b44130bacb8b7b1ea816918cf83f3084d2b7bdf62ddccb910ff50e2a463c5a5f"
+    },
+    {
+      "seed": 6037,
+      "sha256": "c24f45d5cce93b33920eaee3ecbe3a570c8240626d93fdc003bb120eb6340e31"
+    },
+    {
+      "seed": 6039,
+      "sha256": "0ea50bcb5cc2ad7ab0ecb0324831f10ce9f4f8560e4d96a0f8d5cab2d747bc49"
+    },
+    {
+      "seed": 6040,
+      "sha256": "3c6b33fa00f50f394b438dfdc086c12cb0889449a85c726337d93d9c43cf7198"
+    },
+    {
+      "seed": 6042,
+      "sha256": "529b03bb90fe3ab4fa2d1a0d628cc605377b1b6e1cc6ee0b7204447847082881"
+    },
+    {
+      "seed": 6044,
+      "sha256": "9bade7c9ffe4b00de013deb90819cd1b497fbb4d6cbe07b004c42bfef69e8730"
+    },
+    {
+      "seed": 6045,
+      "sha256": "9e7e7ffa67b11c146881300fcf6e0a60878d181c03d8a3c33bd0e10a5b6febd6"
+    },
+    {
+      "seed": 6046,
+      "sha256": "082f79d1e2bcf18b2bef0c6b68798e7ace607f9a277c7c09ffbd5d50f2931a7e"
+    },
+    {
+      "seed": 6047,
+      "sha256": "ffcad7b6d3f74a60353334a437484f1c9a3c9732e741131f77ded7941a71ff31"
+    },
+    {
+      "seed": 6048,
+      "sha256": "72ae5d88931fe3493738e2a9408601af8599378af9407b85e3219d5c068bd563"
+    },
+    {
+      "seed": 6049,
+      "sha256": "cf1dfb1aa846e7bb1b5e3602e9272ca9ba3ed2551a6fd8402a67787e57dad4f6"
+    },
+    {
+      "seed": 6050,
+      "sha256": "e580f9d712466bb351267fd0286274e479540cdb977aad3172b0dfbedd1150f8"
+    },
+    {
+      "seed": 6051,
+      "sha256": "19b1fe54bf5a57549439e544ea2f0bf142561104cde36b936c14ef9ae2c21030"
+    },
+    {
+      "seed": 6052,
+      "sha256": "80302c838b31c7952a62f9de73f6c2f517d5a2c1704f749bc2093ffc53c88689"
+    },
+    {
+      "seed": 6053,
+      "sha256": "870bc2a633a6cd58f88824038077d707bb53be3c880501ead4f44c22e2556744"
+    },
+    {
+      "seed": 6054,
+      "sha256": "d168b539bfb1e7f5cb2ecb4194ffd247ff1526b10a446072385f18258ac11909"
+    },
+    {
+      "seed": 6055,
+      "sha256": "75b9cb99f0dbdc8f455732a4e2999e46f8cbf7707c88b643d73adbdc3b0be642"
+    },
+    {
+      "seed": 6056,
+      "sha256": "7b13419e901d35660e90051b0a35607fc0aee9086801f0c4e5ea7ea8fbc84a2d"
+    },
+    {
+      "seed": 6057,
+      "sha256": "277d1a23224ab0dc81a6a8e604f4ac25d7eaa4636b7dd500a09a5b94ef2d62c3"
+    },
+    {
+      "seed": 6058,
+      "sha256": "02bb5245e09769eb2e908cd18396e11dcd6e41f89e983f6e3c1f684727fdb9e1"
+    }
+  ],
+  "band": {
+    "draw_order": "ascending",
+    "first_seed": 6000,
+    "last_seed": 6999,
+    "size": 50
+  },
+  "body_handle_assertion": {
+    "note": "Under temporal version 2 neither the rendered meeting trigger line nor any prefix step text matches this pattern; the death tick stays out of the listener-visible handle.",
+    "pattern": "body-p-\\d+-\\d+"
+  },
+  "canonical_json": "json.dumps(prefix.model_dump(mode='json'), sort_keys=True, separators=(',', ':')) encoded as UTF-8, hashed with sha256",
+  "card": "tasks/work/held-out-prefix-freeze-3.md",
+  "converted": {
+    "branch": "work/fresh-deduction-run-3",
+    "date": "2026-09-13",
+    "informed": "tasks/work/fresh-deduction-limits-4.md",
+    "note": "The live run of 2026-09-13 rendered the prefixes of seeds 6000 and 6001 to the model and then stopped in its fourth unit: the per-unit output ceiling of 4,000 was cleared at 3,116 charged when the next ballot's pre-flight reserved its full 1,024 cap, so the stop was made by the reservation schedule rather than by spend (tasks/diagnosis-2026-09-13-live-run-stops.md). Seeds 6002-6058 were digest-checked and discarded unrendered, and the run was left unmerged (PR #451; branch work/fresh-deduction-run-3 is its archive). The preregistration treats a rendered prefix as development data and the stop informed the re-sized ceilings of the fourth authorization, which tasks/work/fresh-deduction-limits-4.md carries, so this set is development data from that date: it may be read, debugged and quoted, and it may not be used as a held-out input again. The bytes below are the ones frozen at c06ee085, unrestamped; only status and this record were added when the file moved here from audits/deduction-candidate/held-out/manifest.json under tasks/work/held-out-prefix-freeze-4.md.",
+    "pull_request": "#451",
+    "rendered_seeds": [
+      6000,
+      6001
+    ],
+    "superseded_by": "audits/deduction-candidate/held-out/manifest.json"
+  },
+  "dependency_restamps": {
+    "entries": [],
+    "note": "One entry per commit that edited a GENERATOR_SOURCES file after the freeze WITHOUT moving the set: source_sha256 was regenerated only after test_the_committed_manifest_regenerates_from_its_own_band showed accepted[] and skipped[] identical to the committed record. A commit that moves any prefix digest or skip is not restamped here: the set becomes development data and a new band is frozen under a new card (tasks/post-merge-plan.md, 'Sequencing')."
+  },
+  "development_definitions": {
+    "absent_from_accepted": true,
+    "note": "The seven hand-authored development cases in experiments/deduction_scenarios.py are seed 1 by construction, so the band excludes them; their digests are recorded here and asserted absent from accepted[].sha256.",
+    "sha256": {
+      "already_known_dead": "99984c2f4399f145ec8741d38fba9a36bbe9326893d2d1f8e01ad6af59e7bda2",
+      "honest": "0fe63ad364d581933184e0a0576771c70810553a5769203e1fcd89ec589a47ad",
+      "impossible_account": "73e5421eeafc1570cfca64a74424f0ff455b137fb140e05d62383d1f77a98d1f",
+      "insufficient_evidence": "bc3c42338fa06994df099e132b983b0ad8529428f9c1bc92ee3e1c0a48a482fc",
+      "late_accusation": "86001089f4652c7ebff5da71bc34c5485cd74893367d0f2b46137acc5b49e634",
+      "witnessed_kill": "11b932877cf596536bd296370928880ea72dec278f870dd2a295ffa1baaebfa1",
+      "witnessed_vent": "fabf19d2a64de67018d92ee140225b41eb1a90d1c4b801a06f51071eb43b18cb"
+    }
+  },
+  "filter": "A prefix is kept only when no LIVING CREWMATE's episodic memory holds an observed saw_player row carrying a kill or vent action at meeting open. The impostor's own kill record is NOT counted: it is the killer's private knowledge, never crew evidence, and experiments/deduction_evaluation.py's validate_channels already excludes it (follow-up review NG2-6). The filter replays each prefix through HeadlessGame with no meeting runner, so it halts at MEETING_PHASE_REACHED and makes no provider call.",
+  "filter_environment": {
+    "AILIBI_LLM_PROVIDER": "fake",
+    "AILIBI_TEMPORAL_OBSERVATIONS": "2"
+  },
+  "last_accepted_seed": 6058,
+  "max_ticks": 14,
+  "prefix_bytes": "No prefix bytes are committed. The runner regenerates the set from experiments/held_out_prefixes.py and the band below and refuses to proceed if any digest differs from accepted[].sha256.",
+  "roster": {
+    "num_impostors": 1,
+    "num_players": 4,
+    "tasks_per_crewmate": 1
+  },
+  "skipped": [
+    {
+      "reason": "witnessed_kill",
+      "seed": 6002
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6013
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6019
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6026
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6030
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6031
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6038
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6041
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 6043
+    }
+  ],
+  "skipped_reason_counts": {
+    "witnessed_kill": 9
+  },
+  "source_sha256": {
+    "agents/memory/beliefs.py": "d9c946867abf74152b332b9331bdec000f20069703c6ef67c2c7c1d8956e63ce",
+    "agents/memory/store.py": "7a4de65f8b326812ded4b55dc99671d309ec95b0c494a9a0f4074a46e5c8a31a",
+    "agents/perception.py": "5c0b064eacefe3a2f412e48be4c0c110e283b75a0374c2cddd112c2d7c96bb16",
+    "agents/tactical/crewmate_policy.py": "cd190d211c343b121c6ff4d3fb471de2150830fb6f3adf8f1ff8aba475861a53",
+    "agents/tactical/impostor_policy.py": "4cd16044c9f24cfd5ab615faeecedfb730c424009ed5cb7123a802e739e0b727",
+    "engine/actions.py": "a1e142bc9d574539355190af1ac85ff33b5433c0e0893a0ac5b4b1c2a6c2cbef",
+    "engine/entities.py": "55434fd22d0d4e12a2cb966e655da9d0961d4fd5d5b706e50976054d8a7ac24e",
+    "engine/maps/canonical_1.yaml": "070346ceabc353d84101038ed8d281c02c74cc7879423d925f13895a75af6b3e",
+    "engine/rules.py": "b97962a4eb9cdd0b13088ab1991ac7640ab386eb570297b45fd9cd93000df85e",
+    "engine/tick.py": "655d29d07724c984b32681b00756ee6b759b34469dfc4483addf5b61f3b49459",
+    "engine/visibility.py": "90773592a071c60767ba18933315f0aed96c21716996e74649a6fbc4fd7833f3",
+    "engine/world.py": "8367cd422ffb9503e91c3a90931efc21803f47307f6f6b61f7a62fe6ae8bd4bb",
+    "experiments/held_out_prefixes.py": "1338e0670d972a32bf44c678a1a7773469ac8ca831979d0142afd65e390393f4",
+    "observation/action_intent.py": "4b0b9893a52597b96054c982acf9b17d16f3f631bc06058efdf0d62e09b564f3",
+    "observation/body_ids.py": "6287e915e7538080f21ae053b92ca78089235dab2642aa14a3288aa948504ab3",
+    "observation/service.py": "58e0a2b816287a7de154ea735fc4fe974b7976e8fb9291de883cc8fc10dac326",
+    "observation/temporal.py": "23262ec60d8a30e974d5e5cb6e997fd049891347f9a2f07fb68676cc61898b5f",
+    "orchestrator/action_ordering.py": "698d8e0b6c809925967c390f52c2fa94258318fba26c4a538fc2569822432963",
+    "orchestrator/boundary.py": "ab5a8b2397c71256e3895e16cec1687d346140f00e3719360608447b96f1817b",
+    "orchestrator/game.py": "88dd847accf43605d24e6cb0b0dcf789ef908b18bcfd799e29b2bd12c0d8bfe8",
+    "orchestrator/observation_delivery.py": "8b6734d40634b235b36fece522f444c4083d56d0853afe8824afa9abf119bda2",
+    "orchestrator/seeder.py": "8e9e594d911478755d1fbf22cb78e46f60840bbfad7ba5297143e47033d8bf35"
+  },
+  "status": "development",
+  "status_note": "held_out until a held-out result informs a fix. That flip is recorded HERE, by setting status to \"development\" and stating the record that converted the set -- never by deleting this file. Confirming a generalization claim after such a flip needs a new band frozen under a new card.",
+  "temporal_observation_version": 2,
+  "version": 1
+}
