@@ -312,6 +312,81 @@ that carries the document changes, for the reason the entries above record — a
 commit cannot carry its own hash — so it names the code commit it is written
 against, and the record commit that writes it moves no instrument byte.
 
+## Amendments after the diagnosis of 2026-09-13
+
+Three live attempts stopped, and
+[the diagnosis of 2026-09-13](../../tasks/diagnosis-2026-09-13-live-run-stops.md)
+— written from four independent read-only investigations, one synthesis and
+three adversarial refutations of it — found one root under all three: this
+evaluation was SIZED in charged tokens and ENFORCED in reserved ones, and the
+only place it ever met the real provider was the held-out run itself. This
+section is dated apart from the two above because it is written after a
+diagnosis rather than after a stop. It reaches the enforcement text, the live
+gate and the verification section; no held-out outcome informed it, because
+the stops it reads carry counts and identifiers only.
+
+**2026-09-13 (`78b136bd`) — the units of account are stated, the ceilings are
+checked against them before a run starts, and the rehearsal sees what the
+provider did.** Four things move together, all offline and all at $0.
+
+The enforcement section's token-budget bullet now states the units of account
+and quotes `RESERVATION_POLICY` verbatim: the ceilings are enforced on RESERVED
+spend, one unit reserves 9,216 output tokens across its six pre-flights, and a
+ceiling below that schedule authorizes calls it cannot pay for.
+`assert_limits_are_feasible` refuses such a ceiling — and either run-level
+ceiling below a hundred units at the largest unit the live archives charged
+(24,282 input, 3,116 output) — from arithmetic over module constants alone,
+before a path is resolved or a credential read. **Under the limits merged on
+2026-09-07 it refuses.** That is not a defect of the gate: those numbers
+authorize six legal calls a unit cannot pay for, the third attempt was stopped
+by exactly that, and the live gate now fails closed until a fourth
+authorization card re-sizes them. This manifest does not re-size anything: the
+row above is still #437's and the widened wall row is still the third
+authorization card's.
+
+The rehearsal now exercises the dimension that bound. `DryRunProvider` derives
+its usage from the payload it serialises — 66 output tokens a call, identical
+on both arms, 9.9% of the per-unit ceiling — so no committed check could see a
+reservation schedule at all. A usage-replaying double
+(`tests/experiments/usage_replay_double.py`) answers each call with the tokens
+the real endpoint reported for a call of that arm and that kind, out of a
+committed profile of the 36 resolved calls and the two billed-and-refused ones
+the three run branches archived. The profile carries token counts only: no
+prompt, no prefix, no response text and no seed. The verification section below
+records what it measures.
+
+The retry classifier covers every fail-loud empty-response shape the authorized
+client raises. Two of them —
+a body carrying no usage block, and a usage block without its two counts
+(`llm/featherless_client.py:844,850`) — were not covered and would have re-raised
+bare, uncharged and unretried. `TRANSPORT_RETRY` is amended to say what the
+class actually is (any body the client refuses to record a completion from) and
+to stop claiming the adapter refuses before it reads the usage block, which is
+true of two of the four shapes and not of the other two; the quotation under
+"How each limit is enforced" carries the new bytes. The bound, the four trigger
+classes and the counts are unchanged.
+
+A run may now write a per-unit checkpoint and be continued from one, and the
+live gate refuses that continuation until this document carries the owner's
+resumption clause — which it does not, so no live run may be resumed today. The
+mechanism is built and rehearsed on the fake provider because the diagnosis
+names it as owed (`tasks/owner-decisions-2026-09-07.md`, B.4); authorizing a
+second sitting on the held-out set is decision 2 of the diagnosis and the
+owner's to take. The resume is outcome-blind by construction: it reads the
+checkpoint's completed seeds and its identity digests, and nothing in the run
+path reads a grade.
+
+The frozen analysis does not move here. `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
+are the same bytes the sections below quote, and a test holds them to the
+revision the last logged amendment names. The feasibility gate adds no stop to
+the frozen rule: it is a refusal before a run, like the band binding and the
+sampling check, not a condition that can stop one in flight. As with the
+entries above, this one cannot name the commit that carries the document
+change, so it names the commit that carries the behaviour it records; the
+record commit beside it changes this document, the derived counts and one
+docstring this amendment corrects, and no behaviour.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -904,6 +979,47 @@ ratio to their sum (1,481,072) gives about 1.90 M against the 2.4 M ceiling,
 and the larger arm's 17,880 per unit gives about 22,900 against the 45,000
 per-unit ceiling — headroom checks, not predictions, because a real model
 writes a different transcript.
+
+**The output dimension, measured rather than assumed (2026-09-13).** The
+paragraph above is an INPUT headroom check, and until this amendment it was the
+only one: the fake provider's output figure is 66 tokens a call by
+construction, so no committed run could say anything about the ceiling the
+third live attempt actually hit. The replay rehearsal is the output half.
+Re-run it with:
+
+```sh
+uv run pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -k "TestUsageReplay or TestFeasibility" -q
+```
+
+Under the re-sizing [the diagnosis](../../tasks/diagnosis-2026-09-13-live-run-stops.md)
+puts to the owner (per unit 60,000 in / 12,000 out, run 3,600,000 / 350,000),
+the rehearsal runs all 100 units and 600 calls at $0.00 in about seven seconds:
+`repaired_clock` charges 1,072,642 input and 66,105 output (21,453 and 1,322 a
+unit), `combined_accounts` 1,015,417 and 145,889 (20,308 and 2,918 a unit). The
+candidate arm's mean unit is therefore 72.9% of the per-unit output ceiling
+this manifest binds and 31.7% of the schedule its six calls reserve, and the
+run total of 211,994 output tokens is **106.0% of the 200,000 run-level
+ceiling** — a complete run would have stopped near its end on that ceiling even
+with the per-unit one fixed, which is what the diagnosis projected from four
+units and what this measures over a hundred. Input is 2,088,059, 87.0% of the
+2.4 M ceiling. The candidate arm also replays the refusal rate its archives
+carry — two of its nine archived turns — as 33 defaulted turns across its 150,
+against none on the reference arm.
+
+Under the limits this manifest binds, the same rehearsal stops where the live
+run of 2026-09-13 stopped and says the same thing: `LLM budget exceeded on
+output_tokens: current=3116.0 + delta=1024.0 > cap=4000.0`, on the candidate
+arm, 5 of 100 units completed. The figure is the archived unit's own, because
+the rehearsal replays that unit's calls including the turn the provider billed
+and refused.
+
+Nothing graded in either rehearsal is reported here, and none of it is
+evidence about the arms. The double's decision does not depend on the arm, and
+the refusals it replays are the candidate arm's by construction, so any paired
+difference it produces is the fixture's arithmetic rather than a measurement —
+the same caveat the dry run below carries, and it is stronger here because the
+replayed refusals are asymmetric by design.
 
 The bounded retry is exercised here rather than only in its unit cases, because
 the card that added it owes a run of the whole pipeline through one empty

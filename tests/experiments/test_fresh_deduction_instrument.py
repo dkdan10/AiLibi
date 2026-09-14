@@ -3748,6 +3748,108 @@ class TestExecutionManifest:
                 _git("merge-base", "--is-ancestor", commit, "HEAD").returncode == 0
             ), f"named but not an ancestor of HEAD: {commit}"
 
+    def _diagnosis_amendments_section(self) -> str:
+        text = self._text()
+        start = text.index("## Amendments after the diagnosis of 2026-09-13")
+        return text[start : text.index("\n## ", start + 1)]
+
+    def test_the_enforcement_section_quotes_the_reservation_policy(self) -> None:
+        """The units of account are a thing the code enforces, so this document
+        states them in the module's own words.
+
+        `RESERVATION_POLICY` is built from the constants the table above binds —
+        the two per-call caps, the living-voter count and the two calibrated
+        per-unit figures — so a moved cap changes the constant, this quotation
+        and the gate together, and a document that described the schedule in
+        prose could not drift from what the budget reserves.
+        """
+
+        section = " ".join(self._enforcement_section().split())
+        assert " ".join(instrument.RESERVATION_POLICY.split()) in section
+        assert "assert_limits_are_feasible" in section
+
+    def test_the_diagnosis_amendment_names_its_reason_and_a_real_commit(self) -> None:
+        """The 2026-09-13 diagnosis log, held to what the two stop logs are.
+
+        Its own dated section, because it follows a diagnosis rather than a
+        stop; its own commit, resolved against this history rather than taken on
+        the document's word; and its reason, which is the one thing the three
+        stopped runs establish — a design sized in one unit of account and
+        enforced in another.
+        """
+
+        section = self._diagnosis_amendments_section()
+        collapsed = " ".join(section.split())
+        assert "SIZED in charged tokens and ENFORCED in reserved ones" in collapsed
+        assert "Under the limits merged on 2026-09-07 it refuses" in collapsed
+        assert "9,216 output tokens" in collapsed
+        assert "The frozen analysis does not move here" in collapsed
+        for unmoved in (
+            "PRIMARY_OUTCOME",
+            "DECISION_RULE",
+            "MINIMUM_ACTIONABLE_EFFECT_UNITS",
+            "WRONGFUL_EJECTION_TRADEOFF",
+            "STOP_RULE",
+        ):
+            assert unmoved in collapsed
+        commits = re.findall(r"\*\*2026-09-13[^(*]*\(`([0-9a-f]{7,40})`\)", collapsed)
+        assert len(commits) == 1
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commit cannot be resolved")
+        for commit in commits:
+            assert (
+                _git("rev-parse", "--verify", f"{commit}^{{commit}}").returncode == 0
+            ), f"{commit} is not a commit here"
+            touched = _git(
+                "show", "--name-only", "--format=", commit, "--", _INSTRUMENT_REPO_PATH
+            )
+            assert _INSTRUMENT_REPO_PATH in touched.stdout
+            assert (
+                _git("merge-base", "--is-ancestor", commit, "HEAD").returncode == 0
+            ), f"named but not an ancestor of HEAD: {commit}"
+
+    def test_no_frozen_analysis_byte_has_moved_since_the_last_logged_amendment(
+        self,
+    ) -> None:
+        """The frozen design is byte-identical to the last revision that logged one.
+
+        The walk above catches an amendment that moved a frozen constant without
+        logging it; this is the stronger statement this card owes, and it is
+        taken against the tree rather than against the log: every frozen
+        constant at HEAD equals the same constant at the revision the last
+        stopped-run entry names. A card that changed one of them, logged or not,
+        turns this red.
+        """
+
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the revision cannot be read")
+        collapsed = " ".join(self._post_run_amendments_section("2026-09-13").split())
+        named = re.findall(r"\*\*2026-09-13[^(*]*\(`([0-9a-f]{7,40})`\)", collapsed)
+        assert named, "the last stopped-run log names no commit"
+        last = named[-1]
+        before = _frozen_analysis_at(last)
+        assert before is not None, last
+        now = _frozen_analysis_at("HEAD")
+        assert now is not None
+        moved = [
+            name for name in _FROZEN_ANALYSIS_CONSTANTS if before[name] != now[name]
+        ]
+        assert moved == [], f"the frozen analysis moved since {last}: {moved}"
+
+    def test_the_manifest_states_the_resume_gate_without_authorizing_it(self) -> None:
+        """The document says a resume exists, refuses one, and does not enable it.
+
+        The gate looks for `RESUMPTION_CLAUSE`'s own bytes, so a document that
+        described the mechanism in the clause's words would authorize what it
+        describes. This one describes it in other words, which is the property
+        worth checking rather than asserting.
+        """
+
+        text = self._text()
+        assert instrument.RESUMPTION_CLAUSE not in text
+        assert "assert_resume_is_authorized" in text
+        assert "no live run may be resumed" in text
+
     def test_the_enforcement_section_quotes_the_transport_retry(self) -> None:
         """The retry is a thing the instrument DOES, so this document states it
         in the module's own words rather than in a paraphrase that could drift
@@ -4248,11 +4350,30 @@ class TestUsageReplay:
         report = run_dry(output_dir=tmp_path, client=double, limits=feasible_limits())
         assert [arm.units for arm in report.arms] == [50, 50]
         assert report.total_cost_usd == 0.0
+        assert double.attempts == 600
         for arm in report.arms:
             assert arm.output_tokens / arm.units > 1_000
             assert (
                 arm.output_tokens / arm.units < feasible_limits().unit_max_output_tokens
             )
+        # Every figure the manifest's output-headroom paragraph quotes is this
+        # report's, so the record cannot drift from the run that produced it.
+        manifest = _MANIFEST.read_text(encoding="utf-8")
+        for arm in report.arms:
+            assert f"{arm.input_tokens:,}" in manifest, arm.arm
+            assert f"{arm.output_tokens:,}" in manifest, arm.arm
+            assert f"{round(arm.input_tokens / arm.units):,}" in manifest, arm.arm
+            assert f"{round(arm.output_tokens / arm.units):,}" in manifest, arm.arm
+        run_input = sum(arm.input_tokens for arm in report.arms)
+        run_output = sum(arm.output_tokens for arm in report.arms)
+        assert f"{run_input:,}" in manifest
+        assert f"{run_output:,}" in manifest
+        share = 100 * run_output / AUTHORIZED_LIMITS.run_max_output_tokens
+        assert f"{share:.1f}% of the 200,000 run-level" in manifest
+        assert share > 100
+        candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
+        assert f"{candidate.defaulted_turns} defaulted turns" in manifest
+        assert candidate.defaulted_turns > 0
 
     def test_a_call_type_blind_sampler_manufactures_a_truncation(
         self, tmp_path: Path
@@ -4280,6 +4401,55 @@ class TestUsageReplay:
             limits=feasible_limits(),
         )
         assert [arm.units for arm in keyed.arms] == [4, 4]
+
+    @pytest.mark.parametrize(
+        ("mode", "trigger"),
+        [
+            ("billed_refusal", None),
+            ("empty_body", "empty_completion"),
+            ("no_usage_body", "empty_completion"),
+            ("transport_error", "transport_error"),
+        ],
+    )
+    def test_each_planted_provider_fault_reaches_a_running_unit(
+        self, tmp_path: Path, mode: str, trigger: str | None
+    ) -> None:
+        """PLANTED one provider fault at a time, on the candidate arm's first turn.
+
+        The four the double can plant are the four the live runs met: a payload
+        the endpoint billed for and refused (attempt 1 and attempt 3), a 2xx
+        body with no completion (attempt 2), one whose usage block the adapter
+        would not read (the shape no attempt met and no classifier covered),
+        and a dropped connection. Each is planted here through the whole
+        pipeline rather than at the wrapper alone, because what a unit DOES
+        with one is the thing a rehearsal has to show: the refusal is a sample
+        the meeting fail-softs, and the other three are retried and recovered.
+        """
+
+        double = UsageReplayProvider(
+            spoil_call=instrument.UNIT_TURN_CALLS + instrument.UNIT_BALLOT_CALLS + 1,
+            mode=cast(Any, mode),
+        )
+        report = run_dry(
+            output_dir=tmp_path, units=1, limits=feasible_limits(), client=double
+        )
+        assert double.spoiled == 1
+        assert [arm.units for arm in report.arms] == [1, 1]
+        candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
+        reference = next(arm for arm in report.arms if arm.arm == "repaired_clock")
+        assert reference.retried_calls == 0
+        if trigger is None:
+            # A sample, not a fault: the meeting layer substitutes a
+            # placeholder turn for it and the unit resolves. One default, not
+            # two: a planted fault consumes no archived row, so this unit's
+            # three turns draw the bucket's first two rows and never reach the
+            # refusal that sits third in it.
+            assert candidate.defaulted_turns == 1
+            assert candidate.defaults_by_validation == 1
+            assert candidate.retried_calls == 0
+        else:
+            assert candidate.retried_calls == 1
+            assert candidate.attempts_by_trigger == {trigger: 1}
 
     def test_the_archived_refusal_is_replayed_where_it_happened(
         self, tmp_path: Path
@@ -4340,10 +4510,24 @@ class TestEmptyResponseShapes:
                 "empty_completion"
             ), message
         # And the doubles below wear those wordings rather than inventing their
-        # own, so the planted cases prove the classifier against the adapter.
-        for mode in ("empty_body", "no_usage_body", "partial_usage_body"):
+        # own, so the planted cases prove the classifier against the adapter
+        # rather than against themselves. Both directions: every shape this
+        # function raises has a double, and every body-refusal mode a double
+        # plants is one of them.
+        body_refusals = (
+            "empty_body",
+            "empty_content",
+            "no_usage_body",
+            "partial_usage_body",
+        )
+        for mode in body_refusals:
             planted = NO_COMPLETION_MESSAGES[mode]
             assert any(planted.startswith(message[:40]) for message in messages), mode
+        for message in messages:
+            assert any(
+                NO_COMPLETION_MESSAGES[mode].startswith(message[:40])
+                for mode in body_refusals
+            ), f"no double plants this shape: {message}"
 
     def test_an_uncovered_wording_is_not_classified(self) -> None:
         """PLANTED: a fifth refusal the marker tuple does not carry.
@@ -4361,7 +4545,7 @@ class TestEmptyResponseShapes:
         assert instrument.transport_trigger(RuntimeError(planted)) is None
 
     @pytest.mark.parametrize(
-        "mode", ["empty_body", "no_usage_body", "partial_usage_body"]
+        "mode", ["empty_body", "empty_content", "no_usage_body", "partial_usage_body"]
     )
     def test_each_shape_is_retried_and_the_call_recovers(self, mode: str) -> None:
         """PLANTED per shape: one attempt of that wording, then a completion.
@@ -4648,6 +4832,15 @@ class TestCheckpointAndResume:
                 resuming=True,
                 limits=_authorize_feasible_limits(monkeypatch),
             )
+
+    def test_a_tree_without_the_arm_surface_cannot_say_what_it_renders(
+        self, tmp_path: Path
+    ) -> None:
+        """No silent fallback: an absent prompt set is a refusal, not an empty
+        digest map that would make every resume compare equal."""
+
+        with pytest.raises(instrument.InstrumentError, match="prompt set"):
+            instrument.arm_surface_digests(tmp_path)
 
     def test_a_file_that_is_not_a_checkpoint_is_refused(self, tmp_path: Path) -> None:
         """Two plants: not JSON, and JSON of another schema."""

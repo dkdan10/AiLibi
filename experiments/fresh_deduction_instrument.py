@@ -1995,11 +1995,13 @@ class _InstrumentClient:
         rather than a billed refusal — so it enters the ledger as an unaccounted
         attempt with a marker for a model and zero tokens, and its wall is
         charged to the work clock, which held it whether or not anything came
-        back. Zero is what is KNOWN, not what was spent: a 2xx body with no
-        completion in it can carry a ``usage`` block that
-        ``llm/featherless_client.py::_raw_from_response_body`` never reads,
-        because it refuses the body first, so an attempt of this class may have
-        been billed for tokens neither this wrapper nor the budget can see.
+        back. Zero is what is KNOWN, not what was spent:
+        ``llm/featherless_client.py::_raw_from_response_body`` raises rather than
+        returning a completion, and its refusal carries no usage onto the
+        exception — whether it refused before reading the body's ``usage`` block
+        (no choices, empty content) or because of what that block said (absent,
+        or missing its two counts) — so an attempt of this class may have been
+        billed for tokens neither this wrapper nor the budget can see.
         Charging a guess instead would put an invented number in the accounting;
         moving the read is a change to the provider client, which this
         instrument deliberately leaves where every recorded campaign has it.
@@ -3710,6 +3712,11 @@ def arm_surface_digests(repo_root: Path = _REPO_ROOT) -> Mapping[str, str]:
     digests: dict[str, str] = {}
     paths = [repo_root / name for name in ARM_SURFACE_SOURCES]
     prompts = repo_root / ARM_SURFACE_PROMPT_DIR
+    if not prompts.is_dir():
+        raise InstrumentError(
+            f"the prompt set both arms render from is missing: {prompts}; this "
+            "run cannot say what it would render"
+        )
     paths.extend(sorted(path for path in prompts.iterdir() if path.is_file()))
     for path in paths:
         if not path.is_file():

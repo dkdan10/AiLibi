@@ -211,6 +211,13 @@ TRANSPORT_ERROR: Final[str] = (
     "RemoteProtocolError: incomplete chunked read"
 )
 
+#: What it raises when the body carried a choice whose assistant content was
+#: empty — the second of the four shapes, and the one no double planted before
+#: the realism card enumerated them.
+EMPTY_CONTENT_ERROR: Final[str] = (
+    "Featherless returned empty assistant content (model='Qwen/Qwen3.6-27B')."
+)
+
 #: What the same module raises when the body carried a completion but no usage
 #: block it would read token counts out of, and when the block was there without
 #: the two counts. Both are refusals of the whole response: what the adapter read
@@ -242,6 +249,7 @@ RETRYABLE_STATUS_ERROR: Final[str] = (
 #: sample the run may not re-draw.
 NoCompletionMode = Literal[
     "empty_body",
+    "empty_content",
     "no_usage_body",
     "partial_usage_body",
     "transport_error",
@@ -255,6 +263,7 @@ NoCompletionMode = Literal[
 #: wording the adapter actually uses rather than per mode name.
 NO_COMPLETION_MESSAGES: Final[dict[str, str]] = {
     "empty_body": EMPTY_BODY_ERROR,
+    "empty_content": EMPTY_CONTENT_ERROR,
     "no_usage_body": NO_USAGE_BODY_ERROR,
     "partial_usage_body": PARTIAL_USAGE_BODY_ERROR,
     "transport_error": TRANSPORT_ERROR,
