@@ -6,10 +6,13 @@ Other living players: {{ living_ids | join(', ') }}. Dead or ejected: {{ dead_id
 {{ rendered_memory }}
 {% set account_flags = contradictions %}
 {% include '_account_transcript.j2' %}
-{% include '_account_rules.j2' %}
-{#- The reply instruction branches on the SAME condition as the shape menu in
-    _account_rules.j2, so a speaker who was told to keep observations empty is
-    never also told to cite a placement it has no shape to file. -#}
-{% if prior_turn %}Answer the new point in [{{ prior_turn.turn_id }}] by {{ prior_turn.speaker }}. {% if public_account_version or not is_impostor %}Cite your relevant placement or observation, explain what it does and does not establish, and correct an earlier mistake explicitly.{% else %}Answer in free text; make an accusation claim or stay unsure, explain what your answer does and does not establish, and correct an earlier mistake explicitly.{% endif %}{% else %}Add useful information or say you have nothing further. Do not repeat a charge merely because somebody else made it.{% endif %}
-Return only JSON:
+{# `+%}` keeps the newline trim_blocks would eat, so the rules block and the
+   reply instruction below it stay separate lines. #}
+{% include '_account_rules.j2' +%}
+{# The reply instruction branches on the SAME condition as the shape menu in
+   _account_rules.j2, so a speaker who was told to keep observations empty is
+   never also told to cite a placement it has no shape to file. A leading `-`
+   here would strip the newline the include above deliberately keeps. #}
+{% if prior_turn %}Answer the new point in [{{ prior_turn.turn_id }}] by {{ prior_turn.speaker }}. {% if public_account_version or not is_impostor %}Cite your relevant placement or observation, explain what it does and does not establish, and correct an earlier mistake explicitly.{% else %}Answer in free text; make an accusation claim or stay unsure, explain what your answer does and does not establish, and correct an earlier mistake explicitly.{% endif %}{% else %}Add useful information or say you have nothing further. Do not repeat a charge merely because somebody else made it.{% endif +%}
+Return only JSON with exactly these 8 keys. The two lists are shown empty below{% if public_account_version or not is_impostor %}; fill each structured item into the list its shape is listed under above, and put nothing else in either list{% else %}; keep "observations" empty and put your one accusation claim, if you make one, in "claims"{% endif %}:
 {"turn_id":"t","turn_index":0,"speaker":"{{ agent_id }}","turn_kind":"{{ turn_kind }}","reply_to":{% if prior_turn %}"{{ prior_turn.turn_id }}"{% else %}null{% endif %},"observations":[],"claims":[],"free_text":"<brief account or answer>"}
