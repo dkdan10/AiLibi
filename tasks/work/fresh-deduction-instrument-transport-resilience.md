@@ -1,6 +1,6 @@
 # Make the fresh-model deduction instrument survive a provider that returns nothing
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -101,7 +101,7 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
   instrument's `AUTHORIZED_MODEL_WORK_SECONDS` / `AUTHORIZED_ELAPSED_SECONDS`
   carry 6 h / 8 h, copied from the third authorization card, with the test
   that pins the table to the constants updated.
-- [ ] The Inputs table binds the third band frozen by
+- [x] The Inputs table binds the third band frozen by
   [the third freeze](held-out-prefix-freeze-3.md) (band, accepted range, skip
   count read off `audits/deduction-candidate/held-out/manifest.json`), names the
   5000-5999 band as development data since 2026-09-13 and links its record at
@@ -111,7 +111,7 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
   record's `converted.informed` names, and
   `TestExecutionManifest::test_a_binding_to_a_converted_record_stays_an_open_obligation`
   fails the moment this card closes with the row still stale.
-- [ ] A fake-provider dry run of the full pipeline on the new band completes at
+- [x] A fake-provider dry run of the full pipeline on the new band completes at
   $0 with the empty-body double active for at least one call, and Results
   records its aggregate counts only.
 
@@ -157,16 +157,15 @@ scripts/validate_task_docs.py`, `uv run python scripts/check_doc_facts.py`,
 
 ## Results
 
-Round 1 of two, reopened twice for review. The seven review corrections and the
-first five original acceptance items are met and evidenced below; the last two
-— re-binding the Inputs table to the third band, and a dry run over it —
-stay unchecked and this card stays `active`, because
-[the third freeze](held-out-prefix-freeze-3.md) is not merged yet. They are the
-coordinator's stacking round: this branch merges that one in, re-binds the
-table, runs the dry run on the new band into a temporary directory, and closes
-both boxes then. No prefix of any band was printed, opened or committed here,
-and no provider was reached: every case below runs on the fake provider or on a
-double.
+Both rounds are delivered and every acceptance item is met. Round 1, reopened
+twice for review, is the retry itself and the record that states it; the
+stacking round merged [the third freeze](held-out-prefix-freeze-3.md) in,
+re-bound the Inputs table to the band it froze and ran the dry run over that
+band, and is the last dated subsection below. No prefix of any band was
+printed, opened or committed here, and no provider was reached: every case
+below runs on the fake provider or on a double. The third live run is
+[its own card](fresh-deduction-authorization-3.md)'s and is dispatched
+separately after this pull request merges.
 
 ### What changed
 
@@ -413,16 +412,19 @@ tests; cases 6 to 9 are round 1's own.
   own message shapes, and a live call is neither made nor authorized by this
   card; the third run is
   [its own card](fresh-deduction-authorization-3.md)'s, dispatched separately
-  after both of these merge.
+  after this pull request merges.
 - The cost statement the manifest quotes is unchanged and still projects "2.0 M
   tokens over a 6-hour elapsed window". That sentence is the first
   authorization's and the third card did not re-cut it; the elapsed limit this
   manifest binds is the 8 h row above it, and the amendment says so.
-- The Inputs table still binds 5000-5999, which is development data since the
-  stopped run of 2026-09-13 rendered its first seed. Until round 2 re-binds it,
-  `assert_manifest_binds_the_live_band` would pass against a band no run may
-  draw; the live gate that would refuse such a run is the third freeze's
-  record, not this card's.
+- The Inputs table binds 6000-6999 as of the stacking round below, and
+  `assert_manifest_binds_the_live_band` passes against the merged record. What
+  it cannot do is notice the NEXT conversion: a band moves in a freeze card's
+  commit and the document follows in another, so between the two this gate
+  refuses every live run — which is the safe direction and not a silent one,
+  but it is a window, and
+  `test_a_binding_to_a_converted_record_stays_an_open_obligation` is what keeps
+  it from closing by forgetting rather than by re-binding.
 
 ### Review corrections, round 1 (2026-09-13)
 
@@ -560,3 +562,136 @@ its four verified lines; `uv run python scripts/verify_ml_evidence.py` `checks: 
 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5` with `--complete` not run; `uv run pytest
 tests/scripts/test_verify_ml_evidence.py -q` 80 passed; `bash scripts/check.sh`
 exit 0, with its counts in the pull request.
+
+### Stacking and re-binding (2026-09-13)
+
+The round the two open acceptance items were held for, and the one that closes
+this card. No verifier found a defect in round 2's tree; what this round does is
+what was owed — merge the third freeze, re-bind the Inputs table to the band it
+froze, and run the dry run over that band — plus one thing it found while doing
+it, recorded below. Round 1's figures stand as measured at `4591cc17`: no
+constant, no wrapper line and no planted case of that round moved here.
+
+**The merge.** `git merge --no-ff origin/work/held-out-prefix-freeze-3` at
+`0936a45a` (PR #449), merged as `60d1079c`; never rebased, so both histories
+stay readable. Two files conflicted and both were resolved by recomputation
+rather than by choosing a side: `tasks/README.md`'s derived inventory, because
+each branch flipped a different card's Status, and `docs/artifacts.md`'s
+`audits/` row, because each branch changed a different `audits/` byte. The
+held-out manifests came from the freeze side untouched.
+
+**The re-binding** (`da521f46`). The Inputs table now reads 6000–6999, accepted
+seeds 6000–6058, 9 `witnessed_kill` skips — every figure read off the merged
+`audits/deduction-candidate/held-out/manifest.json` — and names both converted
+bands with their dates and the files their records live in, 3000-3999 since
+2026-09-10 and 5000-5999 since 2026-09-13. The Roles table names the third
+preparer session, and the amendment log gains the dated stacking entry, which
+closes the two obligations the entry of `0fa2a3e5` left open and claims nothing
+else. `assert_manifest_binds_the_live_band` passes against the merged record
+(`test_the_committed_manifest_binds_the_live_band_or_is_refused` takes its
+settled branch), and the frozen analysis is byte-identical: the constants the
+verbatim check pins did not move.
+
+**What this round found** (`56581a98`). A re-binding is a document change, so
+the gate is what makes it bite — and the gate's own docstring was out of date
+in the same way review caught `_ModelWorkClock` in round 1.
+`assert_manifest_binds_the_live_band` explains itself by naming the
+conversions, and it still read that 5000-5999 was frozen in place of 3000-3999
+after 5000-5999 had itself become development data. Corrected, and held there
+by `test_the_gate_says_which_bands_actually_moved`, which reads each span out of
+`CONVERTED_BANDS` and each date out of that record's own `converted` block
+instead of trusting the prose. Nothing about the refusal changed.
+
+**The dry run** (`f0574950`). Acceptance item 7 asks for the full pipeline on
+the new band with the empty-body double active for at least one call. It is a
+committed case rather than a figure only this session could reproduce:
+`TestDryRun::test_the_full_dry_run_survives_one_empty_completion` runs both
+arms over the frozen set twice, once clean and once with
+`NoCompletionProvider(mode="empty_body", failures=1)`, and holds the second to
+the first. Aggregates only, on the tree at `f0574950`:
+
+```sh
+uv run python -m experiments.fresh_deduction_instrument --dry-run
+uv run pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -k test_the_full_dry_run_survives_one_empty_completion -q
+```
+
+The plain run is 100 units, 600 calls, `total_cost_usd` 0.0, about two seconds
+of wall into the temporary directory it makes for itself; both arms reach a
+graded outcome on all 50 of their units (50 ejections, 15 role-correct, 35
+wrongful, 15 supported-correct, 150 supported and 5 guard-rewritten ballots, 100
+naming ballots of which 4 cite evidence that does not bear on the ejected
+player), with 894,018 and 587,054 input tokens. The retried run is `1 passed`:
+the double receives 601 sends for 600 calls, `repaired_clock` reports 301 calls,
+`retried_calls` 1, `unaccounted_attempts` 1, `attempts_by_trigger`
+`{"empty_completion": 1}` and one unit with a retry, `combined_accounts` reports
+none, `total_cost_usd` is 0.0, and every graded field, ballot verdict and token
+total on both arms equals the clean run's — which is the claim, not a
+coincidence: the test asserts the equality rather than a band's numbers, so the
+next freeze does not re-pin it. `model_ids` carries `no-completion-returned`
+beside the fixture's own model. No prefix, prompt or report row was printed, and
+both runs wrote to temporary directories.
+
+**Planted cases**, `edit, run, restore` on the committed tree, each quoted with
+the selection it was measured under. Cases 1 to 9 are round 1's and are not
+re-run: no byte they perturb moved this round.
+
+10. **The gate explaining a history that moved on** — its docstring put back to
+    "the 3000-3999 set became development data on 2026-09-10 and 5000-5999 was
+    frozen in its place", at `f0574950`:
+    `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+    TestTheManifestBindsTheBandTheRunWouldDraw -q` → `1 failed, 5 passed, 204
+    deselected`, on `the gate explains itself without saying that 5000-5999
+    became development data on 2026-09-13` — the exact state this branch
+    inherited.
+11. **The Inputs row left on the converted band** — 6000–6999 put back to
+    5000–5999 with this card at `**Status:** done`, at `da521f46`:
+    `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+    "TestExecutionManifest or TestTheManifestBindsTheBandTheRunWouldDraw" -q` →
+    `1 failed, 43 passed, 166 deselected`, the failure being
+    `test_a_binding_to_a_converted_record_stays_an_open_obligation` on
+    `fresh-deduction-instrument-transport-resilience.md is closed while the
+    execution manifest still binds the converted manifest-band-5000-5999.json`.
+    With the card still open the same perturbation is GREEN, and deliberately
+    so: that is the window between a freeze and its re-binding, which
+    `assert_manifest_binds_the_live_band` refuses live runs in. The closing
+    Status is what makes forgetting the row a failure.
+12. **No retry at all, against the whole pipeline** — `MAX_TRANSPORT_ATTEMPTS =
+    1`, at `f0574950`: `uv run pytest
+    tests/experiments/test_fresh_deduction_instrument.py -k TestDryRun -q` → `1
+    failed, 5 passed, 204 deselected`, the full-pipeline case aborting with
+    `InstrumentAborted` on the one empty completion — the stop of 2026-09-13,
+    reproduced offline over 600 calls.
+
+**Verification**, in the card's Validation order, on the tree this round
+delivers (`uv run pytest tests/experiments -q` and the four gates were re-run
+after the card's own edit; the card is not read by any of them except the task
+validator):
+
+```sh
+uv run pytest tests/experiments -q
+uv run python scripts/validate_task_docs.py
+uv run python scripts/check_doc_facts.py
+uv run python scripts/verify_ml_evidence.py
+uv run pytest tests/scripts/test_verify_ml_evidence.py -q
+bash scripts/check.sh
+```
+
+290 passed (287 at round 2, plus the freeze's own case and this round's two);
+`Task docs validation passed: 390 historical phase tasks and 390 prompts; 49
+work cards.`; the four doc-fact lines verified; `checks: 60 | OK 48 | FAIL 0 |
+ABSENT 7 | INFO 5` with `verify-ml-evidence: every check passed` and
+`--complete` not run; 80 passed; `bash scripts/check.sh` exit 0, counts in the
+pull request.
+
+The `audits/` inventory row was recomputed with the merge staged and again with
+the amended manifest staged, on the merged tree:
+
+```sh
+git ls-files audits | wc -l
+git ls-files -z audits | xargs -0 wc -c | tail -1
+```
+
+206 files — the freeze added `manifest-band-5000-5999.json` — and 14,978,051
+bytes, against 14,960,636 over 205 at round 2. `tasks/README.md`'s derived
+sentence moves to `1 ready, 1 active, 47 done` with this card's Status.
