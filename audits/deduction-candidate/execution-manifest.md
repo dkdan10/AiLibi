@@ -710,16 +710,41 @@ prompt set, the temperatures, the roster, the wall windows, the transport bound
 and the dollar limit are unchanged. No recording, report, DTO or weight byte
 moves and no experiment becomes ON.
 
-Two obligations are left open by this entry and are not claimed by it: the
-Inputs table below still binds the 6000-6999 band, which
+Two obligations were left open by this entry when it was written and are
+discharged by the round-3 entry below: the Inputs table bound the 6000-6999
+band, which
 [the fourth freeze card](../../tasks/work/held-out-prefix-freeze-4.md) replaces
-with 7000-7999 and marks development, and the replay-double rehearsal of the
-whole pipeline under these limits on that band is the same card's later round.
-Until that round the verification section's figures are the third band's, and
-they are labelled as such. This entry names the code commit it is written
+with 7000-7999 and marks development, and the rehearsal of the whole pipeline
+under these limits on that band. This entry names the code commit it is written
 against rather than the commit that carries it, for the reason the entries
 above record — a commit cannot carry its own hash — and the record commit that
 writes it moves no instrument byte.
+
+**Round-3 re-binding, same date — the Inputs table moves to the fourth band and
+the rehearsal is re-made under these ceilings.** The fourth freeze is merged
+into the branch that carries this entry, so the record at
+[held-out/manifest.json](held-out/manifest.json) is band 7000-7999 and the
+6000-6999 record sits beside it as
+[held-out/manifest-band-6000-6999.json](held-out/manifest-band-6000-6999.json),
+marked `development` because the stopped run of 2026-09-13 rendered seeds 6000
+and 6001 to the model. The Inputs table below now binds 7000-7999 — accepted
+seeds 7001-7057, eight `witnessed_kill` skips, every number read off that
+record rather than retyped, which
+`test_the_manifest_binds_a_committed_held_out_record` holds — and names all
+three converted bands with their dates and their record paths, which
+`test_the_inputs_row_names_every_converted_band` holds against the records
+themselves. With the row moved,
+`assert_manifest_binds_the_live_band` passes instead of refusing: while the row
+named one band and the freeze record another, that gate shut every live path,
+which is what a stacked delivery is for. The verification section below is
+re-made on the new band under `AUTHORIZED_LIMITS` and `AUTHORIZED_SAMPLING` —
+the ceilings and the caps this table binds — and the rehearsal clears
+`assert_limits_are_feasible` and completes at $0.00 over all 100 units;
+`test_the_rehearsal_is_green_under_the_fourth_authorizations_limits` is that
+run as a committed case. No authorized figure moves in this entry: it re-binds
+inputs and re-measures headroom, and the ceilings, the caps, the frozen
+analysis and the residual recorded above are the bytes the paragraphs above
+left.
 
 ## The instrument
 
@@ -761,8 +786,8 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 
 | Field | Value |
 | --- | --- |
-| Held-out inputs | The 50 proof-free scripted physical prefixes drawn on [the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) by a preparer session that ran no arm, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json). PR #449 is that freeze, and this re-binding is stacked on it |
-| Seed band | 6000–6999 drawn ascending, first 50 passing prefixes; accepted seeds run 6000–6058 with 9 skips, all `witnessed_kill`. Two earlier bands are development data since the stopped run of their date rendered their first seed, and each freeze record is kept beside this one, marked `development`, rather than deleted: 3000-3999 since 2026-09-10, as [held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json), and 5000-5999 since 2026-09-13, as [held-out/manifest-band-5000-5999.json](held-out/manifest-band-5000-5999.json) |
+| Held-out inputs | The 50 proof-free scripted physical prefixes drawn on [the fourth freeze card](../../tasks/work/held-out-prefix-freeze-4.md) by a preparer session that ran no arm, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json). PR #456 is that freeze, and this re-binding is stacked on it |
+| Seed band | 7000–7999 drawn ascending, first 50 passing prefixes; accepted seeds run 7001–7057 with 8 skips, all `witnessed_kill`. Three earlier bands are development data since a stopped run of their date rendered a prefix of theirs, and each freeze record is kept beside this one, marked `development`, rather than deleted: 3000-3999 since 2026-09-10, as [held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json); 5000-5999 since 2026-09-13, as [held-out/manifest-band-5000-5999.json](held-out/manifest-band-5000-5999.json); and 6000-6999 since 2026-09-13, as [held-out/manifest-band-6000-6999.json](held-out/manifest-band-6000-6999.json), whose stopped run of that date rendered seeds 6000 and 6001 — the band this row bound until the fourth freeze marked it `development` on 2026-09-14 |
 | Seed list | Published in the freeze manifest's `accepted[]`. The prefixes themselves are NOT committed anywhere: the runner regenerates them with `experiments.held_out_prefixes.generate()` and refuses to proceed if any digest or skip differs |
 | Development inputs | The seven hand-authored cases in `experiments/deduction_scenarios.py`, seed 1 by construction. Their digests are recorded in the freeze manifest and asserted absent from `accepted[]` |
 | Legal schedules | Each prefix is replayed through the engine, which accepts or rejects every step; a prefix whose hashed steps the engine did not resolve step for step never gets a digest |
@@ -1319,7 +1344,7 @@ rendered prompt after each unit, and over the emitted report; a match is a stop.
 
 | Role | Session |
 | --- | --- |
-| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm. A second session, dispatched on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) after the stopped run of 2026-09-10 rendered a prefix of the first band, drew 5000-5999 with the same generator, marked the first record `development` rather than deleting it, and opened PR #446. A third, dispatched on [the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) after the stopped run of 2026-09-13 rendered a prefix of the second, drew 6000-6999 the same way, marked the second record `development`, and opened PR #449. None of the three ran an arm |
+| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm. A second session, dispatched on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) after the stopped run of 2026-09-10 rendered a prefix of the first band, drew 5000-5999 with the same generator, marked the first record `development` rather than deleting it, and opened PR #446. A third, dispatched on [the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) after the stopped run of 2026-09-13 rendered a prefix of the second, drew 6000-6999 the same way, marked the second record `development`, and opened PR #449. A fourth, dispatched on [the fourth freeze card](../../tasks/work/held-out-prefix-freeze-4.md) after the stopped run of 2026-09-13 rendered two prefixes of the third, drew 7000-7999 the same way, marked the third record `development`, and opened PR #456. None of the four ran an arm |
 | Runner | A separate session dispatched on [the instrument card](../../tasks/work/fresh-deduction-instrument.md), started after that merge. It regenerates the set from the frozen band, verifies the committed hashes, and opens no prefix: no prefix is printed, logged or written into any report, and `assert_report_holds_no_prefix_bytes` refuses a report that carries one |
 | Coordinator | Dispatches both and runs neither |
 
@@ -1331,9 +1356,13 @@ longer held out.
 
 ## Verification of this manifest
 
-The offline mechanics check, on the third held-out band. Run on this branch at
-`f0574950`, the last commit that moves an instrument or test byte; only this
-document and the card move after it, and the dry run reads neither:
+The offline mechanics check, re-made on the FOURTH held-out band under the
+ceilings and the caps this document now binds. Run on this branch at the commit
+that re-binds the Inputs table; that hash is named in
+[the limits card](../../tasks/work/fresh-deduction-limits-4.md)'s Results
+rather than here, because a commit cannot carry its own hash — the reason the
+amendment entries above record — and only that card's `## Acceptance` and
+`## Results` move after it, neither of which the dry run reads:
 
 ```sh
 uv run python -m experiments.fresh_deduction_instrument --dry-run
@@ -1341,24 +1370,27 @@ uv run python -m experiments.fresh_deduction_instrument --dry-run
 
 100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in about two
 seconds of wall, written to the temporary directory the run makes for itself.
-Both arms carried a non-SKIP decision to a graded outcome on all 50 of their
-units — 50 terminal units and no partial one — with 50 ejections each, 15
-role-correct, 35 wrongful, 15 supported-correct, 150 supported ballots and 5
-guard-rewritten ones per arm, and 100 ballots naming the ejected player. The
-report carries the sampling configuration it drew at (`turn_temperature` 0.4,
-`vote_temperature` 0.2, caps 2,048 / 1,024 — the caps this manifest bound until
-the fourth authorization below raised the turn cap to 4,096). Input tokens by
-the fake
-provider's `len // 4` heuristic were 894,018 (`repaired_clock`) and 587,054
+Every one of the 300 ballots an arm cast was a non-SKIP decision — 150 supported
+ballots and 2 guard-rewritten ones per arm — and 49 of each arm's 50 units
+reached a graded terminal outcome: 49 ejections each, 13 role-correct, 36
+wrongful, 13 supported-correct, and 98 ballots naming the ejected player, two
+per ejection. The remaining unit of each arm is graded `partial`, and that is a
+fixture outcome rather than a stop: its three ballots named three different
+players, so no majority formed, nobody was ejected and the game did not end at
+the meeting. The run completed all 100 units. The report carries the sampling
+configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
+4,096 / 1,024 — the caps the fourth authorization above raised the turn half of)
+and the limits it ran under (3,710,000 / 459,000 run-level, 106,000 / 16,000 per
+unit), so this is the first mechanics check made under the authorized ceilings
+themselves rather than under a proposal. Input tokens by the fake provider's
+`len // 4` heuristic were 895,883 (`repaired_clock`) and 608,664
 (`combined_accounts`); applying the decision memo's calibrated 1.28x real-input
-ratio to their sum (1,481,072) gives about 1.90 M against the 2.4 M ceiling of
-the day (51% of the 3,710,000 this manifest now binds),
-and the larger arm's 17,880 per unit gives about 22,900 against the 45,000
-per-unit ceiling of the day (22% of the 106,000 now) — headroom checks, not
-predictions, because a real model writes a different transcript. The dry run is
-re-made on the fourth band, at the raised cap, by the round of this card that
-re-binds the Inputs table; the figures above are the third band's and are the
-ones this section carried when they were measured.
+ratio to their sum (1,504,547) gives about 1.93 M against the 3,710,000 this
+manifest binds (52%), and the larger arm's 17,918 per unit gives about 22,900
+against the 106,000 per-unit ceiling (22%) — headroom checks, not predictions,
+because a real model writes a different transcript. The figures this paragraph
+carried before this re-binding were the third band's, measured at `f0574950`;
+they are superseded with that band by the paragraph you are reading.
 
 **The output dimension, measured rather than assumed (2026-09-13).** The
 paragraph above is an INPUT headroom check, and until this amendment it was the
@@ -1394,6 +1426,22 @@ and what the re-sizing of 2026-09-14 answers. Input is 2,088,059: 56.3% of the
 replays the refusal rate its archives carry — two of its nine archived turns —
 as 33 defaulted turns across its 150, against none on the reference arm.
 
+**The same rehearsal under THIS table's own ceilings, on the fourth band
+(2026-09-14).** The paragraph above runs under the diagnosis's proposal, which
+is not what the owner authorized. Since the fourth authorization the gate
+accepts `AUTHORIZED_LIMITS`, so the rehearsal can be made under the authorized
+ceilings themselves, and it is —
+`tests/experiments/test_fresh_deduction_instrument.py::TestUsageReplay::test_the_rehearsal_is_green_under_the_fourth_authorizations_limits`,
+600 calls over 100 units at $0.00, `assert_limits_are_feasible` cleared first
+and 49 terminal units with one `partial` on each arm, the fourth band's own
+shape. The token totals are the paragraph above's to the token, and that is the
+point rather than a coincidence: the double replays an archived distribution
+keyed by arm and call type, so what it charges depends on which arm and which
+call type asked, never on which prefix the unit ran. The headroom figures above
+therefore survive the re-binding from the third band to the fourth without
+being re-measured, and the figures that do depend on the prefixes — the fake
+provider's input heuristic — are re-measured in the dry-run paragraph instead.
+
 Under the limits and the turn cap this manifest bound until the fourth
 authorization, the same rehearsal stops where the live
 run of 2026-09-13 stopped and says the same thing: `LLM budget exceeded on
@@ -1428,18 +1476,19 @@ fixture's own model, so a retried run cannot read as a clean one. What the
 bound does once the retries are exhausted is established by its planted cases,
 not by this run.
 
-The figures this section carried before the re-bindings of 2026-09-10 and
-2026-09-13 were measured on the 3000-3999 and 5000-5999 bands. They are
-superseded with those bands and are not re-run: both are development data, and
-a dry run over either would measure a set this manifest no longer authorizes.
+The figures this section carried before the re-bindings of 2026-09-10,
+2026-09-13 and 2026-09-14 were measured on the 3000-3999, 5000-5999 and
+6000-6999 bands. They are superseded with those bands and are not re-run: all
+three are development data, and a dry run over any of them would measure a set
+this manifest no longer authorizes.
 
 The relevance amendment costs this fixture no unit on this band either, and the
-figures say so more directly than on the first two: the dry-run provider
-produced four off-target citations per arm across its 100 naming ballots, and
-supported-correct is still the same 15 as role-correct, so the rule removed no
-role-correct ejection here. That the rule bites at all is established by its
-planted cases, not by this run — the fixture cites the transcript's last turn
-whatever it says, so what it exercises is the path, not the judgment.
+figures say so more directly than on any band before it: the dry-run provider
+produced no off-target citation at all on either arm across its 98 naming
+ballots, and supported-correct is the same 13 as role-correct, so the rule
+removed no role-correct ejection here. That the rule bites at all is established
+by its planted cases, not by this run — the fixture cites the transcript's last
+turn whatever it says, so what it exercises is the path, not the judgment.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; it establishes

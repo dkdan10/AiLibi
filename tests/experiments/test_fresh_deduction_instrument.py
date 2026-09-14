@@ -4205,10 +4205,19 @@ class TestExecutionManifest:
             "3 x 4,096 + 3 x 1,024 = 15,360",
             "the per-unit output ceiling is 16,000 and not the 14,000",
             "`CALIBRATION_SAMPLING` freezes the calibration's draw",
-            "still binds the 6000-6999 band",
+            "Round-3 re-binding, same date",
         ):
             assert stated in section, stated
         assert f"turn {instrument.AUTHORIZED_TURN_MAX_TOKENS:,} output" in section
+        # The round-3 entry closes the two obligations the entry above opened,
+        # and it has to say so in the band the generator actually draws rather
+        # than in a span retyped here: the Inputs row below is re-bound to it,
+        # and a document that recorded a different one would be describing a
+        # re-binding nobody made.
+        assert (
+            f"now binds {PREREGISTERED_BAND.first_seed}-"
+            f"{PREREGISTERED_BAND.last_seed}" in section
+        )
         commits = re.findall(r"\*\*2026-09-14[^(*]*\(`([0-9a-f]{7,40})`\)", section)
         assert len(commits) == 1
         if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
@@ -4366,6 +4375,39 @@ class TestExecutionManifest:
             f"{manifest['last_accepted_seed']}" in text
         )
         assert f"{manifest['skipped_reason_counts']['witnessed_kill']} skips" in text
+
+    def _seed_band_row(self) -> str:
+        row = re.search(r"^\|\s*Seed band\s*\|.*$", self._text(), re.MULTILINE)
+        assert row is not None, "the Inputs table carries no Seed band row"
+        return row.group(0)
+
+    def test_the_inputs_row_names_every_converted_band(self) -> None:
+        """The row that binds one band has to account for the ones it replaced.
+
+        A re-binding leaves a band behind, and the reason it was left behind is
+        that a run rendered its prefixes: that is what makes it development
+        data rather than a spare held-out set. A row that named only the band
+        it now binds would let a reader take a converted band for an unused
+        one, so the row names each of them, its date and the record it now
+        lives in — read here off `CONVERTED_BANDS` and off each record's own
+        `converted` block rather than from a list written down in this test, so
+        the NEXT conversion turns this red instead of leaving the document one
+        band behind.
+        """
+
+        row = self._seed_band_row()
+        for converted in CONVERTED_BANDS:
+            record = json.loads(
+                (_REPO_ROOT / converted.manifest_path).read_text(encoding="utf-8")
+            )
+            span = f"{converted.band.first_seed}-{converted.band.last_seed}"
+            assert span in row, f"the Seed band row does not name {span}"
+            assert record["converted"]["date"] in row, (
+                f"the Seed band row names {span} without the date it became "
+                "development data"
+            )
+            name = Path(converted.manifest_path).name
+            assert name in row, f"the Seed band row names {span} but not {name}"
 
     def test_a_binding_to_a_converted_record_stays_an_open_obligation(self) -> None:
         """A development record may be bound only while the re-binding is open.
@@ -4887,6 +4929,64 @@ class TestUsageReplay:
         candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
         assert f"{candidate.defaulted_turns} defaulted turns" in manifest
         assert candidate.defaulted_turns > 0
+
+    def test_the_rehearsal_is_green_under_the_fourth_authorizations_limits(
+        self, tmp_path: Path
+    ) -> None:
+        """The same 100 units under the ceilings and caps this run is AUTHORIZED at.
+
+        The rehearsal above runs under the re-sizing the diagnosis PROPOSES,
+        which is not what the owner bound: until the fourth authorization
+        `assert_limits_are_feasible` refused `AUTHORIZED_LIMITS` outright, so no
+        rehearsal of the whole pipeline could be made under them at all. It can
+        now, and this is it — the authorized ceilings, the authorized caps, on
+        whatever band the live freeze record holds, which is the fourth since
+        that freeze merged. It clears the feasibility gate, completes at $0 and
+        stays inside every ceiling it was measured against.
+
+        The per-arm totals are the ones the manifest's output-headroom paragraph
+        quotes, and that is the band-independence claim the re-binding rests on:
+        the double answers from an archived distribution keyed by arm and call
+        type, so what it charges cannot depend on which prefix a unit ran. The
+        figures that DO depend on the prefixes are the fake provider's, and they
+        are re-measured on the new band by
+        `TestDryRun.test_the_mechanics_check_paragraph_quotes_the_run_it_describes`.
+        """
+
+        instrument.assert_limits_are_feasible()
+        double = UsageReplayProvider()
+        report = run_dry(
+            output_dir=tmp_path,
+            client=double,
+            limits=AUTHORIZED_LIMITS,
+            sampling=AUTHORIZED_SAMPLING,
+        )
+        assert double.attempts == 600
+        assert report.total_cost_usd == 0.0
+        assert report.limits == AUTHORIZED_LIMITS
+        assert report.sampling == AUTHORIZED_SAMPLING
+        assert [arm.units for arm in report.arms] == [50, 50]
+        for arm in report.arms:
+            assert arm.units == arm.terminal_units + arm.partial_units
+            assert (
+                arm.output_tokens / arm.units < AUTHORIZED_LIMITS.unit_max_output_tokens
+            )
+            assert (
+                arm.input_tokens / arm.units < AUTHORIZED_LIMITS.unit_max_input_tokens
+            )
+        assert (
+            sum(arm.output_tokens for arm in report.arms)
+            < AUTHORIZED_LIMITS.run_max_output_tokens
+        )
+        assert (
+            sum(arm.input_tokens for arm in report.arms)
+            < AUTHORIZED_LIMITS.run_max_input_tokens
+        )
+        manifest = _MANIFEST.read_text(encoding="utf-8")
+        for arm in report.arms:
+            assert f"{arm.input_tokens:,}" in manifest, arm.arm
+            assert f"{arm.output_tokens:,}" in manifest, arm.arm
+            assert f"{arm.terminal_units} terminal units" in manifest, arm.arm
 
     def test_a_call_type_blind_sampler_manufactures_a_truncation(
         self, tmp_path: Path
@@ -6703,6 +6803,61 @@ class TestDryRun:
             assert arm.supported_correct_ejections > 0
             assert arm.ballot_verdicts["supported"] > 0
         assert "says nothing about model judgment" in report.caveat
+
+    def test_the_mechanics_check_paragraph_quotes_the_run_it_describes(
+        self, tmp_path: Path
+    ) -> None:
+        """The manifest's dry-run figures, re-derived from the dry run itself.
+
+        These are the figures a re-binding actually moves: the fake provider
+        reads each prompt, so its input heuristic and its graded counts are
+        the BAND's and not the fixture's, and the paragraph carrying the third
+        band's numbers under a row bound to the fourth would be a document
+        describing a set it no longer authorizes. Every number quoted there is
+        asserted here against the report, so the next re-binding turns this red
+        rather than leaving the section stale.
+
+        The command the paragraph names is this run without the temporary
+        directory (`run_dry` makes its own), under the same authorized limits
+        and caps, which is why it is measured here rather than described.
+        """
+
+        report = run_dry(output_dir=tmp_path)
+        assert report.limits == AUTHORIZED_LIMITS
+        assert report.sampling == AUTHORIZED_SAMPLING
+        manifest = _MANIFEST.read_text(encoding="utf-8")
+        paragraph = " ".join(
+            manifest[
+                manifest.index("## Verification of this manifest") : manifest.index(
+                    "**The output dimension"
+                )
+            ].split()
+        )
+        for arm in report.arms:
+            assert f"{arm.input_tokens:,}" in paragraph, arm.arm
+            assert f"{arm.ejections} ejections" in paragraph, arm.arm
+            assert f"{arm.role_correct} role-correct" in paragraph, arm.arm
+            assert f"{arm.wrongful_ejections} wrongful" in paragraph, arm.arm
+            assert (
+                f"{arm.supported_correct_ejections} supported-correct" in paragraph
+            ), arm.arm
+            assert (
+                f"{arm.naming_ballots} ballots naming the ejected player" in paragraph
+            ), arm.arm
+            assert (
+                f"{arm.ballot_verdicts['supported']} supported ballots" in paragraph
+            ), arm.arm
+            assert (
+                f"{arm.ballot_verdicts['guard_rewritten']} guard-rewritten" in paragraph
+            ), arm.arm
+            assert (
+                f"{arm.terminal_units} of each arm's {arm.units} units" in paragraph
+            ), arm.arm
+            assert arm.terminal_units + arm.partial_units == arm.units
+        larger = max(report.arms, key=lambda arm: arm.input_tokens)
+        total = sum(arm.input_tokens for arm in report.arms)
+        assert f"{total:,}" in paragraph
+        assert f"{round(larger.input_tokens / larger.units):,} per unit" in paragraph
 
     def test_the_full_dry_run_survives_one_empty_completion(
         self, tmp_path: Path
