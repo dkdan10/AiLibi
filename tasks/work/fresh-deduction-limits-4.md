@@ -32,6 +32,14 @@ converts to development.
 
 ## Acceptance
 
+- [x] Review correction: the Limitations no longer claim the re-sized run
+  ceilings clear both per-unit output figures. They clear the archived 3,116
+  (315,696 <= 459,000) and not the calibration's 4,590 (463,096 > 459,000), so
+  the stale usage profile is load-bearing; the residual is recorded in the
+  manifest's dated section, held by
+  `test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit`
+  and handed back to the authorization card and the owner, since 459,000 is not
+  this card's to move.
 - [x] Review correction: the fourth freeze is merged into this branch and the
   pull request is retargeted onto `work/held-out-prefix-freeze-4`, so the
   raised ceilings cannot reach `main` ahead of the band they are authorized
@@ -123,7 +131,7 @@ a check.
 
 ## Results
 
-The four review-correction items and the three original items 1, 2 and 5 are
+The five review-correction items and the three original items 1, 2 and 5 are
 done; items 3 and 4 are open, so the card is `active`.
 [The fourth freeze](held-out-prefix-freeze-4.md) is now merged into this branch
 and the pull request is retargeted onto `work/held-out-prefix-freeze-4`, which
@@ -180,7 +188,7 @@ test compares its recorded `sampling` block to the constant). No second
 calibration is authorized by anything here; sizing a run that draws at 4,096
 would need its own calibration and its own ceilings, on a card.
 
-### Planted and perturbed cases (pinned to `c97cc075`)
+### Planted and perturbed cases (pinned to `976f7a6b`)
 
 Each is the claimed defect reintroduced, and each turns the gate red. Run from
 the repository root with the change applied, then reverted.
@@ -196,7 +204,7 @@ the repository root with the change applied, then reverted.
    ```
    E  experiments.fresh_deduction_instrument.LimitsInfeasible: the per-unit output ceiling is 4,000 tokens and one unit reserves 15,360 (3 x 4,096 + 3 x 1,024): this run authorizes calls it cannot pay for, and the budget would refuse one of them on the reservation rather than on the spend
    FAILED ...::TestFeasibility::test_the_gate_accepts_the_fourth_authorizations_limits
-   1 failed, 310 deselected
+   1 failed, 311 deselected
    ```
 
    The same defect is held from the other side by
@@ -212,10 +220,11 @@ the repository root with the change applied, then reverted.
    ```
 
    ```
+   E  experiments.fresh_deduction_instrument.LimitsInfeasible: the per-unit output ceiling is 12,000 tokens and one unit reserves 15,360 ...
    E  assert 4096 == 2048
    FAILED ...::TestCalibrationGate::test_the_feasibility_gate_accepts_the_calibration_at_its_own_caps
    FAILED ...::TestAuthorizedConstants::test_the_calibration_kept_the_caps_it_drew_at
-   2 failed, 309 deselected
+   2 failed, 310 deselected
    ```
 
 3. The dated manifest section's reservation arithmetic replaced by a phrase
@@ -229,7 +238,7 @@ the repository root with the change applied, then reverted.
    ```
    E  AssertionError: 3 x 4,096 + 3 x 1,024 = 15,360
    FAILED ...::TestExecutionManifest::test_the_fourth_authorization_section_records_the_change_and_its_basis
-   1 failed, 310 deselected
+   1 failed, 311 deselected
    ```
 
 4. The run-level reservation term removed from the feasibility gate
@@ -239,19 +248,24 @@ the repository root with the change applied, then reverted.
    ```
    .venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
      -q -p no:randomly \
-     -k "run_output_ceiling_sized_at_exactly_its_units or run_ceiling_below_its_own_units"
+     -k "run_output_ceiling_sized_at_exactly_its_units or run_ceiling_below_its_own_units \
+         or calibrations_largest_unit"
    ```
 
    ```
    E  Failed: DID NOT RAISE <class 'experiments.fresh_deduction_instrument.LimitsInfeasible'>
    FAILED ...::TestFeasibility::test_a_run_ceiling_below_its_own_units_is_refused[run_max_output_tokens-output-4096]
    FAILED ...::TestFeasibility::test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused
-   2 failed, 1 passed, 308 deselected
+   FAILED ...::TestFeasibility::test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit
+   3 failed, 1 passed, 308 deselected
    ```
 
    The INPUT case of the same parametrisation stays green under the
    perturbation, which is what says the term belongs to the output dimension
-   alone rather than to both.
+   alone rather than to both. The third failure is round 2's case, below: it
+   plants the usage profile refreshed to the calibration's own figures, and the
+   same missing term is what would let 459,000 pay for a hundred units at
+   4,590.
 
 5. The manifest's reservation-policy quotation paraphrased (the run-level
    turn-cap sentence replaced by "the run-level OUTPUT ceiling also carries
@@ -265,7 +279,7 @@ the repository root with the change applied, then reverted.
    ```
    E  assert "The token ceilings are enforced on RESERVED spend ... rather than a cap." in '### How each limit is enforced ...'
    FAILED ...::TestExecutionManifest::test_the_enforcement_section_quotes_the_reservation_policy
-   1 failed, 310 deselected
+   1 failed, 311 deselected
    ```
 
 A sixth case is already committed rather than demonstrated by hand: the
@@ -276,31 +290,36 @@ than a silent second distribution.
 
 ### Verification
 
-Every command below was run on this branch at `c97cc075`, which carries the
-whole change: the merge of [the fourth freeze](held-out-prefix-freeze-4.md),
-every instrument, test and manifest byte, the recomputed `docs/artifacts.md`
-audits row and the recomputed task index. The ONLY bytes that move after it are
-this card's `## Acceptance` and `## Results`, so every figure in the table
-reproduces at `c97cc075` and again at the head; `validate_task_docs.py` and
-`check.sh` were re-run after this card's own commit and returned the same
-results. No command below reads a held-out prefix.
+Every command below was re-run on this branch at `976f7a6b`, round 2's commit,
+which carries the whole change: the merge of
+[the fourth freeze](held-out-prefix-freeze-4.md), every instrument, test and
+manifest byte, the recomputed `docs/artifacts.md` audits row and the recomputed
+task index. The ONLY bytes that move after it are this card's `## Acceptance`
+and `## Results`, so every figure in the table reproduces at `976f7a6b` and
+again at the head; `validate_task_docs.py` and `check.sh` were re-run after this
+card's own commit and returned the same results. The two counts that moved from
+round 1's table are the test the round-2 correction adds (392 to 393 in
+`tests/experiments`, 7,704 to 7,705 under `check.sh`). No command below reads a
+held-out prefix.
 
 | Command | Result |
 | --- | --- |
-| `uv run pytest tests/experiments -q` | 392 passed (fake and replay providers only; no live call) |
+| `uv run pytest tests/experiments -q` | 393 passed (fake and replay providers only; no live call) |
 | `uv run python scripts/validate_task_docs.py` | pass (55 work cards) |
 | `uv run python scripts/check_doc_facts.py` | pass |
 | `uv run python scripts/verify_ml_evidence.py` | 60 checks, 48 OK, 0 FAIL, 7 EVIDENCE-BRANCH-ABSENT, 5 INFO |
 | `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
 | `bash scripts/verify_samples.sh` | 4p1i and 9p2i, all 50 samples each, clean |
 | `scripts/build_sample_report.py --sample-dir <set> --check` x 4 | `replays/samples/{4p1i,9p2i}` and `replays/ml_corpus/{4p1i,9p2i}` all consistent with their replays |
-| `bash scripts/check.sh` | exit 0: 7,704 passed / 20 skipped / 3 xfailed, 515 frontend tests, strict mypy over 477 files, ruff clean, production build |
+| `bash scripts/check.sh` | exit 0: 7,705 passed / 20 skipped / 3 xfailed, 515 frontend tests, strict mypy over 477 files, ruff clean, production build |
 
 `docs/artifacts.md`'s `audits/` row is recomputed for the merged tree and the
-manifest's changed bytes: 15,090,348 tracked bytes over 211 files, the file
-count moving because the freeze merged in adds
-`held-out/manifest-band-6000-6999.json`. The task index's derived inventory is
-recomputed for the same merge (1 ready, 2 active, 52 done).
+manifest's changed bytes — round 1's and round 2's: 15,091,970 tracked bytes
+over 211 files, the file count moving because the freeze merged in adds
+`held-out/manifest-band-6000-6999.json` and the byte count moving again with the
+round-2 paragraph the manifest's dated section gains. The task index's derived
+inventory is recomputed for the same merge (1 ready, 2 active, 52 done) and does
+not move in round 2, because no card's Status flips.
 
 ### Limitations
 
@@ -318,10 +337,23 @@ recomputed for the same merge (1 ready, 2 active, 52 done).
 - `tests/experiments/deduction_usage_profile.json` is unchanged, so
   `CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` are still
   the three stopped live runs' largest unit (24,282 / 3,116) rather than the
-  calibration's (35,232 / 4,590). The re-sized run ceilings clear both figures,
-  so the gate is not weakened by it; refreshing the profile is the open question
-  [the calibration card](fresh-deduction-calibration.md)'s Results hands back,
-  and it is not this card's.
+  calibration's (35,232 / 4,590). The stale profile is LOAD-BEARING, not
+  neutral: the run-level OUTPUT ceiling clears the archived figure
+  (100 x 3,116 + 4,096 = 315,696 against 459,000) but NOT the calibration's
+  (100 x 4,590 + 4,096 = 463,096 against the same 459,000), so the corrected
+  gate accepts `AUTHORIZED_LIMITS` on the archived figure alone. 459,000 is a
+  hundred units at 4,590 to the token — exactly the shape this card's own
+  `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused` declares
+  infeasible. The INPUT dimension clears either figure (100 x 35,232 =
+  3,523,200 against 3,710,000), so the residual is one comparison wide. This
+  card may not move 459,000 — it is the owner's, on
+  [the fourth authorization card](fresh-deduction-authorization-4.md) — so the
+  residual is handed back there and to the owner, alongside the profile refresh
+  [the calibration card](fresh-deduction-calibration.md)'s Results already left
+  open; `test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit`
+  holds it so it cannot be lost. Codex's second P1 is therefore repaired in the
+  gate but not fully closed in the numbers, and round 2 below says which half is
+  which.
 - `assert_calibration_is_authorized` now refuses a live calibration drawn at the
   run's cap. Nothing is authorized to run one, so this is a closed door rather
   than a regression, but it is stated: a future calibration needs a card that
@@ -402,3 +434,63 @@ Nothing else in this round touches a recording, a report, a DTO, a weight or a
 default-path byte; no experiment becomes ON; `experiments/held_out_prefixes.py`
 is unedited by this card and arrives only through the merge; no prefix is
 printed, opened or committed, and no provider call is made.
+
+### Review corrections, round 2 (2026-09-14)
+
+One blocking finding, and it holds. The round-1 entry above reported Codex's
+second P1 closed; it is closed in the gate and not in the numbers, and the
+Limitations said the opposite.
+
+**"The re-sized run ceilings clear both figures" was false on the OUTPUT
+dimension.** The corrected run-level bound is 315,696 only because
+`CALIBRATED_UNIT_OUTPUT_TOKENS` is the three stopped runs' archived 3,116. The
+ceiling this authorization binds was sized from the OTHER figure — the
+calibration of 2026-09-14's largest measured unit, 4,590 — and 100 x 4,590 is
+459,000 to the token, which is exactly the shape
+`test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused` declares
+infeasible. Forcing the two calibrated constants to the calibration's own
+figures at `976f7a6b` refuses `AUTHORIZED_LIMITS`:
+
+```
+.venv/bin/python -c "from experiments import fresh_deduction_instrument as i; \
+  i.CALIBRATED_UNIT_OUTPUT_TOKENS = 4590; i.CALIBRATED_UNIT_INPUT_TOKENS = 35232; \
+  i.assert_limits_are_feasible()"
+```
+
+```
+experiments.fresh_deduction_instrument.LimitsInfeasible: the run-level output ceiling is 459,000 tokens and 100 units at the largest unit the live archives charged (4,590), plus the 4,096 its last call reserves against the run budget on top of them, need 463,096: a run this long would stop on the run ceiling rather than on its own evidence
+```
+
+The INPUT dimension clears either figure (100 x 35,232 = 3,523,200 against
+3,710,000), so the residual is one comparison wide. The consequence for this
+card's claims is the one the finding names: the gate accepts `AUTHORIZED_LIMITS`
+on the archived figure ALONE, so the stale usage profile is load-bearing rather
+than neutral, and the Limitations bullet now says that in those words rather
+than claiming both figures clear.
+
+**What this round does and does not repair.** It does not move 459,000: that
+number is the owner's, copied verbatim from
+[the fourth authorization card](fresh-deduction-authorization-4.md)'s
+Constraints table, and this card's Constraints bind it. A residual that only a
+new authorized ceiling can close is therefore handed back rather than papered
+over — to that card and to the owner, alongside the profile refresh
+[the calibration card](fresh-deduction-calibration.md)'s Results already left
+open. Whichever of the two is done first, the other has to follow, because the
+ceiling and the profile are the two sides of one comparison: a refresh without a
+raise turns `test_the_gate_accepts_the_fourth_authorizations_limits` red, and a
+raise without a refresh leaves the gate checking a figure the calibration has
+superseded. Three mechanisms hold it so it cannot be lost:
+`test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit`
+plants the refresh and requires the refusal (reading both measured figures off
+the committed `calibration-2026-09-14/calibration.json` rather than restating
+them, and asserting `100 x 4,590 == 459,000` so the case dissolves the day the
+ceiling moves); the manifest's dated section gains a "Round-2 review
+correction" paragraph a runner reads before the run; and the Limitations bullet
+states which half of Codex's second P1 is closed.
+
+Nothing else in this round moves: no authorized figure, no recording, report,
+DTO or weight byte, no default-path byte, no experiment to ON,
+`experiments/held_out_prefixes.py` unedited, no prefix printed, opened or
+committed, and no provider call. `docs/artifacts.md`'s `audits/` row is
+recomputed for the manifest's new bytes and the Verification section above is
+re-run and repinned to `976f7a6b`.
