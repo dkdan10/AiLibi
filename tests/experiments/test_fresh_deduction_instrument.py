@@ -3913,6 +3913,63 @@ class TestDryRun:
             assert arm.ballot_verdicts["supported"] > 0
         assert "says nothing about model judgment" in report.caveat
 
+    def test_the_full_dry_run_survives_one_empty_completion(
+        self, tmp_path: Path
+    ) -> None:
+        """The whole pipeline over the frozen set, with one call answered emptily.
+
+        The retry's other cases are single units against a double; this is the
+        run the card owes: 600 calls, one of which comes back with no
+        completion, and the question is whether anything but the counters
+        moves. Nothing does — the graded fields, the ballots and the token
+        totals are the clean run's, because an attempt that produced nothing
+        produced nothing to grade or to charge — and the retried arm is
+        readable as retried from its `model_ids` alone.
+        """
+
+        clean = run_dry(output_dir=tmp_path / "clean")
+        double = NoCompletionProvider(mode="empty_body", failures=1)
+        retried = run_instrument(
+            output_dir=tmp_path / "retried", client=double, provider="fake"
+        )
+
+        assert retried.total_cost_usd == 0.0
+        assert retried.paired.paired_units == clean.paired.paired_units
+        # One send more than the run has calls: one attempt, one retry, done.
+        assert double.attempts == 601
+        assert instrument.UNACCOUNTED_ATTEMPT_MODEL in retried.model_ids
+
+        spoiled, untouched = retried.arms[0], retried.arms[1]
+        assert spoiled.retried_calls == 1
+        assert spoiled.unaccounted_attempts == 1
+        assert spoiled.units_with_retries == 1
+        assert dict(spoiled.attempts_by_trigger) == {"empty_completion": 1}
+        assert untouched.retried_calls == 0
+        assert dict(untouched.attempts_by_trigger) == {}
+
+        graded = (
+            "units",
+            "ejections",
+            "role_correct",
+            "wrongful_ejections",
+            "supported_correct_ejections",
+            "naming_ballots",
+            "off_target_citations",
+            "terminal_units",
+            "partial_units",
+            "input_tokens",
+            "output_tokens",
+        )
+        for before, after in zip(clean.arms, retried.arms, strict=True):
+            assert after.arm == before.arm
+            for field in graded:
+                assert getattr(after, field) == getattr(before, field), field
+            assert after.ballot_verdicts == before.ballot_verdicts
+        # The one thing that does move: the unaccounted attempt occupies a row,
+        # so the arm's calls exceed its completions by exactly that attempt.
+        assert spoiled.calls == clean.arms[0].calls + 1
+        assert untouched.calls == clean.arms[1].calls
+
     def test_the_dry_run_writes_nothing_outside_the_directory_it_is_given(
         self, tmp_path: Path
     ) -> None:
