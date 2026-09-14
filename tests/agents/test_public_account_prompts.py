@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, cast, get_args
 
 import pytest
 from jinja2 import DictLoader, Environment
+from pydantic import ValidationError
 
 from agents.strategic.prompts import (
     build_prompt_renderers,
@@ -572,7 +574,303 @@ def test_the_withheld_channel_still_gets_an_answerable_reply_instruction() -> No
     )
     assert "Answer in free text; make an accusation claim or stay unsure" in statement
     # The two things it is asked for are the two the schema still accepts on
-    # this arm: free text and an accusation claim.
+    # this arm: free text and an accusation claim. The turn sketch says so in
+    # the object itself -- observations stay empty, and the one claim the arm
+    # offers is named in the list that carries it.
     assert not _advertised_kinds(statement) & _OBSERVATION_KINDS
     assert "accusation" in _CLAIM_KINDS
-    assert '"claims":[]' in statement and '"free_text":' in statement
+    assert '"observations":[]' in statement and '"free_text":' in statement
+    assert '"claims":[<one accusation claim, or empty>]' in statement
+
+
+# ---------------------------------------------------------------------------
+# Prompt / schema agreement: every advertised shape, in the list it is filed in
+# ---------------------------------------------------------------------------
+#
+# The turn schema discriminates by FIELD as well as by tag: `observations`
+# takes the `ObservationClaim` union (`whereabouts` among them) and `claims`
+# takes alibi / accusation / corroboration only. A menu that lists a shape
+# without naming its list therefore lets a well-formed answer land where
+# `MeetingTurn` refuses it -- which is what two archived live candidate turns
+# did, billed and refused on `claims[].type` with the tag `whereabouts`
+# (tasks/diagnosis-2026-09-13-live-run-stops.md). These tests read the
+# destinations out of the rendered prompt and check each advertised shape
+# against the schema at the place the prompt names, so the agreement is
+# asserted rather than reviewed.
+
+_TURN_FIELDS: tuple[str, str] = ("observations", "claims")
+_SHAPE = re.compile(r'\{\s*"type"\s*:\s*"(?P<kind>[a-z_]+)".*?\}')
+#: A line that declares which turn field the shapes under it belong to: it
+#: names exactly one of the two fields, carries no shape of its own, and ends
+#: in the colon that introduces the list.
+_DECLARES_FIELD = re.compile(r'^[^{]*"(?P<field>observations|claims)"[^{]*:\s*$')
+#: Quoted placeholder text -> a legal value of the field it stands for. The
+#: templates name what they want, so the value is chosen from the placeholder's
+#: own words rather than from a hand-maintained field table.
+_PLACEHOLDER_VALUES: tuple[tuple[str, str], ...] = (
+    ("room", "LABS"),
+    ("task", "fuel_reserves"),
+    ("player", "p-2"),
+    ("killer", "p-2"),
+)
+_BARE_PLACEHOLDERS: tuple[tuple[str, str], ...] = (("<int>", "4"), ("<0.0-1.0>", "0.6"))
+
+
+def _prompt_lines_without_transcript(prompt: str) -> list[str]:
+    """The prompt's own lines, minus the speaker-authored transcript block.
+
+    Everything between the fences is quoted speech and serialized rows other
+    players wrote; the prompt advertises nothing there, and a speaker must not
+    be able to add a shape to what this scan reads.
+    """
+
+    lines: list[str] = []
+    inside = False
+    for line in prompt.splitlines():
+        if line == "<transcript>":
+            inside = True
+        elif line == "</transcript>":
+            inside = False
+        elif not inside:
+            lines.append(line)
+    return lines
+
+
+def _sketch_list_body(line: str, field: str) -> str | None:
+    """The bracketed body of ``"<field>": [...]`` in a whole-turn sketch line."""
+
+    opening = re.search(rf'"{field}"\s*:\s*\[', line)
+    if opening is None:
+        return None
+    depth = 0
+    for index in range(opening.end() - 1, len(line)):
+        if line[index] == "[":
+            depth += 1
+        elif line[index] == "]":
+            depth -= 1
+            if depth == 0:
+                return line[opening.end() : index]
+    raise AssertionError(f"unbalanced {field!r} list in {line!r}")
+
+
+def _advertised_shapes(prompt: str) -> tuple[tuple[str, str, str], ...]:
+    """Every shape the prompt advertises, as (kind, turn field, sketch).
+
+    Two forms carry a destination: a one-line sketch of the whole turn object,
+    where a shape sits inside the ``"observations"`` or ``"claims"`` list, and
+    a declaration line that names one field and introduces the shapes beneath
+    it. A shape with neither raises: an advertised shape whose destination the
+    prompt never states is exactly the defect this reads for.
+    """
+
+    found: list[tuple[str, str, str]] = []
+    field: str | None = None
+    for line in _prompt_lines_without_transcript(prompt):
+        bodies = {name: _sketch_list_body(line, name) for name in _TURN_FIELDS}
+        if any(body is not None for body in bodies.values()):
+            for name, body in bodies.items():
+                if body is not None:
+                    found.extend(
+                        (match["kind"], name, match.group(0))
+                        for match in _SHAPE.finditer(body)
+                    )
+            continue
+        declaration = _DECLARES_FIELD.match(line)
+        if declaration is not None:
+            field = declaration["field"]
+            continue
+        matches = list(_SHAPE.finditer(line))
+        if not matches:
+            field = None
+            continue
+        if field is None:
+            raise AssertionError(
+                f"the prompt advertises {matches[0]['kind']!r} without naming the "
+                f"turn field it belongs in: {line!r}"
+            )
+        found.extend((match["kind"], field, match.group(0)) for match in matches)
+    return tuple(found)
+
+
+def _filled(sketch: str) -> dict[str, Any]:
+    """The advertised sketch as a payload, placeholders replaced by values."""
+
+    filled = sketch.replace(", ...", "")
+    for placeholder, value in _BARE_PLACEHOLDERS:
+        filled = filled.replace(placeholder, value)
+
+    def _quoted(match: re.Match[str]) -> str:
+        described = match.group(1)
+        for keyword, value in _PLACEHOLDER_VALUES:
+            if keyword in described:
+                return f'"{value}"'
+        return '"a short phrase"'
+
+    filled = re.sub(r'"<([^>]*)>"', _quoted, filled)
+    if "<" in filled or ">" in filled:
+        raise AssertionError(f"unfilled placeholder in {sketch!r}")
+    return cast(dict[str, Any], json.loads(filled))
+
+
+def _turn_payload(**lists: list[dict[str, Any]]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "turn_id": "m:turn-1",
+        "turn_index": 1,
+        "speaker": "p-1",
+        "turn_kind": "reply",
+        "reply_to": "m:turn-0",
+        "observations": [],
+        "claims": [],
+        "free_text": "My account.",
+    }
+    payload.update(lists)
+    return payload
+
+
+def _every_account_prompt(
+    *,
+    common: Literal[1] | None,
+    attributed: Literal[1] | None,
+    is_impostor: bool,
+) -> dict[str, str]:
+    renderers = build_prompt_renderers(
+        "qwen3_6_27b",
+        env={},
+        public_account_version=common,
+        attributed_testimony_version=attributed,
+    )
+    opening = renderers.impostor_report if is_impostor else renderers.crewmate_report
+    statement, vote = _account_prompts(
+        _spoken_turn("Where were you?"),
+        common=common,
+        attributed=attributed,
+        is_impostor=is_impostor,
+    )
+    return {
+        "opening": opening(**_opening_kwargs()),
+        "statement": statement,
+        "vote_ballot": vote,
+    }
+
+
+def _assert_every_shape_is_filed_where_the_schema_takes_it(
+    prompt: str, *, label: str
+) -> tuple[tuple[str, str, str], ...]:
+    """Validate each advertised sketch as a turn, in the list the prompt names.
+
+    The same item in the OTHER list must be refused: the two unions are
+    disjoint, so a misfiled shape is a refused turn -- which is why a prompt
+    that does not name the list is a defect rather than a style question.
+    """
+
+    shapes = _advertised_shapes(prompt)
+    for kind, field, sketch in shapes:
+        item = _filled(sketch)
+        turn = MeetingTurn.model_validate(_turn_payload(**{field: [item]}))
+        filed = getattr(turn, field)
+        assert [entry.type for entry in filed] == [kind], f"{label}: {sketch}"
+        other = _TURN_FIELDS[0] if field == _TURN_FIELDS[1] else _TURN_FIELDS[1]
+        with pytest.raises(ValidationError) as refused:
+            MeetingTurn.model_validate(_turn_payload(**{other: [item]}))
+        assert [error["type"] for error in refused.value.errors()] == [
+            "union_tag_invalid"
+        ], f"{label}: {sketch}"
+    return shapes
+
+
+@pytest.mark.parametrize("common,attributed", [(1, None), (None, 1), (1, 1)])
+@pytest.mark.parametrize("is_impostor", [False, True])
+def test_every_advertised_shape_is_accepted_in_the_list_the_prompt_names(
+    common: Literal[1] | None,
+    attributed: Literal[1] | None,
+    is_impostor: bool,
+) -> None:
+    # The agreement, shape by shape and arm by arm, over every account prompt
+    # an arm renders.
+    for name, prompt in _every_account_prompt(
+        common=common, attributed=attributed, is_impostor=is_impostor
+    ).items():
+        shapes = _assert_every_shape_is_filed_where_the_schema_takes_it(
+            prompt, label=name
+        )
+        if name == "vote_ballot" or (is_impostor and common is None):
+            # The ballot asks for a ballot, and the attributed-only impostor
+            # is asked to keep observations empty: neither advertises a shape.
+            assert shapes == ()
+        else:
+            assert ("whereabouts", "observations") in {
+                (kind, field) for kind, field, _ in shapes
+            }
+
+
+def test_the_shape_the_live_run_filed_in_claims_is_refused_exactly_as_recorded() -> (
+    None
+):
+    # The archived refusal, reproduced from the prompt that caused it: two
+    # candidate-arm turns were billed and refused on `claims[].type` with the
+    # tag `whereabouts`. The shape itself is legal -- it is the self-placement
+    # the accounts menu asks for -- so the record is a placement question, and
+    # the prompt now names `observations` as its list.
+    statement = _every_account_prompt(common=1, attributed=1, is_impostor=False)[
+        "statement"
+    ]
+    filed = {
+        field: _filled(sketch)
+        for kind, field, sketch in _advertised_shapes(statement)
+        if kind == "whereabouts"
+    }
+    assert set(filed) == {"observations"}
+    item = filed["observations"]
+    with pytest.raises(ValidationError) as refused:
+        MeetingTurn.model_validate(_turn_payload(claims=[item]))
+    (error,) = refused.value.errors()
+    assert error["type"] == "union_tag_invalid"
+    assert error["loc"] == ("claims", 0)
+    assert error["msg"] == (
+        "Input tag 'whereabouts' found using 'type' does not match any of the "
+        "expected tags: 'alibi', 'accusation', 'corroboration'"
+    )
+    accepted = MeetingTurn.model_validate(_turn_payload(observations=[item]))
+    assert [entry.type for entry in accepted.observations] == ["whereabouts"]
+
+
+@pytest.mark.parametrize(
+    "env,family",
+    [({}, "default"), ({"AILIBI_IMPOSTOR_ROLL_CALL": "1"}, "roll_call")],
+)
+@pytest.mark.parametrize("is_impostor", [False, True])
+@pytest.mark.parametrize("turn_kind", ["reply", "opt_in"])
+def test_the_other_live_turn_prompts_file_their_shapes_the_same_way(
+    env: dict[str, str],
+    family: str,
+    is_impostor: bool,
+    turn_kind: Literal["reply", "opt_in"],
+) -> None:
+    # The accounts arm is not the only family that asks for a roll-call
+    # answer: the diagnosis of 2026-09-13 names the impostor roll-call variant
+    # beside it, and the default set advertises the same shapes. Neither moves
+    # a byte here -- this reads them, so a later edit to either cannot drift
+    # the way the accounts menu did. The default set is checked on the same
+    # terms, which is the evidence that the default path was never ambiguous.
+    turn = _spoken_turn("Where were you?")
+    renderers = build_prompt_renderers("qwen3_6_27b", env=env)
+    prompt = renderers.statement(
+        agent_id="p-1",
+        rendered_memory="own memory",
+        transcript=MeetingTranscript(turns=(turn,)),
+        contradictions=(),
+        prior_turn=turn if turn_kind == "reply" else None,
+        turn_kind=turn_kind,
+        is_impostor=is_impostor,
+    )
+    shapes = _assert_every_shape_is_filed_where_the_schema_takes_it(
+        prompt, label=f"{family}/{turn_kind}/impostor={is_impostor}"
+    )
+    assert {field for kind, field, _ in shapes if kind == "whereabouts"} <= {
+        "observations"
+    }
+    if family == "roll_call" and is_impostor and turn_kind == "reply":
+        # The variant whose whole point is the structured self-placement.
+        assert ("whereabouts", "observations") in {
+            (kind, field) for kind, field, _ in shapes
+        }

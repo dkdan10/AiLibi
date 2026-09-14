@@ -6,7 +6,9 @@ There {{ impostors.verb_be }} {{ impostors.phrase }} at the start of this game.
 {{ map_card }}
 ## Your private memory
 {{ rendered_memory }}
-{% include '_account_rules.j2' %}
+{# `+%}` keeps the newline trim_blocks would eat, so the rules block and the
+   instruction below it stay separate lines. #}
+{% include '_account_rules.j2' +%}
 Open the meeting with a brief account and either accuse one living player or explicitly say "unsure". An emergency call is not a new body discovery. If you found a body, say when and where you found it without guessing when the victim died.
-Return only JSON:
-{"turn_id":"t","turn_index":0,"speaker":"{{ agent_id }}","turn_kind":"opening","reply_to":null,"observations":[],"claims":[],"free_text":"<brief account; say unsure if you make no accusation>"}
+Return only JSON with exactly these 8 keys{% if public_account_version or not is_impostor %}, every structured item inside the list its shape is listed under above and nothing else in either list{% endif %}:
+{"turn_id":"t","turn_index":0,"speaker":"{{ agent_id }}","turn_kind":"opening","reply_to":null,"observations":[{% if public_account_version or not is_impostor %}<observation shapes, or empty>{% endif %}],"claims":[{% if public_account_version or not is_impostor %}<claim shapes, or empty>{% else %}<one accusation claim, or empty>{% endif %}],"free_text":"<brief account; say unsure if you make no accusation>"}

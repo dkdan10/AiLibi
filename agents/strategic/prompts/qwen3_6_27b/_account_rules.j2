@@ -1,3 +1,12 @@
+{#- The shape menu names the turn field each shape belongs to, because the turn
+    schema discriminates by field: "observations" takes the ObservationClaim
+    union (whereabouts included) and "claims" takes alibi / accusation /
+    corroboration only, so a menu that lists a shape without naming its list
+    lets a well-formed answer land in the list the schema refuses. The
+    destination lines below and the whole-turn sketch in each including
+    template are the two halves of that agreement; the agreement itself is
+    asserted shape by shape in
+    tests/agents/test_public_account_prompts.py. -#}
 Public accounts are statements made by a player. Tell the table what you claim happened, and distinguish what you personally observed from what somebody told you. A repeated account is not an additional witness. Discovery time is not death time. A legal route shows possibility, not innocence.
 {% if attributed_testimony_version %}
 Nobody at the table receives a certificate from another player's private memory. Even a spoken vent or kill is that speaker's account. Your own first-hand observation is reliable; hearing the same words from somebody else is testimony. Compare sources, contradictions and alternative explanations before deciding whom to believe.
@@ -5,8 +14,14 @@ Nobody at the table receives a certificate from another player's private memory.
 The game's certified vent findings remain available: a finding that certifies a witnessed vent identifies an impostor. Other accounts do not acquire that guarantee.
 {% endif %}
 {% if public_account_version or not is_impostor %}
-Use only the few relevant structured accounts. {% if public_account_version %}The same public shapes are available to every player:{% else %}Your available public shapes:{% endif %}
-- {"type":"whereabouts","tick":<int>,"room":"<room id>"}: where you claim to have been.
+Use only the few relevant structured accounts, and file each one in the list its shape is listed under.
+{% if public_account_version %}
+The same public shapes are available to every player.
+{% else %}
+These are your available public shapes.
+{% endif %}
+Each item of "observations" is one of these shapes:
+- {"type":"whereabouts","tick":<int>,"room":"<room id>"}: where you claim to have been. It places you alone and names no subject, so it goes in "observations" — it is not one of the "claims" shapes.
 - {"type":"saw_player","tick":<int>,"subject":"<player id>","room":"<room id>","co_present":[]}: whom you claim to have seen.
 - {"type":"saw_move","tick":<int>,"subject":"<player id>","from_room":"<room id>","to_room":"<room id>"}: a claimed arrival at the stated tick; do not invent an earlier origin time.
 - {"type":"found_body","tick":<int>,"body_of":"<player id>","room":"<room id>"}: a claimed discovery, not a time of death.
@@ -16,7 +31,10 @@ Use only the few relevant structured accounts. {% if public_account_version %}Th
 - {"type":"saw_kill","tick":<int>,"subject":"<killer id>","room":"<room id>"}: a claimed kill sighting. Name the killer, not the victim.
 - {"type":"task_activity","task_id":"<task id>","room":"<room id>","from_tick":<int>,"to_tick":<int>}: your account of working on a task. An attempt is not completion.
 {% endif %}
-Claims may be {"type":"alibi","subject":"<player id>","from_tick":<int>,"to_tick":<int>,"room":"<room id>","evidence":[]}, {"type":"accusation","against":"<living player id>","confidence":0.6,"reason":"<reason>"}, or {"type":"corroboration","supports":"<living player id>","on_tick":<int>,"reason":"<reason>"}.
+Each item of "claims" is one of these three shapes and nothing else:
+- {"type":"alibi","subject":"<player id>","from_tick":<int>,"to_tick":<int>,"room":"<room id>","evidence":[]}: a tick range you claim for a named player.
+- {"type":"accusation","against":"<living player id>","confidence":0.6,"reason":"<reason>"}: the living player you say is responsible.
+- {"type":"corroboration","supports":"<living player id>","on_tick":<int>,"reason":"<reason>"}: your support for what another player said.
 {% else %}
 Keep observations empty. Make an accusation claim or stay unsure; do not invent a structured self-alibi.
 {% endif %}

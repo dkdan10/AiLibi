@@ -1226,7 +1226,12 @@ def _require_testimony_shapes_bodies(
 #:   bytes into one quoted line with every line boundary flattened, and the
 #:   reply instruction branches with the shape menu instead of demanding a
 #:   placement the attributed-only arm cannot file.
-ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v2"
+#: * ``v3`` -- the turn-field agreement: the shape menu names the turn field
+#:   each shape belongs to ("observations" / "claims") and the whole-turn
+#:   sketch shows where each list's items go, so an answer that follows the
+#:   menu can no longer put a ``whereabouts`` item where
+#:   :class:`meetings.schemas.MeetingTurn` refuses it.
+ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v3"
 
 
 def public_account_prompt_versions(
