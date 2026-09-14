@@ -1,0 +1,446 @@
+{
+  "band": {
+    "first_seed": 6000,
+    "last_seed": 6999,
+    "size": 50
+  },
+  "note": "The prefixes this run RENDERED to the model, and only those. Rendering converts a held-out input to development data, which is why they are archived here; the other 48 accepted prefixes of the 6000-6999 freeze were regenerated in process, checked against the frozen digests and discarded unrendered, so they stay held out and are deliberately absent.",
+  "rendered": [
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 8,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 6000,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "target": "p-4"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "body_id": "body-p-4"
+              },
+              "type": "report"
+            },
+            "tick": 8
+          }
+        ],
+        "version": 1
+      },
+      "seed": 6000,
+      "sha256": "abd2fe04936956444dd50ddd4e007823f5a904936b57bfec485ca65488f2ab68"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 7,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 6001,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "target": "p-1"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "body_id": "body-p-1"
+              },
+              "type": "report"
+            },
+            "tick": 7
+          }
+        ],
+        "version": 1
+      },
+      "seed": 6001,
+      "sha256": "0d5939654f77bf2c4221fc94bd159576eaff6aac8189d8867d961b05d7704ddc"
+    }
+  ]
+}
