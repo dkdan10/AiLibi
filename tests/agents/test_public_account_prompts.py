@@ -617,6 +617,15 @@ _SHAPE = re.compile(r'\{\s*"type"\s*:\s*"(?P<kind>[a-z_]+)".*?\}')
 #: names exactly one of the two fields, carries no shape of its own, and ends
 #: in the colon that introduces the list.
 _DECLARES_FIELD = re.compile(r'^[^{]*"(?P<field>observations|claims)"[^{]*:\s*$')
+#: A sentence that names a shape and its turn field in the same breath -- `a
+#: structured "saw_vent" observation`. The default opening introduces two
+#: shapes this way, in the rules block rather than under the output-format
+#: menu, so their destination travels with the sketch instead of with a
+#: heading above it. The field word must FOLLOW the quoted kind, so prose that
+#: merely uses the word "claim" as a verb names nothing.
+_NAMES_FIELD_INLINE = re.compile(
+    r'"(?P<kind>[a-z_]+)"\s+(?P<field>observation|claim)s?\b'
+)
 #: Quoted placeholder text -> a legal value of the field it stands for. The
 #: templates name what they want, so the value is chosen from the placeholder's
 #: own words rather than from a hand-maintained field table.
@@ -666,14 +675,32 @@ def _sketch_list_body(line: str, field: str) -> str | None:
     raise AssertionError(f"unbalanced {field!r} list in {line!r}")
 
 
+def _named_inline(line: str) -> dict[str, str]:
+    """kind -> turn field, for every shape this line names in its own prose."""
+
+    named: dict[str, str] = {}
+    for match in _NAMES_FIELD_INLINE.finditer(line):
+        field = f"{match['field']}s"
+        if named.setdefault(match["kind"], field) != field:
+            raise AssertionError(
+                f"the prompt names two turn fields for {match['kind']!r} in one "
+                f"sentence: {line!r}"
+            )
+    return named
+
+
 def _advertised_shapes(prompt: str) -> tuple[tuple[str, str, str], ...]:
     """Every shape the prompt advertises, as (kind, turn field, sketch).
 
-    Two forms carry a destination: a one-line sketch of the whole turn object,
-    where a shape sits inside the ``"observations"`` or ``"claims"`` list, and
-    a declaration line that names one field and introduces the shapes beneath
-    it. A shape with neither raises: an advertised shape whose destination the
-    prompt never states is exactly the defect this reads for.
+    Three forms carry a destination: a one-line sketch of the whole turn
+    object, where a shape sits inside the ``"observations"`` or ``"claims"``
+    list; a declaration line that names one field and introduces the shapes
+    beneath it (an indented line continues the menu it sits in, a flush-left
+    one ends it); and a sentence that names the shape and its field together
+    (:data:`_NAMES_FIELD_INLINE`), which is how the default opening introduces
+    a shape inside its rules block. A shape with none of the three raises: an
+    advertised shape whose destination the prompt never states is exactly the
+    defect this reads for.
     """
 
     found: list[tuple[str, str, str]] = []
@@ -694,14 +721,18 @@ def _advertised_shapes(prompt: str) -> tuple[tuple[str, str, str], ...]:
             continue
         matches = list(_SHAPE.finditer(line))
         if not matches:
-            field = None
+            if not line.startswith((" ", "\t")):
+                field = None
             continue
-        if field is None:
-            raise AssertionError(
-                f"the prompt advertises {matches[0]['kind']!r} without naming the "
-                f"turn field it belongs in: {line!r}"
-            )
-        found.extend((match["kind"], field, match.group(0)) for match in matches)
+        inline = _named_inline(line)
+        for match in matches:
+            destination = inline.get(match["kind"], field)
+            if destination is None:
+                raise AssertionError(
+                    f"the prompt advertises {match['kind']!r} without naming the "
+                    f"turn field it belongs in: {line!r}"
+                )
+            found.append((match["kind"], destination, match.group(0)))
     return tuple(found)
 
 
@@ -865,28 +896,38 @@ def test_the_other_live_turn_prompts_file_their_shapes_the_same_way(
     # a byte here -- this reads them, so a later edit to either cannot drift
     # the way the accounts menu did. The default set is checked on the same
     # terms, which is the evidence that the default path was never ambiguous.
+    # Both live turn prompts are read: the OPENING (`crewmate_report.j2` /
+    # `impostor_report.j2`, or the roll-call variant of the second) and the
+    # statement each turn kind renders.
     turn = _spoken_turn("Where were you?")
     renderers = build_prompt_renderers("qwen3_6_27b", env=env)
-    prompt = renderers.statement(
-        agent_id="p-1",
-        rendered_memory="own memory",
-        transcript=MeetingTranscript(turns=(turn,)),
-        contradictions=(),
-        prior_turn=turn if turn_kind == "reply" else None,
-        turn_kind=turn_kind,
-        is_impostor=is_impostor,
-    )
-    shapes = _assert_every_shape_is_filed_where_the_schema_takes_it(
-        prompt, label=f"{family}/{turn_kind}/impostor={is_impostor}"
-    )
-    assert {field for kind, field, _ in shapes if kind == "whereabouts"} <= {
-        "observations"
+    opening = renderers.impostor_report if is_impostor else renderers.crewmate_report
+    prompts = {
+        "opening": opening(**_opening_kwargs()),
+        "statement": renderers.statement(
+            agent_id="p-1",
+            rendered_memory="own memory",
+            transcript=MeetingTranscript(turns=(turn,)),
+            contradictions=(),
+            prior_turn=turn if turn_kind == "reply" else None,
+            turn_kind=turn_kind,
+            is_impostor=is_impostor,
+        ),
     }
-    if family == "roll_call" and is_impostor and turn_kind == "reply":
-        # The variant whose whole point is the structured self-placement.
-        assert ("whereabouts", "observations") in {
-            (kind, field) for kind, field, _ in shapes
+    for name, prompt in prompts.items():
+        shapes = _assert_every_shape_is_filed_where_the_schema_takes_it(
+            prompt, label=f"{family}/{name}/{turn_kind}/impostor={is_impostor}"
+        )
+        placed = {(kind, field) for kind, field, _ in shapes}
+        assert {field for kind, field in placed if kind == "whereabouts"} <= {
+            "observations"
         }
+        if not is_impostor or family == "roll_call":
+            # Every crewmate prompt asks for the structured self-placement, and
+            # so does every prompt the roll-call lever renders -- that variant's
+            # whole point. The default impostor set asks for no observation at
+            # all, so it advertises no shape to misfile.
+            assert ("whereabouts", "observations") in placed, f"{family}/{name}"
 
 
 # ---------------------------------------------------------------------------
