@@ -1227,10 +1227,12 @@ def _require_testimony_shapes_bodies(
 #:   reply instruction branches with the shape menu instead of demanding a
 #:   placement the attributed-only arm cannot file.
 #: * ``v3`` -- the turn-field agreement: the shape menu names the turn field
-#:   each shape belongs to ("observations" / "claims") and the whole-turn
-#:   sketch shows where each list's items go, so an answer that follows the
-#:   menu can no longer put a ``whereabouts`` item where
-#:   :class:`meetings.schemas.MeetingTurn` refuses it.
+#:   each shape belongs to ("observations" / "claims") and the return
+#:   instruction repeats that destination in prose, so an answer that follows
+#:   the menu can no longer put a ``whereabouts`` item where
+#:   :class:`meetings.schemas.MeetingTurn` refuses it. The whole-turn response
+#:   example keeps both lists empty and stays parseable JSON, because a model
+#:   copying an unparseable example is refused before its fields are read.
 ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v3"
 
 

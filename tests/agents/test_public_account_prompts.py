@@ -531,6 +531,17 @@ _CLAIM_KINDS: frozenset[str] = frozenset(
 _PLACEMENT_KINDS: frozenset[str] = frozenset({"whereabouts", "alibi"})
 _CITATION_INSTRUCTION = "Cite your relevant placement or observation"
 _NO_OBSERVATION_INSTRUCTION = "Keep observations empty"
+#: The two halves of the return instruction that say where a structured item
+#: goes. The response example itself shows both lists empty so that it stays
+#: copyable JSON, so this prose is what carries the destination beside the
+#: labelled shape menu.
+_MENU_DESTINATION = (
+    "fill each structured item into the list its shape is listed under above"
+)
+_WITHHELD_DESTINATION = (
+    'keep "observations" empty and put your one accusation claim, if you make '
+    'one, in "claims"'
+)
 
 
 def _advertised_kinds(prompt: str) -> frozenset[str]:
@@ -574,13 +585,15 @@ def test_the_withheld_channel_still_gets_an_answerable_reply_instruction() -> No
     )
     assert "Answer in free text; make an accusation claim or stay unsure" in statement
     # The two things it is asked for are the two the schema still accepts on
-    # this arm: free text and an accusation claim. The turn sketch says so in
-    # the object itself -- observations stay empty, and the one claim the arm
-    # offers is named in the list that carries it.
+    # this arm: free text and an accusation claim. The response example stays
+    # copyable JSON with both lists empty, so the destination of the one claim
+    # this arm offers is stated in the instruction above it instead.
     assert not _advertised_kinds(statement) & _OBSERVATION_KINDS
     assert "accusation" in _CLAIM_KINDS
-    assert '"observations":[]' in statement and '"free_text":' in statement
-    assert '"claims":[<one accusation claim, or empty>]' in statement
+    assert '"observations":[],"claims":[]' in statement
+    assert '"free_text":' in statement
+    assert _WITHHELD_DESTINATION in statement
+    assert _MENU_DESTINATION not in statement
 
 
 # ---------------------------------------------------------------------------
@@ -874,3 +887,114 @@ def test_the_other_live_turn_prompts_file_their_shapes_the_same_way(
         assert ("whereabouts", "observations") in {
             (kind, field) for kind, field, _ in shapes
         }
+
+
+# ---------------------------------------------------------------------------
+# The response example a model is meant to copy is itself legal JSON
+# ---------------------------------------------------------------------------
+#
+# The provider is called with `response_format={"type": "json_object"}` and no
+# schema-guided decoding (`llm/featherless_client.py`), so an answer that
+# imitates an unparseable example is refused as a whole before any field
+# routing can help. Naming a shape's destination inside the example would cost
+# that property, so the destination is prose (`_MENU_DESTINATION`) beside the
+# labelled menu and the example keeps both lists empty.
+
+_TURN_KEYS: frozenset[str] = frozenset(
+    {
+        "turn_id",
+        "turn_index",
+        "speaker",
+        "turn_kind",
+        "reply_to",
+        "observations",
+        "claims",
+        "free_text",
+    }
+)
+
+
+def _response_examples(prompt: str) -> tuple[str, ...]:
+    """Every whole-object answer example the prompt prints.
+
+    A menu line lists one field's item and starts with ``- ``; an example is a
+    line the model is told to return, so it stands alone as an object.
+    """
+
+    return tuple(
+        line
+        for line in _prompt_lines_without_transcript(prompt)
+        if line.startswith("{") and line.endswith("}")
+    )
+
+
+def _assert_examples_are_copyable_json(prompt: str, *, label: str) -> tuple[str, ...]:
+    examples = _response_examples(prompt)
+    assert examples, f"{label}: the prompt prints no response example"
+    for example in examples:
+        try:
+            json.loads(example)
+        except json.JSONDecodeError as invalid:
+            raise AssertionError(
+                f"{label}: the response example is not JSON, so a model that "
+                f"copies it is refused before its fields are read "
+                f"({invalid}): {example!r}"
+            ) from invalid
+    return examples
+
+
+@pytest.mark.parametrize("common,attributed", [(1, None), (None, 1), (1, 1)])
+@pytest.mark.parametrize("is_impostor", [False, True])
+def test_every_account_response_example_is_copyable_json(
+    common: Literal[1] | None,
+    attributed: Literal[1] | None,
+    is_impostor: bool,
+) -> None:
+    # Every example on every account arm parses, and the turn examples carry
+    # the eight keys with both lists empty -- the destination lives in the
+    # instruction above them, not in an unparseable placeholder inside them.
+    for name, prompt in _every_account_prompt(
+        common=common, attributed=attributed, is_impostor=is_impostor
+    ).items():
+        for example in _assert_examples_are_copyable_json(prompt, label=name):
+            payload = json.loads(example)
+            if name == "vote_ballot":
+                assert "voter" in payload
+                continue
+            assert set(payload) == _TURN_KEYS, f"{name}: {example}"
+            assert payload["observations"] == [] and payload["claims"] == []
+        if name != "vote_ballot":
+            withheld = is_impostor and common is None
+            assert (_MENU_DESTINATION in prompt) is not withheld
+            assert (_WITHHELD_DESTINATION in prompt) is withheld
+
+
+@pytest.mark.parametrize("is_impostor", [False, True])
+@pytest.mark.parametrize("turn_kind", ["reply", "opt_in"])
+def test_the_default_sets_response_examples_are_copyable_json_too(
+    is_impostor: bool,
+    turn_kind: Literal["reply", "opt_in"],
+) -> None:
+    # The default path already had this property; asserting it is what keeps
+    # the account arms' repair from being the only place it holds. The
+    # flag-selected roll-call variant is NOT read here: its example spells a
+    # tick as a bare `<int>`, which predates this card and is pinned by that
+    # variant's own prompt version, so moving it is a separate cascade.
+    turn = _spoken_turn("Where were you?")
+    renderers = build_prompt_renderers("qwen3_6_27b", env={})
+    opening = renderers.impostor_report if is_impostor else renderers.crewmate_report
+    prompts = {
+        "opening": opening(**_opening_kwargs()),
+        "statement": renderers.statement(
+            agent_id="p-1",
+            rendered_memory="own memory",
+            transcript=MeetingTranscript(turns=(turn,)),
+            contradictions=(),
+            prior_turn=turn if turn_kind == "reply" else None,
+            turn_kind=turn_kind,
+            is_impostor=is_impostor,
+        ),
+    }
+    for name, prompt in prompts.items():
+        for example in _assert_examples_are_copyable_json(prompt, label=name):
+            assert set(json.loads(example)) == _TURN_KEYS, f"{name}: {example}"
