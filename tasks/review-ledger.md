@@ -332,6 +332,26 @@ full gate, the 100 canonical reconstructions and the four derived report checks
 pass, and the converted record's accepted and skipped blocks are byte-identical
 to the 2026-09-08 freeze. A second live run needs a new authorization card.
 
+## Root-cause checkpoint (2026-09-14)
+
+Three live runs of the fresh-model deduction instrument stopped at units 1, 1
+and 4 (PRs #445, #448 and #451, all closed unmerged, their branches kept as
+archives). [The diagnosis](diagnosis-2026-09-13-live-run-stops.md) finds one
+root: the per-unit output ceiling was sized in charged tokens and enforced in
+reserved tokens (a unit's reservation schedule of 9,216 against a 4,000
+ceiling), the candidate arm's prompt asked for a shape its turn schema refused,
+and no pre-run surface could show either. Two cards closed the root without an
+owner decision and merged on the owner's instruction: #452 (`baf6da8c`) makes
+the accounts prompt and the turn schema agree (account prompt-set revision v3,
+default-OFF path only); #453 (`dd489e74`) adds a startup feasibility gate that
+refuses ceilings below a unit's reservation schedule (it refuses the 2026-09-07
+limits today, so the live gate fails closed), a usage-replaying provider double
+from the archived live calls, full empty-response retry coverage, and a
+per-unit checkpoint with a resume path the live gate refuses until the manifest
+carries a resumption clause. Three decisions stay the owner's: a bounded live
+calibration on development inputs, the resumption clause, and re-sized
+ceilings for a fourth authorization.
+
 ## Owner rulings (2026-09-07)
 
 The two items deferred at the merge were assessed in

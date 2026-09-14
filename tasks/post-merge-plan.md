@@ -70,6 +70,14 @@ now also binds the manifest's Inputs band to the frozen record), merged on
 2026-09-11 as `ca6e97d6` and `7353ff88`; #445 was closed unmerged. A second run
 needs a new authorization card; none exists yet.
 
+**Root cause (2026-09-14).** After the third stopped run the owner asked for a
+diagnosis instead of another iteration; it is in
+[the diagnosis record](diagnosis-2026-09-13-live-run-stops.md). Its two
+decision-free fixes are merged (#452 `baf6da8c`, #453 `dd489e74`); the
+feasibility gate now refuses the 2026-09-07 ceilings, so no fourth run can start
+until the owner decides on a bounded live calibration on development inputs, a
+resumption clause and re-sized ceilings, in that order.
+
 **Sequencing.** Outcome 1 starts immediately and in parallel: it shares no source
 file with any other card. Outcomes 2, 3 and 4 are serialised in that order,
 because 2 and 4 both reach `agents/memory/store.py` and its meeting-layer
