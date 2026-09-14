@@ -32,7 +32,7 @@ import subprocess
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, Final, cast, get_args
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -72,6 +72,7 @@ from experiments.fresh_deduction_instrument import (
     run_instrument,
     verify_frozen_set,
 )
+from engine.world import load_canonical_map
 from experiments.held_out_prefixes import (
     CONVERTED_BANDS,
     LEGACY_BODY_HANDLE_PATTERN,
@@ -80,6 +81,7 @@ from experiments.held_out_prefixes import (
     TEMPORAL_OBSERVATION_VERSION,
     HeldOutPrefixError,
     assert_no_legacy_body_handles,
+    build_prefix,
     canonical_prefix_json,
 )
 from llm.budget import BudgetExceededError, GameBudget
@@ -389,6 +391,23 @@ def _root_binding_the_live_band(tmp_path: Path) -> Path:
     manifest = tmp_path / EXECUTION_MANIFEST_PATH
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(_manifest_text_bound_to(live), encoding="utf-8")
+    _write_frozen_manifest(tmp_path, _committed_manifest())
+    return tmp_path
+
+
+def _root_without_the_clause_binding_the_live_band(tmp_path: Path, clause: str) -> Path:
+    """A root whose manifest binds the live band and carries no ``clause``.
+
+    The plant for a gate on the DOCUMENT, now that the committed document
+    authorizes both a resume and a calibration: everything else about the tree
+    is the committed one, and the owner's sentence is the only thing missing.
+    """
+
+    text = _manifest_text_bound_to(_live_band())
+    assert clause in text, "the committed manifest does not carry the clause"
+    manifest = tmp_path / EXECUTION_MANIFEST_PATH
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(text.replace(clause, "[clause removed]"), encoding="utf-8")
     _write_frozen_manifest(tmp_path, _committed_manifest())
     return tmp_path
 
@@ -4020,19 +4039,90 @@ class TestExecutionManifest:
         ]
         assert moved == [], f"the frozen analysis moved since {last}: {moved}"
 
-    def test_the_manifest_states_the_resume_gate_without_authorizing_it(self) -> None:
-        """The document says a resume exists, refuses one, and does not enable it.
+    def test_the_manifest_quotes_the_two_clauses_of_2026_09_14_verbatim(self) -> None:
+        """The owner's two sentences, byte for byte, under their dated headings.
 
-        The gate looks for `RESUMPTION_CLAUSE`'s own bytes, so a document that
-        described the mechanism in the clause's words would authorize what it
-        describes. This one describes it in other words, which is the property
-        worth checking rather than asserting.
+        The gates look for these bytes, so a paraphrase authorizes nothing and a
+        document that quoted them loosely would leave a runner refused with
+        every other check green. The module holds one copy and this document the
+        other, and this is what keeps the two identical.
         """
 
         text = self._text()
-        assert instrument.RESUMPTION_CLAUSE not in text
+        assert instrument.RESUMPTION_CLAUSE in text
+        assert instrument.CALIBRATION_CLAUSE in text
+        assert "## Resumption clause (2026-09-14)" in text
+        assert "## Development calibration (2026-09-14)" in text
         assert "assert_resume_is_authorized" in text
-        assert "no live run may be resumed" in text
+        assert "assert_calibration_is_authorized" in text
+
+    def test_the_resumption_section_names_the_stop_it_cannot_carry(self) -> None:
+        """The half of the clause the code cannot make true, stated as such.
+
+        The clause names "a process crash" as resumable with the interrupted
+        unit's spend carried. `run_instrument` makes that arithmetic for every
+        stop that unwinds the process, interrupts included
+        (`test_an_interrupt_leaves_the_pairs_spend_in_the_checkpoint_and_reraises`);
+        a SIGKILL, an OOM kill or a power loss runs no handler and writes no
+        checkpoint, so the interrupted pair's spend is carried by the runner or
+        by nobody. A document that asserted the carry for that class too would
+        be claiming a mechanism this tree does not have, which is the error this
+        test exists to keep out.
+        """
+
+        text = self._text()
+        section = text.split("## Resumption clause (2026-09-14)", 1)[1].split("\n## ")[
+            0
+        ]
+        # Reflowed, because these are sentences a hard wrap may break anywhere
+        # and what is asserted is what the section SAYS.
+        section = " ".join(section.split())
+        for stated in (
+            "SIGKILL",
+            "power loss",
+            "writes no final checkpoint",
+            "is the runner's step, not the instrument's",
+        ):
+            assert stated in section, stated
+        assert "BaseException" in section
+
+    def test_the_calibration_section_states_its_own_limits(self) -> None:
+        """Each calibration ceiling is in the document a runner reads.
+
+        The same rule the authorized values are held to: the instrument
+        enforces the numbers, and the section that authorizes the spend has to
+        name them.
+        """
+
+        text = self._text()
+        for quoted in (
+            "60,000 input / 12,000 output",
+            "600,000 input / 120,000 output",
+            "1 h of model work within a 1.5 h elapsed deadline",
+            "5 paired seeds x 2 arms = 10 units",
+        ):
+            assert quoted in text, quoted
+
+    def test_the_calibration_limits_are_the_numbers_the_section_quotes(self) -> None:
+        """And those numbers are the module's, not a second copy of them."""
+
+        limits = instrument.CALIBRATION_LIMITS
+        assert (limits.unit_max_input_tokens, limits.unit_max_output_tokens) == (
+            60_000,
+            12_000,
+        )
+        assert (limits.run_max_input_tokens, limits.run_max_output_tokens) == (
+            600_000,
+            120_000,
+        )
+        assert (limits.model_work_seconds, limits.elapsed_seconds) == (3_600, 5_400)
+        assert limits.max_cost_usd == instrument.AUTHORIZED_MAX_COST_USD
+        assert instrument.CALIBRATION_PAIRED_SEEDS == 5
+        assert instrument.calibration_units() == 10
+        # The three the calibration does NOT re-size.
+        assert instrument.AUTHORIZED_SAMPLING == AUTHORIZED_SAMPLING
+        assert instrument.MAX_TRANSPORT_ATTEMPTS == 4
+        assert instrument.PER_ATTEMPT_TIMEOUT_SECONDS == 180.0
 
     def test_the_manifest_states_what_a_second_sitting_must_do(self) -> None:
         """Four operational rules, each of them a refusal in the code.
@@ -4786,6 +4876,45 @@ class TestEmptyResponseShapes:
             assert marker in source, marker
 
 
+class _InterruptedProvider(UsageReplayProvider):
+    """The replay double with an operator's Ctrl-C planted on the nth call.
+
+    An interrupt is not a provider fault, so it is not one of the double's
+    `ReplayMode` faults: it is raised above the archived draw, so every call
+    before it replayed real usage and the pair it lands in has really bought
+    tokens. `KeyboardInterrupt` stands here for the whole class the owner's
+    clause calls "a process crash" that still unwinds this process — a Ctrl-C, a
+    SIGTERM, a `SystemExit`.
+    """
+
+    def __init__(self, *, interrupt_at: int, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.interrupt_at = interrupt_at
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is not None and self.attempts + 1 == self.interrupt_at:
+            raise KeyboardInterrupt("the operator stopped the sitting")
+        return await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+
+
 class TestCheckpointAndResume:
     """A stopped run continues where it stopped, or is refused for not being it."""
 
@@ -4974,6 +5103,66 @@ class TestCheckpointAndResume:
             "repaired_clock": (96_031, 6_595, 31),
             "combined_accounts": (78_435, 11_154, 24),
         }
+
+    def test_an_interrupt_leaves_the_pairs_spend_in_the_checkpoint_and_reraises(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a Ctrl-C mid-pair, the stop class the clause's "crash" covers.
+
+        The owner's `RESUMPTION_CLAUSE` names a process crash as resumable "with
+        the interrupted unit's spend and model-work time carried". A stop that
+        unwinds this process has to reach the final checkpoint for that to be
+        arithmetic rather than a promise, so the run loop catches
+        `BaseException` for the accounting — and only for it: the interrupt is
+        re-raised as itself, it is not reported as a `PartialRun`, and it is not
+        given a stop `reason`. Narrow the handler back to `Exception` and this
+        goes red on the abandoned rows, with the pair's spend forgiven exactly
+        as a transport stop's used to be.
+
+        What this test cannot cover is the rest of the class: a SIGKILL, an OOM
+        kill or a power loss runs no handler at all, so it writes nothing and
+        carries nothing. That gap is stated in the manifest's dated clause
+        section and held by
+        `test_the_resumption_section_names_the_stop_it_cannot_carry`.
+        """
+
+        limits = feasible_limits()
+        checkpoint_path = tmp_path / "checkpoint.json"
+        with pytest.raises(KeyboardInterrupt):
+            run_dry(
+                output_dir=tmp_path / "stopped",
+                units=4,
+                limits=limits,
+                client=_InterruptedProvider(interrupt_at=28),
+                checkpoint_path=checkpoint_path,
+            )
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+        abandoned = checkpoint.abandoned.usage_by_arm()
+        assert abandoned, "an interrupt inside a pair carried no spend at all"
+        assert any(row.output_tokens > 0 for row in abandoned.values())
+        # The two completed pairs are graded and the third is not: an interrupt
+        # is a stop between pairs for the resume, and a charge for the budget.
+        assert len(checkpoint.completed_seeds) == 2
+        assert len(checkpoint.units) == 4
+        resumed = run_dry(
+            output_dir=tmp_path / "resumed",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(seed=6),
+            resume=checkpoint,
+        )
+        for arm, tokens in abandoned.items():
+            spent = {row.arm: row.output_tokens for row in resumed.arms}[arm]
+            whole = run_dry(
+                output_dir=tmp_path / f"whole-{arm}",
+                units=4,
+                limits=limits,
+                client=UsageReplayProvider(),
+            )
+            assert spent == (
+                {row.arm: row.output_tokens for row in whole.arms}[arm]
+                + tokens.output_tokens
+            )
 
     def test_the_abandoned_spend_is_charged_against_the_run_ceiling(
         self, tmp_path: Path
@@ -5284,39 +5473,49 @@ class TestCheckpointAndResume:
                 resume=squeezed,
             )
 
-    def test_a_live_resume_is_refused_until_the_manifest_says_so(
+    def test_a_live_resume_is_authorized_by_the_document_and_by_nothing_else(
         self, tmp_path: Path
     ) -> None:
-        """The mechanism is built and rehearsed; spending on it is the owner's.
+        """PLANTED: the same tree with the owner's sentence taken out.
 
-        The committed manifest carries no resumption clause, so the live gate
-        refuses a resume today. A root whose manifest carries the owner's
-        sentence passes the same check, which is what makes this a gate on the
-        document rather than on the code.
+        The committed manifest has carried the clause since 2026-09-14, so the
+        live gate now passes on this tree. A root whose manifest is these bytes
+        minus that sentence is refused by the same call, which is what makes
+        this a gate on the document rather than on the code.
         """
 
-        assert instrument.RESUMPTION_CLAUSE not in _MANIFEST.read_text("utf-8")
-        with pytest.raises(instrument.ResumeNotAuthorized, match="resumption clause"):
-            instrument.assert_resume_is_authorized(provider=AUTHORIZED_PROVIDER)
-        authorized = tmp_path / EXECUTION_MANIFEST_PATH
-        authorized.parent.mkdir(parents=True)
-        authorized.write_text(
-            _MANIFEST.read_text("utf-8") + f"\n{instrument.RESUMPTION_CLAUSE}\n",
+        instrument.assert_resume_is_authorized(provider=AUTHORIZED_PROVIDER)
+        unauthorized = tmp_path / EXECUTION_MANIFEST_PATH
+        unauthorized.parent.mkdir(parents=True)
+        unauthorized.write_text(
+            _MANIFEST.read_text("utf-8").replace(
+                instrument.RESUMPTION_CLAUSE, "[clause removed]"
+            ),
             encoding="utf-8",
         )
-        instrument.assert_resume_is_authorized(
-            provider=AUTHORIZED_PROVIDER, repo_root=tmp_path
-        )
+        with pytest.raises(instrument.ResumeNotAuthorized, match="resumption clause"):
+            instrument.assert_resume_is_authorized(
+                provider=AUTHORIZED_PROVIDER, repo_root=tmp_path
+            )
         # And the fake path is untouched: a rehearsal that could not resume
         # could not prove the resume.
         instrument.assert_resume_is_authorized(provider="fake")
 
-    def test_the_readiness_gate_refuses_a_live_resume(
+    def test_the_readiness_gate_refuses_an_unauthorized_live_resume(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The refusal reaches the CLI's own pre-client gate, not just the helper."""
+        """PLANTED: the refusal reaches the CLI's pre-client gate, not just the helper.
 
-        root = _root_binding_the_live_band(tmp_path)
+        The committed document authorizes a resume since 2026-09-14, so the
+        plant is a root whose manifest is these bytes minus the owner's
+        sentence: the gate the CLI calls before it builds a client has to be
+        the one that refuses, or an unauthorized second sitting would be
+        discovered after a credential was read.
+        """
+
+        root = _root_without_the_clause_binding_the_live_band(
+            tmp_path, instrument.RESUMPTION_CLAUSE
+        )
         invocation = LiveRunInvocation.naming(
             root / EXECUTION_MANIFEST_PATH,
             provider=AUTHORIZED_PROVIDER,
@@ -5420,6 +5619,761 @@ class TestCheckpointAndResume:
             (tmp_path / "second.json").read_text(encoding="utf-8")
         )
         assert [arm.units for arm in report.arms] == [3, 3]
+
+
+def _converted_record() -> Path:
+    """The committed record of the first converted band, which is the input."""
+
+    return _REPO_ROOT / instrument.DEFAULT_CALIBRATION_RECORD
+
+
+def _converted_payload() -> dict[str, Any]:
+    loaded = json.loads(_converted_record().read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    return loaded
+
+
+def _root_with_calibration_record(
+    tmp_path: Path, payload: Mapping[str, Any]
+) -> tuple[Path, Path]:
+    """A repository root carrying ``payload`` where the converted record lives.
+
+    Returns the root and the record's path inside it. The path is what makes a
+    record a record: `verify_calibration_set` matches on WHERE the file is, so a
+    planted variant has to sit where the real one does.
+    """
+
+    record = tmp_path / instrument.DEFAULT_CALIBRATION_RECORD
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps(payload), encoding="utf-8")
+    return tmp_path, record
+
+
+class TestCalibrationInputs:
+    """Which prefixes a calibration may render, and the four ways it refuses.
+
+    The one mistake that would cost something irreversible is pointing this mode
+    at the held-out record: rendering one of those prefixes converts the band
+    the evaluation has still to spend. That refusal is first, by name, and
+    planted below.
+    """
+
+    def test_the_held_out_record_is_refused_by_name(self) -> None:
+        """PLANTED: the calibration pointed at the live freeze."""
+
+        with pytest.raises(instrument.CalibrationInputsRejected) as refused:
+            instrument.verify_calibration_set(_REPO_ROOT / MANIFEST_PATH)
+        assert MANIFEST_PATH in str(refused.value)
+        assert "HELD-OUT" in str(refused.value)
+
+    def test_a_record_no_freeze_converted_is_refused(self, tmp_path: Path) -> None:
+        """PLANTED: the same bytes, one directory away.
+
+        A record is the freeze it was written as. Matching on the path rather
+        than on the band the document claims is what keeps a copy of a converted
+        record — or a hand-written one naming a converted band — from standing
+        in for the freeze itself.
+        """
+
+        elsewhere = tmp_path / "manifest-band-3000-3999.json"
+        elsewhere.write_text(_converted_record().read_text("utf-8"), encoding="utf-8")
+        with pytest.raises(
+            instrument.CalibrationInputsRejected, match="not a converted band"
+        ):
+            instrument.verify_calibration_set(elsewhere, repo_root=tmp_path)
+
+    def test_a_record_that_still_says_held_out_is_refused(self, tmp_path: Path) -> None:
+        """PLANTED: the converted record with its status flipped back.
+
+        The path says which band; the status says whether that band has already
+        been spent. Both are checked, because a freeze that has not been
+        converted is a held-out set wherever its file happens to sit.
+        """
+
+        payload = _converted_payload()
+        payload["status"] = "held_out"
+        root, record = _root_with_calibration_record(tmp_path, payload)
+        with pytest.raises(
+            instrument.CalibrationInputsRejected, match="not 'development'"
+        ):
+            instrument.verify_calibration_set(record, repo_root=root)
+
+    def test_a_moved_digest_is_refused_by_seed(self, tmp_path: Path) -> None:
+        """PLANTED: one accepted digest edited in the record.
+
+        The calibration rebuilds each prefix with the unchanged generator and
+        holds it to the digest the record froze, so a generator that no longer
+        produces these inputs stops the calibration instead of measuring
+        something nobody froze.
+        """
+
+        payload = _converted_payload()
+        payload["accepted"] = [dict(row) for row in payload["accepted"]]
+        payload["accepted"][2]["sha256"] = "0" * 64
+        root, record = _root_with_calibration_record(tmp_path, payload)
+        with pytest.raises(instrument.CalibrationInputsRejected) as refused:
+            instrument.verify_calibration_set(record, repo_root=root)
+        assert "seed 3002" in str(refused.value)
+
+    def test_the_seeds_are_the_records_first_five_ascending(self) -> None:
+        """And they are the GENERATOR's prefixes, rebuilt call for call.
+
+        The prefixes are compared against `build_prefix`'s own output rather
+        than against a description of it, so "the unchanged generator" is a
+        property of the objects the run renders.
+        """
+
+        inputs = instrument.verify_calibration_set(_converted_record())
+        rows = _converted_payload()["accepted"]
+        assert list(inputs.seeds) == [row["seed"] for row in rows[:5]]
+        assert list(inputs.digests) == [row["sha256"] for row in rows[:5]]
+        assert inputs.accepted_in_record == len(rows)
+        game_map = load_canonical_map()
+        for prefix in inputs.prefixes:
+            assert prefix == build_prefix(
+                seed=prefix.seed, roster=inputs.roster, game_map=game_map
+            )
+
+    def test_a_record_missing_its_rows_is_refused_as_a_calibration_input(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the accepted block deleted.
+
+        The freeze record's own readers raise `FrozenSetMismatch`; on this path
+        that is re-raised as this path's refusal, so a runner is told the
+        CALIBRATION's inputs were rejected rather than that a frozen set was.
+        """
+
+        payload = _converted_payload()
+        del payload["accepted"]
+        root, record = _root_with_calibration_record(tmp_path, payload)
+        with pytest.raises(
+            instrument.CalibrationInputsRejected, match="not a readable freeze record"
+        ):
+            instrument.verify_calibration_set(record, repo_root=root)
+
+
+class TestCalibrationGate:
+    """What authorizes a live calibration, and what it refuses."""
+
+    def _invocation(self, root: Path) -> LiveRunInvocation:
+        return LiveRunInvocation.naming(
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
+        )
+
+    def test_the_committed_manifest_authorizes_the_calibration(self) -> None:
+        """The settled state: the clause is in the document the gate reads."""
+
+        instrument.assert_calibration_is_authorized(
+            provider=AUTHORIZED_PROVIDER,
+            invocation=self._invocation(_REPO_ROOT),
+        )
+
+    def test_a_manifest_without_the_clause_refuses_it(self, tmp_path: Path) -> None:
+        """PLANTED: the same document with the owner's sentence removed.
+
+        The gate reads the committed manifest, so what authorizes the spend is
+        the record rather than a flag on a command line.
+        """
+
+        root = _root_without_the_clause_binding_the_live_band(
+            tmp_path, instrument.CALIBRATION_CLAUSE
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="no calibration clause"):
+            instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(root),
+                repo_root=root,
+            )
+
+    def test_the_two_authorizations_refuse_each_others_limits(self) -> None:
+        """PLANTED both ways: each gate refuses the other's ceilings.
+
+        The calibration's limits are not a relaxation of the run's — they are a
+        different authorization for a different spend, and neither one may be
+        run under the other's numbers.
+        """
+
+        with pytest.raises(LiveRunNotAuthorized, match="calibration limits"):
+            instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(_REPO_ROOT),
+                limits=AUTHORIZED_LIMITS,
+            )
+        root = _root_binding_the_live_band(_REPO_ROOT)
+        with pytest.raises(LiveRunNotAuthorized, match="authorized limits exactly"):
+            assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(root),
+                limits=instrument.CALIBRATION_LIMITS,
+                repo_root=root,
+            )
+
+    def test_the_feasibility_gate_accepts_the_calibration_and_refuses_the_run(
+        self,
+    ) -> None:
+        """The arithmetic, on both sets of ceilings.
+
+        The calibration's ten units can pay for themselves; the limits merged on
+        2026-09-07 still cannot pay for their hundred, which is the refusal the
+        diagnosis of 2026-09-13 moved to startup and which this card does not
+        lift.
+        """
+
+        instrument.assert_limits_are_feasible(
+            limits=instrument.CALIBRATION_LIMITS,
+            units=instrument.calibration_units(),
+        )
+        with pytest.raises(instrument.LimitsInfeasible):
+            instrument.assert_limits_are_feasible()
+
+    def test_a_calibration_limit_below_the_reservation_is_refused(self) -> None:
+        """PERTURBED: one token under the schedule a unit reserves."""
+
+        planted = instrument.CALIBRATION_LIMITS.model_copy(
+            update={"unit_max_output_tokens": instrument.unit_output_reservation() - 1}
+        )
+        with pytest.raises(instrument.LimitsInfeasible, match="per-unit output"):
+            instrument.assert_limits_are_feasible(
+                limits=planted, units=instrument.calibration_units()
+            )
+
+    def test_a_fake_calibration_takes_no_invocation(self, tmp_path: Path) -> None:
+        """The rehearsal is the mechanics check and never the authorized run."""
+
+        instrument.assert_calibration_is_authorized(provider="fake", invocation=None)
+        with pytest.raises(LiveRunNotAuthorized, match="takes no live invocation"):
+            instrument.assert_calibration_is_authorized(
+                provider="fake", invocation=self._invocation(_REPO_ROOT)
+            )
+        del tmp_path
+
+    def test_a_live_calibration_without_an_invocation_is_refused(self) -> None:
+        with pytest.raises(LiveRunNotAuthorized, match="carries no LiveRunInvocation"):
+            instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=None
+            )
+
+    def test_more_seeds_than_the_owner_authorized_are_refused(self) -> None:
+        """PLANTED: six paired seeds where five were approved."""
+
+        with pytest.raises(LiveRunNotAuthorized, match="paired seeds"):
+            instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(_REPO_ROOT),
+                paired_seeds=instrument.CALIBRATION_PAIRED_SEEDS + 1,
+            )
+
+    def test_a_live_calibration_without_the_runner_flag_is_refused_by_the_cli(
+        self,
+    ) -> None:
+        """PLANTED: the command without the runner's own statement.
+
+        `parser.error` exits rather than running, so this reaches no provider,
+        builds no client and reads no record — which is the property: the flag
+        is checked before any of that happens.
+        """
+
+        with pytest.raises(SystemExit) as exited:
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--provider",
+                    AUTHORIZED_PROVIDER,
+                    "--execution-manifest",
+                    str(_MANIFEST),
+                    "--output-dir",
+                    str(_REPO_ROOT / "does-not-exist"),
+                ]
+            )
+        assert exited.value.code == 2
+
+    def test_the_readiness_gate_verifies_the_inputs_after_the_arithmetic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: a landmine in place of the input check.
+
+        The order is the live path's: arithmetic and authorization first, the
+        record next, and the verified record is what `build_authorized_client`
+        requires — so an unauthorized calibration never reaches a credential.
+        """
+
+        def landmine(*args: object, **kwargs: object) -> object:
+            raise AssertionError("the record was read before the authorization")
+
+        monkeypatch.setattr(instrument, "verify_calibration_set", landmine)
+        root = _root_without_the_clause_binding_the_live_band(
+            tmp_path, instrument.CALIBRATION_CLAUSE
+        )
+        with pytest.raises(LiveRunNotAuthorized):
+            instrument.assert_ready_for_a_calibration(
+                _converted_record(),
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(root),
+                repo_root=root,
+            )
+
+
+class TestCalibrationRun:
+    """What the mode measures, at $0, on the fake provider and the replay double."""
+
+    def _calibrate(
+        self, tmp_path: Path, client: Any = None
+    ) -> instrument.CalibrationReport:
+        return instrument.run_calibration(
+            _converted_record(), output_dir=tmp_path / "units", client=client
+        )
+
+    def test_the_calibration_never_reads_the_held_out_record(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: a landmine on the held-out check, and the run completes.
+
+        `verify_frozen_set` is the only reader of the live freeze in this
+        module, so a calibration that completes with it mined is a calibration
+        that never touched the set the evaluation is holding.
+        """
+
+        def landmine(*args: object, **kwargs: object) -> object:
+            raise AssertionError("the calibration read the held-out record")
+
+        monkeypatch.setattr(instrument, "verify_frozen_set", landmine)
+        report = self._calibrate(tmp_path)
+        assert report.inputs.record == instrument.DEFAULT_CALIBRATION_RECORD
+        assert report.inputs.status == "development"
+        assert report.inputs.band_first_seed == CONVERTED_BANDS[0].band.first_seed
+
+    def test_the_rehearsal_measures_ten_units_at_zero_cost(
+        self, tmp_path: Path
+    ) -> None:
+        """Five paired seeds, both arms, sixty calls, $0.00."""
+
+        report = self._calibrate(tmp_path)
+        assert report.units == instrument.calibration_units()
+        assert report.paired_seeds == instrument.CALIBRATION_PAIRED_SEEDS
+        assert report.dry_run is True
+        assert report.total_cost_usd == 0.0
+        assert report.limits == instrument.CALIBRATION_LIMITS
+        assert [arm.units for arm in report.arms] == [5, 5]
+        assert [arm.attempts for arm in report.arms] == [30, 30]
+        assert len(report.unit_usage) == 10
+        assert len(report.calls) == 60
+        for arm in report.arms:
+            assert [row.call_type for row in arm.by_call_type] == ["turn", "ballot"]
+            assert [row.completions for row in arm.by_call_type] == [15, 15]
+
+    def test_the_report_grades_nothing(self, tmp_path: Path) -> None:
+        """No outcome, no verdict, no paired statistic anywhere in the payload.
+
+        The frozen analysis is not evaluated here, and the check is on the
+        payload rather than on the intention: a field carrying an outcome would
+        fail this whether or not anything read it.
+        """
+
+        report = self._calibrate(tmp_path)
+        payload = report.model_dump(mode="json")
+        # The three prose fields say what this mode does NOT do, in those very
+        # words, so they are dropped before the scan: what is under test is the
+        # measurements, not the sentences describing their limits.
+        payload.pop("caveat")
+        payload.pop("percentile_rule")
+        payload["proposal"].pop("rule")
+        encoded = json.dumps(payload).lower()
+        for forbidden in (
+            "supported",
+            "verdict",
+            "mcnemar",
+            "eject",
+            "outcome",
+            "primary",
+        ):
+            assert forbidden not in encoded, forbidden
+        assert "No grader ran" in report.caveat
+
+    def test_the_report_carries_no_prefix_bytes(self, tmp_path: Path) -> None:
+        """PLANTED: a step's canonical JSON smuggled into the caveat.
+
+        The evaluation's own guard runs over this report too, so one rule
+        covers both payloads rather than one payload having its own.
+        """
+
+        inputs = instrument.verify_calibration_set(_converted_record())
+        report = self._calibrate(tmp_path)
+        assert_report_holds_no_prefix_bytes(report, inputs.prefixes)
+        step = inputs.prefixes[0].steps[0]
+        leaked = report.model_copy(
+            update={
+                "caveat": json.dumps(
+                    step.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+                )
+            }
+        )
+        with pytest.raises(PrefixBytesLeaked, match="scripted step"):
+            assert_report_holds_no_prefix_bytes(leaked, inputs.prefixes)
+
+    def test_the_replay_double_measures_the_two_schedules_apart(
+        self, tmp_path: Path
+    ) -> None:
+        """The point of keying by call type, seen in the calibration's own rows.
+
+        On the archived distribution the candidate arm's turns run to hundreds
+        of output tokens and its ballots to a fraction of that, and both stay
+        under their own caps. A summary that pooled them would report one
+        number for two schedules and size a ballot's ceiling off a turn.
+        """
+
+        report = self._calibrate(tmp_path, client=UsageReplayProvider())
+        for arm in report.arms:
+            turn, ballot = arm.by_call_type
+            assert turn.output_mean > ballot.output_mean
+            assert turn.output_max < AUTHORIZED_SAMPLING.turn_max_tokens
+            assert ballot.output_max < AUTHORIZED_SAMPLING.vote_max_tokens
+            assert turn.input_max >= turn.input_p95 >= turn.input_mean
+        candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
+        reference = next(arm for arm in report.arms if arm.arm == "repaired_clock")
+        assert candidate.output_tokens > reference.output_tokens
+
+    def test_the_percentile_is_nearest_rank(self) -> None:
+        """PERTURBED: the rule stated is the rule computed.
+
+        An interpolating percentile would report 95.5 for the sample below,
+        which is not a token count anything was charged.
+        """
+
+        sample = list(range(1, 101))
+        assert instrument._percentile(sample, 0.95) == 95
+        assert instrument._percentile([7], 0.95) == 7
+        assert instrument._percentile([1, 2], 0.95) == 2
+        with pytest.raises(ValueError, match="no samples"):
+            instrument._percentile([], 0.95)
+
+    def test_the_proposal_is_the_stated_rule_applied_to_what_was_measured(
+        self, tmp_path: Path
+    ) -> None:
+        """Recomputed from the report's own measured fields.
+
+        Every number in the proposal is reproducible from the four measurements
+        printed beside it, so a reader of the committed output can check the
+        arithmetic without re-running anything.
+        """
+
+        report = self._calibrate(tmp_path, client=UsageReplayProvider())
+        proposal = report.proposal
+        units = proposal.units
+        assert units == instrument.planned_units()
+        assert proposal.unit_max_input_tokens == instrument._rounded_up(
+            proposal.measured_max_unit_input_tokens * 3
+        )
+        assert proposal.unit_max_output_tokens == instrument._rounded_up(
+            max(
+                instrument.unit_output_reservation(),
+                proposal.measured_max_unit_output_tokens * 3,
+            )
+        )
+        assert proposal.run_max_input_tokens == instrument._rounded_up(
+            max(
+                units * proposal.measured_mean_unit_input_tokens * 1.5,
+                units * proposal.measured_max_unit_input_tokens,
+            )
+        )
+        assert proposal.run_max_output_tokens == instrument._rounded_up(
+            max(
+                units * proposal.measured_mean_unit_output_tokens * 1.5,
+                units * proposal.measured_max_unit_output_tokens,
+            )
+        )
+        assert proposal.run_max_input_tokens % 1_000 == 0
+
+    def test_a_fixture_sized_proposal_says_it_clears_no_gate(
+        self, tmp_path: Path
+    ) -> None:
+        """PERTURBED by the provider: the same rule on two distributions.
+
+        `DryRunProvider` derives its usage from the length of the payload it
+        serialises, so a proposal computed from it is a tenth of a real one and
+        the instrument's own feasibility gate refuses it. The report says so in
+        the gate's words instead of publishing the numbers as a measurement.
+        """
+
+        fixture = self._calibrate(tmp_path / "fixture")
+        assert fixture.proposal.clears_the_feasibility_gate is False
+        assert fixture.proposal.feasibility_refusal is not None
+        assert "run-level output ceiling" in fixture.proposal.feasibility_refusal
+        measured = self._calibrate(tmp_path / "measured", client=UsageReplayProvider())
+        assert measured.proposal.clears_the_feasibility_gate is True
+        assert measured.proposal.feasibility_refusal is None
+        instrument.assert_limits_are_feasible(
+            limits=instrument.proposed_limits(measured.proposal)
+        )
+
+    def test_a_stop_reports_its_partial_accounting(self, tmp_path: Path) -> None:
+        """PLANTED: an endpoint that stops answering inside the third call.
+
+        A calibration stops the way a run does — partial accounting, no retry
+        beyond the transport bound, and the spend that bought nothing charged
+        into it — because it is the same path.
+        """
+
+        spoiled = UsageReplayProvider(
+            spoil_call=3,
+            spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+            mode="transport_error",
+        )
+        with pytest.raises(InstrumentAborted) as stopped:
+            self._calibrate(tmp_path, client=spoiled)
+        partial = stopped.value.partial
+        assert partial.completed_units == 0
+        assert partial.planned_units == instrument.calibration_units()
+        assert "TransportAttemptsExhausted" in partial.reason
+        assert partial.usage_by_arm["repaired_clock"].calls > 0
+
+    def test_the_json_destination_is_made_before_the_run_not_after_it(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """PLANTED: the manifest's own command, into a directory nothing made.
+
+        The live command the execution manifest documents writes to
+        `audits/deduction-candidate/calibration-<date>/calibration.json`, whose
+        dated parent does not exist until something creates it. `write_text`
+        does not, and it ran AFTER the units and BEFORE the print — so the once-
+        only spend the manifest authorizes would have completed and then lost
+        its whole record to a FileNotFoundError with nothing on stdout. Neuter
+        the mkdir in `_preflight_json_destination` and this goes red exactly
+        there.
+        """
+
+        destination = tmp_path / "calibration-2026-09-14" / "calibration.json"
+        assert not destination.parent.exists()
+        assert (
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--output-dir",
+                    str(tmp_path / "units"),
+                    "--json",
+                    str(destination),
+                ]
+            )
+            == 0
+        )
+        payload = json.loads(destination.read_text(encoding="utf-8"))
+        assert payload["report_schema"] == instrument.CALIBRATION_SCHEMA
+        # And on stdout as well, written there first: a write that fails anyway
+        # costs the operator a copy-paste, not the measurement.
+        assert instrument.CALIBRATION_SCHEMA in capsys.readouterr().out
+
+    def test_an_unwritable_json_destination_refuses_before_it_spends(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a destination whose parent is a FILE, so no directory can be.
+
+        The preflight's other half. A path that cannot be written is refused at
+        the argument parser, before a unit runs — which is the whole point of
+        moving the check ahead of the calls: a refusal that arrives after the
+        spend is not a refusal.
+        """
+
+        blocked = tmp_path / "not-a-directory"
+        blocked.write_text("", encoding="utf-8")
+        marker = tmp_path / "a-unit-ran"
+
+        def landmine(*args: object, **kwargs: object) -> object:
+            marker.write_text("", encoding="utf-8")
+            raise AssertionError("the calibration ran before its output had a home")
+
+        with pytest.raises(SystemExit) as refused:
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(instrument, "run_calibration", landmine)
+                instrument.main(
+                    [
+                        "--calibrate",
+                        "--output-dir",
+                        str(tmp_path / "units"),
+                        "--json",
+                        str(blocked / "calibration.json"),
+                    ]
+                )
+        assert refused.value.code == 2
+        assert not marker.exists()
+
+
+class TestCalibrationProfileRefresh:
+    """The rehearsal double's profile, rebuilt from a calibration output."""
+
+    def test_the_refresh_writes_a_profile_the_double_reads(
+        self, tmp_path: Path
+    ) -> None:
+        """The documented command, run end to end through the CLI.
+
+        `--calibrate --json <out>` writes the measurement;
+        `--refresh-usage-profile <out> --profile-out <path>` turns it into a
+        profile. Neither step reaches a provider.
+        """
+
+        measurement = tmp_path / "calibration.json"
+        assert (
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--output-dir",
+                    str(tmp_path / "units"),
+                    "--json",
+                    str(measurement),
+                ]
+            )
+            == 0
+        )
+        profile_path = tmp_path / "profile.json"
+        assert (
+            instrument.main(
+                [
+                    "--refresh-usage-profile",
+                    str(measurement),
+                    "--profile-out",
+                    str(profile_path),
+                ]
+            )
+            == 0
+        )
+        profile = UsageProfile.load(profile_path)
+        assert len(profile.calls) == 60
+        assert len(profile.units) == 10
+        payload = json.loads(profile_path.read_text(encoding="utf-8"))
+        permitted = {"arm", "call_type", "input_tokens", "output_tokens", "disposition"}
+        assert {key for row in payload["calls"] for key in row} <= permitted
+        encoded = json.dumps(payload["calls"])
+        for forbidden in ("prompt", "response", "seed", "room", "tick"):
+            assert forbidden not in encoded, forbidden
+
+    def test_the_rehearsal_on_a_refreshed_profile_runs_under_the_proposal(
+        self, tmp_path: Path
+    ) -> None:
+        """The whole loop, at $0: measure, refresh, rehearse, check the gate.
+
+        A hundred units on the refreshed profile complete under the ceilings the
+        calibration proposed, and the proposal passes the feasibility gate. That
+        is what makes the proposal a re-sizing a fourth authorization card could
+        carry rather than four numbers in a report.
+        """
+
+        report = instrument.run_calibration(
+            _converted_record(),
+            output_dir=tmp_path / "units",
+            client=UsageReplayProvider(),
+        )
+        profile_path = tmp_path / "profile.json"
+        instrument.write_usage_profile(report, profile_path)
+        refreshed = UsageProfile.load(profile_path)
+        limits = instrument.proposed_limits(report.proposal)
+        instrument.assert_limits_are_feasible(limits=limits)
+        rehearsed = run_dry(
+            output_dir=tmp_path / "rehearsal",
+            limits=limits,
+            client=UsageReplayProvider(profile=refreshed),
+        )
+        assert [arm.units for arm in rehearsed.arms] == [50, 50]
+        assert rehearsed.total_cost_usd == 0.0
+
+    def test_a_refresh_of_another_schema_is_refused(self, tmp_path: Path) -> None:
+        """PLANTED: the same payload carrying another schema name.
+
+        No silent fallback. A later shape of this output is a different
+        measurement, and turning one into a profile as if it were this one is
+        how a rehearsal ends up replaying counts it has misread.
+        """
+
+        report = instrument.run_calibration(
+            _converted_record(), output_dir=tmp_path / "units"
+        )
+        planted = report.model_copy(update={"report_schema": "something-else/9"})
+        with pytest.raises(ValueError, match="not a calibration"):
+            instrument.usage_profile_from_calibration(planted)
+
+    def _measured(self, tmp_path: Path) -> Path:
+        """One calibration output on disk, as `--calibrate --json` writes it."""
+
+        measurement = tmp_path / "calibration.json"
+        assert (
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--output-dir",
+                    str(tmp_path / "units"),
+                    "--json",
+                    str(measurement),
+                ]
+            )
+            == 0
+        )
+        return measurement
+
+    @pytest.mark.parametrize(
+        ("field", "planted"),
+        [("disposition", "billed_and_refused_"), ("call_type", "turnn")],
+    )
+    def test_a_refresh_refuses_a_call_row_it_cannot_read(
+        self, tmp_path: Path, field: str, planted: str
+    ) -> None:
+        """PLANTED: one misspelled value in one of the sixty call rows.
+
+        These two fields are a parse boundary, and the refresh rewrites the
+        profile the feasibility gate's two calibrated constants are held to.
+        Typed as `str` they parsed clean and went silently wrong twice over:
+        `usage_profile_from_calibration` counts a refusal by exact equality with
+        `billed_and_refused`, and the rehearsal double keys its refusal off the
+        same string, so a misspelled refusal replays as a resolved call and the
+        committed profile carries it. Retype either field `str` and this goes
+        red. Invalid input raises; there is no third disposition to fall back
+        to.
+        """
+
+        measurement = self._measured(tmp_path)
+        payload = json.loads(measurement.read_text(encoding="utf-8"))
+        payload["calls"][0][field] = planted
+        measurement.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        profile_path = tmp_path / "profile.json"
+        with pytest.raises(ValidationError, match=field):
+            instrument.main(
+                [
+                    "--refresh-usage-profile",
+                    str(measurement),
+                    "--profile-out",
+                    str(profile_path),
+                ]
+            )
+        assert not profile_path.exists(), "a refused refresh wrote a profile anyway"
+
+    def test_the_dispositions_the_boundary_accepts_are_the_ledgers_own(self) -> None:
+        """One list of dispositions, not two that drift.
+
+        The boundary model's field and the ledger's `CapturedCall.disposition`
+        are the same `CallDisposition`, so a value the run can record is a value
+        the refresh can read and nothing else is. The same for the two call
+        schedules.
+        """
+
+        fields = instrument.CalibrationCall.model_fields
+        # Compared by members rather than by identity: what has to hold is the
+        # SET of values the boundary accepts, and a plain `str` annotation
+        # carries none, which is the defect this pins.
+        assert get_args(fields["disposition"].annotation) == get_args(
+            instrument.CallDisposition
+        )
+        assert get_args(fields["call_type"].annotation) == get_args(instrument.CallType)
+        assert (
+            instrument.CapturedCall.__dataclass_fields__["disposition"].type
+            == "CallDisposition"
+        )
+        assert set(get_args(instrument.CallDisposition)) == {
+            "resolved",
+            "billed_and_refused",
+            "unaccounted",
+            "aborted",
+        }
+        assert set(get_args(instrument.CallType)) == set(instrument.CALL_TYPES)
 
 
 class TestHarnessesUntouched:
