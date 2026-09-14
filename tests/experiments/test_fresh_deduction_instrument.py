@@ -108,11 +108,20 @@ from tests.experiments.burned_call_double import (
     BURNED_INPUT_TOKENS,
     BURNED_OUTPUT_TOKENS,
     EMPTY_BODY_ERROR,
+    NO_COMPLETION_MESSAGES,
     RETRYABLE_STATUS_ERROR,
     TRANSPORT_ERROR,
     BurnedCallProvider,
     NoCompletionProvider,
     charged_no_completion,
+)
+from tests.experiments import usage_replay_double
+from tests.experiments.usage_replay_double import (
+    PROFILE_PATH,
+    CallTypeBlindReplayProvider,
+    UsageProfile,
+    UsageReplayProvider,
+    feasible_limits,
 )
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
@@ -317,6 +326,60 @@ def _root_binding_the_live_band(tmp_path: Path) -> Path:
     manifest.write_text(_manifest_text_bound_to(live), encoding="utf-8")
     _write_frozen_manifest(tmp_path, _committed_manifest())
     return tmp_path
+
+
+def _literal_message(node: ast.expr) -> str:
+    """The message a `raise RuntimeError(...)` statement writes, as a literal.
+
+    An f-string's interpolations are replaced by a placeholder: what the
+    instrument's classifier keys on is the fixed wording around them, and a
+    marker that only matched a formatted value would not be a marker.
+    """
+
+    if isinstance(node, ast.Constant):
+        return str(node.value)
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            str(part.value) if isinstance(part, ast.Constant) else "<value>"
+            for part in node.values
+        )
+    raise AssertionError(f"not a literal message: {ast.unparse(node)}")
+
+
+def _without_wall(report: InstrumentReport) -> dict[str, Any]:
+    """A report's payload minus the clocks, for comparing two runs of it.
+
+    Everything a run MEASURES is comparable; the two wall clocks are real
+    seconds and are not the same twice, which is why they are dropped here
+    rather than rounded.
+    """
+
+    payload = report.model_dump(mode="json")
+    payload.pop("elapsed_seconds")
+    payload.pop("model_work_seconds")
+    for arm in payload["arms"]:
+        arm.pop("model_work_seconds")
+    return payload
+
+
+def _authorize_feasible_limits(monkeypatch: pytest.MonkeyPatch) -> RunLimits:
+    """Stand in for a fourth authorization's re-sized limits.
+
+    The limits #437 authorized cannot pay for the run they authorize: one unit
+    reserves 9,216 output tokens against a 4,000 per-unit ceiling, and
+    `assert_limits_are_feasible` refuses them before anything else happens. That
+    refusal is the point of this card, and it makes every gate BEHIND it
+    unreachable under those numbers. A test about one of those later gates
+    therefore runs under the re-sizing the diagnosis of 2026-09-13 puts to the
+    owner (`tests/experiments/usage_replay_double.py::feasible_limits`), patched
+    in as the authorized set so the live gate's "exactly the authorized limits"
+    comparison still holds. Nothing here authorizes a live run: no test reaches
+    a provider, and the committed constants are untouched.
+    """
+
+    limits = feasible_limits()
+    monkeypatch.setattr(instrument, "AUTHORIZED_LIMITS", limits)
+    return limits
 
 
 class _StubClient:
@@ -999,16 +1062,21 @@ class TestLiveGate:
         assert instrument.LIVE_RUN_FLAG not in source
         assert re.search(r"^\s*(?:from|import)\s+llm\.provider", source, re.M) is None
 
-        double = Path(burned_call_double.__file__).read_text(encoding="utf-8")
-        assert instrument.LIVE_RUN_FLAG not in double
-        assert re.search(r"^\s*import\s+llm\.provider", double, re.M) is None
-        taken = {
-            alias.name
-            for node in ast.parse(double).body
-            if isinstance(node, ast.ImportFrom) and node.module == "llm.provider"
-            for alias in node.names
-        }
-        assert taken == {"LLMCallFailure", "_attach_parse_failure"}
+        # Both doubles beside this file are held to the same line rather than
+        # exempted from it. The replay double reaches neither `llm.provider` nor
+        # the flag; the burned-call double has to reach the parse-failure seam,
+        # so what it may take from that module is enumerated.
+        for module in (burned_call_double, usage_replay_double):
+            double = Path(module.__file__ or "").read_text(encoding="utf-8")
+            assert instrument.LIVE_RUN_FLAG not in double
+            assert re.search(r"^\s*import\s+llm\.provider", double, re.M) is None
+            taken = {
+                alias.name
+                for node in ast.parse(double).body
+                if isinstance(node, ast.ImportFrom) and node.module == "llm.provider"
+                for alias in node.names
+            }
+            assert taken in (set(), {"LLMCallFailure", "_attach_parse_failure"})
 
 
 class TestAuthorizedClient:
@@ -1082,7 +1150,7 @@ class TestAuthorizedClient:
             build(env={"FEATHERLESS_API_KEY": "unused"})
 
     def test_the_pre_client_gate_stops_on_a_moved_frozen_set(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """PLANTED: a repository root whose execution manifest is the committed
         one and whose held-out manifest carries a moved digest. The readiness
@@ -1108,9 +1176,12 @@ class TestAuthorizedClient:
                 provider=AUTHORIZED_PROVIDER,
                 invocation=invocation,
                 repo_root=tmp_path,
+                limits=_authorize_feasible_limits(monkeypatch),
             )
 
-    def test_the_pre_client_gate_returns_the_verified_set(self, tmp_path: Path) -> None:
+    def test_the_pre_client_gate_returns_the_verified_set(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """The positive half: it hands back the set the client is then built
         against, so the two cannot come apart. The root is the committed tree
         whenever the Inputs row binds the live band, and a copy of it with that
@@ -1124,7 +1195,10 @@ class TestAuthorizedClient:
             repo_root=root,
         )
         frozen = instrument.assert_ready_for_a_live_run(
-            provider=AUTHORIZED_PROVIDER, invocation=invocation, repo_root=root
+            provider=AUTHORIZED_PROVIDER,
+            invocation=invocation,
+            repo_root=root,
+            limits=_authorize_feasible_limits(monkeypatch),
         )
         assert len(frozen.accepted_seeds) == 50
 
@@ -1178,6 +1252,7 @@ class TestAuthorizedClient:
                 provider=AUTHORIZED_PROVIDER,
                 live_invocation=invocation,
                 repo_root=root,
+                limits=_authorize_feasible_limits(monkeypatch),
             )
         assert seen["expected_model"] == AUTHORIZED_MODEL
 
@@ -1282,7 +1357,7 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
         assert f"holds {live[0]}-{live[1]}" in message
 
     def test_a_stale_binding_stops_the_run_before_a_client_exists(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """PLANTED: an Inputs row naming the first converted band, 3000-3999,
         while the live record holds whatever band the current freeze drew.
@@ -1308,6 +1383,7 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
                 provider=AUTHORIZED_PROVIDER,
                 invocation=invocation,
                 repo_root=tmp_path,
+                limits=_authorize_feasible_limits(monkeypatch),
             )
         message = str(refused.value)
         assert (
@@ -3867,6 +3943,747 @@ class TestExecutionManifest:
             f"{rebinding.name} owes the Inputs row a binding to {MANIFEST_PATH} "
             "and no longer names it"
         )
+
+
+class TestFeasibility:
+    """The arithmetic that refuses a run before a provider exists.
+
+    Every case here is the run of 2026-09-13's stop, moved to startup: the
+    per-unit output ceiling was sized on charged spend and enforced on reserved
+    spend, and nothing about noticing that needed a credential, a connection or
+    a held-out prefix.
+    """
+
+    def _drive_one_unit(self, ceiling: int) -> int:
+        """Six calls at the shipped caps against one per-unit budget.
+
+        The shared budget's own arithmetic, not this module's account of it:
+        `GameBudget.preflight` is what `llm/budgeted_client.py` calls before
+        every send, with the full per-call cap as the output delta. Returns how
+        many of the six calls it let through.
+        """
+
+        budget = GameBudget(
+            max_cost_usd=0.0, max_input_tokens=10**9, max_output_tokens=ceiling
+        )
+        caps = [instrument.AUTHORIZED_TURN_MAX_TOKENS] * instrument.UNIT_TURN_CALLS + [
+            instrument.AUTHORIZED_VOTE_MAX_TOKENS
+        ] * instrument.UNIT_BALLOT_CALLS
+        allowed = 0
+        for cap in caps:
+            usage = TokenUsage(input_tokens=0, output_tokens=cap)
+            try:
+                budget.preflight(usage=usage, cost_usd=0.0)
+            except BudgetExceededError:
+                return allowed
+            budget.charge(usage=usage, cost_usd=0.0)
+            allowed += 1
+        return allowed
+
+    def test_the_reservation_is_what_the_shared_budget_actually_reserves(self) -> None:
+        """PERTURBED: the same six calls under two ceilings.
+
+        Under the authorized 4,000 the budget refuses the second call although
+        every one of the six is legal and untruncated; under the schedule
+        `unit_output_reservation` states it lets all six through. The schedule
+        is therefore the budget's own arithmetic rather than this module's claim
+        about it, and the gate below refuses exactly the ceiling that cannot
+        honour it.
+        """
+
+        assert instrument.unit_output_reservation() == 9_216
+        assert self._drive_one_unit(AUTHORIZED_LIMITS.unit_max_output_tokens) < 6
+        assert self._drive_one_unit(instrument.unit_output_reservation()) == 6
+
+    def test_the_authorized_limits_cannot_pay_for_the_run_they_authorize(self) -> None:
+        """PLANTED with attempt 3's own numbers: 4,000 against 9,216.
+
+        This is the live gate failing closed, and it is intended: the limits
+        merged on 2026-09-07 authorize six calls a unit cannot pay for, and a
+        fourth authorization card has to re-size them before any live run.
+        """
+
+        with pytest.raises(instrument.LimitsInfeasible) as refused:
+            instrument.assert_limits_are_feasible()
+        assert "4,000" in str(refused.value)
+        assert "9,216" in str(refused.value)
+
+    def test_a_re_sized_authorization_passes(self) -> None:
+        """The other half: the diagnosis's provisional re-sizing is feasible."""
+
+        instrument.assert_limits_are_feasible(limits=feasible_limits())
+
+    @pytest.mark.parametrize(
+        ("field", "dimension"),
+        [
+            ("run_max_output_tokens", "output"),
+            ("run_max_input_tokens", "input"),
+        ],
+    )
+    def test_a_run_ceiling_below_its_own_units_is_refused(
+        self, field: str, dimension: str
+    ) -> None:
+        """PLANTED: a run ceiling one token below a hundred measured units.
+
+        The per-unit mismatch one level up. A run whose ceiling cannot pay for
+        the units it plans stops near its end on arithmetic rather than on its
+        own evidence, which is what two of the four authorized ceilings would
+        have done to a complete run even with the per-unit one fixed.
+        """
+
+        calibrated = (
+            instrument.CALIBRATED_UNIT_OUTPUT_TOKENS
+            if dimension == "output"
+            else instrument.CALIBRATED_UNIT_INPUT_TOKENS
+        )
+        needed = calibrated * instrument.planned_units()
+        feasible = feasible_limits()
+        planted = feasible.model_copy(update={field: needed - 1})
+        with pytest.raises(instrument.LimitsInfeasible, match=f"run-level {dimension}"):
+            instrument.assert_limits_are_feasible(limits=planted)
+        instrument.assert_limits_are_feasible(
+            limits=feasible.model_copy(update={field: needed})
+        )
+
+    def test_a_per_unit_ceiling_below_a_unit_already_run_is_refused(self) -> None:
+        """PLANTED: a per-unit input ceiling under the largest archived unit."""
+
+        planted = feasible_limits().model_copy(
+            update={
+                "unit_max_input_tokens": instrument.CALIBRATED_UNIT_INPUT_TOKENS - 1
+            }
+        )
+        with pytest.raises(instrument.LimitsInfeasible, match="per-unit input ceiling"):
+            instrument.assert_limits_are_feasible(limits=planted)
+
+    def test_the_calibration_is_the_largest_unit_the_archives_charged(self) -> None:
+        """The two calibrated constants are read off committed evidence.
+
+        `deduction_usage_profile.json` carries the seven archived units' charged
+        totals; the module's constants are their maxima. A profile rebuilt from
+        another run's archives would move both, and this is where that shows up.
+        """
+
+        largest_input, largest_output = UsageProfile.load().largest_unit()
+        assert instrument.CALIBRATED_UNIT_INPUT_TOKENS == largest_input
+        assert instrument.CALIBRATED_UNIT_OUTPUT_TOKENS == largest_output
+
+    def test_the_gate_runs_before_the_frozen_set_is_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: a landmine in place of the frozen-set check.
+
+        The readiness gate is what the CLI calls before it builds a client, and
+        the feasibility check is the first thing in it — arithmetic over module
+        constants, no path resolved and no file opened — so today's limits stop
+        the run before a credential is read or a prefix regenerated.
+        """
+
+        def landmine(*args: object, **kwargs: object) -> object:
+            raise AssertionError("the frozen set was read before the arithmetic")
+
+        monkeypatch.setattr(instrument, "verify_frozen_set", landmine)
+        root = _root_binding_the_live_band(tmp_path)
+        invocation = LiveRunInvocation.naming(
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
+        )
+        with pytest.raises(instrument.LimitsInfeasible):
+            instrument.assert_ready_for_a_live_run(
+                provider=AUTHORIZED_PROVIDER, invocation=invocation, repo_root=root
+            )
+
+    def test_the_live_run_path_fails_closed_under_the_authorized_limits(
+        self, tmp_path: Path
+    ) -> None:
+        """And the other entry point: `run_instrument` refuses too.
+
+        A caller that skipped the readiness gate and went straight to the run
+        would otherwise reach a provider under limits that cannot pay for it.
+        """
+
+        root = _root_binding_the_live_band(tmp_path)
+        invocation = LiveRunInvocation.naming(
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
+        )
+        with pytest.raises(instrument.LimitsInfeasible):
+            run_instrument(
+                output_dir=tmp_path / "out",
+                client=_StubClient(),
+                provider=AUTHORIZED_PROVIDER,
+                live_invocation=invocation,
+                repo_root=root,
+            )
+
+    def test_the_dry_run_is_not_gated_on_feasibility(self, tmp_path: Path) -> None:
+        """The rehearsal must be able to run under the limits it is rehearsing.
+
+        A fake-provider run spends nothing, and the whole point of the rehearsal
+        below is to reproduce what today's limits do to a run. Gating it on the
+        arithmetic would make the defect unobservable offline, which is the
+        state this card found.
+        """
+
+        report = run_dry(output_dir=tmp_path, units=1)
+        assert report.limits == AUTHORIZED_LIMITS
+
+
+class TestUsageReplay:
+    """The rehearsal sees what the provider did, keyed by arm and call type."""
+
+    def _profile_payload(self) -> dict[str, Any]:
+        loaded = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+        assert isinstance(loaded, dict)
+        return loaded
+
+    def test_the_profile_is_the_archived_calls_and_nothing_else(self) -> None:
+        """36 resolved calls and the two billed-and-refused ones, as counts.
+
+        The field list is asserted rather than described: a row carries an arm,
+        a call type, two token counts, its attempt and its disposition, and a
+        profile that grew a prompt, a response, a seed or a room would fail here
+        rather than be committed.
+        """
+
+        payload = self._profile_payload()
+        rows = payload["calls"]
+        assert payload["totals"]["resolved_calls"] == 36
+        assert payload["totals"]["refused_calls_with_usage"] == 2
+        assert len(rows) == 38
+        permitted = {
+            "arm",
+            "call_type",
+            "input_tokens",
+            "output_tokens",
+            "attempt",
+            "disposition",
+            "error_type",
+        }
+        assert {key for row in rows for key in row} <= permitted
+        encoded = json.dumps(rows)
+        for forbidden in ("prompt", "response", "seed", "room", "tick"):
+            assert forbidden not in encoded, forbidden
+
+    def test_the_replay_answers_each_call_with_its_own_arms_usage(
+        self, tmp_path: Path
+    ) -> None:
+        """Every call's replayed row is its own arm's and its own call type's.
+
+        The double reads the prompt family for the arm and the schema for the
+        call type; this holds that classification against what the run actually
+        asked for, over a whole paired unit of each arm.
+        """
+
+        double = UsageReplayProvider()
+        run_dry(output_dir=tmp_path, units=1, limits=feasible_limits(), client=double)
+        assert len(double.replayed) == 12
+        assert {row.arm for row in double.replayed} == {
+            "repaired_clock",
+            "combined_accounts",
+        }
+        for arm in ("repaired_clock", "combined_accounts"):
+            own = [row for row in double.replayed if row.arm == arm]
+            assert [row.call_type for row in own] == ["turn"] * 3 + ["ballot"] * 3
+            for row in own:
+                cap = (
+                    AUTHORIZED_SAMPLING.turn_max_tokens
+                    if row.call_type == "turn"
+                    else AUTHORIZED_SAMPLING.vote_max_tokens
+                )
+                assert row.output_tokens < cap
+
+    def test_a_prompt_from_neither_family_is_refused(self) -> None:
+        """No silent fallback: an unrecognised family would replay another arm."""
+
+        with pytest.raises(ValueError, match="neither arm's marker"):
+            usage_replay_double.arm_of("nothing recognisable here", "turn")
+
+    def test_the_rehearsal_reproduces_the_stop_of_2026_09_13(
+        self, tmp_path: Path
+    ) -> None:
+        """The 100-unit rehearsal under TODAY's limits, on the replay double.
+
+        It stops where the live run stopped and says the same thing: the
+        candidate arm's per-unit output budget refusing a ballot's 1,024-token
+        reservation at 3,116 charged, against a 4,000 ceiling. The number is the
+        archived unit's own — the rehearsal replays that unit's calls, refusal
+        included — so this is the live stop reproduced offline at $0 rather than
+        a stop of the same shape.
+        """
+
+        double = UsageReplayProvider()
+        with pytest.raises(InstrumentAborted) as stopped:
+            run_dry(output_dir=tmp_path, client=double)
+        partial = stopped.value.partial
+        assert (
+            "LLM budget exceeded on output_tokens: current=3116.0 + "
+            "delta=1024.0 > cap=4000.0" in partial.reason
+        )
+        assert partial.completed_units == 5
+        assert partial.planned_units == 100
+        # The stop is the candidate arm's: it is the arm whose last unit spent
+        # more than the reference arm's whole unit.
+        candidate = partial.usage_by_arm["combined_accounts"]
+        reference = partial.usage_by_arm["repaired_clock"]
+        assert candidate.output_tokens > reference.output_tokens
+        assert partial.usage_by_arm["combined_accounts"].cost_usd == 0.0
+
+    def test_the_rehearsal_is_green_under_a_feasible_authorization(
+        self, tmp_path: Path
+    ) -> None:
+        """The same 100 units under the re-sizing the diagnosis proposes.
+
+        Both arms complete all fifty of their units, and the per-arm output
+        totals are the measured profile's rather than the fixture's 66 tokens a
+        call — which is the whole point: the headroom check below reads a number
+        a real endpoint produced.
+        """
+
+        double = UsageReplayProvider()
+        report = run_dry(output_dir=tmp_path, client=double, limits=feasible_limits())
+        assert [arm.units for arm in report.arms] == [50, 50]
+        assert report.total_cost_usd == 0.0
+        for arm in report.arms:
+            assert arm.output_tokens / arm.units > 1_000
+            assert (
+                arm.output_tokens / arm.units < feasible_limits().unit_max_output_tokens
+            )
+
+    def test_a_call_type_blind_sampler_manufactures_a_truncation(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the same replay with the call type thrown away.
+
+        It hands a ballot capped at 1,024 output tokens the 1,045 a turn
+        produced, and the instrument stops the run on a truncation the provider
+        never produced. Keying the profile by call type is what prevents it, and
+        this is the regression that would otherwise be invisible.
+        """
+
+        with pytest.raises(InstrumentAborted) as stopped:
+            run_dry(
+                output_dir=tmp_path,
+                client=CallTypeBlindReplayProvider(),
+                limits=feasible_limits(),
+            )
+        assert "reached its 1024-token output cap" in stopped.value.partial.reason
+        # And the keyed sampler does not, on the same units and the same limits.
+        keyed = run_dry(
+            output_dir=tmp_path / "keyed",
+            client=UsageReplayProvider(),
+            units=4,
+            limits=feasible_limits(),
+        )
+        assert [arm.units for arm in keyed.arms] == [4, 4]
+
+    def test_the_archived_refusal_is_replayed_where_it_happened(
+        self, tmp_path: Path
+    ) -> None:
+        """A unit whose third turn the provider billed for and refused.
+
+        It is a sample, not a fault: the meeting layer substitutes a placeholder
+        turn, the unit resolves, and the spend is charged off the parse-failure
+        metadata. The rehearsal therefore carries the candidate arm's real
+        defaulted-turn rate rather than a clean run the archives do not show.
+        """
+
+        double = UsageReplayProvider()
+        report = run_dry(
+            output_dir=tmp_path, units=1, limits=feasible_limits(), client=double
+        )
+        assert double.refused == 1
+        candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
+        assert candidate.defaulted_turns == 1
+        assert candidate.defaults_by_validation == 1
+        reference = next(arm for arm in report.arms if arm.arm == "repaired_clock")
+        assert reference.defaulted_turns == 0
+
+
+class TestEmptyResponseShapes:
+    """Every fail-loud shape the authorized client raises is classified.
+
+    The classifier keys on the adapter's own wording, so the set of wordings is
+    ENUMERATED from that adapter's source rather than typed here: a fifth
+    refusal added to `_raw_from_response_body` turns this red instead of
+    reaching a run as an unretried stop.
+    """
+
+    def _raised_messages(self) -> list[str]:
+        source = (_REPO_ROOT / "llm" / "featherless_client.py").read_text("utf-8")
+        function = next(
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_raw_from_response_body"
+        )
+        messages: list[str] = []
+        for node in ast.walk(function):
+            if not isinstance(node, ast.Raise) or node.exc is None:
+                continue
+            call = node.exc
+            assert isinstance(call, ast.Call), ast.unparse(node)
+            messages.append(_literal_message(call.args[0]))
+        return messages
+
+    def test_every_shape_the_adapter_raises_is_a_retry_class(self) -> None:
+        """The enumeration, and the four messages it finds."""
+
+        messages = self._raised_messages()
+        assert len(messages) == 4
+        for message in messages:
+            assert instrument.transport_trigger(RuntimeError(message)) == (
+                "empty_completion"
+            ), message
+        # And the doubles below wear those wordings rather than inventing their
+        # own, so the planted cases prove the classifier against the adapter.
+        for mode in ("empty_body", "no_usage_body", "partial_usage_body"):
+            planted = NO_COMPLETION_MESSAGES[mode]
+            assert any(planted.startswith(message[:40]) for message in messages), mode
+
+    def test_an_uncovered_wording_is_not_classified(self) -> None:
+        """PLANTED: a fifth refusal the marker tuple does not carry.
+
+        The enumeration above is only a gate because this is true: a wording
+        outside `_EMPTY_COMPLETION_MARKERS` classifies as nothing, so an
+        unretried stop is what a new refusal would become — and the test above
+        is what makes that red instead.
+        """
+
+        planted = (
+            "Featherless response carried no completion id (model='x'); refusing "
+            "to record it."
+        )
+        assert instrument.transport_trigger(RuntimeError(planted)) is None
+
+    @pytest.mark.parametrize(
+        "mode", ["empty_body", "no_usage_body", "partial_usage_body"]
+    )
+    def test_each_shape_is_retried_and_the_call_recovers(self, mode: str) -> None:
+        """PLANTED per shape: one attempt of that wording, then a completion.
+
+        The two usage-block refusals were uncovered before this card: they
+        re-raised bare, uncharged and unretried, so a run would have stopped on
+        the first one the endpoint produced.
+        """
+
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        double = NoCompletionProvider(mode=cast(Any, mode), failures=1)
+        client = instrument._InstrumentClient(
+            double, work_clock=clock, backoff_base_seconds=0.0
+        )
+        response = asyncio.run(
+            client.complete(prompt="p", schema=None, max_tokens=1024, temperature=0.2)
+        )
+        assert response.text
+        assert double.attempts == 2
+        counted = client.attempts()
+        assert counted.retried_calls == 1
+        assert dict(counted.by_trigger) == {"empty_completion": 1}
+        # The attempt that bought nothing is in the ledger at zero tokens.
+        assert [call.model for call in client.calls][0] == (
+            instrument.UNACCOUNTED_ATTEMPT_MODEL
+        )
+
+    def test_the_markers_are_still_the_adapters_own_wording(self) -> None:
+        """Each fragment the classifier keys on is in that adapter's source."""
+
+        source = (_REPO_ROOT / "llm" / "featherless_client.py").read_text("utf-8")
+        for marker in instrument._EMPTY_COMPLETION_MARKERS:
+            assert marker in source, marker
+
+
+class TestCheckpointAndResume:
+    """A stopped run continues where it stopped, or is refused for not being it."""
+
+    def _checkpoint(self, tmp_path: Path, *, units: int = 2) -> Path:
+        path = tmp_path / "checkpoint.json"
+        run_dry(
+            output_dir=tmp_path / "run",
+            units=units,
+            limits=feasible_limits(),
+            client=UsageReplayProvider(),
+            checkpoint_path=path,
+        )
+        return path
+
+    def test_a_checkpoint_is_written_after_every_paired_seed(
+        self, tmp_path: Path
+    ) -> None:
+        """Both arms of a prefix, or nothing: a resume never begins mid-pair."""
+
+        checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
+        frozen = verify_frozen_set(_REPO_ROOT)
+        assert checkpoint.completed_seeds == tuple(frozen.accepted_seeds[:2])
+        assert len(checkpoint.units) == 4
+        assert {unit.arm for unit in checkpoint.units} == {
+            "repaired_clock",
+            "combined_accounts",
+        }
+        assert checkpoint.held_out_manifest_sha256 == frozen.manifest_sha256
+        assert checkpoint.arm_surface_sha256 == dict(instrument.arm_surface_digests())
+
+    def test_the_checkpoint_carries_no_prompt_or_prefix_bytes(
+        self, tmp_path: Path
+    ) -> None:
+        """The report's rule, applied to the other artifact a run writes."""
+
+        path = self._checkpoint(tmp_path, units=2)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        frozen = verify_frozen_set(_REPO_ROOT)
+        strings = instrument._every_string_in(payload)
+        for prefix in frozen.prefixes[:2]:
+            assert not any(canonical_prefix_json(prefix) in text for text in strings)
+            for step in prefix.steps:
+                fragment = json.dumps(
+                    step.model_dump(mode="json"),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                assert not any(fragment in text for text in strings)
+        assert_no_legacy_body_handles(strings)
+
+    def test_a_resumed_run_reports_what_an_uninterrupted_one_does(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a provider that stops answering at the third paired seed.
+
+        The run stops there with two seeds completed and a checkpoint on disk;
+        a second sitting continues at the third and produces the same report —
+        the same graded units, the same verdicts, the same per-arm token totals
+        — apart from the two wall clocks, which measure real time and cannot be
+        the same twice.
+        """
+
+        limits = feasible_limits()
+        whole = run_dry(
+            output_dir=tmp_path / "whole",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(),
+        )
+        checkpoint_path = tmp_path / "checkpoint.json"
+        stopper = UsageReplayProvider(
+            spoil_call=25,
+            spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+            mode="transport_error",
+        )
+        with pytest.raises(InstrumentAborted) as stopped:
+            run_dry(
+                output_dir=tmp_path / "stopped",
+                units=4,
+                limits=limits,
+                client=stopper,
+                checkpoint_path=checkpoint_path,
+            )
+        assert stopped.value.partial.completed_units == 4
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+        assert len(checkpoint.completed_seeds) == 2
+
+        # The double picks the rotation up where the completed units left it:
+        # three draws per bucket per unit, two units of each arm finished.
+        resumed = run_dry(
+            output_dir=tmp_path / "resumed",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(seed=6),
+            resume=checkpoint,
+        )
+        assert _without_wall(resumed) == _without_wall(whole)
+
+    def test_a_resume_continues_at_the_next_unrendered_seed(
+        self, tmp_path: Path
+    ) -> None:
+        """The tail of the ascending list, and a hole in it refused."""
+
+        checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
+        frozen = verify_frozen_set(_REPO_ROOT)
+        remaining = instrument.next_seeds_after(checkpoint, frozen.prefixes[:4])
+        assert [prefix.seed for prefix in remaining] == list(frozen.accepted_seeds[2:4])
+        holed = checkpoint.model_copy(
+            update={"completed_seeds": (frozen.accepted_seeds[1],)}
+        )
+        with pytest.raises(instrument.ResumeNotAuthorized, match="not a prefix"):
+            instrument.next_seeds_after(holed, frozen.prefixes[:4])
+
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("manifest_sha256", "0" * 64, "execution manifest"),
+            ("held_out_manifest_sha256", "0" * 64, "inputs moved"),
+            ("provider", "featherless", "asks for"),
+        ],
+    )
+    def test_a_checkpoint_that_is_not_this_run_is_refused(
+        self, tmp_path: Path, field: str, value: str, message: str
+    ) -> None:
+        """PLANTED one identity at a time: a resume is the SAME run or none."""
+
+        checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
+        planted = checkpoint.model_copy(update={field: value})
+        with pytest.raises(instrument.ResumeNotAuthorized, match=message):
+            instrument.assert_checkpoint_matches(
+                planted,
+                provider="fake",
+                limits=feasible_limits(),
+                sampling=AUTHORIZED_SAMPLING,
+                frozen=verify_frozen_set(_REPO_ROOT),
+            )
+
+    def test_a_moved_arm_surface_byte_refuses_the_resume(self, tmp_path: Path) -> None:
+        """PLANTED: one template of the prompt set, one byte different.
+
+        The digest is recomputed from the tree at resume time, so this is the
+        real check: a second sitting whose prompts render differently would pair
+        units drawn from two instruments, and the arms are what the design
+        compares.
+        """
+
+        checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
+        moved = dict(checkpoint.arm_surface_sha256)
+        template = f"{instrument.ARM_SURFACE_PROMPT_DIR}/vote_ballot.j2"
+        assert template in moved
+        moved[template] = "0" * 64
+        planted = checkpoint.model_copy(update={"arm_surface_sha256": moved})
+        with pytest.raises(
+            instrument.ResumeNotAuthorized, match="arm surface moved"
+        ) as refused:
+            instrument.assert_checkpoint_matches(
+                planted,
+                provider="fake",
+                limits=feasible_limits(),
+                sampling=AUTHORIZED_SAMPLING,
+                frozen=verify_frozen_set(_REPO_ROOT),
+            )
+        assert template in str(refused.value)
+
+    def test_a_resume_under_other_limits_is_refused(self, tmp_path: Path) -> None:
+        """The budgets are carried, so the ceilings are the first sitting's."""
+
+        checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
+        with pytest.raises(instrument.ResumeNotAuthorized, match="different limits"):
+            instrument.assert_checkpoint_matches(
+                checkpoint,
+                provider="fake",
+                limits=AUTHORIZED_LIMITS,
+                sampling=AUTHORIZED_SAMPLING,
+                frozen=verify_frozen_set(_REPO_ROOT),
+            )
+
+    def test_the_carried_budget_is_charged_before_the_second_sitting_spends(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a run ceiling the first sitting already exhausted.
+
+        A resume that forgot the first sitting's spend would run the whole tail
+        under a fresh budget, which is the one thing a carried budget must not
+        do. Here the carried total is already past the ceiling, so the charge
+        raises before a unit runs.
+        """
+
+        checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
+        spent = sum(usage.output_tokens for usage in checkpoint.usage_by_arm().values())
+        assert spent > 0
+        tight = feasible_limits().model_copy(
+            update={"run_max_output_tokens": spent - 1}
+        )
+        squeezed = checkpoint.model_copy(update={"limits": tight})
+        with pytest.raises(BudgetExceededError):
+            run_dry(
+                output_dir=tmp_path / "resumed",
+                units=4,
+                limits=tight,
+                client=UsageReplayProvider(seed=6),
+                resume=squeezed,
+            )
+
+    def test_a_live_resume_is_refused_until_the_manifest_says_so(
+        self, tmp_path: Path
+    ) -> None:
+        """The mechanism is built and rehearsed; spending on it is the owner's.
+
+        The committed manifest carries no resumption clause, so the live gate
+        refuses a resume today. A root whose manifest carries the owner's
+        sentence passes the same check, which is what makes this a gate on the
+        document rather than on the code.
+        """
+
+        assert instrument.RESUMPTION_CLAUSE not in _MANIFEST.read_text("utf-8")
+        with pytest.raises(instrument.ResumeNotAuthorized, match="resumption clause"):
+            instrument.assert_resume_is_authorized(provider=AUTHORIZED_PROVIDER)
+        authorized = tmp_path / EXECUTION_MANIFEST_PATH
+        authorized.parent.mkdir(parents=True)
+        authorized.write_text(
+            _MANIFEST.read_text("utf-8") + f"\n{instrument.RESUMPTION_CLAUSE}\n",
+            encoding="utf-8",
+        )
+        instrument.assert_resume_is_authorized(
+            provider=AUTHORIZED_PROVIDER, repo_root=tmp_path
+        )
+        # And the fake path is untouched: a rehearsal that could not resume
+        # could not prove the resume.
+        instrument.assert_resume_is_authorized(provider="fake")
+
+    def test_the_readiness_gate_refuses_a_live_resume(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The refusal reaches the CLI's own pre-client gate, not just the helper."""
+
+        root = _root_binding_the_live_band(tmp_path)
+        invocation = LiveRunInvocation.naming(
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
+        )
+        with pytest.raises(instrument.ResumeNotAuthorized):
+            instrument.assert_ready_for_a_live_run(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=invocation,
+                repo_root=root,
+                resuming=True,
+                limits=_authorize_feasible_limits(monkeypatch),
+            )
+
+    def test_a_file_that_is_not_a_checkpoint_is_refused(self, tmp_path: Path) -> None:
+        """Two plants: not JSON, and JSON of another schema."""
+
+        broken = tmp_path / "broken.json"
+        broken.write_text("{not json", encoding="utf-8")
+        with pytest.raises(instrument.ResumeNotAuthorized, match="not a checkpoint"):
+            instrument.read_checkpoint(broken)
+        foreign = tmp_path / "foreign.json"
+        foreign.write_text('{"schema_version": "something/9"}', encoding="utf-8")
+        with pytest.raises(instrument.ResumeNotAuthorized, match="carries schema"):
+            instrument.read_checkpoint(foreign)
+        with pytest.raises(instrument.ResumeNotAuthorized, match="no checkpoint at"):
+            instrument.read_checkpoint(tmp_path / "absent.json")
+
+    def test_the_cli_takes_the_checkpoint_and_the_resume(self, tmp_path: Path) -> None:
+        """The operator's own path: write one, then continue from it."""
+
+        checkpoint = tmp_path / "cp.json"
+        assert (
+            instrument.main(
+                [
+                    "--dry-run",
+                    "--units",
+                    "2",
+                    "--output-dir",
+                    str(tmp_path / "first"),
+                    "--checkpoint",
+                    str(checkpoint),
+                    "--json",
+                    str(tmp_path / "first.json"),
+                ]
+            )
+            == 0
+        )
+        assert instrument.read_checkpoint(checkpoint).completed_seeds
 
 
 class TestHarnessesUntouched:

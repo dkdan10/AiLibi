@@ -485,6 +485,35 @@ asserts this document quotes each of them.
   further to pre-flight. A budget found past its cap stops the run on the unit
   that crossed it: the tokens are already spent, and the stop is what keeps
   the next unit from spending more.
+
+  Both ceilings are stated in one unit of account and enforced in another, and
+  that difference is what stopped the run of 2026-09-13. The rule is quoted
+  verbatim from `RESERVATION_POLICY`:
+
+  The token ceilings are enforced on RESERVED spend and were sized on
+  CHARGED spend. Every call is pre-flighted against its full per-call output
+  cap before it is sent, so one unit reserves 3 x 2,048 for its turns and 3
+  x 1,024 for its ballots — 9,216 output tokens — whatever it is then
+  billed. A per-unit output ceiling below that schedule authorizes six legal
+  calls it cannot pay for, and refuses one of them by arithmetic rather than
+  by spend; the instrument therefore refuses such a ceiling before a live
+  run starts, rather than discovering it partway through one. The run-level
+  ceilings are the same question one level up and are checked against the
+  largest per-unit spend the live archives have charged — 24,282 input and
+  3,116 output — rather than against a mean projection: a hundred units at
+  the largest unit this evaluation has measured is what a run ceiling has to
+  be able to pay for, because a ceiling that cannot is a stop rule that
+  fires on arithmetic near the end of a run it has already paid for.
+
+  `assert_limits_are_feasible` is where it bites, before a credential, a client
+  or a held-out prefix exists: it refuses a per-unit output ceiling below the
+  reservation schedule above, a per-unit input ceiling below the largest unit
+  the live archives charged, and either run-level ceiling below a hundred units
+  at that figure. Under the limits merged on 2026-09-07 it REFUSES, which is
+  deliberate and is the live gate failing closed: those numbers authorize six
+  calls a unit cannot pay for, and a fourth authorization card has to re-size
+  them before any live run. Nothing about noticing this needed a provider —
+  it is arithmetic over the module constants this table binds.
 - **Wall.** Two clocks, because the authorization names two limits: one
   `orchestrator.run_limits.RunDeadline` for the 8 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
@@ -508,7 +537,9 @@ asserts this document quotes each of them.
   A call whose attempt came back with no completion at all is sent again by
   this instrument's own client wrapper rather than by the provider client,
   so no recorded campaign changes behaviour: at most 4 attempts, one send
-  and 3 retries, on an empty or choices-less body, a transport failure, a
+  and 3 retries, on any body the authorized client refuses to record a
+  completion from — no choices, empty assistant content, or a usage block it
+  cannot read token counts out of — as well as a transport failure, a
   retryable HTTP status, or an attempt that outran the 180 s per-attempt
   wall this wrapper bounds each send by — each retry after a short
   exponential backoff, and each attempt still bounded by what is left of the
@@ -519,11 +550,13 @@ asserts this document quotes each of them.
   budget or deadline and a refused live run are all left exactly as they
   were. Every retried attempt is recorded as an unaccounted attempt carrying
   zero tokens, which may have been billed for tokens this side cannot see:
-  the provider client raises on a body with no completion in it before it
-  reads that body's usage block, so no usage rides any of these four classes
-  and this wrapper has none to charge. The attempts are counted per arm and
-  per unit — retried calls, unaccounted attempts and the trigger class of
-  each — beside the meeting-internal defaults.
+  the provider client raises instead of returning a completion, and its
+  refusal carries no usage onto the exception, so no usage rides any of
+  these four classes and this wrapper has none to charge. A body it refused
+  for the state of its usage block is no different here: what the adapter
+  read, it did not pass on. The attempts are counted per arm and per unit —
+  retried calls, unaccounted attempts and the trigger class of each — beside
+  the meeting-internal defaults.
 - **Dollar.** `max_cost_usd=0.0` on both budgets, which the provider's zero
   pre-flight rate makes bookkeeping rather than a brake — exactly as the cost
   statement says.
@@ -603,6 +636,20 @@ the constant itself, so the file doing the scanning carries no copy of the needl
 and needs no exemption. Committed tests DO construct `LiveRunInvocation` objects
 — proving each refusal above is what they are for — and none of them reaches a
 provider.
+
+A run may also write a per-unit checkpoint (`--checkpoint`) and be continued
+from one (`--resume`), and the second of those is gated on this document rather
+than on the code. `assert_resume_is_authorized` refuses a live resume unless
+this manifest carries the owner's resumption clause — the sentence
+`RESUMPTION_CLAUSE` holds, which this document deliberately does not reproduce,
+so describing the mechanism cannot authorize it. It does not carry that
+sentence today, so no live run may be resumed: the mechanism is built and
+rehearsed on the fake provider, and a second sitting on the held-out set is
+decision 2 of [the diagnosis](../../tasks/diagnosis-2026-09-13-live-run-stops.md),
+which is the owner's to take on a fourth authorization card. A resume is also
+refused, on any provider, unless the checkpoint's execution manifest, held-out
+freeze, arm-surface digests, limits and sampling configuration are still this
+tree's: a resumed run is the same run or it is none.
 
 The gate and the frozen-set check both run BEFORE a client is constructed, and
 that order is a property of the signatures rather than of the order two lines

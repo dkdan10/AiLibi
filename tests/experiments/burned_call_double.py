@@ -211,6 +211,23 @@ TRANSPORT_ERROR: Final[str] = (
     "RemoteProtocolError: incomplete chunked read"
 )
 
+#: What the same module raises when the body carried a completion but no usage
+#: block it would read token counts out of, and when the block was there without
+#: the two counts. Both are refusals of the whole response: what the adapter read
+#: it did not pass on, so nothing rides the exception and the instrument's
+#: wrapper has no usage to charge for either.
+NO_USAGE_BODY_ERROR: Final[str] = (
+    "Featherless response carried no usage block (model='Qwen/Qwen3.6-27B'); "
+    "refusing to record 0 tokens, which would under-count the per-game token "
+    "budget (the only backstop under $0 provider-keyed cost)."
+)
+
+PARTIAL_USAGE_BODY_ERROR: Final[str] = (
+    "Featherless usage block omitted prompt_tokens / completion_tokens "
+    "(model='Qwen/Qwen3.6-27B'); refusing to record 0 tokens, which would "
+    "under-count the per-game token budget."
+)
+
 #: And what it raises on a retryable status it could not get past
 #: (`_format_send_error`).
 RETRYABLE_STATUS_ERROR: Final[str] = (
@@ -225,12 +242,24 @@ RETRYABLE_STATUS_ERROR: Final[str] = (
 #: sample the run may not re-draw.
 NoCompletionMode = Literal[
     "empty_body",
+    "no_usage_body",
+    "partial_usage_body",
     "transport_error",
     "retryable_status",
     "stall",
     "truncation",
     "invalid_schema",
 ]
+
+#: The message each no-completion mode raises, so a test can plant one per
+#: wording the adapter actually uses rather than per mode name.
+NO_COMPLETION_MESSAGES: Final[dict[str, str]] = {
+    "empty_body": EMPTY_BODY_ERROR,
+    "no_usage_body": NO_USAGE_BODY_ERROR,
+    "partial_usage_body": PARTIAL_USAGE_BODY_ERROR,
+    "transport_error": TRANSPORT_ERROR,
+    "retryable_status": RETRYABLE_STATUS_ERROR,
+}
 
 
 class NoCompletionProvider(DryRunProvider):
@@ -274,12 +303,9 @@ class NoCompletionProvider(DryRunProvider):
     ) -> LLMResponse:
         self.attempts += 1
         if self.attempts <= self.failures:
-            if self.mode == "empty_body":
-                raise RuntimeError(EMPTY_BODY_ERROR)
-            if self.mode == "transport_error":
-                raise RuntimeError(TRANSPORT_ERROR)
-            if self.mode == "retryable_status":
-                raise RuntimeError(RETRYABLE_STATUS_ERROR)
+            planted = NO_COMPLETION_MESSAGES.get(self.mode)
+            if planted is not None:
+                raise RuntimeError(planted)
             if self.mode == "stall":
                 await asyncio.sleep(self.stall_seconds)
             if self.mode == "invalid_schema" and schema is not None:

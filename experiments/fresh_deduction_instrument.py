@@ -328,6 +328,82 @@ AUTHORIZED_SAMPLING: Final[SamplingConfig] = SamplingConfig(
 
 
 # ---------------------------------------------------------------------------
+# What a unit RESERVES, and what a unit has actually COST
+# ---------------------------------------------------------------------------
+#
+# The two units of account the run of 2026-09-13 was sized in and enforced in
+# (``tasks/diagnosis-2026-09-13-live-run-stops.md``). Everything below is
+# arithmetic over the constants above and over seven archived live units; none
+# of it reads a file, so it can refuse a run before a credential exists.
+
+#: The calls one unit makes, by kind: one opening turn per living speaker and
+#: one ballot per living voter. Both are the roster's living count, and
+#: :func:`run_unit` refuses a unit that resolved a different number of ballots,
+#: so this is the schedule the run follows rather than an estimate of it.
+UNIT_TURN_CALLS: Final[int] = AUTHORIZED_LIVING_VOTERS
+UNIT_BALLOT_CALLS: Final[int] = AUTHORIZED_LIVING_VOTERS
+
+#: The largest input and output a single unit has been CHARGED, over the seven
+#: units the three stopped live runs archived (their per-call rows are in
+#: ``tests/experiments/deduction_usage_profile.json``, whose ``units`` block a
+#: test holds these two numbers to). The input figure is a complete six-call
+#: unit; the output figure is a unit that stopped after four of its six calls,
+#: so it is a floor on what a complete unit of that arm charges rather than a
+#: measurement of one. They are what the run-level ceilings are checked
+#: against, because a ceiling is an anomaly detector and the largest thing this
+#: evaluation has measured is the anomaly's lower edge.
+CALIBRATED_UNIT_INPUT_TOKENS: Final[int] = 24_282
+CALIBRATED_UNIT_OUTPUT_TOKENS: Final[int] = 3_116
+
+
+def planned_units() -> int:
+    """How many units a whole run is: one per frozen prefix per arm."""
+
+    return PREREGISTERED_BAND.size * len(instrument_arms())
+
+
+def unit_output_reservation(
+    *,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    living_voters: int = AUTHORIZED_LIVING_VOTERS,
+) -> int:
+    """The output tokens ONE unit reserves before it is billed for anything.
+
+    ``llm/budgeted_client.py`` pre-flights every call against the full per-call
+    output cap (``llm/budgeted_client.py:259``), so a unit's six calls reserve
+    the whole of both caps whatever the model then writes. This is that
+    schedule, and :func:`assert_limits_are_feasible` is what holds a ceiling to
+    it.
+    """
+
+    if living_voters < 1:
+        raise ValueError(f"a unit has at least one living voter, got {living_voters}")
+    return living_voters * (sampling.turn_max_tokens + sampling.vote_max_tokens)
+
+
+RESERVATION_POLICY: Final[str] = (
+    "The token ceilings are enforced on RESERVED spend and were sized on "
+    "CHARGED spend. Every call is pre-flighted against its full per-call output "
+    "cap before it is sent, so one unit reserves "
+    f"{UNIT_TURN_CALLS} x {AUTHORIZED_TURN_MAX_TOKENS:,} for its turns and "
+    f"{UNIT_BALLOT_CALLS} x {AUTHORIZED_VOTE_MAX_TOKENS:,} for its ballots — "
+    f"{unit_output_reservation():,} output tokens — whatever it is then billed. "
+    "A per-unit output ceiling below that schedule authorizes six legal calls "
+    "it cannot pay for, and refuses one of them by arithmetic rather than by "
+    "spend; the instrument therefore refuses such a ceiling before a live run "
+    "starts, rather than discovering it partway through one. The run-level "
+    "ceilings are the same question one level up and are checked against the "
+    "largest per-unit spend the live archives have charged — "
+    f"{CALIBRATED_UNIT_INPUT_TOKENS:,} input and "
+    f"{CALIBRATED_UNIT_OUTPUT_TOKENS:,} output — rather than against a mean "
+    "projection: a hundred units at the largest unit this evaluation has "
+    "measured is what a run ceiling has to be able to pay for, because a "
+    "ceiling that cannot is a stop rule that fires on arithmetic near the end "
+    "of a run it has already paid for."
+)
+
+
+# ---------------------------------------------------------------------------
 # The preregistered analysis, frozen before any outcome is inspected
 # ---------------------------------------------------------------------------
 
@@ -462,7 +538,9 @@ TRANSPORT_RETRY: Final[str] = (
     "this instrument's own client wrapper rather than by the provider client, "
     "so no recorded campaign changes behaviour: at most "
     f"{MAX_TRANSPORT_ATTEMPTS} attempts, one send and "
-    f"{MAX_TRANSPORT_ATTEMPTS - 1} retries, on an empty or choices-less body, "
+    f"{MAX_TRANSPORT_ATTEMPTS - 1} retries, on any body the authorized client "
+    "refuses to record a completion from — no choices, empty assistant "
+    "content, or a usage block it cannot read token counts out of — as well as "
     "a transport failure, a retryable HTTP status, or an attempt that outran "
     f"the {PER_ATTEMPT_TIMEOUT_SECONDS:.0f} s per-attempt wall this wrapper "
     "bounds each send by — each retry after a short exponential backoff, and "
@@ -474,9 +552,11 @@ TRANSPORT_RETRY: Final[str] = (
     "deadline and a refused live run are all left exactly as they were. Every "
     "retried attempt is recorded as an unaccounted attempt carrying zero "
     "tokens, which may have been billed for tokens this side cannot see: the "
-    "provider client raises on a body with no completion in it before it reads "
-    "that body's usage block, so no usage rides any of these four classes and "
-    "this wrapper has none to charge. The attempts are counted per arm and per "
+    "provider client raises instead of returning a completion, and its refusal "
+    "carries no usage onto the exception, so no usage rides any of these four "
+    "classes and this wrapper has none to charge. A body it refused for the "
+    "state of its usage block is no different here: what the adapter read, it "
+    "did not pass on. The attempts are counted per arm and per "
     "unit — retried calls, unaccounted attempts and the trigger class of each "
     "— beside the meeting-internal defaults."
 )
@@ -505,6 +585,29 @@ class FrozenSetMismatch(InstrumentError):
 
 class LiveRunNotAuthorized(InstrumentError):
     """A non-fake provider was reached without an explicit live invocation."""
+
+
+class LimitsInfeasible(InstrumentError):
+    """The authorized limits cannot pay for the run they authorize.
+
+    Not a stop: a refusal BEFORE a run, raised by :func:`assert_limits_are_feasible`
+    from arithmetic over module constants alone. A ceiling below the reservation
+    schedule the same run will make is a mismatch between the unit the limit was
+    sized in and the unit it is enforced in, and it is static — the run of
+    2026-09-13 discovered it live, and nothing about discovering it needed a
+    provider.
+    """
+
+
+class ResumeNotAuthorized(InstrumentError):
+    """A resumed run was asked for where no authorization or state allows one.
+
+    Three different refusals share this class because they are one rule: a
+    resume continues a run under the manifest and the sources the stopped one
+    ran under. A checkpoint whose digests are not this tree's is a different
+    run; a live resume without the owner's resumption clause in the committed
+    manifest is an unauthorized one.
+    """
 
 
 class PerCallCapExceeded(InstrumentError):
@@ -935,6 +1038,76 @@ def assert_live_run_is_authorized(
     # document authorized THESE inputs. A held-out band that moves under a
     # manifest nobody re-bound passes every check above it.
     assert_manifest_binds_the_live_band(repo_root)
+    # Last here, first in :func:`assert_ready_for_a_live_run`. The checks above
+    # say WHICH run this is, and a run whose manifest, model or band is wrong
+    # should be told that rather than told its arithmetic; on the CLI's own path
+    # the arithmetic is checked before any of this, because it reads nothing.
+    assert_limits_are_feasible(limits=limits, sampling=sampling, units=units)
+
+
+def assert_limits_are_feasible(
+    *,
+    limits: RunLimits = AUTHORIZED_LIMITS,
+    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    units: int | None = None,
+) -> None:
+    """Refuse limits a run cannot honour, from arithmetic alone.
+
+    :data:`RESERVATION_POLICY` states the rule; this enforces it. Four
+    comparisons, no file and no client:
+
+    * the per-unit OUTPUT ceiling against :func:`unit_output_reservation` — the
+      schedule one unit's six pre-flights reserve. The run of 2026-09-13 was
+      stopped by this one: 4,000 against 9,216, six legal calls authorized and
+      the fifth refused by the reservation arithmetic;
+    * the per-unit INPUT ceiling against the largest unit the live archives
+      charged, because a ceiling below a unit this evaluation has already run
+      refuses a unit it has already seen;
+    * both RUN ceilings against that same per-unit figure times the unit count.
+      A run ceiling below what its own units are authorized to spend stops the
+      run near its end on arithmetic rather than on a real overrun, which is
+      the same two-units-of-account defect one level up.
+
+    It runs first in :func:`assert_ready_for_a_live_run` and again inside
+    :func:`assert_live_run_is_authorized`, so neither the CLI's path nor a
+    direct :func:`run_instrument` call can reach a provider without it. Under
+    the limits authorized on 2026-09-07 it refuses, which is the point: those
+    limits cannot pay for the run they authorize, and a fourth authorization
+    card has to re-size them before a live run starts.
+    """
+
+    planned = planned_units() if units is None else units
+    if planned < 1:
+        raise ValueError(f"a run has at least one unit, got {planned}")
+    reserved = unit_output_reservation(sampling=sampling)
+    if limits.unit_max_output_tokens < reserved:
+        raise LimitsInfeasible(
+            f"the per-unit output ceiling is {limits.unit_max_output_tokens:,} "
+            f"tokens and one unit reserves {reserved:,} "
+            f"({UNIT_TURN_CALLS} x {sampling.turn_max_tokens:,} + "
+            f"{UNIT_BALLOT_CALLS} x {sampling.vote_max_tokens:,}): this run "
+            "authorizes calls it cannot pay for, and the budget would refuse "
+            "one of them on the reservation rather than on the spend"
+        )
+    if limits.unit_max_input_tokens < CALIBRATED_UNIT_INPUT_TOKENS:
+        raise LimitsInfeasible(
+            f"the per-unit input ceiling is {limits.unit_max_input_tokens:,} "
+            "tokens and the largest unit the live archives charged is "
+            f"{CALIBRATED_UNIT_INPUT_TOKENS:,}: this ceiling refuses a unit "
+            "this evaluation has already run"
+        )
+    for dimension, ceiling, calibrated in (
+        ("output", limits.run_max_output_tokens, CALIBRATED_UNIT_OUTPUT_TOKENS),
+        ("input", limits.run_max_input_tokens, CALIBRATED_UNIT_INPUT_TOKENS),
+    ):
+        needed = calibrated * planned
+        if ceiling < needed:
+            raise LimitsInfeasible(
+                f"the run-level {dimension} ceiling is {ceiling:,} tokens and "
+                f"{planned} units at the largest unit the live archives "
+                f"charged ({calibrated:,}) need {needed:,}: a run this long "
+                "would stop on the run ceiling rather than on its own evidence"
+            )
 
 
 def assert_client_matches_provider(*, provider: str, client: object | None) -> None:
@@ -975,6 +1148,42 @@ def assert_client_matches_provider(*, provider: str, client: object | None) -> N
         )
 
 
+#: The sentence the owner's resumption clause has to put in the execution
+#: manifest before a LIVE run may be resumed. Held here as the thing the gate
+#: looks for rather than as a paraphrase, so a manifest that merely discusses
+#: resuming does not authorize one: the words below are the authorization, and
+#: the document that describes this mechanism deliberately does not carry them.
+#: Decision 2 of the diagnosis of 2026-09-13 is the clause's substance; writing
+#: it into the manifest is the fourth authorization card's, not this one's.
+RESUMPTION_CLAUSE: Final[str] = (
+    "A run stopped by an environmental cause may be resumed under this "
+    "manifest, at the next unrendered seed, under the same budgets."
+)
+
+
+def assert_resume_is_authorized(*, provider: str, repo_root: Path = _REPO_ROOT) -> None:
+    """Refuse a LIVE resume until the manifest carries the owner's clause.
+
+    The mechanism exists and the fake-provider rehearsal uses it; spending a
+    held-out band on a second sitting is a different question, and it is the
+    owner's. ``fake`` passes untouched, because a rehearsal that could not
+    resume could not prove the resume.
+    """
+
+    if provider == "fake":
+        return
+    manifest = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
+    if not manifest.is_file():
+        raise ResumeNotAuthorized(f"execution manifest is missing: {manifest}")
+    if RESUMPTION_CLAUSE not in manifest.read_text(encoding="utf-8"):
+        raise ResumeNotAuthorized(
+            f"{EXECUTION_MANIFEST_PATH} carries no resumption clause, so a live "
+            "run may not be continued from a checkpoint: the mechanism is "
+            "built and rehearsed offline, and authorizing a second sitting on "
+            "the held-out set is the owner's decision, not this runner's"
+        )
+
+
 def assert_ready_for_a_live_run(
     *,
     provider: str,
@@ -983,14 +1192,18 @@ def assert_ready_for_a_live_run(
     limits: RunLimits = AUTHORIZED_LIMITS,
     sampling: SamplingConfig = AUTHORIZED_SAMPLING,
     repo_root: Path = _REPO_ROOT,
+    resuming: bool = False,
 ) -> FrozenSet:
     """Everything that must hold BEFORE a live client exists, in order.
 
-    The authorization gate first, then the frozen held-out set, and only then may
-    a caller build a client — which is why this returns the verified
-    :class:`FrozenSet` and :func:`build_authorized_client` takes one. A client is
-    a credential and a connection; a run that must stop should stop before one is
-    made, and a moved held-out set is exactly such a stop.
+    Feasibility first — it is arithmetic over module constants, reads nothing
+    and needs nothing, so limits that cannot pay for their own run are refused
+    before a path is resolved. Then the authorization gate, then the frozen
+    held-out set, and only then may a caller build a client — which is why this
+    returns the verified :class:`FrozenSet` and :func:`build_authorized_client`
+    takes one. A client is a credential and a connection; a run that must stop
+    should stop before one is made, and a moved held-out set is exactly such a
+    stop.
 
     ``FrozenSet`` and :func:`verify_frozen_set` are defined further down this
     module; the annotations are lazy (``from __future__ import annotations``) and
@@ -998,6 +1211,9 @@ def assert_ready_for_a_live_run(
     convenience rather than a constraint.
     """
 
+    assert_limits_are_feasible(limits=limits, sampling=sampling, units=units)
+    if resuming:
+        assert_resume_is_authorized(provider=provider, repo_root=repo_root)
     assert_live_run_is_authorized(
         provider=provider,
         invocation=invocation,
@@ -1176,15 +1392,22 @@ _RETRYABLE_STATUS_CODES: Final[frozenset[int]] = frozenset({429, 500, 502, 503, 
 #: (``_format_send_error``, ``llm/featherless_client.py:671-681``).
 _HTTP_STATUS_IN_MESSAGE: Final[re.Pattern[str]] = re.compile(r"\bHTTP (\d{3})\b")
 
-#: What the authorized client says when a 2xx body carried no completion to
-#: record (``_raw_from_response_body``, ``llm/featherless_client.py:804-833``).
-#: It raises a bare ``RuntimeError`` for both, so the message is the only handle
-#: there is; a test asserts each fragment is still in that module's source, so a
-#: rewording turns this classifier red instead of turning it into a stop
-#: mid-run.
+#: What the authorized client says when a 2xx body gave it no completion it
+#: would record (``_raw_from_response_body``, ``llm/featherless_client.py:803-858``).
+#: It raises a bare ``RuntimeError`` for every one of them, so the message is the
+#: only handle there is. Two tests hold this tuple to that function: one asserts
+#: each fragment is still in its source, so a rewording turns the classifier red
+#: instead of turning it into a stop mid-run, and one ENUMERATES every message
+#: that function raises and requires this tuple to classify all of them, so a
+#: fifth refusal shape added there is red here rather than silently unretried.
+#: The last two arrive after the body's ``usage`` block has been read and
+#: rejected rather than before, which changes nothing this side: a refusal the
+#: adapter raises carries no usage onto the exception either way.
 _EMPTY_COMPLETION_MARKERS: Final[tuple[str, ...]] = (
     "refusing to record an empty completion",
     "returned empty assistant content",
+    "carried no usage block",
+    "usage block omitted prompt_tokens / completion_tokens",
 )
 
 #: And what it says when its own sends exhausted on a dropped connection or an
@@ -3312,7 +3535,7 @@ def instrument_sha256() -> str:
 
 
 def _one_prompt_version_set(
-    records: Sequence[UnitRecord], *, arm: ArmName
+    records: Sequence[UnitTelemetry], *, arm: ArmName
 ) -> Mapping[str, str]:
     """The prompt versions every unit of ONE arm recorded, or a stop.
 
@@ -3399,18 +3622,18 @@ def _summarize_arm(
     *,
     grades: Sequence[UnitGrade],
     usage: ArmUsage,
-    records: Sequence[UnitRecord],
+    telemetry: Sequence[UnitTelemetry],
 ) -> ArmSummary:
     own = [grade for grade in grades if grade.arm == arm]
     verdicts: Counter[str] = Counter()
     for grade in own:
         verdicts.update(grade.verdict_counts())
-    own_records = [record for record in records if record.arm == arm]
+    own_records = [unit for unit in telemetry if unit.arm == arm]
     defaults = DefaultedAttempts()
     attempts = TransportAttempts()
     for record in own_records:
-        defaults = defaults.plus(record.defaults)
-        attempts = attempts.plus(record.transport_attempts)
+        defaults = defaults.plus(record.defaults())
+        attempts = attempts.plus(record.attempts())
     return ArmSummary(
         arm=arm,
         units=len(own),
@@ -3433,23 +3656,452 @@ def _summarize_arm(
         defaults_by_deadline=defaults.by_deadline,
         degraded_openings=defaults.degraded_openings,
         units_with_defaults=sum(
-            1 for record in own_records if record.defaults.total > 0
+            1 for record in own_records if record.defaults().total > 0
         ),
         retried_calls=attempts.retried_calls,
         unaccounted_attempts=attempts.unaccounted_attempts,
         attempts_by_trigger=dict(attempts.by_trigger),
         units_with_retries=sum(
-            1
-            for record in own_records
-            if record.transport_attempts.unaccounted_attempts > 0
+            1 for record in own_records if record.attempts().unaccounted_attempts > 0
         ),
-        prompt_versions=dict(_one_prompt_version_set(records, arm=arm)),
+        prompt_versions=dict(_one_prompt_version_set(telemetry, arm=arm)),
         calls=usage.calls,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         cost_usd=usage.cost_usd,
         model_work_seconds=usage.model_work_seconds,
     )
+
+
+# ---------------------------------------------------------------------------
+# The per-unit checkpoint and the outcome-blind resume
+# ---------------------------------------------------------------------------
+
+#: The payload version. A checkpoint written by another shape of this file is
+#: refused rather than migrated: a resumed run has to be the same run.
+CHECKPOINT_SCHEMA: Final[str] = "fresh-deduction-checkpoint/1"
+
+#: The files whose bytes decide what an arm SHOWS a model and what a payload may
+#: say. A resume across a change to any of them would pair units drawn from two
+#: different instruments, so the checkpoint records their digests and
+#: :func:`assert_checkpoint_matches` refuses a mismatch. The frozen INPUTS are
+#: covered separately by the held-out manifest's own digest, and the generator's
+#: 22 sources by that manifest's ``source_sha256`` block.
+ARM_SURFACE_SOURCES: Final[tuple[str, ...]] = (
+    "experiments/fresh_deduction_instrument.py",
+    "meetings/manager.py",
+    "meetings/schemas.py",
+    "meetings/public_accounts.py",
+    "agents/memory/store.py",
+)
+
+#: The prompt directory both arms render from; every file in it is hashed.
+ARM_SURFACE_PROMPT_DIR: Final[str] = "agents/strategic/prompts/qwen3_6_27b"
+
+
+def arm_surface_digests(repo_root: Path = _REPO_ROOT) -> Mapping[str, str]:
+    """``{repository path: sha256}`` for every byte an arm renders through.
+
+    Sorted and complete: a template ADDED to the prompt directory changes this
+    mapping as surely as one edited, because a family that gained a file is a
+    family that renders differently.
+    """
+
+    digests: dict[str, str] = {}
+    paths = [repo_root / name for name in ARM_SURFACE_SOURCES]
+    prompts = repo_root / ARM_SURFACE_PROMPT_DIR
+    paths.extend(sorted(path for path in prompts.iterdir() if path.is_file()))
+    for path in paths:
+        if not path.is_file():
+            raise InstrumentError(
+                f"an arm-surface source is missing: {path}; this run cannot say "
+                "what it would render"
+            )
+        relative = path.resolve().relative_to(repo_root.resolve()).as_posix()
+        digests[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return MappingProxyType(dict(sorted(digests.items())))
+
+
+class CarriedUsage(BaseModel):
+    """One unit's spend, as the checkpoint carries it into the next sitting."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+    model_work_seconds: float = 0.0
+
+    def arm_usage(self) -> ArmUsage:
+        return ArmUsage(
+            calls=self.calls,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            cost_usd=self.cost_usd,
+            model_work_seconds=self.model_work_seconds,
+        )
+
+
+class UnitTelemetry(BaseModel):
+    """Everything the REPORT needs from one unit that is not a grade.
+
+    Counts and version markers: what the meeting layer substituted, what the
+    wrapper had to send again, what the unit spent, which models answered and
+    which template versions rendered it. No prompt, no prefix, no ballot and no
+    role — those live on :class:`UnitRecord`, which is never serialized.
+
+    It exists because a resumed run has to summarise units it did not run. The
+    report was previously built by walking the in-memory records; it is now
+    built by walking these, and one is projected from each record as it
+    finishes (:func:`unit_telemetry`).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seed: int
+    arm: ArmName
+    defaulted_turns: int = 0
+    defaulted_votes: int = 0
+    defaults_by_validation: int = 0
+    defaults_by_deadline: int = 0
+    degraded_openings: int = 0
+    retried_calls: int = 0
+    unaccounted_attempts: int = 0
+    attempts_by_trigger: Mapping[str, int] = {}
+    prompt_versions: Mapping[str, str] = {}
+    model_ids: tuple[str, ...] = ()
+    usage: CarriedUsage = CarriedUsage()
+
+    def defaults(self) -> DefaultedAttempts:
+        return DefaultedAttempts(
+            defaulted_turns=self.defaulted_turns,
+            defaulted_votes=self.defaulted_votes,
+            by_validation=self.defaults_by_validation,
+            by_deadline=self.defaults_by_deadline,
+            degraded_openings=self.degraded_openings,
+        )
+
+    def attempts(self) -> TransportAttempts:
+        return TransportAttempts(
+            retried_calls=self.retried_calls,
+            unaccounted_attempts=self.unaccounted_attempts,
+            by_trigger=MappingProxyType(dict(sorted(self.attempts_by_trigger.items()))),
+        )
+
+
+def unit_telemetry(record: UnitRecord) -> UnitTelemetry:
+    """Project one finished unit onto the counts a report and a resume need."""
+
+    usage = ArmUsage().plus(record.calls)
+    return UnitTelemetry(
+        seed=record.seed,
+        arm=record.arm,
+        defaulted_turns=record.defaults.defaulted_turns,
+        defaulted_votes=record.defaults.defaulted_votes,
+        defaults_by_validation=record.defaults.by_validation,
+        defaults_by_deadline=record.defaults.by_deadline,
+        degraded_openings=record.defaults.degraded_openings,
+        retried_calls=record.transport_attempts.retried_calls,
+        unaccounted_attempts=record.transport_attempts.unaccounted_attempts,
+        attempts_by_trigger=dict(record.transport_attempts.by_trigger),
+        prompt_versions=dict(record.prompt_versions),
+        model_ids=tuple(sorted({call.model for call in record.calls})),
+        usage=CarriedUsage(
+            calls=usage.calls,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cost_usd=usage.cost_usd,
+            model_work_seconds=usage.model_work_seconds,
+        ),
+    )
+
+
+class CheckpointBallot(BaseModel):
+    """One ballot's support verdict, as the checkpoint carries it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    voter: str
+    target: str
+    cited_turn_id: str | None
+    cited_observation_id: str | None
+    verdict: SupportVerdict
+    guard_rewrite_reason: str | None
+
+
+class CheckpointUnit(BaseModel):
+    """One graded unit, flattened for the file and restorable from it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seed: int
+    arm: ArmName
+    outcome: str
+    stop: Literal["terminal", "partial"]
+    ejected_player_id: str | None
+    ejected_role: Role | None
+    role_correct: bool
+    supported_correct_ejection: bool
+    naming_ballots: int
+    off_target_citations: int
+    supported: tuple[CheckpointBallot, ...]
+    telemetry: UnitTelemetry
+
+    def grade(self) -> UnitGrade:
+        """The grade this row was written from, rebuilt exactly."""
+
+        return UnitGrade(
+            seed=self.seed,
+            arm=self.arm,
+            outcome=self.outcome,
+            stop=self.stop,
+            supported=tuple(
+                SupportedGrade(
+                    voter=ballot.voter,
+                    target=ballot.target,
+                    cited_turn_id=ballot.cited_turn_id,
+                    cited_observation_id=ballot.cited_observation_id,
+                    verdict=ballot.verdict,
+                    guard_rewrite_reason=ballot.guard_rewrite_reason,
+                )
+                for ballot in self.supported
+            ),
+            privileged=PrivilegedGrade(
+                ejected_player_id=self.ejected_player_id,
+                ejected_role=self.ejected_role,
+                role_correct=self.role_correct,
+                supported_correct_ejection=self.supported_correct_ejection,
+                naming_ballots=self.naming_ballots,
+                off_target_citations=self.off_target_citations,
+            ),
+        )
+
+
+def checkpoint_unit(grade: UnitGrade, telemetry: UnitTelemetry) -> CheckpointUnit:
+    """Flatten one graded unit and its telemetry into one checkpoint row."""
+
+    if (grade.seed, grade.arm) != (telemetry.seed, telemetry.arm):
+        raise InstrumentError(
+            f"a checkpoint row would pair the grade of seed {grade.seed} on "
+            f"{grade.arm} with the telemetry of seed {telemetry.seed} on "
+            f"{telemetry.arm}"
+        )
+    return CheckpointUnit(
+        seed=grade.seed,
+        arm=grade.arm,
+        outcome=grade.outcome,
+        stop=grade.stop,
+        ejected_player_id=grade.privileged.ejected_player_id,
+        ejected_role=grade.privileged.ejected_role,
+        role_correct=grade.privileged.role_correct,
+        supported_correct_ejection=grade.privileged.supported_correct_ejection,
+        naming_ballots=grade.privileged.naming_ballots,
+        off_target_citations=grade.privileged.off_target_citations,
+        supported=tuple(
+            CheckpointBallot(
+                voter=ballot.voter,
+                target=ballot.target,
+                cited_turn_id=ballot.cited_turn_id,
+                cited_observation_id=ballot.cited_observation_id,
+                verdict=ballot.verdict,
+                guard_rewrite_reason=ballot.guard_rewrite_reason,
+            )
+            for ballot in grade.supported
+        ),
+        telemetry=telemetry,
+    )
+
+
+class RunCheckpoint(BaseModel):
+    """What a stopped run may be continued from, and nothing more.
+
+    Written after every completed PAIRED seed — both arms of one prefix — so a
+    resume never begins mid-pair and the design's pairing cannot be broken by a
+    stop. It carries the identity of everything a resumed run must still be
+    (the execution manifest, the frozen set, the arm surface), the budgets the
+    first sitting spent, and the graded results of the units it finished.
+
+    It is not an interim analysis. Nothing in the run path reads a grade off it:
+    :func:`next_seeds_after` takes the SEEDS it lists and nothing else, and no
+    stop condition anywhere in this module consults one. The grades are in the
+    file because a resumed run has to be able to report the units it did not
+    run, not because anything decides on them.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: str = CHECKPOINT_SCHEMA
+    provider: str
+    manifest_sha256: str
+    held_out_manifest_sha256: str
+    arm_surface_sha256: Mapping[str, str]
+    limits: RunLimits
+    sampling: SamplingConfig
+    completed_seeds: tuple[int, ...]
+    units: tuple[CheckpointUnit, ...]
+    elapsed_seconds: float
+    model_work_seconds: float
+
+    def usage_by_arm(self) -> Mapping[str, ArmUsage]:
+        """The spend to carry into the next sitting, per arm."""
+
+        totals: dict[str, ArmUsage] = {}
+        for unit in self.units:
+            carried = unit.telemetry.usage
+            running = totals.get(unit.arm, ArmUsage())
+            totals[unit.arm] = ArmUsage(
+                calls=running.calls + carried.calls,
+                input_tokens=running.input_tokens + carried.input_tokens,
+                output_tokens=running.output_tokens + carried.output_tokens,
+                cost_usd=running.cost_usd + carried.cost_usd,
+                model_work_seconds=(
+                    running.model_work_seconds + carried.model_work_seconds
+                ),
+            )
+        return MappingProxyType(totals)
+
+
+def write_checkpoint(path: Path, checkpoint: RunCheckpoint) -> None:
+    """Write the checkpoint atomically, refusing one that carries input bytes.
+
+    Atomic because the file is rewritten after every paired seed and a run
+    killed mid-write would otherwise leave the only record of a sitting
+    truncated. The leak check is the same rule the report is held to: a
+    checkpoint is an artifact of the run, so the legacy body handle may not
+    ride it any more than it may ride a report.
+    """
+
+    payload = checkpoint.model_dump(mode="json")
+    leaked = legacy_body_handles(_every_string_in(payload))
+    if leaked:
+        raise PrefixBytesLeaked(
+            "the checkpoint carries a legacy body handle: "
+            + ", ".join(sorted(set(leaked)))
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".partial")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", "utf-8")
+    temporary.replace(path)
+
+
+def read_checkpoint(path: Path) -> RunCheckpoint:
+    """Load a checkpoint, or refuse the file for saying what it is not."""
+
+    if not path.is_file():
+        raise ResumeNotAuthorized(f"there is no checkpoint at {path}")
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ResumeNotAuthorized(f"{path} is not a checkpoint: {exc}") from exc
+    if (
+        not isinstance(loaded, dict)
+        or loaded.get("schema_version") != CHECKPOINT_SCHEMA
+    ):
+        raise ResumeNotAuthorized(
+            f"{path} carries schema {loaded.get('schema_version')!r}, not "
+            f"{CHECKPOINT_SCHEMA!r}; a resumed run is the same run"
+        )
+    try:
+        return RunCheckpoint.model_validate(loaded)
+    except ValidationError as exc:
+        raise ResumeNotAuthorized(f"{path} is not a usable checkpoint: {exc}") from exc
+
+
+def assert_checkpoint_matches(
+    checkpoint: RunCheckpoint,
+    *,
+    provider: str,
+    limits: RunLimits,
+    sampling: SamplingConfig,
+    frozen: FrozenSet,
+    repo_root: Path = _REPO_ROOT,
+) -> None:
+    """Refuse to continue a run that would not be the same run.
+
+    Every comparison is an identity, not a preference: the manifest that
+    authorized the first sitting, the freeze that supplied its inputs, the bytes
+    that rendered its arms, the limits and the sampling configuration it drew
+    under, and the provider it ran against. A difference in any of them makes
+    the two sittings two runs, and pairing their units would be a comparison
+    across instruments rather than across arms.
+    """
+
+    manifest = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
+    if not manifest.is_file():
+        raise ResumeNotAuthorized(f"execution manifest is missing: {manifest}")
+    committed = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    if checkpoint.manifest_sha256 != committed:
+        raise ResumeNotAuthorized(
+            "the checkpoint was written under execution manifest "
+            f"{checkpoint.manifest_sha256}, and the committed one is "
+            f"{committed}: the document that authorized that sitting is not "
+            "this one"
+        )
+    if checkpoint.held_out_manifest_sha256 != frozen.manifest_sha256:
+        raise ResumeNotAuthorized(
+            "the checkpoint was written over held-out freeze "
+            f"{checkpoint.held_out_manifest_sha256}, and this run verified "
+            f"{frozen.manifest_sha256}: the inputs moved between the sittings"
+        )
+    surface = arm_surface_digests(repo_root)
+    if dict(checkpoint.arm_surface_sha256) != dict(surface):
+        moved = sorted(
+            name
+            for name in set(surface) | set(checkpoint.arm_surface_sha256)
+            if checkpoint.arm_surface_sha256.get(name) != surface.get(name)
+        )
+        raise ResumeNotAuthorized(
+            "the arm surface moved between the sittings, so the resumed units "
+            "would not be drawn from the instrument the finished ones were: "
+            + ", ".join(moved)
+        )
+    if checkpoint.provider != provider:
+        raise ResumeNotAuthorized(
+            f"the checkpoint ran against provider {checkpoint.provider!r} and "
+            f"this run asks for {provider!r}"
+        )
+    if checkpoint.limits != limits:
+        raise ResumeNotAuthorized(
+            "the checkpoint ran under different limits; a resumed run carries "
+            "the first sitting's budgets, so it runs under its ceilings too"
+        )
+    if checkpoint.sampling != sampling:
+        raise ResumeNotAuthorized(
+            "the checkpoint drew at a different sampling configuration; the "
+            "two sittings would not be one sample"
+        )
+    known = set(frozen.accepted_seeds)
+    unknown = sorted(seed for seed in checkpoint.completed_seeds if seed not in known)
+    if unknown:
+        raise ResumeNotAuthorized(
+            "the checkpoint reports seeds this freeze does not accept: "
+            + ", ".join(str(seed) for seed in unknown)
+        )
+
+
+def next_seeds_after(
+    checkpoint: RunCheckpoint, prefixes: Sequence[HeldOutPrefix]
+) -> tuple[HeldOutPrefix, ...]:
+    """The unrendered tail of the ascending list, and only the tail.
+
+    Outcome-blind by construction: it reads ``completed_seeds`` and the order
+    the run draws in, and nothing else on the checkpoint. A completed seed that
+    is not a PREFIX of the ascending list is refused rather than skipped — the
+    run order is part of the design, and a hole in it is a checkpoint this
+    module did not write.
+    """
+
+    done = set(checkpoint.completed_seeds)
+    seeds = [prefix.seed for prefix in prefixes]
+    finished = [seed for seed in seeds if seed in done]
+    if finished != seeds[: len(finished)]:
+        raise ResumeNotAuthorized(
+            "the checkpoint's completed seeds are not a prefix of the run "
+            "order; this run draws seeds ascending and a resume continues at "
+            "the next unrendered one"
+        )
+    return tuple(prefixes[len(finished) :])
 
 
 # ---------------------------------------------------------------------------
@@ -3491,13 +4143,23 @@ def run_instrument(
     units: int | None = None,
     limits: RunLimits = AUTHORIZED_LIMITS,
     sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    checkpoint_path: Path | None = None,
+    resume: RunCheckpoint | None = None,
 ) -> InstrumentReport:
     """Run both arms over the frozen set, sequentially, and grade the result.
 
     Order of operations is load-bearing. The authorization gate and the
     client-type check run before anything else, the frozen set is verified before
     a unit runs, the arms run paired seed by seed, and every grader runs only
-    after the last unit, over finished records.
+    after the unit it grades has FINISHED — after the last one, or, when a
+    checkpoint is being written, after both arms of a completed pair.
+
+    ``checkpoint_path`` writes the per-unit checkpoint a stopped run may be
+    continued from; ``resume`` is one, already read and already matched against
+    this tree (:func:`assert_checkpoint_matches`). A resumed run continues at
+    the next unrendered seed, carries the first sitting's spend into both the
+    run budget and the model-work clock, and reports the finished units beside
+    the fresh ones.
 
     On the CLI's live path the frozen set is verified one level up, before the
     client this function is handed even exists
@@ -3520,6 +4182,24 @@ def run_instrument(
     prefixes = frozen.prefixes if units is None else frozen.prefixes[:units]
     arms = instrument_arms()
     planned = len(prefixes) * len(arms)
+    carried_grades: list[UnitGrade] = []
+    carried_telemetry: list[UnitTelemetry] = []
+    completed_seeds: list[int] = []
+    remaining = prefixes
+    if resume is not None:
+        assert_resume_is_authorized(provider=provider, repo_root=repo_root)
+        assert_checkpoint_matches(
+            resume,
+            provider=provider,
+            limits=limits,
+            sampling=sampling,
+            frozen=frozen,
+            repo_root=repo_root,
+        )
+        remaining = next_seeds_after(resume, prefixes)
+        completed_seeds = list(resume.completed_seeds)
+        carried_grades = [unit.grade() for unit in resume.units]
+        carried_telemetry = [unit.telemetry for unit in resume.units]
 
     inner = client if client is not None else DryRunProvider()
     work_clock = _ModelWorkClock(max_seconds=limits.model_work_seconds)
@@ -3543,8 +4223,36 @@ def run_instrument(
 
     state = _RunState()
     records: list[UnitRecord] = []
+    grades: list[UnitGrade] = list(carried_grades)
+    telemetry: list[UnitTelemetry] = list(carried_telemetry)
     started = time.monotonic()
-    for prefix in prefixes:
+    # The elapsed wall of the sittings BEFORE this one. The deadline itself is
+    # per sitting — it bounds a process, and a resumed run is a new one — but
+    # what the record reports is the run's total, so the two are kept apart
+    # here rather than conflated.
+    carried_elapsed = 0.0 if resume is None else resume.elapsed_seconds
+    if resume is not None:
+        # The first sitting's spend, carried before the second one's first call:
+        # a resumed run continues under the same ceilings, so what the stopped
+        # run charged is charged again here rather than forgotten. A carried
+        # total already past a cap raises out of ``charge`` — a run that
+        # exhausted its budget is not resumable, which is the correct answer.
+        for arm_name, carried in resume.usage_by_arm().items():
+            state.usage_by_arm[arm_name] = carried
+            run_budget.charge(
+                usage=TokenUsage(
+                    input_tokens=carried.input_tokens,
+                    output_tokens=carried.output_tokens,
+                ),
+                cost_usd=carried.cost_usd,
+            )
+        for unit in carried_telemetry:
+            state.attempts_by_arm[unit.arm] = state.attempts_by_arm.get(
+                unit.arm, TransportAttempts()
+            ).plus(unit.attempts())
+        state.completed = len(carried_telemetry)
+        work_clock.charge(resume.model_work_seconds)
+    for prefix in remaining:
         for arm in arms:
             try:
                 deadline.check()
@@ -3591,7 +4299,7 @@ def run_instrument(
                         completed_units=state.completed,
                         planned_units=planned,
                         usage_by_arm=dict(state.usage_by_arm),
-                        elapsed_seconds=time.monotonic() - started,
+                        elapsed_seconds=(carried_elapsed + time.monotonic() - started),
                         model_work_seconds=work_clock.seconds,
                         attempts_by_arm=dict(state.attempts_by_arm),
                     )
@@ -3599,12 +4307,42 @@ def run_instrument(
             state.charge(arm.name, record.calls, record.transport_attempts)
             state.completed += 1
             records.append(record)
+        # The pair is complete, so the seed is: both arms of one prefix ran, and
+        # a checkpoint written here can never be resumed from inside a pair.
+        # Grading happens at this boundary rather than mid-unit — the graders
+        # are pure functions over finished records and no stop condition reads
+        # one — because a resumed run has to be able to report units it did not
+        # itself run.
+        completed_seeds.append(prefix.seed)
+        for record in records[-len(arms) :]:
+            grades.append(grade_unit(record))
+            telemetry.append(unit_telemetry(record))
+        if checkpoint_path is not None:
+            write_checkpoint(
+                checkpoint_path,
+                RunCheckpoint(
+                    provider=provider,
+                    manifest_sha256=hashlib.sha256(
+                        (repo_root / EXECUTION_MANIFEST_PATH).read_bytes()
+                    ).hexdigest(),
+                    held_out_manifest_sha256=frozen.manifest_sha256,
+                    arm_surface_sha256=dict(arm_surface_digests(repo_root)),
+                    limits=limits,
+                    sampling=sampling,
+                    completed_seeds=tuple(completed_seeds),
+                    units=tuple(
+                        checkpoint_unit(grade, unit)
+                        for grade, unit in zip(grades, telemetry, strict=True)
+                    ),
+                    elapsed_seconds=carried_elapsed + time.monotonic() - started,
+                    model_work_seconds=work_clock.seconds,
+                ),
+            )
 
-    grades = [grade_unit(record) for record in records]
     report = InstrumentReport(
         provider=provider,
         model_ids=tuple(
-            sorted({call.model for record in records for call in record.calls})
+            sorted({model for unit in telemetry for model in unit.model_ids})
         ),
         execution_mode=AUTHORIZED_EXECUTION_MODE,
         instrument_sha256=instrument_sha256(),
@@ -3625,12 +4363,12 @@ def run_instrument(
                 arm.name,
                 grades=grades,
                 usage=state.usage_by_arm.get(arm.name, ArmUsage()),
-                records=records,
+                telemetry=telemetry,
             )
             for arm in arms
         ),
         paired=paired_result(grades),
-        elapsed_seconds=time.monotonic() - started,
+        elapsed_seconds=carried_elapsed + time.monotonic() - started,
         model_work_seconds=work_clock.seconds,
         total_cost_usd=sum(usage.cost_usd for usage in state.usage_by_arm.values()),
         dry_run=provider == "fake",
@@ -3648,11 +4386,20 @@ def run_dry(
     limits: RunLimits = AUTHORIZED_LIMITS,
     sampling: SamplingConfig = AUTHORIZED_SAMPLING,
     live_invocation: LiveRunInvocation | None = None,
+    client: LLMClient | None = None,
+    checkpoint_path: Path | None = None,
+    resume: RunCheckpoint | None = None,
 ) -> InstrumentReport:
     """The fake-provider mechanics check. Refuses a live invocation outright.
 
     Writes every replay into a temporary directory when none is given, so a dry
     run leaves no prefix bytes behind at all.
+
+    ``client`` is how a rehearsal hands in an offline double — the replay double
+    that reproduces the archived usage profile, say. It is still held to
+    :func:`assert_client_matches_provider`, so only a
+    :class:`~llm.fake_provider.FakeProvider` can be passed here and the fake
+    label cannot be worn by a metered client.
     """
 
     if live_invocation is not None:
@@ -3663,20 +4410,26 @@ def run_dry(
     if output_dir is not None:
         return run_instrument(
             output_dir=output_dir,
+            client=client,
             provider="fake",
             repo_root=repo_root,
             units=units,
             limits=limits,
             sampling=sampling,
+            checkpoint_path=checkpoint_path,
+            resume=resume,
         )
     with TemporaryDirectory() as directory:
         return run_instrument(
             output_dir=Path(directory),
+            client=client,
             provider="fake",
             repo_root=repo_root,
             units=units,
             limits=limits,
             sampling=sampling,
+            checkpoint_path=checkpoint_path,
+            resume=resume,
         )
 
 
@@ -3713,10 +4466,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--json", type=Path, default=None)
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=None,
+        help=(
+            "write the per-unit checkpoint here after every completed paired "
+            "seed; a run stopped by an environmental cause can be continued "
+            "from it with --resume"
+        ),
+    )
+    parser.add_argument(
+        "--resume",
+        type=Path,
+        default=None,
+        help=(
+            "continue the run this checkpoint stopped, at the next unrendered "
+            "seed. Refused unless the manifest, the frozen set, the arm "
+            "surface, the limits and the sampling configuration are still the "
+            "ones it was written under — and, on a live provider, unless the "
+            "execution manifest carries the owner's resumption clause"
+        ),
+    )
     args = parser.parse_args(argv)
 
+    resume = None if args.resume is None else read_checkpoint(args.resume)
     if args.dry_run or args.provider == "fake":
-        report = run_dry(output_dir=args.output_dir, units=args.units)
+        report = run_dry(
+            output_dir=args.output_dir,
+            units=args.units,
+            checkpoint_path=args.checkpoint,
+            resume=resume,
+        )
     else:
         if args.execution_manifest is None or not args.i_am_the_runner:
             parser.error(
@@ -3736,7 +4517,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         # verified set is what ``build_authorized_client`` requires, so that
         # order cannot be reversed by editing these two lines.
         frozen = assert_ready_for_a_live_run(
-            provider=args.provider, invocation=invocation, units=args.units
+            provider=args.provider,
+            invocation=invocation,
+            units=args.units,
+            resuming=resume is not None,
         )
         report = run_instrument(
             output_dir=args.output_dir,
@@ -3747,6 +4531,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             provider=args.provider,
             live_invocation=invocation,
             units=args.units,
+            checkpoint_path=args.checkpoint,
+            resume=resume,
         )
     payload = report.model_dump_json(indent=2)
     if args.json is not None:
