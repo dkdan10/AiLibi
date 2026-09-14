@@ -56,14 +56,15 @@ import re
 import sys
 import time
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import MappingProxyType
 from typing import Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict
+import httpx
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from agents.base import AgentInterface
 from agents.memory.store import AgentMemory
@@ -88,7 +89,7 @@ from experiments.held_out_prefixes import (
     prefix_sha256,
 )
 from experiments.held_out_prefixes import AUTHORIZED_ROSTER as FROZEN_PREFIX_ROSTER
-from llm.budget import GameBudget
+from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
 from llm.provider import extract_parse_failure
@@ -187,11 +188,41 @@ AUTHORIZED_RUN_MAX_OUTPUT_TOKENS: Final[int] = 200_000
 AUTHORIZED_UNIT_MAX_INPUT_TOKENS: Final[int] = 45_000
 AUTHORIZED_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 4_000
 
-#: 4 h of model work inside a 6 h elapsed window. Two different clocks: the
-#: elapsed one is :class:`~orchestrator.run_limits.RunDeadline`; the work one is
-#: the summed provider-call wall :class:`_InstrumentClient` accumulates.
-AUTHORIZED_MODEL_WORK_SECONDS: Final[float] = 4 * 60 * 60
-AUTHORIZED_ELAPSED_SECONDS: Final[float] = 6 * 60 * 60
+#: 6 h of model work inside an 8 h elapsed window: two limits and therefore two
+#: clocks, the elapsed one :class:`~orchestrator.run_limits.RunDeadline` and the
+#: work one the summed provider-call wall :class:`_InstrumentClient`
+#: accumulates. The work window fits a sequential six hundred calls at the
+#: slowest pace this evaluation has measured — 26.6 s each, about 4 h 26 m —
+#: and the elapsed margin covers one recorded provider-side stall on top of it.
+#: Source: ``tasks/work/fresh-deduction-authorization-3.md`` (2026-09-13).
+AUTHORIZED_MODEL_WORK_SECONDS: Final[float] = 6 * 60 * 60
+AUTHORIZED_ELAPSED_SECONDS: Final[float] = 8 * 60 * 60
+
+#: How many times the instrument's own client wrapper sends ONE call whose
+#: attempt came back with no completion: four attempts, so one send and three
+#: retries. The bound is small on purpose. A retry buys no new draw — an attempt
+#: that produced nothing is not a sample of anything — so the only thing more
+#: attempts buy is a longer wait before the same stop, and a sequential run of
+#: one hundred units needs about six hundred consecutive successes, which is the
+#: reason the run needs any retry at all.
+MAX_TRANSPORT_ATTEMPTS: Final[int] = 4
+
+#: The wall one attempt may hold before this wrapper cuts it off and counts it
+#: as an attempt that produced nothing. Sized off the measured per-call band:
+#: the first attempt of this evaluation ran at 11.7 s/call and the second at
+#: 26.6 s/call, so 180 s is about seven times the slowest call anyone has
+#: measured here and a healthy call cannot reach it. The provider client's own
+#: budget is the thing being bounded: ``llm/featherless_client.py`` sends six
+#: times at a 600 s timeout with backoff, so without this one stalled call can
+#: hold the run for the better part of an hour, while four attempts at this
+#: bound cost at most 12 minutes of a 6 h window.
+PER_ATTEMPT_TIMEOUT_SECONDS: Final[float] = 180.0
+
+#: The first retry waits this long, the second twice that, the third four times.
+#: Short on purpose: the failures it backs off from are a stalled or empty
+#: endpoint rather than a rate limit the run could wait out, and the run's own
+#: wall is the budget being spent.
+TRANSPORT_BACKOFF_BASE_SECONDS: Final[float] = 1.0
 
 #: Bookkeeping, not an enforcement mechanism: the provider's zero pre-flight rate
 #: disables ``BudgetedLLMClient``'s USD dimension entirely.
@@ -377,6 +408,15 @@ STOP_RULE: Final[str] = (
     "regenerated prefix matching the legacy body handle; a unit whose recorded "
     "observation clock or experiment config is not the arm's; or a recorded "
     "meeting default whose phase and trigger this instrument cannot classify. "
+    "A call that came back with no completion at all — an empty body, a "
+    "transport failure, a retryable status, or an attempt that outran the "
+    "per-attempt wall each send is bounded by — is retried up to three times, "
+    "then a stop carrying the same partial accounting, with every attempt "
+    "counted per arm and per unit. Retrying one of those buys no new draw: an "
+    "attempt that produced nothing is not a sample. A body that reached its "
+    "output cap and a returned payload that failed schema validation ARE "
+    "samples and are never retried, and neither is an exhausted budget or "
+    "deadline. "
     "A meeting-internal default is NOT itself a stop. The meeting layer's "
     "shipped fail-soft substitutes a placeholder turn or a marked SKIP ballot "
     "for a payload that failed schema validation, at an accepted rate of about "
@@ -416,6 +456,31 @@ BUDGET_CAP_READBACK: Final[str] = (
     "that crossed it: the tokens are already spent, and the stop is what keeps "
     "the next unit from spending more."
 )
+
+TRANSPORT_RETRY: Final[str] = (
+    "A call whose attempt came back with no completion at all is sent again by "
+    "this instrument's own client wrapper rather than by the provider client, "
+    "so no recorded campaign changes behaviour: at most "
+    f"{MAX_TRANSPORT_ATTEMPTS} attempts, one send and "
+    f"{MAX_TRANSPORT_ATTEMPTS - 1} retries, on an empty or choices-less body, "
+    "a transport failure, a retryable HTTP status, or an attempt that outran "
+    f"the {PER_ATTEMPT_TIMEOUT_SECONDS:.0f} s per-attempt wall this wrapper "
+    "bounds each send by — each retry after a short exponential backoff, and "
+    "each attempt still bounded by what is left of the model-work window, "
+    "which no retry may outlive. The last failure stops the run with the same "
+    "partial accounting every other unit failure reports. Nothing that "
+    "produced a completion is retried: a response that reached its output cap, "
+    "a returned payload that failed schema validation, an exhausted budget or "
+    "deadline and a refused live run are all left exactly as they were. Every "
+    "retried attempt is recorded as an unaccounted attempt carrying zero "
+    "tokens, which may have been billed for tokens this side cannot see: the "
+    "provider client raises on a body with no completion in it before it reads "
+    "that body's usage block, so no usage rides any of these four classes and "
+    "this wrapper has none to charge. The attempts are counted per arm and per "
+    "unit — retried calls, unaccounted attempts and the trigger class of each "
+    "— beside the meeting-internal defaults."
+)
+
 
 _ANALYSIS_FREEZE_NOTE: Final[str] = (
     "PRIMARY_OUTCOME, DECISION_RULE, MINIMUM_ACTIONABLE_EFFECT_UNITS, "
@@ -469,6 +534,20 @@ class BudgetExhausted(InstrumentError):
     """
 
 
+class TransportAttemptsExhausted(InstrumentError):
+    """Every authorized attempt at one call came back with no completion.
+
+    The stop a bounded retry ends in, and the one thing this instrument's
+    wrapper retries towards: an empty body, a transport failure, a retryable
+    status and an attempt cut off at :data:`PER_ATTEMPT_TIMEOUT_SECONDS` are all
+    attempts that produced nothing, and :data:`MAX_TRANSPORT_ATTEMPTS` of them
+    in a row is a provider that is not answering rather than a transient. A
+    subclass of :class:`InstrumentError` so the run stops with the partial
+    accounting every other unit failure reports, and so no outer layer can
+    mistake it for another retryable failure and send the call again.
+    """
+
+
 class ProvenanceMismatch(InstrumentError):
     """A unit's recorded identity is not the arm it was run under."""
 
@@ -492,6 +571,10 @@ class PartialRun:
     usage_by_arm: Mapping[str, ArmUsage]
     elapsed_seconds: float
     model_work_seconds: float
+    #: What the wrapper's bounded retry did, per arm. Defaulted rather than
+    #: required so a caller that builds a partial state without one still
+    #: reports the same counts it always did; the run path always supplies it.
+    attempts_by_arm: Mapping[str, TransportAttempts] = field(default_factory=dict)
 
     def describe(self) -> str:
         spent = ", ".join(
@@ -499,10 +582,18 @@ class PartialRun:
             f"{usage.output_tokens} out"
             for arm, usage in sorted(self.usage_by_arm.items())
         )
+        # Only when there were any: a stop that retried nothing should not read
+        # as one that retried and got nowhere.
+        retried = ", ".join(
+            f"{arm}: {attempts.describe()}"
+            for arm, attempts in sorted(self.attempts_by_arm.items())
+            if attempts.unaccounted_attempts
+        )
         return (
             f"{self.reason}; {self.completed_units}/{self.planned_units} units "
             f"completed, {self.elapsed_seconds:.1f}s elapsed, "
             f"{self.model_work_seconds:.1f}s model work; {spent or 'no spend'}"
+            + (f"; {retried}" if retried else "")
         )
 
 
@@ -644,11 +735,12 @@ def assert_manifest_binds_the_live_band(repo_root: Path = _REPO_ROOT) -> None:
     :func:`verify_frozen_set` regenerates whatever record sits at
     :data:`~experiments.held_out_prefixes.MANIFEST_PATH` and holds it to the
     generator's own :data:`~experiments.held_out_prefixes.PREREGISTERED_BAND`.
-    Neither of those reads this document, so a band that moves — the 3000-3999
-    set became development data on 2026-09-10 and 5000-5999 was frozen in its
-    place — leaves the manifest authorizing one band while the run draws
-    another, with every other gate green. That gap is closed here, by comparing
-    the band the Inputs row states with the band the live record holds.
+    Neither of those reads this document, so a band that moves — 3000-3999
+    became development data on 2026-09-10 and 5000-5999 on 2026-09-13, each
+    replaced by a fresh freeze — leaves the manifest authorizing one band while
+    the run draws another, with every other gate green. That gap is closed here,
+    by comparing the band the Inputs row states with the band the live record
+    holds.
 
     It is part of the authorization, not of the frozen-set check: it runs inside
     :func:`assert_live_run_is_authorized`, which is the first thing
@@ -1020,11 +1112,154 @@ class ArmUsage:
         )
 
 
+#: The four failure classes this wrapper retries, all of them ways for an
+#: attempt to produce no completion at all. Written as a closed set so the
+#: report's counts name what was retried rather than "something failed".
+TransportTrigger = Literal[
+    "empty_completion", "transport_error", "retryable_status", "attempt_timeout"
+]
+
+
+@dataclass(frozen=True)
+class TransportAttempts:
+    """One unit's bounded-retry counts: what was sent again, and why.
+
+    Three numbers, because they answer three different questions. How many
+    CALLS needed more than one send is the provider's reliability over this
+    unit; how many ATTEMPTS bought nothing is what the run spent on them, and
+    the wall of each is on the model-work clock and in the call ledger with a
+    marker for a model; and the TRIGGER of each says whether the endpoint
+    returned an empty body, dropped the connection, answered with a retryable
+    status or simply stopped answering.
+
+    Counts, not a stop, up to :data:`MAX_TRANSPORT_ATTEMPTS`: see
+    :data:`TRANSPORT_RETRY` and :data:`STOP_RULE`. Fields are per unit and
+    summed per arm onto :class:`ArmSummary`, beside the meeting-internal
+    defaults :class:`DefaultedAttempts` carries.
+    """
+
+    retried_calls: int = 0
+    unaccounted_attempts: int = 0
+    by_trigger: Mapping[str, int] = field(default_factory=lambda: MappingProxyType({}))
+
+    def plus(self, other: TransportAttempts) -> TransportAttempts:
+        merged: Counter[str] = Counter(dict(self.by_trigger))
+        merged.update(dict(other.by_trigger))
+        return TransportAttempts(
+            retried_calls=self.retried_calls + other.retried_calls,
+            unaccounted_attempts=(
+                self.unaccounted_attempts + other.unaccounted_attempts
+            ),
+            by_trigger=MappingProxyType(dict(sorted(merged.items()))),
+        )
+
+    def describe(self) -> str:
+        triggers = ", ".join(
+            f"{trigger} {count}" for trigger, count in sorted(self.by_trigger.items())
+        )
+        return (
+            f"{self.retried_calls} retried calls, "
+            f"{self.unaccounted_attempts} unaccounted attempts"
+            + (f" ({triggers})" if triggers else "")
+        )
+
+
+#: The HTTP statuses a retry is worth making, mirroring the authorized client's
+#: own ``_RETRYABLE_STATUS`` (``llm/featherless_client.py:529``). Held here
+#: rather than imported because the wrapper classifies a FAILURE the client
+#: already exhausted its own attempts on, and because importing a private name
+#: out of a provider module would couple this instrument to one provider's
+#: internals; a test parses that module's source and holds the two sets equal.
+_RETRYABLE_STATUS_CODES: Final[frozenset[int]] = frozenset({429, 500, 502, 503, 504})
+
+#: The status a failed send reports, as the authorized client words it
+#: (``_format_send_error``, ``llm/featherless_client.py:671-681``).
+_HTTP_STATUS_IN_MESSAGE: Final[re.Pattern[str]] = re.compile(r"\bHTTP (\d{3})\b")
+
+#: What the authorized client says when a 2xx body carried no completion to
+#: record (``_raw_from_response_body``, ``llm/featherless_client.py:804-833``).
+#: It raises a bare ``RuntimeError`` for both, so the message is the only handle
+#: there is; a test asserts each fragment is still in that module's source, so a
+#: rewording turns this classifier red instead of turning it into a stop
+#: mid-run.
+_EMPTY_COMPLETION_MARKERS: Final[tuple[str, ...]] = (
+    "refusing to record an empty completion",
+    "returned empty assistant content",
+)
+
+#: And what it says when its own sends exhausted on a dropped connection or an
+#: unparseable body (``_send_with_retry``, ``llm/featherless_client.py:741-747``).
+_TRANSPORT_FAILURE_MARKER: Final[str] = "on a transport/parse error"
+
+
+def transport_trigger(exc: BaseException) -> TransportTrigger | None:
+    """Which no-completion class this failure is, or ``None`` to leave it alone.
+
+    ``None`` is the important half. A failure that carries parse-failure
+    metadata is a completion the provider BILLED for and then refused on its own
+    schema validation — a sample, which the meeting layer's default path and the
+    per-unit reconciliation already handle, and re-drawing it would be a second
+    draw on one unit. Every refusal this instrument raises itself is ``None``
+    too: a truncation, a foreign checkpoint, an exhausted budget, a deadline and
+    a live-gate refusal are limits that were reached, not calls that failed to
+    happen, and retrying one would be the "no retry and no widening" the stop
+    rule forbids.
+
+    What is left is an attempt that produced nothing, and the four classes are
+    the four shapes that takes. ``TimeoutError`` is one of them rather than a
+    limit: the wrapper's own per-attempt cut-off never reaches here (its caller
+    knows which of the two walls expired), so a ``TimeoutError`` arriving here
+    was raised by the inner client and a read timeout is a transport failure.
+
+    Among the wordings, a status the adapter itself wrote decides before any
+    body text does. ``_format_send_error`` puts the status first and quotes the
+    response body after it, so a permanent 4xx whose body happens to contain an
+    empty-completion phrase would otherwise be read off that body and re-sent up
+    to :data:`MAX_TRANSPORT_ATTEMPTS` times against an endpoint that has already
+    refused it — and only :data:`_RETRYABLE_STATUS_CODES` are retryable at all.
+    """
+
+    if extract_parse_failure(exc) is not None:
+        return None
+    if isinstance(
+        exc,
+        (InstrumentError, RunDeadlineExceeded, BudgetExceededError, ValidationError),
+    ):
+        return None
+    if isinstance(exc, (httpx.TransportError, TimeoutError)):
+        return "transport_error"
+    message = str(exc)
+    status = _HTTP_STATUS_IN_MESSAGE.search(message)
+    if status is not None:
+        # The status the adapter reported outranks the body it quotes after it.
+        code = int(status.group(1))
+        return "retryable_status" if code in _RETRYABLE_STATUS_CODES else None
+    if any(marker in message for marker in _EMPTY_COMPLETION_MARKERS):
+        return "empty_completion"
+    if _TRANSPORT_FAILURE_MARKER in message:
+        return "transport_error"
+    return None
+
+
+class _NoCompletion(Exception):
+    """Internal: one attempt produced nothing. Never leaves :class:`_InstrumentClient`.
+
+    Carries the trigger class so the retry loop counts what it retried without
+    classifying the same exception twice. The original failure is always chained
+    onto it, and the loop re-raises that chain on the attempt that exhausts the
+    bound.
+    """
+
+    def __init__(self, trigger: TransportTrigger) -> None:
+        super().__init__(trigger)
+        self.trigger = trigger
+
+
 class _ModelWorkClock:
     """The summed provider-call wall, against the authorized work window.
 
     Separate from :class:`~orchestrator.run_limits.RunDeadline`, which measures
-    ELAPSED time: the authorization allows 4 h of model work inside a 6 h
+    ELAPSED time: the authorization allows 6 h of model work inside an 8 h
     elapsed window, which is two limits and therefore two clocks.
 
     The window bounds each call IN FLIGHT as well as the total after it. A clock
@@ -1032,10 +1267,13 @@ class _ModelWorkClock:
     on the authorized provider is not small: ``llm/featherless_client.py`` retries
     a send six times at a 600 s timeout with exponential backoff, so a single
     ``complete`` can stay in flight for the better part of an hour. Charging on
-    return alone would let a run at 3 h 59 m of model work spend a fifth hour
-    against an authorization of four, with only the separate 6 h elapsed clock
+    return alone would let a run at 5 h 59 m of model work spend a seventh hour
+    against an authorization of six, with only the separate 8 h elapsed clock
     behind it. :meth:`remaining` is what
-    :meth:`_InstrumentClient.complete` bounds each await by.
+    :meth:`_InstrumentClient._attempt` bounds each await by, and
+    ``test_the_work_clock_docstring_states_the_authorized_window`` holds the
+    figures above to the two constants so a widened authorization cannot leave
+    the enforcing class describing the old one.
     """
 
     def __init__(self, *, max_seconds: float) -> None:
@@ -1085,6 +1323,15 @@ class _ModelWorkClock:
 #: accounting from a response that actually arrived.
 ABORTED_ATTEMPT_MODEL: Final[str] = "aborted-in-flight"
 
+#: The ``model`` a :class:`CapturedCall` carries for an attempt that came back
+#: with no completion at all — the class :data:`TRANSPORT_RETRY` sends again.
+#: No usage reaches this side for it — the provider client raises before it
+#: reads the body's usage block — so its row carries zero tokens and this
+#: marker rather than a served model id, and may have been billed for tokens
+#: this side cannot see. The report's ``model_ids`` names it beside the real
+#: ones: a run that had to send calls twice says so.
+UNACCOUNTED_ATTEMPT_MODEL: Final[str] = "no-completion-returned"
+
 
 def _preflight_rates(inner: LLMClient) -> tuple[float, float] | None:
     """The USD pre-flight rates :class:`_InstrumentClient` should expose, if any.
@@ -1110,7 +1357,7 @@ def _preflight_rates(inner: LLMClient) -> tuple[float, float] | None:
 class _InstrumentClient:
     """Wrap the provider to enforce the per-call caps and capture the prompts.
 
-    Five jobs, none of which the budget layer does:
+    Six jobs, none of which the budget layer does:
 
     1. refuse a ``max_tokens`` that is not one of the two shipped caps, so
        "the shipped defaults unchanged" is checked rather than asserted;
@@ -1123,7 +1370,16 @@ class _InstrumentClient:
     4. bound each provider await by the model-work window's remaining seconds,
        so the authorized window stops the run DURING the call that exhausts it
        rather than one whole call later;
-    5. hold the prompts the supported grader reads, in memory, for one unit.
+    5. send a call that came back with no completion again, up to
+       :data:`MAX_TRANSPORT_ATTEMPTS` attempts, counting every one
+       (:data:`TRANSPORT_RETRY`);
+    6. hold the prompts the supported grader reads, in memory, for one unit.
+
+    Job 5 lives HERE and not in the provider client. ``llm/featherless_client.py``
+    retries its own transport families already, and every recorded campaign runs
+    through it, so widening its retry classes to cover an empty completion would
+    change behaviour for recordings this evaluation has nothing to do with. This
+    wrapper is the run's own, and a retry it makes moves nothing else.
 
     Every stop above records the call FIRST. The response came back, so the
     tokens were spent whether or not they are usable, and the partial accounting
@@ -1150,7 +1406,26 @@ class _InstrumentClient:
         turn_max_tokens: int = AUTHORIZED_TURN_MAX_TOKENS,
         vote_max_tokens: int = AUTHORIZED_VOTE_MAX_TOKENS,
         expected_model: str | None = None,
+        max_transport_attempts: int = MAX_TRANSPORT_ATTEMPTS,
+        per_attempt_timeout_seconds: float = PER_ATTEMPT_TIMEOUT_SECONDS,
+        # Read from the module at CONSTRUCTION rather than captured as a default
+        # when this class is defined, so a test of a stop that exhausts the
+        # bound does not have to sit out the seven seconds of real backoff the
+        # authorized value would spend inside ``run_instrument``.
+        backoff_base_seconds: float | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
+        backoff = (
+            TRANSPORT_BACKOFF_BASE_SECONDS
+            if backoff_base_seconds is None
+            else backoff_base_seconds
+        )
+        if max_transport_attempts < 1:
+            raise ValueError("a call is sent at least once")
+        if per_attempt_timeout_seconds <= 0:
+            raise ValueError("the per-attempt wall must be positive")
+        if backoff < 0:
+            raise ValueError("a backoff cannot be negative")
         self._inner = inner
         self._work_clock = work_clock
         self._allowed_max_tokens = frozenset({turn_max_tokens, vote_max_tokens})
@@ -1159,7 +1434,16 @@ class _InstrumentClient:
         # marker; the authorized model id on a live run, where the served model
         # is a thing the manifest binds.
         self._expected_model = expected_model
+        self._max_attempts = max_transport_attempts
+        self._per_attempt_seconds = per_attempt_timeout_seconds
+        self._backoff_base = backoff
+        # Injected for the same reason ``llm/featherless_client.py`` injects its
+        # own: a test of the bound must not wait out the backoff it is testing.
+        self._sleep = sleep
         self._calls: list[CapturedCall] = []
+        self._retried_calls = 0
+        self._unaccounted_attempts = 0
+        self._triggers: Counter[str] = Counter()
         # The USD pre-flight rates are the WRAPPED client's, never this
         # wrapper's own. ``BudgetedLLMClient`` reads them off whatever it is
         # handed (``llm/budgeted_client.py:115-129``), so hardcoding zero here
@@ -1188,6 +1472,24 @@ class _InstrumentClient:
         self._calls.clear()
         return calls
 
+    def attempts(self) -> TransportAttempts:
+        """This unit's retry counts so far, without clearing them."""
+
+        return TransportAttempts(
+            retried_calls=self._retried_calls,
+            unaccounted_attempts=self._unaccounted_attempts,
+            by_trigger=MappingProxyType(dict(sorted(self._triggers.items()))),
+        )
+
+    def take_attempts(self) -> TransportAttempts:
+        """Return this unit's retry counts and reset them for the next unit."""
+
+        counted = self.attempts()
+        self._retried_calls = 0
+        self._unaccounted_attempts = 0
+        self._triggers.clear()
+        return counted
+
     async def complete(
         self,
         *,
@@ -1199,6 +1501,16 @@ class _InstrumentClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
+        """One call, sent up to :data:`MAX_TRANSPORT_ATTEMPTS` times.
+
+        The caps are checked once, because they describe the REQUEST and no
+        retry changes it. Everything after that is one attempt at a time:
+        :meth:`_attempt` either returns a response, raises the stop that attempt
+        earned, or raises :class:`_NoCompletion` when it produced nothing at
+        all. Only the last of those is sent again, and only
+        :data:`TRANSPORT_RETRY`'s classes reach it.
+        """
+
         if max_tokens > self._ceiling:
             raise PerCallCapExceeded(
                 f"a call asked for {max_tokens} output tokens; the authorized "
@@ -1210,16 +1522,71 @@ class _InstrumentClient:
                 f"caps are the shipped {sorted(self._allowed_max_tokens)} and "
                 "this run may not move them"
             )
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                return await self._attempt(
+                    prompt=prompt,
+                    schema=schema,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    call_kind=call_kind,
+                    model=model,
+                    agent_id=agent_id,
+                )
+            except _NoCompletion as nothing:
+                cause = nothing.__cause__ or nothing
+                self._triggers[nothing.trigger] += 1
+                self._unaccounted_attempts += 1
+                if attempt == self._max_attempts:
+                    raise TransportAttemptsExhausted(
+                        f"{self._max_attempts} attempts at one call came back "
+                        f"with no completion (last: {nothing.trigger}, "
+                        f"{type(cause).__name__}: {cause})"
+                    ) from cause
+                # Exponential, like the provider client's own loop, and short:
+                # the run's wall is what a wait is spent out of.
+                await self._sleep(self._backoff_base * 2 ** (attempt - 1))
+                # Counted after the wait, not before it: the counter says a call
+                # was SENT again, and a run the elapsed deadline cancels during
+                # the backoff never sends it. Nothing is awaited between here and
+                # the next send, so the count and the send cannot come apart.
+                if attempt == 1:
+                    self._retried_calls += 1
+        raise AssertionError(  # pragma: no cover - the loop returns or raises
+            "the attempt loop neither returned a response nor raised a stop"
+        )
+
+    async def _attempt(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind,
+        model: str | None,
+        agent_id: str | None,
+    ) -> LLMResponse:
+        """One send, recorded whatever it does.
+
+        Two walls bound the await and only the tighter one applies: what is LEFT
+        of the model-work window, the way
+        ``orchestrator.run_limits.RunDeadline.run`` bounds meeting work by what
+        is left of the elapsed one, and :data:`PER_ATTEMPT_TIMEOUT_SECONDS` for
+        this attempt alone. Which of the two expired decides what the cut-off
+        means: the window is a limit the run reached and a stop, the per-attempt
+        wall is an attempt that stopped answering and a retry. Without the
+        window bound the limit is checked only once a call returns, so a run
+        near its ceiling can spend one further whole call — up to the provider
+        client's own retry-and-timeout budget — beyond the authorization.
+        ``timeout.expired()`` separates OUR cut-off from a timeout the inner
+        client raised itself, which stays a provider failure.
+        """
+
         started = time.monotonic()
-        # The await is bounded by what is LEFT of the model-work window, the
-        # way orchestrator.run_limits.RunDeadline.run bounds meeting work by
-        # what is left of the elapsed one. Without it the window is checked only
-        # once a call returns, so a run near its limit can spend one further
-        # whole call — up to the provider client's own retry-and-timeout budget
-        # — beyond an authorized ceiling. ``timeout.expired()`` separates OUR
-        # stop from a timeout the inner client raised itself, which stays a
-        # provider failure and is not re-labelled as a limit.
-        window = asyncio.timeout(self._work_clock.remaining())
+        remaining = self._work_clock.remaining()
+        window_binds = remaining <= self._per_attempt_seconds
+        window = asyncio.timeout(min(remaining, self._per_attempt_seconds))
         try:
             async with window:
                 response = await self._inner.complete(
@@ -1233,15 +1600,25 @@ class _InstrumentClient:
                 )
         except TimeoutError as exc:
             if not window.expired():
-                raise
-            aborted = time.monotonic() - started
-            # Recorded like every other stop in this client: the attempt bought
-            # no response, but it held the provider for ``aborted`` seconds and
-            # may have been billed for tokens this side cannot see, so it enters
-            # the partial accounting as a call with unknown (zero) usage rather
-            # than vanishing.
-            self._calls.append(
-                CapturedCall(
+                # The inner client's own read timeout: an attempt that produced
+                # nothing, recorded and retried like the other three classes
+                # rather than re-labelled as a limit this run reached.
+                raise self._nothing_came_back(
+                    trigger="transport_error",
+                    started=started,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    agent_id=agent_id,
+                ) from exc
+            if window_binds:
+                aborted = time.monotonic() - started
+                # Recorded like every other stop in this client: the attempt
+                # bought no response, but it held the provider for ``aborted``
+                # seconds and may have been billed for tokens this side cannot
+                # see, so it enters the partial accounting as a call with
+                # unknown (zero) usage rather than vanishing. Its own marker,
+                # because the limit that cut it off is the run's window.
+                self._record(
                     agent_id=agent_id,
                     prompt=prompt,
                     max_tokens=max_tokens,
@@ -1251,8 +1628,16 @@ class _InstrumentClient:
                     model=ABORTED_ATTEMPT_MODEL,
                     seconds=aborted,
                 )
-            )
-            raise self._work_clock.charge_aborted(aborted) from exc
+                raise self._work_clock.charge_aborted(aborted) from exc
+            # The per-attempt wall was the tighter of the two: an endpoint that
+            # stopped answering, recorded and retried like the other classes.
+            raise self._nothing_came_back(
+                trigger="attempt_timeout",
+                started=started,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                agent_id=agent_id,
+            ) from exc
         except BaseException as exc:
             # A call the provider BILLED and then refused. A real provider
             # validates the completion itself and raises before anything
@@ -1261,23 +1646,33 @@ class _InstrumentClient:
             # stop reports — the same understatement the truncation stop used to
             # make, and the gap the run of 2026-09-10 stopped on. The
             # parse-failure metadata riding the exception carries the real spend
-            # (``llm.provider.extract_parse_failure``); an exception without it
-            # bought nothing and is re-raised untouched.
+            # (``llm.provider.extract_parse_failure``).
             failure = extract_parse_failure(exc)
             if failure is None:
-                raise
-            burned = time.monotonic() - started
-            self._calls.append(
-                CapturedCall(
-                    agent_id=agent_id,
+                # Nothing was billed, so nothing is charged for tokens; whether
+                # the attempt is sent again is :func:`transport_trigger`'s to
+                # say, and an exception it does not recognise is re-raised
+                # untouched.
+                trigger = transport_trigger(exc)
+                if trigger is None:
+                    raise
+                raise self._nothing_came_back(
+                    trigger=trigger,
+                    started=started,
                     prompt=prompt,
                     max_tokens=max_tokens,
-                    input_tokens=failure.input_tokens,
-                    output_tokens=failure.output_tokens,
-                    cost_usd=failure.cost_usd,
-                    model=failure.model,
-                    seconds=burned,
-                )
+                    agent_id=agent_id,
+                ) from exc
+            burned = time.monotonic() - started
+            self._record(
+                agent_id=agent_id,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                input_tokens=failure.input_tokens,
+                output_tokens=failure.output_tokens,
+                cost_usd=failure.cost_usd,
+                model=failure.model,
+                seconds=burned,
             )
             # Charged like a call that returned: the provider held the wall for
             # it either way, so the work clock and the per-arm
@@ -1307,17 +1702,15 @@ class _InstrumentClient:
         # Recorded before either of the stops below, because the response
         # exists: its tokens were spent and its provider time elapsed, and a
         # stop that dropped them would understate its own partial accounting.
-        self._calls.append(
-            CapturedCall(
-                agent_id=agent_id,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                cost_usd=response.cost_usd,
-                model=response.model,
-                seconds=seconds,
-            )
+        self._record(
+            agent_id=agent_id,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            cost_usd=response.cost_usd,
+            model=response.model,
+            seconds=seconds,
         )
         self._work_clock.charge(seconds)
         stop = self._unusable_response(
@@ -1328,6 +1721,82 @@ class _InstrumentClient:
         if stop is not None:
             raise stop
         return response
+
+    def _record(
+        self,
+        *,
+        agent_id: str | None,
+        prompt: str,
+        max_tokens: int,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+        model: str,
+        seconds: float,
+    ) -> None:
+        """Put one attempt in the ledger, with whatever it actually cost.
+
+        One recorder for all four outcomes — a response, a billed-and-refused
+        completion, an attempt the window cut off and an attempt that produced
+        nothing — so an attempt the provider reported usage for is charged with
+        that usage and an attempt it reported none for still occupies a row. A
+        row that vanished would understate the partial accounting a stop
+        reports, which is the defect the run of 2026-09-10 stopped on.
+        """
+
+        self._calls.append(
+            CapturedCall(
+                agent_id=agent_id,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost_usd,
+                model=model,
+                seconds=seconds,
+            )
+        )
+
+    def _nothing_came_back(
+        self,
+        *,
+        trigger: TransportTrigger,
+        started: float,
+        prompt: str,
+        max_tokens: int,
+        agent_id: str | None,
+    ) -> _NoCompletion:
+        """Record an attempt that produced no completion, and ask for a retry.
+
+        No usage reaches this side for it — that is what makes it this class
+        rather than a billed refusal — so it enters the ledger as an unaccounted
+        attempt with a marker for a model and zero tokens, and its wall is
+        charged to the work clock, which held it whether or not anything came
+        back. Zero is what is KNOWN, not what was spent: a 2xx body with no
+        completion in it can carry a ``usage`` block that
+        ``llm/featherless_client.py::_raw_from_response_body`` never reads,
+        because it refuses the body first, so an attempt of this class may have
+        been billed for tokens neither this wrapper nor the budget can see.
+        Charging a guess instead would put an invented number in the accounting;
+        moving the read is a change to the provider client, which this
+        instrument deliberately leaves where every recorded campaign has it.
+        Returned rather than raised so the caller chains the original failure
+        onto it.
+        """
+
+        elapsed = time.monotonic() - started
+        self._record(
+            agent_id=agent_id,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            model=UNACCOUNTED_ATTEMPT_MODEL,
+            seconds=elapsed,
+        )
+        self._work_clock.charge(elapsed)
+        return _NoCompletion(trigger)
 
     def _unusable_response(
         self, *, model: str, output_tokens: int, max_tokens: int
@@ -1952,6 +2421,7 @@ class UnitRecord:
     recorded_experiment_config: RecordedExperimentConfig | None
     prompt_versions: Mapping[str, str]
     defaults: DefaultedAttempts
+    transport_attempts: TransportAttempts
 
 
 def run_unit(
@@ -2072,6 +2542,9 @@ def run_unit(
     assert_no_legacy_body_handles([call.prompt for call in client.calls])
     _assert_live_prompts_were_recorded(meeting, calls=client.calls, seed=prefix.seed)
     calls = client.take()
+    # Drained with the calls and for the same reason: the attempts belong to the
+    # unit that made them, and the next unit starts at zero.
+    attempts = client.take_attempts()
     del work_clock  # charged inside the client; named here so the caller sees it
 
     return UnitRecord(
@@ -2094,6 +2567,7 @@ def run_unit(
         recorded_experiment_config=recorded_experiment_config(entries),
         prompt_versions=MappingProxyType(dict(meeting.prompt_versions)),
         defaults=count_defaulted_attempts(entries, meeting=meeting, seed=prefix.seed),
+        transport_attempts=attempts,
     )
 
 
@@ -2774,6 +3248,16 @@ class ArmSummary(BaseModel):
     defaults_by_deadline: int
     degraded_openings: int
     units_with_defaults: int
+    # The bounded retry's counts, reported beside the meeting-internal defaults
+    # and for the same reason: a call this arm had to send twice is spend and a
+    # provider fault, and without these counts a retried run is indistinguishable
+    # from a clean one. ``calls`` above includes the unaccounted attempts, whose
+    # rows carry zero tokens and the ``UNACCOUNTED_ATTEMPT_MODEL`` marker, so
+    # subtracting ``unaccounted_attempts`` from it gives the completions.
+    retried_calls: int
+    unaccounted_attempts: int
+    attempts_by_trigger: Mapping[str, int]
+    units_with_retries: int
     prompt_versions: Mapping[str, str]
     calls: int
     input_tokens: int
@@ -2923,8 +3407,10 @@ def _summarize_arm(
         verdicts.update(grade.verdict_counts())
     own_records = [record for record in records if record.arm == arm]
     defaults = DefaultedAttempts()
+    attempts = TransportAttempts()
     for record in own_records:
         defaults = defaults.plus(record.defaults)
+        attempts = attempts.plus(record.transport_attempts)
     return ArmSummary(
         arm=arm,
         units=len(own),
@@ -2949,6 +3435,14 @@ def _summarize_arm(
         units_with_defaults=sum(
             1 for record in own_records if record.defaults.total > 0
         ),
+        retried_calls=attempts.retried_calls,
+        unaccounted_attempts=attempts.unaccounted_attempts,
+        attempts_by_trigger=dict(attempts.by_trigger),
+        units_with_retries=sum(
+            1
+            for record in own_records
+            if record.transport_attempts.unaccounted_attempts > 0
+        ),
         prompt_versions=dict(_one_prompt_version_set(records, arm=arm)),
         calls=usage.calls,
         input_tokens=usage.input_tokens,
@@ -2972,10 +3466,19 @@ class _RunState:
     """
 
     usage_by_arm: dict[str, ArmUsage] = field(default_factory=dict)
+    attempts_by_arm: dict[str, TransportAttempts] = field(default_factory=dict)
     completed: int = 0
 
-    def charge(self, arm: ArmName, calls: Sequence[CapturedCall]) -> None:
+    def charge(
+        self,
+        arm: ArmName,
+        calls: Sequence[CapturedCall],
+        attempts: TransportAttempts = TransportAttempts(),
+    ) -> None:
         self.usage_by_arm[arm] = self.usage_by_arm.get(arm, ArmUsage()).plus(calls)
+        self.attempts_by_arm[arm] = self.attempts_by_arm.get(
+            arm, TransportAttempts()
+        ).plus(attempts)
 
 
 def run_instrument(
@@ -3077,7 +3580,11 @@ def run_instrument(
                 # spent, so they are charged into the partial accounting before
                 # it is reported — "retains partial evidence and unresolved
                 # accounting" means the spend that bought nothing, too.
-                state.charge(arm.name, instrument_client.take())
+                state.charge(
+                    arm.name,
+                    instrument_client.take(),
+                    instrument_client.take_attempts(),
+                )
                 raise InstrumentAborted(
                     PartialRun(
                         reason=f"{type(exc).__name__}: {exc}",
@@ -3086,9 +3593,10 @@ def run_instrument(
                         usage_by_arm=dict(state.usage_by_arm),
                         elapsed_seconds=time.monotonic() - started,
                         model_work_seconds=work_clock.seconds,
+                        attempts_by_arm=dict(state.attempts_by_arm),
                     )
                 ) from exc
-            state.charge(arm.name, record.calls)
+            state.charge(arm.name, record.calls, record.transport_attempts)
             state.completed += 1
             records.append(record)
 

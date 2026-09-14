@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import hashlib
+import inspect
 import json
 import re
 import subprocess
@@ -106,7 +107,12 @@ from tests.experiments import burned_call_double
 from tests.experiments.burned_call_double import (
     BURNED_INPUT_TOKENS,
     BURNED_OUTPUT_TOKENS,
+    EMPTY_BODY_ERROR,
+    RETRYABLE_STATUS_ERROR,
+    TRANSPORT_ERROR,
     BurnedCallProvider,
+    NoCompletionProvider,
+    charged_no_completion,
 )
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
@@ -1201,12 +1207,39 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
 
     A freeze moves the band before the document that authorizes it can follow:
     the third freeze drew 6000-6999 while the Inputs row still named 5000-5999,
-    and the re-binding is the transport-resilience card's acceptance item. That
-    window is exactly what this gate is for, so the first case below asserts the
-    refusal rather than skipping it, and
+    and the re-binding that closed that window is the transport-resilience
+    card's acceptance item. The window is exactly what this gate is for, so the
+    first case below asserts the refusal rather than skipping it whenever the
+    tree is in one, and
     `TestExecutionManifest.test_a_binding_to_a_converted_record_stays_an_open_obligation`
-    is what keeps the window from becoming permanent.
+    is what keeps such a window from becoming permanent.
     """
+
+    def test_the_gate_says_which_bands_actually_moved(self) -> None:
+        """The gate's own docstring, held to the records that moved.
+
+        It motivates the check by naming the conversions, which is a list that
+        grows: a docstring written at the first conversion went on describing
+        5000-5999 as the band frozen in place of 3000-3999 after 5000-5999 had
+        itself become development data. Read out of `CONVERTED_BANDS` and each
+        record's own `converted.date` instead of trusted, so the next
+        conversion turns this red here rather than leaving the enforcing
+        function explaining a history that has moved on.
+        """
+
+        source = instrument.assert_manifest_binds_the_live_band.__doc__
+        assert source is not None, "the gate carries no docstring to check"
+        doc = " ".join(source.split())
+        for converted in CONVERTED_BANDS:
+            record = json.loads(
+                (_REPO_ROOT / converted.manifest_path).read_text(encoding="utf-8")
+            )
+            span = f"{converted.band.first_seed}-{converted.band.last_seed}"
+            date = record["converted"]["date"]
+            assert re.search(rf"{span}[^.]*?{re.escape(date)}", doc), (
+                f"the gate explains itself without saying that {span} became "
+                f"development data on {date}"
+            )
 
     def _planted_root(self, root: Path, *, band: tuple[int, int]) -> Path:
         """A repository root whose Inputs row names `band` and whose freeze
@@ -1567,13 +1600,34 @@ class TestBudgetAndDeadline:
 
 
 class TestModelWorkWindow:
-    """The 4 h window is a limit on model work, so it has to bind IN FLIGHT.
+    """The work window is a limit on model work, so it has to bind IN FLIGHT.
 
     Charged only on return it is a one-call-granular limit, and one call on the
     authorized provider is six sends at a 600 s timeout with backoff — close to
-    an hour. A run at 3 h 59 m could then spend a fifth hour against an
-    authorization of four, with only the separate 6 h elapsed clock behind it.
+    an hour. A run at 5 h 59 m could then spend a seventh hour against an
+    authorization of six, with only the separate 8 h elapsed clock behind it.
     """
+
+    def test_the_work_clock_docstring_states_the_authorized_window(self) -> None:
+        """PLANTED: the docstring left at the authorization it used to enforce.
+
+        `_ModelWorkClock` is the mechanism the manifest sends an auditor to
+        read, so a widened authorization that moved the constants and the record
+        but not the class's own account of them would leave the enforcing code
+        stating a limit no longer authorized — which is what happened when
+        4 h / 6 h became 6 h / 8 h. The figures are derived from the constants
+        here, never retyped.
+        """
+
+        doc = " ".join((inspect.getdoc(instrument._ModelWorkClock) or "").split())
+        work_hours = int(instrument.AUTHORIZED_MODEL_WORK_SECONDS // 3600)
+        elapsed_hours = int(instrument.AUTHORIZED_ELAPSED_SECONDS // 3600)
+        assert f"{work_hours} h of model work" in doc
+        assert f"{elapsed_hours} h elapsed window" in doc
+        # The boundary illustration is one minute short of the work window and
+        # names the hour past it, so it cannot survive a widening either.
+        assert f"{work_hours - 1} h 59 m of model work" in doc
+        assert f"separate {elapsed_hours} h elapsed clock" in doc
 
     def test_the_window_stops_during_the_call_that_exhausts_it(self) -> None:
         """PLANTED: a 0.2 s window and a call that stays in flight for 5 s.
@@ -1621,17 +1675,36 @@ class TestModelWorkWindow:
     def test_a_providers_own_timeout_is_not_relabelled_as_the_window(self) -> None:
         """PLANTED: the inner client raises `TimeoutError` with the window wide
         open. A provider timeout is a transport failure, not a limit that was
-        reached, and mislabelling it would forge a stop reason."""
+        reached, and mislabelling it would forge a stop reason.
+
+        It is retried like the other no-completion classes, so the stop that
+        arrives is the exhausted retry bound and not `RunDeadlineExceeded`; the
+        original timeout is chained onto it and named in its message, and the
+        work clock carries only the attempts' own (negligible) wall rather than
+        a window it never reached.
+        """
 
         clock = instrument._ModelWorkClock(max_seconds=3600.0)
-        client = instrument._InstrumentClient(_TimingOutProvider(), work_clock=clock)
-        with pytest.raises(TimeoutError, match="the provider's own read timeout"):
+        client = instrument._InstrumentClient(
+            _TimingOutProvider(),
+            work_clock=clock,
+            backoff_base_seconds=0.0,
+        )
+        with pytest.raises(
+            instrument.TransportAttemptsExhausted,
+            match="the provider's own read timeout",
+        ) as caught:
             asyncio.run(
                 client.complete(
                     prompt="p", schema=None, max_tokens=1024, temperature=0.2
                 )
             )
-        assert clock.seconds == 0.0
+        assert not isinstance(caught.value, RunDeadlineExceeded)
+        assert isinstance(caught.value.__cause__, TimeoutError)
+        assert clock.seconds < 1.0
+        assert dict(client.attempts().by_trigger) == {
+            "transport_error": instrument.MAX_TRANSPORT_ATTEMPTS
+        }
 
     def test_a_call_inside_the_window_is_untouched(self) -> None:
         clock = instrument._ModelWorkClock(max_seconds=3600.0)
@@ -1642,6 +1715,436 @@ class TestModelWorkWindow:
         )
         assert inner.finished == 1
         assert 0.0 < clock.seconds < 1.0
+
+
+class _RecordedSleep:
+    """The wrapper's backoff, recorded instead of waited out."""
+
+    def __init__(self) -> None:
+        self.waits: list[float] = []
+
+    async def __call__(self, seconds: float) -> None:
+        self.waits.append(seconds)
+
+
+class TestTransportRetry:
+    """The bounded retry: what is sent again, what is not, and what it costs.
+
+    The second live run (PR #448) stopped on its fifth call because Featherless
+    answered a 2xx with no `choices`, which the adapter refuses with a bare
+    `RuntimeError` none of its own retry classes carries. An attempt that
+    produced no completion is not a sample, so sending it again re-draws
+    nothing; a truncation and a refused payload ARE samples, so sending either
+    again would draw a frozen unit twice. Each case below is one side of that
+    line, at the wrapper, which is where the bound lives.
+    """
+
+    def _client(
+        self,
+        inner: Any,
+        *,
+        clock: instrument._ModelWorkClock | None = None,
+        sleep: _RecordedSleep | None = None,
+        per_attempt_timeout_seconds: float = instrument.PER_ATTEMPT_TIMEOUT_SECONDS,
+    ) -> instrument._InstrumentClient:
+        return instrument._InstrumentClient(
+            inner,
+            work_clock=clock or instrument._ModelWorkClock(max_seconds=3600.0),
+            per_attempt_timeout_seconds=per_attempt_timeout_seconds,
+            sleep=sleep or _RecordedSleep(),
+        )
+
+    def _call(
+        self, client: instrument._InstrumentClient, *, schema: Any = None
+    ) -> LLMResponse:
+        return asyncio.run(
+            client.complete(prompt="p", schema=schema, max_tokens=1024, temperature=0.2)
+        )
+
+    def test_one_empty_body_then_a_completion_continues_the_call(self) -> None:
+        """PLANTED: the failure that stopped the run of 2026-09-13, once.
+
+        The call resolves on its second attempt, one retry is counted with its
+        trigger, and the attempt that bought nothing is in the ledger with zero
+        tokens and its own marker rather than missing from it.
+        """
+
+        inner = NoCompletionProvider(mode="empty_body", failures=1)
+        sleep = _RecordedSleep()
+        client = self._client(inner, sleep=sleep)
+        response = self._call(client)
+        assert response.text
+        assert inner.attempts == 2
+        assert sleep.waits == [instrument.TRANSPORT_BACKOFF_BASE_SECONDS]
+        attempts = client.attempts()
+        assert attempts.retried_calls == 1
+        assert attempts.unaccounted_attempts == 1
+        assert dict(attempts.by_trigger) == {"empty_completion": 1}
+        unaccounted = [
+            call
+            for call in client.calls
+            if call.model == instrument.UNACCOUNTED_ATTEMPT_MODEL
+        ]
+        assert len(unaccounted) == 1
+        assert unaccounted[0].input_tokens == unaccounted[0].output_tokens == 0
+        assert unaccounted[0].cost_usd == 0.0
+
+    def test_four_empty_bodies_stop_the_call(self) -> None:
+        """PLANTED: the same failure, never recovering. Four attempts is the
+        bound, so the fourth is a stop and not a fifth send, and the backoff
+        between them is the exponential the constant states."""
+
+        inner = NoCompletionProvider(mode="empty_body", failures=99)
+        sleep = _RecordedSleep()
+        client = self._client(inner, sleep=sleep)
+        with pytest.raises(
+            instrument.TransportAttemptsExhausted, match="empty_completion"
+        ) as caught:
+            self._call(client)
+        assert inner.attempts == instrument.MAX_TRANSPORT_ATTEMPTS == 4
+        assert sleep.waits == [1.0, 2.0, 4.0]
+        assert "refusing to record an empty completion" in str(caught.value)
+        attempts = client.attempts()
+        assert attempts.retried_calls == 1
+        assert attempts.unaccounted_attempts == 4
+        assert dict(attempts.by_trigger) == {"empty_completion": 4}
+
+    @pytest.mark.parametrize(
+        ("message", "trigger"),
+        [
+            (TRANSPORT_ERROR, "transport_error"),
+            (RETRYABLE_STATUS_ERROR, "retryable_status"),
+        ],
+    )
+    def test_a_transport_failure_and_a_retryable_status_are_retried(
+        self, message: str, trigger: str
+    ) -> None:
+        """PLANTED: the other two shapes the adapter raises without a
+        completion — its exhausted transport/parse sends and a 503 it could not
+        get past — each recovered on the retry and counted as its own class."""
+
+        mode = "transport_error" if trigger == "transport_error" else "retryable_status"
+        inner = NoCompletionProvider(mode=cast(Any, mode), failures=1)
+        client = self._client(inner)
+        self._call(client)
+        assert inner.attempts == 2
+        assert dict(client.attempts().by_trigger) == {trigger: 1}
+        assert message  # the double raises exactly this wording
+
+    def test_an_attempt_past_the_per_attempt_wall_is_retried(self) -> None:
+        """PLANTED: the endpoint holds the connection open and never answers.
+
+        The wrapper cuts the attempt off at its own wall and sends the call
+        again; without that bound the attempt runs to the provider client's own
+        budget, which is six sends at a 600 s timeout. The assertion is on how
+        long it took, not only that it recovered.
+        """
+
+        inner = NoCompletionProvider(mode="stall", failures=1, stall_seconds=5.0)
+        client = self._client(inner, per_attempt_timeout_seconds=0.05)
+        started = time.monotonic()
+        self._call(client)
+        elapsed = time.monotonic() - started
+        assert elapsed < 2.0, (
+            f"the retry waited for the stalled attempt: {elapsed:.1f}s"
+        )
+        assert inner.attempts == 2
+        assert dict(client.attempts().by_trigger) == {"attempt_timeout": 1}
+        # The wall that cut it off is this wrapper's, not the run's window, so
+        # the row it left carries the unaccounted marker rather than the one a
+        # limit being reached leaves behind.
+        assert [call.model for call in client.calls][0] == (
+            instrument.UNACCOUNTED_ATTEMPT_MODEL
+        )
+        assert len(client.calls) == 2
+
+    def test_the_model_work_window_still_stops_a_stalled_attempt(self) -> None:
+        """The two walls are not the same wall. When what is LEFT of the
+        model-work window is the tighter of the two, the cut-off attempt is the
+        limit being reached — a stop, with no retry — and not an endpoint that
+        stopped answering."""
+
+        inner = NoCompletionProvider(mode="stall", failures=1, stall_seconds=5.0)
+        clock = instrument._ModelWorkClock(max_seconds=0.2)
+        client = self._client(inner, clock=clock, per_attempt_timeout_seconds=60.0)
+        with pytest.raises(RunDeadlineExceeded, match="exhausted mid-call"):
+            self._call(client)
+        assert inner.attempts == 1
+        assert client.attempts().unaccounted_attempts == 0
+        assert [call.model for call in client.calls] == [
+            instrument.ABORTED_ATTEMPT_MODEL
+        ]
+
+    def test_a_truncated_response_is_not_retried(self) -> None:
+        """PLANTED: a response at its output cap. It is a completion the model
+        produced, so it is the datum the stop rule refuses to accept rather
+        than an attempt that failed to happen; sending it again would draw the
+        same frozen unit twice."""
+
+        inner = NoCompletionProvider(mode="truncation", failures=99)
+        client = self._client(inner)
+        with pytest.raises(PerCallCapExceeded, match="a truncation is a"):
+            self._call(client)
+        assert inner.attempts == 1
+        assert client.attempts().unaccounted_attempts == 0
+
+    def test_a_payload_the_adapter_refused_on_its_schema_is_not_retried(self) -> None:
+        """PLANTED: the adapter validated the completion and re-raised. The
+        endpoint produced a body, the meeting layer's default path is what
+        handles it, and the reconciliation counts its spend — so the wrapper
+        leaves it alone."""
+
+        inner = NoCompletionProvider(mode="invalid_schema", failures=99)
+        client = self._client(inner)
+        with pytest.raises(ValidationError):
+            self._call(client, schema=ModelAuthoredVoteBallot)
+        assert inner.attempts == 1
+        assert client.attempts().unaccounted_attempts == 0
+
+    def test_a_billed_and_refused_call_is_not_retried(self) -> None:
+        """The same line, on the failure the provider CHARGED for: its spend is
+        already in this client's ledger and in the budget, so a retry would buy
+        a second charge on one unit."""
+
+        inner = BurnedCallProvider()
+        client = self._client(inner)
+        with pytest.raises(ValidationError):
+            self._call(client, schema=ModelAuthoredVoteBallot)
+        assert inner.ballots == 1
+        assert client.attempts().unaccounted_attempts == 0
+        assert [call.input_tokens for call in client.calls] == [BURNED_INPUT_TOKENS]
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            BudgetExceededError(
+                dimension="input_tokens", current=45_000, delta=1, cap=45_000
+            ),
+            RunDeadlineExceeded("the elapsed deadline passed"),
+            PerCallCapExceeded("a response reached its cap"),
+            LiveRunNotAuthorized("no invocation"),
+            RuntimeError("something this wrapper has never seen"),
+        ],
+        ids=["budget", "deadline", "cap", "live-gate", "unclassified"],
+    )
+    def test_what_the_wrapper_never_sends_again(self, failure: Exception) -> None:
+        """An exhausted limit, a refusal this instrument raised and a failure
+        nothing here can classify are all `None` to the classifier.
+
+        The first three would be "no retry and no widening of any limit"
+        violated by a retry; the last is the conservative direction — an
+        unrecognised failure stops the run with its partial accounting rather
+        than being sent again blindly.
+        """
+
+        assert instrument.transport_trigger(failure) is None
+
+    def test_a_billed_failure_is_not_retried_however_it_is_worded(self) -> None:
+        """PLANTED: a refusal the endpoint CHARGED for, worded like an empty body.
+
+        The wording is the only handle the empty-completion class has, so a
+        classifier that reached for it first would re-send a call whose spend is
+        already in the ledger and in the budget — a second charge on one unit of
+        a frozen design. What decides is the class of the failure: usage rides
+        this one, so it is a completion that was produced and refused.
+        """
+
+        billed = charged_no_completion(EMPTY_BODY_ERROR)
+        assert instrument.transport_trigger(billed) is None
+
+    def test_a_refused_payload_quoting_a_status_is_not_a_status_from_the_endpoint(
+        self,
+    ) -> None:
+        """PLANTED: the body the model wrote mentions an HTTP 503.
+
+        A `ValidationError` renders the input it rejected, so a status the MODEL
+        wrote appears in the message exactly where a status the ENDPOINT
+        returned would. Reading the wording of a payload that arrived is the
+        defect; the class is checked first, and a refused payload is a sample
+        whatever it says.
+        """
+
+        planted = '{"rationale_text": "HTTP 503"}'
+        with pytest.raises(ValidationError) as caught:
+            ModelAuthoredVoteBallot.model_validate_json(planted)
+        assert "HTTP 503" in str(caught.value)
+        assert instrument.transport_trigger(caught.value) is None
+
+    def test_an_unaccounted_attempt_says_what_it_cannot_know(self) -> None:
+        """The record may not claim a charge this side never sees.
+
+        `_raw_from_response_body` refuses a body with no completion in it BEFORE
+        it reads that body's `usage` block, so a 2xx the provider billed for and
+        then answered emptily reaches this wrapper as a bare `RuntimeError` with
+        nothing riding it. The ledger row is zero tokens — what is KNOWN, not
+        what was spent — and `TRANSPORT_RETRY`, which the manifest quotes
+        verbatim, says so instead of claiming the usage was recorded. Moving the
+        usage read ahead of the refusal is a change to the provider client and
+        would turn this red, which is the point: the wording would then be
+        wrong.
+        """
+
+        function = (
+            (_REPO_ROOT / "llm" / "featherless_client.py")
+            .read_text(encoding="utf-8")
+            .split("def _raw_from_response_body")[1]
+        )
+        refuses = function.index("refusing to record an empty completion")
+        reads_usage = function.index('usage = body.get("usage")')
+        assert refuses < reads_usage
+        assert (
+            "may have been billed for tokens this side cannot see"
+            in instrument.TRANSPORT_RETRY
+        )
+        assert "recorded as an unaccounted attempt carrying zero tokens" in (
+            instrument.TRANSPORT_RETRY
+        )
+        # And the ledger row the run actually writes is that zero.
+        inner = NoCompletionProvider(mode="empty_body", failures=1)
+        client = self._client(inner)
+        self._call(client)
+        unaccounted = [
+            call
+            for call in client.calls
+            if call.model == instrument.UNACCOUNTED_ATTEMPT_MODEL
+        ]
+        assert [(call.input_tokens, call.output_tokens) for call in unaccounted] == [
+            (0, 0)
+        ]
+
+    def test_a_permanent_status_outranks_the_body_it_quotes(self) -> None:
+        """PLANTED: a 400 whose response body contains the empty-completion
+        phrase, and one whose body contains the transport-failure phrase.
+
+        `_format_send_error` writes the status first and quotes the body after
+        it, so both markers and the status live in one message. Read body-first
+        the wrapper would send a request the endpoint has permanently refused
+        four times over; only `_RETRYABLE_STATUS_CODES` are retryable at all,
+        and the status is the half the adapter wrote rather than the half the
+        endpoint returned.
+        """
+
+        for body in (
+            "refusing to record an empty completion",
+            "on a transport/parse error",
+        ):
+            permanent = RuntimeError(
+                "Featherless chat-completions POST failed: HTTP 400 "
+                f"(model='Qwen/Qwen3.6-27B'): {body}"
+            )
+            assert instrument.transport_trigger(permanent) is None, body
+        # The same message with a status that IS retryable stays a retry.
+        assert (
+            instrument.transport_trigger(RuntimeError(RETRYABLE_STATUS_ERROR))
+            == "retryable_status"
+        )
+        # And an empty body, which carries no status at all, is unaffected.
+        assert (
+            instrument.transport_trigger(RuntimeError(EMPTY_BODY_ERROR))
+            == "empty_completion"
+        )
+
+    def test_a_retry_is_counted_only_once_the_next_send_begins(self) -> None:
+        """PLANTED: the elapsed deadline cancels the call DURING the backoff.
+
+        `RunDeadline` cancels the coroutine it bounds, and the cancellation can
+        land in the wait between two attempts. Counted before the wait, the stop
+        would report one retried call for a call that was only ever sent once;
+        the attempt that produced nothing is still counted, because it happened.
+        """
+
+        class _CancellingSleep:
+            def __init__(self) -> None:
+                self.waits: list[float] = []
+
+            async def __call__(self, seconds: float) -> None:
+                self.waits.append(seconds)
+                raise asyncio.CancelledError
+
+        inner = NoCompletionProvider(mode="empty_body", failures=99)
+        sleep = _CancellingSleep()
+        client = instrument._InstrumentClient(
+            inner,
+            work_clock=instrument._ModelWorkClock(max_seconds=3600.0),
+            sleep=sleep,
+        )
+        with pytest.raises(asyncio.CancelledError):
+            self._call(client)
+        assert inner.attempts == 1
+        assert sleep.waits == [instrument.TRANSPORT_BACKOFF_BASE_SECONDS]
+        attempts = client.attempts()
+        assert attempts.retried_calls == 0
+        assert attempts.unaccounted_attempts == 1
+
+    def test_the_classifier_keys_on_wording_the_adapter_still_uses(self) -> None:
+        """The empty-completion class has no type of its own to match on.
+
+        `llm/featherless_client.py` raises a bare `RuntimeError` for a body with
+        no `choices`, so the message is the only handle there is. This reads
+        that module's SOURCE — text, never an import, so this file gains no
+        route to a real client — and holds every fragment the classifier keys
+        on, plus the retryable-status set, to what the adapter actually writes.
+        A rewording there turns this red instead of turning a retry into a stop
+        mid-run.
+        """
+
+        source = (_REPO_ROOT / "llm" / "featherless_client.py").read_text(
+            encoding="utf-8"
+        )
+        for marker in instrument._EMPTY_COMPLETION_MARKERS:
+            assert marker in source, marker
+        assert instrument._TRANSPORT_FAILURE_MARKER in source
+        assert "POST failed: HTTP " in source
+        bound = next(
+            node
+            for node in ast.parse(source).body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "_RETRYABLE_STATUS"
+        )
+        # ``frozenset({...})`` — the set literal inside the call is the part a
+        # literal evaluation can read.
+        call = cast(ast.Call, bound.value)
+        assert set(ast.literal_eval(call.args[0])) == set(
+            instrument._RETRYABLE_STATUS_CODES
+        )
+
+    def test_a_retried_run_reports_the_attempts_per_arm(self, tmp_path: Path) -> None:
+        """PLANTED at the RUN, not the wrapper: the first call of the first arm
+        comes back empty once. The unit still resolves, and the arm summary
+        carries what it cost — which is the difference between a clean run and
+        a retried one that would otherwise read the same."""
+
+        inner = NoCompletionProvider(mode="empty_body", failures=1)
+        report = run_instrument(output_dir=tmp_path, client=inner, units=1)
+        reference = next(arm for arm in report.arms if arm.arm == "repaired_clock")
+        candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
+        assert reference.retried_calls == 1
+        assert reference.unaccounted_attempts == 1
+        assert dict(reference.attempts_by_trigger) == {"empty_completion": 1}
+        assert reference.units_with_retries == 1
+        assert candidate.retried_calls == 0
+        assert candidate.units_with_retries == 0
+        assert instrument.UNACCOUNTED_ATTEMPT_MODEL in report.model_ids
+
+    def test_an_exhausted_call_stops_the_run_with_its_attempts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: an endpoint that answers nothing at all. Four attempts, then
+        the stop, with the attempts in the partial accounting a stop reports —
+        the same place the spent-but-unusable calls go."""
+
+        monkeypatch.setattr(instrument, "TRANSPORT_BACKOFF_BASE_SECONDS", 0.0)
+        inner = NoCompletionProvider(mode="empty_body", failures=99)
+        with pytest.raises(InstrumentAborted) as caught:
+            run_instrument(output_dir=tmp_path, client=inner, units=1)
+        partial = caught.value.partial
+        assert "TransportAttemptsExhausted" in partial.reason
+        assert partial.completed_units == 0
+        attempts = partial.attempts_by_arm["repaired_clock"]
+        assert attempts.retried_calls == 1
+        assert attempts.unaccounted_attempts == 4
+        assert "4 unaccounted attempts (empty_completion 4)" in partial.describe()
 
 
 class TestMeetingDefaults:
@@ -2301,6 +2804,7 @@ class TestGraders:
             "recorded_experiment_config": None,
             "prompt_versions": {},
             "defaults": instrument.DefaultedAttempts(),
+            "transport_attempts": instrument.TransportAttempts(),
         }
         payload.update(kwargs)
         return instrument.UnitRecord(**payload)
@@ -2842,7 +3346,7 @@ class TestExecutionManifest:
             "turn temperature 0.4 / vote temperature 0.2",
             "2,400,000 input / 200,000 output run-level",
             "45,000 input / 4,000 output per unit",
-            "4 h of model work within a 6 h elapsed deadline",
+            "6 h of model work within an 8 h elapsed deadline",
             "$0.00 marginal",
             "4p1i with 3 living voters at meeting open",
             "| Execution mode | sequential |",
@@ -2959,17 +3463,20 @@ class TestExecutionManifest:
         "Every amendment is dated here" is the kind of sentence a document asks
         to be trusted about. This walks the history instead: every commit after
         the manifest's own freeze whose frozen-analysis constants differ from its
-        parent's is an amendment, and its abbreviated hash has to appear in the
-        section. Three do — the decision rule's third condition with the sampling
-        binding, the stop rule's reversal, and the relevance rubric — and two of
-        them went unlogged until round 5 of this pull request's review.
+        parent's is an amendment, and its abbreviated hash has to appear in one
+        of the dated logs. Three were pre-run — the decision rule's third
+        condition with the sampling binding, the stop rule's reversal, and the
+        relevance rubric — and two of them went unlogged until round 5 of the
+        instrument's pull request. The stop rule's transport clause of
+        2026-09-13 is the first that belongs in a post-run log instead, which is
+        why the search below is over every log rather than the first one.
         """
 
         amendments = _frozen_analysis_amendments()
         if amendments is None:
             pytest.skip("no full git history here; the amendment log cannot be walked")
         assert amendments, "no post-freeze revision of the frozen analysis was found"
-        section = self._amendments_section()
+        section = self._every_amendment_section()
         unlogged = {
             commit: moved
             for commit, moved in amendments.items()
@@ -2977,10 +3484,30 @@ class TestExecutionManifest:
         }
         assert unlogged == {}, f"amendments missing from the log: {unlogged}"
 
-    def _post_run_amendments_section(self) -> str:
+    def _post_run_amendments_section(self, date: str = "2026-09-10") -> str:
         text = self._text()
-        start = text.index("## Amendments after the stopped run of 2026-09-10")
+        start = text.index(f"## Amendments after the stopped run of {date}")
         return text[start : text.index("\n## ", start + 1)]
+
+    def _every_amendment_section(self) -> str:
+        """Every dated amendment log this document carries, as one string.
+
+        The pre-run log and one post-run log per stopped run. The completeness
+        walk below reads all of them, because WHICH log an amendment belongs in
+        is a property of when it was made, and "logged nowhere" is the defect
+        that walk exists to catch.
+        """
+
+        sections = [self._amendments_section()]
+        text = self._text()
+        marker = "## Amendments after the stopped run of "
+        cursor = 0
+        while True:
+            found = text.find(marker, cursor)
+            if found == -1:
+                return "\n".join(sections)
+            cursor = found + 1
+            sections.append(text[found : text.index("\n## ", cursor)])
 
     def test_the_post_run_amendments_name_their_reason_and_a_real_commit(
         self,
@@ -3097,6 +3624,99 @@ class TestExecutionManifest:
             if word in lowered
         ]
         assert named == [], f"the frozen rule now names provider identity: {named}"
+
+    def test_the_transport_amendment_names_its_reason_and_a_real_commit(self) -> None:
+        """The 2026-09-13 log, held to what the 2026-09-10 log is held to.
+
+        Its own dated section, because it was written after a unit ran; its own
+        commit, resolved against this history rather than taken on the
+        document's word; and its reason, which is the one thing the stopped run
+        of that date establishes — a 2xx body with no completion in it.
+
+        This entry moves the frozen analysis, which the entries above do not, so
+        it says which constant moved and which did not, and the stop-rule
+        quotation further down this document carries the new bytes (the
+        verbatim check above is what holds that).
+        """
+
+        section = self._post_run_amendments_section("2026-09-13")
+        collapsed = " ".join(section.split())
+        assert "an attempt that produced nothing is retried" in collapsed
+        assert "retried up to three times" in collapsed
+        assert "no `choices`" in collapsed
+        assert "`STOP_RULE` gains a transport clause" in collapsed
+        for unmoved in (
+            "PRIMARY_OUTCOME",
+            "DECISION_RULE",
+            "MINIMUM_ACTIONABLE_EFFECT_UNITS",
+            "WRONGFUL_EJECTION_TRADEOFF",
+        ):
+            assert unmoved in collapsed
+        # Every dated entry of this section, however it is qualified, names the
+        # commit that carried it; exactly one of them is the entry that moved
+        # the frozen analysis, and a second one would be a second unlogged move.
+        commits = re.findall(r"\*\*2026-09-13[^(*]*\(`([0-9a-f]{7,40})`\)", collapsed)
+        assert commits, "an amendment entry names no commit"
+        assert collapsed.count("`STOP_RULE` gains a transport clause") == 1
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commit cannot be resolved")
+        for commit in commits:
+            assert (
+                _git("rev-parse", "--verify", f"{commit}^{{commit}}").returncode == 0
+            ), f"{commit} is not a commit here"
+            touched = _git(
+                "show", "--name-only", "--format=", commit, "--", _INSTRUMENT_REPO_PATH
+            )
+            assert _INSTRUMENT_REPO_PATH in touched.stdout
+            assert (
+                _git("merge-base", "--is-ancestor", commit, "HEAD").returncode == 0
+            ), f"named but not an ancestor of HEAD: {commit}"
+
+    def test_the_enforcement_section_quotes_the_transport_retry(self) -> None:
+        """The retry is a thing the instrument DOES, so this document states it
+        in the module's own words rather than in a paraphrase that could drift
+        from the bound the code enforces."""
+
+        section = " ".join(self._enforcement_section().split())
+        assert " ".join(instrument.TRANSPORT_RETRY.split()) in section
+
+    def test_the_stop_rule_and_the_manifest_name_the_bound_the_code_enforces(
+        self,
+    ) -> None:
+        """ "Retried up to three times" is a number, and the number is a constant.
+
+        The frozen rule spells the bound out in words and `MAX_TRANSPORT_ATTEMPTS`
+        is what the wrapper actually counts, so a change to one without the other
+        would leave the run stopping somewhere the record does not say. The
+        quoted rule in this document is the same bytes (the verbatim check
+        above), so this pins all three at once.
+        """
+
+        assert instrument.MAX_TRANSPORT_ATTEMPTS == 4
+        assert "retried up to three times, then a stop" in STOP_RULE
+        assert "retried up to three times" in self._text()
+        assert f"{instrument.PER_ATTEMPT_TIMEOUT_SECONDS:.0f} s" in self._text()
+
+    def test_the_wall_row_carries_the_constants_the_run_enforces(self) -> None:
+        """The widened window, derived from the constants rather than retyped.
+
+        The parametrised check above pins the owner's sentence; this one pins
+        the two numbers inside it to `AUTHORIZED_MODEL_WORK_SECONDS` and
+        `AUTHORIZED_ELAPSED_SECONDS`, so moving a constant without moving the
+        row — or the other way round — is red rather than a document that
+        describes a run nobody authorized.
+        """
+
+        row = next(
+            line
+            for line in self._text().splitlines()
+            if line.startswith("| Wall-clock deadline")
+        )
+        work_hours = AUTHORIZED_LIMITS.model_work_seconds / 3600
+        elapsed_hours = AUTHORIZED_LIMITS.elapsed_seconds / 3600
+        assert f"{work_hours:.0f} h of model work" in row
+        assert f"{elapsed_hours:.0f} h elapsed deadline" in row
+        assert "widened 2026-09-13" in row
 
     def test_the_manifest_marks_the_row_the_authorization_card_does_not_carry(
         self,
@@ -3293,6 +3913,63 @@ class TestDryRun:
             assert arm.ballot_verdicts["supported"] > 0
         assert "says nothing about model judgment" in report.caveat
 
+    def test_the_full_dry_run_survives_one_empty_completion(
+        self, tmp_path: Path
+    ) -> None:
+        """The whole pipeline over the frozen set, with one call answered emptily.
+
+        The retry's other cases are single units against a double; this is the
+        run the card owes: 600 calls, one of which comes back with no
+        completion, and the question is whether anything but the counters
+        moves. Nothing does — the graded fields, the ballots and the token
+        totals are the clean run's, because an attempt that produced nothing
+        produced nothing to grade or to charge — and the retried arm is
+        readable as retried from its `model_ids` alone.
+        """
+
+        clean = run_dry(output_dir=tmp_path / "clean")
+        double = NoCompletionProvider(mode="empty_body", failures=1)
+        retried = run_instrument(
+            output_dir=tmp_path / "retried", client=double, provider="fake"
+        )
+
+        assert retried.total_cost_usd == 0.0
+        assert retried.paired.paired_units == clean.paired.paired_units
+        # One send more than the run has calls: one attempt, one retry, done.
+        assert double.attempts == 601
+        assert instrument.UNACCOUNTED_ATTEMPT_MODEL in retried.model_ids
+
+        spoiled, untouched = retried.arms[0], retried.arms[1]
+        assert spoiled.retried_calls == 1
+        assert spoiled.unaccounted_attempts == 1
+        assert spoiled.units_with_retries == 1
+        assert dict(spoiled.attempts_by_trigger) == {"empty_completion": 1}
+        assert untouched.retried_calls == 0
+        assert dict(untouched.attempts_by_trigger) == {}
+
+        graded = (
+            "units",
+            "ejections",
+            "role_correct",
+            "wrongful_ejections",
+            "supported_correct_ejections",
+            "naming_ballots",
+            "off_target_citations",
+            "terminal_units",
+            "partial_units",
+            "input_tokens",
+            "output_tokens",
+        )
+        for before, after in zip(clean.arms, retried.arms, strict=True):
+            assert after.arm == before.arm
+            for field in graded:
+                assert getattr(after, field) == getattr(before, field), field
+            assert after.ballot_verdicts == before.ballot_verdicts
+        # The one thing that does move: the unaccounted attempt occupies a row,
+        # so the arm's calls exceed its completions by exactly that attempt.
+        assert spoiled.calls == clean.arms[0].calls + 1
+        assert untouched.calls == clean.arms[1].calls
+
     def test_the_dry_run_writes_nothing_outside_the_directory_it_is_given(
         self, tmp_path: Path
     ) -> None:
@@ -3423,8 +4100,10 @@ class TestAuthorizedConstants:
             unit_max_input_tokens=45_000,
             unit_max_output_tokens=4_000,
             max_cost_usd=0.0,
-            elapsed_seconds=6 * 60 * 60,
-            model_work_seconds=4 * 60 * 60,
+            # Widened on 2026-09-13 by the third authorization card, whose
+            # Constraints table the manifest's wall row now copies.
+            elapsed_seconds=8 * 60 * 60,
+            model_work_seconds=6 * 60 * 60,
         )
 
     def test_the_arms_run_the_clock_the_freeze_screened_under(self) -> None:

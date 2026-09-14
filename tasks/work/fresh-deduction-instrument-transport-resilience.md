@@ -1,6 +1,6 @@
 # Make the fresh-model deduction instrument survive a provider that returns nothing
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -37,28 +37,63 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
 
 ## Acceptance
 
-- [ ] `_InstrumentClient` retries a call up to `MAX_TRANSPORT_ATTEMPTS = 4`
+- [x] Review correction: the Codex disposition count in this card and in the pull
+  request is the count `gh api repos/dkdan10/AiLibi/pulls/450/comments --paginate`
+  prints — eight P1 comments, six repaired and two refuted — and the one bullet
+  that neither repairs nor refutes a comment of its own says which repaired
+  comment's reach it narrows, so the arithmetic adds up on its face.
+- [x] Review correction: `TRANSPORT_RETRY`, the manifest's verbatim quotation of
+  it and the measures row state what this side can actually see — an unaccounted
+  attempt is recorded as zero tokens, which is what is KNOWN about it, and may
+  have been billed for tokens this side cannot see — because
+  `llm/featherless_client.py::_raw_from_response_body` refuses a body with no
+  completion in it before it reads that body's `usage` block and a failure that
+  DOES carry usage is never retried. A test holds the wording to that ordering
+  in the adapter's source; the gap is a named limitation and the provider-client
+  change that would close it is outside this card's Constraints.
+- [x] Review correction: `_ModelWorkClock`'s docstring carries the 6 h / 8 h
+  authorization the constants and the manifest already carried, with its
+  boundary example at 5 h 59 m and the seventh hour, and a test derives both
+  figures from the constants so a widened authorization cannot leave the
+  enforcing class describing the retired one.
+- [x] Review correction: `transport_trigger` reads the status the adapter itself
+  wrote before any response body it quotes, so a permanent 4xx whose body
+  carries an empty-completion or transport phrase is a stop rather than four
+  sends against an endpoint that already refused it.
+- [x] Review correction: a retried call is counted once its next send begins
+  rather than before the backoff, so a run the elapsed deadline cancels mid-wait
+  cannot report a re-send that never happened.
+- [x] Review correction: every number in Results reproduces from the command
+  quoted beside it on the committed tree, each perturbation states the exact
+  pytest selection it was measured under, and the `audits/` byte count uses the
+  repo's portable command rather than a BSD-only `stat`.
+- [x] Review correction: all eight Codex P1 comments on this pull request are
+  dispositioned in the dated subsection of Results — six repaired, two refuted
+  with reasons.
+- [x] `_InstrumentClient` retries a call up to `MAX_TRANSPORT_ATTEMPTS = 4`
   attempts (three retries) only when the attempt produced no completion: an
   empty or `choices`-less body, a transport error, a retryable HTTP status, or a
   per-attempt timeout of `PER_ATTEMPT_TIMEOUT_SECONDS` (choose a value the
   measured 12-27 s/call band justifies, e.g. 180 s) — each with a short
-  backoff, each attempt charged to the budget when the provider reported usage
-  and counted as an unaccounted attempt when it did not. A fourth failure is a
-  stop with the same partial accounting as today.
-- [ ] Never retried: a response that reached its output cap (a truncation stays
+  backoff, each attempt charged to the budget with whatever usage rides the
+  failure and counted as an unaccounted attempt when none does — which the
+  provider client makes every one of these four classes, as round 1's first
+  repaired entry in Results records. A fourth failure is a stop with the same
+  partial accounting as today.
+- [x] Never retried: a response that reached its output cap (a truncation stays
   a stop), a returned payload that fails schema validation (the meeting layer's
   default path keeps handling it and the reconciliation counts its spend), an
   exhausted budget or deadline, a live-gate refusal.
-- [ ] Attempts are counted per arm and per unit (retried calls, unaccounted
+- [x] Attempts are counted per arm and per unit (retried calls, unaccounted
   attempts, the trigger class of each) in the report and in the partial
   accounting a stop reports, beside the meeting-internal defaults.
-- [ ] Planted cases with a real-provider-shaped double: an empty body once then
+- [x] Planted cases with a real-provider-shaped double: an empty body once then
   a valid completion continues the unit and counts one retry; four empty bodies
   stop the run with the attempts in the partial accounting; a transport error
   and a per-attempt timeout are retried; a truncated response is not; a
   schema-invalid payload is not retried by the wrapper; each case reproduced red
   on the pre-fix code where it changes behaviour.
-- [ ] The execution manifest's `STOP_RULE` quotation and the code's frozen
+- [x] The execution manifest's `STOP_RULE` quotation and the code's frozen
   string move together to name the bound ("retried up to three times, then a
   stop"), the "How each limit is enforced" section describes the wrapper's
   retry, a dated section "Amendments after the stopped run of 2026-09-13"
@@ -66,7 +101,7 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
   instrument's `AUTHORIZED_MODEL_WORK_SECONDS` / `AUTHORIZED_ELAPSED_SECONDS`
   carry 6 h / 8 h, copied from the third authorization card, with the test
   that pins the table to the constants updated.
-- [ ] The Inputs table binds the third band frozen by
+- [x] The Inputs table binds the third band frozen by
   [the third freeze](held-out-prefix-freeze-3.md) (band, accepted range, skip
   count read off `audits/deduction-candidate/held-out/manifest.json`), names the
   5000-5999 band as development data since 2026-09-13 and links its record at
@@ -76,7 +111,7 @@ to 6 h of model work within 8 h elapsed with the token budget unchanged.
   record's `converted.informed` names, and
   `TestExecutionManifest::test_a_binding_to_a_converted_record_stays_an_open_obligation`
   fails the moment this card closes with the row still stale.
-- [ ] A fake-provider dry run of the full pipeline on the new band completes at
+- [x] A fake-provider dry run of the full pipeline on the new band completes at
   $0 with the empty-body double active for at least one call, and Results
   records its aggregate counts only.
 
@@ -119,3 +154,544 @@ scripts/validate_task_docs.py`, `uv run python scripts/check_doc_facts.py`,
 `uv run python scripts/verify_ml_evidence.py` (offline; never `--complete`),
 `uv run pytest tests/scripts/test_verify_ml_evidence.py -q`, and
 `bash scripts/check.sh`. Do not run the live evaluation as a check.
+
+## Results
+
+Both rounds are delivered and every acceptance item is met. Round 1, reopened
+twice for review, is the retry itself and the record that states it; the
+stacking round merged [the third freeze](held-out-prefix-freeze-3.md) in,
+re-bound the Inputs table to the band it froze and ran the dry run over that
+band, and is the last dated subsection below. No prefix of any band was
+printed, opened or committed here, and no provider was reached: every case
+below runs on the fake provider or on a double. The third live run is
+[its own card](fresh-deduction-authorization-3.md)'s and is dispatched
+separately after this pull request merges.
+
+### What changed
+
+`_InstrumentClient.complete` is now a bounded retry loop over a new
+`_attempt`, which is the old body: one send, recorded whatever it does. The
+wrapper is the sixth job named in its own docstring, and the placement is the
+decision — `llm/featherless_client.py` is untouched, so every recorded campaign
+keeps the retry classes it was recorded under, and this run's own wrapper is
+what changes. `transport_trigger` names the four ways an attempt can produce
+nothing (`empty_completion`, `transport_error`, `retryable_status`,
+`attempt_timeout`); `TransportAttempts` counts what was re-sent; `STOP_RULE`
+gains the clause that states the bound and `TRANSPORT_RETRY` states how it is
+enforced. The two clocks are unchanged in kind and widened in size:
+`AUTHORIZED_MODEL_WORK_SECONDS` / `AUTHORIZED_ELAPSED_SECONDS` are 6 h / 8 h,
+copied from
+[the third authorization card](fresh-deduction-authorization-3.md)'s
+Constraints table.
+
+The record moves with it, in the manifest's "Amendments after the stopped run
+of 2026-09-13" (`55132350`, naming the code commit `0fa2a3e5`): the frozen stop
+rule is quoted in its new bytes, "How each limit is enforced" gains a Transport
+bullet quoting `TRANSPORT_RETRY` verbatim, the Wall bullet and the authorized
+table carry the widened window, the Inputs row on a missing attempt says the
+bound, and the measures table gains the per-arm attempt counts. The
+preregistration's "Reaching an authorized time, token or cost limit stops new
+calls, retains partial evidence and unresolved accounting, and does not trigger
+unbudgeted retries or silent expansion" is what the design answers to: no limit
+is widened by a retry, every attempt is inside the model-work window, and an
+exhausted bound is a stop with the partial accounting `PartialRun` already
+carried.
+
+### Decisions
+
+- **The bound is four attempts.** A retry re-draws nothing — an attempt that
+  produced no completion is not a sample — so more attempts buy only a longer
+  wait before the same stop. Four is what a sequential hundred units needs
+  against a transient, and `MAX_TRANSPORT_ATTEMPTS` is what a test pins the
+  frozen rule's "retried up to three times" to.
+- **The per-attempt wall is 180 s**, sized off this evaluation's own measured
+  band: 11.7 s/call on 2026-09-10 and 26.6 s/call on 2026-09-13, so 180 s is
+  about seven times the slowest call anyone has measured and a healthy call
+  cannot reach it. What it bounds is the provider client's own budget — six
+  sends at a 600 s timeout — so one stalled call can no longer hold the run for
+  the better part of an hour; four attempts at this wall cost at most 12 minutes
+  of a 6 h window.
+- **Which wall expired decides what a cut-off means.** Each attempt is bounded
+  by `min(work_clock.remaining(), PER_ATTEMPT_TIMEOUT_SECONDS)`. The window is a
+  limit the run reached and stays the stop it was; the per-attempt wall is an
+  endpoint that stopped answering and is a retry. A `TimeoutError` the inner
+  client raises itself is classified `transport_error` — the wording the
+  pre-existing test used for it — and the stop that eventually follows is
+  `TransportAttemptsExhausted`, never the window.
+- **The classifier is a positive matcher, and what it reads is ordered.** It
+  returns a trigger only for the four recognised shapes, so an exhausted limit,
+  a refusal this instrument raised, and a failure it has never seen are all left
+  exactly as they were — an unclassifiable provider failure is still a stop,
+  which is the conservative direction. Three things are read before the empty-
+  completion wording, and each is planted below: a failure carrying parse-
+  failure metadata (a completion the provider billed for), the limit and refusal
+  classes, and the HTTP status the adapter itself wrote. The status is last of
+  the three and still ahead of the wording because `_format_send_error` puts the
+  status first and quotes the response BODY after it, so a permanent 4xx whose
+  body happens to carry one of the markers would otherwise be re-sent four times
+  against an endpoint that had already refused it.
+- **An unaccounted attempt occupies a row, and its zero is what is KNOWN.**
+  It enters the call ledger with `UNACCOUNTED_ATTEMPT_MODEL`, zero tokens and
+  its real wall, which is charged
+  to the work clock, so the per-arm `model_work_seconds` and the clock keep
+  describing the same seconds and a stop cannot understate itself. An attempt
+  the model-work WINDOW cut off keeps its own older marker,
+  `ABORTED_ATTEMPT_MODEL`, because the two cut-offs mean different things and
+  only one of them is retried (`0eb0a514`; both markers are asserted). The arm's
+  completions are `calls` minus `unaccounted_attempts`; the marker is in the
+  report's `model_ids`, so a retried run cannot read as a clean one. The zero is
+  not a claim that nothing was billed: `_raw_from_response_body` refuses a body
+  with no completion in it before it reads that body's `usage` block, so no
+  usage rides any of the four retried classes and the wrapper has none to
+  charge. `TRANSPORT_RETRY`, the manifest quotation of it and the measures row
+  say exactly that, and the gap is the first limitation below.
+- **The commit order is forced at one point.** `0fa2a3e5` moves `STOP_RULE`,
+  so the amendment log that must name it can only be written afterwards — a
+  commit cannot carry its own hash. `55132350` is that log plus the rest of the
+  record; `7689c01c` adds the two planted cases that make the classifier's
+  guards load-bearing; `0eb0a514` separates the two cut-off markers. Round 1 of
+  review repeats the shape: `4591cc17` carries the four code corrections and
+  their planted cases, and the record commit after it writes the amendment entry
+  that names it. The record commits re-pin the manifest's verification section
+  and recompute the `audits/` row to the tree they land on.
+
+### Verification
+
+Run at `4591cc17`, the last commit that moves an instrument or test byte; the
+record commit after it writes the round-1 amendment entry that names it, re-pins
+the manifest's verification section and recomputes the `audits/` row, and
+nothing else moves.
+
+```sh
+uv run pytest tests/experiments -q
+```
+
+287 passed (283 before round 1, plus its four gates). The card's remaining
+validation, in order:
+
+```sh
+uv run python scripts/validate_task_docs.py
+uv run python scripts/check_doc_facts.py
+uv run python scripts/verify_ml_evidence.py
+uv run pytest tests/scripts/test_verify_ml_evidence.py -q
+```
+
+`Task docs validation passed: 390 historical phase tasks and 390 prompts; 49
+work cards.`; the four doc-fact lines (front door, ml-program, budgets)
+verified; `checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5` with
+`verify-ml-evidence: every check passed` — the 7 absent rows are the evidence
+branch a fresh checkout does not carry, and `--complete` was not run; 80 passed
+(`--collect-only` reports the same 80, and that file is unchanged in this
+branch; round 1 corrected the 78 first stated here, which never reproduced).
+
+The `audits/` inventory row in `docs/artifacts.md` was recomputed with the
+amended manifest staged:
+
+```sh
+git ls-files audits | wc -l
+git ls-files -z audits | xargs -0 wc -c | tail -1
+```
+
+205 files, 14,960,636 bytes — the row now reads `14,960,636 tracked bytes / 205
+files` against 14,950,292 on `d2812f1c`. The byte-count idiom is the portable
+one other cards here use; round 1 replaced a `stat -f%z` invocation that only
+BSD `stat` accepts and that this repository's Linux CI cannot run.
+
+The fake-provider mechanics check, re-run and re-pinned in the manifest's
+verification section:
+
+```sh
+uv run python -m experiments.fresh_deduction_instrument --dry-run \
+  --output-dir "$TMP/dryrun"
+```
+
+100 units, 600 calls, `total_cost_usd` 0.0, about two and a half seconds of
+wall, written to a temporary directory, and every figure identical to the one
+the manifest carried at `08aee9cc`: 49
+ejections, 22 role-correct, 27 wrongful and 22 supported-correct per arm, 150
+supported and 4 guard-rewritten ballots, 98 naming ballots with no off-target
+citation, 889,373 and 585,214 input tokens. Both arms report `retried_calls` 0,
+`unaccounted_attempts` 0 and no trigger: the dry-run provider answers every
+call, so this run exercises the retry not at all, which is why every case below
+is planted.
+
+`bash scripts/check.sh` — exit 0. Counts are in the pull request.
+
+### The planted cases
+
+Each is `edit, run, restore` on the committed tree at `4591cc17`, the last
+commit that moves an instrument or test byte, and each turns red exactly the
+tests that claim the behaviour. Every count below is the line the quoted command
+prints on that tree; the record commit after it moves no Python. Cases 1 to 5
+are the first round's, re-run and re-counted here because round 1 added four
+tests; cases 6 to 9 are round 1's own.
+
+1. **No retry at all** — the pre-fix behaviour, planted as
+   `MAX_TRANSPORT_ATTEMPTS = 1`:
+   `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+   TestTransportRetry -q` → `9 failed, 13 passed, 186 deselected`. The nine are
+   the empty body recovered, four empty bodies stopping, the transport failure
+   and the retryable status, the per-attempt wall, the unaccounted attempt's
+   ledger row, the retry counted at the next send, the per-arm report and the
+   stop's partial accounting.
+2. **A classifier with no class guards** — the parse-failure and limit/refusal
+   checks deleted from `transport_trigger`, same command → `2 failed, 20 passed,
+   186 deselected`: the billed refusal worded like an empty body, and the
+   refused payload whose rejected input quotes an HTTP 503. Without them the
+   first would be charged twice on one unit and the second would read a status
+   the MODEL wrote as one the endpoint returned.
+3. **One wall instead of two** — `window_binds = True` and the await bounded by
+   the work window alone, same command → `1 failed, 21 passed, 186 deselected`,
+   with `test_an_attempt_past_the_per_attempt_wall_is_retried` failing on
+   `the retry waited for the stalled attempt: 5.0s`, which is the defect
+   measured rather than asserted.
+4. **The window back at 4 h** — `AUTHORIZED_MODEL_WORK_SECONDS = 4 * 60 * 60`:
+   `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -q` →
+   `3 failed, 205 passed`, the authorized-limits object, the manifest's wall row
+   (the test that pins the table to the constants) and, since round 1, the work
+   clock's own docstring.
+5. **The manifest stating another bound** — its stop-rule quotation reworded to
+   "retried up to five times", same whole-file command → `1 failed, 207 passed`:
+   `test_the_manifest_quotes_the_frozen_analysis`, so the document cannot
+   describe a bound the code does not enforce.
+6. **The clock's docstring left at the retired authorization** — its two figures
+   put back to 4 h inside 6 h and its example to 3 h 59 m and a fifth hour, with
+   the constants untouched:
+   `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+   TestModelWorkWindow -q` → `1 failed, 4 passed, 203 deselected`, which is
+   exactly the state this branch shipped in and review caught.
+7. **A body read before the status** — the marker matches moved back ahead of
+   the status check in `transport_trigger`:
+   `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+   TestTransportRetry -q` → `1 failed, 21 passed, 186 deselected`, the failure
+   being the permanent HTTP 400 whose quoted body carries an empty-completion
+   phrase and is classified `empty_completion` — four sends against an endpoint
+   that refused it once.
+8. **A retry counted before the backoff** — `_retried_calls` incremented ahead
+   of the wait, same command → `1 failed, 21 passed, 186 deselected`: a run
+   cancelled during the backoff reports one retried call and one attempt, which
+   is a re-send that never happened.
+9. **The record claiming usage the wrapper never sees** — `TRANSPORT_RETRY` put
+   back to "with whatever usage the provider reported for it":
+   `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+   "TestTransportRetry or TestExecutionManifest" -q` → `2 failed, 58 passed, 148
+   deselected`, the two being the disclosure test — which reads the adapter's
+   source and holds the refusal AHEAD of the usage read — and the manifest's
+   verbatim quotation, so the wording and the document cannot drift apart.
+
+### Limitations
+
+- **A retried attempt's usage is invisible to this side, and may not be zero.**
+  `llm/featherless_client.py::_raw_from_response_body` refuses a 2xx body with
+  no completion in it BEFORE it reads that body's `usage` block, so a body the
+  provider billed for and then answered emptily reaches the wrapper as a bare
+  `RuntimeError` with nothing on it; the ledger row is zero tokens and the run's
+  2.4 M input cap under-counts that attempt. The bound on the exposure is
+  `MAX_TRANSPORT_ATTEMPTS - 1` unseen attempts per call. This card's Constraints
+  put the retry in the wrapper and keep `llm/featherless_client.py` untouched,
+  precisely so no recorded campaign's behaviour moves, so closing it is a
+  provider-client change and a card of its own; what this card does instead is
+  say so, in `TRANSPORT_RETRY`, in the manifest's quotation of it and its
+  measures row, and in a test that holds the wording to the adapter's actual
+  ordering — the same phrasing `ABORTED_ATTEMPT_MODEL` already used for the
+  window cut-off.
+- The empty-completion class has no exception type of its own: the adapter
+  raises a bare `RuntimeError`, so the classifier keys on its wording.
+  `test_the_classifier_keys_on_wording_the_adapter_still_uses` reads
+  `llm/featherless_client.py` as TEXT — never an import, so this test module
+  gains no route to a real client — and holds every fragment and the retryable
+  status set to that source, which turns a rewording red here instead of into a
+  stop mid-run. It does not cover a failure shape that module does not yet
+  produce.
+- A provider failure the classifier cannot place is not retried. That is the
+  choice, not an oversight, and the pre-existing
+  `test_a_provider_transport_failure_stops_the_run_with_partial_state` is the
+  case: an ad-hoc `RuntimeError` still stops the run with its partial
+  accounting.
+- Nothing here was proven against the endpoint. The doubles wear the adapter's
+  own message shapes, and a live call is neither made nor authorized by this
+  card; the third run is
+  [its own card](fresh-deduction-authorization-3.md)'s, dispatched separately
+  after this pull request merges.
+- The cost statement the manifest quotes is unchanged and still projects "2.0 M
+  tokens over a 6-hour elapsed window". That sentence is the first
+  authorization's and the third card did not re-cut it; the elapsed limit this
+  manifest binds is the 8 h row above it, and the amendment says so.
+- The Inputs table binds 6000-6999 as of the stacking round below, and
+  `assert_manifest_binds_the_live_band` passes against the merged record. What
+  it cannot do is notice the NEXT conversion: a band moves in a freeze card's
+  commit and the document follows in another, so between the two this gate
+  refuses every live run — which is the safe direction and not a silent one,
+  but it is a window, and
+  `test_a_binding_to_a_converted_record_stays_an_open_obligation` is what keeps
+  it from closing by forgetting rather than by re-binding.
+
+### Review corrections, round 1 (2026-09-13)
+
+Eleven blocking findings across three lenses, and the eight Codex P1 comments on
+`e13bec01`, all of them from review `5192491997`. Six of the eight were valid and
+are repaired; two are refuted below. (Round 2 corrected the counts, which first
+read seven, four and three; every comment was already dispositioned.) Code and
+planted cases are `4591cc17`; this record is the commit
+after it. Nothing about the design moved: the frozen analysis is the same bytes,
+no limit was widened, and acceptance items 6 and 7 stay open for the stacking
+round.
+
+**Repaired.** Six of the seven entries carry a Codex id; entry 5 is the lenses'
+own finding and no Codex comment.
+
+1. *The enforcement text claimed usage it never sees* (Codex `4001070464`, and
+   the same finding from two lenses). `TRANSPORT_RETRY` said every failed
+   attempt is recorded "with whatever usage the provider reported for it". No
+   retried class can carry usage — the adapter refuses the body before it reads
+   the `usage` block, and a failure that DOES carry parse-failure metadata is
+   never retried — so for these four classes the code never looks. Preserving
+   the usage means moving that read, which is a change to
+   `llm/featherless_client.py` this card's Constraints exclude and which would
+   move every recorded campaign; the wording, the manifest quotation, the
+   measures row, the two comments and the retry's own acceptance item now say
+   what the mechanism does, the gap is the first limitation above, and planted
+   case 9 holds the wording to the adapter's ordering.
+2. *The clock's docstring stated the retired 4 h / 6 h authorization* (Codex
+   `4001070472`, three lenses). Repaired to 6 h inside 8 h with the 5 h 59 m /
+   seventh-hour example, `:meth:`_InstrumentClient._attempt`` for the await it
+   now bounds, and a test that derives both figures from the constants
+   (planted case 6).
+3. *The status was read after the body* (Codex `4001070475`). Valid: a permanent
+   4xx whose quoted body carries an empty-completion or transport phrase would
+   have been re-sent four times. The adapter's own status now decides first and
+   only `_RETRYABLE_STATUS_CODES` are retryable (planted case 7).
+4. *A retried call was counted before the next send* (Codex `4001070469`).
+   Valid at a deadline boundary: a cancellation during the backoff left one
+   retried call against one attempt. Counted after the wait now, with nothing
+   awaited before the send (planted case 8).
+5. *Numbers that did not reproduce.* `tests/scripts/test_verify_ml_evidence.py`
+   is 80 tests, not the 78 stated here and in the pull request; that file is
+   unchanged in this branch, so 78 never held. Planted case 1 was `7 failed, 10
+   passed` and case 3 `1 failed, 22 passed` against a quoted selection that
+   prints neither. Every case is re-run above on `4591cc17`, each with the exact
+   command and the exact line it prints, and the pull request body carries the
+   same numbers.
+6. *A BSD-only byte count* (Codex `4001070471`). `stat -f%z` is a filesystem
+   query to GNU coreutils and exits non-zero on the Linux CI. Replaced with the
+   portable `xargs -0 wc -c` idiom other cards here use; the total is unchanged
+   apart from this round's own manifest bytes (14,960,636 / 205 files).
+7. *Provenance longer than one trailing line* (Codex `4001070465`, craft rule
+   1). The work-window constants' comment carried the source card, the date, the
+   superseded limits and two run measurements. It now explains the current
+   intent and names its source in one trailing line; the history it dropped is
+   in the manifest's amendment log, which is where the record lives.
+
+**Refuted.** Two Codex comments, `4001070467` and `4001070474`; the third bullet
+narrows the reach of `4001070464`, which is repaired above as entry 1 and is not
+a ninth comment.
+
+- *"Retain retry counts for each unit"* (Codex `4001070467`). The report is
+  aggregate-only by contract — `InstrumentReport`'s docstring and
+  `assert_report_holds_no_prefix_bytes` — and "per unit" here means what it
+  means for the meeting-internal defaults this counter was built beside:
+  `UnitRecord.transport_attempts` carries each unit's own counts, the per-arm
+  summary publishes `units_with_retries` exactly as it publishes
+  `units_with_defaults`, and every unaccounted attempt is a row in that unit's
+  `calls` with the `no-completion-returned` marker, which is where the
+  granularity actually lives. Emitting a per-unit row keyed to a held-out unit
+  would add a unit-resolved surface to a report whose whole design is that it
+  carries none. Acceptance item 3 is met on the same reading its own "beside the
+  meeting-internal defaults" points at.
+- *"Preserve the amendment commit instead of squashing it"* (Codex
+  `4001070474`). It reads a history this branch does not have: it names
+  `f3d42d05`, whose sole parent it gives as `d2812f1c`. On this branch
+  `0fa2a3e5` is an ancestor of `HEAD` and touches the instrument, which is what
+  `test_the_transport_amendment_names_its_reason_and_a_real_commit` checks and
+  what the green suite shows. Round 1 tightened that test rather than leaving
+  the point untested: it now resolves EVERY dated entry's commit in the section,
+  so the round-1 entry is held to the same standard as the first.
+- *The empty-completion retry "potentially allows the authorized live run to
+  cross a token cap without stopping"* (the wider reach of Codex `4001070464`,
+  whose narrow claim is repaired as entry 1 above). The
+  under-count is real and is the limitation above; "without stopping" is not.
+  The run-level budget is charged for every completion that arrives, the
+  per-unit and run caps are read back after each unit, and the unseen quantity
+  is bounded by three attempts per call. What it cannot do is turn a stop into a
+  continue: nothing in this wrapper widens a limit, and an exhausted budget is
+  never a retry class.
+
+
+### Review corrections, round 2 (2026-09-13)
+
+One blocking finding, raised independently by two lenses: the Codex disposition
+counts stated above and in the pull request did not reproduce. This round moves
+no code, no test, no `audits/` byte and no `docs/artifacts.md` row — only this
+card and the pull-request body — so every figure under Verification and every
+planted case still stands as measured at `4591cc17`, the `audits/` inventory row
+is untouched at 14,960,636 bytes over 205 files, and `tasks/README.md` keeps `2
+ready, 2 active, 45 done` because no card's Status moved.
+
+**Repaired.** *The Codex comment counts were wrong.* The review left eight P1
+comments, not seven, and this card repairs six of them and refutes two, not four
+and three:
+
+```sh
+gh api repos/dkdan10/AiLibi/pulls/450/comments --paginate \
+  -q '.[] | "\(.id) \(.pull_request_review_id) \(.original_commit_id[0:8])"'
+```
+
+prints eight lines — `4001070464`, `4001070465`, `4001070467`, `4001070469`,
+`4001070471`, `4001070472`, `4001070474`, `4001070475` — every one of them from
+review `5192491997` on `e13bec01`, which is the only review this pull request
+carries. The round-1 lists above already named all eight: six ids under
+**Repaired**, two under **Refuted**. What miscounted was the summary sentence,
+which read the lists' lengths instead of their ids — **Repaired** has a seventh
+entry that is the lenses' own finding and no Codex comment, and **Refuted** has a
+third bullet that narrows the reach of `4001070464`, repaired above, rather than
+answering a ninth comment. The acceptance item, the round-1 lead sentence, both
+list headings and the pull-request body now say eight, six and two, and each list
+says which of its entries is not a comment of its own, so the arithmetic reads
+straight off the page. No disposition changed and no comment was left unanswered:
+this is a counting repair, which is why it carries no planted case — the claim it
+fixes is a number about this pull request, and the command that prints it is
+quoted above.
+
+Nothing refuted.
+
+Re-run on the tree this round delivers, in the card's Validation order: `uv run
+pytest tests/experiments -q` 287 passed; `uv run python
+scripts/validate_task_docs.py` `Task docs validation passed: 390 historical phase
+tasks and 390 prompts; 49 work cards.`; `uv run python scripts/check_doc_facts.py`
+its four verified lines; `uv run python scripts/verify_ml_evidence.py` `checks: 60
+| OK 48 | FAIL 0 | ABSENT 7 | INFO 5` with `--complete` not run; `uv run pytest
+tests/scripts/test_verify_ml_evidence.py -q` 80 passed; `bash scripts/check.sh`
+exit 0, with its counts in the pull request.
+
+### Stacking and re-binding (2026-09-13)
+
+The round the two open acceptance items were held for, and the one that closes
+this card. No verifier found a defect in round 2's tree; what this round does is
+what was owed — merge the third freeze, re-bind the Inputs table to the band it
+froze, and run the dry run over that band — plus one thing it found while doing
+it, recorded below. Round 1's figures stand as measured at `4591cc17`: no
+constant, no wrapper line and no planted case of that round moved here.
+
+**The merge.** `git merge --no-ff origin/work/held-out-prefix-freeze-3` at
+`0936a45a` (PR #449), merged as `60d1079c`; never rebased, so both histories
+stay readable. Two files conflicted and both were resolved by recomputation
+rather than by choosing a side: `tasks/README.md`'s derived inventory, because
+each branch flipped a different card's Status, and `docs/artifacts.md`'s
+`audits/` row, because each branch changed a different `audits/` byte. The
+held-out manifests came from the freeze side untouched.
+
+**The re-binding** (`da521f46`). The Inputs table now reads 6000–6999, accepted
+seeds 6000–6058, 9 `witnessed_kill` skips — every figure read off the merged
+`audits/deduction-candidate/held-out/manifest.json` — and names both converted
+bands with their dates and the files their records live in, 3000-3999 since
+2026-09-10 and 5000-5999 since 2026-09-13. The Roles table names the third
+preparer session, and the amendment log gains the dated stacking entry, which
+closes the two obligations the entry of `0fa2a3e5` left open and claims nothing
+else. `assert_manifest_binds_the_live_band` passes against the merged record
+(`test_the_committed_manifest_binds_the_live_band_or_is_refused` takes its
+settled branch), and the frozen analysis is byte-identical: the constants the
+verbatim check pins did not move.
+
+**What this round found** (`56581a98`). A re-binding is a document change, so
+the gate is what makes it bite — and the gate's own docstring was out of date
+in the same way review caught `_ModelWorkClock` in round 1.
+`assert_manifest_binds_the_live_band` explains itself by naming the
+conversions, and it still read that 5000-5999 was frozen in place of 3000-3999
+after 5000-5999 had itself become development data. Corrected, and held there
+by `test_the_gate_says_which_bands_actually_moved`, which reads each span out of
+`CONVERTED_BANDS` and each date out of that record's own `converted` block
+instead of trusting the prose. Nothing about the refusal changed.
+
+**The dry run** (`f0574950`). Acceptance item 7 asks for the full pipeline on
+the new band with the empty-body double active for at least one call. It is a
+committed case rather than a figure only this session could reproduce:
+`TestDryRun::test_the_full_dry_run_survives_one_empty_completion` runs both
+arms over the frozen set twice, once clean and once with
+`NoCompletionProvider(mode="empty_body", failures=1)`, and holds the second to
+the first. Aggregates only, on the tree at `f0574950`:
+
+```sh
+uv run python -m experiments.fresh_deduction_instrument --dry-run
+uv run pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -k test_the_full_dry_run_survives_one_empty_completion -q
+```
+
+The plain run is 100 units, 600 calls, `total_cost_usd` 0.0, about two seconds
+of wall into the temporary directory it makes for itself; both arms reach a
+graded outcome on all 50 of their units (50 ejections, 15 role-correct, 35
+wrongful, 15 supported-correct, 150 supported and 5 guard-rewritten ballots, 100
+naming ballots of which 4 cite evidence that does not bear on the ejected
+player), with 894,018 and 587,054 input tokens. The retried run is `1 passed`:
+the double receives 601 sends for 600 calls, `repaired_clock` reports 301 calls,
+`retried_calls` 1, `unaccounted_attempts` 1, `attempts_by_trigger`
+`{"empty_completion": 1}` and one unit with a retry, `combined_accounts` reports
+none, `total_cost_usd` is 0.0, and every graded field, ballot verdict and token
+total on both arms equals the clean run's — which is the claim, not a
+coincidence: the test asserts the equality rather than a band's numbers, so the
+next freeze does not re-pin it. `model_ids` carries `no-completion-returned`
+beside the fixture's own model. No prefix, prompt or report row was printed, and
+both runs wrote to temporary directories.
+
+**Planted cases**, `edit, run, restore` on the committed tree, each quoted with
+the selection it was measured under. Cases 1 to 9 are round 1's and are not
+re-run: no byte they perturb moved this round.
+
+10. **The gate explaining a history that moved on** — its docstring put back to
+    "the 3000-3999 set became development data on 2026-09-10 and 5000-5999 was
+    frozen in its place", at `f0574950`:
+    `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+    TestTheManifestBindsTheBandTheRunWouldDraw -q` → `1 failed, 5 passed, 204
+    deselected`, on `the gate explains itself without saying that 5000-5999
+    became development data on 2026-09-13` — the exact state this branch
+    inherited.
+11. **The Inputs row left on the converted band** — 6000–6999 put back to
+    5000–5999 with this card at `**Status:** done`, at `da521f46`:
+    `uv run pytest tests/experiments/test_fresh_deduction_instrument.py -k
+    "TestExecutionManifest or TestTheManifestBindsTheBandTheRunWouldDraw" -q` →
+    `1 failed, 43 passed, 166 deselected`, the failure being
+    `test_a_binding_to_a_converted_record_stays_an_open_obligation` on
+    `fresh-deduction-instrument-transport-resilience.md is closed while the
+    execution manifest still binds the converted manifest-band-5000-5999.json`.
+    With the card still open the same perturbation is GREEN, and deliberately
+    so: that is the window between a freeze and its re-binding, which
+    `assert_manifest_binds_the_live_band` refuses live runs in. The closing
+    Status is what makes forgetting the row a failure.
+12. **No retry at all, against the whole pipeline** — `MAX_TRANSPORT_ATTEMPTS =
+    1`, at `f0574950`: `uv run pytest
+    tests/experiments/test_fresh_deduction_instrument.py -k TestDryRun -q` → `1
+    failed, 5 passed, 204 deselected`, the full-pipeline case aborting with
+    `InstrumentAborted` on the one empty completion — the stop of 2026-09-13,
+    reproduced offline over 600 calls.
+
+**Verification**, in the card's Validation order, on the tree this round
+delivers (`uv run pytest tests/experiments -q` and the four gates were re-run
+after the card's own edit; the card is not read by any of them except the task
+validator):
+
+```sh
+uv run pytest tests/experiments -q
+uv run python scripts/validate_task_docs.py
+uv run python scripts/check_doc_facts.py
+uv run python scripts/verify_ml_evidence.py
+uv run pytest tests/scripts/test_verify_ml_evidence.py -q
+bash scripts/check.sh
+```
+
+290 passed (287 at round 2, plus the freeze's own case and this round's two);
+`Task docs validation passed: 390 historical phase tasks and 390 prompts; 49
+work cards.`; the four doc-fact lines verified; `checks: 60 | OK 48 | FAIL 0 |
+ABSENT 7 | INFO 5` with `verify-ml-evidence: every check passed` and
+`--complete` not run; 80 passed; `bash scripts/check.sh` exit 0, counts in the
+pull request.
+
+The `audits/` inventory row was recomputed with the merge staged and again with
+the amended manifest staged, on the merged tree:
+
+```sh
+git ls-files audits | wc -l
+git ls-files -z audits | xargs -0 wc -c | tail -1
+```
+
+206 files — the freeze added `manifest-band-5000-5999.json` — and 14,978,051
+bytes, against 14,960,636 over 205 at round 2. `tasks/README.md`'s derived
+sentence moves to `1 ready, 1 active, 47 done` with this card's Status.

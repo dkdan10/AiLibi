@@ -1,6 +1,6 @@
 # Fresh-model deduction evaluation — execution manifest
 
-**Dated 2026-09-09, amended 2026-09-10. Status: bound.
+**Dated 2026-09-09, amended 2026-09-10 and 2026-09-13. Status: bound.
 This document authorizes no live call.**
 
 [The preregistration](preregistration.md) §"Select a candidate and prepare a
@@ -36,8 +36,10 @@ that completeness is a mechanism rather than a promise:
 walks this branch's history from the commit that first bound this document,
 reads the frozen-analysis constants out of every later revision of
 `experiments/fresh_deduction_instrument.py`, and requires each commit whose
-values differ from its parent's to be named in this section. A pre-run change to
-the frozen analysis that nobody logged here fails that test.
+values differ from its parent's to be named in one of this document's dated
+amendment logs — this section, or one of the post-run sections below, which is
+where an amendment made after a unit ran belongs. A change to the frozen
+analysis that nobody logged fails that test wherever it was made.
 
 **2026-09-09 (`2dde0c91`) — the decision rule gains its third condition, and
 the sampling configuration is bound.** Round-1 review of the instrument's pull
@@ -183,6 +185,133 @@ without the check it proves, and each is listed in
 [the reconciliation card](../../tasks/work/fresh-deduction-instrument-reconciliation.md)'s
 stacking subsection.
 
+## Amendments after the stopped run of 2026-09-13
+
+The second live run stopped inside its first unit as well (PR #448, closed
+unmerged; branch `work/fresh-deduction-run-2` is its archive). On its fifth
+call the endpoint answered a 2xx with no `choices`, which
+`llm/featherless_client.py::_raw_from_response_body` refuses with a bare
+`RuntimeError` that none of that client's own retry classes carries, so the
+attempt reached the instrument as a failure and the run stopped with four
+resolved calls of a projected six hundred. This section is dated apart from the
+one above for the same reason that one is: it is written after a unit ran. It
+reaches the transport clause of the frozen rule, the enforcement text and the
+wall row; no held-out outcome informed it, because the stop it reads carries
+counts and identifiers only, and the four calls it resolved were seed 5000 of a
+band this document no longer binds.
+
+**2026-09-13 (`0fa2a3e5`) — an attempt that produced nothing is retried
+within a stated bound, and the wall window carries the third authorization's
+numbers.** Three things move together.
+
+`STOP_RULE` gains a transport clause and is quoted below in its new bytes. It is
+the one amendment in this document that reaches the frozen analysis after a unit
+ran, and it is written down as such: a call that came back with no completion at
+all is retried up to three times and then a stop, with every attempt counted per
+arm and per unit. It widens no limit and adds no stop — the run stops on the
+same conditions it stopped on before, one of them later — and it draws no second
+sample, because the attempts it re-sends produced nothing to sample. The clause
+says the other half in the same breath: a body that reached its output cap and a
+returned payload that failed schema validation ARE samples and are never
+retried, and neither is an exhausted budget or deadline. The other four frozen
+constants — `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS` and `WRONGFUL_EJECTION_TRADEOFF` — are the
+same bytes the sections below quote.
+
+The retry itself lives in the instrument's own client wrapper and not in
+`llm/featherless_client.py`, which is what keeps every recorded campaign's
+behaviour where it was; `TRANSPORT_RETRY` states it and "How each limit is
+enforced" quotes that constant verbatim. Its bound is four attempts at a 180 s
+per-attempt wall, sized off the measured per-call band rather than chosen: this
+evaluation's calls have run at 11.7 s and 26.6 s, so a healthy call cannot reach
+the wall, and four attempts at it cost at most 12 minutes of the work window
+against the better part of an hour one stalled call could otherwise hold. Every
+attempt is still bounded by what is left of that window, so no retry outlives
+the authorization. Each case is planted and red without the code it proves, and
+each is listed in
+[the transport-resilience card](../../tasks/work/fresh-deduction-instrument-transport-resilience.md)'s
+Results.
+
+The wall row of the authorized table now reads 6 h of model work within an 8 h
+elapsed deadline, copied verbatim from
+[the third authorization card](../../tasks/work/fresh-deduction-authorization-3.md)'s
+Constraints table, and `AUTHORIZED_MODEL_WORK_SECONDS` /
+`AUTHORIZED_ELAPSED_SECONDS` carry the same numbers. That row is the owner's,
+widened by the instruction of 2026-09-13 that card records; every other row of
+that table is #437's, unchanged. The cost statement is the same paragraph in
+both cards and is not re-cut here: its "2.0 M tokens over a 6-hour elapsed
+window" is the first authorization's projection sentence, and the elapsed limit
+this manifest binds is the 8 h row above it.
+
+Two obligations were left open by this entry and are not claimed by it: the
+Inputs table below still bound the 5000-5999 band, which the stopped run of
+2026-09-13 rendered the first seed of and which
+[the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) replaces,
+and the re-binding to the third band was the same card's later round. The
+stacking entry below is that round and closes both.
+
+**2026-09-13, review round 1 (`4591cc17`) — the enforcement text says only what
+this side can see.** Review of the entry above found `TRANSPORT_RETRY` claiming
+more than the mechanism can do: it said every failed attempt is recorded "with
+whatever usage the provider reported for it". None of the four retried classes
+can carry usage. `llm/featherless_client.py::_raw_from_response_body` refuses a
+body with no completion in it BEFORE it reads that body's `usage` block, and a
+failure that does carry parse-failure metadata is a completion the provider
+billed for and is never retried at all — so an attempt of these classes reaches
+the wrapper with nothing on it to charge. The constant, the quotation of it
+under "How each limit is enforced" and the measures row now say what is true: an
+unaccounted attempt is recorded as zero tokens, which is what is KNOWN about it
+rather than what it was billed, and it may have been billed for tokens this side
+cannot see — the phrasing the model-work cut-off already used for the same
+reason. Reading the usage first would be a change to
+`llm/featherless_client.py`, which
+[the transport-resilience card](../../tasks/work/fresh-deduction-instrument-transport-resilience.md)'s
+Constraints exclude precisely so that no recorded campaign's behaviour moves;
+the gap is carried as a limitation on that card instead. The frozen analysis
+does not move here: the stop rule and the four constants named above are the
+same bytes this document quotes below. The same commit makes two smaller
+corrections to the wrapper — the status the adapter reported is read before any
+response body it quotes, so a permanent 4xx is never re-sent, and a retried call
+is counted once its next send begins rather than before the backoff, so a run
+cancelled mid-wait cannot report a send it never made — and repairs the
+`_ModelWorkClock` docstring, which still described the 4 h / 6 h authorization
+the entry above widened.
+
+**2026-09-13, the stacking round (`56581a98`) — the Inputs table is re-bound to
+the third held-out band, and the gate that refuses a stale binding says which
+bands have moved.** The stopped run of 2026-09-13 rendered the first seed of the
+5000-5999 band to the model, which the preregistration and the Roles section
+below make development data, exactly as the run of 2026-09-10 did to 3000-3999.
+[The third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) drew
+6000-6999 with the same generator, marked the second record `development` and
+kept it beside the first rather than deleting it, and merged as PR #449; this
+branch merged that record in and the Inputs table now binds 6000-6999 —
+accepted seeds 6000-6058, nine `witnessed_kill` skips, every number read off
+[the freeze record](held-out/manifest.json) — and names both converted bands
+with the dates and the files their records now live in. The Roles table names
+the third preparer session beside the first two. This closes the two
+obligations the entry of `0fa2a3e5` left open and claims nothing else: the
+limits, the sampling configuration, the provider and model, the measures and
+the frozen analysis are the same bytes they were before it, and the stop rule
+is byte-identical.
+
+A re-binding is a document change, so the gate is what makes it bite, and this
+round found the gate itself out of date. `assert_manifest_binds_the_live_band`
+motivates its own check by naming the conversions, and its docstring still read
+that 5000-5999 was frozen in place of 3000-3999 after 5000-5999 had itself
+become development data. `56581a98` corrects it and holds it there:
+`test_the_gate_says_which_bands_actually_moved` reads each span out of
+`CONVERTED_BANDS` and each date out of that record's own `converted` block, so
+the next conversion turns the docstring red rather than leaving the enforcing
+function explaining a history that moved on. The band the row names and the band
+the live record holds are compared as before; nothing about the refusal changed.
+The verification section below is re-measured on the new band, and its dry run
+is the one the transport-resilience card owed: the same 600 calls with one of
+them answered emptily, counted and recovered. This entry cannot name the commit
+that carries the document changes, for the reason the entries above record — a
+commit cannot carry its own hash — so it names the code commit it is written
+against, and the record commit that writes it moves no instrument byte.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -223,21 +352,26 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 
 | Field | Value |
 | --- | --- |
-| Held-out inputs | The 50 proof-free scripted physical prefixes drawn on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) by a preparer session that ran no arm, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json). The owner's merge of PR #446 is that freeze, and this re-binding is stacked on it |
-| Seed band | 5000–5999 drawn ascending, first 50 passing prefixes; accepted seeds run 5000–5052 with 3 skips, all `witnessed_kill`. The first band, 3000-3999, is development data since 2026-09-10 — the stopped run of that date rendered its first seed — and its freeze record is kept beside this one, marked `development`, as [held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json) |
+| Held-out inputs | The 50 proof-free scripted physical prefixes drawn on [the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) by a preparer session that ran no arm, recorded as hashes only in [held-out/manifest.json](held-out/manifest.json). PR #449 is that freeze, and this re-binding is stacked on it |
+| Seed band | 6000–6999 drawn ascending, first 50 passing prefixes; accepted seeds run 6000–6058 with 9 skips, all `witnessed_kill`. Two earlier bands are development data since the stopped run of their date rendered their first seed, and each freeze record is kept beside this one, marked `development`, rather than deleted: 3000-3999 since 2026-09-10, as [held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json), and 5000-5999 since 2026-09-13, as [held-out/manifest-band-5000-5999.json](held-out/manifest-band-5000-5999.json) |
 | Seed list | Published in the freeze manifest's `accepted[]`. The prefixes themselves are NOT committed anywhere: the runner regenerates them with `experiments.held_out_prefixes.generate()` and refuses to proceed if any digest or skip differs |
 | Development inputs | The seven hand-authored cases in `experiments/deduction_scenarios.py`, seed 1 by construction. Their digests are recorded in the freeze manifest and asserted absent from `accepted[]` |
 | Legal schedules | Each prefix is replayed through the engine, which accepts or rejects every step; a prefix whose hashed steps the engine did not resolve step for step never gets a digest |
 | Provider-response repetitions | One. Each unit is one prefix and one meeting; no response is sampled twice and no unit is repeated |
 | Run order | Sequential, seed ascending, both arms per seed before the next seed |
-| Maximum opportunities | 50 prefixes × 2 arms = 100 meeting units, ~600 model calls. An attempt that never resolves — a transport failure, a truncation, an exhausted limit — is a stop, and the partial state is reported rather than replaced. An attempt whose payload failed schema validation is NOT a stop: the meeting layer substitutes a placeholder turn or a marked SKIP ballot for it at an accepted ~1-in-50 rate, and the instrument counts every such substitution per unit and per arm (see "Meeting-internal defaults" below) so it stays visible instead of being silently replaced |
+| Maximum opportunities | 50 prefixes × 2 arms = 100 meeting units, ~600 model calls. An attempt that came back with no completion at all — an empty body, a transport failure, a retryable status, a send that outran the per-attempt wall — is retried up to three times and then a stop; a truncation and an exhausted limit are stops with no retry. The partial state is reported rather than replaced, and every retried attempt is counted per arm and per unit. An attempt whose payload failed schema validation is NOT a stop: the meeting layer substitutes a placeholder turn or a marked SKIP ballot for it at an accepted ~1-in-50 rate, and the instrument counts every such substitution per unit and per arm (see "Meeting-internal defaults" below) so it stays visible instead of being silently replaced |
 
 ## Sampling configuration, caps and limits — the owner's authorized values
 
 Copied verbatim from [the authorization card](../../tasks/work/fresh-deduction-authorization.md)'s
 Constraints table, whose reasoning of record is item B of
 [the 2026-09-07 decision memo](../../tasks/owner-decisions-2026-09-07.md) — with
-one row that is NOT from that table and is marked as such. The authorization
+one row that is NOT from that table and is marked as such, and one the owner
+later widened. The wall row is copied verbatim from
+[the third authorization card](../../tasks/work/fresh-deduction-authorization-3.md)'s
+Constraints table instead, which restates #437's other values unchanged and
+carries the owner's instruction of 2026-09-13; see "Amendments after the stopped
+run of 2026-09-13". The authorization
 card binds no temperature; the preregistration
 (`preregistration.md:113-115`) requires this manifest to bind the sampling
 configuration, so the sampling-temperature row states the values shipped in
@@ -251,7 +385,7 @@ inheriting them. It moves no owner-authorized number.
 | Per-call token cap | turn 2,048 output / vote 1,024, the shipped defaults unchanged. The committed lab rows for this model-and-prompt-set pair ran at `max_tokens=4096` and never exceeded 195 output tokens, so a truncation is a real signal rather than a cap artifact |
 | Sampling temperature *(not from the authorization card — see the note above)* | turn temperature 0.4 / vote temperature 0.2 — the shipped values (`meetings/manager.py:211,213`), bound here rather than inherited. The instrument passes an explicit `MeetingConfig` carrying them, records both on every report, and a test asserts they are still the shipped values, so a later edit to those module defaults breaks a test instead of silently moving this frozen design's sampling distribution |
 | Total token budget | 2,400,000 input / 200,000 output run-level, and 45,000 input / 4,000 output per unit. Hard stop. Projection for option A: 600 calls; input `repaired_clock` 3,636/call x 300 + `combined_accounts` 2,441/call x 300 = 1,823,100; output 600 x 220 = 132,000 |
-| Wall-clock deadline | 4 h of model work within a 6 h elapsed deadline. The work window comes from the measured 12-23 s/call band; the 2 h margin covers one recorded 3h21m provider-side HTTP 529 stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
+| Wall-clock deadline *(widened 2026-09-13 — from the third authorization card)* | 6 h of model work within an 8 h elapsed deadline. Widened from 4 h / 6 h on 2026-09-13: the second attempt measured 26.6 s/call over its four resolved calls against 11.7 s/call on 2026-09-10, and six hundred calls at the slower pace need about 4 h 26 m; the 2 h elapsed margin still covers one recorded 3h21m provider-side stall (`audits/audit-phase-21-adopting-record.md:373-380`) |
 | Dollar limit | $0.00 marginal, recorded as bookkeeping and not as an enforcement mechanism. The provider's zero pre-flight rate disables the USD dimension, so only the token budget and the deadline can stop a run |
 | Roster | 4p1i with 3 living voters at meeting open. A change of roster invalidates the token budget above and requires a new authorization |
 | Execution mode | sequential |
@@ -352,18 +486,44 @@ asserts this document quotes each of them.
   that crossed it: the tokens are already spent, and the stop is what keeps
   the next unit from spending more.
 - **Wall.** Two clocks, because the authorization names two limits: one
-  `orchestrator.run_limits.RunDeadline` for the 6 h elapsed window, checked
+  `orchestrator.run_limits.RunDeadline` for the 8 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
-  4 h of model work. The work clock bounds each provider await by what is LEFT
+  6 h of model work. The work clock bounds each provider await by what is LEFT
   of its window, the way `RunDeadline.run` bounds meeting work by what is left
   of the elapsed one, so the run stops DURING the call that exhausts the window.
   A clock charged only when a call returns would be a one-call-granular limit,
   and one call on this provider is not small: `llm/featherless_client.py` retries
   a send six times at a 600 s timeout with exponential backoff, so a run at
-  3 h 59 m of model work could otherwise spend a fifth hour against an
-  authorization of four. The cut-off attempt's elapsed wall is charged to the
-  clock and its call recorded in the partial accounting with unknown (zero)
-  usage before the stop is raised.
+  5 h 59 m of model work could otherwise spend a seventh hour against an
+  authorization of six. Each attempt is bounded by the tighter of that remaining
+  window and the 180 s per-attempt wall below, and which of the two expired is
+  what the cut-off means: the window is a limit reached and a stop, the
+  per-attempt wall is an attempt that stopped answering and a retry. The cut-off
+  attempt's elapsed wall is charged to the clock and its call recorded in the
+  partial accounting with unknown (zero) usage before the stop is raised.
+- **Transport.** A call that produced no completion is sent again by the
+  instrument's own client wrapper, within a bound this document states, quoted
+  verbatim from `TRANSPORT_RETRY`:
+
+  A call whose attempt came back with no completion at all is sent again by
+  this instrument's own client wrapper rather than by the provider client,
+  so no recorded campaign changes behaviour: at most 4 attempts, one send
+  and 3 retries, on an empty or choices-less body, a transport failure, a
+  retryable HTTP status, or an attempt that outran the 180 s per-attempt
+  wall this wrapper bounds each send by — each retry after a short
+  exponential backoff, and each attempt still bounded by what is left of the
+  model-work window, which no retry may outlive. The last failure stops the
+  run with the same partial accounting every other unit failure reports.
+  Nothing that produced a completion is retried: a response that reached its
+  output cap, a returned payload that failed schema validation, an exhausted
+  budget or deadline and a refused live run are all left exactly as they
+  were. Every retried attempt is recorded as an unaccounted attempt carrying
+  zero tokens, which may have been billed for tokens this side cannot see:
+  the provider client raises on a body with no completion in it before it
+  reads that body's usage block, so no usage rides any of these four classes
+  and this wrapper has none to charge. The attempts are counted per arm and
+  per unit — retried calls, unaccounted attempts and the trigger class of
+  each — beside the meeting-internal defaults.
 - **Dollar.** `max_cost_usd=0.0` on both budgets, which the provider's zero
   pre-flight rate makes bookkeeping rather than a brake — exactly as the cost
   statement says.
@@ -511,6 +671,7 @@ Per unit, with counts beside every rate:
 | Supported / unsupported / uncited ballots | Per ballot, per arm, with guard-rewritten ballots counted separately |
 | Naming ballots and off-target citations | Per ballot, per arm: `naming_ballots` counts the ballots naming the ejected player and `off_target_citations` how many of those cited evidence that does not bear on that player. The pair says how often relevance rather than presence is what a unit turned on |
 | Meeting-internal defaults | Per attempt, per arm: `defaulted_turns` and `defaulted_votes`, split by trigger into `defaults_by_validation` and `defaults_by_deadline`, plus `degraded_openings`. `units_with_defaults` counts the units carrying at least one, and is the bound on how many of that arm's decisions rest on a partly unauthored meeting |
+| Retried provider attempts | Per attempt, per arm: `retried_calls` counts the calls this run had to send more than once and `unaccounted_attempts` the attempts that bought no completion and carried no usage this side can see, split by trigger into `attempts_by_trigger`. `units_with_retries` counts the units carrying at least one. Every unaccounted attempt is also a row in the per-arm `calls` total, carrying the `no-completion-returned` marker and zero tokens — what is known about it, not what it was billed — so the completions are `calls` minus `unaccounted_attempts` |
 | Terminal vs partial units | A unit whose meeting ended the game is terminal; one that stopped at the tick after the report is deliberately partial. Neither is a game-win trial |
 | Provider cost | Calls, input and output tokens, `cost_usd` and model-work seconds, per arm and per run, against the limits above |
 
@@ -617,23 +778,32 @@ token and wall limits above.
 
 The run stops, retains its partial evidence and unresolved accounting, and
 authorizes no retry and no widening of any limit, on any of: a token budget
-exhausted at either the per-unit or the run level; the elapsed wall deadline or
-the model-work window, the latter cutting off the attempt in flight rather than
-one call later; a per-call response that reached its output cap (a truncation
-is a stop, not a datum); a held-out digest or skip that differs from the frozen
-manifest; a rendered prompt or regenerated prefix matching the legacy body
-handle; a unit whose recorded observation clock or experiment config is not the
-arm's; or a recorded meeting default whose phase and trigger this instrument
-cannot classify. A meeting-internal default is NOT itself a stop. The meeting
-layer's shipped fail-soft substitutes a placeholder turn or a marked SKIP
-ballot for a payload that failed schema validation, at an accepted rate of
-about 1 in 50 calls, and a fixed 50-unit paired sample cannot be abandoned for
-a substitution the engine is designed to make. Every such substitution is
-instead counted per arm and per unit — turns and votes separately, by trigger,
-with the units carrying any — and reported beside decision coverage, so it is
-visible rather than silently replaced. No stop condition reads an outcome: the
-50 paired units are a fixed sample with no interim analysis and no optional
-stopping, so nothing here can be tripped by a result the run has produced.
+exhausted at either the per-unit or the run level; the elapsed wall deadline
+or the model-work window, the latter cutting off the attempt in flight
+rather than one call later; a per-call response that reached its output cap
+(a truncation is a stop, not a datum); a held-out digest or skip that
+differs from the frozen manifest; a rendered prompt or regenerated prefix
+matching the legacy body handle; a unit whose recorded observation clock or
+experiment config is not the arm's; or a recorded meeting default whose
+phase and trigger this instrument cannot classify. A call that came back
+with no completion at all — an empty body, a transport failure, a retryable
+status, or an attempt that outran the per-attempt wall each send is bounded
+by — is retried up to three times, then a stop carrying the same partial
+accounting, with every attempt counted per arm and per unit. Retrying one of
+those buys no new draw: an attempt that produced nothing is not a sample. A
+body that reached its output cap and a returned payload that failed schema
+validation ARE samples and are never retried, and neither is an exhausted
+budget or deadline. A meeting-internal default is NOT itself a stop. The
+meeting layer's shipped fail-soft substitutes a placeholder turn or a marked
+SKIP ballot for a payload that failed schema validation, at an accepted rate
+of about 1 in 50 calls, and a fixed 50-unit paired sample cannot be
+abandoned for a substitution the engine is designed to make. Every such
+substitution is instead counted per arm and per unit — turns and votes
+separately, by trigger, with the units carrying any — and reported beside
+decision coverage, so it is visible rather than silently replaced. No stop
+condition reads an outcome: the 50 paired units are a fixed sample with no
+interim analysis and no optional stopping, so nothing here can be tripped by
+a result the run has produced.
 
 **Possible decisions**, per the preregistration: advance for an explicitly scoped
 adopting review, revise and evaluate a new version, reject, or gather more
@@ -653,7 +823,7 @@ rendered prompt after each unit, and over the emitted report; a match is a stop.
 
 | Role | Session |
 | --- | --- |
-| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm. A second session, dispatched on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) after the stopped run of 2026-09-10 rendered a prefix of the first band, drew 5000-5999 with the same generator, marked the first record `development` rather than deleting it, and opened PR #446; it ran no arm either |
+| Preparer | A session dispatched on [the freeze card](../../tasks/work/held-out-prefix-freeze.md). It built the deterministic generator, drew from the preregistered band, committed the hashes and opened the pull request the owner merged as `23a23c2d`. It ran no arm. A second session, dispatched on [the second freeze card](../../tasks/work/held-out-prefix-freeze-2.md) after the stopped run of 2026-09-10 rendered a prefix of the first band, drew 5000-5999 with the same generator, marked the first record `development` rather than deleting it, and opened PR #446. A third, dispatched on [the third freeze card](../../tasks/work/held-out-prefix-freeze-3.md) after the stopped run of 2026-09-13 rendered a prefix of the second, drew 6000-6999 the same way, marked the second record `development`, and opened PR #449. None of the three ran an arm |
 | Runner | A separate session dispatched on [the instrument card](../../tasks/work/fresh-deduction-instrument.md), started after that merge. It regenerates the set from the frozen band, verifies the committed hashes, and opens no prefix: no prefix is printed, logged or written into any report, and `assert_report_holds_no_prefix_bytes` refuses a report that carries one |
 | Coordinator | Dispatches both and runs neither |
 
@@ -665,41 +835,58 @@ longer held out.
 
 ## Verification of this manifest
 
-The offline mechanics check, on the second held-out band. Run on this branch at
-`08aee9cc`, the commit that re-bound the Inputs table above; only this document
-moves after it, and the dry run reads none of it:
+The offline mechanics check, on the third held-out band. Run on this branch at
+`f0574950`, the last commit that moves an instrument or test byte; only this
+document and the card move after it, and the dry run reads neither:
 
 ```sh
-.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run
+uv run python -m experiments.fresh_deduction_instrument --dry-run
 ```
 
 100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in about two
-and a half seconds of wall. Both arms carried a non-SKIP decision to a graded
-outcome on 49 of their 50 units: 49 ejections each, 22 role-correct, 27
-wrongful, 22 supported-correct, 150 supported ballots and 4 guard-rewritten ones
-per arm, with 98 ballots naming the ejected player, none of which cited evidence
-that does not bear on that player. The fiftieth is the same prefix in both arms:
-its meeting reached no ejection, so its game reached no terminal outcome and it
-is one partial unit per arm rather than a stop. The report carries the sampling
-configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
-2,048 / 1,024). Input tokens by the fake provider's `len // 4` heuristic were
-889,373 (`repaired_clock`) and 585,214 (`combined_accounts`); applying the
-decision memo's calibrated 1.28x real-input ratio to their sum (1,474,587) gives
-about 1.89 M against the 2.4 M ceiling, and the larger arm's 17,787 per unit
-gives about 22,800 against the 45,000 per-unit ceiling — headroom checks, not
-predictions, because a real model writes a different transcript.
+seconds of wall, written to the temporary directory the run makes for itself.
+Both arms carried a non-SKIP decision to a graded outcome on all 50 of their
+units — 50 terminal units and no partial one — with 50 ejections each, 15
+role-correct, 35 wrongful, 15 supported-correct, 150 supported ballots and 5
+guard-rewritten ones per arm, and 100 ballots naming the ejected player. The
+report carries the sampling configuration it drew at (`turn_temperature` 0.4,
+`vote_temperature` 0.2, caps 2,048 / 1,024). Input tokens by the fake
+provider's `len // 4` heuristic were 894,018 (`repaired_clock`) and 587,054
+(`combined_accounts`); applying the decision memo's calibrated 1.28x real-input
+ratio to their sum (1,481,072) gives about 1.90 M against the 2.4 M ceiling,
+and the larger arm's 17,880 per unit gives about 22,900 against the 45,000
+per-unit ceiling — headroom checks, not predictions, because a real model
+writes a different transcript.
 
-The figures this section carried before the re-binding of 2026-09-10 were
-measured on the 3000-3999 band. They are superseded with it and are not re-run:
-that band is development data, and a dry run over it would measure a set this
-manifest no longer authorizes.
+The bounded retry is exercised here rather than only in its unit cases, because
+the card that added it owes a run of the whole pipeline through one empty
+completion. The plain run above does not reach it — the dry-run provider
+answers every call, so both arms report `retried_calls` 0,
+`unaccounted_attempts` 0 and no trigger at all. The same 600 calls with the
+empty-body double answering one of them are a committed case,
+`tests/experiments/test_fresh_deduction_instrument.py::TestDryRun::test_the_full_dry_run_survives_one_empty_completion`:
+the double receives 601 sends, `repaired_clock` reports 301 calls,
+`retried_calls` 1, `unaccounted_attempts` 1, `attempts_by_trigger`
+`{"empty_completion": 1}` and one unit with a retry, `combined_accounts` reports
+none, and every graded field, ballot verdict and token total on both arms is the
+plain run's — an attempt that produced nothing produced nothing to grade or to
+charge. The run's `model_ids` carries `no-completion-returned` beside the
+fixture's own model, so a retried run cannot read as a clean one. What the
+bound does once the retries are exhausted is established by its planted cases,
+not by this run.
 
-The relevance amendment costs this fixture no unit on this band either, for a
-simpler reason than on the first: the dry-run provider produced no off-target
-citation at all, so the rule removed nothing from the 22 role-correct ejections
-and supported-correct is the same 22. That the rule bites at all is established
-by its planted cases, not by this run — the fixture cites the transcript's last
-turn whatever it says, so what it exercises is the path, not the judgment.
+The figures this section carried before the re-bindings of 2026-09-10 and
+2026-09-13 were measured on the 3000-3999 and 5000-5999 bands. They are
+superseded with those bands and are not re-run: both are development data, and
+a dry run over either would measure a set this manifest no longer authorizes.
+
+The relevance amendment costs this fixture no unit on this band either, and the
+figures say so more directly than on the first two: the dry-run provider
+produced four off-target citations per arm across its 100 naming ballots, and
+supported-correct is still the same 15 as role-correct, so the rule removed no
+role-correct ejection here. That the rule bites at all is established by its
+planted cases, not by this run — the fixture cites the transcript's last turn
+whatever it says, so what it exercises is the path, not the judgment.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; it establishes
