@@ -259,15 +259,58 @@ def _converted_manifest_paths() -> tuple[Path, ...]:
 def _first_accepted_seed() -> int:
     """The first seed of the committed freeze; the unit files are named for it.
 
-    Derived rather than written down: the band has moved once already -- the
-    3000-3999 set became development data on 2026-09-10 and 5000-5999 was
-    frozen in its place -- and a literal here would only re-pin these names to
-    whichever band was current when it was typed.
+    Derived rather than written down: the band has moved twice already -- the
+    3000-3999 set became development data on 2026-09-10 and the 5000-5999 set
+    on 2026-09-13, each replaced by a fresh freeze -- and a literal here would
+    only re-pin these names to whichever band was current when it was typed.
     """
 
     accepted = _committed_manifest()["accepted"]
     assert isinstance(accepted, list)
     return int(accepted[0]["seed"])
+
+
+def _live_band() -> tuple[int, int]:
+    """The band the freeze record at ``MANIFEST_PATH`` holds: what a run draws."""
+
+    band = _committed_manifest()["band"]
+    return int(band["first_seed"]), int(band["last_seed"])
+
+
+def _manifest_text_bound_to(band: tuple[int, int]) -> str:
+    """The committed execution manifest with its Inputs row moved to ``band``."""
+
+    return re.sub(
+        r"^(\|\s*Seed band\s*\|\s*)\d+–\d+",
+        rf"\g<1>{band[0]}–{band[1]}",
+        _MANIFEST.read_text(encoding="utf-8"),
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+
+def _root_binding_the_live_band(tmp_path: Path) -> Path:
+    """A repository root whose Inputs row binds the band the runner would draw.
+
+    Usually the repository itself: a document bound to the live freeze is the
+    settled state. Between a freeze and the re-binding that follows it the
+    committed row still names the band that freeze just converted, and
+    ``assert_manifest_binds_the_live_band`` refuses there -- deliberately, and
+    with its own cases in ``TestTheManifestBindsTheBandTheRunWouldDraw`` below.
+    The cases that use this helper are about what the gate does once that check
+    passes, so in that window they run against a copy of the committed document
+    whose Seed band row is moved to the live band and in which nothing else
+    changes.
+    """
+
+    live = _live_band()
+    if instrument.manifest_bound_band(_MANIFEST.read_text(encoding="utf-8")) == live:
+        return _REPO_ROOT
+    manifest = tmp_path / EXECUTION_MANIFEST_PATH
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(_manifest_text_bound_to(live), encoding="utf-8")
+    _write_frozen_manifest(tmp_path, _committed_manifest())
+    return tmp_path
 
 
 class _StubClient:
@@ -1042,7 +1085,9 @@ class TestAuthorizedClient:
 
         manifest = tmp_path / EXECUTION_MANIFEST_PATH
         manifest.parent.mkdir(parents=True)
-        manifest.write_text(_MANIFEST.read_text(encoding="utf-8"), encoding="utf-8")
+        # Bound to the live band, so the refusal under test is the moved digest
+        # rather than a stale Inputs row, which is checked one gate earlier.
+        manifest.write_text(_manifest_text_bound_to(_live_band()), encoding="utf-8")
         moved = _committed_manifest()
         moved["accepted"][0]["sha256"] = "0" * 64
         _write_frozen_manifest(tmp_path, moved)
@@ -1059,15 +1104,21 @@ class TestAuthorizedClient:
                 repo_root=tmp_path,
             )
 
-    def test_the_pre_client_gate_returns_the_verified_set(self) -> None:
-        """The positive half: on the committed tree it hands back the set the
-        client is then built against, so the two cannot come apart."""
+    def test_the_pre_client_gate_returns_the_verified_set(self, tmp_path: Path) -> None:
+        """The positive half: it hands back the set the client is then built
+        against, so the two cannot come apart. The root is the committed tree
+        whenever the Inputs row binds the live band, and a copy of it with that
+        one row moved while a re-binding is outstanding."""
 
+        root = _root_binding_the_live_band(tmp_path)
         invocation = LiveRunInvocation.naming(
-            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
         )
         frozen = instrument.assert_ready_for_a_live_run(
-            provider=AUTHORIZED_PROVIDER, invocation=invocation
+            provider=AUTHORIZED_PROVIDER, invocation=invocation, repo_root=root
         )
         assert len(frozen.accepted_seeds) == 50
 
@@ -1107,8 +1158,12 @@ class TestAuthorizedClient:
             raise _Stop("stopped before any unit ran")
 
         monkeypatch.setattr(instrument, "_InstrumentClient", spy)
+        root = _root_binding_the_live_band(tmp_path / "root")
         invocation = LiveRunInvocation.naming(
-            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
         )
         with pytest.raises(_Stop):
             run_instrument(
@@ -1116,6 +1171,7 @@ class TestAuthorizedClient:
                 client=_StubClient(),
                 provider=AUTHORIZED_PROVIDER,
                 live_invocation=invocation,
+                repo_root=root,
             )
         assert seen["expected_model"] == AUTHORIZED_MODEL
 
@@ -1142,6 +1198,14 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
     2026-09-10 and 5000-5999 was frozen in its place, the manifest went on
     authorizing a band the runner would no longer draw, with every other gate
     green. Nothing but the re-binding closed that, and a document is not a gate.
+
+    A freeze moves the band before the document that authorizes it can follow:
+    the third freeze drew 6000-6999 while the Inputs row still named 5000-5999,
+    and the re-binding is the transport-resilience card's acceptance item. That
+    window is exactly what this gate is for, so the first case below asserts the
+    refusal rather than skipping it, and
+    `TestExecutionManifest.test_a_binding_to_a_converted_record_stays_an_open_obligation`
+    is what keeps the window from becoming permanent.
     """
 
     def _planted_root(self, root: Path, *, band: tuple[int, int]) -> Path:
@@ -1151,31 +1215,44 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
 
         manifest = root / EXECUTION_MANIFEST_PATH
         manifest.parent.mkdir(parents=True, exist_ok=True)
-        text = re.sub(
-            r"^(\|\s*Seed band\s*\|\s*)\d+–\d+",
-            rf"\g<1>{band[0]}–{band[1]}",
-            _MANIFEST.read_text(encoding="utf-8"),
-            count=1,
-            flags=re.MULTILINE,
-        )
-        manifest.write_text(text, encoding="utf-8")
+        manifest.write_text(_manifest_text_bound_to(band), encoding="utf-8")
         _write_frozen_manifest(root, _committed_manifest())
         return manifest
 
-    def test_the_committed_manifest_binds_the_live_band(self) -> None:
-        """The settled state: the Inputs row and the freeze record agree."""
+    def test_the_committed_manifest_binds_the_live_band_or_is_refused(self) -> None:
+        """Settled, or a stale binding this gate refuses while a card owes the row.
 
-        record_band = _committed_manifest()["band"]
-        assert instrument.manifest_bound_band(
-            _MANIFEST.read_text(encoding="utf-8")
-        ) == (record_band["first_seed"], record_band["last_seed"])
-        instrument.assert_manifest_binds_the_live_band()
+        Settled means the Inputs row and the freeze record name one band and the
+        gate passes. Otherwise the row has to name a band a CONVERTED record
+        holds -- a band no committed record holds at all would be a document
+        describing inputs that do not exist -- and the gate has to refuse,
+        naming both bands. Either way the committed tree cannot reach a live
+        call under a document written for another band.
+        """
+
+        live = _live_band()
+        bound = instrument.manifest_bound_band(_MANIFEST.read_text(encoding="utf-8"))
+        if bound == live:
+            instrument.assert_manifest_binds_the_live_band()
+            return
+        assert bound in {
+            (converted.band.first_seed, converted.band.last_seed)
+            for converted in CONVERTED_BANDS
+        }, (
+            f"the Inputs row binds seed band {bound[0]}-{bound[1]}, which is "
+            "neither the live freeze nor a converted record"
+        )
+        with pytest.raises(LiveRunNotAuthorized) as refused:
+            instrument.assert_manifest_binds_the_live_band()
+        message = str(refused.value)
+        assert f"binds seed band {bound[0]}-{bound[1]}" in message
+        assert f"holds {live[0]}-{live[1]}" in message
 
     def test_a_stale_binding_stops_the_run_before_a_client_exists(
         self, tmp_path: Path
     ) -> None:
-        """PLANTED: the exact state this branch inherited — an Inputs row naming
-        the converted 3000-3999 band while the live record holds 5000-5999.
+        """PLANTED: an Inputs row naming the first converted band, 3000-3999,
+        while the live record holds whatever band the current freeze drew.
 
         The refusal comes out of `assert_ready_for_a_live_run`, which is the
         call the CLI makes before it builds anything: the gate constructs no

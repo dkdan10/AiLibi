@@ -73,6 +73,12 @@ _CONVERTED_MANIFEST_PATH = (
     "audits/deduction-candidate/held-out/manifest-band-3000-3999.json"
 )
 
+#: The second band's freeze record after the third freeze moved it. Development
+#: data since 2026-09-13, on the same grounds and kept the same way.
+_CONVERTED_MANIFEST_PATH_5000 = (
+    "audits/deduction-candidate/held-out/manifest-band-5000-5999.json"
+)
+
 
 def _step(tick: int, actor: str, kind: str, payload: dict[str, object]) -> PrefixStep:
     return PrefixStep(
@@ -541,13 +547,13 @@ def test_the_skip_role_split_reaches_the_band_only_through_the_published_skips()
 
 
 def test_the_preregistered_band_is_the_one_the_card_froze() -> None:
-    """The second freeze's band, and the first one kept as a converted band."""
+    """The third freeze's band, and the two earlier ones kept as converted bands."""
 
     assert (
         PREREGISTERED_BAND.first_seed,
         PREREGISTERED_BAND.last_seed,
         PREREGISTERED_BAND.size,
-    ) == (5000, 5999, 50)
+    ) == (6000, 6999, 50)
     assert [
         (
             converted.band.first_seed,
@@ -556,7 +562,10 @@ def test_the_preregistered_band_is_the_one_the_card_froze() -> None:
             converted.manifest_path,
         )
         for converted in CONVERTED_BANDS
-    ] == [(3000, 3999, 50, _CONVERTED_MANIFEST_PATH)]
+    ] == [
+        (3000, 3999, 50, _CONVERTED_MANIFEST_PATH),
+        (5000, 5999, 50, _CONVERTED_MANIFEST_PATH_5000),
+    ]
     assert MANIFEST_PATH not in {
         converted.manifest_path for converted in CONVERTED_BANDS
     }
@@ -811,10 +820,8 @@ def test_the_manifest_records_the_flip_rather_than_a_deletion() -> None:
     assert "never by deleting this file" in str(manifest["status_note"])
 
 
-def _converted_manifest() -> dict[str, object]:
-    manifest = json.loads(
-        (REPO_ROOT / _CONVERTED_MANIFEST_PATH).read_text(encoding="utf-8")
-    )
+def _converted_manifest(path: str = _CONVERTED_MANIFEST_PATH) -> dict[str, object]:
+    manifest = json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
     assert isinstance(manifest, dict)
     return manifest
 
@@ -837,22 +844,41 @@ _BAND_3000_BLOCKS_AT_23A23C2D: Mapping[str, str] = {
     "skipped": "b243d9c8d1214932c9878094609ba4ec8c3dd2f1045ddc5a80cdd480988c56d3",
 }
 
+#: The same two blocks of the 5000-5999 record as the owner's merge of the second
+#: freeze froze them at ``ca6e97d6``. That record carries no dependency restamp,
+#: so the whole diff between the frozen file and the moved one is the ``status``
+#: flip and the ``converted`` block the third freeze added.
+_BAND_5000_BLOCKS_AT_CA6E97D6: Mapping[str, str] = {
+    "accepted": "fab9a1c584e872c4d9e81cb5d27bb08f31020bc8470b8df26962c271edb9b98d",
+    "skipped": "385c9cc6e65d747cc83b313d680a17a18c69753596c7608c0f8ef9db3e57fc26",
+}
+
 
 def test_the_range_walks_refuse_a_converted_band_as_well() -> None:
     """A frozen band's seeds are not an out-of-band range, converted or not.
 
-    The 3000-3999 prefixes are development data since 2026-09-10, so a walk over
-    them would leak nothing; what the refusal protects is the meaning of the
-    number both commands print. The freeze cards quote it as the OUT-OF-BAND
-    rejection rate, and a range covering seeds an earlier freeze already
-    screened is not that rate.
+    The 3000-3999 prefixes are development data since 2026-09-10 and the
+    5000-5999 prefixes since 2026-09-13, so a walk over either would leak
+    nothing; what the refusal protects is the meaning of the number both
+    commands print. The freeze cards quote it as the OUT-OF-BAND rejection
+    rate, and a range covering seeds an earlier freeze already screened is not
+    that rate.
     """
 
     walks: tuple[Callable[[int, int], object], ...] = (
         tally_reasons,
         skip_witness_roles_over_range,
     )
-    assert CONVERTED_BANDS
+    # Derived from the records on disk, not from the list under test: a band
+    # dropped out of CONVERTED_BANDS would otherwise take its own case with it
+    # and the walk would quietly reopen on a set an earlier freeze screened.
+    on_disk = sorted((REPO_ROOT / MANIFEST_PATH).parent.glob("manifest-band-*.json"))
+    assert on_disk, "no converted freeze record is committed"
+    listed = {converted.manifest_path for converted in CONVERTED_BANDS}
+    assert {str(path.relative_to(REPO_ROOT)) for path in on_disk} == listed, (
+        "every committed manifest-band-*.json is a band CONVERTED_BANDS names, "
+        "or the range guard no longer refuses it"
+    )
     for converted in CONVERTED_BANDS:
         band = converted.band
         for first, last in (
@@ -861,11 +887,24 @@ def test_the_range_walks_refuse_a_converted_band_as_well() -> None:
             (band.last_seed, band.last_seed + 1),
             (band.first_seed + 7, band.last_seed - 7),
         ):
+            # A range that spills off a converted band onto the live one -- which
+            # is what the top edge of 5000-5999 does now that 6000-6999 is
+            # frozen -- is refused for the live band first. Both refusals come
+            # from the same guard; the live band is the stricter reason, so the
+            # case still proves the range is out of reach.
+            touches_live = (
+                first <= PREREGISTERED_BAND.last_seed
+                and PREREGISTERED_BAND.first_seed <= last
+            )
             for walk in walks:
                 with pytest.raises(HeldOutPrefixError) as refusal:
                     walk(first, last)
-                assert "intersect the converted band" in str(refusal.value)
-                assert converted.manifest_path in str(refusal.value)
+                message = str(refusal.value)
+                if touches_live:
+                    assert "intersect the preregistered band" in message
+                    continue
+                assert "intersect the converted band" in message
+                assert converted.manifest_path in message
 
 
 def test_the_converted_band_keeps_the_blocks_it_was_frozen_with() -> None:
@@ -906,14 +945,54 @@ def test_the_converted_band_keeps_the_blocks_it_was_frozen_with() -> None:
         ConvertedRecord.model_validate(unmodelled)
 
 
-def test_the_current_freeze_is_the_second_band_and_starts_without_restamps() -> None:
-    """The live record is the new band; the old one sits beside it, not under it."""
+def test_the_converted_second_band_keeps_the_blocks_it_was_frozen_with() -> None:
+    """The second band is marked development in place, the way the first was.
+
+    The stopped run of 2026-09-13 rendered seed 5000, so this record stopped
+    being a held-out set on that date. Its digests are that run's input
+    identity, so the two blocks are compared against the bytes the owner's merge
+    froze at ``ca6e97d6`` rather than trusting the moved file's prose. That
+    record carries no dependency restamp, so nothing but ``status`` and
+    ``converted`` may have moved.
+    """
+
+    manifest = _converted_manifest(_CONVERTED_MANIFEST_PATH_5000)
+    assert manifest["status"] == "development"
+    assert "never by deleting this file" in str(manifest["status_note"])
+    assert manifest["card"] == "tasks/work/held-out-prefix-freeze-2.md"
+    assert manifest["band"] == {
+        "draw_order": "ascending",
+        "first_seed": 5000,
+        "last_seed": 5999,
+        "size": 50,
+    }
+    restamps = manifest["dependency_restamps"]
+    assert isinstance(restamps, dict)
+    assert restamps["entries"] == []
+    for block, digest in _BAND_5000_BLOCKS_AT_CA6E97D6.items():
+        assert _block_digest(manifest[block]) == digest
+    accepted = manifest["accepted"]
+    assert isinstance(accepted, list)
+    assert len(accepted) == 50
+
+    record = ConvertedRecord.model_validate(manifest["converted"])
+    assert record.date == "2026-09-13"
+    assert record.pull_request == "#448"
+    assert record.branch == "work/fresh-deduction-run-2"
+    assert record.rendered_seeds == (5000,)
+    assert record.informed == (
+        "tasks/work/fresh-deduction-instrument-transport-resilience.md"
+    )
+    assert record.superseded_by == MANIFEST_PATH
+
+
+def test_the_current_freeze_is_the_third_band_and_starts_without_restamps() -> None:
+    """The live record is the new band; the old ones sit beside it, not under it."""
 
     manifest = _committed_manifest()
-    converted = _converted_manifest()
     assert manifest["status"] == "held_out"
     assert "converted" not in manifest
-    assert manifest["card"] == "tasks/work/held-out-prefix-freeze-2.md"
+    assert manifest["card"] == "tasks/work/held-out-prefix-freeze-3.md"
     assert manifest["band"] == {
         "draw_order": "ascending",
         "first_seed": PREREGISTERED_BAND.first_seed,
@@ -926,15 +1005,17 @@ def test_the_current_freeze_is_the_second_band_and_starts_without_restamps() -> 
     assert restamps["entries"] == []
 
     accepted = manifest["accepted"]
-    old_accepted = converted["accepted"]
     assert isinstance(accepted, list)
-    assert isinstance(old_accepted, list)
-    assert {row["seed"] for row in accepted}.isdisjoint(
-        row["seed"] for row in old_accepted
-    )
-    assert {row["sha256"] for row in accepted}.isdisjoint(
-        row["sha256"] for row in old_accepted
-    )
+    assert CONVERTED_BANDS
+    for converted_band in CONVERTED_BANDS:
+        old_accepted = _converted_manifest(converted_band.manifest_path)["accepted"]
+        assert isinstance(old_accepted, list)
+        assert {row["seed"] for row in accepted}.isdisjoint(
+            row["seed"] for row in old_accepted
+        )
+        assert {row["sha256"] for row in accepted}.isdisjoint(
+            row["sha256"] for row in old_accepted
+        )
 
 
 def test_a_converted_record_flips_the_status_and_changes_nothing_else() -> None:
@@ -950,17 +1031,17 @@ def test_a_converted_record_flips_the_status_and_changes_nothing_else() -> None:
     generated = generate(
         SeedBand(first_seed=_DEBUG_SEEDS[0], last_seed=_DEBUG_SEEDS[0] + 99, size=2)
     )
-    card = "tasks/work/held-out-prefix-freeze-2.md"
+    card = "tasks/work/held-out-prefix-freeze-3.md"
     frozen = build_manifest(generated, repo_root=REPO_ROOT, card=card)
     assert frozen["status"] == "held_out"
     assert "converted" not in frozen
 
     record = ConvertedRecord(
-        date="2026-09-10",
-        pull_request="#445",
-        branch="work/fresh-deduction-run",
+        date="2026-09-13",
+        pull_request="#448",
+        branch="work/fresh-deduction-run-2",
         rendered_seeds=(_DEBUG_SEEDS[0],),
-        informed="tasks/work/fresh-deduction-instrument-reconciliation.md",
+        informed="tasks/work/fresh-deduction-instrument-transport-resilience.md",
         superseded_by=MANIFEST_PATH,
         note="A planted flip over two out-of-band debugging seeds.",
     )
