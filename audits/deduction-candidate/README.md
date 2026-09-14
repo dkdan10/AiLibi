@@ -33,6 +33,15 @@ This directory records the unadopted follow-through to the owner's independent
   2026-09-07. It authorizes no live call: a call additionally requires an
   explicit runner invocation naming that file, and no test or CI job performs
   one.
+- [Development calibration, 2026-09-14](calibration-2026-09-14/CALIBRATION.md)
+  measures what the provider CHARGES, on the first five accepted seeds of the
+  converted 3000–3999 band, both arms, once, under the calibration limits. It
+  grades nothing — no grader ran, no paired statistic was computed and no
+  meeting outcome is recorded — so it measures nothing about the candidate's
+  merit and no unit of it counts towards the primary outcome. Its output is the
+  per-arm, per-call-type token profile, zero refusals and zero defaults on the
+  corrected account prompts, and a re-sized ceiling proposal that authorizes
+  nothing.
 
 The reproducible development command is:
 

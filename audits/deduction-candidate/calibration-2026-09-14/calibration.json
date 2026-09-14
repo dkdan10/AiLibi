@@ -1,0 +1,739 @@
+{
+  "report_schema": "fresh-deduction-calibration/1",
+  "provider": "featherless",
+  "model_ids": [
+    "Qwen/Qwen3.6-27B"
+  ],
+  "execution_mode": "sequential",
+  "instrument_sha256": "d1b36d8cb459121188ab8108f4dac8261b73664044e1546df289535e697d6552",
+  "prompt_set": "qwen3_6_27b",
+  "inputs": {
+    "record": "audits/deduction-candidate/held-out/manifest-band-3000-3999.json",
+    "record_sha256": "ca4cd057acb2119646190fb6fff923a897ec207d5f54c491c3e1dfae0944cf3c",
+    "status": "development",
+    "band_first_seed": 3000,
+    "band_last_seed": 3999,
+    "seeds": [
+      3000,
+      3001,
+      3002,
+      3003,
+      3004
+    ],
+    "accepted_in_record": 50,
+    "skipped_in_record": 8
+  },
+  "limits": {
+    "run_max_input_tokens": 600000,
+    "run_max_output_tokens": 120000,
+    "unit_max_input_tokens": 60000,
+    "unit_max_output_tokens": 12000,
+    "max_cost_usd": 0.0,
+    "elapsed_seconds": 5400.0,
+    "model_work_seconds": 3600.0
+  },
+  "sampling": {
+    "turn_max_tokens": 2048,
+    "turn_temperature": 0.4,
+    "vote_max_tokens": 1024,
+    "vote_temperature": 0.2
+  },
+  "paired_seeds": 5,
+  "units": 10,
+  "arms": [
+    {
+      "arm": "repaired_clock",
+      "units": 5,
+      "attempts": 30,
+      "completions": 30,
+      "input_tokens": 105129,
+      "output_tokens": 5539,
+      "cost_usd": 0.0,
+      "model_work_seconds": 378.30074316612445,
+      "seconds_per_attempt": 12.610024772204149,
+      "by_call_type": [
+        {
+          "arm": "repaired_clock",
+          "call_type": "turn",
+          "completions": 15,
+          "input_mean": 3316.866666666667,
+          "input_p95": 4266,
+          "input_max": 4266,
+          "output_mean": 273.8666666666667,
+          "output_p95": 448,
+          "output_max": 448,
+          "max_tokens": 2048
+        },
+        {
+          "arm": "repaired_clock",
+          "call_type": "ballot",
+          "completions": 15,
+          "input_mean": 3691.733333333333,
+          "input_p95": 4667,
+          "input_max": 4667,
+          "output_mean": 95.4,
+          "output_p95": 124,
+          "output_max": 124,
+          "max_tokens": 1024
+        }
+      ],
+      "mean_unit_input_tokens": 21025.8,
+      "mean_unit_output_tokens": 1107.8,
+      "max_unit_input_tokens": 23494,
+      "max_unit_output_tokens": 1486,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "defaults_by_validation": 0,
+      "defaults_by_deadline": 0,
+      "degraded_openings": 0,
+      "units_with_defaults": 0,
+      "charged_failed_attempts": 0,
+      "charged_failed_input_tokens": 0,
+      "charged_failed_output_tokens": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0,
+      "aborted_attempts": 0,
+      "attempts_by_trigger": {}
+    },
+    {
+      "arm": "combined_accounts",
+      "units": 5,
+      "attempts": 30,
+      "completions": 30,
+      "input_tokens": 142151,
+      "output_tokens": 15685,
+      "cost_usd": 0.0,
+      "model_work_seconds": 655.583408750128,
+      "seconds_per_attempt": 21.852780291670932,
+      "by_call_type": [
+        {
+          "arm": "combined_accounts",
+          "call_type": "turn",
+          "completions": 15,
+          "input_mean": 3805.6,
+          "input_p95": 5977,
+          "input_max": 5977,
+          "output_mean": 881.8666666666667,
+          "output_p95": 2036,
+          "output_max": 2036,
+          "max_tokens": 2048
+        },
+        {
+          "arm": "combined_accounts",
+          "call_type": "ballot",
+          "completions": 15,
+          "input_mean": 5671.133333333333,
+          "input_p95": 7973,
+          "input_max": 7973,
+          "output_mean": 163.8,
+          "output_p95": 237,
+          "output_max": 237,
+          "max_tokens": 1024
+        }
+      ],
+      "mean_unit_input_tokens": 28430.2,
+      "mean_unit_output_tokens": 3137.0,
+      "max_unit_input_tokens": 35232,
+      "max_unit_output_tokens": 4590,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "defaults_by_validation": 0,
+      "defaults_by_deadline": 0,
+      "degraded_openings": 0,
+      "units_with_defaults": 0,
+      "charged_failed_attempts": 0,
+      "charged_failed_input_tokens": 0,
+      "charged_failed_output_tokens": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0,
+      "aborted_attempts": 0,
+      "attempts_by_trigger": {}
+    }
+  ],
+  "calls": [
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3434,
+      "output_tokens": 319,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3483,
+      "output_tokens": 126,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 2729,
+      "output_tokens": 352,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3748,
+      "output_tokens": 73,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3010,
+      "output_tokens": 124,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 4072,
+      "output_tokens": 83,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 2565,
+      "output_tokens": 900,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 4569,
+      "output_tokens": 2036,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 5808,
+      "output_tokens": 1236,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 7521,
+      "output_tokens": 169,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 6796,
+      "output_tokens": 157,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 7973,
+      "output_tokens": 92,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 2920,
+      "output_tokens": 267,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3476,
+      "output_tokens": 448,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3782,
+      "output_tokens": 155,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 4229,
+      "output_tokens": 102,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3678,
+      "output_tokens": 108,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3234,
+      "output_tokens": 88,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 2060,
+      "output_tokens": 715,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 3710,
+      "output_tokens": 1045,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 5977,
+      "output_tokens": 883,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 6589,
+      "output_tokens": 181,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 6017,
+      "output_tokens": 205,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 5590,
+      "output_tokens": 145,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3321,
+      "output_tokens": 340,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3315,
+      "output_tokens": 423,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 4266,
+      "output_tokens": 425,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 4667,
+      "output_tokens": 92,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3869,
+      "output_tokens": 108,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 4056,
+      "output_tokens": 98,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 2457,
+      "output_tokens": 1060,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 4737,
+      "output_tokens": 883,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 5372,
+      "output_tokens": 932,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 6594,
+      "output_tokens": 149,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 5833,
+      "output_tokens": 184,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 6022,
+      "output_tokens": 237,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3309,
+      "output_tokens": 269,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3436,
+      "output_tokens": 135,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3149,
+      "output_tokens": 282,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3983,
+      "output_tokens": 73,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3541,
+      "output_tokens": 85,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3399,
+      "output_tokens": 108,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 2440,
+      "output_tokens": 682,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 4042,
+      "output_tokens": 717,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 4241,
+      "output_tokens": 734,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 5565,
+      "output_tokens": 215,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 4979,
+      "output_tokens": 165,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 4840,
+      "output_tokens": 182,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3165,
+      "output_tokens": 283,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 3328,
+      "output_tokens": 176,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "input_tokens": 2640,
+      "output_tokens": 108,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 2780,
+      "output_tokens": 90,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3773,
+      "output_tokens": 101,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "input_tokens": 3337,
+      "output_tokens": 98,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 2294,
+      "output_tokens": 487,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 3506,
+      "output_tokens": 675,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "input_tokens": 3306,
+      "output_tokens": 243,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 3026,
+      "output_tokens": 155,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 4150,
+      "output_tokens": 81,
+      "disposition": "resolved"
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "input_tokens": 3572,
+      "output_tokens": 140,
+      "disposition": "resolved"
+    }
+  ],
+  "unit_usage": [
+    {
+      "seed": 3000,
+      "arm": "repaired_clock",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 20476,
+      "output_tokens": 1077,
+      "model_work_seconds": 97.37417683191597,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3000,
+      "arm": "combined_accounts",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 35232,
+      "output_tokens": 4590,
+      "model_work_seconds": 212.93602020782419,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3001,
+      "arm": "repaired_clock",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 21319,
+      "output_tokens": 1168,
+      "model_work_seconds": 45.94820212502964,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3001,
+      "arm": "combined_accounts",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 29943,
+      "output_tokens": 3174,
+      "model_work_seconds": 100.24060737458058,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3002,
+      "arm": "repaired_clock",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 23494,
+      "output_tokens": 1486,
+      "model_work_seconds": 54.714256584178656,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3002,
+      "arm": "combined_accounts",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 31015,
+      "output_tokens": 3445,
+      "model_work_seconds": 136.64169378997758,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3003,
+      "arm": "repaired_clock",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 20817,
+      "output_tokens": 952,
+      "model_work_seconds": 142.01043483428657,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3003,
+      "arm": "combined_accounts",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 26107,
+      "output_tokens": 2695,
+      "model_work_seconds": 142.84743875125423,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3004,
+      "arm": "repaired_clock",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 19023,
+      "output_tokens": 856,
+      "model_work_seconds": 38.25367279071361,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    {
+      "seed": 3004,
+      "arm": "combined_accounts",
+      "attempts": 6,
+      "completions": 6,
+      "input_tokens": 19854,
+      "output_tokens": 1781,
+      "model_work_seconds": 62.91764862649143,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "charged_failed_attempts": 0,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    }
+  ],
+  "proposal": {
+    "rule": "The per-unit OUTPUT ceiling is max(the reservation schedule, 3 x the largest unit measured): it is enforced on what a unit RESERVES, so it has to clear that schedule before anything else. The per-unit INPUT ceiling is 3 x the largest unit measured — the same multiple with no reservation floor to clear, because no pre-flight reserves an input cap. Each run-level ceiling is the whole design's unit count x the measured MEAN unit x 1.5, raised to that unit count x the largest unit measured where the mean rule falls below it: that product is the floor `assert_limits_are_feasible` enforces, and a proposed ceiling the instrument would refuse is not a proposal. Every figure is rounded up to the next 1,000 tokens. This is a proposal and authorizes nothing: the ceilings a run spends under are the owner's, on a card, and this instrument keeps refusing any limits but the ones it is handed.",
+    "units": 100,
+    "reservation_schedule": 9216,
+    "measured_max_unit_input_tokens": 35232,
+    "measured_max_unit_output_tokens": 4590,
+    "measured_mean_unit_input_tokens": 24728.0,
+    "measured_mean_unit_output_tokens": 2122.4,
+    "unit_max_input_tokens": 106000,
+    "unit_max_output_tokens": 14000,
+    "run_max_input_tokens": 3710000,
+    "run_max_output_tokens": 459000,
+    "clears_the_feasibility_gate": true,
+    "feasibility_refusal": null
+  },
+  "percentile_rule": "p95 is the nearest-rank percentile of the sample sorted ascending: the value at index ceil(0.95 x n) - 1. No interpolation, because every value in the sample is a token count some call was actually charged and a number between two of them is not one of those.",
+  "elapsed_seconds": 1034.502619375009,
+  "model_work_seconds": 1033.8841519162524,
+  "seconds_per_attempt": 17.23140253193754,
+  "total_cost_usd": 0.0,
+  "dry_run": false,
+  "caveat": "A spend measurement on development inputs, not an evaluation. No grader ran, no paired statistic was computed and no meeting outcome is reported: the primary outcome, the decision rule and the minimum actionable effect are untouched, and no unit of this calibration counts towards them."
+}
