@@ -312,6 +312,124 @@ that carries the document changes, for the reason the entries above record — a
 commit cannot carry its own hash — so it names the code commit it is written
 against, and the record commit that writes it moves no instrument byte.
 
+## Amendments after the diagnosis of 2026-09-13
+
+Three live attempts stopped, and
+[the diagnosis of 2026-09-13](../../tasks/diagnosis-2026-09-13-live-run-stops.md)
+— written from four independent read-only investigations, one synthesis and
+three adversarial refutations of it — found one root under all three: this
+evaluation was SIZED in charged tokens and ENFORCED in reserved ones, and the
+only place it ever met the real provider was the held-out run itself. This
+section is dated apart from the two above because it is written after a
+diagnosis rather than after a stop. It reaches the enforcement text, the live
+gate and the verification section; no held-out outcome informed it, because
+the stops it reads carry counts and identifiers only.
+
+**2026-09-13 (`78b136bd`) — the units of account are stated, the ceilings are
+checked against them before a run starts, and the rehearsal sees what the
+provider did.** Four things move together, all offline and all at $0.
+
+The enforcement section's token-budget bullet now states the units of account
+and quotes `RESERVATION_POLICY` verbatim: the ceilings are enforced on RESERVED
+spend, one unit reserves 9,216 output tokens across its six pre-flights, and a
+ceiling below that schedule authorizes calls it cannot pay for.
+`assert_limits_are_feasible` refuses such a ceiling — and either run-level
+ceiling below a hundred units at the largest unit the live archives charged
+(24,282 input, 3,116 output) — from arithmetic over module constants alone,
+before a path is resolved or a credential read. **Under the limits merged on
+2026-09-07 it refuses.** That is not a defect of the gate: those numbers
+authorize six legal calls a unit cannot pay for, the third attempt was stopped
+by exactly that, and the live gate now fails closed until a fourth
+authorization card re-sizes them. This manifest does not re-size anything: the
+row above is still #437's and the widened wall row is still the third
+authorization card's.
+
+The rehearsal now exercises the dimension that bound. `DryRunProvider` derives
+its usage from the payload it serialises — 66 output tokens a call, identical
+on both arms, 9.9% of the per-unit ceiling — so no committed check could see a
+reservation schedule at all. A usage-replaying double
+(`tests/experiments/usage_replay_double.py`) answers each call with the tokens
+the real endpoint reported for a call of that arm and that kind, out of a
+committed profile of the 36 resolved calls and the two billed-and-refused ones
+the three run branches archived. The profile carries token counts only: no
+prompt, no prefix, no response text and no seed. The verification section below
+records what it measures.
+
+The retry classifier covers every fail-loud empty-response shape the authorized
+client raises. Two of them —
+a body carrying no usage block, and a usage block without its two counts
+(`llm/featherless_client.py:844,850`) — were not covered and would have re-raised
+bare, uncharged and unretried. `TRANSPORT_RETRY` is amended to say what the
+class actually is (any body the client refuses to record a completion from) and
+to stop claiming the adapter refuses before it reads the usage block, which is
+true of two of the four shapes and not of the other two; the quotation under
+"How each limit is enforced" carries the new bytes. The bound, the four trigger
+classes and the counts are unchanged.
+
+A run may now write a per-unit checkpoint and be continued from one, and the
+live gate refuses that continuation until this document carries the owner's
+resumption clause — which it does not, so no live run may be resumed today. The
+mechanism is built and rehearsed on the fake provider because the diagnosis
+names it as owed (`tasks/owner-decisions-2026-09-07.md`, B.4); authorizing a
+second sitting on the held-out set is decision 2 of the diagnosis and the
+owner's to take. The resume is outcome-blind by construction: it reads the
+checkpoint's completed seeds and its identity digests, and nothing in the run
+path reads a grade.
+
+The frozen analysis does not move here. `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
+are the same bytes the sections below quote, and a test holds them to the
+revision the last logged amendment names. The feasibility gate adds no stop to
+the frozen rule: it is a refusal before a run, like the band binding and the
+sampling check, not a condition that can stop one in flight. As with the
+entries above, this one cannot name the commit that carries the document
+change, so it names the commit that carries the behaviour it records,
+`78b136bd`; the record commit that wrote this entry, `808b5070`, changed this
+document, the derived counts, one docstring this amendment corrects, and one
+guard: `arm_surface_digests` refuses a missing prompt-set directory instead of
+hashing nothing (corrected 2026-09-14; the entry first said "no behaviour").
+This entry records that commit and stops there: what a review then
+found wrong with the mechanism above, and what was changed to repair it, is the
+entry below.
+
+**2026-09-14 (`0185182d`) — a stopped sitting carries its whole spend into the
+next one, and the identity a resume is held to is named rather than claimed.**
+An independent review of the commit above found the resume forgiving what a
+stop had already bought and holding a resumed sitting to a set of files that
+omitted the code rendering its prompts. Nothing the entry above records is
+retracted; this entry records what changed in the mechanism it describes.
+
+A resumed sitting carries the whole of what the earlier ones spent, not the
+graded part of it. The checkpoint is written at PAIR boundaries, so a stop
+part-way through a pair charges calls that no unit row accounts for; one final
+checkpoint is written on the stop path and records them as abandoned spend
+(`AbandonedSpend`), per arm, with the model-work seconds they burned, and the
+next sitting charges them — `charged_usage_by_arm` and
+`charged_model_work_seconds`, the graded rows plus the abandoned ones — against
+the same ceilings before it makes a call. It accumulates across stops. Two
+other rules follow from the same file: a resumed sitting writes into an output
+directory of its own, and `assert_the_tail_can_be_recorded` refuses by name a
+replay already on disk for a seed still to run rather than overwriting it,
+because a stop leaves the unit it was inside half-recorded; and a resume may
+not be narrower than the checkpoint it continues, so a unit count that would
+drop a finished seed is refused instead of reported. The identity a resume is
+held to is a NAMED set of files (`ARM_SURFACE_SOURCES` plus every file of the
+prompt directory), which this amendment widens to
+`agents/strategic/prompts/loader.py`, which builds the Jinja environment and
+selects the renderers, and to `orchestrator/game.py`; the constant states where
+the rest of the run path is covered instead, rather than claiming the digests
+cover every byte an arm renders through. The live gate's own paragraph on what
+a second sitting must do is written by this commit as well, and states the same
+rules where a runner reads them.
+
+The frozen analysis does not move here either. The five constants the entry
+above lists are the same bytes at `0185182d` as at `78b136bd`, and the test
+that holds them compares the tree against the revision the log names rather
+than trusting this sentence. As with the entries above, this entry cannot name
+the commit that writes it; the record commit that does changes this document,
+the card and the tests that hold this section to the history, and no instrument
+byte.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -485,6 +603,35 @@ asserts this document quotes each of them.
   further to pre-flight. A budget found past its cap stops the run on the unit
   that crossed it: the tokens are already spent, and the stop is what keeps
   the next unit from spending more.
+
+  Both ceilings are stated in one unit of account and enforced in another, and
+  that difference is what stopped the run of 2026-09-13. The rule is quoted
+  verbatim from `RESERVATION_POLICY`:
+
+  The token ceilings are enforced on RESERVED spend and were sized on
+  CHARGED spend. Every call is pre-flighted against its full per-call output
+  cap before it is sent, so one unit reserves 3 x 2,048 for its turns and 3
+  x 1,024 for its ballots — 9,216 output tokens — whatever it is then
+  billed. A per-unit output ceiling below that schedule authorizes six legal
+  calls it cannot pay for, and refuses one of them by arithmetic rather than
+  by spend; the instrument therefore refuses such a ceiling before a live
+  run starts, rather than discovering it partway through one. The run-level
+  ceilings are the same question one level up and are checked against the
+  largest per-unit spend the live archives have charged — 24,282 input and
+  3,116 output — rather than against a mean projection: a hundred units at
+  the largest unit this evaluation has measured is what a run ceiling has to
+  be able to pay for, because a ceiling that cannot is a stop rule that
+  fires on arithmetic near the end of a run it has already paid for.
+
+  `assert_limits_are_feasible` is where it bites, before a credential, a client
+  or a held-out prefix exists: it refuses a per-unit output ceiling below the
+  reservation schedule above, a per-unit input ceiling below the largest unit
+  the live archives charged, and either run-level ceiling below a hundred units
+  at that figure. Under the limits merged on 2026-09-07 it REFUSES, which is
+  deliberate and is the live gate failing closed: those numbers authorize six
+  calls a unit cannot pay for, and a fourth authorization card has to re-size
+  them before any live run. Nothing about noticing this needed a provider —
+  it is arithmetic over the module constants this table binds.
 - **Wall.** Two clocks, because the authorization names two limits: one
   `orchestrator.run_limits.RunDeadline` for the 8 h elapsed window, checked
   between units and inside the meeting, and a summed provider-call clock for the
@@ -508,7 +655,9 @@ asserts this document quotes each of them.
   A call whose attempt came back with no completion at all is sent again by
   this instrument's own client wrapper rather than by the provider client,
   so no recorded campaign changes behaviour: at most 4 attempts, one send
-  and 3 retries, on an empty or choices-less body, a transport failure, a
+  and 3 retries, on any body the authorized client refuses to record a
+  completion from — no choices, empty assistant content, or a usage block it
+  cannot read token counts out of — as well as a transport failure, a
   retryable HTTP status, or an attempt that outran the 180 s per-attempt
   wall this wrapper bounds each send by — each retry after a short
   exponential backoff, and each attempt still bounded by what is left of the
@@ -519,11 +668,13 @@ asserts this document quotes each of them.
   budget or deadline and a refused live run are all left exactly as they
   were. Every retried attempt is recorded as an unaccounted attempt carrying
   zero tokens, which may have been billed for tokens this side cannot see:
-  the provider client raises on a body with no completion in it before it
-  reads that body's usage block, so no usage rides any of these four classes
-  and this wrapper has none to charge. The attempts are counted per arm and
-  per unit — retried calls, unaccounted attempts and the trigger class of
-  each — beside the meeting-internal defaults.
+  the provider client raises instead of returning a completion, and its
+  refusal carries no usage onto the exception, so no usage rides any of
+  these four classes and this wrapper has none to charge. A body it refused
+  for the state of its usage block is no different here: what the adapter
+  read, it did not pass on. The attempts are counted per arm and per unit —
+  retried calls, unaccounted attempts and the trigger class of each — beside
+  the meeting-internal defaults.
 - **Dollar.** `max_cost_usd=0.0` on both budgets, which the provider's zero
   pre-flight rate makes bookkeeping rather than a brake — exactly as the cost
   statement says.
@@ -603,6 +754,32 @@ the constant itself, so the file doing the scanning carries no copy of the needl
 and needs no exemption. Committed tests DO construct `LiveRunInvocation` objects
 — proving each refusal above is what they are for — and none of them reaches a
 provider.
+
+A run may also write a per-unit checkpoint (`--checkpoint`) and be continued
+from one (`--resume`), and the second of those is gated on this document rather
+than on the code. `assert_resume_is_authorized` refuses a live resume unless
+this manifest carries the owner's resumption clause — the sentence
+`RESUMPTION_CLAUSE` holds, which this document deliberately does not reproduce,
+so describing the mechanism cannot authorize it. It does not carry that
+sentence today, so no live run may be resumed: the mechanism is built and
+rehearsed on the fake provider, and a second sitting on the held-out set is
+decision 2 of [the diagnosis](../../tasks/diagnosis-2026-09-13-live-run-stops.md),
+which is the owner's to take on a fourth authorization card. A resume is also
+refused, on any provider, unless the checkpoint's execution manifest, held-out
+freeze, arm-surface digests, limits and sampling configuration are still this
+tree's: a resumed run is the same run or it is none.
+
+What a runner has to do differently on a second sitting, and what the code does
+for them: pass a NEW `--output-dir`, because the first sitting's directory holds
+the half-recorded replay of the unit its stop was inside and a resume that would
+land on it is refused by name; pass the same `--units` or more, because a resume
+narrower than its checkpoint is refused rather than silently reporting units it
+did not run; and pass `--resume` alone if the checkpoint is to keep advancing in
+place, since `--checkpoint` defaults to the `--resume` path and a sitting that
+wrote no checkpoint would lose its own progress to the next stop. The budgets
+the second sitting starts from are the first one's whole spend: the units it
+graded and the pair its stop abandoned, the latter recorded by a final
+checkpoint written on the stop path.
 
 The gate and the frozen-set check both run BEFORE a client is constructed, and
 that order is a property of the signatures rather than of the order two lines
@@ -857,6 +1034,47 @@ ratio to their sum (1,481,072) gives about 1.90 M against the 2.4 M ceiling,
 and the larger arm's 17,880 per unit gives about 22,900 against the 45,000
 per-unit ceiling — headroom checks, not predictions, because a real model
 writes a different transcript.
+
+**The output dimension, measured rather than assumed (2026-09-13).** The
+paragraph above is an INPUT headroom check, and until this amendment it was the
+only one: the fake provider's output figure is 66 tokens a call by
+construction, so no committed run could say anything about the ceiling the
+third live attempt actually hit. The replay rehearsal is the output half.
+Re-run it with:
+
+```sh
+uv run pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -k "TestUsageReplay or TestFeasibility" -q
+```
+
+Under the re-sizing [the diagnosis](../../tasks/diagnosis-2026-09-13-live-run-stops.md)
+puts to the owner (per unit 60,000 in / 12,000 out, run 3,600,000 / 350,000),
+the rehearsal runs all 100 units and 600 calls at $0.00 in about seven seconds:
+`repaired_clock` charges 1,072,642 input and 66,105 output (21,453 and 1,322 a
+unit), `combined_accounts` 1,015,417 and 145,889 (20,308 and 2,918 a unit). The
+candidate arm's mean unit is therefore 72.9% of the per-unit output ceiling
+this manifest binds and 31.7% of the schedule its six calls reserve, and the
+run total of 211,994 output tokens is **106.0% of the 200,000 run-level
+ceiling** — a complete run would have stopped near its end on that ceiling even
+with the per-unit one fixed, which is what the diagnosis projected from four
+units and what this measures over a hundred. Input is 2,088,059, 87.0% of the
+2.4 M ceiling. The candidate arm also replays the refusal rate its archives
+carry — two of its nine archived turns — as 33 defaulted turns across its 150,
+against none on the reference arm.
+
+Under the limits this manifest binds, the same rehearsal stops where the live
+run of 2026-09-13 stopped and says the same thing: `LLM budget exceeded on
+output_tokens: current=3116.0 + delta=1024.0 > cap=4000.0`, on the candidate
+arm, 5 of 100 units completed. The figure is the archived unit's own, because
+the rehearsal replays that unit's calls including the turn the provider billed
+and refused.
+
+Nothing graded in either rehearsal is reported here, and none of it is
+evidence about the arms. The double's decision does not depend on the arm, and
+the refusals it replays are the candidate arm's by construction, so any paired
+difference it produces is the fixture's arithmetic rather than a measurement —
+the same caveat the dry run below carries, and it is stronger here because the
+replayed refusals are asymmetric by design.
 
 The bounded retry is exercised here rather than only in its unit cases, because
 the card that added it owes a run of the whole pipeline through one empty
