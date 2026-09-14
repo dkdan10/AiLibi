@@ -1207,12 +1207,39 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
 
     A freeze moves the band before the document that authorizes it can follow:
     the third freeze drew 6000-6999 while the Inputs row still named 5000-5999,
-    and the re-binding is the transport-resilience card's acceptance item. That
-    window is exactly what this gate is for, so the first case below asserts the
-    refusal rather than skipping it, and
+    and the re-binding that closed that window is the transport-resilience
+    card's acceptance item. The window is exactly what this gate is for, so the
+    first case below asserts the refusal rather than skipping it whenever the
+    tree is in one, and
     `TestExecutionManifest.test_a_binding_to_a_converted_record_stays_an_open_obligation`
-    is what keeps the window from becoming permanent.
+    is what keeps such a window from becoming permanent.
     """
+
+    def test_the_gate_says_which_bands_actually_moved(self) -> None:
+        """The gate's own docstring, held to the records that moved.
+
+        It motivates the check by naming the conversions, which is a list that
+        grows: a docstring written at the first conversion went on describing
+        5000-5999 as the band frozen in place of 3000-3999 after 5000-5999 had
+        itself become development data. Read out of `CONVERTED_BANDS` and each
+        record's own `converted.date` instead of trusted, so the next
+        conversion turns this red here rather than leaving the enforcing
+        function explaining a history that has moved on.
+        """
+
+        source = instrument.assert_manifest_binds_the_live_band.__doc__
+        assert source is not None, "the gate carries no docstring to check"
+        doc = " ".join(source.split())
+        for converted in CONVERTED_BANDS:
+            record = json.loads(
+                (_REPO_ROOT / converted.manifest_path).read_text(encoding="utf-8")
+            )
+            span = f"{converted.band.first_seed}-{converted.band.last_seed}"
+            date = record["converted"]["date"]
+            assert re.search(rf"{span}[^.]*?{re.escape(date)}", doc), (
+                f"the gate explains itself without saying that {span} became "
+                f"development data on {date}"
+            )
 
     def _planted_root(self, root: Path, *, band: tuple[int, int]) -> Path:
         """A repository root whose Inputs row names `band` and whose freeze
