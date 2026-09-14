@@ -32,6 +32,13 @@ manifest says can only bias the primary outcome in one direction.
 
 ## Acceptance
 
+- [x] Review correction: the whole-turn response example the account templates
+  print is valid JSON again on every arm, and a gate parses every response
+  example the account prompts and the default set print, so a model that copies
+  the final example is not refused before its fields are read.
+- [x] Review correction: all three Codex inline comments on `bc0a75f6` are
+  dispositioned below — one repaired, two refuted in writing against the
+  precedent and the reproduction each refutation rests on.
 - [x] Reproduce the refusal offline: a turn payload of the shape the accounts
   prompt instructs (a `whereabouts` item under `claims`) fails `MeetingTurn`
   validation with the archived `union_tag_invalid` reason; recorded with the
@@ -139,15 +146,17 @@ schema already takes them.
   `whereabouts` bullet says so in its own words: it places the speaker alone,
   names no subject, "so it goes in `"observations"` — it is not one of the
   `"claims"` shapes".
-- **The whole turn object is sketched with its lists filled.** The two account
-  templates that produce a turn (`_account_opening.j2`,
-  `accusation_round_accounts.j2`) print
-  `"observations":[<observation shapes, or empty>],"claims":[<claim shapes, or
-  empty>]` instead of two empty lists, so the sketch and the menu agree about
-  where an item goes. On the attributed-only impostor arm, which is told to
-  keep observations empty, the sketch keeps `"observations":[]` literally and
-  offers `"claims":[<one accusation claim, or empty>]` — the one shape that arm
-  has.
+- **The return instruction names the destination; the example stays copyable
+  JSON.** The two account templates that produce a turn (`_account_opening.j2`,
+  `accusation_round_accounts.j2`) keep `"observations":[],"claims":[]` in the
+  whole-turn example — that line is the object a model copies, so it has to
+  parse — and say where a structured item goes in the sentence above it: "fill
+  each structured item into the list its shape is listed under above, and put
+  nothing else in either list". On the attributed-only impostor arm, which has
+  no shape menu, that sentence reads "keep `"observations"` empty and put your
+  one accusation claim, if you make one, in `"claims"`" instead. The first
+  draft of this card put those destinations INSIDE the example, which cost the
+  example its JSON; round 1 below records the defect and the repair.
 - **Two rendering seams were closed in passing.** `trim_blocks` eats the
   newline after a block tag, so the pre-existing renders ran the last rules
   sentence into the next instruction (`…in public speech.Open the meeting…`)
@@ -253,7 +262,8 @@ row is unchanged and still reconciles against disk.
 
 ### Planted failures
 
-Each row is a perturbation of the committed tree at this card's head: apply the
+Each row is a perturbation of the committed tree at the round-0 head
+`bc0a75f6`: apply the
 substitution, run the command, restore the file. `git status --porcelain` was
 empty of unintended changes after each restore.
 
@@ -265,7 +275,8 @@ empty of unintended changes after each restore.
 
 ### Verification
 
-All commands run on this branch's tree with this card's text on disk.
+All commands run at the round-0 head `bc0a75f6`, with this card's text on
+disk.
 
 | Command | Result |
 | --- | --- |
@@ -295,3 +306,129 @@ All commands run on this branch's tree with this card's text on disk.
   own record.
 - Delivery state: implemented and verified locally; not owner reviewed, not
   merged.
+
+### Review corrections, round 1 (2026-09-14)
+
+One review lens returned one blocking finding over the head `bc0a75f6`: the
+three Codex inline comments on that head were left undispositioned, and the P2
+among them is a real defect. All three are dispositioned here — one repaired at
+`2bddbde2`, two refuted. No other finding was returned, and no number in the
+round-0 tables above failed to reproduce.
+
+**Repaired: the response example was no longer valid JSON** (Codex 4002032957,
+P2, `_account_opening.j2:14`). The first draft named each shape's destination
+inside the whole-turn example, so the line printed after `Return only JSON` read
+`…"observations":[<observation shapes, or empty>],"claims":[<claim shapes, or
+empty>],…`. Reproduced on `bc0a75f6`:
+
+```
+git checkout bc0a75f6 -- agents/strategic/prompts/qwen3_6_27b
+.venv/bin/python -c 'import json
+from agents.strategic.prompts import build_prompt_renderers
+r = build_prompt_renderers("qwen3_6_27b", env={}, public_account_version=1, attributed_testimony_version=1)
+p = r.crewmate_report(agent_id="p-1", current_tick=8, meeting_trigger="Emergency meeting", rendered_memory="own memory", public_transcript="", living_ids=("p-2","p-3"))
+line = [l for l in p.splitlines() if l.startswith("{\"turn_id\"")][0]
+json.loads(line)'
+```
+
+→ `json.decoder.JSONDecodeError: Expecting value: line 1 column 101 (char 100)`.
+The pre-card example parsed, and every default-ON template's example still
+parses (`crewmate_report.j2`, `impostor_report.j2`, both branches of
+`accusation_round.j2`), so this card was the one place that broke the property.
+It matters because `llm/featherless_client.py` calls the provider with
+`response_format={"type": "json_object"}` and no schema-guided decoding: a model
+that imitates an unparseable final example is refused as a whole turn, billed
+and replaced by a placeholder — the same outcome this card exists to remove,
+reached by a different route.
+
+Repaired by the route the finding's first option names. The example goes back to
+`"observations":[],"claims":[]` on every account arm and the destination moves
+into the return instruction beside the labelled menu, quoted in the corrected
+bullet above. Nothing about the shape/field agreement depends on the example:
+`_advertised_shapes` reads the accounts menu through its two DECLARATION lines
+(`Each item of "observations" is one of these shapes:` and the `"claims"`
+heading), and the whole-turn-sketch route it also supports is what the default
+set and the roll-call variant use. `ACCOUNT_PROMPT_SET_REVISION` stays `v3`: no
+committed capture carries a `v3` stamp — `.venv/bin/python -m pytest
+"tests/agents/test_public_account_prompts.py::test_no_committed_capture_already_carries_todays_account_stamps"
+-q` → `2 passed` — so this branch is still one unrecorded revision of those
+bodies rather than a second generation of a published one.
+
+The repair is pinned by two new gates in
+`tests/agents/test_public_account_prompts.py`:
+`test_every_account_response_example_is_copyable_json` parses every whole-object
+example each account arm prints, asserts the turn examples carry the eight keys
+with both lists empty, and asserts the prose destination is present on exactly
+the arms that have a menu; `test_the_default_sets_response_examples_are_copyable_json_too`
+reads the default set on the same terms, so the property is not asserted only
+where it just broke.
+
+**Refuted: `_PLACEMENT` is not module-level mutable state in the sense the rule
+governs** (Codex 4002032953, P1, `tests/meetings/test_account_turn_refusals.py:43`).
+AGENTS.md rule 5 is a load-bearing ARCHITECTURE rule about which object owns
+runtime state — "Explicit objects own state" — and the repository applies it to
+production modules, not to a test module's literal fixtures. Twenty-four other
+test modules carry a module-level `dict`/`list` fixture on the same terms
+(`grep -rlE '^[A-Za-z_][A-Za-z0-9_]*(: *(dict|list)\[[^]]*\])? *= *(\{|\[)'
+tests --include='*.py' | wc -l` → `25`, this module included), among them
+`tests/eval/test_funnel.py:150` (`_ROLES`) and `tests/engine/test_rules.py:264`
+(`_IN_VENT_ACTION_TABLE`). The concrete risk the comment names does not exist
+here either: `grep -n "_PLACEMENT" tests/meetings/test_account_turn_refusals.py`
+returns exactly two lines — the definition and `payload[place_in] = [_PLACEMENT,
+*payload[place_in]]` — the dict is never written to, and the enclosing `_answer`
+returns `json.dumps(payload)`, so no alias of it escapes the call. Rewriting it
+would change no behaviour and would cost the fixture the single place its value
+is written down.
+
+**Refuted: the flagged lines state the defect, not provenance** (Codex 4002032955,
+P1, `tests/agents/test_public_account_prompts.py:596`). Craft rule 1 bounds
+PROVENANCE — who changed a thing, when, under which task — to one trailing line.
+The flagged clause is not provenance: it is the semantic defect the gate detects
+("two archived live candidate turns … billed and refused on `claims[].type` with
+the tag `whereabouts`"), which craft rule 2 requires a new invariant gate to name
+and prove with a planted case, and craft rule 5 requires a claim to state
+together with the committed evidence it reproduces from. The one path in the
+block, `tasks/diagnosis-2026-09-13-live-run-stops.md`, IS that evidence, cited
+once. The repository writes exactly this way where a gate exists because of a
+recorded failure — `tests/llm/test_real_provider.py:555-557`,
+`tests/llm/test_budget.py:281`, `tests/experiments/test_probe_backends.py:87`,
+`tests/training/test_goodhart_probe.py:698` — and the card carries the longer
+history, as the comment asks, without the test losing the one sentence that says
+why the gate is there.
+
+**Planted failures, measured at `2bddbde2`.** Apply the substitution to the named
+file, run the command, restore the file from a copy taken before it.
+`git status --porcelain` named only this card's own files after each restore.
+
+| Guard | Perturbation | Command | Observed |
+| --- | --- | --- | --- |
+| The account example must parse | `_account_opening.j2` back to its `bc0a75f6` body (`git show bc0a75f6:…/_account_opening.j2`), whose example carries the placeholder lists | `.venv/bin/python -m pytest "tests/agents/test_public_account_prompts.py::test_every_account_response_example_is_copyable_json" -q` | `AssertionError: opening: the response example is not JSON, so a model that copies it is refused before its fields are read (Expecting value: line 1 column 101 (char 100)): '{"turn_id":"t",…,"observations":[<observation shapes, or empty>],…}'` — `6 failed` |
+| The default set's example must parse too | `crewmate_report.j2`: `"observations": []` → `"observations": [<observation shapes, or empty>]` in the output-format line | `.venv/bin/python -m pytest "tests/agents/test_public_account_prompts.py::test_the_default_sets_response_examples_are_copyable_json_too" -q` | the same assertion at `column 112`, on the default crewmate opening — `2 failed, 2 passed` |
+| An empty example must be paired with the prose destination | `accusation_round_accounts.j2`: the clause `; fill each structured item into the list its shape is listed under above, and put nothing else in either list` deleted | `.venv/bin/python -m pytest "tests/agents/test_public_account_prompts.py::test_every_account_response_example_is_copyable_json" -q` | `assert ('fill each structured item into the list its shape is listed under above' in 'You are p-1. …') is not False` — `5 failed, 1 passed` (the sixth arm is the attributed-only impostor, which carries the other clause) |
+
+**Verification, round 1.** All commands run at `2bddbde2` with this card's text
+on disk.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/meetings tests/agents -q` | 2,629 passed |
+| `bash scripts/check.sh` | exit 0 — "All checks passed!"; 7,602 Python passed, 20 skipped, 3 xfailed; 515 frontend tests over 19 files; strict mypy clean on 476 sources; 4 import contracts kept, 0 broken; 390 phase tasks / 390 prompts in sync; 51 work cards; production build |
+| `.venv/bin/python scripts/generate_prompts.py --check` | exit 0 — all 390 prompts in sync |
+| `bash scripts/verify_samples.sh` | exit 0 — all 100 canonical recordings verified clean (50 + 50) |
+| `.venv/bin/python scripts/build_sample_report.py --sample-dir <set> --check` for `replays/samples/4p1i`, `replays/samples/9p2i`, `replays/ml_corpus/4p1i`, `replays/ml_corpus/9p2i` | all four consistent with their replays, exit 0 |
+| `.venv/bin/python -m pytest tests/experiments/test_held_out_prefixes.py -q` | 33 passed |
+
+The Python count rises by ten from the round-0 table: the two new gates carry
+six and four parametrisations. No `GENERATOR_SOURCES` file is in this branch's
+diff (`git diff --name-only origin/main...HEAD` against the list that module
+exports → empty intersection), so the frozen held-out manifest still needs no
+restamp, and no `audits/` or `tests/fixtures/` byte moves, so the
+`docs/artifacts.md` inventory is unchanged.
+
+**Round-1 limitation.** The JSON gate reads the account arms and the default
+set. It deliberately does NOT read the flag-selected impostor roll-call variant:
+`accusation_round_roll_call.j2:197` spells a tick as a bare `<int>` inside its
+example, so that example does not parse either. That byte predates this card, is
+pinned by `accusation_round_roll_call.qwen3_6_27b.v1`, and moving it would open
+that variant's own version cascade — out of this card's boundary, and recorded
+here as an open item rather than silently covered.
