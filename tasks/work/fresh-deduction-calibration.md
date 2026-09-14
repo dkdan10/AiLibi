@@ -1,6 +1,6 @@
 # Calibrate the fresh-model deduction instrument on development inputs
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -91,10 +91,15 @@ whose provider is not the authorized one, carries a per-unit checkpoint and a
   frozen analysis strings stay byte-identical (test).
 - [x] Every new gate has a planted failure; the fake-provider and replay-double
   calibrations run at $0 and Results records aggregate counts only.
-- [ ] The live calibration itself is run by a separate runner session
+- [x] The live calibration itself is run by a separate runner session
   dispatched on this card after the code merges; its Results subsection
   records the measured profile, the proposal, actual usage against the
-  calibration limits and $0.00 marginal cost, and the archive path.
+  calibration limits and $0.00 marginal cost, and the archive path. Run once on
+  2026-09-14 by a runner session that is not this card's implementer, on seeds
+  3000-3004 of the converted band, ten units and sixty calls, exit 0 in
+  17m15s. Archived at
+  [audits/deduction-candidate/calibration-2026-09-14/](../../audits/deduction-candidate/calibration-2026-09-14/CALIBRATION.md);
+  "Live calibration (2026-09-14)" under Results below carries the figures.
 
 ## Constraints
 
@@ -140,11 +145,75 @@ instructions.
 
 ## Results
 
-Acceptance items 1 to 6 are implemented and verified offline on this branch.
-Item 7 is the live calibration itself, which a separate runner session runs on
-this card after the code merges (Constraints: "The runner of the calibration is
-not the implementer of this card"), so the card stays `active` and the task
-index's inventory sentence is unchanged.
+Acceptance items 1 to 6 were implemented and verified offline by the
+implementer session and merged as PR #454. Item 7 is the live calibration
+itself, which a separate runner session ran on 2026-09-14 (Constraints: "The
+runner of the calibration is not the implementer of this card"); the subsection
+immediately below records it, and the card is `done`.
+
+### Live calibration (2026-09-14)
+
+Run once, by a runner session, on the merge commit `6f28d6ee`. The full record
+is
+[audits/deduction-candidate/calibration-2026-09-14/CALIBRATION.md](../../audits/deduction-candidate/calibration-2026-09-14/CALIBRATION.md),
+where every number below is read off the archived `calibration.json` by a
+command that file quotes. Ten units (five paired seeds x two arms), sixty
+calls, exit 0, `2026-09-14T10:26:05Z` to `2026-09-14T10:43:20Z`. The input was
+bound before the spend: the converted 3000-3999 record at sha256
+`ca4cd057acb2119646190fb6fff923a897ec207d5f54c491c3e1dfae0944cf3c`,
+byte-identical to `origin/main`'s. The held-out record was not read.
+
+The measured profile, per arm and per call type, over sixty completions:
+
+| Arm | Call | n | in mean / p95 / max | out mean / p95 / max | out cap |
+| --- | --- | --- | --- | --- | --- |
+| `repaired_clock` | turn | 15 | 3,316.9 / 4,266 / 4,266 | 273.9 / 448 / 448 | 2,048 |
+| `repaired_clock` | ballot | 15 | 3,691.7 / 4,667 / 4,667 | 95.4 / 124 / 124 | 1,024 |
+| `combined_accounts` | turn | 15 | 3,805.6 / 5,977 / 5,977 | 881.9 / 2,036 / 2,036 | 2,048 |
+| `combined_accounts` | ballot | 15 | 5,671.1 / 7,973 / 7,973 | 163.8 / 237 / 237 | 1,024 |
+
+Per unit, the reference arm charges mean 21,025.8 input / 1,107.8 output
+(max 23,494 / 1,486) and the candidate arm mean 28,430.2 / 3,137.0
+(max 35,232 / 4,590) — 2.83x the reference arm's output in total.
+
+**Zero refusals, zero defaults, zero charged failed attempts, on both arms**,
+and every unit resolved all six of its calls. The `union_tag_invalid` refusals
+the diagnosis of 2026-09-13 found on the candidate arm did not recur on the
+corrected account prompts at revision v3: none in thirty candidate-arm
+attempts. Transport: sixty attempts, sixty completions, no retried call and no
+unaccounted attempt. Pace 17.23 s per attempt pooled (12.61 reference, 21.85
+candidate).
+
+Usage against the calibration limits, at **$0.00 marginal**: run input
+247,280 / 600,000 (41.2%), run output 21,224 / 120,000 (17.7%), largest unit
+35,232 / 60,000 input (58.7%) and 4,590 / 12,000 output (38.2%), model work
+1,033.9 s / 3,600 s (28.7%) inside 1,034.5 s / 5,400 s elapsed (19.2%).
+
+The ceiling proposal for the hundred-unit design: per unit **106,000** input /
+**14,000** output, run **3,710,000** / **459,000**,
+`clears_the_feasibility_gate true`. The code's rule and the card's rule
+disagree on one figure and both are reported: the card's 100 x mean x 1.5 gives
+run 3,710,000 input and 319,000 output, the code's added floor of
+100 x measured maximum gives 3,524,000 and 459,000, so the floor binds on
+output and the card's rule on input. The proposal authorizes nothing.
+
+Two things the runner hands back rather than settles. One, the largest
+candidate turn charged 2,036 output tokens against the 2,048 per-call cap — one
+of fifteen, and a truncation is a stop with no retry — which is a per-call
+question the proposal does not touch. Two, the replay double's committed
+profile was **not** refreshed: the documented command runs and its rehearsal
+reproduces this calibration's proposal exactly (against the committed profile's
+per unit 73,000 / 11,000 and run 3,100,000 / 339,000), but adopting it reds
+eight tests, and only one of them is the two-constant move the Limitations
+anticipated. The other seven delete the double's billed-refusal and
+2026-09-13-stop regressions — there is no fault left to replay, because the
+corrected prompts produced none — amend the execution manifest's quoted
+headroom figures, and re-pin this card's own round-1 record. That is the
+implementer's decision, not the runner's. CALIBRATION.md names all eight.
+
+This calibration measured nothing about the candidate's merit: no grader ran,
+no paired statistic was computed, no meeting outcome was recorded, and the
+frozen analysis is untouched.
 
 ### What was built, and where it sits in the design
 
@@ -349,7 +418,10 @@ Limitations, stated rather than implied:
   serialisation length or the archived profile's replay. Replacing exactly those
   with measured ones is what the calibration is for, and until the runner
   session runs it the ceilings a fourth authorization would carry are still
-  sized on seven archived units.
+  sized on seven archived units. *(SUPERSEDED 2026-09-14 by "Live calibration
+  (2026-09-14)" above: the measurement exists, and the proposal is now sized on
+  ten measured units. The round-0 and round-1 figures in this subsection remain
+  what they were — the fake provider's and the archived replay's.)*
 - **The proposal authorizes nothing.** It is arithmetic in a committed record; a
   ceiling is the owner's, on a card, and `assert_live_run_is_authorized` keeps
   refusing anything but the limits it is handed.
@@ -369,7 +441,14 @@ Limitations, stated rather than implied:
   it is the runner's step on the live output, and it moves
   `CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` with it —
   `test_the_calibration_is_the_largest_unit_the_archives_charged` is where a
-  refresh that forgot them goes red.
+  refresh that forgot them goes red. *(STILL TRUE after 2026-09-14, and for a
+  reason this bullet did not anticipate: the runner ran the refresh, and it reds
+  eight tests rather than the one. Seven of the eight delete the double's
+  billed-refusal and 2026-09-13-stop regressions — the live sitting produced no
+  fault to archive — amend the manifest's quoted headroom figures, and re-pin
+  the round-1 record above. The runner left the profile where it was and handed
+  the decision back; "Live calibration (2026-09-14)" above and CALIBRATION.md
+  name all eight.)*
 - **A calibration has no resume.** Ten units inside a ninety-minute window are
   re-run rather than continued, which spends development data the evaluation is
   not holding in reserve.
