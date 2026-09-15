@@ -1,6 +1,6 @@
 # Fourth run of the fresh-model deduction evaluation
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -38,24 +38,24 @@ accepts them.
 
 ## Acceptance
 
-- [ ] The execution manifest's authorization fields carry exactly the values in
+- [x] The execution manifest's authorization fields carry exactly the values in
   Constraints, the instrument's constants equal them, and the feasibility gate
   accepts them (the reservation schedule under the raised turn cap is 15,360
   against a 16,000 per-unit output ceiling).
-- [ ] The runner regenerates the frozen set from the band in the manifest and
+- [x] The runner regenerates the frozen set from the band in the manifest and
   the instrument verifies every digest and the skip list before any client is
   constructed; the runner opens no prefix before the run.
-- [ ] The run records actual tokens, attempts (including retried and
+- [x] The run records actual tokens, attempts (including retried and
   unaccounted ones), elapsed wall, model-work time and the $0.00 marginal cost
   against these limits, per arm and for the run; an exhausted budget or
   deadline stops the run; an environmental stop may be resumed once per stop
   under the manifest's resumption clause with the interrupted unit's spend
   carried, and every resumption is reported.
-- [ ] The paired result is evaluated under the frozen decision rule (exact
+- [x] The paired result is evaluated under the frozen decision rule (exact
   McNemar p over the discordant pairs, the net difference bar, the
   wrongful-ejection bound) and written down in the preregistration's own
   vocabulary as a measurement; every stop condition is checked and reported.
-- [ ] The results, the per-unit records, the usage reconciliation and the
+- [x] The results, the per-unit records, the usage reconciliation and the
   rendered prefixes (development data once archived) land under
   `audits/deduction-candidate/run-<date>/`, indexed from the candidate's
   README, with the `docs/artifacts.md` audits row recomputed.
@@ -153,3 +153,51 @@ the run, the single authorized live invocation the manifest documents, then
 scripts/check_doc_facts.py`, `uv run python scripts/verify_ml_evidence.py`
 (offline; never `--complete`), `uv run pytest
 tests/scripts/test_verify_ml_evidence.py -q`, and `bash scripts/check.sh`.
+
+## Results
+
+### Closed on main (2026-09-15)
+
+The fourth authorized run was made once on 2026-09-15 (the sitting began late
+on 2026-09-14 in the machine's zone) and stopped in unit 26 of 100 on a
+per-call truncation: a ballot on `combined_accounts` seed 7016 reached the
+1,024-token vote cap. `STOP_RULE` makes a truncation a stop with no retry and
+the resumption clause of 2026-09-14 makes that class final, so there was one
+sitting, no resume and no re-run. Twelve paired seeds were graded, neither arm
+scored the primary outcome on any of them, and the decision rule is stated on
+fifty, so its conjunction is not evaluable: `combined_accounts` neither
+advances to an adopting review nor is rejected. The run's record, RESULTS.md,
+the 26 replays, the final checkpoint, the usage reconciliation, the stop log
+and the thirteen rendered prefixes under
+`audits/deduction-candidate/run-2026-09-15/`, lives on the closed pull request
+#458's branch `work/fresh-deduction-run-4` at `5f2383ea`, which the owner chose
+not to merge; the acceptance boxes are checked against that record, not
+against a completed measurement, as the first three cards were.
+[The diagnosis of 2026-09-15](../diagnosis-2026-09-15-truncation-stop.md)
+carries the root cause, the owner's rulings and the four cards that follow.
+
+| Quantity | Value |
+| --- | --- |
+| Units completed | 25 of 100; 12 of 50 paired seeds graded |
+| Primary outcome | 0 of 12 on each arm; `b` = `c` = 0; exact McNemar p 1.0, the empty-sample constant |
+| Decision-rule clauses | all three not evaluable |
+| Ejections | `repaired_clock` 0; `combined_accounts` 1 (role-correct, unsupported: both naming ballots were nulled for a malformed citation id) |
+| Meeting-internal defaults | `combined_accounts` 2 defaulted turns by validation; `repaired_clock` 0 |
+| Charged failed attempts | 1, the truncated ballot (4,734 in / 1,024 out) |
+| Transport retries, unaccounted attempts, resumptions | 0, 0, none |
+| Usage | 156 attempts; 612,588 input (16.5% of 3,710,000) and 58,986 output (12.9% of 459,000); $0.00 |
+| Wall | 1,886.3 s elapsed of 28,800; 1,884.6 s of model work of 21,600; 12.1 s per attempt |
+| Stop that fired | the per-call vote cap, once |
+| Seeds rendered | 13 of the band's 50 (7001, 7003, 7004, 7005, 7006, 7008, 7009, 7010, 7012, 7013, 7014, 7015, 7016); 37 stay held out |
+
+Every re-sized ceiling of this authorization held with wide margins and the
+calibration's per-unit means predicted this run's within 5%; the vote cap,
+the one number the fourth authorization did not move, is where the run
+stopped, on an impostor-authored ballot whose free-text rationale ran away.
+The pre-flight, the decisions the runner took, the verification commands and
+the full outcome tables are in the card and RESULTS.md on the archive branch
+(`git show origin/work/fresh-deduction-run-4:tasks/work/fresh-deduction-authorization-4.md`).
+The gates on that branch passed with the real exit code: 7,708 Python tests,
+strict mypy over 479 sources, 515 frontend tests. The fourth freeze record's
+`status` is untouched here; [the fifth freeze card](held-out-prefix-freeze-5.md)
+marks it development.

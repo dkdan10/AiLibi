@@ -332,6 +332,30 @@ full gate, the 100 canonical reconstructions and the four derived report checks
 pass, and the converted record's accepted and skipped blocks are byte-identical
 to the 2026-09-08 freeze. A second live run needs a new authorization card.
 
+## Fourth run and truncation checkpoint (2026-09-15)
+
+The fourth live run of the fresh-model deduction instrument (PR #458, branch
+`work/fresh-deduction-run-4` at `5f2383ea`, closed unmerged by the owner on
+2026-09-15, the branch kept as the archive) completed 25 of 100 units and 12
+of 50 paired seeds, then stopped on a per-call truncation: an impostor-authored
+ballot on the candidate arm reached the 1,024-token vote cap. Every ceiling
+re-sized on 2026-09-14 held with wide margins (16.5% of the run input ceiling,
+12.9% of the output ceiling, 6.6% of the wall); the calibration's per-unit
+means predicted the run's within 5%. Neither arm scored, so the decision rule
+is not evaluable. [The diagnosis of 2026-09-15](diagnosis-2026-09-15-truncation-stop.md)
+finds the root in the candidate's ballot template: it commissions deliberation,
+offers one unbounded field for it, and never inherited the reference family's
+compact-ballot bound; the runaway is the impostor's concealment plan written
+into the answer. Two further one-sided defects ride the same thinness: the
+candidate's citations copy the memory line's `obs ` tag word and are nulled
+(12 ballots coerced to SKIP, the arm's one correct ejection lost), and the
+impostor states its role in the public transcript in 2 of 13 candidate games.
+The owner approved every decision on 2026-09-15 and four cards opened on
+`6e2d00ee`: the v4 accounts revision, the finish-reason recording, the second
+development calibration (sixty paired seeds, role-split, truncations counted
+in that mode only, the leak diagnostic pre-declared) and the fifth freeze
+(band 8000-8999). The card is closed on `main` against the archive.
+
 ## Root-cause checkpoint (2026-09-14)
 
 Three live runs of the fresh-model deduction instrument stopped at units 1, 1

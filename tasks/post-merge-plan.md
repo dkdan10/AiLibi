@@ -78,6 +78,18 @@ feasibility gate now refuses the 2026-09-07 ceilings, so no fourth run can start
 until the owner decides on a bounded live calibration on development inputs, a
 resumption clause and re-sized ceilings, in that order.
 
+**Fourth run and its diagnosis (2026-09-15).** The owner approved the three
+decisions on 2026-09-14; the calibration (#455), the fourth freeze (#456,
+band 7000-7999) and the re-sized limits (#457) merged, and the fourth run
+(PR #458, closed unmerged, branch kept) reached unit 26 before an
+impostor-authored ballot overran the unchanged 1,024-token vote cap.
+[The diagnosis of 2026-09-15](diagnosis-2026-09-15-truncation-stop.md) puts
+the root in the candidate's ballot template rather than in a cap, names two
+further one-sided defects (nulled citations, a public role leak), and records
+the owner's rulings; four cards carry them (`6e2d00ee`), in the order v4
+accounts revision and finish-reason recording, then the second calibration,
+then the fifth authorization with its limits card and the fifth freeze.
+
 **Sequencing.** Outcome 1 starts immediately and in parallel: it shares no source
 file with any other card. Outcomes 2, 3 and 4 are serialised in that order,
 because 2 and 4 both reach `agents/memory/store.py` and its meeting-layer
