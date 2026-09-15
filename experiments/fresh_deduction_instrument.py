@@ -3400,31 +3400,46 @@ def _converted_record_paths(repo_root: Path) -> tuple[Path, ...]:
 def _draw_in_converted_order(
     paths: Sequence[Path], *, repo_root: Path
 ) -> tuple[Path, ...]:
-    """Hold a supplied record list to the canonical draw, or refuse it.
+    """Hold a supplied record list to a PREFIX of the converted records, or refuse.
 
     The card's decision 2 and the manifest's dated section both say the draw is
     :data:`CONVERTED_BANDS` in the order those bands were converted, with
-    nothing left to the runner — so a list is a SUBSEQUENCE of that order and
-    never a re-ordering or a repetition of it. Checked here rather than trusted,
-    because the caller that may pass one is the live-capable pre-flight
-    (:func:`assert_ready_for_a_calibration`, :func:`run_calibration`): the
-    review of 2026-09-15 reproduced ``[band-5000, band-3000]`` drawing the
-    5000 band first and ``[band-3000, band-3000]`` drawing sixty prefixes over
-    fifty distinct seeds, both of them verifying clean and both of them an
-    authorized live sitting spent on a draw nobody approved.
+    nothing left to the runner — so a list is a PREFIX of that order: it starts
+    at the first converted record and skips none, which with the greedy fill in
+    :func:`verify_calibration_draw` makes the drawn seeds a function of the seed
+    count alone. An ordered non-repeating SUBSEQUENCE is not enough, and the
+    round-2 review of 2026-09-15 is why: :data:`CONVERTED_BANDS` holds three
+    development records, so ``[band-5000, band-6000]`` and
+    ``[band-3000, band-6000]`` are each ascending and name no record twice, yet
+    each verified clean at sixty seeds and ended at seed 6010 where the
+    authorized draw ends at 5009 — a different sixty seeds under the same
+    authorization. Round 1 had reproduced the two shapes this rule already
+    refused, ``[band-5000, band-3000]`` (re-ordered) and
+    ``[band-3000, band-3000]`` (sixty prefixes over fifty distinct seeds).
+
+    Checked here rather than trusted, and before a prefix is rebuilt, because
+    the caller that may pass a list is the live-capable pre-flight
+    (:func:`assert_ready_for_a_calibration`, :func:`run_calibration`): each of
+    those shapes would have spent an authorized live sitting on a draw nobody
+    approved.
 
     Membership itself is :func:`_converted_band_for`'s, which refuses the
     held-out record BY NAME before anything else and refuses a path that is no
     converted band's record at all; this adds the two facts that are about the
     list rather than about one path.
+
+    One consequence, stated rather than absorbed: the first calibration's
+    ``--calibration-record`` can now name only the first converted record, the
+    one it drew from. Its clause reads "a converted band", so this is narrower
+    than that authorization — and narrowing one can refuse a spend that was
+    approved but can never permit one that was not, which is the direction a
+    pre-flight should err in.
     """
 
     order = [band.manifest_path for band in CONVERTED_BANDS]
     seen: dict[str, int] = {}
-    previous = -1
     for position, path in enumerate(paths):
         converted = _converted_band_for(path, repo_root)
-        index = order.index(converted.manifest_path)
         if converted.manifest_path in seen:
             raise CalibrationInputsRejected(
                 f"the calibration draw names {converted.manifest_path} twice "
@@ -3433,15 +3448,17 @@ def _draw_in_converted_order(
                 "twice and reports them as distinct paired seeds, so the draw "
                 "is the converted records without repetition"
             )
-        if index < previous:
+        if position >= len(order) or order[position] != converted.manifest_path:
             raise CalibrationInputsRejected(
-                f"the calibration draw names {converted.manifest_path} after "
-                f"{order[previous]}; the draw is the converted records in the "
-                "order those bands were converted, and a list in another order "
-                "is a different set of seeds"
+                f"the calibration draw names {converted.manifest_path} at "
+                f"position {position + 1}; the draw is the converted records "
+                "in the order those bands were converted, from the first "
+                "onwards with none skipped ("
+                + ", ".join(order)
+                + "), and any other list draws a different set of seeds under "
+                "the same authorization"
             )
         seen[converted.manifest_path] = position
-        previous = index
     return tuple(paths)
 
 
@@ -3463,10 +3480,13 @@ def verify_calibration_draw(
     (:func:`_converted_band_for`), so pointing this at the live band is refused
     at the first path rather than after fifty prefixes have been rebuilt.
 
-    ``records`` names a SUBSEQUENCE of that order and nothing else:
-    :func:`_draw_in_converted_order` refuses a re-ordered or repeated list
-    before a prefix is rebuilt, so the override cannot turn the canonical draw
-    into one the card does not authorize.
+    ``records`` names a PREFIX of that order and nothing else:
+    :func:`_draw_in_converted_order` refuses a re-ordered, repeated or
+    band-skipping list before a prefix is rebuilt. With the greedy fill below,
+    that makes the drawn seeds a function of ``paired_seeds`` alone — an
+    accepted ``records`` list draws exactly what the default draws — so the
+    override cannot turn the canonical draw into one the card does not
+    authorize, only shorten the list of records the same draw may spill into.
 
     A draw that cannot be filled is a stop, not a smaller calibration: sixty
     paired seeds is the owner's decision 7 and fifty of them measures a
@@ -3531,7 +3551,10 @@ def assert_ready_for_a_calibration(
     ``records`` names the draw's records in order; neither names the default,
     which is every converted record in :data:`CONVERTED_BANDS`' own order. The
     two are mutually exclusive, because a caller that passed both would have
-    said two different things about the same draw.
+    said two different things about the same draw. Either way the list reaches
+    :func:`_draw_in_converted_order`, which holds it to a PREFIX of
+    :data:`CONVERTED_BANDS` before a prefix is rebuilt, so neither override can
+    name a draw the mode's clause does not authorize.
     """
 
     assert_limits_are_feasible(
@@ -7010,7 +7033,8 @@ def run_calibration(
     measurement, and whether the report carries the role split and the leak
     diagnostic. ``record`` names one converted record and ``records`` the
     draw's records in order; neither names the default, which is every
-    converted band in :data:`CONVERTED_BANDS`' own order.
+    converted band in :data:`CONVERTED_BANDS`' own order, and both are held to
+    a PREFIX of that order by :func:`_draw_in_converted_order`.
     """
 
     mode = assert_calibration_is_authorized(
@@ -7425,7 +7449,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help=(
             "the converted band's freeze record the calibration draws from "
-            f"(default: {DEFAULT_CALIBRATION_RECORD}). The "
+            f"(default: {DEFAULT_CALIBRATION_RECORD}). A draw is a PREFIX of "
+            "the converted bands in the order they were converted, so that "
+            "record is also the only one a draw may start at. The "
             f"{CALIBRATION_MODES[1].name} mode draws across the converted "
             "bands in order and refuses this flag"
         ),

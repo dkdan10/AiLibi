@@ -26,6 +26,7 @@ import ast
 import asyncio
 import hashlib
 import inspect
+import itertools
 import json
 import re
 import subprocess
@@ -7921,6 +7922,63 @@ class TestTheCalibrationDrawSpansRecords:
             )
         assert "in the order those bands were converted" in str(refused.value)
 
+    def test_a_record_list_that_skips_a_converted_record_is_refused(self) -> None:
+        """PLANTED: two ascending, non-repeating lists that are not the draw.
+
+        Round 1 refused a re-ordered list and a repeated one, which left the
+        round-2 review a third shape. `CONVERTED_BANDS` holds THREE development
+        records, so `[band-5000, band-6000]` and `[band-3000, band-6000]` are
+        each ascending and name no record twice; both verified clean at sixty
+        seeds and drew a draw ending at seed 6010 where the authorized one ends
+        at 5009 — a different sixty seeds under the same authorization. The
+        rule is a PREFIX of `CONVERTED_BANDS`, not an ordered subsequence of it.
+        """
+
+        first, second, third = (
+            _REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS
+        )
+        for records in ([second, third], [first, third]):
+            with pytest.raises(instrument.CalibrationInputsRejected) as refused:
+                instrument.verify_calibration_draw(
+                    records=records,
+                    paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+                )
+            assert "with none skipped" in str(refused.value)
+
+    def test_only_a_prefix_of_the_converted_records_is_accepted(self) -> None:
+        """The PROPERTY acceptance item 2 claims, over every list, not three shapes.
+
+        Three plants are three shapes, and the round-2 review found the fourth
+        by enumerating rather than by reading. So this enumerates: every
+        ordered arrangement of the converted records up to their own length,
+        repetitions included, through `verify_calibration_draw` at the mode's
+        sixty seeds. A list is accepted only when it is a prefix of
+        `CONVERTED_BANDS` long enough to fill sixty, and every accepted list
+        draws exactly the seeds the default draw draws — which is what makes
+        the override unable to name a draw the card does not authorize.
+        """
+
+        paths = [_REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS]
+        canonical = instrument.verify_calibration_draw(
+            paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS
+        ).seeds
+        accepted: list[tuple[str, ...]] = []
+        for length in range(1, len(paths) + 1):
+            for candidate in itertools.product(paths, repeat=length):
+                try:
+                    draw = instrument.verify_calibration_draw(
+                        records=list(candidate),
+                        paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+                    )
+                except instrument.CalibrationInputsRejected:
+                    continue
+                accepted.append(tuple(path.name for path in candidate))
+                assert draw.seeds == canonical
+        assert accepted == [
+            tuple(path.name for path in paths[:2]),
+            tuple(path.name for path in paths[:3]),
+        ]
+
     def test_the_live_capable_preflight_refuses_the_same_two_lists(
         self, tmp_path: Path
     ) -> None:
@@ -7945,6 +8003,44 @@ class TestTheCalibrationDrawSpansRecords:
                     paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
                 )
             with pytest.raises(instrument.CalibrationInputsRejected):
+                instrument.run_calibration(
+                    output_dir=tmp_path / "units",
+                    records=records,
+                    limits=instrument.CALIBRATION_2_LIMITS,
+                    sampling=instrument.CALIBRATION_2_SAMPLING,
+                    paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+                )
+
+    def test_the_live_capable_preflight_refuses_a_band_skipping_list(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED on the two paths that can SPEND: the round-2 review's lists.
+
+        The same reasoning as the case above, for the shape round 1 left open.
+        Both of these were ACCEPTED by both entry points at `74b9eea6`, each
+        returning sixty seeds ending at 6010 against the authorized 5009, so a
+        refusal that only the helper made would leave the live pre-flight and
+        the runner spending an authorized sitting on a draw nobody approved.
+        """
+
+        first, second, third = (
+            _REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS
+        )
+        for records in ([second, third], [first, third]):
+            with pytest.raises(
+                instrument.CalibrationInputsRejected, match="with none skipped"
+            ):
+                instrument.assert_ready_for_a_calibration(
+                    provider="fake",
+                    invocation=None,
+                    records=records,
+                    limits=instrument.CALIBRATION_2_LIMITS,
+                    sampling=instrument.CALIBRATION_2_SAMPLING,
+                    paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+                )
+            with pytest.raises(
+                instrument.CalibrationInputsRejected, match="with none skipped"
+            ):
                 instrument.run_calibration(
                     output_dir=tmp_path / "units",
                     records=records,
