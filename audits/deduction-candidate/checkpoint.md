@@ -59,3 +59,11 @@ comparison. Fresh model decisions require the [preregistration](preregistration.
 a frozen execution manifest and an explicitly authorized provider/token/wall/cost
 budget. Neither this capture nor completion of offline implementation authorizes
 spending, adoption or merging into main.
+
+2026-09-15 — the fourth authorized live run of the fresh-model comparison stopped
+at unit 26 of 100 on a per-call truncation (a ballot at its 1,024-token output
+cap), a stop the rule allows no retry for and the resumption clause makes final;
+12 of 50 paired seeds were graded, neither arm scored the primary outcome, the
+decision rule is not evaluable and the candidate stays OFF and unadopted.
+[The record](run-2026-09-15/RESULTS.md) holds the partial evidence, the
+accounting against every limit and the thirteen prefixes the run rendered.

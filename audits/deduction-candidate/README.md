@@ -48,6 +48,20 @@ This directory records the unadopted follow-through to the owner's independent
   per-arm, per-call-type token profile, zero refusals and zero defaults on the
   corrected account prompts, and a re-sized ceiling proposal that authorizes
   nothing.
+- [Fourth run, 2026-09-15](run-2026-09-15/RESULTS.md) is the one authorized live
+  sitting of the fresh-model comparison on the fourth held-out band, and it is a
+  STOPPED run: it completed 25 of 100 units and stopped on a per-call
+  truncation — a ballot that reached its 1,024-token output cap — which the stop
+  rule makes a stop with no retry and the resumption clause makes final. Twelve
+  paired seeds were graded, neither arm scored the primary outcome on any of
+  them, and the decision rule is stated on fifty paired units, so it is not
+  evaluable: the candidate neither advances nor is rejected. The directory holds
+  the partial evidence the stop rule requires a stopped run to retain — the
+  replays, the final checkpoint, the usage reconciliation, the stop log and the
+  thirteen prefixes the run rendered, which are development data now. It adopts
+  nothing. The three earlier attempts stopped in their first four units and
+  their records are on the archive branches of closed pull requests, named in
+  that file.
 
 The reproducible development command is:
 
