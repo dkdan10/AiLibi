@@ -1,0 +1,1676 @@
+{
+  "abandoned": {
+    "arms": [
+      {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "retried_calls": 0,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 21255,
+          "model_work_seconds": 42.036928582936525,
+          "output_tokens": 1221
+        }
+      },
+      {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "retried_calls": 0,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 5,
+          "cost_usd": 0.0,
+          "input_tokens": 18953,
+          "model_work_seconds": 70.4045910842251,
+          "output_tokens": 2881
+        }
+      }
+    ],
+    "model_work_seconds": 112.44151966716163
+  },
+  "arm_surface_sha256": {
+    "agents/memory/store.py": "7a4de65f8b326812ded4b55dc99671d309ec95b0c494a9a0f4074a46e5c8a31a",
+    "agents/strategic/prompts/loader.py": "34e227e3f7f33a7ec3cdd7c35d447f004d65ae1c746993a11d629955e71d5a1d",
+    "agents/strategic/prompts/qwen3_6_27b/_account_opening.j2": "85954da5e66a742cddf7a1ecee4fbe00bcd29647427d99947e740f8b66e7b1fc",
+    "agents/strategic/prompts/qwen3_6_27b/_account_rules.j2": "2399f70844e70c7655ec55762532aee3b6c5b37d8d36ed52c4866ad4a4458edd",
+    "agents/strategic/prompts/qwen3_6_27b/_account_transcript.j2": "a24c79f3f3e7b615cb957fdb63e20c1398bd492ddc1093ad582e335711f6ec5d",
+    "agents/strategic/prompts/qwen3_6_27b/accusation_round.j2": "29cfc6ad9ff3229c3b270484aa81331ba4c87de167577831ea4413dd39c5fe12",
+    "agents/strategic/prompts/qwen3_6_27b/accusation_round_accounts.j2": "2eef01c871269cfae04e732922988f59be71cd8d64ef66306ecfbcafd5689a4e",
+    "agents/strategic/prompts/qwen3_6_27b/accusation_round_roll_call.j2": "f8a96374976806a1129a601bdd04ac0c7bfd2cbddbe3b87b9b0c3931909ee815",
+    "agents/strategic/prompts/qwen3_6_27b/crewmate_report.j2": "9a7b6ac8860dda7377c6400e6a02858d49d7dd34012bb2a956047249abed17eb",
+    "agents/strategic/prompts/qwen3_6_27b/crewmate_report_accounts.j2": "98978c7b4bb778187a82cfe7f0028560374fde18ac295af9f2279e6d860de0c1",
+    "agents/strategic/prompts/qwen3_6_27b/impostor_report.j2": "f72155953affafd8064de5afcb4ce3ee442488f76617a1fa7edba990d0476e33",
+    "agents/strategic/prompts/qwen3_6_27b/impostor_report_accounts.j2": "98978c7b4bb778187a82cfe7f0028560374fde18ac295af9f2279e6d860de0c1",
+    "agents/strategic/prompts/qwen3_6_27b/impostor_report_roll_call.j2": "3bf49c24001c973de78770a75d67675e6d4e8bbf5afedef10ab6874cb692ce61",
+    "agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2": "5cc750a1fb0733dbec412c22cb224e78729569aa2c0719041467aad0997d2104",
+    "agents/strategic/prompts/qwen3_6_27b/vote_ballot_accounts.j2": "5765fd66b2d10b1671c27d8f7d37a672b2c2b0a8fb2e1759cf79724ca0715062",
+    "experiments/fresh_deduction_instrument.py": "3c2ebaf56e76de31e556c63b4953aa0c892b1687da5c03f69c60afa49a58d526",
+    "meetings/manager.py": "4c7eb1e1897d86e2e90f02b2b4bcbf582ffb4866b654068fdce91379e2d667dc",
+    "meetings/public_accounts.py": "5f5faaaa79574094e5dd2a49ec957cb0136bce20a03d2582499fa911c332caf5",
+    "meetings/schemas.py": "92c623d867948fa8eb624a306c94273a1ea7a3aaca8869395b4a8ee0a9b24bd1",
+    "orchestrator/game.py": "88dd847accf43605d24e6cb0b0dcf789ef908b18bcfd799e29b2bd12c0d8bfe8"
+  },
+  "completed_seeds": [
+    7001,
+    7003,
+    7004,
+    7005,
+    7006,
+    7008,
+    7009,
+    7010,
+    7012,
+    7013,
+    7014,
+    7015
+  ],
+  "elapsed_seconds": 1886.2961242501624,
+  "held_out_manifest_sha256": "5fe4b1e3e1ca931b5712d05785d9d72fff261502bcd2bd7ab71071e5a458ed8b",
+  "limits": {
+    "elapsed_seconds": 28800.0,
+    "max_cost_usd": 0.0,
+    "model_work_seconds": 21600.0,
+    "run_max_input_tokens": 3710000,
+    "run_max_output_tokens": 459000,
+    "unit_max_input_tokens": 106000,
+    "unit_max_output_tokens": 16000
+  },
+  "manifest_sha256": "04bf714b8b4f03862ea9fe5ebb81bcf548ec4ec7d8bcc31c2178e82c54cc658d",
+  "model_work_seconds": 1772.1927821259014,
+  "provider": "featherless",
+  "sampling": {
+    "turn_max_tokens": 4096,
+    "turn_temperature": 0.4,
+    "vote_max_tokens": 1024,
+    "vote_temperature": 0.2
+  },
+  "schema_version": "fresh-deduction-checkpoint/1",
+  "units": [
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7001,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7001,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 19981,
+          "model_work_seconds": 57.34351162589155,
+          "output_tokens": 1161
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7001,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7001,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 29840,
+          "model_work_seconds": 167.3030137908645,
+          "output_tokens": 3250
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7003,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": "p-2:6:2",
+          "cited_turn_id": "headless-seed-7003:meeting-0:turn-2",
+          "guard_rewrite_reason": null,
+          "target": "p-1",
+          "verdict": "supported",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7003,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 20510,
+          "model_work_seconds": 43.38471074937843,
+          "output_tokens": 1151
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7003,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7003,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 22977,
+          "model_work_seconds": 64.0009718327783,
+          "output_tokens": 2353
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7004,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": "p-4:10:4",
+          "cited_turn_id": "headless-seed-7004:meeting-0:turn-0",
+          "guard_rewrite_reason": null,
+          "target": "p-2",
+          "verdict": "supported",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7004,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 20622,
+          "model_work_seconds": 39.631442124955356,
+          "output_tokens": 1101
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7004,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 1,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 1,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7004,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 21812,
+          "model_work_seconds": 86.39236441580579,
+          "output_tokens": 3358
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7005,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7005,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 18727,
+          "model_work_seconds": 39.53296595788561,
+          "output_tokens": 1153
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7005,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7005,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 26015,
+          "model_work_seconds": 87.71875854185782,
+          "output_tokens": 3464
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7006,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7006,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 20800,
+          "model_work_seconds": 37.492576834280044,
+          "output_tokens": 1087
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7006,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7006,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 33995,
+          "model_work_seconds": 130.81611950020306,
+          "output_tokens": 4168
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7008,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": "headless-seed-7008:meeting-0:turn-0",
+          "guard_rewrite_reason": null,
+          "target": "p-3",
+          "verdict": "supported",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7008,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 19980,
+          "model_work_seconds": 36.12808416807093,
+          "output_tokens": 1100
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7008,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7008,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 31617,
+          "model_work_seconds": 166.22150200000033,
+          "output_tokens": 3732
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7009,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": "p-4:6:1",
+          "cited_turn_id": "headless-seed-7009:meeting-0:turn-0",
+          "guard_rewrite_reason": null,
+          "target": "p-1",
+          "verdict": "supported",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7009,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 21024,
+          "model_work_seconds": 49.167230458697304,
+          "output_tokens": 1207
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7009,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7009,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 36743,
+          "model_work_seconds": 111.49828095920384,
+          "output_tokens": 4816
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7010,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7010,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 21111,
+          "model_work_seconds": 41.31023050053045,
+          "output_tokens": 1159
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7010,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": "p-2:6:2",
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "p-4",
+          "verdict": "supported",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7010,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 27291,
+          "model_work_seconds": 119.40089712385088,
+          "output_tokens": 3842
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7012,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": "headless-seed-7012:meeting-0:turn-0",
+          "guard_rewrite_reason": null,
+          "target": "p-2",
+          "verdict": "supported",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7012,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 19634,
+          "model_work_seconds": 43.88150804094039,
+          "output_tokens": 1092
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7012,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 1,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 1,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7012,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 24798,
+          "model_work_seconds": 102.49052424915135,
+          "output_tokens": 4288
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7013,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7013,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 20669,
+          "model_work_seconds": 38.419652208220214,
+          "output_tokens": 1075
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7013,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "under_gate_redirect",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-3"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7013,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 25141,
+          "model_work_seconds": 67.11617104220204,
+          "output_tokens": 2554
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7014,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7014,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 19272,
+          "model_work_seconds": 43.446176750352606,
+          "output_tokens": 943
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7014,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7014,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 22680,
+          "model_work_seconds": 80.96513987635262,
+          "output_tokens": 2471
+        }
+      }
+    },
+    {
+      "arm": "repaired_clock",
+      "ejected_player_id": null,
+      "ejected_role": null,
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "outcome": "SKIPPED",
+      "role_correct": false,
+      "seed": 7015,
+      "stop": "partial",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "repaired_clock",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round.qwen3_6_27b.v5",
+          "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+          "impostor_report": "impostor_report.qwen3_6_27b.v5",
+          "vote_ballot": "vote_ballot.qwen3_6_27b.v5"
+        },
+        "retried_calls": 0,
+        "seed": 7015,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 6,
+          "cost_usd": 0.0,
+          "input_tokens": 20032,
+          "model_work_seconds": 36.468995791627094,
+          "output_tokens": 1054
+        }
+      }
+    },
+    {
+      "arm": "combined_accounts",
+      "ejected_player_id": "p-4",
+      "ejected_role": "IMPOSTOR",
+      "naming_ballots": 2,
+      "off_target_citations": 0,
+      "outcome": "EJECTED",
+      "role_correct": true,
+      "seed": 7015,
+      "stop": "terminal",
+      "supported": [
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "p-4",
+          "verdict": "uncited",
+          "voter": "p-1"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": null,
+          "target": "p-4",
+          "verdict": "uncited",
+          "voter": "p-2"
+        },
+        {
+          "cited_observation_id": null,
+          "cited_turn_id": null,
+          "guard_rewrite_reason": "uncited_coerced",
+          "target": "SKIP",
+          "verdict": "uncited",
+          "voter": "p-4"
+        }
+      ],
+      "supported_correct_ejection": false,
+      "telemetry": {
+        "arm": "combined_accounts",
+        "attempts_by_trigger": {},
+        "defaulted_turns": 0,
+        "defaulted_votes": 0,
+        "defaults_by_deadline": 0,
+        "defaults_by_validation": 0,
+        "degraded_openings": 0,
+        "model_ids": [
+          "Qwen/Qwen3.6-27B"
+        ],
+        "prompt_versions": {
+          "accusation_round": "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "crewmate_report": "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "impostor_report": "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+          "vote_ballot": "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+        },
+        "retried_calls": 0,
+        "seed": 7015,
+        "unaccounted_attempts": 0,
+        "usage": {
+          "calls": 7,
+          "cost_usd": 0.0,
+          "input_tokens": 27109,
+          "model_work_seconds": 82.06195358280092,
+          "output_tokens": 3305
+        }
+      }
+    }
+  ]
+}

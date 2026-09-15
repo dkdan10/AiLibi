@@ -1,0 +1,3117 @@
+{
+  "band": {
+    "first_seed": 7000,
+    "last_seed": 7999,
+    "size": 50
+  },
+  "note": "The prefixes this run RENDERED to the model, and only those. Rendering converts a held-out input to development data, which is why they are archived here; the other 37 accepted prefixes of the 7000-7999 freeze were regenerated in process, checked against the frozen digests and discarded unrendered, so they stay held out and are deliberately absent.",
+  "rendered": [
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 7,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7001,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "target": "p-2"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "body_id": "body-p-2"
+              },
+              "type": "report"
+            },
+            "tick": 7
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "d840ade9edb7397ef5aed7ba537596c36f0fa491ccb38176b939eb179e43acea",
+      "seed": 7001,
+      "sha256": "d840ade9edb7397ef5aed7ba537596c36f0fa491ccb38176b939eb179e43acea"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 5,
+        "max_ticks": 14,
+        "report_tick": 8,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7003,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "target": "p-3"
+              },
+              "type": "kill"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "body_id": "body-p-3"
+              },
+              "type": "report"
+            },
+            "tick": 8
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "92a2e24b6aec196b3836b6690f2130a41aa19cbbf91c6ef02b7b961141754064",
+      "seed": 7003,
+      "sha256": "92a2e24b6aec196b3836b6690f2130a41aa19cbbf91c6ef02b7b961141754064"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 11,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7004,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "target": "p-3"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 9
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 9
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 10
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "body_id": "body-p-3"
+              },
+              "type": "report"
+            },
+            "tick": 11
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "9634706d446cfc9a5b350e881f397987086a5d35b0b32e34a050f3d7f8b707a4",
+      "seed": 7004,
+      "sha256": "9634706d446cfc9a5b350e881f397987086a5d35b0b32e34a050f3d7f8b707a4"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 7,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7005,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "target": "p-4"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "body_id": "body-p-4"
+              },
+              "type": "report"
+            },
+            "tick": 7
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "85dcd4dc1674bd04fc4ac9ef6afba805573287537bdf5d7cc948f60457362932",
+      "seed": 7005,
+      "sha256": "85dcd4dc1674bd04fc4ac9ef6afba805573287537bdf5d7cc948f60457362932"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 9,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7006,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "target": "p-2"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "body_id": "body-p-2"
+              },
+              "type": "report"
+            },
+            "tick": 9
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "b5b148399e639ea3f19ef0d8a2b054d98145cb555b4cecb89a23d38d6f336709",
+      "seed": 7006,
+      "sha256": "b5b148399e639ea3f19ef0d8a2b054d98145cb555b4cecb89a23d38d6f336709"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 9,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7008,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "target": "p-4"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "body_id": "body-p-4"
+              },
+              "type": "report"
+            },
+            "tick": 9
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "4597932e93f85692121c663f8414e91688824d1512bc46cddc03a4327917d6e5",
+      "seed": 7008,
+      "sha256": "4597932e93f85692121c663f8414e91688824d1512bc46cddc03a4327917d6e5"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 5,
+        "max_ticks": 14,
+        "report_tick": 6,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7009,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "target": "p-2"
+              },
+              "type": "kill"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "body_id": "body-p-2"
+              },
+              "type": "report"
+            },
+            "tick": 6
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "02a66473ec7f830bd53c5f96b25b5ae18283ba36108770cc2a551b8fc519320d",
+      "seed": 7009,
+      "sha256": "02a66473ec7f830bd53c5f96b25b5ae18283ba36108770cc2a551b8fc519320d"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 8,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7010,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "target": "p-1"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "body_id": "body-p-1"
+              },
+              "type": "report"
+            },
+            "tick": 8
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "2f1c0b5a1bf5d8b1f1a42fa4988faf4c864bf886fb2b0b27c9083e022ca417b4",
+      "seed": 7010,
+      "sha256": "2f1c0b5a1bf5d8b1f1a42fa4988faf4c864bf886fb2b0b27c9083e022ca417b4"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 6,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7012,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "target": "p-4"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "body_id": "body-p-4"
+              },
+              "type": "report"
+            },
+            "tick": 6
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "b93d7ac163b49d0a15b48016d1fa045942b0eff2658ff1b2f14b0870b6ab6551",
+      "seed": 7012,
+      "sha256": "b93d7ac163b49d0a15b48016d1fa045942b0eff2658ff1b2f14b0870b6ab6551"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 5,
+        "max_ticks": 14,
+        "report_tick": 9,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7013,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "target": "p-1"
+              },
+              "type": "kill"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "body_id": "body-p-1"
+              },
+              "type": "report"
+            },
+            "tick": 9
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "64119a8c1cab3ba5e8639977096082d0d6395b2c4728d413bedb89ad24a6879a",
+      "seed": 7013,
+      "sha256": "64119a8c1cab3ba5e8639977096082d0d6395b2c4728d413bedb89ad24a6879a"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 5,
+        "max_ticks": 14,
+        "report_tick": 10,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7014,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "target": "p-3"
+              },
+              "type": "kill"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 9
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "STORAGE"
+              },
+              "type": "move"
+            },
+            "tick": 9
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "body_id": "body-p-3"
+              },
+              "type": "report"
+            },
+            "tick": 10
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "f84fb85b3b81ce760e139277384f6914f6f4246268e3b7972ff7fafd55e10b5e",
+      "seed": 7014,
+      "sha256": "f84fb85b3b81ce760e139277384f6914f6f4246268e3b7972ff7fafd55e10b5e"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 4,
+        "max_ticks": 14,
+        "report_tick": 6,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7015,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "target": "p-3"
+              },
+              "type": "kill"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "body_id": "body-p-3"
+              },
+              "type": "report"
+            },
+            "tick": 6
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "9c577ec638163a9d43a0f32c0b8aeedfd987311045582f0acfa0fa0378427381",
+      "seed": 7015,
+      "sha256": "9c577ec638163a9d43a0f32c0b8aeedfd987311045582f0acfa0fa0378427381"
+    },
+    {
+      "canonical_json": {
+        "kill_tick": 5,
+        "max_ticks": 14,
+        "report_tick": 10,
+        "roster": {
+          "num_impostors": 1,
+          "num_players": 4,
+          "tasks_per_crewmate": 1
+        },
+        "seed": 7016,
+        "steps": [
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 0
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 1
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "CAFETERIA"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 2
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-4",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 3
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "UPPER_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 4
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "target": "p-4"
+              },
+              "type": "kill"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 5
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "ADMIN"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "EAST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 6
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "WEST_HALL"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 7
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "MEDBAY"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "ENGINEERING"
+              },
+              "type": "move"
+            },
+            "tick": 8
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 9
+          },
+          {
+            "action": {
+              "actor": "p-2",
+              "payload": {
+                "to_room": "LABS"
+              },
+              "type": "move"
+            },
+            "tick": 9
+          },
+          {
+            "action": {
+              "actor": "p-3",
+              "payload": {
+                "to_room": "REACTOR"
+              },
+              "type": "move"
+            },
+            "tick": 9
+          },
+          {
+            "action": {
+              "actor": "p-1",
+              "payload": {
+                "body_id": "body-p-4"
+              },
+              "type": "report"
+            },
+            "tick": 10
+          }
+        ],
+        "version": 1
+      },
+      "frozen_sha256": "b9a191e081a1ec68c2fa3b931ef2a59148fe1a2d96428806f96bb0be701fc850",
+      "seed": 7016,
+      "sha256": "b9a191e081a1ec68c2fa3b931ef2a59148fe1a2d96428806f96bb0be701fc850"
+    }
+  ]
+}

@@ -1,0 +1,1005 @@
+{
+  "abandoned": {
+    "combined_accounts": {
+      "calls": 5,
+      "input_tokens": 18953,
+      "model_work_seconds": 70.4045910842251,
+      "output_tokens": 2881,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    },
+    "repaired_clock": {
+      "calls": 6,
+      "input_tokens": 21255,
+      "model_work_seconds": 42.036928582936525,
+      "output_tokens": 1221,
+      "retried_calls": 0,
+      "unaccounted_attempts": 0
+    }
+  },
+  "abandoned_model_work_seconds": 112.44151966716163,
+  "arms": {
+    "combined_accounts": {
+      "attempts_by_trigger": {},
+      "ballot_verdicts": {
+        "supported": 1,
+        "uncited": 35
+      },
+      "charged_failed_attempts": 0,
+      "charged_failed_input_tokens": 0,
+      "charged_failed_output_tokens": 0,
+      "cost_usd": 0.0,
+      "defaulted_turns": 2,
+      "defaulted_votes": 0,
+      "defaults_by_deadline": 0,
+      "defaults_by_validation": 2,
+      "degraded_openings": 0,
+      "ejections": 1,
+      "experiment_configs": [
+        "{\"attributed_testimony_version\": 1, \"bounded_rebuttal_version\": null, \"crew_idle_policy\": \"hub_wait\", \"evidence_reasoning_version\": 2, \"format_version\": 2, \"meeting_reset\": \"preserve\", \"post_meeting_retarget\": false, \"public_account_version\": 1, \"redistribution_policy\": \"lowest_id\", \"sabotage_threshold\": \"six_sevenths\", \"self_report\": false, \"vent_exit_policy\": \"target_distance\"}"
+      ],
+      "graded_units": 12,
+      "guard_rewritten_ballots": 13,
+      "largest_single_output": 1900,
+      "largest_unit_input": 36743,
+      "largest_unit_output": 4816,
+      "model_work_seconds": 1265.9856969150715,
+      "models": [
+        "Qwen/Qwen3.6-27B"
+      ],
+      "naming_ballots": 2,
+      "off_target_citations": 0,
+      "partial_units": 11,
+      "prompt_version_markers": [
+        "accusation_round_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+        "crewmate_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+        "impostor_report_accounts.qwen3_6_27b.v3.accounts1.attributed1",
+        "vote_ballot_accounts.qwen3_6_27b.v3.accounts1.attributed1"
+      ],
+      "resolved_calls": 73,
+      "resolved_input_tokens": 330018,
+      "resolved_output_tokens": 41601,
+      "retried_calls": 0,
+      "role_correct_ejections": 1,
+      "supported_correct_ejections": 0,
+      "temporal_observation_versions": [
+        2
+      ],
+      "terminal_units": 1,
+      "unaccounted_attempts": 0,
+      "units_with_defaults": 2,
+      "units_with_retries": 0,
+      "wrongful_ejections": 0
+    },
+    "repaired_clock": {
+      "attempts_by_trigger": {},
+      "ballot_verdicts": {
+        "supported": 5,
+        "uncited": 31
+      },
+      "charged_failed_attempts": 0,
+      "charged_failed_input_tokens": 0,
+      "charged_failed_output_tokens": 0,
+      "cost_usd": 0.0,
+      "defaulted_turns": 0,
+      "defaulted_votes": 0,
+      "defaults_by_deadline": 0,
+      "defaults_by_validation": 0,
+      "degraded_openings": 0,
+      "ejections": 0,
+      "experiment_configs": [
+        "{\"attributed_testimony_version\": null, \"bounded_rebuttal_version\": null, \"crew_idle_policy\": \"hub_wait\", \"evidence_reasoning_version\": 2, \"format_version\": 2, \"meeting_reset\": \"preserve\", \"post_meeting_retarget\": false, \"public_account_version\": null, \"redistribution_policy\": \"lowest_id\", \"sabotage_threshold\": \"six_sevenths\", \"self_report\": false, \"vent_exit_policy\": \"target_distance\"}"
+      ],
+      "graded_units": 12,
+      "guard_rewritten_ballots": 0,
+      "largest_single_output": 423,
+      "largest_unit_input": 21111,
+      "largest_unit_output": 1207,
+      "model_work_seconds": 506.20708521083,
+      "models": [
+        "Qwen/Qwen3.6-27B"
+      ],
+      "naming_ballots": 0,
+      "off_target_citations": 0,
+      "partial_units": 12,
+      "prompt_version_markers": [
+        "accusation_round.qwen3_6_27b.v5",
+        "crewmate_report.qwen3_6_27b.v5",
+        "impostor_report.qwen3_6_27b.v5",
+        "vote_ballot.qwen3_6_27b.v5"
+      ],
+      "resolved_calls": 72,
+      "resolved_input_tokens": 242362,
+      "resolved_output_tokens": 13283,
+      "retried_calls": 0,
+      "role_correct_ejections": 0,
+      "supported_correct_ejections": 0,
+      "temporal_observation_versions": [
+        2
+      ],
+      "terminal_units": 0,
+      "unaccounted_attempts": 0,
+      "units_with_defaults": 0,
+      "units_with_retries": 0,
+      "wrongful_ejections": 0
+    }
+  },
+  "completed_paired_seeds": [
+    7001,
+    7003,
+    7004,
+    7005,
+    7006,
+    7008,
+    7009,
+    7010,
+    7012,
+    7013,
+    7014,
+    7015
+  ],
+  "elapsed_seconds": 1886.2961242501624,
+  "execution_manifest_sha256": "04bf714b8b4f03862ea9fe5ebb81bcf548ec4ec7d8bcc31c2178e82c54cc658d",
+  "held_out_manifest_sha256": "5fe4b1e3e1ca931b5712d05785d9d72fff261502bcd2bd7ab71071e5a458ed8b",
+  "limits": {
+    "elapsed_seconds": 28800.0,
+    "max_cost_usd": 0.0,
+    "model_work_seconds": 21600.0,
+    "run_max_input_tokens": 3710000,
+    "run_max_output_tokens": 459000,
+    "unit_max_input_tokens": 106000,
+    "unit_max_output_tokens": 16000
+  },
+  "model_work_seconds": 1772.1927821259014,
+  "per_unit": [
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-2"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 29840,
+      "largest_call_output": 1250,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 3250,
+      "replay_kind": "meeting",
+      "seed": 7001,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 22977,
+      "largest_call_output": 745,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 2353,
+      "replay_kind": "meeting",
+      "seed": 7003,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 1,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 21812,
+      "largest_call_output": 1657,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 3358,
+      "replay_kind": "meeting",
+      "seed": 7004,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 26015,
+      "largest_call_output": 1503,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 3464,
+      "replay_kind": "meeting",
+      "seed": 7005,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-2"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 33995,
+      "largest_call_output": 1538,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 4168,
+      "replay_kind": "meeting",
+      "seed": 7006,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 31617,
+      "largest_call_output": 1524,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 3732,
+      "replay_kind": "meeting",
+      "seed": 7008,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-2"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 36743,
+      "largest_call_output": 1900,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 4816,
+      "replay_kind": "meeting",
+      "seed": 7009,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-1"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 27291,
+      "largest_call_output": 1442,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 3842,
+      "replay_kind": "meeting",
+      "seed": 7010,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 1,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 24798,
+      "largest_call_output": 1718,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 4288,
+      "replay_kind": "meeting",
+      "seed": 7012,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-1"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 25141,
+      "largest_call_output": 695,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 2554,
+      "replay_kind": "meeting",
+      "seed": 7013,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 22680,
+      "largest_call_output": 752,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 2471,
+      "replay_kind": "meeting",
+      "seed": 7014,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 7,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": "p-4",
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 27109,
+      "largest_call_output": 928,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "EJECTED",
+      "output_tokens": 3305,
+      "replay_kind": "meeting",
+      "seed": 7015,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "combined_accounts",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 4,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 14219,
+      "largest_call_output": 592,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": null,
+      "output_tokens": 1857,
+      "replay_kind": "meeting_aborted",
+      "seed": 7016,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-2"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 19981,
+      "largest_call_output": 348,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1161,
+      "replay_kind": "meeting",
+      "seed": 7001,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 20510,
+      "largest_call_output": 356,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1151,
+      "replay_kind": "meeting",
+      "seed": 7003,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 20622,
+      "largest_call_output": 340,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1101,
+      "replay_kind": "meeting",
+      "seed": 7004,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 18727,
+      "largest_call_output": 307,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1153,
+      "replay_kind": "meeting",
+      "seed": 7005,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-2"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 20800,
+      "largest_call_output": 316,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1087,
+      "replay_kind": "meeting",
+      "seed": 7006,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 19980,
+      "largest_call_output": 320,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1100,
+      "replay_kind": "meeting",
+      "seed": 7008,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-2"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 21024,
+      "largest_call_output": 370,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1207,
+      "replay_kind": "meeting",
+      "seed": 7009,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-1"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 21111,
+      "largest_call_output": 367,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1159,
+      "replay_kind": "meeting",
+      "seed": 7010,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 19634,
+      "largest_call_output": 348,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1092,
+      "replay_kind": "meeting",
+      "seed": 7012,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-1"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 20669,
+      "largest_call_output": 320,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1075,
+      "replay_kind": "meeting",
+      "seed": 7013,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 19272,
+      "largest_call_output": 307,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 943,
+      "replay_kind": "meeting",
+      "seed": 7014,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-3"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 20032,
+      "largest_call_output": 315,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1054,
+      "replay_kind": "meeting",
+      "seed": 7015,
+      "temporal_observation_version": 2
+    },
+    {
+      "arm": "repaired_clock",
+      "body_handles_in_prompts": [
+        "body-p-4"
+      ],
+      "calls": 6,
+      "charged_failed_attempts": 0,
+      "deadline_default_rows": 0,
+      "ejected_player_id": null,
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "input_tokens": 21255,
+      "largest_call_output": 423,
+      "legacy_body_handles_in_prompts": [],
+      "outcome": "SKIPPED",
+      "output_tokens": 1221,
+      "replay_kind": "meeting",
+      "seed": 7016,
+      "temporal_observation_version": 2
+    }
+  ],
+  "sampling": {
+    "turn_max_tokens": 4096,
+    "turn_temperature": 0.4,
+    "vote_max_tokens": 1024,
+    "vote_temperature": 0.2
+  },
+  "totals": {
+    "abandoned_calls": 11,
+    "abandoned_input_tokens": 40208,
+    "abandoned_output_tokens": 4102,
+    "charged_calls": 156,
+    "charged_input_tokens": 612588,
+    "charged_output_tokens": 58986,
+    "graded_calls": 145,
+    "graded_input_tokens": 572380,
+    "graded_output_tokens": 54884
+  }
+}
