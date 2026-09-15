@@ -85,6 +85,18 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
 
 ## Acceptance
 
+- [x] Review correction: the `records=` override cannot name a draw the card
+  does not authorize, which is a PREFIX rule and not an ordering one.
+  `CONVERTED_BANDS` holds THREE development records, so round 1's ordered,
+  non-repeating subsequence still accepted `[band-5000, band-6000]` and
+  `[band-3000, band-6000]` — each sixty seeds ending at 6010 where the
+  authorized draw ends at 5009 — on `verify_calibration_draw` and on both
+  live-capable entry points. A supplied list is now held to a prefix of
+  `CONVERTED_BANDS`, refused before a prefix is rebuilt, which with the greedy
+  fill makes an accepted list's seeds a function of the seed count alone.
+  Planted: both lists on the helper and on the two live-capable entry points,
+  plus a property case that enumerates every ordered arrangement of the
+  converted records and holds each accepted one to the default draw's seeds.
 - [x] Review correction: acceptance item 3's truncation COUNTING is driven end
   to end rather than asserted at the seam. A truncating provider double goes
   through `run_calibration` in this mode and the sitting finishes, and the case
@@ -93,13 +105,14 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   truncation produces (eight marked SKIP ballots and one placeholder turn).
   Disabling the tally turns it red.
 - [x] Review correction: the `records=` override of the live-capable pre-flight
-  cannot name a draw the card does not authorize. A supplied list is held to
-  `CONVERTED_BANDS`' own order with no record named twice, so the two shapes
-  the review reproduced — `[band-5000, band-3000]` and `[band-3000,
-  band-3000]`, the second of which filled sixty prefixes out of fifty distinct
-  seeds — are refused, on `verify_calibration_draw`,
+  is held to `CONVERTED_BANDS`' own order with no record named twice, so the two
+  shapes the round-1 review reproduced — `[band-5000, band-3000]` and
+  `[band-3000, band-3000]`, the second of which filled sixty prefixes out of
+  fifty distinct seeds — are refused, on `verify_calibration_draw`,
   `assert_ready_for_a_calibration` and `run_calibration` alike. Planted: both
-  lists, on the helper and on the two live-capable entry points.
+  lists, on the helper and on the two live-capable entry points. Order and
+  no-repetition are NOT the whole property: the round-2 correction above found
+  the band-skipping shape they still admitted and replaced the rule.
 - [x] Review correction: acceptance item 7's plant binds the branch it names.
   Its fixture set the measured mean equal to the measured maximum, so the mean
   rule dominated and the case passed with the in-flight headroom term deleted;
@@ -581,6 +594,100 @@ moves, no prompt byte moves, no experiment becomes ON, and the held-out record
 at `MANIFEST_PATH` is untouched. The arm-surface digest moves again, for the
 same reason the card already declares:
 `experiments/fresh_deduction_instrument.py` is in `ARM_SURFACE_SOURCES`.
+
+**What is still not done** is unchanged: items 8, 9 and 11 belong to the live
+sitting, which the Constraints reserve to a separate runner session. The card
+stays `active`.
+
+### Review corrections, round 2 (2026-09-15)
+
+Two blocking findings, ONE defect: two lenses read the same hole in round 1's
+repair of Codex P1. It is repaired at `f2f52e5a`; neither finding was refuted,
+and the round-1 claim that drew them was indeed false. Every command below ran
+on this branch at `f2f52e5a`, with the fake provider or with no provider at
+all, and the only later change is this card's own prose; no live provider call
+was made and `scripts/verify_ml_evidence.py --complete` was not run.
+
+**The defect: an ordered subsequence is not the draw.** Round 1 held a supplied
+`records` list to `CONVERTED_BANDS`' order with no record named twice, and
+acceptance item 2 then claimed the override "cannot name a draw the card does
+not authorize". That does not follow, because `CONVERTED_BANDS` holds THREE
+development records — 3000-3999, 5000-5999 and 6000-6999, each `development`
+with fifty accepted seeds — so a list may be ascending, name nothing twice, and
+still skip a band. Reproduced at `74b9eea6`, on the helper and on both
+live-capable entry points:
+
+| Records | At `74b9eea6` | Seeds drawn | Authorized |
+| --- | --- | --- | --- |
+| `[band-5000, band-6000]` | ACCEPTED | 50 of 5000 then 10 of 6000, last seed 6010 | no |
+| `[band-3000, band-6000]` | ACCEPTED | 50 of 3000 then 10 of 6000, last seed 6010 | no |
+| `[band-3000, band-5000]` | ACCEPTED | 50 of 3000 then 10 of 5000, last seed 5009 | yes |
+
+`CALIBRATION_2_CLAUSE` authorizes "the first sixty accepted seeds of the
+converted bands, taken in the order those bands were converted", which is the
+third row and only the third. The first two are a different sixty seeds under
+the same authorization — the same defect class as Codex P1, which round 1 had
+therefore only partly closed.
+
+**The repair: a PREFIX, not a subsequence.** `_draw_in_converted_order` now
+requires the supplied list to be `CONVERTED_BANDS` from its first record
+onwards with none skipped — position *i* must be `CONVERTED_BANDS[i]` — checked
+before any prefix is rebuilt, with the repetition refusal kept ahead of it so
+`[band-3000, band-3000]` still fails by name. With the greedy fill in
+`verify_calibration_draw` unchanged, that turns the drawn seeds into a function
+of `paired_seeds` alone: an accepted `records` list draws EXACTLY what the
+default draws, and the override can only shorten the list of records the same
+draw may spill into. That is the property acceptance item 2 now claims, and the
+wording of both the item and the helper's docstring — which had said
+"SUBSEQUENCE" — is corrected to it.
+
+**Planted.** Three cases, all committed:
+`test_a_record_list_that_skips_a_converted_record_is_refused` puts both lists
+through the helper; `test_the_live_capable_preflight_refuses_a_band_skipping_list`
+puts both through `assert_ready_for_a_calibration` and `run_calibration`, the
+two paths that can spend; and
+`test_only_a_prefix_of_the_converted_records_is_accepted` enumerates every
+ordered arrangement of the converted records up to their own length,
+repetitions included, asserting that exactly the two prefixes long enough to
+fill sixty are accepted and that each accepted draw's seeds equal the default
+draw's. The property case exists because round 2 found this shape by
+enumerating, where round 1 had reasoned from the two shapes it had reproduced;
+a rule this one is worth checking exhaustively, since the list it ranges over
+is three records long. Verified by perturbation: with the prefix comparison
+replaced by round 1's "not earlier than any record already seen" test, all
+three new cases go red and round 1's nine cases in the class stay green.
+
+**One consequence, declared rather than absorbed.** The rule is uniform, so the
+first calibration's `--calibration-record` can now name only
+`CONVERTED_BANDS[0]` — its default, and the record the 2026-09-14 sitting drew
+from. `CALIBRATION_CLAUSE` reads "a converted band", so this is NARROWER than
+that mode's authorization. It is deliberate: a narrowed pre-flight can refuse a
+spend that was approved but can never permit one that was not, and mode-aware
+membership would have left the 60-seed case safe only by arithmetic (a
+one-record draw cannot fill sixty today) rather than by rule, which is the
+defect class being closed. The flag's `--help` and the helper's docstring both
+say so.
+
+**Gates, at `f2f52e5a`.**
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 486 passed (483 before, plus this round's 3) |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 59 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `--complete` was NOT run |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0 |
+
+**Record impact of this round.** No `audits/` byte moves, so the
+`docs/artifacts.md` audits row is unchanged from round 1's 211 files and
+15,118,706 bytes; the manifest's sentence that the draw is "the list and the
+count, with nothing left to the runner" needed no edit, because this round is
+what makes it true. No recording, report, DTO, metric or weight byte moves, no
+prompt byte moves, no experiment becomes ON, and the held-out record at
+`MANIFEST_PATH` is untouched. The arm-surface digest moves again, for the reason
+the card already declares: `experiments/fresh_deduction_instrument.py` is in
+`ARM_SURFACE_SOURCES`.
 
 **What is still not done** is unchanged: items 8, 9 and 11 belong to the live
 sitting, which the Constraints reserve to a separate runner session. The card
