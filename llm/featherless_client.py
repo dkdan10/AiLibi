@@ -194,6 +194,11 @@ class FeatherlessRawResponse(BaseModel):
     surface for thinking models (``choices[0].message.reasoning_content``); it
     must be empty under a non-thinking request and is one of the inputs the
     ``fail_loud`` guard inspects (coerced to ``""`` when absent).
+    ``finish_reason`` is the server's own word for why generation stopped
+    (``choices[0].finish_reason``, ``"length"`` on a completion cut off at its
+    output cap), carried verbatim and coerced to ``None`` when the key is
+    absent or is not a string. It is never defaulted to ``"stop"``: a reading
+    this adapter did not receive is recorded as missing.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -203,6 +208,7 @@ class FeatherlessRawResponse(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     reasoning_content: str = ""
+    finish_reason: str | None = None
 
 
 FeatherlessSendHook = Callable[..., Awaitable[FeatherlessRawResponse]]
@@ -396,6 +402,11 @@ class FeatherlessClient:
                         cost_usd=cost_usd,
                         error_type=type(exc).__name__,
                         error_message=str(exc)[:_ERROR_MESSAGE_CHARS],
+                        # The reading rides the refusal as well as the response:
+                        # a body truncated at the output cap is exactly the body
+                        # that then fails schema validation, so this is the path
+                        # the field most needs to reach.
+                        finish_reason=raw.finish_reason,
                     ),
                 )
                 raise
@@ -407,6 +418,7 @@ class FeatherlessClient:
             ),
             cost_usd=cost_usd,
             model=raw.model,
+            finish_reason=raw.finish_reason,
         )
 
     def _model_for(self, call_kind: CallKind) -> str:
@@ -831,6 +843,14 @@ def _raw_from_response_body(
             "refusing to record an empty completion."
         )
     message = choices[0].get("message") or {}
+    # The server's own word for why generation stopped, kept beside the
+    # counters rather than dropped with the rest of the choice. Coerced to
+    # ``None`` for an absent key or a non-string value and never defaulted to
+    # ``"stop"``: the point of the field is to say what the provider reported,
+    # and a manufactured "stop" would read as a completion that ran to its
+    # natural end (AGENTS.md: no silent fallbacks).
+    reported_finish = choices[0].get("finish_reason")
+    finish_reason = reported_finish if isinstance(reported_finish, str) else None
     content = message.get("content") or ""
     if not content.strip():
         raise RuntimeError(
@@ -858,6 +878,7 @@ def _raw_from_response_body(
         prompt_tokens=usage["prompt_tokens"],
         completion_tokens=usage["completion_tokens"],
         reasoning_content=reasoning_content,
+        finish_reason=finish_reason,
     )
 
 

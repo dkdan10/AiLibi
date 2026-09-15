@@ -87,6 +87,7 @@ from experiments.held_out_prefixes import (
 )
 from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
+from llm.fake_provider import FAKE_FINISH_REASON
 from meetings.manager import DefaultedCall
 from meetings.schemas import (
     AccusationClaim,
@@ -544,16 +545,30 @@ def _less_the_stops_own_calls(
         arm["input_tokens"] -= row.usage.input_tokens
         arm["output_tokens"] -= row.usage.output_tokens
         arm["cost_usd"] -= row.usage.cost_usd
+        arm["cap_signal_disagreements"] -= row.usage.cap_signal_disagreements
         payload["total_cost_usd"] -= row.usage.cost_usd
     return payload
 
 
 class _StubClient:
-    """A minimal in-process client with no schema behaviour, for cap tests."""
+    """A minimal in-process client with no schema behaviour, for cap tests.
 
-    def __init__(self, *, output_tokens: int = 5, input_tokens: int = 1) -> None:
+    ``finish_reason`` is what this stub reports the provider said about how
+    generation stopped: ``None`` by default, which is the reading an adapter
+    that maps none records and the one every case here had before the field
+    existed.
+    """
+
+    def __init__(
+        self,
+        *,
+        output_tokens: int = 5,
+        input_tokens: int = 1,
+        finish_reason: str | None = None,
+    ) -> None:
         self.output_tokens = output_tokens
         self.input_tokens = input_tokens
+        self.finish_reason = finish_reason
         self.calls = 0
 
     async def complete(
@@ -576,6 +591,7 @@ class _StubClient:
             ),
             cost_usd=0.0,
             model="stub",
+            finish_reason=self.finish_reason,
         )
 
 
@@ -2686,6 +2702,294 @@ class TestChargedCallAccounting:
             [marker, captured, legacy_default, other_meeting], meeting_id="m"
         )
         assert charged == (captured, legacy_default)
+
+
+class TestTruncationIsObservedAsWellAsInferred:
+    """The truncation stop reads two signals and prefers neither.
+
+    The fourth run stopped at unit 26 of 100 on a ballot that reached its
+    1,024-token output cap, and nothing in the tree recorded the provider's own
+    word for it: the stop was INFERRED from `output_tokens >= max_tokens`
+    alone (`tasks/diagnosis-2026-09-15-truncation-stop.md`, §5 fix D, approved
+    as §6 decision 3). The stop condition's WORDS are unchanged — `STOP_RULE`
+    already stops on "a per-call response that reached its output cap", and a
+    `finish_reason` of `"length"` is the provider saying exactly that — and its
+    evidence is widened: either signal stops the run, and a call on which the
+    two disagree is counted rather than silently resolved in favour of one.
+
+    A null observation is not a disagreement: an absent reading contradicts
+    nothing, which is what the two null rows below pin.
+    """
+
+    def _client(self, inner: Any, **kwargs: Any) -> Any:
+        clock = instrument._ModelWorkClock(max_seconds=3600.0)
+        return instrument._InstrumentClient(inner, work_clock=clock, **kwargs)
+
+    def _call(self, client: Any, *, max_tokens: int) -> None:
+        asyncio.run(
+            client.complete(
+                prompt="p", schema=None, max_tokens=max_tokens, temperature=0.2
+            )
+        )
+
+    #: The card's decision table, one row per case: what the provider reported,
+    #: how many output tokens it charged against the 1,024 vote cap, whether
+    #: the run stops, and whether the row counts as a disagreement.
+    @pytest.mark.parametrize(
+        ("finish_reason", "output_tokens", "stops", "disagreements"),
+        [
+            ("length", 1024, True, 0),
+            ("length", 900, True, 1),
+            ("stop", 1024, True, 1),
+            ("stop", 900, False, 0),
+            (None, 1024, True, 0),
+            (None, 900, False, 0),
+        ],
+    )
+    def test_the_decision_table_is_the_whole_rule(
+        self,
+        finish_reason: str | None,
+        output_tokens: int,
+        stops: bool,
+        disagreements: int,
+    ) -> None:
+        cap = AUTHORIZED_SAMPLING.vote_max_tokens
+        inner = _StubClient(output_tokens=output_tokens, finish_reason=finish_reason)
+        client = self._client(inner)
+        if stops:
+            with pytest.raises(PerCallCapExceeded, match="a truncation is a stop"):
+                self._call(client, max_tokens=cap)
+        else:
+            self._call(client, max_tokens=cap)
+        rows = client.take()
+        # Recorded either way, and the reading recorded is the one the provider
+        # gave: a stop drops no row, because a stop's partial accounting has to
+        # carry the call that caused it.
+        assert [row.finish_reason for row in rows] == [finish_reason]
+        usage = instrument.ArmUsage().plus(rows)
+        assert usage.cap_signal_disagreements == disagreements
+
+    def test_the_two_planted_disagreements_are_red_without_the_reading(self) -> None:
+        """PLANTED, both directions, at the authorized 1,024-token vote cap.
+
+        `"length"` at 900 tokens is the case the counters CANNOT see: below the
+        cap, so the inference passes it, and the provider says it was cut off.
+        `"stop"` at exactly 1,024 is the reverse: the inference stops it and the
+        provider's word says otherwise. Before this card the first was not a
+        stop at all and the second was a stop nobody could question; both are
+        now stops, and both are counted.
+        """
+
+        cap = AUTHORIZED_SAMPLING.vote_max_tokens
+        observed_only = self._client(
+            _StubClient(output_tokens=900, finish_reason="length")
+        )
+        with pytest.raises(PerCallCapExceeded) as below_cap:
+            self._call(observed_only, max_tokens=cap)
+        message = str(below_cap.value)
+        assert "finish_reason 'length'" in message
+        assert f"on 900 of {cap} output tokens" in message
+        assert "the two signals disagree" in message
+        assert (
+            instrument.ArmUsage().plus(observed_only.take()).cap_signal_disagreements
+            == 1
+        )
+
+        inferred_only = self._client(
+            _StubClient(output_tokens=cap, finish_reason="stop")
+        )
+        with pytest.raises(PerCallCapExceeded) as at_cap:
+            self._call(inferred_only, max_tokens=cap)
+        at_cap_message = str(at_cap.value)
+        # The inference's own wording, unchanged: this half of the rule is the
+        # one that has always been there.
+        assert f"a response reached its {cap}-token output cap ({cap} tokens)" in (
+            at_cap_message
+        )
+        assert "the two signals disagree" in at_cap_message
+        assert (
+            instrument.ArmUsage().plus(inferred_only.take()).cap_signal_disagreements
+            == 1
+        )
+
+    def test_the_agreement_row_stops_without_counting_a_disagreement(self) -> None:
+        """The third case, which is what keeps the counter honest: a provider
+        that says `"length"` at exactly the cap agrees with the inference, so
+        the run stops and NOTHING is counted. Without this the counter could be
+        wired to fire on every truncation stop and still look correct."""
+
+        cap = AUTHORIZED_SAMPLING.vote_max_tokens
+        client = self._client(_StubClient(output_tokens=cap, finish_reason="length"))
+        with pytest.raises(PerCallCapExceeded) as stopped:
+            self._call(client, max_tokens=cap)
+        message = str(stopped.value)
+        assert f"a response reached its {cap}-token output cap" in message
+        assert "finish_reason 'length'" in message
+        assert "the two signals disagree" not in message
+        assert instrument.ArmUsage().plus(client.take()).cap_signal_disagreements == 0
+
+    def test_a_silent_provider_is_stopped_by_the_inference_alone(self) -> None:
+        """The adapters this card does not edit report nothing, so their calls
+        are judged exactly as they were: the counters stop the run and the
+        message claims no observation that was never made."""
+
+        cap = AUTHORIZED_SAMPLING.vote_max_tokens
+        client = self._client(_StubClient(output_tokens=cap))
+        with pytest.raises(PerCallCapExceeded) as stopped:
+            self._call(client, max_tokens=cap)
+        message = str(stopped.value)
+        assert message == (
+            f"a response reached its {cap}-token output cap ({cap} tokens); "
+            "a truncation is a stop, not a datum"
+        )
+
+    def test_a_refused_completion_carries_the_reading_the_fourth_run_lost(
+        self,
+    ) -> None:
+        """PLANTED on the path the fourth run actually stopped through.
+
+        A body cut off mid-string fails `model_validate_json`, so the run's stop
+        came off the parse-failure metadata and not off a response. A reading
+        that reached only responses would miss precisely this call: here the
+        provider says `"length"` at 900 tokens, below the cap, so ONLY the
+        observation can stop it.
+        """
+
+        cap = AUTHORIZED_SAMPLING.vote_max_tokens
+        provider = BurnedCallProvider(output_tokens=900, finish_reason="length")
+        client = self._client(provider)
+        with pytest.raises(PerCallCapExceeded, match="finish_reason 'length'"):
+            asyncio.run(
+                client.complete(
+                    prompt="a vote prompt",
+                    schema=ModelAuthoredVoteBallot,
+                    max_tokens=cap,
+                    temperature=AUTHORIZED_SAMPLING.vote_temperature,
+                    agent_id="p-1",
+                )
+            )
+        rows = client.take()
+        assert [(row.disposition, row.finish_reason) for row in rows] == [
+            ("billed_and_refused", "length")
+        ]
+        assert instrument.ArmUsage().plus(rows).cap_signal_disagreements == 1
+
+    def test_a_refused_completion_from_a_silent_provider_reads_null(self) -> None:
+        """The same path with no reading on the metadata: recorded as null and
+        judged on the counters alone, which is what an adapter that maps no
+        `finish_reason` produces."""
+
+        provider = BurnedCallProvider(output_tokens=900, finish_reason=None)
+        client = self._client(provider)
+        with pytest.raises(ValidationError):
+            asyncio.run(
+                client.complete(
+                    prompt="a vote prompt",
+                    schema=ModelAuthoredVoteBallot,
+                    max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens,
+                    temperature=AUTHORIZED_SAMPLING.vote_temperature,
+                    agent_id="p-1",
+                )
+            )
+        rows = client.take()
+        assert [(row.disposition, row.finish_reason) for row in rows] == [
+            ("billed_and_refused", None)
+        ]
+        assert instrument.ArmUsage().plus(rows).cap_signal_disagreements == 0
+
+    def test_an_attempt_that_produced_nothing_records_null(self) -> None:
+        """The `unaccounted` row of the table: nothing came back, so there is
+        nothing to have reported a reason. Null, and never a disagreement."""
+
+        inner = NoCompletionProvider(mode="empty_body", failures=1)
+        client = self._client(inner, per_attempt_timeout_seconds=60.0)
+        self._call(client, max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens)
+        rows = client.take()
+        assert [(row.disposition, row.finish_reason) for row in rows] == [
+            ("unaccounted", None),
+            ("resolved", FAKE_FINISH_REASON),
+        ]
+        assert instrument.ArmUsage().plus(rows).cap_signal_disagreements == 0
+
+    def test_an_attempt_the_work_window_cut_off_records_null(self) -> None:
+        """The `aborted` row: the run's own window ended the attempt, so the
+        provider said nothing about how generation stopped."""
+
+        inner = NoCompletionProvider(mode="stall", failures=1, stall_seconds=5.0)
+        clock = instrument._ModelWorkClock(max_seconds=0.2)
+        client = instrument._InstrumentClient(
+            inner, work_clock=clock, per_attempt_timeout_seconds=60.0
+        )
+        with pytest.raises(RunDeadlineExceeded, match="exhausted mid-call"):
+            self._call(client, max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens)
+        rows = client.take()
+        assert [(row.disposition, row.finish_reason) for row in rows] == [
+            ("aborted", None)
+        ]
+        assert instrument.ArmUsage().plus(rows).cap_signal_disagreements == 0
+
+    def test_the_identity_stop_still_comes_first(self) -> None:
+        """A checkpoint swap is still reported as a checkpoint swap, not as a
+        truncation: the served-model check runs before either signal is read,
+        and the row it leaves still carries what the provider said."""
+
+        cap = AUTHORIZED_SAMPLING.vote_max_tokens
+        client = self._client(
+            _StubClient(output_tokens=cap, finish_reason="length"),
+            expected_model=AUTHORIZED_MODEL,
+        )
+        with pytest.raises(instrument.ProviderIdentityMismatch, match="stub"):
+            self._call(client, max_tokens=cap)
+        assert [row.finish_reason for row in client.take()] == ["length"]
+
+    def test_the_report_counts_disagreements_per_arm(self, tmp_path: Path) -> None:
+        """The count is reported, not just held: one field per arm beside
+        `retried_calls` and `unaccounted_attempts`. A dry run's double reports
+        `"stop"` on every call and none of them reaches a cap, so both arms
+        report zero — which is the reading a run with no contradiction has."""
+
+        report = run_instrument(output_dir=tmp_path, units=1)
+        assert [arm.cap_signal_disagreements for arm in report.arms] == [0, 0]
+        assert all(
+            "cap_signal_disagreements" in arm.model_dump() for arm in report.arms
+        )
+
+    def test_the_committed_calibration_and_profile_parse_and_read_null(self) -> None:
+        """Records written before this card still parse, and read null.
+
+        `CALIBRATION_SCHEMA` stays `fresh-deduction-calibration/1` and the usage
+        profile stays `fresh-deduction-usage-profile/1`: an added optional field
+        defaulting to null changes how no existing record reads, and this is the
+        proof. A double's `"stop"` is the double's own word — the ARCHIVE is
+        silent, and stays silent.
+        """
+
+        assert instrument.CALIBRATION_SCHEMA == "fresh-deduction-calibration/1"
+        payload = json.loads(
+            (
+                _REPO_ROOT
+                / "audits"
+                / "deduction-candidate"
+                / "calibration-2026-09-14"
+                / "calibration.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert payload["report_schema"] == instrument.CALIBRATION_SCHEMA
+        calls = [
+            instrument.CalibrationCall.model_validate(row) for row in payload["calls"]
+        ]
+        assert calls, "the committed calibration carries no call rows"
+        assert {call.finish_reason for call in calls} == {None}
+
+        profile = json.loads(
+            usage_replay_double.PROFILE_PATH.read_text(encoding="utf-8")
+        )
+        assert profile["schema"] == "fresh-deduction-usage-profile/1"
+        loaded = usage_replay_double.UsageProfile.load()
+        assert {row.finish_reason for row in loaded.calls} == {None}
+        # What the double puts on the wire for a silent archive is its own word,
+        # said so at the constant rather than mistaken for a measurement.
+        assert usage_replay_double.REPLAYED_FINISH_REASON == "stop"
 
 
 class TestBurnedCallStopConditions:
@@ -6588,7 +6892,18 @@ class TestCalibrationProfileRefresh:
         assert len(profile.calls) == 60
         assert len(profile.units) == 10
         payload = json.loads(profile_path.read_text(encoding="utf-8"))
-        permitted = {"arm", "call_type", "input_tokens", "output_tokens", "disposition"}
+        # `finish_reason` joins the enumeration because it is the PROVIDER's
+        # one-word reason for stopping — `"stop"`, `"length"` — and carries no
+        # prompt, prefix or payload bytes; everything else a completion knows
+        # stays out, which is what this assertion is for.
+        permitted = {
+            "arm",
+            "call_type",
+            "input_tokens",
+            "output_tokens",
+            "disposition",
+            "finish_reason",
+        }
         assert {key for row in payload["calls"] for key in row} <= permitted
         encoded = json.dumps(payload["calls"])
         for forbidden in ("prompt", "response", "seed", "room", "tick"):

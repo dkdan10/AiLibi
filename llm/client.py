@@ -119,6 +119,14 @@ class LLMResponse(BaseModel):
     consumers can budget without knowing the provider. ``model`` is the
     string id the adapter actually called — opaque to consumers, useful
     for replay records.
+
+    ``finish_reason`` is the provider's own word for why generation
+    stopped, carried verbatim. It is ``None`` when the adapter has no such
+    reading, which is what an adapter that does not map one records: a
+    missing reading is recorded as missing and never inferred, guessed or
+    defaulted to ``"stop"``. Consumers that need to know whether a
+    completion was cut off at its output cap read this beside the output
+    counters rather than instead of them.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -127,6 +135,10 @@ class LLMResponse(BaseModel):
     usage: TokenUsage
     cost_usd: float
     model: str
+    #: Defaulted so a response built without one reads as a provider that
+    #: reported nothing, which is what every adapter that predates this
+    #: field records.
+    finish_reason: str | None = None
 
 
 @runtime_checkable

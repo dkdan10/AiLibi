@@ -112,7 +112,7 @@ from experiments.held_out_prefixes import (
 from experiments.held_out_prefixes import AUTHORIZED_ROSTER as FROZEN_PREFIX_ROSTER
 from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
-from llm.fake_provider import FakeProvider
+from llm.fake_provider import FAKE_FINISH_REASON, FakeProvider
 from llm.provider import extract_parse_failure
 from meetings.manager import (
     DEFAULT_TURN_MAX_TOKENS,
@@ -1648,17 +1648,78 @@ class CapturedCall:
     #: Defaulted so a row built without one reads as an ordinary completion,
     #: which is what every caller that predates this field recorded.
     disposition: CallDisposition = "resolved"
+    #: The provider's own word for why generation stopped, as the response or
+    #: the parse-failure metadata reported it. ``None`` on the two dispositions
+    #: that carry no completion, and ``None`` from any adapter that maps no
+    #: such reading: a missing reading is recorded as missing rather than
+    #: guessed. Defaulted for the same reason ``disposition`` is.
+    finish_reason: str | None = None
+
+
+#: The provider's own word for a completion cut off at its output cap, as the
+#: OpenAI-compatible endpoints this run is authorized against report it
+#: (``choices[0].finish_reason``). Every other value — and an absent reading —
+#: is not a truncation.
+TRUNCATION_FINISH_REASON: Final[str] = "length"
+
+
+def _truncation_signals(
+    *, finish_reason: str | None, output_tokens: int, max_tokens: int
+) -> tuple[bool, bool]:
+    """The two independent readings of "this completion was cut off".
+
+    ``observed`` is the provider's own ``finish_reason``; ``inferred`` is the
+    counter comparison this instrument has made since it was written. Returned
+    as a pair rather than as one verdict because both callers need both: the
+    stop fires on EITHER, and a call whose two signals disagree is counted
+    whichever way it fell, because preferring one of them silently is how the
+    fourth run stopped on a truncation nobody observed.
+    """
+
+    observed = finish_reason == TRUNCATION_FINISH_REASON
+    inferred = output_tokens >= max_tokens
+    return observed, inferred
+
+
+def _cap_signals_disagree(call: CapturedCall) -> bool:
+    """Whether one ledger row's two truncation signals contradict each other.
+
+    A null observation is NOT a disagreement: an absent reading contradicts
+    nothing, so a row from an adapter that maps no ``finish_reason`` — and the
+    two dispositions that carry no completion at all — never counts.
+
+    Read off the recorded row rather than tallied at the stop, so the count is
+    a property of the ledger the report summarises and one definition serves
+    the stop and the count alike. A row that stopped the run for another reason
+    (an identity mismatch, say) still counts here if its two signals disagreed,
+    which is the honest reading: the disagreement happened.
+    """
+
+    if call.finish_reason is None:
+        return False
+    observed, inferred = _truncation_signals(
+        finish_reason=call.finish_reason,
+        output_tokens=call.output_tokens,
+        max_tokens=call.max_tokens,
+    )
+    return observed != inferred
 
 
 @dataclass(frozen=True)
 class ArmUsage:
-    """One arm's spend, kept separate so the arms' asymmetry stays visible."""
+    """One arm's spend, kept separate so the arms' asymmetry stays visible.
+
+    ``cap_signal_disagreements`` is not spend; it rides here because this is
+    the tally that walks the captured rows, and the count is derived from them
+    (:func:`_cap_signals_disagree`) rather than accumulated separately.
+    """
 
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
     model_work_seconds: float = 0.0
+    cap_signal_disagreements: int = 0
 
     def plus(self, calls: Sequence[CapturedCall]) -> ArmUsage:
         return ArmUsage(
@@ -1667,6 +1728,10 @@ class ArmUsage:
             output_tokens=self.output_tokens + sum(c.output_tokens for c in calls),
             cost_usd=self.cost_usd + sum(c.cost_usd for c in calls),
             model_work_seconds=self.model_work_seconds + sum(c.seconds for c in calls),
+            cap_signal_disagreements=(
+                self.cap_signal_disagreements
+                + sum(1 for c in calls if _cap_signals_disagree(c))
+            ),
         )
 
     def merged(self, other: ArmUsage) -> ArmUsage:
@@ -1683,6 +1748,9 @@ class ArmUsage:
             output_tokens=self.output_tokens + other.output_tokens,
             cost_usd=self.cost_usd + other.cost_usd,
             model_work_seconds=self.model_work_seconds + other.model_work_seconds,
+            cap_signal_disagreements=(
+                self.cap_signal_disagreements + other.cap_signal_disagreements
+            ),
         )
 
 
@@ -2256,6 +2324,7 @@ class _InstrumentClient:
                 model=failure.model,
                 seconds=burned,
                 disposition="billed_and_refused",
+                finish_reason=failure.finish_reason,
             )
             # Charged like a call that returned: the provider held the wall for
             # it either way, so the work clock and the per-arm
@@ -2277,6 +2346,7 @@ class _InstrumentClient:
                 model=failure.model,
                 output_tokens=failure.output_tokens,
                 max_tokens=max_tokens,
+                finish_reason=failure.finish_reason,
             )
             if stop is not None:
                 raise stop from exc
@@ -2294,12 +2364,14 @@ class _InstrumentClient:
             cost_usd=response.cost_usd,
             model=response.model,
             seconds=seconds,
+            finish_reason=response.finish_reason,
         )
         self._work_clock.charge(seconds)
         stop = self._unusable_response(
             model=response.model,
             output_tokens=response.usage.output_tokens,
             max_tokens=max_tokens,
+            finish_reason=response.finish_reason,
         )
         if stop is not None:
             raise stop
@@ -2317,6 +2389,7 @@ class _InstrumentClient:
         model: str,
         seconds: float,
         disposition: CallDisposition = "resolved",
+        finish_reason: str | None = None,
     ) -> None:
         """Put one attempt in the ledger, with whatever it actually cost.
 
@@ -2331,6 +2404,13 @@ class _InstrumentClient:
         re-derived downstream from the model marker: two of the four carry a
         marker for a model and the other two carry the served one, so a
         summary would have to guess which of THOSE two it was looking at.
+
+        ``finish_reason`` is the provider's own word for why generation
+        stopped, on the two dispositions that carry a completion: a response
+        reports it and a parse failure's metadata carries it. The other two
+        record null and the parameter is defaulted for them, because nothing
+        came back to report one — an absent reading is recorded as absent and
+        never back-filled.
         """
 
         self._calls.append(
@@ -2344,6 +2424,7 @@ class _InstrumentClient:
                 model=model,
                 seconds=seconds,
                 disposition=disposition,
+                finish_reason=finish_reason,
             )
         )
 
@@ -2392,7 +2473,12 @@ class _InstrumentClient:
         return _NoCompletion(trigger)
 
     def _unusable_response(
-        self, *, model: str, output_tokens: int, max_tokens: int
+        self,
+        *,
+        model: str,
+        output_tokens: int,
+        max_tokens: int,
+        finish_reason: str | None,
     ) -> InstrumentError | None:
         """The stop a completed call earns, or ``None`` if it earns none.
 
@@ -2402,6 +2488,15 @@ class _InstrumentClient:
         function so the two paths cannot enforce different lists — the run of
         2026-09-10's lesson was a check that reached one surface and not the
         other.
+
+        The truncation stop reads TWO signals and prefers neither: the
+        provider's own ``finish_reason`` and the ``output_tokens >= max_tokens``
+        inference this instrument has always made. Either one stops the run —
+        the union can only stop it EARLIER than the inference alone, never
+        later, and can never turn a stop into a datum — and the message names
+        which of them fired. A call whose two signals disagree is counted per
+        arm off its ledger row (:func:`_cap_signals_disagree`); a null reading
+        is not a disagreement, because an absent reading contradicts nothing.
         """
 
         if self._expected_model is not None and model != self._expected_model:
@@ -2409,12 +2504,36 @@ class _InstrumentClient:
                 f"a response came back from model {model!r}; this run "
                 f"is authorized for {self._expected_model!r} only"
             )
-        if output_tokens >= max_tokens:
-            return PerCallCapExceeded(
-                f"a response reached its {max_tokens}-token output cap "
-                f"({output_tokens} tokens); a truncation is a "
-                "stop, not a datum"
-            )
+        observed, inferred = _truncation_signals(
+            finish_reason=finish_reason,
+            output_tokens=output_tokens,
+            max_tokens=max_tokens,
+        )
+        if observed or inferred:
+            fired: list[str] = []
+            if inferred:
+                fired.append(
+                    f"a response reached its {max_tokens}-token output cap "
+                    f"({output_tokens} tokens)"
+                )
+            if observed:
+                fired.append(
+                    "the provider reported finish_reason "
+                    f"{TRUNCATION_FINISH_REASON!r}"
+                    + (
+                        ""
+                        if inferred
+                        else f" on {output_tokens} of {max_tokens} output tokens"
+                    )
+                )
+            message = " and ".join(fired) + "; a truncation is a stop, not a datum"
+            if finish_reason is not None and observed != inferred:
+                message += (
+                    " (the two signals disagree: finish_reason "
+                    f"{finish_reason!r} against {output_tokens} of "
+                    f"{max_tokens} output tokens)"
+                )
+            return PerCallCapExceeded(message)
         return None
 
 
@@ -2502,6 +2621,13 @@ class DryRunProvider(FakeProvider):
             ),
             cost_usd=0.0,
             model=DRY_RUN_MODEL,
+            # A DOUBLE's reading, like everything else this provider reports.
+            # It writes its own payload and is never cut off, so ``"stop"`` is
+            # the honest word; it is supplied so the dry run exercises the
+            # recorded field rather than leaving it null on every offline path.
+            # It is not an archive's silence — a real adapter that maps no
+            # reading still records ``None``.
+            finish_reason=FAKE_FINISH_REASON,
         )
 
     def _turn(self, *, prompt: str, agent_id: str | None) -> MeetingTurn:
@@ -4072,6 +4198,14 @@ class ArmSummary(BaseModel):
     unaccounted_attempts: int
     attempts_by_trigger: Mapping[str, int]
     units_with_retries: int
+    # Calls on which the provider's own ``finish_reason`` and this instrument's
+    # ``output_tokens >= max_tokens`` inference contradicted each other. A
+    # counted anomaly beside the two above, and reported for the same reason:
+    # the truncation stop fires on either signal, so without this count a run
+    # whose two readings disagree is indistinguishable from one whose readings
+    # agree. Zero on an arm whose provider reported no reading at all, because
+    # an absent reading contradicts nothing.
+    cap_signal_disagreements: int
     prompt_versions: Mapping[str, str]
     calls: int
     input_tokens: int
@@ -4259,6 +4393,7 @@ def _summarize_arm(
         units_with_retries=sum(
             1 for record in own_records if record.attempts().unaccounted_attempts > 0
         ),
+        cap_signal_disagreements=usage.cap_signal_disagreements,
         prompt_versions=dict(_one_prompt_version_set(telemetry, arm=arm)),
         calls=usage.calls,
         input_tokens=usage.input_tokens,
@@ -4348,6 +4483,11 @@ class CarriedUsage(BaseModel):
     output_tokens: int = 0
     cost_usd: float = 0.0
     model_work_seconds: float = 0.0
+    #: Carried for the same reason the counts are: the calls themselves are
+    #: gone with the sitting that made them, so a resumed run that dropped this
+    #: would report an arm's disagreements as the tail's alone. Defaulted, so a
+    #: checkpoint written before this field parses and reads zero.
+    cap_signal_disagreements: int = 0
 
     def arm_usage(self) -> ArmUsage:
         return ArmUsage(
@@ -4356,6 +4496,7 @@ class CarriedUsage(BaseModel):
             output_tokens=self.output_tokens,
             cost_usd=self.cost_usd,
             model_work_seconds=self.model_work_seconds,
+            cap_signal_disagreements=self.cap_signal_disagreements,
         )
 
 
@@ -4429,6 +4570,7 @@ def unit_telemetry(record: UnitRecord) -> UnitTelemetry:
             output_tokens=usage.output_tokens,
             cost_usd=usage.cost_usd,
             model_work_seconds=usage.model_work_seconds,
+            cap_signal_disagreements=usage.cap_signal_disagreements,
         ),
     )
 
@@ -4621,6 +4763,7 @@ def abandoned_spend(
                     output_tokens=spend.output_tokens,
                     cost_usd=spend.cost_usd,
                     model_work_seconds=spend.model_work_seconds,
+                    cap_signal_disagreements=spend.cap_signal_disagreements,
                 ),
                 retried_calls=tally.retried_calls,
                 unaccounted_attempts=tally.unaccounted_attempts,
@@ -5517,6 +5660,13 @@ class CalibrationCall(BaseModel):
     input_tokens: int
     output_tokens: int
     disposition: CallDisposition
+    #: The provider's own word for why this completion stopped, or null when it
+    #: reported none — which is what every call in a calibration recorded
+    #: before this field existed reads, because the reading was not captured
+    #: then. Defaulted, and typed ``str | None`` rather than a Literal: it is
+    #: the PROVIDER's vocabulary, not this module's, and a value this module
+    #: does not know is a fact to record rather than a parse error.
+    finish_reason: str | None = None
 
 
 class CalibrationUnitUsage(BaseModel):
@@ -5679,6 +5829,7 @@ def _call_rows(
             input_tokens=call.input_tokens,
             output_tokens=call.output_tokens,
             disposition=call.disposition,
+            finish_reason=call.finish_reason,
         )
         for record in records
         for call in record.calls
@@ -6074,6 +6225,11 @@ def usage_profile_from_calibration(report: CalibrationReport) -> dict[str, objec
             "input_tokens": call.input_tokens,
             "output_tokens": call.output_tokens,
             "disposition": call.disposition,
+            # Null on a row measured before the reading was captured, which is
+            # what the committed profile carries today: the rehearsal double
+            # reads it with ``entry.get`` and replays a double's ``"stop"``
+            # where the archive is silent, and says so.
+            "finish_reason": call.finish_reason,
         }
         for call in report.calls
     ]

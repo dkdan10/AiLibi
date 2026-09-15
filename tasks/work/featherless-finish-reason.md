@@ -1,6 +1,6 @@
 # Record the provider's finish_reason so a truncation is observed, not inferred
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -58,7 +58,7 @@ tuple, so its recording change moves the digest as every edit to it does.
 
 ## Acceptance
 
-- [ ] The client reads the field and never invents it.
+- [x] The client reads the field and never invents it.
   `_raw_from_response_body` (`llm/featherless_client.py:804-861`) takes
   `choices[0].get("finish_reason")` onto `FeatherlessRawResponse`
   (:185-205) as `str | None`, coerced to `None` when the key is absent or not
@@ -67,7 +67,7 @@ tuple, so its recording change moves the digest as every edit to it does.
   (`tests/llm/test_featherless_client.py:490-497`) with the key absent reads
   `None`, with `"length"` reads `"length"`, and with a non-string reads `None`
   rather than the raw value.
-- [ ] Both provider-neutral carriers take it. `LLMResponse`
+- [x] Both provider-neutral carriers take it. `LLMResponse`
   (`llm/client.py:115-129`) and `LLMCallFailure` (`llm/provider.py:102-124`)
   each gain `finish_reason: str | None = None`, and the Featherless adapter
   sets both: the response at `llm/featherless_client.py:402-410` and the
@@ -78,7 +78,7 @@ tuple, so its recording change moves the digest as every edit to it does.
   Mapping Anthropic's `stop_reason` or Ollama's `done_reason` is out of
   scope, and a planted test asserts those two adapters still read null
   rather than a guess.
-- [ ] The offline doubles supply a value so every non-live path exercises the
+- [x] The offline doubles supply a value so every non-live path exercises the
   field. `llm/fake_provider.py:67-75` returns `"stop"`, and the replay double
   (`tests/experiments/usage_replay_double.py:331-338`) returns the archived
   row's reading when its profile carries one and `"stop"` otherwise;
@@ -86,7 +86,7 @@ tuple, so its recording change moves the digest as every edit to it does.
   carries the same onto the refusal it raises. A double's `"stop"` is
   synthetic and is not an archive's silence: the card says so here, the
   docstrings say so there, and the ARCHIVE path still records null.
-- [ ] The instrument records it per call. `CapturedCall` (:1632-1650) gains
+- [x] The instrument records it per call. `CapturedCall` (:1632-1650) gains
   `finish_reason: str | None = None`, `_record` (:2308-2348) takes it, and
   both recording sites pass what they hold: the refused site (:2249-2259)
   from the parse-failure metadata, the resolved site (:2288-2297) from the
@@ -100,7 +100,7 @@ tuple, so its recording change moves the digest as every edit to it does.
   | `unaccounted` | nothing came back | null |
   | `aborted` | the work window cut the attempt off | null |
 
-- [ ] The cap check reads both signals and prefers neither.
+- [x] The cap check reads both signals and prefers neither.
   `_unusable_response` (:2394-2418) takes the observed reading beside
   `output_tokens` and `max_tokens` and decides by this table, which is the
   whole of the new rule:
@@ -116,13 +116,13 @@ tuple, so its recording change moves the digest as every edit to it does.
 
   A null observation is not a disagreement: an absent reading contradicts
   nothing. The stop message names which signal or signals fired.
-- [ ] Both planted proofs the diagnosis asks for exist and are red without the
+- [x] Both planted proofs the diagnosis asks for exist and are red without the
   change: a body reporting `"length"` at 900 output tokens against the 1,024
   vote cap raises `PerCallCapExceeded` and counts a disagreement; a body
   reporting `"stop"` at exactly 1,024 raises it on the inference, unchanged,
   and counts one too. A third case pins the agreement row, so the counter
   cannot be wired to fire on every stop.
-- [ ] The count is reported, not just held. `ArmSummary` (:4035-4080) gains
+- [x] The count is reported, not just held. `ArmSummary` (:4035-4080) gains
   the per-arm disagreement count beside `retried_calls` and
   `unaccounted_attempts`, which are the existing precedent for a counted
   anomaly on that model; the calibration report's per-call row
@@ -134,7 +134,7 @@ tuple, so its recording change moves the digest as every edit to it does.
   (`_reconcile_recorded_spend`, :3483-3521) gains no term: it is token
   arithmetic against the budget snapshot, and the reading rides the ledger row
   it reconciles rather than changing what has to balance.
-- [ ] Records written before this card still parse, and read null. A test
+- [x] Records written before this card still parse, and read null. A test
   loads the committed
   `audits/deduction-candidate/calibration-2026-09-14/calibration.json` and
   `tests/experiments/deduction_usage_profile.json` through the current models
@@ -142,7 +142,7 @@ tuple, so its recording change moves the digest as every edit to it does.
   (:5381) stays `fresh-deduction-calibration/1` and the usage profile stays
   `fresh-deduction-usage-profile/1`: an added optional field defaulting to
   null changes how no existing record reads, and that test proves it.
-- [ ] The execution manifest gains one dated paragraph under
+- [x] The execution manifest gains one dated paragraph under
   `### How each limit is enforced`
   (`audits/deduction-candidate/execution-manifest.md:857`), attached to the
   `Per-call cap` bullet at :888, recording that from this date the truncation
@@ -152,7 +152,7 @@ tuple, so its recording change moves the digest as every edit to it does.
   (:619-650), `AUTHORIZED_SAMPLING` and every limit constant are
   byte-identical afterwards, and the test that pins the manifest to the
   constants passes unchanged.
-- [ ] `docs/artifacts.md`'s `audits/` inventory row is recomputed with the
+- [x] `docs/artifacts.md`'s `audits/` inventory row is recomputed with the
   manifest change staged, `scripts/verify_ml_evidence.py` passes offline, and
   every new gate above has a planted failure recorded in Results with the
   message it produced.
@@ -248,3 +248,169 @@ replay doubles only), then `uv run python scripts/validate_task_docs.py`,
 scripts/verify_ml_evidence.py` (offline; never `--complete`), `uv run pytest
 tests/scripts/test_verify_ml_evidence.py -q`, and `bash scripts/check.sh`.
 Neither the live evaluation nor a live calibration is a check or is run here.
+
+## Results
+
+Every acceptance item is met and the card is `done`. The stop condition's WORDS
+are unchanged — `STOP_RULE` (`experiments/fresh_deduction_instrument.py:619-650`)
+already stops on "a per-call response that reached its output cap" — and its
+EVIDENCE is widened: the provider's own `finish_reason` is now recorded beside
+the `output_tokens >= max_tokens` inference, either signal stops the run, and a
+call on which the two contradict is counted per arm. No limit, no sampling
+value, no authorized-table row and no byte of `STOP_RULE` or
+`AUTHORIZED_SAMPLING` moved; no run, calibration or re-record is authorized by
+this work, and no live provider call was made on any path.
+
+Architecture: `docs/architecture.md`'s LLM-adapter layer — the provider-neutral
+`llm/client.py` surface every adapter implements — and AGENTS.md load-bearing
+rule 5, invalid input raises and no silent fallbacks, are what shape the
+design: a reading the adapter did not receive is recorded as `None` rather than
+defaulted, on every path.
+
+**What moved, in one line each.** `FeatherlessRawResponse`, `LLMResponse` and
+`LLMCallFailure` each gain `finish_reason: str | None = None`; the Featherless
+adapter reads `choices[0]["finish_reason"]` in `_raw_from_response_body` and
+sets both carriers; `FakeProvider` reports `FAKE_FINISH_REASON` (`"stop"`, a
+double's word, named so no reader mistakes it for a measurement) and
+`DryRunProvider` carries the same; `CapturedCall`, `CalibrationCall`, the usage
+profile's call rows and `ArmSummary.cap_signal_disagreements` record it or the
+count derived from it. `llm/ollama_client.py` and the Anthropic adapter in
+`llm/provider.py` are NOT edited and therefore read null, which a test pins.
+
+**Decision — where the count lives, and why it is derived.** The per-arm count
+rides `ArmUsage` (and `CarriedUsage`, so a resumed sitting carries it) and is
+DERIVED from the ledger rows by `_cap_signals_disagree`, not accumulated as a
+second counter inside `_unusable_response`. One definition then serves the stop
+and the report, and the count is a property of what was recorded: a row whose
+two signals disagreed counts even if some other stop — an identity mismatch —
+fired first, which is the honest reading, because the disagreement happened.
+`ArmUsage` is a spend tally and this is not spend; it rides there because that
+is the one tally that walks the captured rows, and its docstring says so.
+
+**Decision — the stop message names which signal fired, and the inference's own
+wording is byte-identical.** A call stopped by the counters alone with no
+reading still raises exactly `a response reached its 1024-token output cap
+(1024 tokens); a truncation is a stop, not a datum`, pinned by
+`test_a_silent_provider_is_stopped_by_the_inference_alone`. An observed-only
+stop names `finish_reason 'length'` and the tokens it was seen at; a
+disagreement appends the contradiction in the same message.
+
+**Decision — the doubles say `"stop"`, and say that they are saying it.** The
+fake provider, the dry-run provider, `charged_parse_failure` and the replay
+double all report `"stop"` where they have no archived reading, so every
+offline path exercises the field. `usage_replay_double.REPLAYED_FINISH_REASON`
+and `llm.fake_provider.FAKE_FINISH_REASON` name it, their docstrings say it is
+a double's word and not an archive's, and `UsageRow.finish_reason` keeps the
+ARCHIVE's own silence visible as `None`.
+
+**Record impact, as declared.** One `audits/` document is amended — the
+execution manifest, one dated paragraph attached to the `Per-call cap` bullet —
+and `docs/artifacts.md`'s `audits/` row moves from `15,096,108 tracked bytes /
+211 files` to `15,097,461 tracked bytes / 211 files`: 211 files unchanged,
++1,353 bytes, the paragraph. No recording, report, calibration record or usage
+profile is regenerated. The arm-surface digest moves, because the instrument is
+in `ARM_SURFACE_SOURCES`: `assert_checkpoint_matches` refuses a resume across
+the change and the fourth run's units are not poolable with later ones, which
+the card costs as already spent. `llm/featherless_client.py`, `llm/client.py`
+and `llm/provider.py` are outside that tuple and outside the prompt directory,
+so the client half is digest-neutral. `CALIBRATION_SCHEMA` stays
+`fresh-deduction-calibration/1` and the usage profile stays
+`fresh-deduction-usage-profile/1`.
+
+**Two deviations from Expected scope, both directly necessary and both
+declared.** First, `DryRunProvider.complete` — inside the instrument, already
+in scope — sets `finish_reason=FAKE_FINISH_REASON`, so the dry run exercises
+the recorded field instead of leaving it null on every offline path. Second,
+the profile row's permitted-key enumeration in
+`TestCalibrationProfileRefresh::test_the_refresh_writes_a_profile_the_double_reads`
+gains `"finish_reason"`: it is a leak guard over a row that carries counts
+only, and the provider's one-word stop reason carries no prompt, prefix or
+payload bytes. Nothing else outside the card's file list is touched.
+
+### Verification
+
+Run on `work/featherless-finish-reason`, in a worktree of this branch, with the
+repository's own `.venv`.
+
+| command | result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/llm -q` | `328 passed, 17 skipped` |
+| `.venv/bin/python -m pytest tests/experiments -q` | `412 passed` |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed |
+| `.venv/bin/python scripts/check_doc_facts.py` | passed |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`, `verify-ml-evidence: every check passed.` |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | passed |
+| `bash scripts/check.sh` | passed, exit 0 |
+
+The seven `ABSENT` rows are the evidence-branch bytes a fresh clone does not
+carry. `--complete` was not run, and neither a live evaluation nor a live
+calibration is a check here or was run.
+
+### The planted failures, each edited, run and restored
+
+Every one was applied to this tree, run, and reverted; the tests named are the
+new ones in `tests/llm/test_featherless_client.py` and
+`tests/experiments/test_fresh_deduction_instrument.py`.
+
+1. **The client invents a reading.** `_raw_from_response_body`'s coercion
+   changed to `else "stop"`. Red: `test_absent_finish_reason_maps_to_none`, the
+   four `test_a_non_string_finish_reason_maps_to_none` cases and
+   `test_the_client_never_defaults_the_reading_to_stop` — `6 failed, 1 passed`,
+   the last with `assert 'stop' not in [...]` naming the literal.
+2. **The observed signal is dropped**, i.e. the rule as it stood before this
+   card: `observed = False` forced in `_unusable_response`. Red:
+   `test_the_decision_table_is_the_whole_rule[length-900-True-1]`,
+   `test_the_two_planted_disagreements_are_red_without_the_reading`,
+   `test_the_agreement_row_stops_without_counting_a_disagreement` and
+   `test_a_refused_completion_carries_the_reading_the_fourth_run_lost` —
+   `4 failed, 12 passed`. This is the `"length"`-at-900-tokens case the counters
+   cannot see.
+3. **The counter fires on every truncation stop.** `_cap_signals_disagree`
+   returning `observed or inferred`. Red:
+   `test_the_decision_table_is_the_whole_rule[length-1024-True-0]` and
+   `test_the_agreement_row_stops_without_counting_a_disagreement` —
+   `2 failed, 14 passed`. This is the agreement row, which is what keeps the
+   count from being a second name for the stop.
+4. **A null observation counted as a disagreement.** The
+   `if call.finish_reason is None: return False` guard removed. Red:
+   `test_the_decision_table_is_the_whole_rule[None-1024-True-0]` —
+   `1 failed, 15 passed`, `assert 1 == 0`.
+5. **The refused path loses the reading.** `finish_reason` dropped from the
+   instrument's `billed_and_refused` record and from its `_unusable_response`
+   call. Red: `test_a_refused_completion_carries_the_reading_the_fourth_run_lost`
+   — `1 failed, 15 passed`. This is the path the fourth run actually stopped
+   through.
+6. **The boundary defaults instead of recording null.**
+   `CalibrationCall.finish_reason` defaulted to `"stop"`. Red:
+   `test_the_committed_calibration_and_profile_parse_and_read_null` —
+   `1 failed, 15 passed`, `Extra items in the right set: None`.
+7. **The adapter's refusal carrier loses it, and an unedited adapter guesses.**
+   `finish_reason=raw.finish_reason` removed from the Featherless
+   `LLMCallFailure`, and `finish_reason="stop"` added to `llm/ollama_client.py`.
+   Red: `test_the_parse_failure_carrier_takes_the_reading` and
+   `test_the_anthropic_and_ollama_adapters_still_read_null` —
+   `2 failed, 3 passed`. Both edits reverted; `llm/ollama_client.py` carries no
+   change in this branch's diff.
+
+### Limitations
+
+- **The widening cannot be checked against the fourth run.** The field was
+  never recorded there, so there is no way to know how often its two signals
+  would have disagreed. That is the reason for the card, not a claim that the
+  risk is zero. The union can only trip a stop EARLIER than the inference
+  alone, never later, and can never turn a stop into a datum.
+- **A per-unit replay row still will not say why a call stopped.**
+  `orchestrator/game.py` and `orchestrator/replay.py` are arm surface and are
+  not edited, so `LLMCallRecord` does not carry the reading; a recount reads it
+  from the report and the calibration record. Extending that row is a separate
+  card.
+- **Only the Featherless adapter maps a reading.** Anthropic's `stop_reason`
+  and Ollama's `done_reason` are out of scope by the card, and those two
+  adapters record null — pinned, so a later guess is red rather than silent.
+- **The two readings are checked against each other, not against ground
+  truth.** A provider that reports `"length"` wrongly, or omits it on a
+  truncation, is invisible to both; what the count says is that the two
+  readings differed, which is the most an offline instrument can say.
+- **The disagreement count is at most one per stopped run in practice**, since
+  a disagreement is also a stop. It is reported per arm because a calibration —
+  which the second calibration card is briefed to run — can see several.
