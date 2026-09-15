@@ -34,6 +34,7 @@ from pydantic import BaseModel, ValidationError
 import experiments.fresh_deduction_instrument as instrument
 from experiments.fresh_deduction_instrument import DryRunProvider
 from llm.client import CallKind, LLMResponse, TokenUsage
+from llm.fake_provider import FAKE_FINISH_REASON
 from llm.provider import LLMCallFailure, _attach_parse_failure
 from meetings.schemas import ModelAuthoredVoteBallot
 
@@ -54,6 +55,7 @@ def charged_parse_failure(
     input_tokens: int,
     output_tokens: int,
     model: str = instrument.DRY_RUN_MODEL,
+    finish_reason: str | None = FAKE_FINISH_REASON,
 ) -> ValidationError:
     """The exception a real provider raises after billing for a refused payload.
 
@@ -65,6 +67,14 @@ def charged_parse_failure(
     `model` is what the endpoint says it served. It is settable because that is
     the one fact the metadata carries which a hosted endpoint can get wrong on
     its own: a checkpoint swap shows up here just as it shows up on a response.
+
+    `finish_reason` is the provider's own word for why generation stopped,
+    carried onto the refusal because the real adapter carries it there: a body
+    cut off at the output cap is the usual reason a payload then fails schema
+    validation. The default is a DOUBLE's `"stop"` and not a measurement — this
+    file plants its own payload and is never cut off — so a caller that wants a
+    truncation says `"length"` and a caller replaying an archive that recorded
+    no reading passes `None`.
     """
 
     try:
@@ -81,6 +91,7 @@ def charged_parse_failure(
                 cost_usd=0.0,
                 error_type=type(exc).__name__,
                 error_message=str(exc)[:200],
+                finish_reason=finish_reason,
             ),
         )
         return exc
@@ -136,6 +147,10 @@ class BurnedCallProvider(DryRunProvider):
     overrun still on it, so only the post-unit read-back can find it.
     `served_model` is what the endpoint claims to have served, for the checkpoint
     swap a refused payload carries in its metadata like any other.
+    `finish_reason` is the word the endpoint puts on the refused completion: the
+    double's own `"stop"` by default, `"length"` for the provider-observed
+    truncation the run of 2026-09-15 stopped on and could not name, and `None`
+    for an adapter that maps no reading at all.
     """
 
     def __init__(
@@ -146,6 +161,7 @@ class BurnedCallProvider(DryRunProvider):
         then_transport_failure: bool = False,
         burn_on_ballot: int = 1,
         served_model: str = instrument.DRY_RUN_MODEL,
+        finish_reason: str | None = FAKE_FINISH_REASON,
     ) -> None:
         super().__init__()
         self.input_tokens = input_tokens
@@ -155,6 +171,7 @@ class BurnedCallProvider(DryRunProvider):
         self._then_transport_failure = then_transport_failure
         self._burn_on_ballot = burn_on_ballot
         self._served_model = served_model
+        self._finish_reason = finish_reason
 
     async def complete(
         self,
@@ -177,6 +194,7 @@ class BurnedCallProvider(DryRunProvider):
                     input_tokens=self.input_tokens,
                     output_tokens=self.output_tokens,
                     model=self._served_model,
+                    finish_reason=self._finish_reason,
                 )
         if self._then_transport_failure and self.burned == 1:
             self._then_transport_failure = False
@@ -340,5 +358,9 @@ class NoCompletionProvider(DryRunProvider):
                 ),
                 cost_usd=response.cost_usd,
                 model=response.model,
+                # The dry run's own `"stop"`, kept rather than dropped: this
+                # mode plants the counter's truncation, so the reading it
+                # carries is the one the underlying double reported.
+                finish_reason=response.finish_reason,
             )
         return response

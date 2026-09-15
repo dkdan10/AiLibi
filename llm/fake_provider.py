@@ -26,6 +26,13 @@ from llm.client import CallKind, LLMResponse, TokenUsage
 _FAKE_MEETING_MODEL: Final[str] = "fake-meeting"
 _FAKE_TRIGGER_MODEL: Final[str] = "fake-trigger"
 
+#: What this fake reports as the reason generation stopped. A DOUBLE's reading
+#: and not a provider's: the fake writes its own text and is never cut off, so
+#: ``"stop"`` is what honestly describes it. Named rather than inlined so a
+#: test can assert the offline path carries a reading without spelling the
+#: literal twice, and so no reader mistakes it for an archived measurement.
+FAKE_FINISH_REASON: Final[str] = "stop"
+
 
 class FakeProvider:
     """In-process LLM stub that returns schema-valid, deterministic output.
@@ -38,6 +45,8 @@ class FakeProvider:
     * Token counts derive from prompt and response string lengths so the
       same call yields the same :class:`TokenUsage` every time.
     * ``cost_usd`` is always ``0.0`` (the fake never spends money).
+    * ``finish_reason`` is always :data:`FAKE_FINISH_REASON`, which is this
+      double's own word and not a measurement.
     * The model id reported back is the fake-tier id matching
       ``call_kind`` (or the explicit ``model`` argument when given).
     """
@@ -72,6 +81,13 @@ class FakeProvider:
             ),
             cost_usd=0.0,
             model=chosen_model,
+            # A DOUBLE's reading, not a provider's. This fake builds its text
+            # itself and is never cut off, so the honest word for how it
+            # stopped is ``"stop"`` — and it is supplied so every offline path
+            # exercises the field rather than leaving it null everywhere but
+            # live. It is not an archive's silence: a real adapter that maps no
+            # reading still records ``None``.
+            finish_reason=FAKE_FINISH_REASON,
         )
 
 
@@ -201,4 +217,4 @@ def _fallback_zero(annotation: Any) -> Any:
         return None
 
 
-__all__ = ["FakeProvider"]
+__all__ = ["FAKE_FINISH_REASON", "FakeProvider"]

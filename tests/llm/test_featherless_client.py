@@ -26,10 +26,12 @@ Async ``complete`` calls are driven with ``asyncio.run`` rather than
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -43,6 +45,7 @@ from llm.budgeted_client import (
     BudgetedLLMClient,
     _default_cost_rates,
 )
+import llm.featherless_client as featherless_client
 from llm.client import LLMClient
 from llm.fake_provider import FakeProvider
 from llm.featherless_client import (
@@ -57,9 +60,11 @@ from llm.featherless_client import (
     _send_with_retry,
     _supports_thinking_kwarg,
 )
+from llm.ollama_client import OllamaClient, OllamaRawResponse
 from llm.provider import (
     PROVIDER_FEATHERLESS,
     AnthropicClient,
+    AnthropicRawResponse,
     _compute_cost_usd,
     build_default_client,
     extract_parse_failure,
@@ -133,6 +138,7 @@ def _send_returning(
     prompt_tokens: int = 11,
     completion_tokens: int = 7,
     reasoning_content: str = "",
+    finish_reason: str | None = None,
 ) -> _RecordingSend:
     return _RecordingSend(
         raw=FeatherlessRawResponse(
@@ -141,6 +147,7 @@ def _send_returning(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             reasoning_content=reasoning_content,
+            finish_reason=finish_reason,
         )
     )
 
@@ -516,6 +523,76 @@ class TestResponseBodyMapping:
         raw = _raw_from_response_body(body, model="m")
         assert raw.reasoning_content == ""
 
+    def test_absent_finish_reason_maps_to_none(self) -> None:
+        """PLANTED: the body this suite has always sent, which carries no
+        `finish_reason` at all. Absent reads null — never `"stop"`, which would
+        be this adapter inventing a reading the server did not give it."""
+
+        raw = _raw_from_response_body(self._body(), model="m")
+        assert raw.finish_reason is None
+
+    def test_a_length_finish_reason_is_carried_verbatim(self) -> None:
+        """PLANTED: the reading the fourth run stopped on and could not name.
+        `"length"` is the server saying the completion hit its output cap."""
+
+        body = self._body(
+            choices=[
+                {
+                    "message": {"content": _VALID_BODY, "reasoning_content": ""},
+                    "finish_reason": "length",
+                }
+            ]
+        )
+        raw = _raw_from_response_body(body, model="m")
+        assert raw.finish_reason == "length"
+
+    @pytest.mark.parametrize("planted", [17, True, {"reason": "length"}, ["length"]])
+    def test_a_non_string_finish_reason_maps_to_none(self, planted: Any) -> None:
+        """PLANTED: a server that answers with something other than a string.
+        Coerced to null rather than carried, so no downstream comparison ever
+        reads a truncation off a shape that is not the provider's word."""
+
+        body = self._body(
+            choices=[
+                {
+                    "message": {"content": _VALID_BODY, "reasoning_content": ""},
+                    "finish_reason": planted,
+                }
+            ]
+        )
+        raw = _raw_from_response_body(body, model="m")
+        assert raw.finish_reason is None
+
+    def test_the_client_never_defaults_the_reading_to_stop(self) -> None:
+        """No `"stop"` string literal exists anywhere in the adapter's code, so
+        a reading this client did not receive cannot be manufactured in it.
+
+        Read off the parsed tree rather than the raw text, so the prose that
+        EXPLAINS the rule (docstrings and comments that name `"stop"`) does not
+        satisfy or break it: only an executable literal counts.
+        """
+
+        source = Path(featherless_client.__file__ or "").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        docstrings = {
+            id(node.body[0].value)
+            for node in ast.walk(tree)
+            if isinstance(
+                node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+            )
+            and node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+        }
+        literals = [
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in docstrings
+        ]
+        assert "stop" not in literals
+
     def test_model_falls_back_to_requested_when_absent(self) -> None:
         body = self._body()
         del body["model"]
@@ -554,6 +631,120 @@ class TestResponseBodyMapping:
         body = self._body(usage={"prompt_tokens": 5, "completion_tokens": 0})
         raw = _raw_from_response_body(body, model="m")
         assert raw.completion_tokens == 0
+
+
+class TestFinishReasonReachesBothCarriers:
+    """The reading rides a response AND a refusal, and only this adapter sets it.
+
+    The fourth run of the fresh-deduction instrument stopped at unit 26 on a
+    body cut off at its 1,024-token output cap. Nothing recorded the provider's
+    own word for that, and the stop was inferred from the output counters
+    alone. It came back through the PARSE-FAILURE path — a truncated body is
+    the usual reason a payload then fails schema validation — so a field that
+    reached only the response would miss the call that actually stopped it
+    (`tasks/diagnosis-2026-09-15-truncation-stop.md` §5 fix D).
+    """
+
+    def test_a_response_carries_the_servers_reading(self) -> None:
+        send = _send_returning(finish_reason="length")
+        client = _client(send)
+
+        response = asyncio.run(
+            client.complete(
+                prompt="p", schema=_SampleReport, max_tokens=64, temperature=0.0
+            )
+        )
+
+        assert response.finish_reason == "length"
+
+    def test_a_response_from_a_silent_server_reads_null(self) -> None:
+        client = _client(_send_returning())
+
+        response = asyncio.run(
+            client.complete(
+                prompt="p", schema=_SampleReport, max_tokens=64, temperature=0.0
+            )
+        )
+
+        assert response.finish_reason is None
+
+    def test_the_parse_failure_carrier_takes_the_reading(self) -> None:
+        """PLANTED: the shape the fourth run stopped on — a body the server cut
+        off at the cap (`"length"`) which then fails schema validation. Before
+        this field the refusal carried the counters and nothing else, so the
+        one call that stopped the run could not name why."""
+
+        send = _send_returning(
+            text=_MALFORMED_BODY,
+            prompt_tokens=2228,
+            completion_tokens=1024,
+            finish_reason="length",
+        )
+        client = _client(send)
+
+        with pytest.raises(ValidationError) as exc_info:
+            asyncio.run(
+                client.complete(
+                    prompt="p" * 40,
+                    schema=_SampleReport,
+                    max_tokens=1024,
+                    temperature=0.0,
+                )
+            )
+
+        failure = extract_parse_failure(exc_info.value)
+        assert failure is not None
+        assert failure.finish_reason == "length"
+        assert (failure.input_tokens, failure.output_tokens) == (2228, 1024)
+
+    def test_the_parse_failure_carrier_of_a_silent_server_reads_null(self) -> None:
+        client = _client(_send_returning(text=_MALFORMED_BODY))
+
+        with pytest.raises(ValidationError) as exc_info:
+            asyncio.run(
+                client.complete(
+                    prompt="p" * 40,
+                    schema=_SampleReport,
+                    max_tokens=64,
+                    temperature=0.0,
+                )
+            )
+
+        failure = extract_parse_failure(exc_info.value)
+        assert failure is not None
+        assert failure.finish_reason is None
+
+    def test_the_anthropic_and_ollama_adapters_still_read_null(self) -> None:
+        """PLANTED: the two adapters this card does NOT edit, each answering a
+        well-formed body. Mapping Anthropic's `stop_reason` or Ollama's
+        `done_reason` onto this field is out of scope, and a guessed `"stop"`
+        from either of them would be a reading no adapter took."""
+
+        async def _anthropic_send(**_: Any) -> AnthropicRawResponse:
+            return AnthropicRawResponse(
+                text=_VALID_BODY,
+                model="claude-sonnet-4-6",
+                input_tokens=11,
+                output_tokens=22,
+            )
+
+        async def _ollama_send(**_: Any) -> OllamaRawResponse:
+            return OllamaRawResponse(
+                text=_VALID_BODY,
+                model="qwen3.5:9b",
+                prompt_eval_count=5,
+                eval_count=9,
+            )
+
+        anthropic = AnthropicClient(api_key="test-key", send=_anthropic_send)
+        ollama = OllamaClient(host="localhost:11434", seed=0, send=_ollama_send)
+        for client in (anthropic, ollama):
+            response = asyncio.run(
+                client.complete(
+                    prompt="p", schema=_SampleReport, max_tokens=64, temperature=0.0
+                )
+            )
+            assert response.finish_reason is None
 
 
 class TestMalformedBodyBecomesFailedCall:

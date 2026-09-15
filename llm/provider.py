@@ -122,6 +122,13 @@ class LLMCallFailure(BaseModel):
     cost_usd: float
     error_type: str
     error_message: str
+    #: The provider's own word for why generation stopped, carried on the
+    #: refused completion exactly as :attr:`llm.client.LLMResponse.finish_reason`
+    #: carries it on one that parsed. A body cut off at its output cap is the
+    #: usual reason a payload then fails schema validation, so a reader that
+    #: saw this field only on responses would miss it on precisely the calls
+    #: it was added for. ``None`` when the adapter maps no such reading.
+    finish_reason: str | None = None
 
 
 SendHook = Callable[..., Awaitable[AnthropicRawResponse]]

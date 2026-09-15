@@ -892,6 +892,25 @@ asserts this document quotes each of them.
   completion, not off the parse: a body cut off at the cap is the usual reason a
   payload then fails schema validation, so the same check is applied to the
   `output_tokens` a refused call's parse-failure metadata reports.
+
+  **2026-09-15 — the truncation reading is observed as well as inferred.** From
+  this date the cap check reads the provider's own `finish_reason` beside the
+  `output_tokens >= max_tokens` inference above, and EITHER of them stops the
+  run. A `finish_reason` of `"length"` is the provider saying the completion
+  reached its cap, which is what this bullet already refuses, so the union can
+  only stop a run earlier than the inference alone and can never turn a stop
+  into a datum. A call on which the two signals disagree — `"length"` below the
+  cap, or any other word at it — stops the run and is COUNTED, reported per arm
+  as `cap_signal_disagreements` beside `retried_calls` and
+  `unaccounted_attempts`. A call whose provider reported no reading records
+  null, and null is not a disagreement, because an absent reading contradicts
+  nothing. The reading rides a refused call's parse-failure metadata as well as
+  a response, since the run of 2026-09-15 stopped through the refused path and
+  a check that reached only responses would have missed it. This changes no
+  limit, no sampling value and no word of `STOP_RULE`; the fourth run cannot be
+  re-read against it, because the field was never recorded there
+  (`tasks/work/featherless-finish-reason.md`;
+  `tasks/diagnosis-2026-09-15-truncation-stop.md` §5 fix D, §6 decision 3).
 - **Sampling.** The two temperatures and the two caps are served through an
   explicit `MeetingConfig` built from `AUTHORIZED_SAMPLING`, and a live run whose
   sampling configuration is not that one is refused before any client is built.
