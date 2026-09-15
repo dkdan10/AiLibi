@@ -1,6 +1,6 @@
 # Run a second development calibration sized for the impostor ballot mode
 
-**Status:** ready
+**Status:** active
 
 ## Outcome
 
@@ -85,7 +85,7 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
 
 ## Acceptance
 
-- [ ] A SECOND dated clause and constant set beside the 2026-09-14 set, not
+- [x] A SECOND dated clause and constant set beside the 2026-09-14 set, not
   replacing it: `CALIBRATION_2_PAIRED_SEEDS = 60`, `CALIBRATION_2_LIMITS`, and
   `CALIBRATION_2_SAMPLING` equal to `AUTHORIZED_SAMPLING` (`:426`), so the draw
   is turn 4,096 / vote 1,024 and what is measured is what the fifth run would
@@ -95,7 +95,7 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   sets whole and refuses every crossing, with a planted failure each: five seeds
   under the second's limits, sixty under the first's, either mode drawing at the
   other's caps.
-- [ ] The draw: accepted seeds ascending across `CONVERTED_BANDS`
+- [x] The draw: accepted seeds ascending across `CONVERTED_BANDS`
   (`experiments/held_out_prefixes.py:375-394`) in list order until sixty paired
   seeds are bound, so all fifty of the 3000-3999 record then 5000 to 5009 of
   the 5000-5999 record. Each record is verified by `verify_calibration_set`
@@ -104,7 +104,7 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   block names every record with its sha256 and the seeds drawn from it. Planted:
   a `status` that is not `development`, a moved digest, and a draw that runs out
   of accepted seeds before sixty.
-- [ ] In THIS mode a per-call truncation is a measurement, not a stop. The cap
+- [x] In THIS mode a per-call truncation is a measurement, not a stop. The cap
   branch of `_unusable_response` (`:2413`) does not raise here, the truncated
   ballot or turn takes the meeting layer's existing fail-soft
   (`meetings/manager.py:2288,2298`; `:1916-1922`), and the call is counted per
@@ -112,14 +112,14 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   branch and the live path still stop: a planted failure proves a live
   evaluation invocation still raises `PerCallCapExceeded` on that response.
   `STOP_RULE` (`:619`) is not edited; the manifest's dated section says why.
-- [ ] Role-split reporting: per arm, per call type, split by the voter's or
+- [x] Role-split reporting: per arm, per call type, split by the voter's or
   speaker's hidden role, the completions and the mean, p95 and max of output
   tokens and of the character lengths of `rationale_text`, `claims[].reason` and
   `free_text`, plus the count of impostor-authored candidate ballots that open
   by stating their own role or kill. The truncation rate's denominator is
   impostor DRAWS, since a fail-softed ballot is a draw that produced no
   rationale. Counts and lengths only: no prose, prompt, prefix or outcome.
-- [ ] The pre-declared leak diagnostic (decision 9): a detector over each unit's
+- [x] The pre-declared leak diagnostic (decision 9): a detector over each unit's
   committed public turns counts, per arm, the turns in which a speaker states
   its own hidden role or a kill it committed, off the roles `UnitRecord`
   (`:3230`) already holds. Reported here AND pre-declared in the manifest as a
@@ -130,13 +130,13 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   positive shapes (a first-person role statement, a first-person kill
   statement) and the negative the diagnosis counted out, an impostor rebutting
   an accusation against itself.
-- [ ] The Constraints table's limits are the mode's, and
+- [x] The Constraints table's limits are the mode's, and
   `assert_limits_are_feasible` (`:1203`) accepts them for 120 units: per-unit
   output 16,000 against a 15,360 schedule, per-unit input 60,000 against the
   24,282 largest archived unit (`:477`), run output 3,116 x 120 + 4,096 =
   378,016 against 450,000 and run input 2,913,840 against 4,500,000. Planted:
   the first mode's 12,000 per-unit output, which this draw cannot pay for.
-- [ ] The ceiling proposal rule adds the in-flight headroom term: a proposed
+- [x] The ceiling proposal rule adds the in-flight headroom term: a proposed
   run-level OUTPUT ceiling is at least units x the measured maximum unit plus
   one turn cap, the term the gate enforces (`:1264-1273`), and the proposal's
   own feasibility check (`:5862-5870`) runs against the CALIBRATION's maxima
@@ -156,7 +156,7 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   `assert_report_holds_no_prefix_bytes` (`:4178`) over the payload. Prefixes
   and rendered prompts are not committed; replays go to the runner's
   `--output-dir`, outside version control.
-- [ ] The execution manifest gains a dated "Development calibration 2
+- [x] The execution manifest gains a dated "Development calibration 2
   (2026-09-15)" section: the clause verbatim, the inputs and their records, the
   limits and sampling table, the truncation ruling scoped to this mode, and the
   leak column pre-declared for the fifth run. The frozen analysis strings stay
@@ -249,3 +249,230 @@ scripts/check_doc_facts.py`, `uv run python scripts/verify_ml_evidence.py`
 (offline; never `--complete`), `uv run pytest
 tests/scripts/test_verify_ml_evidence.py -q`, and `bash scripts/check.sh`.
 Neither the live calibration nor the live evaluation is a check here.
+
+## Results
+
+Acceptance items 1 to 7 and 10 are implemented and verified offline, at $0, by
+the implementer session. Items 8, 9 and 11 all depend on the live sitting, which
+this card's Constraints reserve to a separate runner session ("The runner of the
+sitting is not this card's implementer"), so they stay unchecked and the card
+stays `active`; what each of them still needs is stated under **What is not
+done** below.
+
+### Where this sits
+
+`experiments/` is an offline measurement harness whose outputs are artifacts
+rather than behaviour (`docs/architecture.md` §Packages, "offline measurement
+harnesses write separate artifacts"), so nothing here moves an engine, agent or
+meeting byte and the four import-linter contracts of §Enforced boundaries are
+untouched. The design this mode serves is
+[the preregistration](../../audits/deduction-candidate/preregistration.md) and
+[the execution manifest](../../audits/deduction-candidate/execution-manifest.md);
+the manifest's frozen analysis — `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`WRONGFUL_EJECTION_TRADEOFF`, `MINIMUM_ACTIONABLE_EFFECT_UNITS` and `STOP_RULE` —
+is byte-identical, which
+`test_the_manifest_quotes_the_frozen_analysis` and
+`test_the_stop_rule_still_says_a_truncation_is_a_stop` hold.
+
+### Decisions
+
+1. **Two modes in a table, not two sets of constants read independently.**
+   `CalibrationMode` holds a mode's seeds, limits, sampling and clause as one
+   value, `CALIBRATION_MODES` carries both, and `calibration_mode_for` accepts a
+   calibration only when all three sizing values are ONE mode's. Five constants
+   read independently would authorize the crossings nobody approved, which is
+   how a sixty-seed draw ends up under ceilings sized for ten units.
+2. **The draw is a list of records, not a bigger record.** `CalibrationSet`
+   still binds one record and still runs every per-record check;
+   `CalibrationDraw` is a sequence of them and `verify_calibration_draw` fills
+   the seed count across `CONVERTED_BANDS` in list order. `verify_calibration_set`
+   gained one keyword, `draw_at_most`, off by default — so the single-record
+   path keeps its own "this record accepts 50 and I draw 51" refusal
+   (`test_a_single_record_draw_still_refuses_a_record_it_cannot_fill`) and the
+   "ran out of seeds" refusal lives over the whole draw, where the question is
+   answerable.
+3. **The truncation relaxation is a constructor flag on the client, defaulted
+   off.** `_InstrumentClient(truncation_is_a_measurement=...)` and
+   `_build_harness(truncation_is_a_measurement=...)`; `run_instrument` and
+   `run_dry` never pass it, and `run_calibration` passes the matched mode's
+   value. It reaches the cap branch of `_unusable_response` only: the identity
+   branch still returns `ProviderIdentityMismatch` in this mode.
+4. **The leak detector is scoped to the IMPOSTOR role and documented as a
+   floor.** A crewmate naming its own role is every crewmate's opening line;
+   counting it would report the roster rather than a leak, and the figures the
+   diagnosis published (2 of 13 candidate games, 0 of 39 reference turns) are
+   impostor self-tells. `ROLE_LEAK_RULE` says so and says what the rule cannot
+   do — it does not read intent, so an impostor that confesses in words it does
+   not match is not counted.
+5. **`clears_the_feasibility_gate` now means the proposal's own claim, and the
+   old comparison is reported beside it.** The card asks the proposal's
+   feasibility check to run against the CALIBRATION's maxima; that check is
+   cleared by construction, so the signal the fixture-vs-measurement case held
+   would have been lost. It moved to a second field,
+   `clears_the_committed_profiles_gate` / `committed_profile_refusal`, and
+   `test_a_fixture_sized_proposal_says_it_clears_no_gate` reads it — the
+   perturbation is unchanged, only the field it names.
+6. **The mode is selected by `--calibration-mode`, and the second mode refuses
+   `--calibration-record`.** The draw is `CONVERTED_BANDS` in order plus the
+   seed count, with nothing left to the runner, so a flag that half-chose it
+   would make the draw a runner decision.
+
+### Verification
+
+Every command below ran on this branch at the commit its section names, with the
+fake provider, the replay double or no provider at all. No live provider call
+was made by this card and `scripts/verify_ml_evidence.py --complete` was not run.
+
+The card's Validation section, in order, run with `.venv/bin/python` (the
+interpreter `uv run` selects on this worktree):
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 473 passed |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 59 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5` (the 7 absent are the evidence branch a fresh clone does not carry); `--complete` was NOT run |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0 — ruff, ruff format, lint-imports (4 contracts kept), `validate_task_docs.py`, `generate_prompts.py --check` (390 in sync), strict mypy, 7,806 passed / 20 skipped / 3 xfailed, and the frontend leg 515 tests in 19 files |
+
+`tests/experiments/test_fresh_deduction_instrument.py` alone: 387 passed, of
+which 56 are this card's.
+
+**The two $0 end-to-end sittings.** Both ran from this branch; neither output is
+committed.
+
+The fake provider, through the documented command:
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument \
+  --calibrate --calibration-mode 2026-09-15 \
+  --output-dir <tmp>/units --json <tmp>/fake.json
+```
+
+exit 0; `mode 2026-09-15`, 120 units, 720 completions, `total_cost_usd 0.0`,
+`dry_run true`; inputs `manifest-band-3000-3999.json` (50 seeds) then
+`manifest-band-5000-5999.json` (10); role split on each arm
+`turn/CREWMATE 120, turn/IMPOSTOR 60, ballot/CREWMATE 120, ballot/IMPOSTOR 60`
+draws — sixty impostor ballot draws an arm, which is the owner's decision-7 bar.
+
+The replay double, over the archived per-call counts: 120 units, $0.00,
+`measured_max_unit_output_tokens 3,384`, proposal `run_max_output_tokens
+343,000` against the 100 x 3,384 + 4,096 = 342,496 the gate requires — the
+in-flight term, in a number. The candidate arm's role split reads
+`turn/IMPOSTOR draws 60, output mean 958.4, max 1,455` against
+`turn/CREWMATE draws 120, mean 757.6`, and its `free_text` samples are 43 and 97
+against those 60 and 120 draws, which is the denominator rule doing its work: a
+fail-softed turn is a draw that produced no text.
+
+And the refresh path over that output, which makes no call:
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument \
+  --refresh-usage-profile <tmp>/replay.json --profile-out <tmp>/profile.json
+```
+
+720 call rows, 120 unit rows, `built_from.mode 2026-09-15`, `built_from.records`
+`[("3000-3999", 50), ("5000-5999", 10)]`. The COMMITTED profile
+(`tests/experiments/deduction_usage_profile.json`) is deliberately unchanged —
+see **What is not done** below.
+
+### Planted and perturbed failures
+
+Each new gate carries a case that fails on the defect it claims to catch. All of
+them are committed, not demonstrated and reverted.
+
+| Gate | Planted case | Test |
+| --- | --- | --- |
+| One mode whole, no crossing | sixty seeds under the 2026-09-14 ceilings | `test_sixty_seeds_under_the_first_modes_limits_are_refused` |
+| One mode whole, no crossing | five seeds under the calibration-2 ceilings | `test_five_seeds_under_the_second_modes_limits_are_refused` |
+| One mode whole, no crossing | each mode drawing at the other's caps | `test_either_mode_drawing_at_the_others_caps_is_refused` |
+| The crossing is refused offline too | a fake-provider rehearsal of a crossing | `test_a_crossing_is_refused_on_the_rehearsal_path_too` |
+| The clause authorizes the mode | the committed manifest with the second sentence removed | `test_a_manifest_without_the_second_clause_refuses_it` |
+| The draw never reads the held-out record | `MANIFEST_PATH` named among the draw's records | `test_the_held_out_record_is_refused_by_name_inside_a_draw` |
+| The draw is sixty or it is a stop | sixty seeds from one fifty-seed record | `test_a_draw_that_runs_out_of_accepted_seeds_is_refused` |
+| Development data only | the second record flipped back to `held_out` | `test_a_status_that_is_not_development_stops_the_draw` |
+| The generator still makes these inputs | one digest moved in the record the draw spills into | `test_a_moved_digest_stops_the_draw_by_seed` |
+| The live path still stops on a truncation | a completion at its cap, both signals, on the run's wrapper | `test_the_live_path_still_stops_on_a_truncation` |
+| A foreign checkpoint stops in every mode | a truncated completion from another model | `test_the_identity_branch_still_stops_in_the_measurement_mode` |
+| The leak detector's three shapes | two first-person statements and the rebuttal counted out | `test_the_two_positive_shapes_are_counted`, `test_the_rebuttal_the_diagnosis_counted_out_is_not` |
+| The role split cannot guess an author | a ledger row naming a speaker the unit holds no role for | `test_a_call_no_role_can_be_read_off_is_refused` |
+| The ceilings pay for this draw | the first mode's 12,000 per-unit output against a 15,360 schedule | `test_the_first_modes_per_unit_output_cannot_pay_for_this_draw` |
+| The proposal carries the in-flight headroom | 4,590 over a hundred units | `test_a_hundred_units_of_the_calibrations_largest_unit` |
+| The gate reads the figures it is handed | the same limits against two calibrated unit sizes | `test_the_gate_reads_the_figures_it_is_handed` |
+| The draw is not a runner decision | `--calibration-record` passed in the second mode | `test_the_second_mode_refuses_a_single_record_flag` |
+
+### How the 2026-09-14 hand-back is settled
+
+[The limits card](fresh-deduction-limits-4.md) handed back one residual: the
+fourth authorization published 459,000 for a hundred units while its own largest
+unit needs 4,590 x 100 + 4,096 = 463,096, and the gate accepts
+`AUTHORIZED_LIMITS` on this tree only because `deduction_usage_profile.json`
+still carries the older 3,116.
+
+The CAUSE is closed here, in the rule that writes such numbers:
+`ceiling_proposal` now adds the in-flight headroom term the gate enforces, so a
+proposal can no longer publish a run-level output ceiling the gate would refuse,
+and `test_a_hundred_units_of_the_calibrations_largest_unit` plants exactly that
+arithmetic — 4,590 over a hundred units must propose at least 464,000.
+
+The NUMBER stays where it is. 459,000 is the owner's, on the fourth
+authorization card, and re-sizing it is the fifth authorization's decision on
+the profile this calibration's sitting refreshes; nothing here moves an
+authorized figure. So
+`test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit` keeps
+its plant and its meaning, and its docstring now records where the cause was
+closed and what is still outstanding. The other two dependent tests are updated
+rather than deferred:
+`test_the_calibration_is_the_largest_unit_the_archives_charged` is unchanged and
+still green, because the two calibrated constants move only when the committed
+profile does; and the profile's own round-trip case gains a second-mode
+counterpart, `test_the_refresh_path_reads_a_second_mode_output`, which drives
+`--refresh-usage-profile` over a calibration-2 payload at $0 and checks the
+720 call rows, the 120 unit rows, the `mode` and the per-record `records` block.
+
+### What is not done, and why
+
+* **Item 8 (the profile refresh).** The path works for calibration-2 output and
+  is tested; the REFRESH itself needs the sitting's measured numbers.
+  Refreshing the committed profile from a fixture-driven or replay-driven
+  rehearsal would lower `CALIBRATED_UNIT_INPUT_TOKENS` and
+  `CALIBRATED_UNIT_OUTPUT_TOKENS` to a serialisation length and quietly widen
+  the feasibility gate, so it is deliberately not done here. The manifest's
+  dated section says the refresh belongs to the sitting.
+* **Item 9 (the committed aggregates).** The report shape, the per-unit usage
+  rows and `assert_report_holds_no_prefix_bytes` over the payload are delivered
+  and tested; the bytes under
+  `audits/deduction-candidate/calibration-2-<date>/` are the sitting's output
+  and land with it.
+* **Item 11 (the live sitting).** A separate runner session, on
+  `work/fresh-deduction-calibration-2-run`, after this pull request merges.
+
+### Limitations
+
+* The leak detector is a lexical rule over committed turn text, gated on the
+  speaker's ground-truth role. It counts three shapes and reads no intent, so
+  the per-arm figure is a FLOOR: an impostor that confesses in words the rule
+  does not match is not counted. `ROLE_LEAK_RULE` states this, it is quoted in
+  every calibration-2 output, and the owner's decision 9 makes it a reported
+  diagnostic rather than a gate for exactly this kind of reason.
+* The attribution guard that counts out a rebuttal is a same-sentence check. A
+  rebuttal spread across two sentences ("p-1 accuses me. I am the impostor,
+  apparently.") would be counted as a leak. The fourth run's own negative is a
+  single sentence and is counted out; a mis-count in the other direction
+  inflates a reported column and cannot move a gate.
+* The role split's prose lengths are over AUTHORED payloads and its truncation
+  denominator is DRAWS, which is the right pair for the rate but means the two
+  numbers in a row have different denominators. The field names say which is
+  which (`draws` against `lengths[].samples`) and `CALIBRATION_2_CLAUSE` and the
+  manifest's section both state the rule.
+* `CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` are still
+  the three stopped live runs' figures. Every feasibility claim in this card's
+  table is against those, and they move when the sitting's profile refresh does.
+* The wall is the binding limit of the sitting and has a 1.14x margin at the
+  slowest arm pace measured. A calibration has no checkpoint and no resume, so a
+  stop is reported with its partial accounting and a second sitting needs the
+  owner's say.
+* The arm-surface digest moves, because `experiments/fresh_deduction_instrument.py`
+  is in `ARM_SURFACE_SOURCES`. That is a fresh stamp before the fifth run, not a
+  re-record: no recording, report, DTO, metric or weight byte moves, no
+  experiment becomes ON, and the held-out record at `MANIFEST_PATH` is untouched.
