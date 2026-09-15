@@ -52,7 +52,7 @@ inspected or tallied.
 
 One coupling is new and is load-bearing. Because the execution manifest's
 Inputs row still binds 7000-7999 after this card,
-`tests/experiments/test_fresh_deduction_instrument.py:4412` takes its
+`tests/experiments/test_fresh_deduction_instrument.py:4722` takes its
 converted branch: it reads the path in the moved record's `converted.informed`,
 requires that card to be open (no `**Status:** done`) and requires it to name
 `audits/deduction-candidate/held-out/manifest.json`. A missing file there is a
@@ -82,7 +82,7 @@ card, so it has to exist in the tree this freeze merges into.
   expected at `tasks/work/fresh-deduction-limits-5.md`, and that card is
   present and open in the tree this branch merges into, so
   `test_a_binding_to_a_converted_record_stays_an_open_obligation`
-  (`tests/experiments/test_fresh_deduction_instrument.py:4412`) passes rather
+  (`tests/experiments/test_fresh_deduction_instrument.py:4722`) passes rather
   than erroring on a path that does not resolve. If the coordinator dispatches
   that card under a different slug, the record names the slug that exists; the
   diagnosis is named in `note`, not here, because the gate reads this field as
@@ -106,7 +106,7 @@ card, so it has to exist in the tree this freeze merges into.
   (`experiments/fresh_deduction_instrument.py:990-1001`) names 7000-7999 and
   2026-09-15 alongside the three earlier conversions, which is what
   `test_the_gate_says_which_bands_actually_moved`
-  (`tests/experiments/test_fresh_deduction_instrument.py:1454`) reads out of
+  (`tests/experiments/test_fresh_deduction_instrument.py:1476`) reads out of
   `CONVERTED_BANDS` and each record's own `converted.date`. No constant, no
   behaviour and no `GENERATOR_SOURCES` file moves with it.
 - [ ] No prefix bytes are committed; the preparer inspects no generated prefix
