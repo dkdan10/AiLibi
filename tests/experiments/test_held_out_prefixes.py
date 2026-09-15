@@ -79,6 +79,13 @@ _CONVERTED_MANIFEST_PATH_5000 = (
     "audits/deduction-candidate/held-out/manifest-band-5000-5999.json"
 )
 
+#: The third band's freeze record after the fourth freeze moved it. Development
+#: data since 2026-09-13 as well: the run of that date rendered two of its
+#: prefixes before the per-unit output ceiling stopped it.
+_CONVERTED_MANIFEST_PATH_6000 = (
+    "audits/deduction-candidate/held-out/manifest-band-6000-6999.json"
+)
+
 
 def _step(tick: int, actor: str, kind: str, payload: dict[str, object]) -> PrefixStep:
     return PrefixStep(
@@ -547,13 +554,19 @@ def test_the_skip_role_split_reaches_the_band_only_through_the_published_skips()
 
 
 def test_the_preregistered_band_is_the_one_the_card_froze() -> None:
-    """The third freeze's band, and the two earlier ones kept as converted bands."""
+    """The fourth freeze's band, and the three earlier ones kept as converted.
+
+    The order of ``CONVERTED_BANDS`` is load-bearing beyond this file: the
+    calibration's default input record is ``CONVERTED_BANDS[0]``, the
+    3000-3999 band, so a newly converted band is appended rather than
+    prepended.
+    """
 
     assert (
         PREREGISTERED_BAND.first_seed,
         PREREGISTERED_BAND.last_seed,
         PREREGISTERED_BAND.size,
-    ) == (6000, 6999, 50)
+    ) == (7000, 7999, 50)
     assert [
         (
             converted.band.first_seed,
@@ -565,6 +578,7 @@ def test_the_preregistered_band_is_the_one_the_card_froze() -> None:
     ] == [
         (3000, 3999, 50, _CONVERTED_MANIFEST_PATH),
         (5000, 5999, 50, _CONVERTED_MANIFEST_PATH_5000),
+        (6000, 6999, 50, _CONVERTED_MANIFEST_PATH_6000),
     ]
     assert MANIFEST_PATH not in {
         converted.manifest_path for converted in CONVERTED_BANDS
@@ -853,16 +867,26 @@ _BAND_5000_BLOCKS_AT_CA6E97D6: Mapping[str, str] = {
     "skipped": "385c9cc6e65d747cc83b313d680a17a18c69753596c7608c0f8ef9db3e57fc26",
 }
 
+#: The same two blocks of the 6000-6999 record as the owner's merge of the third
+#: freeze froze them at ``c06ee085``. That record accumulated no dependency
+#: restamp between that merge and this branch's base either, so the whole diff
+#: between the frozen file and the moved one is the ``status`` flip and the
+#: ``converted`` block the fourth freeze added.
+_BAND_6000_BLOCKS_AT_C06EE085: Mapping[str, str] = {
+    "accepted": "cb0adbd1661426889ff72ca19314882213813684f9cf842b5c27ab108fce6832",
+    "skipped": "f270485ff1a5f7d6baf1db82b21e3c98014cf9fd29d3b9913ffa0f881d8e3d2c",
+}
+
 
 def test_the_range_walks_refuse_a_converted_band_as_well() -> None:
     """A frozen band's seeds are not an out-of-band range, converted or not.
 
     The 3000-3999 prefixes are development data since 2026-09-10 and the
-    5000-5999 prefixes since 2026-09-13, so a walk over either would leak
-    nothing; what the refusal protects is the meaning of the number both
-    commands print. The freeze cards quote it as the OUT-OF-BAND rejection
-    rate, and a range covering seeds an earlier freeze already screened is not
-    that rate.
+    5000-5999 and 6000-6999 prefixes since 2026-09-13, so a walk over any of
+    them would leak nothing; what the refusal protects is the meaning of the
+    number both commands print. The freeze cards quote it as the OUT-OF-BAND
+    rejection rate, and a range covering seeds an earlier freeze already
+    screened is not that rate.
     """
 
     walks: tuple[Callable[[int, int], object], ...] = (
@@ -887,14 +911,25 @@ def test_the_range_walks_refuse_a_converted_band_as_well() -> None:
             (band.last_seed, band.last_seed + 1),
             (band.first_seed + 7, band.last_seed - 7),
         ):
-            # A range that spills off a converted band onto the live one -- which
-            # is what the top edge of 5000-5999 does now that 6000-6999 is
-            # frozen -- is refused for the live band first. Both refusals come
-            # from the same guard; the live band is the stricter reason, so the
-            # case still proves the range is out of reach.
+            # A range that spills off one frozen band onto its neighbour -- which
+            # is what the one-seed overhangs do now that 5000-5999, 6000-6999
+            # and 7000-7999 are adjacent -- is refused for whichever band the
+            # guard reaches first: the live band, then the converted list in
+            # order. Both refusals come from the same guard, so such a case
+            # still proves the range is out of reach; which band it names is
+            # mirrored here rather than assumed, and every band still has cases
+            # that touch it alone.
             touches_live = (
                 first <= PREREGISTERED_BAND.last_seed
                 and PREREGISTERED_BAND.first_seed <= last
+            )
+            refused_for = next(
+                (
+                    other
+                    for other in CONVERTED_BANDS
+                    if first <= other.band.last_seed and other.band.first_seed <= last
+                ),
+                None,
             )
             for walk in walks:
                 with pytest.raises(HeldOutPrefixError) as refusal:
@@ -903,8 +938,9 @@ def test_the_range_walks_refuse_a_converted_band_as_well() -> None:
                 if touches_live:
                     assert "intersect the preregistered band" in message
                     continue
+                assert refused_for is not None
                 assert "intersect the converted band" in message
-                assert converted.manifest_path in message
+                assert refused_for.manifest_path in message
 
 
 def test_the_converted_band_keeps_the_blocks_it_was_frozen_with() -> None:
@@ -986,13 +1022,53 @@ def test_the_converted_second_band_keeps_the_blocks_it_was_frozen_with() -> None
     assert record.superseded_by == MANIFEST_PATH
 
 
-def test_the_current_freeze_is_the_third_band_and_starts_without_restamps() -> None:
+def test_the_converted_third_band_keeps_the_blocks_it_was_frozen_with() -> None:
+    """The third band is marked development in place, the way the first two were.
+
+    The stopped run of 2026-09-13 rendered seeds 6000 and 6001 before the
+    per-unit output ceiling stopped it in its fourth unit, so this record
+    stopped being a held-out set on that date. Its digests are that run's input
+    identity, so the two blocks are compared against the bytes the owner's merge
+    of the third freeze froze at ``c06ee085`` rather than trusting the moved
+    file's prose. That record carries no dependency restamp, so nothing but
+    ``status`` and ``converted`` may have moved.
+    """
+
+    manifest = _converted_manifest(_CONVERTED_MANIFEST_PATH_6000)
+    assert manifest["status"] == "development"
+    assert "never by deleting this file" in str(manifest["status_note"])
+    assert manifest["card"] == "tasks/work/held-out-prefix-freeze-3.md"
+    assert manifest["band"] == {
+        "draw_order": "ascending",
+        "first_seed": 6000,
+        "last_seed": 6999,
+        "size": 50,
+    }
+    restamps = manifest["dependency_restamps"]
+    assert isinstance(restamps, dict)
+    assert restamps["entries"] == []
+    for block, digest in _BAND_6000_BLOCKS_AT_C06EE085.items():
+        assert _block_digest(manifest[block]) == digest
+    accepted = manifest["accepted"]
+    assert isinstance(accepted, list)
+    assert len(accepted) == 50
+
+    record = ConvertedRecord.model_validate(manifest["converted"])
+    assert record.date == "2026-09-13"
+    assert record.pull_request == "#451"
+    assert record.branch == "work/fresh-deduction-run-3"
+    assert record.rendered_seeds == (6000, 6001)
+    assert record.informed == "tasks/work/fresh-deduction-limits-4.md"
+    assert record.superseded_by == MANIFEST_PATH
+
+
+def test_the_current_freeze_is_the_fourth_band_and_starts_without_restamps() -> None:
     """The live record is the new band; the old ones sit beside it, not under it."""
 
     manifest = _committed_manifest()
     assert manifest["status"] == "held_out"
     assert "converted" not in manifest
-    assert manifest["card"] == "tasks/work/held-out-prefix-freeze-3.md"
+    assert manifest["card"] == "tasks/work/held-out-prefix-freeze-4.md"
     assert manifest["band"] == {
         "draw_order": "ascending",
         "first_seed": PREREGISTERED_BAND.first_seed,
@@ -1031,7 +1107,7 @@ def test_a_converted_record_flips_the_status_and_changes_nothing_else() -> None:
     generated = generate(
         SeedBand(first_seed=_DEBUG_SEEDS[0], last_seed=_DEBUG_SEEDS[0] + 99, size=2)
     )
-    card = "tasks/work/held-out-prefix-freeze-3.md"
+    card = "tasks/work/held-out-prefix-freeze-4.md"
     frozen = build_manifest(generated, repo_root=REPO_ROOT, card=card)
     assert frozen["status"] == "held_out"
     assert "converted" not in frozen
