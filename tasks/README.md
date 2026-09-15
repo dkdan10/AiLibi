@@ -40,7 +40,7 @@ findings and current repairs remain distinct.
 
 ## Card inventory
 
-As of 2026-09-15, `tasks/work/` holds 59 cards: 4 ready, 55 done. That sentence
+As of 2026-09-15, `tasks/work/` holds 59 cards: 3 ready, 56 done. That sentence
 is derived, not typed: `scripts/validate_task_docs.py` recomputes the total and
 the per-status breakdown from the cards themselves and fails when either drifts,
 so flipping one card's Status is enough to make this paragraph wrong out loud.

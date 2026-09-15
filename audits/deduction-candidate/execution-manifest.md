@@ -746,6 +746,126 @@ inputs and re-measures headroom, and the ceilings, the caps, the frozen
 analysis and the residual recorded above are the bytes the paragraphs above
 left.
 
+## Accounts prompt set v4 (2026-09-15)
+
+Decisions 1 and 2 of
+[the diagnosis of 2026-09-15](../../tasks/diagnosis-2026-09-15-truncation-stop.md),
+approved by the owner on that date and written up as
+[the v4 accounts revision card](../../tasks/work/accounts-prompt-set-v4.md).
+This section is dated apart from the authorizations above because it is not
+one: it moves what the CANDIDATE ARM IS ASKED FOR and nothing it is judged by.
+The primary outcome and its rubrics, the decision rule, the minimum actionable
+effect, the tradeoff bound and the stop rule are the bytes the sections below
+quote; every cap, ceiling, wall, transport bound and dollar limit in the table
+above is unchanged; the schema is untouched; and no unit has been run under
+these bodies, nor is one authorized by this entry.
+
+**2026-09-15 — the three bounds the reference family already carried are
+ported into the candidate's account templates, and
+`ACCOUNT_PROMPT_SET_REVISION` advances `v3` to `v4`
+(`agents/strategic/prompts/loader.py:1248`).** The candidate ballot
+commissioned deliberation and gave it one unbounded place to land, which is
+what stopped the fourth run at unit 26 of 100 on a ballot at the 1,024-token
+vote cap. Three edits, all on the `*_accounts.j2` family that only the
+`combined_accounts` arm renders; the reference family keeps its bytes and is
+what each edit is copied from rather than a re-invention of it:
+
+- **The ballot's rationale budget.** `vote_ballot_accounts.j2` now asks for ONE
+  short sentence (~20 words) and carries `vote_ballot.j2`'s own warning that a
+  long rationale can overrun the output limit and truncate the JSON, which
+  discards the vote. An honest limit, recorded with the fix: a budget bounds
+  the symptom, not the channel — decoding is non-thinking by the model lock, so
+  deliberation still has nowhere to go but the answer, and the reference arm
+  shows a bound holding it to ~100 characters rather than removing it.
+- **The citation form.** The same line shows the bare `{agent}:{tick}:{seq}`
+  observation id — WITHOUT the `obs ` tag word `agents/memory/store.py` renders
+  around it, which is render dressing rather than part of the id — with a
+  literal example built from the voter's own id. The response skeleton keeps
+  `primary_reason_observation_id` NULL, exactly as `vote_ballot.j2`'s own
+  skeleton does: the form is shown in prose and never pre-filled into the
+  object a model copies verbatim. Corrected in round 3 of review — an earlier
+  draft of this bullet, and of the fix as delivered, pre-filled the skeleton
+  with the literal example, which is copyable into an EJECT, and a copied
+  literal that is not in the voter's own valid set is nulled and the ejection
+  coerced to SKIP: the very defect this bullet repairs, re-entering through
+  its own example.
+- **The turn bound.** `_account_rules.j2` asks for one short phrase in an
+  accusation's and a corroboration's `"reason"`, and
+  `accusation_round_accounts.j2`'s reply instruction asks for 1-2 short
+  sentences and then a stop in place of an explanation of what a citation does
+  and does not establish. It is also the only proposed lever against the
+  public-transcript role leak the diagnosis measured (2 of 13 candidate games,
+  0 of 13 reference): `_account_rules.j2` already forbids that leak in words,
+  and a prohibition alone did not hold in this register. The owner's reading of
+  decision 9 is that the leak does not block the next run on its own, so the
+  per-arm leak count is pre-declared as a reported diagnostic on the next
+  calibration rather than as a gate here.
+
+**ONE-SIDED EFFECT — declared here before anything is measured.** The citation
+repair is neither a style note nor measurement-neutral. On the fourth run 13 of
+14 candidate EJECT citations were nulled and 12 ballots were coerced to SKIP —
+`meetings/manager.py` nulls an id that is not in the voter's own valid set,
+with no suffix recovery by design, and then coerces the now-uncited EJECT to
+SKIP whenever the target carries no contradiction flag — against none of either
+on the reference arm. Supplying the format therefore converts coerced SKIPs
+into live ejections ON THE TREATMENT ARM ONLY: the fix raises the candidate's
+ejection RATE, which is precisely the failure `WRONGFUL_EJECTION_TRADEOFF`
+polices, and the next run reads the wrongful-ejection bound against this entry
+rather than reading a higher ejection count as a finding.
+
+**ONE-SIDED EFFECT, second channel — the turn bound reaches a grader too.**
+An earlier draft of this section called the other two edits measurement-neutral
+on the ground that neither a ballot's rationale nor a turn's prose is an input
+to any grader. Half of that is WITHDRAWN: turn prose IS one.
+`grade_citation_relevance` grades a ballot that cites a TURN through
+`_turn_bears_on`, which walks the cited turn's dumped structure rather than a
+named field list — `CITATION_RELEVANCE_RUBRIC` says so in as many words, "its
+claims and its free text included" — so a cited turn is RELEVANT to the ejected
+player when it is that player's own or names them anywhere in its content, the
+turn's `free_text` and each claim's `"reason"` included. Those are exactly the
+two fields the turn bound shortens, and `every_citation_relevant` is a conjunct
+of the primary outcome `supported_correct_ejection`. The declared direction is
+DOWNWARD and on the candidate arm alone: shorter prose names fewer players, so
+a ballot citing a bounded turn is likelier to be graded OFF_TARGET for the
+ejected player and its unit likelier to score 0. The next calibration therefore
+may not attribute a shift in the candidate's citation relevance to the citation
+repair alone — two of the three edits move graded inputs, and they push in
+opposite directions. Only the rationale half of the withdrawn claim survives:
+no grader reads a ballot's `rationale_text`, so the rationale budget moves
+prompt bytes and no graded input. Both halves are behavioural facts about the
+instrument rather than a reading of it, and
+`tests/experiments/test_accounts_v4_measurement_surface.py` pins them.
+
+**Run 4's 24 complete units are not poolable with what follows.** The three
+edits move the candidate's measured surface, so a unit recorded before them and
+a unit recorded after them are not two draws from one instrument; the fourth
+run's 24 complete units stay what they are, a record of the bodies that
+produced them, and nothing after this entry may be pooled with them.
+
+**The arm-surface digest moves, and no committed constant pins it.** Every file
+of `agents/strategic/prompts/qwen3_6_27b` is hashed into `arm_surface_digests`
+alongside `ARM_SURFACE_SOURCES`, so these three templates and
+`agents/strategic/prompts/loader.py` all move it. The digest is recomputed from
+the tree rather than pinned by a literal, so no recorded byte needs editing —
+but `assert_checkpoint_matches` compares a resuming run against the checkpoint's
+recorded digests, so the fourth run's sitting (PR #458, branch
+`work/fresh-deduction-run-4` at `5f2383ea`, unmerged) is no longer resumable.
+That is the intended consequence of a moved surface, not a defect in the
+checkpoint.
+
+**No recording, no re-record, no calibration.** The account bodies are
+reachable only behind two default-OFF levers: `public_account_version` and
+`attributed_testimony_version` default to `None` in both
+`orchestrator/experiment_config.py` and `meetings/evidence_profile.py`,
+`.env.example` carries both switches commented out, and
+`public_account_prompt_versions` returns `None` when neither is set. No
+committed recording renders these bodies, so no sample is rebuilt and no report
+is re-scored, and every committed account stamp under `audits/` stays at the
+revision it recorded — a stamp records which bodies ran, not which bodies are
+current, which is why the 2026-09-14 calibration record keeps `v3`. The second
+calibration and the fifth run are authorized by their own cards, not by this
+entry.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -1404,14 +1524,21 @@ configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
 and the limits it ran under (3,710,000 / 459,000 run-level, 106,000 / 16,000 per
 unit), so this is the first mechanics check made under the authorized ceilings
 themselves rather than under a proposal. Input tokens by the fake provider's
-`len // 4` heuristic were 895,883 (`repaired_clock`) and 608,664
+`len // 4` heuristic were 895,883 (`repaired_clock`) and 643,779
 (`combined_accounts`); applying the decision memo's calibrated 1.28x real-input
-ratio to their sum (1,504,547) gives about 1.93 M against the 3,710,000 this
-manifest binds (52%), and the larger arm's 17,918 per unit gives about 22,900
+ratio to their sum (1,539,662) gives about 1.97 M against the 3,710,000 this
+manifest binds (53%), and the larger arm's 17,918 per unit gives about 22,900
 against the 106,000 per-unit ceiling (22%) — headroom checks, not predictions,
 because a real model writes a different transcript. The figures this paragraph
 carried before this re-binding were the third band's, measured at `f0574950`;
-they are superseded with that band by the paragraph you are reading.
+they are superseded with that band by the paragraph you are reading. Re-made again on
+2026-09-15 for the v4 account bodies, and once more the same day when round 3
+of review returned the ballot skeleton to a null observation id and said in
+prose what to replace that null with: only the candidate arm's figure moves
+(608,664 to 643,779, +5.8%), because only its templates gained bytes. Every
+graded count, the reference arm's figure and the larger arm's per-unit figure
+are unchanged, which is the arithmetic a prompt-only revision of one arm should
+produce.
 
 **The output dimension, measured rather than assumed (2026-09-13).** The
 paragraph above is an INPUT headroom check, and until this amendment it was the

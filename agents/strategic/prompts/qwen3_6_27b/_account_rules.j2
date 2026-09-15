@@ -35,8 +35,8 @@ Each item of "observations" is one of these shapes:
 {% endif %}
 Each item of "claims" is one of these three shapes and nothing else:
 - {"type":"alibi","subject":"<player id>","from_tick":<int>,"to_tick":<int>,"room":"<room id>","evidence":[]}: a tick range you claim for a named player.
-- {"type":"accusation","against":"<living player id>","confidence":0.6,"reason":"<reason>"}: the living player you say is responsible.
-- {"type":"corroboration","supports":"<living player id>","on_tick":<int>,"reason":"<reason>"}: your support for what another player said.
+- {"type":"accusation","against":"<living player id>","confidence":0.6,"reason":"<one short phrase>"}: the living player you say is responsible.
+- {"type":"corroboration","supports":"<living player id>","on_tick":<int>,"reason":"<one short phrase>"}: your support for what another player said.
 {% else %}
 Keep observations empty. Make an accusation claim or stay unsure; do not invent a structured self-alibi.
 {% endif %}
