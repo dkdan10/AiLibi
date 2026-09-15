@@ -85,6 +85,34 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
 
 ## Acceptance
 
+- [x] Review correction: acceptance item 3's truncation COUNTING is driven end
+  to end rather than asserted at the seam. A truncating provider double goes
+  through `run_calibration` in this mode and the sitting finishes, and the case
+  pins the whole role-split tally — per arm, per call type, per hidden role,
+  with the provider's `finish_reason` — together with the fail-soft each
+  truncation produces (eight marked SKIP ballots and one placeholder turn).
+  Disabling the tally turns it red.
+- [x] Review correction: the `records=` override of the live-capable pre-flight
+  cannot name a draw the card does not authorize. A supplied list is held to
+  `CONVERTED_BANDS`' own order with no record named twice, so the two shapes
+  the review reproduced — `[band-5000, band-3000]` and `[band-3000,
+  band-3000]`, the second of which filled sixty prefixes out of fifty distinct
+  seeds — are refused, on `verify_calibration_draw`,
+  `assert_ready_for_a_calibration` and `run_calibration` alike. Planted: both
+  lists, on the helper and on the two live-capable entry points.
+- [x] Review correction: acceptance item 7's plant binds the branch it names.
+  Its fixture set the measured mean equal to the measured maximum, so the mean
+  rule dominated and the case passed with the in-flight headroom term deleted;
+  the mean is now well below the maximum, the headroom branch decides the
+  proposal, and deleting the term drops it to 459,000 and turns the case red.
+- [x] Review correction: the leak detector counts out a statement that is
+  SUPPOSED or ASKED rather than asserted, and `ROLE_LEAK_RULE` no longer claims
+  the figure is a floor. A conditional self-reference scored as a confession
+  and inflated both reported columns, so the guard now carries conditional,
+  hypothetical and interrogative governors, and the rule string and the
+  manifest's pre-declaration both say the count is an estimate carrying error
+  in BOTH directions. Planted: four deflections counted out, and two
+  confessions with a trailing conditional still counted.
 - [x] A SECOND dated clause and constant set beside the 2026-09-14 set, not
   replacing it: `CALIBRATION_2_PAIRED_SEEDS = 60`, `CALIBRATION_2_LIMITS`, and
   `CALIBRATION_2_SAMPLING` equal to `AUTHORIZED_SAMPLING` (`:426`), so the draw
@@ -297,13 +325,16 @@ is byte-identical, which
    `run_dry` never pass it, and `run_calibration` passes the matched mode's
    value. It reaches the cap branch of `_unusable_response` only: the identity
    branch still returns `ProviderIdentityMismatch` in this mode.
-4. **The leak detector is scoped to the IMPOSTOR role and documented as a
-   floor.** A crewmate naming its own role is every crewmate's opening line;
-   counting it would report the roster rather than a leak, and the figures the
-   diagnosis published (2 of 13 candidate games, 0 of 39 reference turns) are
-   impostor self-tells. `ROLE_LEAK_RULE` says so and says what the rule cannot
-   do — it does not read intent, so an impostor that confesses in words it does
-   not match is not counted.
+4. **The leak detector is scoped to the IMPOSTOR role, and its error is
+   published in both directions.** A crewmate naming its own role is every
+   crewmate's opening line; counting it would report the roster rather than a
+   leak, and the figures the diagnosis published (2 of 13 candidate games, 0 of
+   39 reference turns) are impostor self-tells. `ROLE_LEAK_RULE` says so and
+   says what the rule cannot do. It was published as a FLOOR and is not one:
+   the round-1 review corrections below found a conditional self-reference
+   scoring as a confession, added the conditional governors that count it out,
+   and reworded the rule and the manifest's pre-declaration to say the count is
+   an estimate carrying error in both directions.
 5. **`clears_the_feasibility_gate` now means the proposal's own claim, and the
    old comparison is reported beside it.** The card asks the proposal's
    feasibility check to run against the CALIBRATION's maxima; that check is
@@ -447,19 +478,132 @@ counterpart, `test_the_refresh_path_reads_a_second_mode_output`, which drives
 * **Item 11 (the live sitting).** A separate runner session, on
   `work/fresh-deduction-calibration-2-run`, after this pull request merges.
 
+### Review corrections, round 1 (2026-09-15)
+
+Six blocking findings, four distinct defects — two of the six are a second
+lens's reading of the same Codex P1. All four are repaired at `0eb5eeb8`; no
+finding was refuted. Every command below ran on this branch at `0eb5eeb8`, with
+the fake provider, the replay double or no provider at all; the only later
+change is this card's own prose. No live provider call was made and
+`scripts/verify_ml_evidence.py --complete` was not run.
+
+**1. The truncation tally had no enforcing test.** The reviewer neutered the
+tally in `_role_split_rows` (`if False and any(...)`) and `pytest
+tests/experiments -q` still reported 473 passed, identical to clean: every case
+read a sitting with zero truncations, so `truncations == 0` and
+`truncations_by_finish_reason == {}` held whether the counter worked or not, and
+nothing drove a truncating provider through the mode at all. This is the
+sitting's flagship measurement, so it is now driven end to end.
+`TruncatedCompletionProvider` (`tests/experiments/burned_call_double.py`) cuts a
+call off at its own `max_tokens`, reports `finish_reason="length"` and re-raises
+with the usage the endpoint billed — the shape the fourth run stopped on — and
+`TestATruncationIsMeasuredEndToEnd` runs a whole 120-unit sitting against it
+through `run_calibration` in this mode. Ten planted truncations: one turn cut
+across BOTH of its attempts, which is how the manager's placeholder turn is
+reached rather than its retry, and eight consecutive ballots, a window chosen
+because it spans the first pair of units and so reaches both arms and both
+hidden roles. The case pins the entire role-split tally as a mapping —
+`repaired_clock` turn/CREWMATE 2, ballot/CREWMATE 3, ballot/IMPOSTOR 2;
+`combined_accounts` ballot/CREWMATE 2, ballot/IMPOSTOR 1; zero on the three rows
+that drew none — each with `{"length": n}`, and beside it the fail-soft: eight
+defaulted votes, one defaulted turn, nine defaults attributed to validation and
+none to a deadline, and ten billed-and-refused attempts in the ledger. With the
+tally disabled the mapping goes to zeros and the case fails.
+
+The window is a window for a reason worth recording: three truncated turns in
+one unit spend 12,288 output tokens and the next 4,096-token pre-flight exceeds
+the mode's own 16,000 per-unit output ceiling, which stops the sitting. The
+relaxation makes a truncation a datum, not free.
+
+**2. The `records=` override could name a non-canonical draw.** Reproduced at
+`63dd6e7c`: `verify_calibration_draw(records=[band-5000, band-3000])` drew fifty
+seeds of the 5000 band and ten of the 3000 band, seeds not ascending, and
+`records=[band-3000, band-3000]` returned sixty draws over fifty distinct seeds
+— ten prefixes rendered twice and reported as sixty paired seeds. Both verified
+clean, and both reach the live path through `assert_ready_for_a_calibration` and
+`run_calibration`, which is the pre-flight the manifest documents as the gate.
+`_draw_in_converted_order` now holds a supplied list to `CONVERTED_BANDS`' own
+order with no record named twice, before a prefix is rebuilt. Membership stays
+`_converted_band_for`'s, so the held-out record is still refused BY NAME and
+first. Planted: `test_a_record_named_twice_is_refused`,
+`test_a_record_list_in_another_order_is_refused`, and
+`test_the_live_capable_preflight_refuses_the_same_two_lists`, which puts both
+lists through the two entry points that can spend.
+
+**3. The in-flight headroom plant was inert.** Its fixture set
+`mean_unit_output_tokens` equal to the maximum, 4,590, so the mean rule
+(100 x 4,590 x 1.5 = 688,500) dominated the headroom rule
+(100 x 4,590 + 4,096 = 463,096) and the proposal was 689,000 either way: the
+case passed with `+ sampling.turn_max_tokens` deleted. The fixture is now five
+units averaging 2,000 with a 4,590 maximum, so the mean branch is 300,000 and
+the headroom branch decides the number; the case asserts that inequality
+explicitly rather than leaving a reader to re-derive which branch bound.
+Verified by perturbation: with the term deleted the proposal is 459,000 and
+`test_a_hundred_units_of_the_calibrations_largest_unit` fails
+`assert 459000 >= 464000`.
+
+**4. `ROLE_LEAK_RULE` claimed a floor it did not have.** Reproduced at
+`63dd6e7c`: `states_own_role_or_kill("If I am the impostor, why would I report
+the body?", role="IMPOSTOR")` returned True, and so did a supposition split by a
+semicolon, which `_SENTENCE_SPLIT` does not treat as a boundary. The guard held
+attribution and negation and no conditional, so a deflection scored as a
+confession — and the same predicate drives `opens_with_a_self_tell`, so BOTH
+reported columns inflated. An over-counting detector is not a floor. Repaired on
+both halves the finding offered: `_ATTRIBUTED_TO_ANOTHER` is renamed
+`_NOT_AN_ASSERTION` and gains a third family (`if`, `unless`, `whether`,
+`suppose`/`assume`/`imagine`/`pretend` and their forms, `hypothetical*`,
+`were I`, `why|how|what would`), and the rule string and the manifest's
+pre-declaration now say the count is an ESTIMATE carrying error in BOTH
+directions and is not a floor — which is honest about the residual the card's
+own Limitations already admitted, a rebuttal spread across two sentences.
+Planted both ways: `test_a_supposition_or_a_question_is_not_a_confession` counts
+out four deflections on both columns, and
+`test_the_guard_reaches_only_what_governs_the_words` keeps a confession with a
+trailing conditional counted, because the guard is a prefix check and a governor
+that trails the statement governs nothing.
+
+**Gates, at `0eb5eeb8`.**
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 483 passed (473 before, plus this round's 10) |
+| `.venv/bin/python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 59 work cards` |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; `--complete` was NOT run |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0 |
+
+**Record impact of this round.** One `audits/` byte change — the manifest's leak
+pre-declaration — so the `docs/artifacts.md` audits row is re-derived with the
+change staged: the tracked `audits/` inventory is 211 files and 15,118,706
+bytes, up 361 from 15,118,345. No recording, report, DTO, metric or weight byte
+moves, no prompt byte moves, no experiment becomes ON, and the held-out record
+at `MANIFEST_PATH` is untouched. The arm-surface digest moves again, for the
+same reason the card already declares:
+`experiments/fresh_deduction_instrument.py` is in `ARM_SURFACE_SOURCES`.
+
+**What is still not done** is unchanged: items 8, 9 and 11 belong to the live
+sitting, which the Constraints reserve to a separate runner session. The card
+stays `active`.
+
 ### Limitations
 
 * The leak detector is a lexical rule over committed turn text, gated on the
-  speaker's ground-truth role. It counts three shapes and reads no intent, so
-  the per-arm figure is a FLOOR: an impostor that confesses in words the rule
-  does not match is not counted. `ROLE_LEAK_RULE` states this, it is quoted in
-  every calibration-2 output, and the owner's decision 9 makes it a reported
-  diagnostic rather than a gate for exactly this kind of reason.
-* The attribution guard that counts out a rebuttal is a same-sentence check. A
-  rebuttal spread across two sentences ("p-1 accuses me. I am the impostor,
-  apparently.") would be counted as a leak. The fourth run's own negative is a
-  single sentence and is counted out; a mis-count in the other direction
-  inflates a reported column and cannot move a gate.
+  speaker's ground-truth role. It reads no intent, so an impostor that
+  confesses in words its two shapes do not match is missed; and its guard is a
+  same-sentence check, so an attribution, denial or supposition spread across
+  two sentences ("p-1 accuses me. I am the impostor, apparently.") is counted.
+  The per-arm figure is therefore an ESTIMATE carrying error in BOTH
+  directions, not a floor. `ROLE_LEAK_RULE` says so in those words, it is
+  quoted in every calibration-2 output, the manifest's pre-declaration says the
+  same, and the owner's decision 9 makes it a reported diagnostic rather than a
+  gate for exactly this kind of reason.
+* The guard's third family — conditional, hypothetical and interrogative
+  governors — was added by the round-1 review corrections, which reproduced a
+  deflection ("If I am the impostor, why would I report the body?") scoring as
+  a confession on both reported columns. It is a prefix check like the other
+  two, so a governor that trails the statement governs nothing and the
+  confession is still counted; that asymmetry is tested in both directions.
 * The role split's prose lengths are over AUTHORED payloads and its truncation
   denominator is DRAWS, which is the right pair for the rate but means the two
   numbers in a row have different denominators. The field names say which is
