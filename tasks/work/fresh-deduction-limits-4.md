@@ -1,6 +1,6 @@
 # Move the fresh-model deduction instrument to the fourth authorization's limits
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -32,7 +32,50 @@ converts to development.
 
 ## Acceptance
 
-- [ ] `AUTHORIZED_TURN_MAX_TOKENS` is 4,096, the vote cap stays 1,024, and the
+- [x] Review correction: the re-measured mechanics paragraph no longer calls
+  150 ballots 300. An arm casts 150 (three per unit over 50 units) and
+  `guard_rewritten` is an overlay on the verdict columns rather than a fourth
+  bucket, so the paragraph carries 150 an arm, says what the overlay is, and
+  keeps 300 only as the two-arm total; the gate that pins the paragraph to the
+  run now DERIVES the per-arm total from `supported + unsupported + uncited`,
+  with the two-arm figure planted to show it red.
+- [x] Review correction: the two items this card owed after the stacking are
+  delivered rather than deferred again. The Inputs table binds 7000-7999 off
+  the merged freeze record, the row names all three converted bands with their
+  dates and their record paths, the rehearsal of the whole pipeline is re-made
+  on that band under `AUTHORIZED_LIMITS` and `AUTHORIZED_SAMPLING` at $0, and
+  the mechanics check's own figures are re-measured there — each held by a
+  committed case with a planted failure, not by prose.
+- [x] Review correction: the Limitations no longer claim the re-sized run
+  ceilings clear both per-unit output figures. They clear the archived 3,116
+  (315,696 <= 459,000) and not the calibration's 4,590 (463,096 > 459,000), so
+  the stale usage profile is load-bearing; the residual is recorded in the
+  manifest's dated section, held by
+  `test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit`
+  and handed back to the authorization card and the owner, since 459,000 is not
+  this card's to move.
+- [x] Review correction: the fourth freeze is merged into this branch and the
+  pull request is retargeted onto `work/held-out-prefix-freeze-4`, so the
+  raised ceilings cannot reach `main` ahead of the band they are authorized
+  against. The card's Constraints asked for exactly this and the delivery was
+  based on `main` instead.
+- [x] Review correction: the live path is closed on the merged tree by a
+  mechanism rather than by the ordering of two pull requests. The Inputs row
+  binds 6000-6999, the freeze record now holds 7000-7999, and
+  `assert_manifest_binds_the_live_band` refuses the pair — which
+  `test_the_committed_manifest_binds_the_live_band_or_is_refused` takes as its
+  refusal branch on this tree, so no live invocation can spend the band the
+  stopped third run already rendered.
+- [x] Review correction: `assert_limits_are_feasible` adds the per-call
+  reservation its parent budget pre-flights to the run-level OUTPUT
+  comparison — 315,696 needed against the 459,000 this authorization binds —
+  with a planted case at exactly 311,600, the figure the old comparison
+  accepted. The INPUT comparison deliberately keeps no such term.
+- [x] Review correction: the Results' planted cases and Verification table are
+  repinned to `c97cc075` and re-run there, so every quoted figure reproduces at
+  the commit the preamble names and the list of what moves after it is this
+  card alone.
+- [x] `AUTHORIZED_TURN_MAX_TOKENS` is 4,096, the vote cap stays 1,024, and the
   four token ceilings are 106,000 / 16,000 per unit and 3,710,000 / 459,000
   run-level, copied from the authorization card's Constraints table; the
   reservation schedule under the new caps is 15,360 and
@@ -42,23 +85,23 @@ converts to development.
   configuration, not through a default-path change; the default meeting
   path's recorded prompts and caps are unchanged (`verify_samples.sh`, the four
   `--check` runs).
-- [ ] The manifest's limits table carries the same values verbatim with the
+- [x] The manifest's limits table carries the same values verbatim with the
   authorization card named as their source, the reservation-policy text states
   the new schedule, and a dated section "Fourth authorization (2026-09-14)"
   records the change and its basis; the test that pins the table to the
   constants passes and the frozen analysis strings are byte-identical (test).
-- [ ] After [the fourth freeze](held-out-prefix-freeze-4.md) is merged into
-  this branch, the Inputs table binds band 7000-7999 (band, accepted range,
-  skip count from the new `audits/deduction-candidate/held-out/manifest.json`),
-  names all three converted bands as development data with their dates and
-  their record paths, including
-  `audits/deduction-candidate/held-out/manifest-band-6000-6999.json`, which
-  this row binds until then, and
+- [x] After [the fourth freeze](held-out-prefix-freeze-4.md) is merged into
+  this branch, the Inputs table binds band 7000-7999 (band, accepted range
+  7001-7057 and 8 `witnessed_kill` skips, every number read off the merged
+  `audits/deduction-candidate/held-out/manifest.json`), names all three
+  converted bands as development data with their dates and their record paths,
+  including `audits/deduction-candidate/held-out/manifest-band-6000-6999.json`,
+  which this row bound until then, and
   `assert_manifest_binds_the_live_band` passes against the merged record.
-- [ ] The replay-double rehearsal of the full pipeline under the new limits
+- [x] The replay-double rehearsal of the full pipeline under the new limits
   clears the feasibility gate and completes at $0, and Results records its
   aggregate counts only.
-- [ ] Every new gate has a planted failure proving it detects the claimed
+- [x] Every new gate has a planted failure proving it detects the claimed
   defect.
 
 ## Constraints
@@ -99,3 +142,554 @@ tests/scripts/test_verify_ml_evidence.py -q`, `bash scripts/verify_samples.sh`,
 the four `uv run python scripts/build_sample_report.py --sample-dir <set>
 --check` runs, and `bash scripts/check.sh`. Do not run the live evaluation as
 a check.
+
+## Results
+
+Every item is done and the card is `done`. The six review-correction items and
+the three original items 1, 2 and 5 were closed in rounds 1 and 2; items 3 and
+4 — the Inputs table's re-binding to the fourth band and the rehearsal of the
+whole pipeline on it — are closed in the round-3 subsection at the end of this
+section, on the tree that already carried
+[the fourth freeze](held-out-prefix-freeze-4.md)'s merge and the pull request's
+retarget onto `work/held-out-prefix-freeze-4`. The committed tree now binds one
+band in the manifest and holds the same band in the freeze record, so
+`assert_manifest_binds_the_live_band` passes rather than refusing; what closed
+the live path while the two differed is described in round 1 below and is a
+mechanism the next freeze will use again.
+
+**What moved.** `AUTHORIZED_TURN_MAX_TOKENS` is 4,096 (written as a number, no
+longer read from `meetings.manager`), the vote cap is still the shipped 1,024,
+and the four ceilings are 106,000 / 16,000 per unit and 3,710,000 / 459,000
+run-level — every figure copied from
+[the fourth authorization card](fresh-deduction-authorization-4.md)'s
+Constraints table. `unit_output_reservation()` is therefore 15,360 and
+`assert_limits_are_feasible()` accepts `AUTHORIZED_LIMITS`, which is the first
+time the gate the diagnosis of 2026-09-13 installed has passed on the committed
+numbers.
+
+**The turn cap reaches the meeting layer through the instrument's own sampling
+configuration**, not through a default-path file. `run_unit` already built its
+runner with `config=sampling.meeting_config()`
+(`experiments/fresh_deduction_instrument.py`, the `build_default_meeting_runner`
+call), and `MeetingConfig.turn_max_tokens` is what `meetings/manager.py` passes
+as each turn's `max_tokens`; raising `AUTHORIZED_TURN_MAX_TOKENS` moves that
+value and nothing else. `meetings/manager.py`'s `DEFAULT_TURN_MAX_TOKENS` is
+still 2,048 and `orchestrator/game.py` is untouched, so no recorded campaign
+and no default meeting path draws differently. The four `--check` runs and
+`verify_samples.sh` below confirm it against the recorded samples.
+
+**The refusal is kept as a plant rather than retired with the defect.** The
+4,000 ceiling merged on 2026-09-07 is still red — now against the wider
+schedule — and the two gate tests that used to rely on the committed limits
+being infeasible plant those ceilings as the authorized set instead of
+asserting the tree's own numbers
+(`test_the_live_run_path_fails_closed_under_infeasible_limits`,
+`test_the_gate_runs_before_the_frozen_set_is_read`). The
+`_authorize_feasible_limits` helper those tests shared existed only to work
+around the committed limits being unpayable and is deleted.
+
+**The calibration mode keeps the caps it drew at.** `CALIBRATION_LIMITS` is
+untouched, as the card requires, and that is exactly why the calibration's draw
+had to be frozen beside it: its 12,000 per-unit output ceiling pays for the
+9,216-token schedule the 2,048 cap reserves and not for the 15,360 the raised
+cap reserves, so following the run to 4,096 would have authorized six calls the
+calibration's own ceilings cannot pay for — the defect
+`assert_limits_are_feasible` exists to refuse, one authorization down. A new
+`CALIBRATION_SAMPLING` holds the calibration's caps,
+`assert_calibration_is_authorized` now requires it, and the committed
+`calibration-2026-09-14/calibration.json` stays re-derivable from this tree (a
+test compares its recorded `sampling` block to the constant). No second
+calibration is authorized by anything here; sizing a run that draws at 4,096
+would need its own calibration and its own ceilings, on a card.
+
+### Planted and perturbed cases (pinned to `b5028a6d`)
+
+Each is the claimed defect reintroduced, and each turns the gate red. Run from
+the repository root with the change applied, then reverted. The five below are
+rounds 1 and 2's, re-run at `b5028a6d`; only their deselect counts moved, by
+the three cases round 3 adds, whose own plants are in the round-3 subsection at
+the end of this section.
+
+1. The committed per-unit output ceiling put back to the 4,000 merged on
+   2026-09-07 (`AUTHORIZED_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 4_000`):
+
+   ```
+   .venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+     -q -p no:randomly -k test_the_gate_accepts_the_fourth_authorizations_limits
+   ```
+
+   ```
+   E  experiments.fresh_deduction_instrument.LimitsInfeasible: the per-unit output ceiling is 4,000 tokens and one unit reserves 15,360 (3 x 4,096 + 3 x 1,024): this run authorizes calls it cannot pay for, and the budget would refuse one of them on the reservation rather than on the spend
+   FAILED ...::TestFeasibility::test_the_gate_accepts_the_fourth_authorizations_limits
+   1 failed, 314 deselected
+   ```
+
+   The same defect is held from the other side by
+   `test_the_ceilings_merged_on_2026_09_07_are_still_refused`, which plants that
+   ceiling and requires the refusal to name both 4,000 and 15,360.
+
+2. `CALIBRATION_SAMPLING` made to follow the run's raised cap
+   (`turn_max_tokens=AUTHORIZED_TURN_MAX_TOKENS`):
+
+   ```
+   .venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+     -q -p no:randomly -k "calibration_at_its_own_caps or kept_the_caps_it_drew_at"
+   ```
+
+   ```
+   E  experiments.fresh_deduction_instrument.LimitsInfeasible: the per-unit output ceiling is 12,000 tokens and one unit reserves 15,360 ...
+   E  assert 4096 == 2048
+   FAILED ...::TestCalibrationGate::test_the_feasibility_gate_accepts_the_calibration_at_its_own_caps
+   FAILED ...::TestAuthorizedConstants::test_the_calibration_kept_the_caps_it_drew_at
+   2 failed, 313 deselected
+   ```
+
+3. The dated manifest section's reservation arithmetic replaced by a phrase
+   ("`3 x 4,096 + 3 x 1,024 = 15,360`" to "the raised reservation schedule"):
+
+   ```
+   .venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+     -q -p no:randomly -k fourth_authorization_section
+   ```
+
+   ```
+   E  AssertionError: 3 x 4,096 + 3 x 1,024 = 15,360
+   FAILED ...::TestExecutionManifest::test_the_fourth_authorization_section_records_the_change_and_its_basis
+   1 failed, 314 deselected
+   ```
+
+4. The run-level reservation term removed from the feasibility gate
+   (`needed = calibrated * planned + in_flight` back to `needed = calibrated *
+   planned`), which is the defect the round-1 correction below repairs:
+
+   ```
+   .venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+     -q -p no:randomly \
+     -k "run_output_ceiling_sized_at_exactly_its_units or run_ceiling_below_its_own_units \
+         or calibrations_largest_unit"
+   ```
+
+   ```
+   E  Failed: DID NOT RAISE <class 'experiments.fresh_deduction_instrument.LimitsInfeasible'>
+   FAILED ...::TestFeasibility::test_a_run_ceiling_below_its_own_units_is_refused[run_max_output_tokens-output-4096]
+   FAILED ...::TestFeasibility::test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused
+   FAILED ...::TestFeasibility::test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit
+   3 failed, 1 passed, 311 deselected
+   ```
+
+   The INPUT case of the same parametrisation stays green under the
+   perturbation, which is what says the term belongs to the output dimension
+   alone rather than to both. The third failure is round 2's case, below: it
+   plants the usage profile refreshed to the calibration's own figures, and the
+   same missing term is what would let 459,000 pay for a hundred units at
+   4,590.
+
+5. The manifest's reservation-policy quotation paraphrased (the run-level
+   turn-cap sentence replaced by "the run-level OUTPUT ceiling also carries
+   some headroom for the call in flight"):
+
+   ```
+   .venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+     -q -p no:randomly -k enforcement_section_quotes_the_reservation_policy
+   ```
+
+   ```
+   E  assert "The token ceilings are enforced on RESERVED spend ... rather than a cap." in '### How each limit is enforced ...'
+   FAILED ...::TestExecutionManifest::test_the_enforcement_section_quotes_the_reservation_policy
+   1 failed, 314 deselected
+   ```
+
+A sixth case is already committed rather than demonstrated by hand: the
+per-call cap gate is parametrized over 8,192, 2,048 and 512, and 2,048 — the
+shipped turn default, an authorized cap until 2026-09-14 — is now refused by
+`_InstrumentClient`, so a caller still drawing at the old cap is a stop rather
+than a silent second distribution.
+
+### Verification
+
+Every command below was re-run on this branch at `244d9aa0`, round 5's commit,
+which carries the whole change: the merge of
+[the fourth freeze](held-out-prefix-freeze-4.md), every instrument, test and
+manifest byte including the re-bound Inputs table and round 5's corrected
+ballot total, and the recomputed `docs/artifacts.md` audits row. The ONLY bytes
+that move after it are this card's `## Acceptance` and `## Results`; the task
+index's derived sentence does not move in this round, because the Status stays
+`done`. So every figure in the table reproduces at `244d9aa0` and again at the
+head, and `validate_task_docs.py` and `check.sh` were re-run after this card's
+own commit and returned the same results. No count in the table moved from
+round 3's: round 5 extends an existing case rather than adding one, so
+`tests/experiments` is still 396 and `check.sh` still 7,708. No command below
+reads a held-out prefix, and none of them makes a provider call.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/experiments -q` | 396 passed (fake and replay providers only; no live call) |
+| `uv run python scripts/validate_task_docs.py` | pass (55 work cards) |
+| `uv run python scripts/check_doc_facts.py` | pass |
+| `uv run python scripts/verify_ml_evidence.py` | 60 checks, 48 OK, 0 FAIL, 7 EVIDENCE-BRANCH-ABSENT, 5 INFO |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/verify_samples.sh` | 4p1i and 9p2i, all 50 samples each, clean |
+| `scripts/build_sample_report.py --sample-dir <set> --check` x 4 | `replays/samples/{4p1i,9p2i}` and `replays/ml_corpus/{4p1i,9p2i}` all consistent with their replays |
+| `bash scripts/check.sh` | exit 0: 7,708 passed / 20 skipped / 3 xfailed, 515 frontend tests, strict mypy over 477 files, ruff clean, production build |
+
+`docs/artifacts.md`'s `audits/` row is recomputed for the merged tree and every
+round's manifest bytes: 15,096,108 tracked bytes over 211 files. The file count
+moved in round 1, because the freeze merged in adds
+`held-out/manifest-band-6000-6999.json`; the byte count moved again in round 2
+with the paragraph the manifest's dated section gained, in round 3 with the
+re-bound Inputs table, the round-3 entry and the re-measured verification
+section, and in round 5 with the corrected ballot total. The task index's
+derived inventory moved in round 3, when this card's Status flipped: 1 ready,
+1 active, 53 done, recomputed by `validate_task_docs.py` after the flip and
+unchanged since, because the Status does not move again.
+
+### Limitations
+
+- The rehearsal is a REPLAY double, not a model. Both runs round 3 records
+  answer from committed fixtures — the fake provider's `len // 4` heuristic and
+  an archived usage distribution keyed by arm and call type — so what they
+  establish is that the pipeline completes inside the authorized ceilings at
+  $0, never that a real endpoint would charge these tokens or that either arm
+  decides anything. The paired figures both runs emit are the fixture's
+  arithmetic, and the manifest says so where they are printed.
+- The replay double's token totals are band-independent by construction, so the
+  manifest's output-headroom figures survive the re-binding unchanged and are
+  not re-measured on the fourth band. That is stated rather than hidden: the
+  one thing a re-binding does move on that side is the graded shape (49
+  terminal units and one `partial` an arm, where the third band had 50 and 0),
+  and the figures that genuinely depend on the prefixes — the fake provider's
+  input heuristic and the graded counts — are re-measured and pinned by
+  `test_the_mechanics_check_paragraph_quotes_the_run_it_describes`.
+- `tests/experiments/deduction_usage_profile.json` is unchanged, so
+  `CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` are still
+  the three stopped live runs' largest unit (24,282 / 3,116) rather than the
+  calibration's (35,232 / 4,590). The stale profile is LOAD-BEARING, not
+  neutral: the run-level OUTPUT ceiling clears the archived figure
+  (100 x 3,116 + 4,096 = 315,696 against 459,000) but NOT the calibration's
+  (100 x 4,590 + 4,096 = 463,096 against the same 459,000), so the corrected
+  gate accepts `AUTHORIZED_LIMITS` on the archived figure alone. 459,000 is a
+  hundred units at 4,590 to the token — exactly the shape this card's own
+  `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused` declares
+  infeasible. The INPUT dimension clears either figure (100 x 35,232 =
+  3,523,200 against 3,710,000), so the residual is one comparison wide. This
+  card may not move 459,000 — it is the owner's, on
+  [the fourth authorization card](fresh-deduction-authorization-4.md) — so the
+  residual is handed back there and to the owner, alongside the profile refresh
+  [the calibration card](fresh-deduction-calibration.md)'s Results already left
+  open; `test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit`
+  holds it so it cannot be lost. Codex's second P1 is therefore repaired in the
+  gate but not fully closed in the numbers, and round 2 below says which half is
+  which.
+- `assert_calibration_is_authorized` now refuses a live calibration drawn at the
+  run's cap. Nothing is authorized to run one, so this is a closed door rather
+  than a regression, but it is stated: a future calibration needs a card that
+  carries both a draw and ceilings that pay for it.
+
+### Review corrections, round 1 (2026-09-14)
+
+Four blocking findings, two of them Codex comments on `2962c44e` that the first
+round left unanswered. Each is repaired by a mechanism on this branch rather
+than by a note, and the reasoning is written here because this worker posts no
+pull-request comments.
+
+**The pull request was delivered unstacked, so the raised ceilings could have
+merged first.** The card's Constraints say this card lands after
+[the fourth freeze](held-out-prefix-freeze-4.md) and merges that branch in, and
+Expected scope says it is stacked on `work/held-out-prefix-freeze-4`; the
+delivery was based on `main` and mergeable there. `work/held-out-prefix-freeze-4`
+is now merged into this branch (merge commit `38bad13e`, the freeze branch's
+side taken on both derived lines) and the pull request is retargeted onto it.
+
+**Raising the ceiling opened a green live-run path onto a band already
+rendered.** This card is the first to make `assert_limits_are_feasible` accept
+`AUTHORIZED_LIMITS`, and that gate runs FIRST in `assert_ready_for_a_live_run`,
+so before it the arithmetic alone stopped every live path — including onto
+6000-6999, which the stopped third run rendered. The merge closes it by
+mechanism, not by ordering: `PREREGISTERED_BAND` and the committed freeze
+record are now 7000-7999 while the manifest's Inputs row still binds
+6000-6999, and `assert_manifest_binds_the_live_band` refuses that pair inside
+`assert_live_run_is_authorized`, before a provider, a credential or a
+connection exists. On this tree:
+
+```
+.venv/bin/python -c "from experiments import fresh_deduction_instrument as i; i.assert_manifest_binds_the_live_band()"
+```
+
+```
+experiments.fresh_deduction_instrument.LiveRunNotAuthorized: audits/deduction-candidate/execution-manifest.md binds seed band 6000-6999, but the held-out record at audits/deduction-candidate/held-out/manifest.json holds 7000-7999: the authorization was written for one band and this run would spend another
+```
+
+That refusal is not incidental to the tests: at `c97cc075`
+`test_the_committed_manifest_binds_the_live_band_or_is_refused` takes its
+refusal branch on the committed tree and requires the message to name both
+bands, and `_root_binding_the_live_band` plants a rebound COPY for the cases
+that are about what happens after this check passes. Item 3 re-binds the row to
+7000-7999 in the next round; until it does, the live path stays shut.
+
+**The run-level feasibility check had no reservation term.** Codex's second P1,
+and it reproduces: `GameBudget.preflight` recurses into its parent
+(`llm/budget.py`), so the RUN budget sees a call's full output cap added to
+everything the run has already charged, exactly as the unit budget does. The
+gate's own docstring claimed it closed "the same two-units-of-account defect one
+level up", but its two run-level comparisons were the only ones with no
+reservation term, and the authorization card sizes run output as exactly a
+hundred units at the largest measured unit (100 x 4,590 = 459,000) — an
+arithmetic that at its own bound, 311,600 against the archived 3,116, could not
+have paid for the hundredth unit's last call. `assert_limits_are_feasible` now
+adds one turn cap to the run-level OUTPUT comparison: 315,696 needed against
+the 459,000 this authorization binds, so the gate still accepts
+`AUTHORIZED_LIMITS` and no authorized figure moves. The INPUT comparison keeps
+no such term, because an input pre-flight is the prompt's own estimated length
+rather than a cap (`llm/budgeted_client.py`'s `estimate`); planted case 4 above
+shows the output half going red and the input half staying green under the same
+perturbation. `RESERVATION_POLICY` states the term, the manifest quotes it
+verbatim, its enforcement paragraph names 315,696 against 459,000, and a
+round-1 correction note inside the dated "Fourth authorization (2026-09-14)"
+section records the change and that it moves no authorized number.
+
+**The Verification preamble was pinned to a commit where two of its counts did
+not reproduce.** It named `b80cb92e` while `390 passed` and `7,702 passed` were
+head figures, and its list of what moved after that commit omitted the test
+file and `docs/artifacts.md`. The whole section is repinned to `c97cc075` and
+every command re-run there — eight commands, all eight in the table above — and
+the planted-and-perturbed subsection is repinned with it, because case 3's test
+did not exist at `b80cb92e` and the deselect counts moved with the merged
+tests. After `c97cc075` only this card's `## Acceptance` and `## Results` move.
+
+Nothing else in this round touches a recording, a report, a DTO, a weight or a
+default-path byte; no experiment becomes ON; `experiments/held_out_prefixes.py`
+is unedited by this card and arrives only through the merge; no prefix is
+printed, opened or committed, and no provider call is made.
+
+### Review corrections, round 2 (2026-09-14)
+
+One blocking finding, and it holds. The round-1 entry above reported Codex's
+second P1 closed; it is closed in the gate and not in the numbers, and the
+Limitations said the opposite.
+
+**"The re-sized run ceilings clear both figures" was false on the OUTPUT
+dimension.** The corrected run-level bound is 315,696 only because
+`CALIBRATED_UNIT_OUTPUT_TOKENS` is the three stopped runs' archived 3,116. The
+ceiling this authorization binds was sized from the OTHER figure — the
+calibration of 2026-09-14's largest measured unit, 4,590 — and 100 x 4,590 is
+459,000 to the token, which is exactly the shape
+`test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused` declares
+infeasible. Forcing the two calibrated constants to the calibration's own
+figures at `976f7a6b` refuses `AUTHORIZED_LIMITS`:
+
+```
+.venv/bin/python -c "from experiments import fresh_deduction_instrument as i; \
+  i.CALIBRATED_UNIT_OUTPUT_TOKENS = 4590; i.CALIBRATED_UNIT_INPUT_TOKENS = 35232; \
+  i.assert_limits_are_feasible()"
+```
+
+```
+experiments.fresh_deduction_instrument.LimitsInfeasible: the run-level output ceiling is 459,000 tokens and 100 units at the largest unit the live archives charged (4,590), plus the 4,096 its last call reserves against the run budget on top of them, need 463,096: a run this long would stop on the run ceiling rather than on its own evidence
+```
+
+The INPUT dimension clears either figure (100 x 35,232 = 3,523,200 against
+3,710,000), so the residual is one comparison wide. The consequence for this
+card's claims is the one the finding names: the gate accepts `AUTHORIZED_LIMITS`
+on the archived figure ALONE, so the stale usage profile is load-bearing rather
+than neutral, and the Limitations bullet now says that in those words rather
+than claiming both figures clear.
+
+**What this round does and does not repair.** It does not move 459,000: that
+number is the owner's, copied verbatim from
+[the fourth authorization card](fresh-deduction-authorization-4.md)'s
+Constraints table, and this card's Constraints bind it. A residual that only a
+new authorized ceiling can close is therefore handed back rather than papered
+over — to that card and to the owner, alongside the profile refresh
+[the calibration card](fresh-deduction-calibration.md)'s Results already left
+open. Whichever of the two is done first, the other has to follow, because the
+ceiling and the profile are the two sides of one comparison: a refresh without a
+raise turns `test_the_gate_accepts_the_fourth_authorizations_limits` red, and a
+raise without a refresh leaves the gate checking a figure the calibration has
+superseded. Three mechanisms hold it so it cannot be lost:
+`test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit`
+plants the refresh and requires the refusal (reading both measured figures off
+the committed `calibration-2026-09-14/calibration.json` rather than restating
+them, and asserting `100 x 4,590 == 459,000` so the case dissolves the day the
+ceiling moves); the manifest's dated section gains a "Round-2 review
+correction" paragraph a runner reads before the run; and the Limitations bullet
+states which half of Codex's second P1 is closed.
+
+Nothing else in this round moves: no authorized figure, no recording, report,
+DTO or weight byte, no default-path byte, no experiment to ON,
+`experiments/held_out_prefixes.py` unedited, no prefix printed, opened or
+committed, and no provider call. `docs/artifacts.md`'s `audits/` row is
+recomputed for the manifest's new bytes and the Verification section above is
+re-run and repinned to `976f7a6b`.
+
+### Stacking and re-binding (2026-09-14)
+
+One blocking finding, and it holds: the branch was stacked on
+[the fourth freeze](held-out-prefix-freeze-4.md) in round 1 but the two items
+that stacking existed for were still owed. They are delivered here, and the
+card closes.
+
+**The Inputs table binds the band the runner would draw.** The merged freeze
+record at `audits/deduction-candidate/held-out/manifest.json` is band
+7000-7999, 50 accepted prefixes running 7001-7057 with 8 `witnessed_kill`
+skips; the Inputs row carries those numbers, read off that record rather than
+retyped, and `test_the_manifest_binds_a_committed_held_out_record` derives each
+of them from the record the row binds. The consequence is the one round 1
+described from the other side: at `6e199278`
+`assert_manifest_binds_the_live_band` REFUSED, because the row named 6000-6999
+while the record held 7000-7999; at `b5028a6d` it passes, and
+`test_the_committed_manifest_binds_the_live_band_or_is_refused` takes its
+settled branch — the branch that calls the gate and requires it not to raise —
+instead of its refusal branch. The band the row now names and the band the
+generator's `PREREGISTERED_BAND` draws are the same, so the live path is open
+to the band it is authorized for and to no other.
+
+**The row accounts for the bands it replaced.** 6000-6999 is named beside
+3000-3999 and 5000-5999, each with the date it became development data and the
+record it now lives in, including
+`held-out/manifest-band-6000-6999.json` — the band this row itself bound until
+the fourth freeze marked it `development` on 2026-09-14, converted because the
+stopped run of 2026-09-13 rendered seeds 6000 and 6001 to the model.
+`test_the_inputs_row_names_every_converted_band` reads that roll-call out of
+`CONVERTED_BANDS` and each record's own `converted.date` rather than from a
+list written down in the test, so the NEXT conversion turns it red instead of
+leaving the document a band behind. Planted at `b5028a6d`, the 6000-6999 clause
+deleted from the row:
+
+```
+.venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -q -p no:randomly -k test_the_inputs_row_names_every_converted_band
+```
+
+```
+E  AssertionError: the Seed band row does not name 6000-6999
+FAILED ...::TestExecutionManifest::test_the_inputs_row_names_every_converted_band
+1 failed, 314 deselected
+```
+
+**The rehearsal, under the ceilings this authorization binds, on the new
+band.** Until this card the feasibility gate refused `AUTHORIZED_LIMITS`, so no
+rehearsal of the whole pipeline could be made under them at all; it can now, and
+`test_the_rehearsal_is_green_under_the_fourth_authorizations_limits` is it. The
+replay double answers all 600 calls of all 100 units under `AUTHORIZED_LIMITS`
+and `AUTHORIZED_SAMPLING`, after `assert_limits_are_feasible()` passes:
+`total_cost_usd` 0.0, 50 units an arm, 49 terminal and 1 `partial` each, every
+per-unit and run-level figure inside the ceiling it was measured against — the
+run charges 211,994 output tokens against 459,000 and 2,088,059 input against
+3,710,000. Aggregates only; no unit, seed or prefix is printed anywhere. Planted
+at `b5028a6d`, the run-level output ceiling put back to the 200,000 this
+authorization superseded:
+
+```
+.venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -q -p no:randomly -k test_the_rehearsal_is_green_under_the_fourth_authorizations_limits
+```
+
+```
+E  experiments.fresh_deduction_instrument.LimitsInfeasible: the run-level output ceiling is 200,000 tokens and 100 units at the largest unit the live archives charged (3,116), plus the 4,096 its last call reserves against the run budget on top of them, need 315,696: a run this long would stop on the run ceiling rather than on its own evidence
+1 failed, 314 deselected
+```
+
+That refusal is the right one twice over: the gate stops first, and the measured
+211,994 is itself over the superseded ceiling, which is the fact the re-sizing
+of 2026-09-14 answers.
+
+**The mechanics check is re-measured, because its figures are the band's.** The
+replay double's totals are band-independent — it answers from an archived
+distribution keyed by arm and call type, so what it charges cannot depend on
+which prefix a unit ran — but the fake provider reads each prompt, so its input
+heuristic and its graded counts are the band's. Re-run on the fourth band under
+the authorized limits and caps (`uv run python -m
+experiments.fresh_deduction_instrument --dry-run`, the command the manifest's
+verification section names), it is 100 units, 600 calls, `total_cost_usd` 0.0:
+895,883 and 608,664 input tokens (the third band's were 894,018 and 587,054),
+49 ejections an arm with 13 role-correct, 36 wrongful and 13 supported-correct,
+150 supported ballots and 2 guard-rewritten ones an arm, 98 ballots naming the
+ejected player, and no off-target citation on either arm. The remaining unit of
+each arm is graded `partial`: its three ballots named three different players,
+so no majority formed, nobody was ejected and the game did not end at the
+meeting — a fixture outcome, not a stop, and the run completed all 100 units.
+`test_the_mechanics_check_paragraph_quotes_the_run_it_describes` derives every
+one of those numbers from the report and requires the manifest's paragraph to
+carry it. Planted at `b5028a6d`, the third band's figure left in the paragraph:
+
+```
+.venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -q -p no:randomly -k test_the_mechanics_check_paragraph_quotes_the_run_it_describes
+```
+
+```
+E  AssertionError: repaired_clock
+E  assert '895,883' in "## Verification of this manifest The offline mechanics check, re-made on the FOURTH held-out band ..."
+1 failed, 314 deselected
+```
+
+**What the manifest records.** A "Round-3 re-binding, same date" paragraph
+inside the dated "Fourth authorization (2026-09-14)" section says which band
+the row moved to, which record it was read from, that the gate now passes where
+it refused, and that the rehearsal was re-made under this table's own ceilings;
+the two obligations the first entry of that section left open are marked
+discharged there rather than deleted. The Roles table names the fourth preparer
+session and PR #456 beside the three before it.
+`test_the_fourth_authorization_section_records_the_change_and_its_basis` now
+requires the round-3 paragraph and derives the band it names from
+`PREREGISTERED_BAND`.
+
+Nothing else in this round moves: no authorized figure, no ceiling, no cap, no
+recording, report, DTO or weight byte, no default-path byte, no experiment to
+ON, `experiments/held_out_prefixes.py` unedited, and no provider call — the
+only two runs are the fake provider's and the replay double's, both at $0. No
+prefix of any band is printed, logged, opened or committed, and both runs wrote
+to temporary directories. `docs/artifacts.md`'s `audits/` row is recomputed for
+the manifest's new bytes and the Verification section above is re-run and
+repinned to `b5028a6d`.
+
+### Review corrections, round 5 (2026-09-14)
+
+One blocking finding, and it holds.
+
+**The re-measured mechanics paragraph called 150 ballots 300.** The sentence
+this card added at `b5028a6d` read "Every one of the 300 ballots an arm cast
+was a non-SKIP decision — 150 supported ballots and 2 guard-rewritten ones per
+arm", and it was wrong twice. An arm casts 150 ballots — three per unit over 50
+units — so 300 is the TWO-arm total, one ballot for each of the 600 calls that
+is not a turn. And `guard_rewritten` is an OVERLAY on the verdict columns
+rather than a fourth bucket (`UnitGrade.verdict_counts`
+counts `not grade.voter_authored` over the same grades the three columns
+already hold), so the 2 do not add to the 150 either. The sentence therefore
+contradicted its own figures: 150 supported + 0 unsupported + 0 uncited is not
+"every one of 300". Re-derived from the run the paragraph describes, both arms
+report `{supported: 150, unsupported: 0, uncited: 0, guard_rewritten: 2}`.
+
+**What moved.** The paragraph now says 150 an arm, names the overlay for what
+it is, and keeps 300 in a parenthetical as the two-arm total tied to the 600
+calls. No measured figure is restated: the correction is arithmetic on figures
+the run already reported.
+
+**The gate now derives the total instead of leaving it unchecked.** This was
+the one number in the paragraph that no assertion covered, because it is not a
+single verdict column — it is `supported + unsupported + uncited`, the sum the
+overlay must stay out of.
+`test_the_mechanics_check_paragraph_quotes_the_run_it_describes` computes it
+from `arm.ballot_verdicts` and requires the paragraph to carry it, so both
+wrong arithmetics — the two-arm total and the columns-plus-overlay sum — are
+now red. Planted at `244d9aa0`, the 300 put back:
+
+```
+.venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -q -p no:randomly -k test_the_mechanics_check_paragraph_quotes_the_run_it_describes
+```
+
+```
+E  AssertionError: repaired_clock
+E  assert '150 ballots an arm cast' in "## Verification of this manifest The offline mechanics check, re-made on the FOURTH held-out band under the ceilings ..."
+1 failed, 314 deselected
+```
+
+Nothing else in this round moves: no authorized figure, no ceiling, no cap, no
+constant, no recording, report, DTO or weight byte, no default-path byte, no
+experiment to ON, `experiments/held_out_prefixes.py` unedited, and no provider
+call — the dry run behind the re-derivation is the fake provider's, at $0, into
+a temporary directory. No prefix of any band is printed, logged, opened or
+committed; only aggregate counts are. `docs/artifacts.md`'s `audits/` row is
+recomputed for the manifest's new bytes and the Verification section above is
+re-run and repinned to `244d9aa0`.

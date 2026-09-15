@@ -59,6 +59,7 @@ from experiments.fresh_deduction_instrument import (
     PrefixBytesLeaked,
     PrivilegedGrade,
     RunLimits,
+    SamplingConfig,
     SupportedGrade,
     UnitGrade,
     assert_live_run_is_authorized,
@@ -136,6 +137,46 @@ _INSTRUMENT_SOURCE: Final[Path] = (
 #: Two prefixes is enough for a paired comparison and keeps these tests fast;
 #: the full 50 runs once, in the dry-run test.
 _SMOKE_UNITS: Final[int] = 2
+
+#: The per-unit OUTPUT ceiling the owner merged on 2026-09-07, kept here as the
+#: planted defect rather than as a live constant. The third live run stopped on
+#: it — 4,000 against a 9,216-token reservation schedule — and the fourth
+#: authorization of 2026-09-14 replaced it with 16,000. It stays planted because
+#: the refusal is what the re-sizing answers: under the raised turn cap the same
+#: ceiling cannot pay for the first call of a unit, let alone its sixth.
+_CEILINGS_MERGED_2026_09_07: Final[int] = 4_000
+
+
+def _limits_merged_on_2026_09_07() -> RunLimits:
+    """The four token ceilings the owner merged on 2026-09-07, as one object.
+
+    The fourth authorization of 2026-09-14 replaced all four. They are kept here
+    as the planted set a gate test needs — the committed ceilings now pay for
+    their own run, so a refusal has to be planted to be shown — and as the
+    denominator the manifest's superseded headroom figures were measured
+    against. The walls are today's, because neither of them is what these
+    plants are about.
+    """
+
+    return AUTHORIZED_LIMITS.model_copy(
+        update={
+            "run_max_input_tokens": 2_400_000,
+            "run_max_output_tokens": 200_000,
+            "unit_max_input_tokens": 45_000,
+            "unit_max_output_tokens": _CEILINGS_MERGED_2026_09_07,
+        }
+    )
+
+
+def _sampling_before_the_raise() -> SamplingConfig:
+    """The draw in force until the fourth authorization raised the turn cap.
+
+    A rehearsal that reproduces a stop from before 2026-09-14 has to reserve
+    what that run reserved, or it reproduces the stop's shape and not the stop.
+    """
+
+    return AUTHORIZED_SAMPLING.model_copy(update={"turn_max_tokens": 2048})
+
 
 #: The commit that first bound the execution manifest. Every later change to a
 #: frozen-analysis constant is an amendment to a document that already existed,
@@ -505,26 +546,6 @@ def _less_the_stops_own_calls(
         arm["cost_usd"] -= row.usage.cost_usd
         payload["total_cost_usd"] -= row.usage.cost_usd
     return payload
-
-
-def _authorize_feasible_limits(monkeypatch: pytest.MonkeyPatch) -> RunLimits:
-    """Stand in for a fourth authorization's re-sized limits.
-
-    The limits #437 authorized cannot pay for the run they authorize: one unit
-    reserves 9,216 output tokens against a 4,000 per-unit ceiling, and
-    `assert_limits_are_feasible` refuses them before anything else happens. That
-    refusal is the point of this card, and it makes every gate BEHIND it
-    unreachable under those numbers. A test about one of those later gates
-    therefore runs under the re-sizing the diagnosis of 2026-09-13 puts to the
-    owner (`tests/experiments/usage_replay_double.py::feasible_limits`), patched
-    in as the authorized set so the live gate's "exactly the authorized limits"
-    comparison still holds. Nothing here authorizes a live run: no test reaches
-    a provider, and the committed constants are untouched.
-    """
-
-    limits = feasible_limits()
-    monkeypatch.setattr(instrument, "AUTHORIZED_LIMITS", limits)
-    return limits
 
 
 class _StubClient:
@@ -1295,7 +1316,7 @@ class TestAuthorizedClient:
             build(env={"FEATHERLESS_API_KEY": "unused"})
 
     def test_the_pre_client_gate_stops_on_a_moved_frozen_set(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path
     ) -> None:
         """PLANTED: a repository root whose execution manifest is the committed
         one and whose held-out manifest carries a moved digest. The readiness
@@ -1321,12 +1342,9 @@ class TestAuthorizedClient:
                 provider=AUTHORIZED_PROVIDER,
                 invocation=invocation,
                 repo_root=tmp_path,
-                limits=_authorize_feasible_limits(monkeypatch),
             )
 
-    def test_the_pre_client_gate_returns_the_verified_set(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_pre_client_gate_returns_the_verified_set(self, tmp_path: Path) -> None:
         """The positive half: it hands back the set the client is then built
         against, so the two cannot come apart. The root is the committed tree
         whenever the Inputs row binds the live band, and a copy of it with that
@@ -1343,7 +1361,6 @@ class TestAuthorizedClient:
             provider=AUTHORIZED_PROVIDER,
             invocation=invocation,
             repo_root=root,
-            limits=_authorize_feasible_limits(monkeypatch),
         )
         assert len(frozen.accepted_seeds) == 50
 
@@ -1397,7 +1414,6 @@ class TestAuthorizedClient:
                 provider=AUTHORIZED_PROVIDER,
                 live_invocation=invocation,
                 repo_root=root,
-                limits=_authorize_feasible_limits(monkeypatch),
             )
         assert seen["expected_model"] == AUTHORIZED_MODEL
 
@@ -1502,7 +1518,7 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
         assert f"holds {live[0]}-{live[1]}" in message
 
     def test_a_stale_binding_stops_the_run_before_a_client_exists(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path
     ) -> None:
         """PLANTED: an Inputs row naming the first converted band, 3000-3999,
         while the live record holds whatever band the current freeze drew.
@@ -1528,7 +1544,6 @@ class TestTheManifestBindsTheBandTheRunWouldDraw:
                 provider=AUTHORIZED_PROVIDER,
                 invocation=invocation,
                 repo_root=tmp_path,
-                limits=_authorize_feasible_limits(monkeypatch),
             )
         message = str(refused.value)
         assert (
@@ -1654,11 +1669,15 @@ class TestPerCallCaps:
         clock = instrument._ModelWorkClock(max_seconds=work_seconds)
         return instrument._InstrumentClient(inner, work_clock=clock)
 
-    @pytest.mark.parametrize("max_tokens", [4096, 512])
-    def test_a_call_outside_the_shipped_caps_stops_the_run(
+    @pytest.mark.parametrize("max_tokens", [8192, 2048, 512])
+    def test_a_call_outside_the_authorized_caps_stops_the_run(
         self, max_tokens: int
     ) -> None:
-        # PLANTED: a caller asking for a cap the authorization did not name.
+        # PLANTED: a caller asking for a cap the authorization did not name —
+        # over the ceiling, and two under it. 2,048 is the shipped turn default
+        # and was an authorized cap until 2026-09-14, so it is planted here on
+        # purpose: after the raise, a caller still asking for it is a caller
+        # drawing from a distribution this manifest no longer binds.
         import asyncio
 
         client = self._client(_StubClient())
@@ -3563,10 +3582,10 @@ class TestExecutionManifest:
         [
             "`featherless`",
             "`Qwen/Qwen3.6-27B`",
-            "turn 2,048 output / vote 1,024",
+            "turn 4,096 output / vote 1,024",
             "turn temperature 0.4 / vote temperature 0.2",
-            "2,400,000 input / 200,000 output run-level",
-            "45,000 input / 4,000 output per unit",
+            "3,710,000 input / 459,000 output run-level",
+            "106,000 input / 16,000 output per unit",
             "6 h of model work within an 8 h elapsed deadline",
             "$0.00 marginal",
             "4p1i with 3 living voters at meeting open",
@@ -4160,6 +4179,58 @@ class TestExecutionManifest:
         ):
             assert stated in collapsed, stated
 
+    def _fourth_authorization_section(self) -> str:
+        text = self._text()
+        start = text.index("## Fourth authorization (2026-09-14)")
+        return text[start : text.index("\n## ", start + 1)]
+
+    def test_the_fourth_authorization_section_records_the_change_and_its_basis(
+        self,
+    ) -> None:
+        """The dated entry for the re-sizing, held to the same bar as the rest.
+
+        A limits change is a spending decision, so the section that records it
+        has to name the card that authorized it, the measurement it was sized
+        from, the one observation that forced the turn cap, and the arithmetic
+        the raise moves — not just the numbers, which the table already carries.
+        The commit it names is resolved against this history rather than taken
+        on the document's word, and is required to have moved the instrument.
+        """
+
+        section = " ".join(self._fourth_authorization_section().split())
+        for stated in (
+            "fresh-deduction-authorization-4.md",
+            "calibration-2026-09-14/calibration.json",
+            "2,036 output tokens against the 2,048 cap",
+            "3 x 4,096 + 3 x 1,024 = 15,360",
+            "the per-unit output ceiling is 16,000 and not the 14,000",
+            "`CALIBRATION_SAMPLING` freezes the calibration's draw",
+            "Round-3 re-binding, same date",
+        ):
+            assert stated in section, stated
+        assert f"turn {instrument.AUTHORIZED_TURN_MAX_TOKENS:,} output" in section
+        # The round-3 entry closes the two obligations the entry above opened,
+        # and it has to say so in the band the generator actually draws rather
+        # than in a span retyped here: the Inputs row below is re-bound to it,
+        # and a document that recorded a different one would be describing a
+        # re-binding nobody made.
+        assert (
+            f"now binds {PREREGISTERED_BAND.first_seed}-"
+            f"{PREREGISTERED_BAND.last_seed}" in section
+        )
+        commits = re.findall(r"\*\*2026-09-14[^(*]*\(`([0-9a-f]{7,40})`\)", section)
+        assert len(commits) == 1
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+            pytest.skip("no full history here; the named commit cannot be resolved")
+        for commit in commits:
+            assert (
+                _git("rev-parse", "--verify", f"{commit}^{{commit}}").returncode == 0
+            ), f"{commit} is not a commit here"
+            touched = _git(
+                "show", "--name-only", "--format=", commit, "--", _INSTRUMENT_REPO_PATH
+            )
+            assert _INSTRUMENT_REPO_PATH in touched.stdout
+
     def test_the_enforcement_section_quotes_the_transport_retry(self) -> None:
         """The retry is a thing the instrument DOES, so this document states it
         in the module's own words rather than in a paraphrase that could drift
@@ -4305,6 +4376,39 @@ class TestExecutionManifest:
         )
         assert f"{manifest['skipped_reason_counts']['witnessed_kill']} skips" in text
 
+    def _seed_band_row(self) -> str:
+        row = re.search(r"^\|\s*Seed band\s*\|.*$", self._text(), re.MULTILINE)
+        assert row is not None, "the Inputs table carries no Seed band row"
+        return row.group(0)
+
+    def test_the_inputs_row_names_every_converted_band(self) -> None:
+        """The row that binds one band has to account for the ones it replaced.
+
+        A re-binding leaves a band behind, and the reason it was left behind is
+        that a run rendered its prefixes: that is what makes it development
+        data rather than a spare held-out set. A row that named only the band
+        it now binds would let a reader take a converted band for an unused
+        one, so the row names each of them, its date and the record it now
+        lives in — read here off `CONVERTED_BANDS` and off each record's own
+        `converted` block rather than from a list written down in this test, so
+        the NEXT conversion turns this red instead of leaving the document one
+        band behind.
+        """
+
+        row = self._seed_band_row()
+        for converted in CONVERTED_BANDS:
+            record = json.loads(
+                (_REPO_ROOT / converted.manifest_path).read_text(encoding="utf-8")
+            )
+            span = f"{converted.band.first_seed}-{converted.band.last_seed}"
+            assert span in row, f"the Seed band row does not name {span}"
+            assert record["converted"]["date"] in row, (
+                f"the Seed band row names {span} without the date it became "
+                "development data"
+            )
+            name = Path(converted.manifest_path).name
+            assert name in row, f"the Seed band row names {span} but not {name}"
+
     def test_a_binding_to_a_converted_record_stays_an_open_obligation(self) -> None:
         """A development record may be bound only while the re-binding is open.
 
@@ -4395,30 +4499,49 @@ class TestFeasibility:
     def test_the_reservation_is_what_the_shared_budget_actually_reserves(self) -> None:
         """PERTURBED: the same six calls under two ceilings.
 
-        Under the authorized 4,000 the budget refuses the second call although
-        every one of the six is legal and untruncated; under the schedule
-        `unit_output_reservation` states it lets all six through. The schedule
-        is therefore the budget's own arithmetic rather than this module's claim
-        about it, and the gate below refuses exactly the ceiling that cannot
-        honour it.
+        Under the 4,000 merged on 2026-09-07 the budget refuses the FIRST call
+        at the raised turn cap although every one of the six is legal and
+        untruncated; under the schedule `unit_output_reservation` states it lets
+        all six through. The schedule is therefore the budget's own arithmetic
+        rather than this module's claim about it, and the gate below refuses
+        exactly the ceiling that cannot honour it.
         """
 
-        assert instrument.unit_output_reservation() == 9_216
-        assert self._drive_one_unit(AUTHORIZED_LIMITS.unit_max_output_tokens) < 6
+        assert instrument.unit_output_reservation() == 15_360
+        assert self._drive_one_unit(_CEILINGS_MERGED_2026_09_07) < 6
         assert self._drive_one_unit(instrument.unit_output_reservation()) == 6
 
-    def test_the_authorized_limits_cannot_pay_for_the_run_they_authorize(self) -> None:
-        """PLANTED with attempt 3's own numbers: 4,000 against 9,216.
+    def test_the_gate_accepts_the_fourth_authorizations_limits(self) -> None:
+        """The committed ceilings pay for the run they authorize.
 
-        This is the live gate failing closed, and it is intended: the limits
-        merged on 2026-09-07 authorize six calls a unit cannot pay for, and a
-        fourth authorization card has to re-size them before any live run.
+        The fourth authorization card re-sized them from the live calibration of
+        2026-09-14 precisely so this holds: 16,000 per-unit output against a
+        15,360 schedule, 106,000 per-unit input against the largest archived
+        unit, and both run ceilings above a hundred units at that unit.
         """
 
+        instrument.assert_limits_are_feasible()
+        assert AUTHORIZED_LIMITS.unit_max_output_tokens >= (
+            instrument.unit_output_reservation()
+        )
+        assert self._drive_one_unit(AUTHORIZED_LIMITS.unit_max_output_tokens) == 6
+
+    def test_the_ceilings_merged_on_2026_09_07_are_still_refused(self) -> None:
+        """PLANTED with attempt 3's own number: 4,000 against 15,360.
+
+        The refusal the diagnosis of 2026-09-13 moved to startup is not lifted
+        by the re-sizing — it is what the re-sizing answers. The planted ceiling
+        is the one that stopped the third live run, and the raised turn cap only
+        makes the gap it names wider.
+        """
+
+        planted = AUTHORIZED_LIMITS.model_copy(
+            update={"unit_max_output_tokens": _CEILINGS_MERGED_2026_09_07}
+        )
         with pytest.raises(instrument.LimitsInfeasible) as refused:
-            instrument.assert_limits_are_feasible()
+            instrument.assert_limits_are_feasible(limits=planted)
         assert "4,000" in str(refused.value)
-        assert "9,216" in str(refused.value)
+        assert "15,360" in str(refused.value)
 
     def test_a_re_sized_authorization_passes(self) -> None:
         """The other half: the diagnosis's provisional re-sizing is feasible."""
@@ -4426,21 +4549,30 @@ class TestFeasibility:
         instrument.assert_limits_are_feasible(limits=feasible_limits())
 
     @pytest.mark.parametrize(
-        ("field", "dimension"),
+        ("field", "dimension", "in_flight"),
         [
-            ("run_max_output_tokens", "output"),
-            ("run_max_input_tokens", "input"),
+            (
+                "run_max_output_tokens",
+                "output",
+                AUTHORIZED_SAMPLING.turn_max_tokens,
+            ),
+            ("run_max_input_tokens", "input", 0),
         ],
     )
     def test_a_run_ceiling_below_its_own_units_is_refused(
-        self, field: str, dimension: str
+        self, field: str, dimension: str, in_flight: int
     ) -> None:
-        """PLANTED: a run ceiling one token below a hundred measured units.
+        """PLANTED: a run ceiling one token below what its own run reserves.
 
         The per-unit mismatch one level up. A run whose ceiling cannot pay for
         the units it plans stops near its end on arithmetic rather than on its
         own evidence, which is what two of the four authorized ceilings would
-        have done to a complete run even with the per-unit one fixed.
+        have done to a complete run even with the per-unit one fixed. The
+        OUTPUT bound carries one further turn cap, for the reason
+        `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused`
+        plants; the INPUT bound carries none, because an input pre-flight is
+        the prompt's own estimated length rather than a cap, and the pair of
+        cases here is what holds those two shapes apart.
         """
 
         calibrated = (
@@ -4448,7 +4580,7 @@ class TestFeasibility:
             if dimension == "output"
             else instrument.CALIBRATED_UNIT_INPUT_TOKENS
         )
-        needed = calibrated * instrument.planned_units()
+        needed = calibrated * instrument.planned_units() + in_flight
         feasible = feasible_limits()
         planted = feasible.model_copy(update={field: needed - 1})
         with pytest.raises(instrument.LimitsInfeasible, match=f"run-level {dimension}"):
@@ -4456,6 +4588,91 @@ class TestFeasibility:
         instrument.assert_limits_are_feasible(
             limits=feasible.model_copy(update={field: needed})
         )
+
+    def test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused(
+        self,
+    ) -> None:
+        """PLANTED: the run ceiling this evaluation's own sizing rule produces.
+
+        `GameBudget.preflight` recurses into its parent (`llm/budget.py`), so
+        the RUN budget is pre-flighted at a call's full output cap on top of
+        everything the run has already charged -- the same two units of account
+        the per-unit ceiling was re-sized for, one level up. A run-level output
+        ceiling set to exactly a hundred units at the largest measured unit
+        therefore cannot pay for its own last call: the run reaches the end of
+        its hundredth unit and is refused on the reservation rather than on the
+        spend. Until this correction the gate compared against that product
+        alone and accepted it, which is the defect planted here; the authorized
+        459,000 clears the corrected bound with room, so nothing the fourth
+        authorization carries moves.
+        """
+
+        turn_cap = AUTHORIZED_SAMPLING.turn_max_tokens
+        charged = instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * instrument.planned_units()
+        planted = feasible_limits().model_copy(
+            update={"run_max_output_tokens": charged}
+        )
+        with pytest.raises(instrument.LimitsInfeasible) as refused:
+            instrument.assert_limits_are_feasible(limits=planted)
+        assert f"{charged:,}" in str(refused.value)
+        assert f"{turn_cap:,}" in str(refused.value)
+        assert f"{charged + turn_cap:,}" in str(refused.value)
+        instrument.assert_limits_are_feasible(
+            limits=feasible_limits().model_copy(
+                update={"run_max_output_tokens": charged + turn_cap}
+            )
+        )
+        assert AUTHORIZED_LIMITS.run_max_output_tokens >= charged + turn_cap
+
+    def test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: the usage profile refreshed to the calibration's own figures.
+
+        The authorized run-level OUTPUT ceiling is a hundred units at the
+        largest unit the calibration of 2026-09-14 measured — 100 x 4,590 =
+        459,000 — which is exactly the shape
+        `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused`
+        plants and the corrected gate refuses. The gate accepts
+        `AUTHORIZED_LIMITS` on this tree only because
+        `deduction_usage_profile.json` still carries the three stopped live
+        runs' 3,116: the stale profile is LOAD-BEARING here rather than
+        neutral, and this case is what says so. The INPUT dimension clears
+        either figure, so the residual is one comparison wide. Nothing here
+        moves an authorized number — 459,000 is the owner's, on the fourth
+        authorization card — and the hand-back is recorded in the limits
+        card's Results.
+        """
+
+        measured = json.loads(
+            (
+                _REPO_ROOT
+                / "audits"
+                / "deduction-candidate"
+                / "calibration-2026-09-14"
+                / "calibration.json"
+            ).read_text(encoding="utf-8")
+        )["proposal"]
+        largest_output = int(measured["measured_max_unit_output_tokens"])
+        largest_input = int(measured["measured_max_unit_input_tokens"])
+        units = instrument.planned_units()
+        turn_cap = AUTHORIZED_SAMPLING.turn_max_tokens
+        # As committed, on the archived profile: the gate passes.
+        instrument.assert_limits_are_feasible()
+        archived = instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units + turn_cap
+        assert archived <= AUTHORIZED_LIMITS.run_max_output_tokens
+        # The ceiling is the calibration's largest unit times the unit count,
+        # to the token, which is the bound this gate refuses.
+        assert largest_output * units == AUTHORIZED_LIMITS.run_max_output_tokens
+        monkeypatch.setattr(instrument, "CALIBRATED_UNIT_OUTPUT_TOKENS", largest_output)
+        monkeypatch.setattr(instrument, "CALIBRATED_UNIT_INPUT_TOKENS", largest_input)
+        with pytest.raises(instrument.LimitsInfeasible) as refused:
+            instrument.assert_limits_are_feasible()
+        message = str(refused.value)
+        assert "run-level output" in message
+        assert f"{largest_output * units + turn_cap:,}" in message
+        # One dimension only: the input side clears the refreshed figure.
+        assert largest_input * units <= AUTHORIZED_LIMITS.run_max_input_tokens
 
     def test_a_per_unit_ceiling_below_a_unit_already_run_is_refused(self) -> None:
         """PLANTED: a per-unit input ceiling under the largest archived unit."""
@@ -4495,6 +4712,11 @@ class TestFeasibility:
             raise AssertionError("the frozen set was read before the arithmetic")
 
         monkeypatch.setattr(instrument, "verify_frozen_set", landmine)
+        # PLANTED as the authorized set, because the committed one has been
+        # feasible since 2026-09-14: the four ceilings #437 merged, which the
+        # arithmetic refuses.
+        planted = _limits_merged_on_2026_09_07()
+        monkeypatch.setattr(instrument, "AUTHORIZED_LIMITS", planted)
         root = _root_binding_the_live_band(tmp_path)
         invocation = LiveRunInvocation.naming(
             root / EXECUTION_MANIFEST_PATH,
@@ -4504,18 +4726,25 @@ class TestFeasibility:
         )
         with pytest.raises(instrument.LimitsInfeasible):
             instrument.assert_ready_for_a_live_run(
-                provider=AUTHORIZED_PROVIDER, invocation=invocation, repo_root=root
+                provider=AUTHORIZED_PROVIDER,
+                invocation=invocation,
+                repo_root=root,
+                limits=planted,
             )
 
-    def test_the_live_run_path_fails_closed_under_the_authorized_limits(
-        self, tmp_path: Path
+    def test_the_live_run_path_fails_closed_under_infeasible_limits(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """And the other entry point: `run_instrument` refuses too.
 
         A caller that skipped the readiness gate and went straight to the run
         would otherwise reach a provider under limits that cannot pay for it.
+        PLANTED as the authorized set, since the committed ceilings have paid
+        for their own run since 2026-09-14: the ones #437 merged.
         """
 
+        planted = _limits_merged_on_2026_09_07()
+        monkeypatch.setattr(instrument, "AUTHORIZED_LIMITS", planted)
         root = _root_binding_the_live_band(tmp_path)
         invocation = LiveRunInvocation.naming(
             root / EXECUTION_MANIFEST_PATH,
@@ -4530,6 +4759,7 @@ class TestFeasibility:
                 provider=AUTHORIZED_PROVIDER,
                 live_invocation=invocation,
                 repo_root=root,
+                limits=planted,
             )
 
     def test_the_dry_run_is_not_gated_on_feasibility(self, tmp_path: Path) -> None:
@@ -4618,19 +4848,27 @@ class TestUsageReplay:
     def test_the_rehearsal_reproduces_the_stop_of_2026_09_13(
         self, tmp_path: Path
     ) -> None:
-        """The 100-unit rehearsal under TODAY's limits, on the replay double.
+        """The 100-unit rehearsal under the limits OF THAT DAY, on the double.
 
         It stops where the live run stopped and says the same thing: the
         candidate arm's per-unit output budget refusing a ballot's 1,024-token
         reservation at 3,116 charged, against a 4,000 ceiling. The number is the
         archived unit's own — the rehearsal replays that unit's calls, refusal
         included — so this is the live stop reproduced offline at $0 rather than
-        a stop of the same shape.
+        a stop of the same shape. Both halves of that day are planted: the
+        ceilings #437 merged AND the 2,048 turn cap the run drew at, because a
+        rehearsal at today's 4,096 would be refused on its FIRST call and would
+        reproduce a different stop.
         """
 
         double = UsageReplayProvider()
         with pytest.raises(InstrumentAborted) as stopped:
-            run_dry(output_dir=tmp_path, client=double)
+            run_dry(
+                output_dir=tmp_path,
+                client=double,
+                limits=_limits_merged_on_2026_09_07(),
+                sampling=_sampling_before_the_raise(),
+            )
         partial = stopped.value.partial
         assert (
             "LLM budget exceeded on output_tokens: current=3116.0 + "
@@ -4679,11 +4917,76 @@ class TestUsageReplay:
         assert f"{run_input:,}" in manifest
         assert f"{run_output:,}" in manifest
         share = 100 * run_output / AUTHORIZED_LIMITS.run_max_output_tokens
-        assert f"{share:.1f}% of the 200,000 run-level" in manifest
-        assert share > 100
+        assert f"{share:.1f}% of the 459,000 run-level" in manifest
+        assert share < 100
+        # And the figure that made the re-sizing necessary, against the ceiling
+        # this manifest bound until 2026-09-14: the same measured total, over
+        # 100%, which is what a complete run would have stopped on.
+        superseded = _limits_merged_on_2026_09_07().run_max_output_tokens
+        overrun = 100 * run_output / superseded
+        assert f"{overrun:.1f}% of the 200,000 run-level" in manifest
+        assert overrun > 100
         candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
         assert f"{candidate.defaulted_turns} defaulted turns" in manifest
         assert candidate.defaulted_turns > 0
+
+    def test_the_rehearsal_is_green_under_the_fourth_authorizations_limits(
+        self, tmp_path: Path
+    ) -> None:
+        """The same 100 units under the ceilings and caps this run is AUTHORIZED at.
+
+        The rehearsal above runs under the re-sizing the diagnosis PROPOSES,
+        which is not what the owner bound: until the fourth authorization
+        `assert_limits_are_feasible` refused `AUTHORIZED_LIMITS` outright, so no
+        rehearsal of the whole pipeline could be made under them at all. It can
+        now, and this is it — the authorized ceilings, the authorized caps, on
+        whatever band the live freeze record holds, which is the fourth since
+        that freeze merged. It clears the feasibility gate, completes at $0 and
+        stays inside every ceiling it was measured against.
+
+        The per-arm totals are the ones the manifest's output-headroom paragraph
+        quotes, and that is the band-independence claim the re-binding rests on:
+        the double answers from an archived distribution keyed by arm and call
+        type, so what it charges cannot depend on which prefix a unit ran. The
+        figures that DO depend on the prefixes are the fake provider's, and they
+        are re-measured on the new band by
+        `TestDryRun.test_the_mechanics_check_paragraph_quotes_the_run_it_describes`.
+        """
+
+        instrument.assert_limits_are_feasible()
+        double = UsageReplayProvider()
+        report = run_dry(
+            output_dir=tmp_path,
+            client=double,
+            limits=AUTHORIZED_LIMITS,
+            sampling=AUTHORIZED_SAMPLING,
+        )
+        assert double.attempts == 600
+        assert report.total_cost_usd == 0.0
+        assert report.limits == AUTHORIZED_LIMITS
+        assert report.sampling == AUTHORIZED_SAMPLING
+        assert [arm.units for arm in report.arms] == [50, 50]
+        for arm in report.arms:
+            assert arm.units == arm.terminal_units + arm.partial_units
+            assert (
+                arm.output_tokens / arm.units < AUTHORIZED_LIMITS.unit_max_output_tokens
+            )
+            assert (
+                arm.input_tokens / arm.units < AUTHORIZED_LIMITS.unit_max_input_tokens
+            )
+        assert (
+            sum(arm.output_tokens for arm in report.arms)
+            < AUTHORIZED_LIMITS.run_max_output_tokens
+        )
+        assert (
+            sum(arm.input_tokens for arm in report.arms)
+            < AUTHORIZED_LIMITS.run_max_input_tokens
+        )
+        manifest = _MANIFEST.read_text(encoding="utf-8")
+        for arm in report.arms:
+            assert f"{arm.input_tokens:,}" in manifest, arm.arm
+            assert f"{arm.output_tokens:,}" in manifest, arm.arm
+            assert f"{arm.terminal_units} terminal units" in manifest, arm.arm
 
     def test_a_call_type_blind_sampler_manufactures_a_truncation(
         self, tmp_path: Path
@@ -5517,7 +5820,7 @@ class TestCheckpointAndResume:
         instrument.assert_resume_is_authorized(provider="fake")
 
     def test_the_readiness_gate_refuses_an_unauthorized_live_resume(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path
     ) -> None:
         """PLANTED: the refusal reaches the CLI's pre-client gate, not just the helper.
 
@@ -5543,7 +5846,6 @@ class TestCheckpointAndResume:
                 invocation=invocation,
                 repo_root=root,
                 resuming=True,
-                limits=_authorize_feasible_limits(monkeypatch),
             )
 
     def test_a_tree_without_the_arm_surface_cannot_say_what_it_renders(
@@ -5834,33 +6136,46 @@ class TestCalibrationGate:
                 repo_root=root,
             )
 
-    def test_the_feasibility_gate_accepts_the_calibration_and_refuses_the_run(
+    def test_the_feasibility_gate_accepts_the_calibration_at_its_own_caps(
         self,
     ) -> None:
-        """The arithmetic, on both sets of ceilings.
+        """The arithmetic, on the calibration's ceilings and its own draw.
 
-        The calibration's ten units can pay for themselves; the limits merged on
-        2026-09-07 still cannot pay for their hundred, which is the refusal the
-        diagnosis of 2026-09-13 moved to startup and which this card does not
-        lift.
+        Its ten units can pay for themselves at `CALIBRATION_SAMPLING` — the
+        caps the owner's ceilings of 2026-09-14 were sized against and the ones
+        the committed output was measured at. At the RUN's raised turn cap the
+        same ceilings cannot: 12,000 against a 15,360 schedule is the same
+        defect the third live run stopped on, one authorization down, which is
+        why `assert_calibration_is_authorized` holds a live calibration to the
+        calibration draw rather than to the run's.
         """
 
         instrument.assert_limits_are_feasible(
             limits=instrument.CALIBRATION_LIMITS,
+            sampling=instrument.CALIBRATION_SAMPLING,
             units=instrument.calibration_units(),
         )
-        with pytest.raises(instrument.LimitsInfeasible):
-            instrument.assert_limits_are_feasible()
+        with pytest.raises(instrument.LimitsInfeasible, match="per-unit output"):
+            instrument.assert_limits_are_feasible(
+                limits=instrument.CALIBRATION_LIMITS,
+                sampling=AUTHORIZED_SAMPLING,
+                units=instrument.calibration_units(),
+            )
 
     def test_a_calibration_limit_below_the_reservation_is_refused(self) -> None:
         """PERTURBED: one token under the schedule a unit reserves."""
 
+        reserved = instrument.unit_output_reservation(
+            sampling=instrument.CALIBRATION_SAMPLING
+        )
         planted = instrument.CALIBRATION_LIMITS.model_copy(
-            update={"unit_max_output_tokens": instrument.unit_output_reservation() - 1}
+            update={"unit_max_output_tokens": reserved - 1}
         )
         with pytest.raises(instrument.LimitsInfeasible, match="per-unit output"):
             instrument.assert_limits_are_feasible(
-                limits=planted, units=instrument.calibration_units()
+                limits=planted,
+                sampling=instrument.CALIBRATION_SAMPLING,
+                units=instrument.calibration_units(),
             )
 
     def test_a_fake_calibration_takes_no_invocation(self, tmp_path: Path) -> None:
@@ -6091,7 +6406,12 @@ class TestCalibrationRun:
         )
         assert proposal.unit_max_output_tokens == instrument._rounded_up(
             max(
-                instrument.unit_output_reservation(),
+                # The schedule of the caps the calibration DREW at: a proposal
+                # reserves what its own measurement reserved, and lifting it to
+                # the run's raised cap is the owner's step, on the card.
+                instrument.unit_output_reservation(
+                    sampling=instrument.CALIBRATION_SAMPLING
+                ),
                 proposal.measured_max_unit_output_tokens * 3,
             )
         )
@@ -6128,7 +6448,11 @@ class TestCalibrationRun:
         assert measured.proposal.clears_the_feasibility_gate is True
         assert measured.proposal.feasibility_refusal is None
         instrument.assert_limits_are_feasible(
-            limits=instrument.proposed_limits(measured.proposal)
+            limits=instrument.proposed_limits(measured.proposal),
+            # At the draw the proposal reserved against — its own. The gate it
+            # reports clearing is that one, and saying so here is what keeps the
+            # report's claim and this check the same claim.
+            sampling=instrument.CALIBRATION_SAMPLING,
         )
 
     def test_a_stop_reports_its_partial_accounting(self, tmp_path: Path) -> None:
@@ -6279,6 +6603,13 @@ class TestCalibrationProfileRefresh:
         calibration proposed, and the proposal passes the feasibility gate. That
         is what makes the proposal a re-sizing a fourth authorization card could
         carry rather than four numbers in a report.
+
+        All three steps are at the calibration's own draw, which is the loop as
+        it ran: a proposal reserves against the caps it measured. The fourth
+        authorization then RAISED the turn cap on the strength of that same
+        measurement, and the test below is where the consequence is recorded —
+        the proposal's per-unit output figure does not clear the run's new
+        schedule, which is why the card lifted it by hand.
         """
 
         report = instrument.run_calibration(
@@ -6290,14 +6621,45 @@ class TestCalibrationProfileRefresh:
         instrument.write_usage_profile(report, profile_path)
         refreshed = UsageProfile.load(profile_path)
         limits = instrument.proposed_limits(report.proposal)
-        instrument.assert_limits_are_feasible(limits=limits)
+        instrument.assert_limits_are_feasible(
+            limits=limits, sampling=instrument.CALIBRATION_SAMPLING
+        )
         rehearsed = run_dry(
             output_dir=tmp_path / "rehearsal",
             limits=limits,
+            sampling=instrument.CALIBRATION_SAMPLING,
             client=UsageReplayProvider(profile=refreshed),
         )
         assert [arm.units for arm in rehearsed.arms] == [50, 50]
         assert rehearsed.total_cost_usd == 0.0
+
+    def test_the_proposal_does_not_clear_the_raised_turn_caps_schedule(
+        self, tmp_path: Path
+    ) -> None:
+        """The one figure the fourth authorization did not take from the report.
+
+        `ceiling_proposal` reserves against the caps it measured, so a proposal
+        made at the 2,048 draw clears 9,216 and no more. The card raised the
+        run's turn cap on the strength of the same calibration, and a run that
+        draws at 4,096 reserves 15,360 — so the proposal's per-unit output
+        ceiling is refused for the run it was sizing, and the committed
+        `AUTHORIZED_UNIT_MAX_OUTPUT_TOKENS` is the lifted figure rather than the
+        reported one. This is that gap, held as arithmetic rather than as a
+        sentence in a document.
+        """
+
+        report = instrument.run_calibration(
+            _converted_record(),
+            output_dir=tmp_path / "units",
+            client=UsageReplayProvider(),
+        )
+        proposed = instrument.proposed_limits(report.proposal)
+        assert proposed.unit_max_output_tokens < instrument.unit_output_reservation()
+        with pytest.raises(instrument.LimitsInfeasible, match="per-unit output"):
+            instrument.assert_limits_are_feasible(limits=proposed)
+        assert AUTHORIZED_LIMITS.unit_max_output_tokens >= (
+            instrument.unit_output_reservation()
+        )
 
     def test_a_refresh_of_another_schema_is_refused(self, tmp_path: Path) -> None:
         """PLANTED: the same payload carrying another schema name.
@@ -6442,6 +6804,74 @@ class TestDryRun:
             assert arm.ballot_verdicts["supported"] > 0
         assert "says nothing about model judgment" in report.caveat
 
+    def test_the_mechanics_check_paragraph_quotes_the_run_it_describes(
+        self, tmp_path: Path
+    ) -> None:
+        """The manifest's dry-run figures, re-derived from the dry run itself.
+
+        These are the figures a re-binding actually moves: the fake provider
+        reads each prompt, so its input heuristic and its graded counts are
+        the BAND's and not the fixture's, and the paragraph carrying the third
+        band's numbers under a row bound to the fourth would be a document
+        describing a set it no longer authorizes. Every number quoted there is
+        asserted here against the report, so the next re-binding turns this red
+        rather than leaving the section stale.
+
+        The command the paragraph names is this run without the temporary
+        directory (`run_dry` makes its own), under the same authorized limits
+        and caps, which is why it is measured here rather than described.
+
+        The per-arm ballot TOTAL is derived here too, and it is the one figure
+        of the paragraph that cannot be read off a single verdict column:
+        `UnitGrade.verdict_counts` reports `guard_rewritten` as an OVERLAY on
+        `supported`/`unsupported`/`uncited` rather than as a fourth bucket, so
+        an arm's ballots are those three summed and nothing else. Quoting the
+        two-arm total, or the three columns plus the overlay, is the arithmetic
+        this assertion refuses.
+        """
+
+        report = run_dry(output_dir=tmp_path)
+        assert report.limits == AUTHORIZED_LIMITS
+        assert report.sampling == AUTHORIZED_SAMPLING
+        manifest = _MANIFEST.read_text(encoding="utf-8")
+        paragraph = " ".join(
+            manifest[
+                manifest.index("## Verification of this manifest") : manifest.index(
+                    "**The output dimension"
+                )
+            ].split()
+        )
+        for arm in report.arms:
+            assert f"{arm.input_tokens:,}" in paragraph, arm.arm
+            assert f"{arm.ejections} ejections" in paragraph, arm.arm
+            assert f"{arm.role_correct} role-correct" in paragraph, arm.arm
+            assert f"{arm.wrongful_ejections} wrongful" in paragraph, arm.arm
+            assert (
+                f"{arm.supported_correct_ejections} supported-correct" in paragraph
+            ), arm.arm
+            assert (
+                f"{arm.naming_ballots} ballots naming the ejected player" in paragraph
+            ), arm.arm
+            assert (
+                f"{arm.ballot_verdicts['supported']} supported ballots" in paragraph
+            ), arm.arm
+            assert (
+                f"{arm.ballot_verdicts['guard_rewritten']} guard-rewritten" in paragraph
+            ), arm.arm
+            ballots = sum(
+                arm.ballot_verdicts[verdict]
+                for verdict in ("supported", "unsupported", "uncited")
+            )
+            assert f"{ballots:,} ballots an arm cast" in paragraph, arm.arm
+            assert (
+                f"{arm.terminal_units} of each arm's {arm.units} units" in paragraph
+            ), arm.arm
+            assert arm.terminal_units + arm.partial_units == arm.units
+        larger = max(report.arms, key=lambda arm: arm.input_tokens)
+        total = sum(arm.input_tokens for arm in report.arms)
+        assert f"{total:,}" in paragraph
+        assert f"{round(larger.input_tokens / larger.units):,} per unit" in paragraph
+
     def test_the_full_dry_run_survives_one_empty_completion(
         self, tmp_path: Path
     ) -> None:
@@ -6560,14 +6990,52 @@ class TestDryRun:
 
 
 class TestAuthorizedConstants:
-    def test_the_per_call_caps_are_the_shipped_defaults(self) -> None:
+    def test_the_per_call_caps_are_the_fourth_authorizations(self) -> None:
+        """The vote cap is still the shipped default; the turn cap is not.
+
+        The fourth authorization of 2026-09-14 raised the turn cap to 4,096 and
+        left the vote cap alone, so the divergence is asserted rather than
+        allowed to appear: the turn cap is the card's number, the vote cap is
+        `meetings.manager`'s, and the shipped pair is still (2048, 1024), so a
+        later edit to those defaults breaks this instead of moving what the
+        owner authorized.
+        """
+
         from meetings.manager import DEFAULT_TURN_MAX_TOKENS, DEFAULT_VOTE_MAX_TOKENS
 
-        assert instrument.AUTHORIZED_TURN_MAX_TOKENS == DEFAULT_TURN_MAX_TOKENS
+        assert instrument.AUTHORIZED_TURN_MAX_TOKENS == 4096
+        assert instrument.AUTHORIZED_TURN_MAX_TOKENS != DEFAULT_TURN_MAX_TOKENS
         assert instrument.AUTHORIZED_VOTE_MAX_TOKENS == DEFAULT_VOTE_MAX_TOKENS
-        # And the numbers the manifest names, so a moved shipped default breaks
-        # this rather than moving what the owner authorized.
         assert (DEFAULT_TURN_MAX_TOKENS, DEFAULT_VOTE_MAX_TOKENS) == (2048, 1024)
+
+    def test_the_calibration_kept_the_caps_it_drew_at(self) -> None:
+        """The calibration's own sampling, frozen apart from the run's.
+
+        Its ceilings were approved against the 9,216-token schedule the caps it
+        drew at reserve; the run's turn cap has since moved. Holding the two
+        apart is what keeps the committed calibration re-derivable and keeps a
+        spent authorization from silently paying for a draw nobody sized it for.
+        """
+
+        from meetings.manager import DEFAULT_TURN_MAX_TOKENS
+
+        calibration = instrument.CALIBRATION_SAMPLING
+        assert calibration.turn_max_tokens == DEFAULT_TURN_MAX_TOKENS
+        assert calibration.vote_max_tokens == AUTHORIZED_SAMPLING.vote_max_tokens
+        assert calibration.turn_temperature == AUTHORIZED_SAMPLING.turn_temperature
+        assert calibration.vote_temperature == AUTHORIZED_SAMPLING.vote_temperature
+        assert instrument.unit_output_reservation(sampling=calibration) == 9_216
+        # And the committed output was drawn at exactly these values.
+        recorded = json.loads(
+            (
+                _REPO_ROOT
+                / "audits"
+                / "deduction-candidate"
+                / "calibration-2026-09-14"
+                / "calibration.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert recorded["sampling"] == calibration.model_dump()
 
     def test_the_sampling_temperatures_are_the_shipped_defaults(self) -> None:
         """The manifest binds the sampling configuration, so the run may not
@@ -6624,10 +7092,13 @@ class TestAuthorizedConstants:
 
     def test_the_limits_object_is_the_authorized_numbers(self) -> None:
         assert AUTHORIZED_LIMITS == RunLimits(
-            run_max_input_tokens=2_400_000,
-            run_max_output_tokens=200_000,
-            unit_max_input_tokens=45_000,
-            unit_max_output_tokens=4_000,
+            # Re-sized on 2026-09-14 by the fourth authorization card, whose
+            # Constraints table the manifest's token-budget row now copies, from
+            # the live development calibration of that day.
+            run_max_input_tokens=3_710_000,
+            run_max_output_tokens=459_000,
+            unit_max_input_tokens=106_000,
+            unit_max_output_tokens=16_000,
             max_cost_usd=0.0,
             # Widened on 2026-09-13 by the third authorization card, whose
             # Constraints table the manifest's wall row now copies.

@@ -166,11 +166,15 @@ from paired_stats import exact_mcnemar_p  # noqa: E402
 #
 # Every constant below is a value the owner authorized by merging #437 on
 # 2026-09-07 (merge commit 0f49d8e6; ruling B.12 in
-# tasks/owner-decisions-2026-09-07.md). They are copied here so the instrument
-# ENFORCES the manifest rather than describing it, and
-# tests/experiments/test_fresh_deduction_instrument.py asserts the manifest
-# quotes each of them. Changing one here without a new authorization is a
-# spending decision, not a refactor.
+# tasks/owner-decisions-2026-09-07.md), except the six the later authorization
+# cards moved and name: the two wall windows, from
+# tasks/work/fresh-deduction-authorization-3.md (2026-09-13), and the turn cap
+# and the four token ceilings, from tasks/work/fresh-deduction-authorization-4.md
+# (2026-09-14), which sized them on that day's live development calibration.
+# They are copied here so the instrument ENFORCES the manifest rather than
+# describing it, and tests/experiments/test_fresh_deduction_instrument.py
+# asserts the manifest quotes each of them. Changing one here without a new
+# authorization is a spending decision, not a refactor.
 
 #: The provider name the manifest binds. Anything else needs its own manifest.
 AUTHORIZED_PROVIDER: Final[str] = "featherless"
@@ -181,11 +185,20 @@ AUTHORIZED_MODEL: Final[str] = "Qwen/Qwen3.6-27B"
 #: The prompt set the model lock carries.
 AUTHORIZED_PROMPT_SET: Final[str] = "qwen3_6_27b"
 
-#: The shipped per-call output caps, unchanged. The instrument refuses a call
-#: asking for more than the turn cap and refuses a ``max_tokens`` that is
-#: neither shipped value, so "the shipped defaults unchanged" is a check rather
-#: than a claim.
-AUTHORIZED_TURN_MAX_TOKENS: Final[int] = DEFAULT_TURN_MAX_TOKENS
+#: The per-call output caps. The vote cap is the shipped default, unchanged and
+#: written as such. The TURN cap is not: the fourth authorization
+#: (``tasks/work/fresh-deduction-authorization-4.md``, 2026-09-14) raised it from
+#: the shipped 2,048 to 4,096 because the development calibration of that day
+#: charged 2,036 output tokens on its largest candidate turn — 1 of 15 — and a
+#: truncation is a stop with no retry, while the committed lab rows for this
+#: model ran at ``max_tokens=4096``. It is therefore written here as a number
+#: rather than read from ``meetings.manager``, and the run serves it through
+#: :data:`AUTHORIZED_SAMPLING`'s own :class:`~meetings.manager.MeetingConfig`,
+#: so no default-path byte moves and no other campaign draws differently. The
+#: instrument still refuses a call asking for more than the turn cap and refuses
+#: a ``max_tokens`` that is neither authorized value, so "the caps this manifest
+#: binds" is a check rather than a claim.
+AUTHORIZED_TURN_MAX_TOKENS: Final[int] = 4_096
 AUTHORIZED_VOTE_MAX_TOKENS: Final[int] = DEFAULT_VOTE_MAX_TOKENS
 
 #: The sampling temperatures the run draws at. The preregistration asks the
@@ -201,13 +214,27 @@ AUTHORIZED_VOTE_MAX_TOKENS: Final[int] = DEFAULT_VOTE_MAX_TOKENS
 AUTHORIZED_TURN_TEMPERATURE: Final[float] = 0.4
 AUTHORIZED_VOTE_TEMPERATURE: Final[float] = 0.2
 
-#: The run-level hard stop, both token dimensions.
-AUTHORIZED_RUN_MAX_INPUT_TOKENS: Final[int] = 2_400_000
-AUTHORIZED_RUN_MAX_OUTPUT_TOKENS: Final[int] = 200_000
+#: The run-level hard stop, both token dimensions. Re-sized by the fourth
+#: authorization from the live development calibration of 2026-09-14
+#: (``audits/deduction-candidate/calibration-2026-09-14/calibration.json``)
+#: rather than from a projection: the larger of a hundred units at the measured
+#: mean x 1.5 and a hundred units at the largest measured unit, on each
+#: dimension. The figures merged on 2026-09-07 were 2,400,000 / 200,000, and a
+#: complete run measured over a hundred units would have stopped near its end on
+#: the output one.
+AUTHORIZED_RUN_MAX_INPUT_TOKENS: Final[int] = 3_710_000
+AUTHORIZED_RUN_MAX_OUTPUT_TOKENS: Final[int] = 459_000
 
-#: The per-unit hard stop, charged upward into the run-level parent.
-AUTHORIZED_UNIT_MAX_INPUT_TOKENS: Final[int] = 45_000
-AUTHORIZED_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 4_000
+#: The per-unit hard stop, charged upward into the run-level parent. Also the
+#: fourth authorization's, from the same calibration: three times the largest
+#: measured unit (35,232 input; 4,590 output gives 13,770), with the OUTPUT
+#: figure lifted to clear the reservation schedule the raised turn cap makes —
+#: :func:`unit_output_reservation` is 15,360 — and rounded up to 16,000. The
+#: figures merged on 2026-09-07 were 45,000 / 4,000, and
+#: :func:`assert_limits_are_feasible` refuses that output ceiling under either
+#: turn cap.
+AUTHORIZED_UNIT_MAX_INPUT_TOKENS: Final[int] = 106_000
+AUTHORIZED_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 16_000
 
 #: 6 h of model work inside an 8 h elapsed window: two limits and therefore two
 #: clocks, the elapsed one :class:`~orchestrator.run_limits.RunDeadline` and the
@@ -311,9 +338,18 @@ AUTHORIZED_LIMITS: Final[RunLimits] = RunLimits(
 # data, already rendered once — measured for what the provider charges, so the
 # ceilings a fourth held-out authorization is sized from come off this endpoint
 # rather than off a projection. Everything below is the size of that spend. The
-# per-call caps, the temperatures and the transport bound are NOT re-sized: the
-# calibration measures the run it is sizing, so it has to draw the way that run
-# draws.
+# per-call caps, the temperatures and the transport bound were NOT re-sized for
+# it: the calibration measures the run it is sizing, so it had to draw the way
+# that run drew.
+#
+# That calibration has since been spent — once, on 2026-09-14 — and the fourth
+# authorization it sized raised the RUN's turn cap from the 2,048 it drew at to
+# 4,096. Its own ceilings were authorized against the 9,216-token schedule the
+# caps it drew at reserve, so they are frozen here together with those caps
+# (CALIBRATION_SAMPLING): the mode reproduces the draw it measured, and the
+# committed output remains the arithmetic this tree can re-derive. A calibration
+# that sized a run drawing at 4,096 would have to draw at 4,096 and would need
+# its own ceilings, which are the owner's on a card and are not written here.
 
 #: Paired seeds the calibration renders: five prefixes, both arms, thirty calls
 #: an arm. Small on purpose — the quantity being measured is what one call and
@@ -321,8 +357,9 @@ AUTHORIZED_LIMITS: Final[RunLimits] = RunLimits(
 CALIBRATION_PAIRED_SEEDS: Final[int] = 5
 
 #: The per-unit ceilings of a calibration unit. The output figure clears the
-#: 9,216-token reservation schedule with room for a unit that runs long; the
-#: input figure is about 2.5x the largest unit the live archives charged.
+#: 9,216-token reservation schedule of :data:`CALIBRATION_SAMPLING` with room
+#: for a unit that runs long; the input figure is about 2.5x the largest unit
+#: the live archives charged.
 CALIBRATION_UNIT_MAX_INPUT_TOKENS: Final[int] = 60_000
 CALIBRATION_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 12_000
 
@@ -388,6 +425,24 @@ class SamplingConfig(BaseModel):
 
 AUTHORIZED_SAMPLING: Final[SamplingConfig] = SamplingConfig(
     turn_max_tokens=AUTHORIZED_TURN_MAX_TOKENS,
+    turn_temperature=AUTHORIZED_TURN_TEMPERATURE,
+    vote_max_tokens=AUTHORIZED_VOTE_MAX_TOKENS,
+    vote_temperature=AUTHORIZED_VOTE_TEMPERATURE,
+)
+
+#: The draw the development calibration of 2026-09-14 made, frozen at what it
+#: made rather than tracking :data:`AUTHORIZED_SAMPLING`. Until the fourth
+#: authorization the two were the same object, and the calibration's ceilings
+#: were approved on that basis: :data:`CALIBRATION_UNIT_MAX_OUTPUT_TOKENS` of
+#: 12,000 pays for the 9,216-token schedule these caps reserve and not for the
+#: 15,360 the raised turn cap reserves. Letting the calibration mode follow the
+#: run's cap would authorize six calls its own ceilings cannot pay for — the
+#: defect :func:`assert_limits_are_feasible` exists to refuse — so the mode
+#: keeps the draw it measured, the committed calibration output stays
+#: re-derivable from this tree, and a calibration of the raised draw needs its
+#: own ceilings on its own card.
+CALIBRATION_SAMPLING: Final[SamplingConfig] = SamplingConfig(
+    turn_max_tokens=DEFAULT_TURN_MAX_TOKENS,
     turn_temperature=AUTHORIZED_TURN_TEMPERATURE,
     vote_max_tokens=AUTHORIZED_VOTE_MAX_TOKENS,
     vote_temperature=AUTHORIZED_VOTE_TEMPERATURE,
@@ -474,14 +529,20 @@ RESERVATION_POLICY: Final[str] = (
     "it cannot pay for, and refuses one of them by arithmetic rather than by "
     "spend; the instrument therefore refuses such a ceiling before a live run "
     "starts, rather than discovering it partway through one. The run-level "
-    "ceilings are the same question one level up and are checked against the "
+    "ceilings are the same question one level up, because the pre-flight "
+    "recurses into the parent budget, and are checked against the "
     "largest per-unit spend the live archives have charged — "
     f"{CALIBRATED_UNIT_INPUT_TOKENS:,} input and "
     f"{CALIBRATED_UNIT_OUTPUT_TOKENS:,} output — rather than against a mean "
     "projection: a hundred units at the largest unit this evaluation has "
     "measured is what a run ceiling has to be able to pay for, because a "
     "ceiling that cannot is a stop rule that fires on arithmetic near the end "
-    "of a run it has already paid for."
+    "of a run it has already paid for. The run-level OUTPUT ceiling carries "
+    f"one further {AUTHORIZED_TURN_MAX_TOKENS:,}-token turn cap on top of that "
+    "product, because the last call of the run is reserved against the run "
+    "budget after the run has charged everything before it; the input "
+    "dimension carries no such term, its pre-flight being the prompt's own "
+    "estimated length rather than a cap."
 )
 
 
@@ -1157,17 +1218,27 @@ def assert_limits_are_feasible(
     * the per-unit INPUT ceiling against the largest unit the live archives
       charged, because a ceiling below a unit this evaluation has already run
       refuses a unit it has already seen;
-    * both RUN ceilings against that same per-unit figure times the unit count.
-      A run ceiling below what its own units are authorized to spend stops the
-      run near its end on arithmetic rather than on a real overrun, which is
-      the same two-units-of-account defect one level up.
+    * both RUN ceilings against that same per-unit figure times the unit count,
+      and the OUTPUT one against one further per-call turn cap on top of that
+      product. ``GameBudget.preflight`` recurses into its parent
+      (``llm/budget.py``), so the RUN budget sees a call's full output cap added
+      to everything the run has already charged, exactly as the unit budget
+      does; a run ceiling sized at exactly what its units charge therefore
+      cannot pay for its own last call. A run ceiling below what its own units
+      are authorized to spend stops the run near its end on arithmetic rather
+      than on a real overrun, which is the same two-units-of-account defect one
+      level up. The INPUT dimension takes no such term: a call's input side is
+      pre-flighted at the prompt's own estimated length
+      (``llm/budgeted_client.py``'s ``estimate``), not at a cap.
 
     It runs first in :func:`assert_ready_for_a_live_run` and again inside
     :func:`assert_live_run_is_authorized`, so neither the CLI's path nor a
-    direct :func:`run_instrument` call can reach a provider without it. Under
-    the limits authorized on 2026-09-07 it refuses, which is the point: those
-    limits cannot pay for the run they authorize, and a fourth authorization
-    card has to re-size them before a live run starts.
+    direct :func:`run_instrument` call can reach a provider without it. It
+    ACCEPTS :data:`AUTHORIZED_LIMITS` since the fourth authorization of
+    2026-09-14 re-sized them, and it still refuses the ceilings merged on
+    2026-09-07 — 4,000 per-unit output against a schedule of
+    :func:`unit_output_reservation`, under either turn cap — which is what
+    ``test_the_ceilings_merged_on_2026_09_07_are_still_refused`` plants.
     """
 
     planned = planned_units() if units is None else units
@@ -1190,17 +1261,29 @@ def assert_limits_are_feasible(
             f"{CALIBRATED_UNIT_INPUT_TOKENS:,}: this ceiling refuses a unit "
             "this evaluation has already run"
         )
-    for dimension, ceiling, calibrated in (
-        ("output", limits.run_max_output_tokens, CALIBRATED_UNIT_OUTPUT_TOKENS),
-        ("input", limits.run_max_input_tokens, CALIBRATED_UNIT_INPUT_TOKENS),
+    for dimension, ceiling, calibrated, in_flight in (
+        (
+            "output",
+            limits.run_max_output_tokens,
+            CALIBRATED_UNIT_OUTPUT_TOKENS,
+            sampling.turn_max_tokens,
+        ),
+        ("input", limits.run_max_input_tokens, CALIBRATED_UNIT_INPUT_TOKENS, 0),
     ):
-        needed = calibrated * planned
+        needed = calibrated * planned + in_flight
         if ceiling < needed:
+            reserved_here = (
+                f", plus the {in_flight:,} its last call reserves against the "
+                "run budget on top of them,"
+                if in_flight
+                else ""
+            )
             raise LimitsInfeasible(
                 f"the run-level {dimension} ceiling is {ceiling:,} tokens and "
                 f"{planned} units at the largest unit the live archives "
-                f"charged ({calibrated:,}) need {needed:,}: a run this long "
-                "would stop on the run ceiling rather than on its own evidence"
+                f"charged ({calibrated:,}){reserved_here} need {needed:,}: a "
+                "run this long would stop on the run ceiling rather than on "
+                "its own evidence"
             )
 
 
@@ -1313,7 +1396,7 @@ def assert_calibration_is_authorized(
     provider: str,
     invocation: LiveRunInvocation | None,
     limits: RunLimits = CALIBRATION_LIMITS,
-    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    sampling: SamplingConfig = CALIBRATION_SAMPLING,
     paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
     repo_root: Path = _REPO_ROOT,
 ) -> None:
@@ -1328,9 +1411,16 @@ def assert_calibration_is_authorized(
     * a live calibration runs under :data:`CALIBRATION_LIMITS` exactly, so the
       held-out run's own ceilings are refused here as firmly as the
       calibration's are refused there;
-    * it draws at the authorized sampling configuration, because a calibration
-      that drew differently would measure a distribution the run it sizes does
-      not draw from;
+    * it draws at :data:`CALIBRATION_SAMPLING` exactly — the draw the owner's
+      ceilings of 2026-09-14 were sized against, and the one the committed
+      calibration made. Until the fourth authorization that was
+      :data:`AUTHORIZED_SAMPLING` itself, for the reason this check still
+      carries: a calibration that draws differently from the run it sizes
+      measures a distribution that run does not draw from. The fourth
+      authorization raised the run's turn cap, so the two have parted, and
+      sizing a run that draws at 4,096 needs a calibration that draws at 4,096
+      under ceilings that can pay for it — neither of which this authorization
+      grants;
     * it draws :data:`CALIBRATION_PAIRED_SEEDS` seeds, not more: the spend the
       owner approved is five paired seeds;
     * and the manifest has to carry :data:`CALIBRATION_CLAUSE`. That is the
@@ -1379,11 +1469,12 @@ def assert_calibration_is_authorized(
             "limits this calibration carries are not the ones the owner "
             "authorized on 2026-09-14"
         )
-    if sampling != AUTHORIZED_SAMPLING:
+    if sampling != CALIBRATION_SAMPLING:
         raise LiveRunNotAuthorized(
-            "a calibration draws at the authorized sampling configuration "
+            "a calibration draws at the calibration sampling configuration "
             "exactly; a different cap or temperature measures a distribution "
-            "the run it sizes will not draw from"
+            "the ceilings the owner authorized on 2026-09-14 were not sized "
+            "against"
         )
     if paired_seeds != CALIBRATION_PAIRED_SEEDS:
         raise LiveRunNotAuthorized(
@@ -2902,7 +2993,7 @@ def assert_ready_for_a_calibration(
     provider: str,
     invocation: LiveRunInvocation | None,
     limits: RunLimits = CALIBRATION_LIMITS,
-    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    sampling: SamplingConfig = CALIBRATION_SAMPLING,
     paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
     repo_root: Path = _REPO_ROOT,
 ) -> CalibrationSet:
@@ -5824,7 +5915,7 @@ def run_calibration(
     live_invocation: LiveRunInvocation | None = None,
     repo_root: Path = _REPO_ROOT,
     limits: RunLimits = CALIBRATION_LIMITS,
-    sampling: SamplingConfig = AUTHORIZED_SAMPLING,
+    sampling: SamplingConfig = CALIBRATION_SAMPLING,
     paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
 ) -> CalibrationReport:
     """Measure what the provider charges, on a converted band's first seeds.
