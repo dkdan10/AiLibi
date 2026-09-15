@@ -88,7 +88,11 @@ from experiments.held_out_prefixes import (
 from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FAKE_FINISH_REASON
-from meetings.manager import DefaultedCall
+from meetings.manager import (
+    DEFAULT_TURN_FREE_TEXT,
+    DEFAULT_VOTE_RATIONALE,
+    DefaultedCall,
+)
 from meetings.schemas import (
     AccusationClaim,
     MeetingTurn,
@@ -4946,6 +4950,19 @@ class TestFeasibility:
         moves an authorized number — 459,000 is the owner's, on the fourth
         authorization card — and the hand-back is recorded in the limits
         card's Results.
+
+        WHERE IT IS SETTLED (2026-09-15, the second calibration's card). The
+        cause is closed at the source: `ceiling_proposal` now adds the
+        in-flight headroom term the gate enforces, so a proposal can no longer
+        publish a run-level output ceiling the gate would refuse, and
+        `TestTheProposalCarriesTheInFlightHeadroom` plants exactly this
+        arithmetic — 4,590 over a hundred units must now propose at least
+        464,000. What stays is the NUMBER already authorized: 459,000 is the
+        owner's, and re-sizing it is the fifth authorization card's, on the
+        profile the second calibration's sitting refreshes. So this case keeps
+        its plant and its meaning until that card lands, and the residual it
+        holds is now one authorized figure rather than a rule that would keep
+        producing more of them.
         """
 
         measured = json.loads(
@@ -6728,7 +6745,11 @@ class TestCalibrationRun:
         assert proposal.run_max_output_tokens == instrument._rounded_up(
             max(
                 units * proposal.measured_mean_unit_output_tokens * 1.5,
-                units * proposal.measured_max_unit_output_tokens,
+                # The in-flight headroom term the gate enforces and the
+                # proposal now carries: the run's last call is reserved against
+                # the run budget after everything before it has been charged.
+                units * proposal.measured_max_unit_output_tokens
+                + instrument.CALIBRATION_SAMPLING.turn_max_tokens,
             )
         )
         assert proposal.run_max_input_tokens % 1_000 == 0
@@ -6740,15 +6761,28 @@ class TestCalibrationRun:
 
         `DryRunProvider` derives its usage from the length of the payload it
         serialises, so a proposal computed from it is a tenth of a real one and
-        the instrument's own feasibility gate refuses it. The report says so in
-        the gate's words instead of publishing the numbers as a measurement.
+        the instrument's feasibility gate refuses it AGAINST THE COMMITTED
+        PROFILE. The report says so in the gate's words instead of publishing
+        the numbers as a measurement.
+
+        That comparison moved fields on the second calibration's card, and the
+        perturbation moved with it. `clears_the_feasibility_gate` is now the
+        proposal's own claim — these ceilings pay for a run of the units THIS
+        sitting measured — which a proposal computed from any distribution
+        clears by construction, and is therefore no longer where a fixture and
+        a measurement differ. `clears_the_committed_profiles_gate` is that
+        comparison, reported beside it, and it is what this case reads.
         """
 
         fixture = self._calibrate(tmp_path / "fixture")
-        assert fixture.proposal.clears_the_feasibility_gate is False
-        assert fixture.proposal.feasibility_refusal is not None
-        assert "run-level output ceiling" in fixture.proposal.feasibility_refusal
+        assert fixture.proposal.clears_the_committed_profiles_gate is False
+        assert fixture.proposal.committed_profile_refusal is not None
+        assert "run-level output ceiling" in fixture.proposal.committed_profile_refusal
+        # Its own claim still holds: the ceilings pay for the units it saw.
+        assert fixture.proposal.clears_the_feasibility_gate is True
         measured = self._calibrate(tmp_path / "measured", client=UsageReplayProvider())
+        assert measured.proposal.clears_the_committed_profiles_gate is True
+        assert measured.proposal.committed_profile_refusal is None
         assert measured.proposal.clears_the_feasibility_gate is True
         assert measured.proposal.feasibility_refusal is None
         instrument.assert_limits_are_feasible(
@@ -7424,3 +7458,1086 @@ class TestAuthorizedConstants:
     def test_the_arms_run_the_clock_the_freeze_screened_under(self) -> None:
         for arm in instrument_arms():
             assert arm.temporal_version == TEMPORAL_OBSERVATION_VERSION
+
+
+def _root_with_both_converted_records(tmp_path: Path) -> Path:
+    """A repository root carrying copies of the two records this draw spans.
+
+    The path is what makes a record a record — `_converted_band_for` matches on
+    WHERE the file is — so a planted variant has to sit where the real one
+    does, and both have to be present for a draw that spills from the first
+    into the second.
+    """
+
+    assert tmp_path.resolve() != _REPO_ROOT.resolve()
+    for converted in CONVERTED_BANDS:
+        source = _REPO_ROOT / converted.manifest_path
+        if not source.is_file():
+            continue
+        planted = tmp_path / converted.manifest_path
+        planted.parent.mkdir(parents=True, exist_ok=True)
+        planted.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    return tmp_path
+
+
+def _unit_record_with(
+    *,
+    turns: tuple[MeetingTurn, ...] = (),
+    ballots: tuple[VoteBallot, ...] = (),
+    roles: Mapping[str, Any] | None = None,
+    calls: tuple[Any, ...] = (),
+    arm: Any = "combined_accounts",
+) -> Any:
+    """One in-memory unit record carrying only what a detector reads."""
+
+    return instrument.UnitRecord(
+        seed=3000,
+        arm=arm,
+        meeting_id="m-1",
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        ballots=ballots,
+        turns=turns,
+        roles={"p-1": "IMPOSTOR"} if roles is None else dict(roles),
+        prompts_by_agent={},
+        calls=calls,
+        game_outcome="CREWMATES",
+        recorded_temporal_version=TEMPORAL_OBSERVATION_VERSION,
+        recorded_experiment_config=None,
+        prompt_versions={},
+        defaults=instrument.DefaultedAttempts(),
+        transport_attempts=instrument.TransportAttempts(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# The second development calibration (tasks/work/fresh-deduction-calibration-2.md)
+# ---------------------------------------------------------------------------
+
+
+def _calibration_2_report(
+    tmp_path: Path, client: Any = None
+) -> instrument.CalibrationReport:
+    """One whole second-mode calibration at $0, on a $0 provider."""
+
+    return instrument.run_calibration(
+        output_dir=tmp_path / "units",
+        client=client,
+        limits=instrument.CALIBRATION_2_LIMITS,
+        sampling=instrument.CALIBRATION_2_SAMPLING,
+        paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+    )
+
+
+@pytest.fixture(scope="module")
+def calibration_2_fake(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> instrument.CalibrationReport:
+    """One 120-unit rehearsal of the second mode, shared by the cases below.
+
+    Module-scoped because it is the expensive thing in this file — sixty
+    prefixes rebuilt and 720 fake completions — and every case that reads it
+    reads the same sitting. The cases that have to drive the mode themselves
+    (the CLI, a planted refusal) still run their own.
+    """
+
+    return _calibration_2_report(tmp_path_factory.mktemp("calibration-2-fake"))
+
+
+@pytest.fixture(scope="module")
+def calibration_2_replayed(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> instrument.CalibrationReport:
+    """The same mode over the archived per-call counts, shared the same way."""
+
+    return _calibration_2_report(
+        tmp_path_factory.mktemp("calibration-2-replay"), client=UsageReplayProvider()
+    )
+
+
+def _turn_saying(text: str, *, speaker: str = "p-1") -> MeetingTurn:
+    """One committed public turn carrying ``text`` and nothing else."""
+
+    return MeetingTurn(
+        turn_id="m-1:turn-0",
+        turn_index=0,
+        speaker=speaker,
+        turn_kind="opening",
+        reply_to=None,
+        free_text=text,
+    )
+
+
+def _ballot_saying(text: str, *, voter: str = "p-1") -> VoteBallot:
+    """One recorded ballot whose rationale is ``text``."""
+
+    return VoteBallot(
+        voter=voter,
+        target="SKIP",
+        confidence=0.5,
+        primary_reason_id=None,
+        rationale_text=text,
+    )
+
+
+class TestTheTwoAuthorizedCalibrationModes:
+    """Two sets, each whole, and every crossing of them refused.
+
+    The first calibration has been spent and its output is the arithmetic this
+    tree re-derives, so its five seeds, its 2,048-token turn cap and its ten
+    units' ceilings stay exactly where they were. The second is a different
+    authorization for a different spend: sixty paired seeds at the RUN's draw,
+    under ceilings that pay for the schedule that draw reserves. What makes
+    them two authorizations rather than one with knobs is that no value of
+    either may be taken into the other.
+    """
+
+    def _invocation(self, root: Path) -> LiveRunInvocation:
+        return LiveRunInvocation.naming(
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
+        )
+
+    def test_the_second_set_is_the_cards_constraints_table(self) -> None:
+        """The values the owner's merge authorizes, as one object."""
+
+        assert instrument.CALIBRATION_2_PAIRED_SEEDS == 60
+        assert instrument.CALIBRATION_2_LIMITS == RunLimits(
+            run_max_input_tokens=4_500_000,
+            run_max_output_tokens=450_000,
+            unit_max_input_tokens=60_000,
+            unit_max_output_tokens=16_000,
+            max_cost_usd=0.0,
+            elapsed_seconds=6 * 60 * 60,
+            model_work_seconds=5 * 60 * 60,
+        )
+        # The point of the second mode: it draws the way the fifth run would.
+        assert instrument.CALIBRATION_2_SAMPLING == AUTHORIZED_SAMPLING
+        assert instrument.CALIBRATION_2_SAMPLING.turn_max_tokens == 4_096
+        assert instrument.CALIBRATION_2_SAMPLING.vote_max_tokens == 1_024
+
+    def test_the_first_set_is_untouched_by_the_second(self) -> None:
+        """The spent authorization keeps its own seeds, caps and ceilings."""
+
+        assert instrument.CALIBRATION_PAIRED_SEEDS == 5
+        assert instrument.CALIBRATION_SAMPLING.turn_max_tokens == 2_048
+        assert instrument.CALIBRATION_LIMITS.unit_max_output_tokens == 12_000
+        assert instrument.CALIBRATION_LIMITS != instrument.CALIBRATION_2_LIMITS
+
+    def test_each_mode_is_accepted_whole(self) -> None:
+        """Both authorized sets pass, live, against the committed manifest."""
+
+        for mode in instrument.CALIBRATION_MODES:
+            matched = instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(_REPO_ROOT),
+                limits=mode.limits,
+                sampling=mode.sampling,
+                paired_seeds=mode.paired_seeds,
+            )
+            assert matched is mode
+
+    def test_sixty_seeds_under_the_first_modes_limits_are_refused(self) -> None:
+        """PLANTED: the second calibration's draw under the first's ceilings.
+
+        Twelve thousand output tokens a unit pays for the 9,216-token schedule
+        of the 2,048 draw and not for the 15,360 the raised turn cap reserves,
+        so this crossing authorizes 720 calls it cannot pay for — the defect
+        `assert_limits_are_feasible` exists to refuse, one authorization down.
+        """
+
+        with pytest.raises(LiveRunNotAuthorized, match="calibration limits"):
+            instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(_REPO_ROOT),
+                limits=instrument.CALIBRATION_LIMITS,
+                sampling=instrument.CALIBRATION_2_SAMPLING,
+                paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+            )
+
+    def test_five_seeds_under_the_second_modes_limits_are_refused(self) -> None:
+        """PLANTED: the first calibration's draw under the second's ceilings.
+
+        A spend nobody approved: the owner authorized five paired seeds at the
+        2,048 draw and sixty at 4,096, and five at 4,096 under 4.5 M input is
+        neither.
+        """
+
+        with pytest.raises(LiveRunNotAuthorized, match="paired seeds"):
+            instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(_REPO_ROOT),
+                limits=instrument.CALIBRATION_2_LIMITS,
+                sampling=instrument.CALIBRATION_2_SAMPLING,
+                paired_seeds=instrument.CALIBRATION_PAIRED_SEEDS,
+            )
+
+    def test_either_mode_drawing_at_the_others_caps_is_refused(self) -> None:
+        """PLANTED both ways: each mode's seeds and ceilings at the other's draw.
+
+        A calibration that draws differently from the run it sizes measures a
+        distribution that run does not draw from. That is why the first mode's
+        sampling was frozen at what it drew, and it is why the second exists.
+        """
+
+        for mode, other in (
+            (instrument.CALIBRATION_MODES[0], instrument.CALIBRATION_MODES[1]),
+            (instrument.CALIBRATION_MODES[1], instrument.CALIBRATION_MODES[0]),
+        ):
+            with pytest.raises(LiveRunNotAuthorized) as refused:
+                instrument.assert_calibration_is_authorized(
+                    provider=AUTHORIZED_PROVIDER,
+                    invocation=self._invocation(_REPO_ROOT),
+                    limits=mode.limits,
+                    sampling=other.sampling,
+                    paired_seeds=mode.paired_seeds,
+                )
+            assert "cross" in str(refused.value)
+
+    def test_a_crossing_is_refused_on_the_rehearsal_path_too(self) -> None:
+        """The mode lookup runs before the fake provider's early return.
+
+        A rehearsal of a shape no live sitting could take is a rehearsal of
+        nothing, and it is how a crossing reaches a runner with every offline
+        check green.
+        """
+
+        with pytest.raises(LiveRunNotAuthorized, match="cross"):
+            instrument.assert_calibration_is_authorized(
+                provider="fake",
+                invocation=None,
+                limits=instrument.CALIBRATION_2_LIMITS,
+                sampling=instrument.CALIBRATION_SAMPLING,
+                paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+            )
+
+    def test_the_committed_manifest_authorizes_the_second_calibration(self) -> None:
+        """The settled state: the second clause is in the document the gate reads."""
+
+        assert instrument.CALIBRATION_2_CLAUSE in _MANIFEST.read_text(encoding="utf-8")
+
+    def test_a_manifest_without_the_second_clause_refuses_it(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the committed document with the second sentence removed.
+
+        Each mode's clause authorizes that mode's spend and no other, so a
+        manifest carrying only the first one authorizes only five seeds.
+        """
+
+        root = _root_without_the_clause_binding_the_live_band(
+            tmp_path, instrument.CALIBRATION_2_CLAUSE
+        )
+        assert instrument.CALIBRATION_CLAUSE in (
+            root / EXECUTION_MANIFEST_PATH
+        ).read_text(encoding="utf-8")
+        with pytest.raises(LiveRunNotAuthorized, match="no calibration clause"):
+            instrument.assert_calibration_is_authorized(
+                provider=AUTHORIZED_PROVIDER,
+                invocation=self._invocation(root),
+                limits=instrument.CALIBRATION_2_LIMITS,
+                sampling=instrument.CALIBRATION_2_SAMPLING,
+                paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+                repo_root=root,
+            )
+
+    def test_the_feasibility_gate_accepts_the_second_mode_for_120_units(self) -> None:
+        """The arithmetic of the Constraints table, against the shipped gate.
+
+        Per-unit output 16,000 against the 15,360 schedule; per-unit input
+        60,000 against the largest archived unit; and both run ceilings against
+        120 units of that archived unit, the OUTPUT one with a further turn cap
+        of in-flight headroom on top.
+        """
+
+        units = instrument.calibration_units(instrument.CALIBRATION_2_PAIRED_SEEDS)
+        assert units == 120
+        instrument.assert_limits_are_feasible(
+            limits=instrument.CALIBRATION_2_LIMITS,
+            sampling=instrument.CALIBRATION_2_SAMPLING,
+            units=units,
+        )
+        assert (
+            instrument.unit_output_reservation(
+                sampling=instrument.CALIBRATION_2_SAMPLING
+            )
+            == 15_360
+        )
+        needed = (
+            instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units
+            + instrument.CALIBRATION_2_SAMPLING.turn_max_tokens
+        )
+        assert needed <= instrument.CALIBRATION_2_RUN_MAX_OUTPUT_TOKENS
+        assert (
+            instrument.CALIBRATED_UNIT_INPUT_TOKENS * units
+            <= instrument.CALIBRATION_2_RUN_MAX_INPUT_TOKENS
+        )
+
+    def test_the_first_modes_per_unit_output_cannot_pay_for_this_draw(self) -> None:
+        """PLANTED: 12,000 output a unit against a 15,360-token schedule."""
+
+        planted = instrument.CALIBRATION_2_LIMITS.model_copy(
+            update={
+                "unit_max_output_tokens": (
+                    instrument.CALIBRATION_UNIT_MAX_OUTPUT_TOKENS
+                )
+            }
+        )
+        with pytest.raises(instrument.LimitsInfeasible, match="per-unit output"):
+            instrument.assert_limits_are_feasible(
+                limits=planted,
+                sampling=instrument.CALIBRATION_2_SAMPLING,
+                units=instrument.calibration_units(
+                    instrument.CALIBRATION_2_PAIRED_SEEDS
+                ),
+            )
+
+
+class TestTheCalibrationDrawSpansRecords:
+    """Sixty paired seeds across the converted bands, in their own order."""
+
+    def test_the_draw_is_fifty_of_one_record_then_ten_of_the_next(self) -> None:
+        """The ordering rule, as objects rather than as a description.
+
+        `CONVERTED_BANDS` in list order, ascending within each record, until
+        the count is bound: the draw is reproducible from that list and the
+        number sixty, with nothing left to the runner.
+        """
+
+        draw = instrument.verify_calibration_draw()
+        assert draw.paired_seeds == instrument.CALIBRATION_2_PAIRED_SEEDS
+        assert [len(drawn.prefixes) for drawn in draw.sets] == [50, 10]
+        assert [drawn.band.first_seed for drawn in draw.sets] == [3000, 5000]
+        assert list(draw.seeds) == sorted(draw.seeds)
+        for drawn, converted in zip(draw.sets, CONVERTED_BANDS):
+            assert drawn.record_path == (_REPO_ROOT / converted.manifest_path).resolve()
+            assert len(drawn.record_sha256) == 64
+            assert len(drawn.digests) == len(drawn.prefixes)
+
+    def test_the_held_out_record_is_refused_by_name_inside_a_draw(self) -> None:
+        """PLANTED: the live freeze named among the draw's records.
+
+        The one mistake that costs something irreversible, refused at the path
+        rather than after fifty prefixes have been rebuilt.
+        """
+
+        with pytest.raises(instrument.CalibrationInputsRejected) as refused:
+            instrument.verify_calibration_draw(
+                records=[_REPO_ROOT / MANIFEST_PATH], paired_seeds=1
+            )
+        assert "HELD-OUT" in str(refused.value)
+
+    def test_a_draw_that_runs_out_of_accepted_seeds_is_refused(self) -> None:
+        """PLANTED: sixty seeds from one fifty-seed record.
+
+        Sixty paired seeds is the owner's decision 7 — the count that makes the
+        bar a 99.2% chance of seeing a 1-in-13 event — so fifty of them measures
+        a different thing and is a stop, not a smaller calibration.
+        """
+
+        with pytest.raises(
+            instrument.CalibrationInputsRejected, match="runs out of accepted seeds"
+        ) as refused:
+            instrument.verify_calibration_draw(
+                records=[_converted_record()],
+                paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+            )
+        assert "50 seeds in all" in str(refused.value)
+
+    def test_a_status_that_is_not_development_stops_the_draw(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the second record of the draw flipped back to held out."""
+
+        root = _root_with_both_converted_records(tmp_path)
+        second = root / CONVERTED_BANDS[1].manifest_path
+        payload = json.loads(second.read_text(encoding="utf-8"))
+        payload["status"] = "held_out"
+        second.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(
+            instrument.CalibrationInputsRejected, match="not 'development'"
+        ):
+            instrument.verify_calibration_draw(
+                repo_root=root, paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS
+            )
+
+    def test_a_moved_digest_stops_the_draw_by_seed(self, tmp_path: Path) -> None:
+        """PLANTED: one accepted digest edited in the record the draw spills into.
+
+        Each drawn prefix is rebuilt with the unchanged generator and held to
+        the digest that record froze, in every record of the draw and not only
+        in the first.
+        """
+
+        root = _root_with_both_converted_records(tmp_path)
+        second = root / CONVERTED_BANDS[1].manifest_path
+        payload = json.loads(second.read_text(encoding="utf-8"))
+        payload["accepted"] = [dict(row) for row in payload["accepted"]]
+        moved = payload["accepted"][3]["seed"]
+        payload["accepted"][3]["sha256"] = "0" * 64
+        second.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(instrument.CalibrationInputsRejected) as refused:
+            instrument.verify_calibration_draw(
+                repo_root=root, paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS
+            )
+        assert f"seed {moved}" in str(refused.value)
+
+    def test_a_single_record_draw_still_refuses_a_record_it_cannot_fill(self) -> None:
+        """The per-record refusal is unchanged where the draw is one record.
+
+        `draw_at_most` is the multi-record path's and is off by default, so the
+        first calibration's own "this record accepts N and I draw M" refusal
+        still fires where it always did.
+        """
+
+        with pytest.raises(
+            instrument.CalibrationInputsRejected, match="accepts 50 seeds"
+        ):
+            instrument.verify_calibration_set(_converted_record(), paired_seeds=51)
+
+
+class TestATruncationIsAMeasurementInTheSecondModeOnly:
+    """The scoped relaxation, and the three things it does not reach."""
+
+    def _client(self, *, measuring: bool) -> Any:
+        return instrument._InstrumentClient(
+            DryRunProvider(),
+            work_clock=instrument._ModelWorkClock(max_seconds=60.0),
+            turn_max_tokens=AUTHORIZED_SAMPLING.turn_max_tokens,
+            vote_max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens,
+            expected_model="the-authorized-model",
+            truncation_is_a_measurement=measuring,
+        )
+
+    def test_the_live_path_still_stops_on_a_truncation(self) -> None:
+        """PLANTED: a completion at its cap, on the run's own wrapper.
+
+        The live evaluation's stop, unchanged. Both signals are planted, one
+        at a time and together, because the stop fires on either.
+        """
+
+        client = self._client(measuring=False)
+        for finish_reason, output_tokens in (
+            ("length", 10),
+            (None, 1_024),
+            ("length", 1_024),
+        ):
+            stop = client._unusable_response(
+                model="the-authorized-model",
+                output_tokens=output_tokens,
+                max_tokens=1_024,
+                finish_reason=finish_reason,
+            )
+            assert isinstance(stop, instrument.PerCallCapExceeded)
+
+    def test_the_second_calibration_counts_it_instead(self) -> None:
+        """The same three completions, in the mode that measures them.
+
+        No stop is returned, so the truncated body goes back to the meeting
+        layer's shipped fail-soft and the call stays in the ledger, where the
+        role split counts it.
+        """
+
+        client = self._client(measuring=True)
+        for finish_reason, output_tokens in (
+            ("length", 10),
+            (None, 1_024),
+            ("length", 1_024),
+        ):
+            assert (
+                client._unusable_response(
+                    model="the-authorized-model",
+                    output_tokens=output_tokens,
+                    max_tokens=1_024,
+                    finish_reason=finish_reason,
+                )
+                is None
+            )
+
+    def test_the_identity_branch_still_stops_in_the_measurement_mode(self) -> None:
+        """PLANTED: a foreign checkpoint's truncated completion.
+
+        A response from a model this run is not authorized for is a stop in
+        every mode. The relaxation reaches the cap branch and nothing else, and
+        a truncated body from the wrong endpoint must not slip past both.
+        """
+
+        stop = self._client(measuring=True)._unusable_response(
+            model="some-other-checkpoint",
+            output_tokens=1_024,
+            max_tokens=1_024,
+            finish_reason="length",
+        )
+        assert isinstance(stop, instrument.ProviderIdentityMismatch)
+
+    def test_the_evaluations_harness_never_asks_for_the_relaxation(self) -> None:
+        """The two evaluation entry points build a stopping client.
+
+        The flag is a parameter of `_build_harness` defaulted off, so this is
+        what says the run path does not pass it.
+        """
+
+        harness = instrument._build_harness(
+            client=DryRunProvider(),
+            limits=AUTHORIZED_LIMITS,
+            sampling=AUTHORIZED_SAMPLING,
+            invocation=None,
+        )
+        assert harness.client._truncation_is_a_measurement is False
+
+    def test_the_stop_rule_still_says_a_truncation_is_a_stop(self) -> None:
+        """`STOP_RULE` is not edited by this card, and the manifest quotes it."""
+
+        assert "a truncation is a stop, not a datum" in instrument.STOP_RULE
+        assert " ".join(instrument.STOP_RULE.split()) in " ".join(
+            _MANIFEST.read_text(encoding="utf-8").split()
+        )
+
+
+class TestTheRoleLeakDiagnostic:
+    """The pre-declared detector: two positive shapes and the counted-out one."""
+
+    def test_the_two_positive_shapes_are_counted(self) -> None:
+        """PLANTED: the fourth run's two shapes, on an impostor speaker."""
+
+        for text in (
+            "I am the impostor and I am tired of pretending otherwise.",
+            "I killed p-3 myself. There, I said it.",
+            "I did it.",
+        ):
+            assert instrument.states_own_role_or_kill(text, role="IMPOSTOR") is True
+
+    def test_the_rebuttal_the_diagnosis_counted_out_is_not(self) -> None:
+        """PLANTED: seed 7015's turn-1, an impostor rebutting an accusation.
+
+        The words are there and the assertion is not: the sentence attributes
+        them to p-1 before quoting them. The diagnosis of 2026-09-15 counted
+        this out by hand, and the detector has to count it out the same way or
+        it reports a number that document does not.
+        """
+
+        assert (
+            instrument.states_own_role_or_kill(
+                "p-1's claim that I am the impostor rests on nothing and is weak.",
+                role="IMPOSTOR",
+            )
+            is False
+        )
+        assert (
+            instrument.states_own_role_or_kill(
+                "I am not the impostor; p-2 is.", role="IMPOSTOR"
+            )
+            is False
+        )
+
+    def test_a_crewmate_naming_its_own_role_is_not_a_leak(self) -> None:
+        """Every crewmate says so; counting it would report the roster."""
+
+        assert (
+            instrument.states_own_role_or_kill(
+                "I am a crewmate and I was in Electrical.", role="CREWMATE"
+            )
+            is False
+        )
+        # And a crewmate LYING about being the impostor is not a leak either:
+        # the statement is false, so it discloses nothing about that speaker.
+        assert (
+            instrument.states_own_role_or_kill(
+                "I am the impostor, ha.", role="CREWMATE"
+            )
+            is False
+        )
+
+    def test_the_count_is_over_committed_turns_and_the_units_own_roles(self) -> None:
+        """The detector reads the transcript, not the ballots or the prefix."""
+
+        record = _unit_record_with(
+            turns=(
+                _turn_saying("I killed p-3 myself.", speaker="p-1"),
+                _turn_saying("I was in Electrical the whole time.", speaker="p-2"),
+                _turn_saying("I am the impostor.", speaker="p-2"),
+            ),
+            roles={
+                "p-1": "IMPOSTOR",
+                "p-2": "CREWMATE",
+            },
+        )
+        assert instrument.count_leaking_turns(record) == 1
+
+    def test_a_placeholder_turn_is_not_counted(self) -> None:
+        """The meeting layer's substitute is the layer's text, not a leak."""
+
+        placeholder = _turn_saying(
+            next(iter(DEFAULT_TURN_FREE_TEXT.values())), speaker="p-1"
+        )
+        record = _unit_record_with(turns=(placeholder,), roles={"p-1": "IMPOSTOR"})
+        assert instrument.count_leaking_turns(record) == 0
+
+    def test_the_self_tell_count_reads_the_ballots_opening(self) -> None:
+        """ "Opens with" rather than "contains", which is the measured shape."""
+
+        opening = _ballot_saying("I am the impostor. I vote SKIP.")
+        buried = _ballot_saying(
+            "p-2 was in Electrical and p-3 never reported. I am the impostor."
+        )
+        assert instrument.opens_with_a_self_tell(opening, role="IMPOSTOR") is True
+        assert instrument.opens_with_a_self_tell(buried, role="IMPOSTOR") is False
+
+    def test_a_guard_marker_does_not_hide_the_opening(self) -> None:
+        """A bracketed marker the meeting layer prepended is stripped first."""
+
+        marked = _ballot_saying("[guard: redirected] I killed p-3. I vote SKIP.")
+        assert instrument.opens_with_a_self_tell(marked, role="IMPOSTOR") is True
+
+    def test_a_fail_softed_ballot_authors_no_self_tell(self) -> None:
+        """PLANTED: the layer's own default SKIP, whose rationale it wrote."""
+
+        defaulted = _ballot_saying(DEFAULT_VOTE_RATIONALE)
+        assert instrument.opens_with_a_self_tell(defaulted, role="IMPOSTOR") is False
+
+    def test_the_rule_is_published_with_the_count(self) -> None:
+        """A count whose rule lives only in a module is one nobody can check."""
+
+        assert "REPORTED diagnostic and not a gate" in instrument.ROLE_LEAK_RULE
+        assert "REBUTTING" in instrument.ROLE_LEAK_RULE
+
+
+class TestTheRoleSplitReporting:
+    """What the second mode measures that the first could not: the author."""
+
+    def test_both_roles_are_reported_on_both_schedules(
+        self, calibration_2_fake: instrument.CalibrationReport
+    ) -> None:
+        """Sixty impostor ballot draws an arm, which is the owner's bar.
+
+        Decision 7 asks for at least sixty impostor-authored candidate ballots.
+        Exposure is one impostor per 4p1i unit, so sixty candidate units is
+        sixty draws, and this is where that arithmetic is a measurement rather
+        than a projection.
+        """
+
+        report = calibration_2_fake
+        assert report.mode == "2026-09-15"
+        assert report.units == 120
+        candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
+        rows = {(row.call_type, row.role): row for row in candidate.by_role}
+        assert set(rows) == {
+            ("turn", "CREWMATE"),
+            ("turn", "IMPOSTOR"),
+            ("ballot", "CREWMATE"),
+            ("ballot", "IMPOSTOR"),
+        }
+        assert rows[("ballot", "IMPOSTOR")].draws == 60
+        assert rows[("ballot", "CREWMATE")].draws == 120
+        for row in candidate.by_role:
+            assert row.output_max >= row.output_p95
+            assert {stats.field for stats in row.lengths} <= {
+                "rationale_text",
+                "free_text",
+                "claims_reason",
+            }
+            assert all(stats.samples > 0 for stats in row.lengths)
+
+    def test_the_first_mode_reports_no_role_split(self, tmp_path: Path) -> None:
+        """The committed five-seed output's shape, unchanged.
+
+        Its bytes are the arithmetic this tree re-derives, so the mode that
+        wrote them keeps writing them.
+        """
+
+        report = instrument.run_calibration(
+            _converted_record(), output_dir=tmp_path / "units"
+        )
+        assert report.mode == "2026-09-14"
+        assert all(arm.by_role == () for arm in report.arms)
+        assert report.role_leak_rule == ""
+
+    def test_the_report_carries_counts_and_lengths_only(
+        self, calibration_2_fake: instrument.CalibrationReport
+    ) -> None:
+        """No prose, no prompt, no prefix and no outcome, checked on the payload.
+
+        The role split measures the CONTENT of three fields, so the one thing
+        this payload must not do is carry that content instead of its length.
+        No key of any of them appears in it — `rationale_text` and `free_text`
+        occur only as the NAME of a length statistic, never as a field with a
+        value — and the evaluation's own prefix guard is run over it here as
+        well as inside `run_calibration`.
+        """
+
+        report = calibration_2_fake
+        payload = json.loads(report.model_dump_json())
+        encoded = json.dumps(payload)
+        for forbidden in (
+            '"rationale_text":',
+            '"free_text":',
+            '"claims":',
+            '"turns":',
+            '"prompt":',
+            '"prompts_by_agent":',
+            '"steps":',
+            '"outcome":',
+        ):
+            assert forbidden not in encoded, forbidden
+        assert_report_holds_no_prefix_bytes(
+            report, instrument.verify_calibration_draw().prefixes
+        )
+        assert instrument.ROLE_LEAK_RULE in payload["role_leak_rule"]
+
+    def test_a_call_no_role_can_be_read_off_is_refused(self, tmp_path: Path) -> None:
+        """PLANTED: a ledger row naming a speaker the unit holds no role for.
+
+        Invalid input raises. Filing it under a default would move one of the
+        two distributions this calibration exists to separate, silently.
+        """
+
+        record = _unit_record_with(
+            turns=(),
+            roles={"p-1": "IMPOSTOR"},
+            calls=(
+                instrument.CapturedCall(
+                    agent_id="p-9",
+                    prompt="",
+                    max_tokens=AUTHORIZED_SAMPLING.vote_max_tokens,
+                    input_tokens=1,
+                    output_tokens=1,
+                    cost_usd=0.0,
+                    model="m",
+                    seconds=0.1,
+                ),
+            ),
+        )
+        with pytest.raises(instrument.InstrumentError, match="no hidden role"):
+            instrument._role_split_rows(
+                "combined_accounts",
+                records=[record],
+                sampling=AUTHORIZED_SAMPLING,
+            )
+
+    def test_the_truncation_denominator_is_draws_not_rationales(
+        self, calibration_2_fake: instrument.CalibrationReport
+    ) -> None:
+        """A fail-softed ballot is a draw that produced no rationale.
+
+        The rate the fifth run is sized on is truncations per impostor DRAW, so
+        the ledger rows are the denominator and the authored payloads are a
+        separate, smaller count.
+        """
+
+        report = calibration_2_fake
+        candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")
+        row = next(
+            item
+            for item in candidate.by_role
+            if (item.call_type, item.role) == ("ballot", "IMPOSTOR")
+        )
+        samples = {stats.field: stats.samples for stats in row.lengths}
+        assert row.draws >= samples.get("rationale_text", 0)
+        assert row.truncations == 0
+        assert row.truncations_by_finish_reason == {}
+
+
+class TestTheProposalCarriesTheInFlightHeadroom:
+    """The residual of 2026-09-14, closed in the rule that writes the numbers."""
+
+    def test_a_hundred_units_of_the_calibrations_largest_unit(self) -> None:
+        """PLANTED: 4,590 over 100 units must propose at least 464,000.
+
+        The first calibration's largest unit was 4,590 output tokens and the
+        fourth authorization published 459,000 for a hundred units — exactly
+        the product, and 4,096 short of what those hundred units reserve. The
+        gate has always enforced the term; the PROPOSAL did not carry it, so
+        the number it published was one the gate would refuse. It carries it
+        now, and this is the arithmetic.
+        """
+
+        measured = instrument.CalibrationArmUsage(
+            arm="combined_accounts",
+            units=1,
+            attempts=6,
+            completions=6,
+            input_tokens=35_232,
+            output_tokens=4_590,
+            cost_usd=0.0,
+            model_work_seconds=1.0,
+            seconds_per_attempt=1.0,
+            by_call_type=(),
+            mean_unit_input_tokens=35_232.0,
+            mean_unit_output_tokens=4_590.0,
+            max_unit_input_tokens=35_232,
+            max_unit_output_tokens=4_590,
+            defaulted_turns=0,
+            defaulted_votes=0,
+            defaults_by_validation=0,
+            defaults_by_deadline=0,
+            degraded_openings=0,
+            units_with_defaults=0,
+            charged_failed_attempts=0,
+            charged_failed_input_tokens=0,
+            charged_failed_output_tokens=0,
+            retried_calls=0,
+            unaccounted_attempts=0,
+            aborted_attempts=0,
+            attempts_by_trigger={},
+        )
+        proposal = instrument.ceiling_proposal(
+            [measured], sampling=AUTHORIZED_SAMPLING, units=100
+        )
+        assert proposal.run_max_output_tokens >= 464_000
+        assert proposal.run_max_output_tokens >= (
+            100 * 4_590 + AUTHORIZED_SAMPLING.turn_max_tokens
+        )
+        # And the number the fourth authorization published is below it, which
+        # is what makes this a residual rather than a preference.
+        assert AUTHORIZED_LIMITS.run_max_output_tokens < proposal.run_max_output_tokens
+
+    def test_the_proposal_checks_itself_against_its_own_maxima(
+        self, tmp_path: Path
+    ) -> None:
+        """Whose numbers the proposal's own claim is checked against.
+
+        A proposal answers "can these ceilings pay for the run I measured", and
+        checking that against a profile built from some earlier run's archives
+        answers a different question. Both are reported, and a fixture-sized
+        sitting is where they differ.
+        """
+
+        fixture = instrument.run_calibration(
+            _converted_record(), output_dir=tmp_path / "units"
+        )
+        assert fixture.proposal.clears_the_feasibility_gate is True
+        assert fixture.proposal.feasibility_refusal is None
+        assert fixture.proposal.clears_the_committed_profiles_gate is False
+        assert "run-level output" in str(fixture.proposal.committed_profile_refusal)
+        assert "ONE further per-call turn cap" in instrument.CEILING_PROPOSAL_RULE
+
+    def test_the_gate_reads_the_figures_it_is_handed(self) -> None:
+        """PERTURBED: the same limits against two calibrated unit sizes.
+
+        The parameterisation is what lets the proposal check itself; this is
+        the parameter doing something, so it cannot be a no-op that happens to
+        agree with the module constants.
+        """
+
+        limits = instrument.CALIBRATION_2_LIMITS
+        instrument.assert_limits_are_feasible(
+            limits=limits,
+            sampling=instrument.CALIBRATION_2_SAMPLING,
+            units=120,
+            calibrated_unit_input_tokens=1_000,
+            calibrated_unit_output_tokens=1_000,
+        )
+        with pytest.raises(instrument.LimitsInfeasible, match="per-unit input"):
+            instrument.assert_limits_are_feasible(
+                limits=limits,
+                sampling=instrument.CALIBRATION_2_SAMPLING,
+                units=120,
+                calibrated_unit_input_tokens=limits.unit_max_input_tokens + 1,
+                calibrated_unit_output_tokens=1_000,
+            )
+
+
+class TestTheSecondCalibrationEndToEnd:
+    """The mode at $0, twice, and the refresh path over its output."""
+
+    def test_the_fake_provider_runs_the_whole_mode(
+        self, calibration_2_fake: instrument.CalibrationReport
+    ) -> None:
+        """120 units, 720 completions, both arms, $0.00."""
+
+        report = calibration_2_fake
+        assert report.units == 120
+        assert report.paired_seeds == 60
+        assert report.limits == instrument.CALIBRATION_2_LIMITS
+        assert report.sampling == instrument.CALIBRATION_2_SAMPLING
+        assert report.dry_run is True
+        assert report.total_cost_usd == 0.0
+        assert len(report.calls) == 720
+        assert len(report.unit_usage) == 120
+        assert [arm.units for arm in report.arms] == [60, 60]
+
+    def test_the_inputs_block_names_every_record_and_its_seeds(
+        self, calibration_2_fake: instrument.CalibrationReport
+    ) -> None:
+        """Which records were spent, with the digest each of them froze."""
+
+        report = calibration_2_fake
+        assert [row.record for row in report.input_records] == [
+            CONVERTED_BANDS[0].manifest_path,
+            CONVERTED_BANDS[1].manifest_path,
+        ]
+        assert [len(row.seeds) for row in report.input_records] == [50, 10]
+        assert report.inputs == report.input_records[0]
+        for row in report.input_records:
+            assert row.status == "development"
+            assert len(row.record_sha256) == 64
+        drawn = [seed for row in report.input_records for seed in row.seeds]
+        assert drawn[:1] == [3000]
+        assert drawn[50:] == list(range(5000, 5010))
+
+    def test_the_replay_double_runs_the_mode_on_measured_usage(
+        self, calibration_2_replayed: instrument.CalibrationReport
+    ) -> None:
+        """The same mode over the archived per-call counts, still at $0."""
+
+        report = calibration_2_replayed
+        assert report.units == 120
+        assert report.total_cost_usd == 0.0
+        assert report.proposal.measured_max_unit_output_tokens > 0
+        assert report.proposal.clears_the_feasibility_gate is True
+
+    def test_the_refresh_path_reads_a_second_mode_output(
+        self, tmp_path: Path, calibration_2_replayed: instrument.CalibrationReport
+    ) -> None:
+        """`--refresh-usage-profile` over a calibration-2 payload, at $0.
+
+        The documented command is the runner's next step after the sitting, so
+        the path has to read the shape the sitting writes — a report naming two
+        records and carrying a role split — before the sitting is run, not
+        after.
+        """
+
+        report = calibration_2_replayed
+        measurement = tmp_path / "calibration.json"
+        measurement.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+        profile_path = tmp_path / "profile.json"
+        assert (
+            instrument.main(
+                [
+                    "--refresh-usage-profile",
+                    str(measurement),
+                    "--profile-out",
+                    str(profile_path),
+                ]
+            )
+            == 0
+        )
+        profile = UsageProfile.load(profile_path)
+        assert len(profile.calls) == 720
+        assert len(profile.units) == 120
+        payload = json.loads(profile_path.read_text(encoding="utf-8"))
+        assert payload["built_from"]["mode"] == "2026-09-15"
+        assert [row["seeds"] for row in payload["built_from"]["records"]] == [50, 10]
+        permitted = {
+            "arm",
+            "call_type",
+            "input_tokens",
+            "output_tokens",
+            "disposition",
+            "finish_reason",
+        }
+        assert {key for row in payload["calls"] for key in row} <= permitted
+
+    def test_the_cli_runs_the_mode_by_name(self, tmp_path: Path) -> None:
+        """`--calibrate --calibration-mode 2026-09-15`, dry, at exit 0."""
+
+        measurement = tmp_path / "calibration.json"
+        assert (
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--calibration-mode",
+                    "2026-09-15",
+                    "--output-dir",
+                    str(tmp_path / "units"),
+                    "--json",
+                    str(measurement),
+                ]
+            )
+            == 0
+        )
+        payload = json.loads(measurement.read_text(encoding="utf-8"))
+        assert payload["mode"] == "2026-09-15"
+        assert payload["units"] == 120
+
+    def test_the_second_mode_refuses_a_single_record_flag(self, tmp_path: Path) -> None:
+        """PLANTED: the draw's records named by hand.
+
+        The draw is `CONVERTED_BANDS` in order and the seed count, with nothing
+        left to choose; a flag that half-chose it would make the draw a runner
+        decision.
+        """
+
+        with pytest.raises(SystemExit) as exited:
+            instrument.main(
+                [
+                    "--calibrate",
+                    "--calibration-mode",
+                    "2026-09-15",
+                    "--calibration-record",
+                    str(_converted_record()),
+                    "--output-dir",
+                    str(tmp_path / "units"),
+                ]
+            )
+        assert exited.value.code == 2
+
+
+class TestTheManifestCarriesTheSecondCalibration:
+    """The dated section, pinned to the constants it describes."""
+
+    def _text(self) -> str:
+        return _MANIFEST.read_text(encoding="utf-8")
+
+    def test_the_section_exists_and_quotes_the_clause_verbatim(self) -> None:
+        text = self._text()
+        assert "## Development calibration 2 (2026-09-15)" in text
+        assert instrument.CALIBRATION_2_CLAUSE in text
+        # And the first section is still there, and still its own.
+        assert "## Development calibration (2026-09-14)" in text
+        assert instrument.CALIBRATION_CLAUSE in text
+
+    @pytest.mark.parametrize(
+        "quoted",
+        [
+            "| Calibration-2 paired seeds | 60",
+            "| Calibration-2 per-unit token ceiling | 60,000 input / 16,000 output |",
+            (
+                "| Calibration-2 run-level token ceiling | 4,500,000 input / "
+                "450,000 output |"
+            ),
+            (
+                "| Calibration-2 wall-clock deadline | 5 h of model work within "
+                "a 6 h elapsed deadline |"
+            ),
+            "| Calibration-2 units | 60 paired seeds x 2 arms = 120 units",
+            "| Calibration-2 dollar limit | $0.00 marginal",
+            "turn 4,096 output / vote 1,024",
+        ],
+    )
+    def test_the_table_quotes_each_authorized_value(self, quoted: str) -> None:
+        assert quoted in self._text()
+
+    def test_the_table_is_the_constants(self) -> None:
+        """The document and the module, held to each other rather than to prose."""
+
+        text = self._text()
+        limits = instrument.CALIBRATION_2_LIMITS
+        assert f"{limits.unit_max_input_tokens:,} input" in text
+        assert f"{limits.run_max_input_tokens:,} input" in text
+        assert f"{instrument.CALIBRATION_2_PAIRED_SEEDS} paired seeds x 2 arms" in text
+        assert int(limits.model_work_seconds // 3600) == 5
+        assert int(limits.elapsed_seconds // 3600) == 6
+
+    def test_the_section_scopes_the_truncation_ruling_to_this_mode(self) -> None:
+        """The relaxation is a calibration rule and says so, beside the stop rule."""
+
+        # Whitespace-normalised: the document is hard-wrapped, and a sentence
+        # that crosses a line break is the same sentence.
+        text = " ".join(self._text().split())
+        assert (
+            "A per-call truncation is a MEASUREMENT in this mode, and only in it"
+        ) in text
+        assert "the live run's stop rule is unchanged" in text
+        # And the ruling it is scoped against is named in the same section.
+        assert "`STOP_RULE` below is unedited" in text
+
+    def test_the_leak_column_is_pre_declared_for_the_fifth_run(self) -> None:
+        """Decision 9, as a reported column named before the run that reads it."""
+
+        text = self._text()
+        assert "role leak" in text.lower()
+        assert "reported diagnostic" in text.lower()
+        assert "does not block" in text.lower()
