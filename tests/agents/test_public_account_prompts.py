@@ -7,7 +7,7 @@ import re
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal, cast, get_args
+from typing import Any, Final, Literal, cast, get_args
 
 import pytest
 from jinja2 import DictLoader, Environment
@@ -1039,3 +1039,135 @@ def test_the_default_sets_response_examples_are_copyable_json_too(
     for name, prompt in prompts.items():
         for example in _assert_examples_are_copyable_json(prompt, label=name):
             assert set(json.loads(example)) == _TURN_KEYS, f"{name}: {example}"
+
+
+# ---------------------------------------------------------------------------
+# Revision v4: the three bounds the reference family already carried
+# ---------------------------------------------------------------------------
+#
+# The candidate account family commissioned deliberation and gave it one
+# unbounded place to land (`tasks/diagnosis-2026-09-15-truncation-stop.md`):
+# the fourth live run stopped on a ballot whose `rationale_text` ran past the
+# vote cap, and thirteen of fourteen candidate EJECT citations copied the
+# `[obs ...]` tag word into `primary_reason_observation_id`, which
+# `meetings/manager.py` nulls before coercing the now-uncited ejection to SKIP.
+# The reference family bounds the same three fields and its ballots did
+# neither. These read the ported bytes out of the RENDERED prompt -- synthetic,
+# seed-free inputs through the real renderers, no held-out seed anywhere near
+# them -- so a later edit that drops a bound is red here rather than at a
+# provider.
+
+#: The ballot's rationale budget and its consequence, ported from
+#: `vote_ballot.j2`'s `"rationale_text"` bullet.
+_RATIONALE_BUDGET: Final[str] = "ONE short sentence (~20 words)"
+_TRUNCATION_WARNING: Final[str] = (
+    "a long rationale can overrun the output limit and truncate the JSON, "
+    "which discards your vote"
+)
+#: The citation form: the bare `{agent}:{tick}:{seq}` id, as the reference
+#: shows it. `agents/memory/store.py` renders `[obs <id>] ...` around the id,
+#: and that wrapper is render dressing -- an id copied WITH the tag word is not
+#: in the voter's valid set and is nulled.
+_CITATION_FIELD: Final[str] = "primary_reason_observation_id"
+_BARE_OBSERVATION_ID: Final[re.Pattern[str]] = re.compile(r"p-\d+:\d+:\d+")
+_SHOWN_CITATION: Final[re.Pattern[str]] = re.compile(
+    rf'"{_CITATION_FIELD}":\s*"([^"]*)"'
+)
+#: The turn bound: the reference's own placeholder and its "then stop".
+_TURN_REASON_BOUND: Final[str] = '"reason":"<one short phrase>"'
+_UNBOUNDED_TURN_REASON: Final[str] = '"reason":"<reason>"'
+#: The reply bound reads "1-2 short sentences" in both branches and "plus your
+#: structured items" in the one that has any, so the length and the stop are
+#: asserted as the two clauses they are rather than as one brittle span.
+_TURN_LENGTH_BOUND: Final[str] = "1-2 short sentences"
+_TURN_STOP: Final[str] = ", then stop"
+_UNBOUNDED_REPLY: Final[str] = "explain what it does and does not establish"
+#: The revisions that name the bodies BEFORE these three bounds. A tree whose
+#: templates carry the bounds may not compose a stamp from any of them: the
+#: revision exists so that two generations of one body never share a
+#: `MeetingReplayEntry.prompt_versions` marker.
+_PRE_V4_REVISIONS: Final[frozenset[str]] = frozenset({"v1", "v2", "v3"})
+
+
+def _v4_ballot() -> str:
+    """The candidate ballot as the combined arm renders it, on synthetic input."""
+
+    _statement, vote = _account_prompts(_spoken_turn("Where were you?"))
+    return vote
+
+
+def test_the_ballot_bounds_its_rationale_and_warns_what_a_long_one_costs() -> None:
+    # Fix A. Both sentences, because the budget without the consequence is the
+    # instruction the candidate family already carried in weaker words ("a
+    # concise reason") and the run truncated under it anyway.
+    vote = _v4_ballot()
+    assert _RATIONALE_BUDGET in vote
+    assert _TRUNCATION_WARNING in vote
+    assert "<one short reason>" not in vote
+
+
+def test_every_citation_the_ballot_shows_is_the_bare_id_the_layer_accepts() -> None:
+    # Fix B. Two things have to hold: an example is shown at all (the
+    # reference's inoculation, which the candidate lacked), and EVERY id the
+    # prompt shows is the bare form -- an example carrying the `obs ` tag word
+    # would teach the exact string the meeting layer nulls.
+    vote = _v4_ballot()
+    shown = _SHOWN_CITATION.findall(vote)
+    assert shown, "the ballot shows no citation example at all"
+    for value in shown:
+        assert _BARE_OBSERVATION_ID.fullmatch(value), value
+        assert "obs" not in value
+    # The skeleton is the object a model copies, so the form has to be in it
+    # rather than only in the prose above it.
+    skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
+    assert len(skeleton) == 1
+    assert f'"{_CITATION_FIELD}":null' not in skeleton[0]
+    assert _SHOWN_CITATION.search(skeleton[0]) is not None
+
+
+@pytest.mark.parametrize("common,attributed", [(1, None), (None, 1), (1, 1)])
+@pytest.mark.parametrize("is_impostor", [False, True])
+def test_the_account_turn_asks_for_one_short_phrase_and_then_a_stop(
+    common: Literal[1] | None,
+    attributed: Literal[1] | None,
+    is_impostor: bool,
+) -> None:
+    # Fix C, on every arm and both roles. The reply instruction carries the
+    # reference's bound instead of "explain what it does and does not
+    # establish", and wherever the shape menu offers an accusation or a
+    # corroboration its `reason` is the reference's one short phrase.
+    prompts = _every_account_prompt(
+        common=common, attributed=attributed, is_impostor=is_impostor
+    )
+    statement = prompts["statement"]
+    assert _TURN_LENGTH_BOUND in statement
+    assert _TURN_STOP in statement
+    assert _UNBOUNDED_REPLY not in statement
+    for name, prompt in prompts.items():
+        if name == "vote_ballot":
+            continue
+        assert _UNBOUNDED_TURN_REASON not in prompt, name
+        if '{"type":"accusation"' in prompt:
+            assert _TURN_REASON_BOUND in prompt, name
+
+
+def test_a_body_carrying_the_v4_bounds_cannot_be_stamped_an_older_revision() -> None:
+    # The revision and the bodies are one fact. `ACCOUNT_PROMPT_SET_REVISION`
+    # exists so that two generations of one template never share a stamp, so a
+    # tree that RENDERS the three bounds and still composes `v1`, `v2` or `v3`
+    # would record the new bodies under an identifier that already names the
+    # old ones. Read off the constant rather than against a literal: what is
+    # asserted is that the stamp is not one of the pre-v4 generations and that
+    # every arm's stamp carries whatever the constant says.
+    vote = _v4_ballot()
+    statement = _every_account_prompt(common=1, attributed=1, is_impostor=False)[
+        "statement"
+    ]
+    assert _RATIONALE_BUDGET in vote and _TRUNCATION_WARNING in vote
+    assert _SHOWN_CITATION.findall(vote)
+    assert _TURN_REASON_BOUND in statement
+    assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V4_REVISIONS
+    stamps = _account_stamps()
+    assert stamps
+    for stamp in stamps:
+        assert f".{ACCOUNT_PROMPT_SET_REVISION}.accounts" in stamp

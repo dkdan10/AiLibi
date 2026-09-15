@@ -1233,7 +1233,19 @@ def _require_testimony_shapes_bodies(
 #:   :class:`meetings.schemas.MeetingTurn` refuses it. The whole-turn response
 #:   example keeps both lists empty and stays parseable JSON, because a model
 #:   copying an unparseable example is refused before its fields are read.
-ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v3"
+#: * ``v4`` -- the three bounds the reference family already carried,
+#:   ported into the candidate bodies rather than re-invented: the
+#:   ballot's ``rationale_text`` budget (ONE short sentence, ~20 words)
+#:   with the warning that a long rationale truncates the JSON and
+#:   discards the vote; the citation form, the bare
+#:   ``{agent}:{tick}:{seq}`` observation id WITHOUT the ``obs`` tag word
+#:   ``agents.memory.store`` renders around it, with a literal example and
+#:   a pre-filled skeleton; and the turn's ``"reason"`` as one short
+#:   phrase with a "then stop" reply instruction. The first two repair a
+#:   live defect rather than a style note: an id carrying the tag word is
+#:   nulled by the meeting layer, which then coerces the uncited ejection
+#:   to SKIP.
+ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v4"
 
 
 def public_account_prompt_versions(
