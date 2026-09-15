@@ -115,11 +115,16 @@ from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FAKE_FINISH_REASON, FakeProvider
 from llm.provider import extract_parse_failure
 from meetings.manager import (
+    DEFAULT_TURN_FREE_TEXT,
     DEFAULT_TURN_MAX_TOKENS,
     DEFAULT_VOTE_MAX_TOKENS,
+    DEFAULT_VOTE_RATIONALE,
     MeetingConfig,
 )
 from meetings.schemas import (
+    AccusationClaim,
+    Claim,
+    CorroborationClaim,
     MeetingTurn,
     ModelAuthoredVoteBallot,
     TurnAnnotationKind,
@@ -447,6 +452,71 @@ CALIBRATION_SAMPLING: Final[SamplingConfig] = SamplingConfig(
     vote_max_tokens=AUTHORIZED_VOTE_MAX_TOKENS,
     vote_temperature=AUTHORIZED_VOTE_TEMPERATURE,
 )
+
+
+# ---------------------------------------------------------------------------
+# The SECOND development calibration
+# (tasks/work/fresh-deduction-calibration-2.md)
+# ---------------------------------------------------------------------------
+#
+# A third authorization, approved by the owner on 2026-09-15 as decision 7 of
+# ``tasks/diagnosis-2026-09-15-truncation-stop.md``, and a SECOND set beside the
+# one above rather than a replacement of it. The first mode keeps its own
+# sampling, seeds and ceilings, because the output it measured is still the
+# arithmetic this tree re-derives; this one is the draw the FIFTH run would
+# make.
+#
+# What makes it a different authorization rather than a bigger version of the
+# first: it draws at :data:`AUTHORIZED_SAMPLING` (turn 4,096, not 2,048), so it
+# needs ceilings that pay for the 15,360-token schedule that cap reserves; it
+# draws sixty paired seeds rather than five, which no single converted record
+# holds; and in it a per-call truncation is a MEASUREMENT rather than a stop,
+# because a calibration that stops at the first runaway cannot measure the rate
+# it was sent to measure. The live run's stop rule is untouched by all three.
+
+#: Paired seeds the second calibration renders: sixty prefixes, both arms, 120
+#: units, about 720 model calls. The bar is the owner's decision 7 — at least
+#: sixty impostor-authored candidate ballots, a 99.2% chance of seeing a
+#: 1-in-13 event — and exposure is about one impostor ballot draw per unit, so
+#: sixty candidate units is sixty draws.
+CALIBRATION_2_PAIRED_SEEDS: Final[int] = 60
+
+#: The per-unit ceilings of a second-calibration unit. The output figure clears
+#: the 15,360-token reservation schedule of :data:`CALIBRATION_2_SAMPLING`; the
+#: input figure is about 1.6x the largest unit the fourth run charged (36,743).
+CALIBRATION_2_UNIT_MAX_INPUT_TOKENS: Final[int] = 60_000
+CALIBRATION_2_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 16_000
+
+#: The run-level ceilings. The fourth run's per-unit means project about 2.87 M
+#: input and 276 k output over 120 units, so these are anomaly detectors at
+#: roughly 1.6x rather than a budget.
+CALIBRATION_2_RUN_MAX_INPUT_TOKENS: Final[int] = 4_500_000
+CALIBRATION_2_RUN_MAX_OUTPUT_TOKENS: Final[int] = 450_000
+
+#: Five hours of model work inside a six-hour elapsed window, one sitting. The
+#: wall is the binding limit and is stated rather than absorbed: 720 calls in
+#: 5 h allows 25.0 s per call, against 17.23 s per attempt pooled and 21.85 s on
+#: the candidate arm on 2026-09-14 — a margin of 1.45x pooled and 1.14x at the
+#: slowest arm pace this evaluation has measured.
+CALIBRATION_2_MODEL_WORK_SECONDS: Final[float] = 5 * 60 * 60
+CALIBRATION_2_ELAPSED_SECONDS: Final[float] = 6 * 60 * 60
+
+CALIBRATION_2_LIMITS: Final[RunLimits] = RunLimits(
+    run_max_input_tokens=CALIBRATION_2_RUN_MAX_INPUT_TOKENS,
+    run_max_output_tokens=CALIBRATION_2_RUN_MAX_OUTPUT_TOKENS,
+    unit_max_input_tokens=CALIBRATION_2_UNIT_MAX_INPUT_TOKENS,
+    unit_max_output_tokens=CALIBRATION_2_UNIT_MAX_OUTPUT_TOKENS,
+    max_cost_usd=AUTHORIZED_MAX_COST_USD,
+    elapsed_seconds=CALIBRATION_2_ELAPSED_SECONDS,
+    model_work_seconds=CALIBRATION_2_MODEL_WORK_SECONDS,
+)
+
+#: The draw the second calibration makes: the RUN's own, to the token and to
+#: the temperature. Written as the same object rather than as a copy of its
+#: four numbers, because the property being asserted is identity of the draw —
+#: what is measured is what the fifth run would do — and a copy is a place for
+#: the two to part without anything going red.
+CALIBRATION_2_SAMPLING: Final[SamplingConfig] = AUTHORIZED_SAMPLING
 
 
 # ---------------------------------------------------------------------------
@@ -1205,6 +1275,8 @@ def assert_limits_are_feasible(
     limits: RunLimits = AUTHORIZED_LIMITS,
     sampling: SamplingConfig = AUTHORIZED_SAMPLING,
     units: int | None = None,
+    calibrated_unit_input_tokens: int | None = None,
+    calibrated_unit_output_tokens: int | None = None,
 ) -> None:
     """Refuse limits a run cannot honour, from arithmetic alone.
 
@@ -1239,11 +1311,31 @@ def assert_limits_are_feasible(
     2026-09-07 — 4,000 per-unit output against a schedule of
     :func:`unit_output_reservation`, under either turn cap — which is what
     ``test_the_ceilings_merged_on_2026_09_07_are_still_refused`` plants.
+
+    The two calibrated figures default to the module's constants — the largest
+    unit the committed usage profile holds — and are parameters so that a
+    CALIBRATION can run this same gate against its OWN measured maxima.
+    :func:`ceiling_proposal` does exactly that: a proposal sized on what a
+    sitting measured is feasible or not against that sitting's numbers, and
+    checking it against a profile built from some earlier run's archives
+    answers a question nobody asked. Read from module scope at call time rather
+    than bound as parameter defaults, so a test that moves either constant
+    moves this gate with it.
     """
 
     planned = planned_units() if units is None else units
     if planned < 1:
         raise ValueError(f"a run has at least one unit, got {planned}")
+    calibrated_input = (
+        CALIBRATED_UNIT_INPUT_TOKENS
+        if calibrated_unit_input_tokens is None
+        else calibrated_unit_input_tokens
+    )
+    calibrated_output = (
+        CALIBRATED_UNIT_OUTPUT_TOKENS
+        if calibrated_unit_output_tokens is None
+        else calibrated_unit_output_tokens
+    )
     reserved = unit_output_reservation(sampling=sampling)
     if limits.unit_max_output_tokens < reserved:
         raise LimitsInfeasible(
@@ -1254,21 +1346,21 @@ def assert_limits_are_feasible(
             "authorizes calls it cannot pay for, and the budget would refuse "
             "one of them on the reservation rather than on the spend"
         )
-    if limits.unit_max_input_tokens < CALIBRATED_UNIT_INPUT_TOKENS:
+    if limits.unit_max_input_tokens < calibrated_input:
         raise LimitsInfeasible(
             f"the per-unit input ceiling is {limits.unit_max_input_tokens:,} "
             "tokens and the largest unit the live archives charged is "
-            f"{CALIBRATED_UNIT_INPUT_TOKENS:,}: this ceiling refuses a unit "
+            f"{calibrated_input:,}: this ceiling refuses a unit "
             "this evaluation has already run"
         )
     for dimension, ceiling, calibrated, in_flight in (
         (
             "output",
             limits.run_max_output_tokens,
-            CALIBRATED_UNIT_OUTPUT_TOKENS,
+            calibrated_output,
             sampling.turn_max_tokens,
         ),
-        ("input", limits.run_max_input_tokens, CALIBRATED_UNIT_INPUT_TOKENS, 0),
+        ("input", limits.run_max_input_tokens, calibrated_input, 0),
     ):
         needed = calibrated * planned + in_flight
         if ceiling < needed:
@@ -1367,6 +1459,119 @@ CALIBRATION_CLAUSE: Final[str] = (
     "grades nothing, reads no held-out prefix, and writes aggregates only."
 )
 
+#: The owner's SECOND calibration clause, approved on 2026-09-15 with the rest
+#: of the diagnosis's section-6 decisions and quoted verbatim by the manifest's
+#: dated "Development calibration 2 (2026-09-15)" section. A second clause
+#: rather than an edited first one: the first calibration has been spent, its
+#: clause is what authorized that spend, and a document that rewrote it would
+#: describe a spend nobody made.
+CALIBRATION_2_CLAUSE: Final[str] = (
+    "A second development calibration may spend on the first sixty accepted "
+    "seeds of the converted bands, taken in the order those bands were "
+    "converted, both arms, once and under the calibration-2 limits; it grades "
+    "nothing, reads no held-out prefix, counts a per-call truncation as a "
+    "measurement rather than a stop, and writes aggregates only."
+)
+
+
+@dataclass(frozen=True)
+class CalibrationMode:
+    """One authorized calibration, as the whole set of values it was approved as.
+
+    The reason this is a value object and not five module constants read
+    independently: the two modes differ on every axis at once — seeds, limits,
+    sampling, clause and what a truncation means — and each set was approved as
+    a set. Five constants read independently authorize the sixteen crossings
+    nobody approved, which is exactly how a sixty-seed draw could end up running
+    under ceilings sized for ten units.
+    """
+
+    #: The dated name, which is also the manifest heading and the CLI value.
+    name: str
+    paired_seeds: int
+    limits: RunLimits
+    sampling: SamplingConfig
+    clause: str
+    #: Whether a per-call truncation is a measurement in this mode. False on the
+    #: first, and on every live evaluation: see :data:`STOP_RULE`, which this
+    #: flag does not edit and does not reach.
+    truncation_is_a_measurement: bool
+
+    def describe(self) -> str:
+        return (
+            f"{self.name}: {self.paired_seeds} paired seeds, that mode's "
+            f"calibration limits, turn {self.sampling.turn_max_tokens:,} / vote "
+            f"{self.sampling.vote_max_tokens:,}"
+        )
+
+
+#: Every calibration the owner has authorized, oldest first. A closed table, so
+#: "exactly one of these, whole" is a lookup rather than a chain of ifs.
+CALIBRATION_MODES: Final[tuple[CalibrationMode, ...]] = (
+    CalibrationMode(
+        name="2026-09-14",
+        paired_seeds=CALIBRATION_PAIRED_SEEDS,
+        limits=CALIBRATION_LIMITS,
+        sampling=CALIBRATION_SAMPLING,
+        clause=CALIBRATION_CLAUSE,
+        truncation_is_a_measurement=False,
+    ),
+    CalibrationMode(
+        name="2026-09-15",
+        paired_seeds=CALIBRATION_2_PAIRED_SEEDS,
+        limits=CALIBRATION_2_LIMITS,
+        sampling=CALIBRATION_2_SAMPLING,
+        clause=CALIBRATION_2_CLAUSE,
+        truncation_is_a_measurement=True,
+    ),
+)
+
+
+def _names_the_modes_with(field: str, value: object) -> str:
+    """Which authorized modes carry ``value`` in ``field``, in words."""
+
+    owners = [mode.name for mode in CALIBRATION_MODES if getattr(mode, field) == value]
+    if not owners:
+        return "no authorized calibration mode's"
+    return " and ".join(f"the {name} mode's" for name in owners)
+
+
+def calibration_mode_for(
+    *,
+    limits: RunLimits,
+    sampling: SamplingConfig,
+    paired_seeds: int,
+) -> CalibrationMode:
+    """The ONE authorized mode these three values are, or a refusal naming the cross.
+
+    Arithmetic over :data:`CALIBRATION_MODES`: no file is read and no provider
+    exists, so it runs first in :func:`assert_calibration_is_authorized` and on
+    the rehearsal path too. A set that matches no mode on all three fields is
+    refused with the fields named one by one, because "these limits are not the
+    ones the owner authorized" says nothing about WHICH of the two the caller
+    half-reached.
+    """
+
+    for mode in CALIBRATION_MODES:
+        if (mode.limits, mode.sampling, mode.paired_seeds) == (
+            limits,
+            sampling,
+            paired_seeds,
+        ):
+            return mode
+    raise LiveRunNotAuthorized(
+        "a calibration runs exactly one authorized mode whole, and these "
+        "values cross them: the limits are "
+        f"{_names_the_modes_with('limits', limits)}, the sampling is "
+        f"{_names_the_modes_with('sampling', sampling)}, and {paired_seeds} "
+        f"paired seeds is {_names_the_modes_with('paired_seeds', paired_seeds)}. "
+        "The authorized modes are "
+        + "; ".join(mode.describe() for mode in CALIBRATION_MODES)
+        + ". Each mode's calibration limits, sampling and paired seeds were "
+        "approved as one set, so a value taken from the other mode is not a "
+        "smaller spend but a different one."
+    )
+
 
 def assert_resume_is_authorized(*, provider: str, repo_root: Path = _REPO_ROOT) -> None:
     """Refuse a LIVE resume until the manifest carries the owner's clause.
@@ -1399,47 +1604,59 @@ def assert_calibration_is_authorized(
     sampling: SamplingConfig = CALIBRATION_SAMPLING,
     paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
     repo_root: Path = _REPO_ROOT,
-) -> None:
-    """Refuse a calibration that is not the one the owner authorized.
+) -> CalibrationMode:
+    """Refuse a calibration that is not one the owner authorized, or name it.
 
     The live-run gate's sibling, not a relaxation of it: the two authorize
     different spends, so they check different limits, different inputs and a
     different clause, and neither passes the other's run.
 
+    * the three values that size the spend — the limits, the sampling
+      configuration and the seed count — have to be ONE authorized mode of
+      :data:`CALIBRATION_MODES`, whole. Two modes are authorized: the five-seed
+      calibration of 2026-09-14 at :data:`CALIBRATION_SAMPLING`, and the
+      sixty-seed calibration of 2026-09-15 at :data:`CALIBRATION_2_SAMPLING`.
+      Every crossing of them is refused by :func:`calibration_mode_for` —
+      sixty seeds under the first mode's ceilings is a run its per-unit output
+      figure cannot pay for, five seeds under the second's is a spend nobody
+      approved, and either mode drawing at the other's caps measures a
+      distribution the run it sizes does not draw from. That last refusal is
+      the one the fourth authorization created: it raised the RUN's turn cap to
+      4,096, so a calibration sizing that run has to draw at 4,096 under
+      ceilings that clear its 15,360-token schedule, which is what the second
+      mode is;
     * ``fake`` passes without an invocation, and refuses one, exactly as
       :func:`assert_live_run_is_authorized` does — a rehearsal is not a run.
-    * a live calibration runs under :data:`CALIBRATION_LIMITS` exactly, so the
-      held-out run's own ceilings are refused here as firmly as the
-      calibration's are refused there;
-    * it draws at :data:`CALIBRATION_SAMPLING` exactly — the draw the owner's
-      ceilings of 2026-09-14 were sized against, and the one the committed
-      calibration made. Until the fourth authorization that was
-      :data:`AUTHORIZED_SAMPLING` itself, for the reason this check still
-      carries: a calibration that draws differently from the run it sizes
-      measures a distribution that run does not draw from. The fourth
-      authorization raised the run's turn cap, so the two have parted, and
-      sizing a run that draws at 4,096 needs a calibration that draws at 4,096
-      under ceilings that can pay for it — neither of which this authorization
-      grants;
-    * it draws :data:`CALIBRATION_PAIRED_SEEDS` seeds, not more: the spend the
-      owner approved is five paired seeds;
-    * and the manifest has to carry :data:`CALIBRATION_CLAUSE`. That is the
+      The mode lookup above still runs for it, so a rehearsal of a crossing is
+      refused where a runner would be refused rather than quietly rehearsing a
+      shape no live sitting could take;
+    * and the manifest has to carry the matched mode's own clause. That is the
       authorization itself, the way the resumption clause is: this gate reads
-      the committed document rather than a flag.
+      the committed document rather than a flag, and each mode's clause
+      authorizes only that mode's spend.
 
     :func:`assert_manifest_binds_the_live_band` is deliberately NOT applied. It
     binds the Inputs table's band to the held-out record, and a calibration
     draws neither — its inputs are a converted band's record, checked by
-    :func:`verify_calibration_set` against :data:`CONVERTED_BANDS`.
+    :func:`verify_calibration_draw` against :data:`CONVERTED_BANDS`.
+
+    Returns the matched mode, because the caller needs it: it is what says
+    whether a truncation is a measurement in this sitting and whether the
+    report carries the role split. Returning it rather than having
+    :func:`run_calibration` look it up a second time keeps one answer to
+    "which spend is this".
     """
 
+    mode = calibration_mode_for(
+        limits=limits, sampling=sampling, paired_seeds=paired_seeds
+    )
     if provider == "fake":
         if invocation is not None:
             raise LiveRunNotAuthorized(
                 "a fake-provider calibration takes no live invocation; the "
                 "rehearsal is the mechanics check and never the authorized run"
             )
-        return
+        return mode
     if invocation is None:
         raise LiveRunNotAuthorized(
             f"provider {provider!r} is a live provider and this calibration "
@@ -1463,24 +1680,6 @@ def assert_calibration_is_authorized(
             f"the live invocation names model {invocation.model!r}, not the "
             f"authorized {AUTHORIZED_MODEL!r}"
         )
-    if limits != CALIBRATION_LIMITS:
-        raise LiveRunNotAuthorized(
-            "a live calibration runs under the calibration limits exactly; the "
-            "limits this calibration carries are not the ones the owner "
-            "authorized on 2026-09-14"
-        )
-    if sampling != CALIBRATION_SAMPLING:
-        raise LiveRunNotAuthorized(
-            "a calibration draws at the calibration sampling configuration "
-            "exactly; a different cap or temperature measures a distribution "
-            "the ceilings the owner authorized on 2026-09-14 were not sized "
-            "against"
-        )
-    if paired_seeds != CALIBRATION_PAIRED_SEEDS:
-        raise LiveRunNotAuthorized(
-            f"a live calibration draws {CALIBRATION_PAIRED_SEEDS} paired seeds; "
-            f"this one asks for {paired_seeds}"
-        )
     manifest = (repo_root / EXECUTION_MANIFEST_PATH).resolve()
     if invocation.manifest_path.resolve() != manifest:
         raise LiveRunNotAuthorized(
@@ -1497,16 +1696,17 @@ def assert_calibration_is_authorized(
             f"manifest's: invocation {invocation.manifest_sha256}, file "
             f"{committed}"
         )
-    if CALIBRATION_CLAUSE not in text:
+    if mode.clause not in text:
         raise LiveRunNotAuthorized(
-            f"{EXECUTION_MANIFEST_PATH} carries no calibration clause, so no "
-            "live calibration is authorized: the mode is built and rehearsed "
-            "offline, and spending on development inputs is recorded in the "
-            "manifest or it is not authorized"
+            f"{EXECUTION_MANIFEST_PATH} carries no calibration clause for the "
+            f"{mode.name} mode, so no live calibration is authorized: the mode "
+            "is built and rehearsed offline, and spending on development "
+            "inputs is recorded in the manifest or it is not authorized"
         )
     assert_limits_are_feasible(
         limits=limits, sampling=sampling, units=calibration_units(paired_seeds)
     )
+    return mode
 
 
 def assert_ready_for_a_live_run(
@@ -1586,7 +1786,8 @@ def authorized_client_environment(env: Mapping[str, str]) -> dict[str, str]:
 
 
 def build_authorized_client(
-    frozen: FrozenSet | CalibrationSet, env: Mapping[str, str] | None = None
+    frozen: FrozenSet | CalibrationSet | CalibrationDraw,
+    env: Mapping[str, str] | None = None,
 ) -> LLMClient:
     """Construct the ONE client a live run may use, from the pinned environment.
 
@@ -1596,12 +1797,13 @@ def build_authorized_client(
     ``frozen`` is evidence rather than an input: it is unused below, and it is
     required so that no client can be constructed before the inputs have been
     verified. The only producer of a :class:`FrozenSet` is
-    :func:`verify_frozen_set` and the only producer of a
-    :class:`CalibrationSet` is :func:`verify_calibration_set`, so "the inputs
+    :func:`verify_frozen_set`, the only producer of a :class:`CalibrationSet`
+    is :func:`verify_calibration_set` and the only producer of a
+    :class:`CalibrationDraw` is :func:`verify_calibration_draw`, so "the inputs
     are checked before a provider exists" is a property of this signature
     instead of an ordering a later edit to :func:`main` could quietly reverse.
-    Both types are accepted and neither can stand in for the other anywhere
-    else: which one a caller holds is what decides which record it verified.
+    All three types are accepted and none can stand in for another anywhere
+    else: which one a caller holds is what decides which records it verified.
     """
 
     del frozen  # see the docstring: proof of ordering, not an input
@@ -2012,7 +2214,11 @@ class _InstrumentClient:
        "the shipped defaults unchanged" is checked rather than asserted;
     2. treat a response that reached its cap as a STOP — a truncation is a cap
        artifact, and the authorization says a truncation in either arm is a
-       stop, not a datum;
+       stop, not a datum. The ONE exception is the second calibration's mode
+       (``truncation_is_a_measurement``), where the truncated body is returned
+       to the meeting layer's shipped fail-soft and counted, because a
+       calibration sent to measure a truncation rate cannot stop at the first
+       one. It is off by default and the evaluation never turns it on;
     3. refuse a response from a model other than ``expected_model`` on the call
        that returns it, so a hosted endpoint serving a different checkpoint
        stops the run instead of being noticed in the report afterwards;
@@ -2055,6 +2261,11 @@ class _InstrumentClient:
         turn_max_tokens: int = AUTHORIZED_TURN_MAX_TOKENS,
         vote_max_tokens: int = AUTHORIZED_VOTE_MAX_TOKENS,
         expected_model: str | None = None,
+        # OFF everywhere but the second calibration's own mode. See
+        # :meth:`_unusable_response`: it turns the cap branch into a counted
+        # measurement and reaches nothing else — not the identity branch, not
+        # the live evaluation, and not :data:`STOP_RULE`, which is unedited.
+        truncation_is_a_measurement: bool = False,
         max_transport_attempts: int = MAX_TRANSPORT_ATTEMPTS,
         per_attempt_timeout_seconds: float = PER_ATTEMPT_TIMEOUT_SECONDS,
         # Read from the module at CONSTRUCTION rather than captured as a default
@@ -2083,6 +2294,7 @@ class _InstrumentClient:
         # marker; the authorized model id on a live run, where the served model
         # is a thing the manifest binds.
         self._expected_model = expected_model
+        self._truncation_is_a_measurement = truncation_is_a_measurement
         self._max_attempts = max_transport_attempts
         self._per_attempt_seconds = per_attempt_timeout_seconds
         self._backoff_base = backoff
@@ -2509,6 +2721,25 @@ class _InstrumentClient:
             output_tokens=output_tokens,
             max_tokens=max_tokens,
         )
+        if (observed or inferred) and self._truncation_is_a_measurement:
+            # The second calibration's mode, and nothing else. A calibration
+            # sent to measure the rate at which a ballot runs past its cap
+            # cannot stop at the first one: the rate would be unmeasurable and
+            # the sitting would report one event and no denominator. So the
+            # truncated body is returned, the meeting layer's shipped fail-soft
+            # substitutes a marked SKIP or a placeholder turn for it exactly as
+            # it does for any other payload that fails schema validation, and
+            # the call is counted off this ledger row — per arm, per call type,
+            # per voter role and with its ``finish_reason``. The ROW is what
+            # carries it (:func:`_truncation_signals` reads the same two
+            # signals back out), so nothing is accumulated here.
+            #
+            # The identity branch above is untouched and still returns its stop:
+            # a foreign checkpoint is not a datum in any mode. The live
+            # evaluation never constructs this client with the flag set, and
+            # :data:`STOP_RULE` still says a truncation is a stop, because on
+            # the run it is.
+            return None
         if observed or inferred:
             fired: list[str] = []
             if inferred:
@@ -2993,6 +3224,7 @@ def verify_calibration_set(
     *,
     repo_root: Path = _REPO_ROOT,
     paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
+    draw_at_most: bool = False,
 ) -> CalibrationSet:
     """Rebuild the calibration's prefixes from a converted record, or refuse.
 
@@ -3014,6 +3246,14 @@ def verify_calibration_set(
     The generator is unchanged and is not asked to change: ``build_prefix``
     already takes its seed, roster and map, so drawing a converted band needs
     nothing of it but the arguments this function passes.
+
+    ``draw_at_most`` is :func:`verify_calibration_draw`'s: it draws
+    ``min(paired_seeds, what the record accepts)`` instead of refusing a record
+    that holds fewer, because a draw that spans records fills a short record
+    from the NEXT band rather than stopping on it. Off by default, so the
+    single-record path keeps refusing a record it cannot fill — the second
+    calibration's own "ran out of seeds" refusal lives one level up, over the
+    whole draw, where the question is actually answerable.
     """
 
     if paired_seeds < 1:
@@ -3082,14 +3322,15 @@ def verify_calibration_set(
             "the calibration record's accepted seeds are not ascending; the "
             "first five of a different order are a different five prefixes"
         )
-    if len(accepted) < paired_seeds:
+    if len(accepted) < paired_seeds and not draw_at_most:
         raise CalibrationInputsRejected(
             f"{converted.manifest_path} accepts {len(accepted)} seeds and this "
             f"calibration draws {paired_seeds}"
         )
+    drawn = min(paired_seeds, len(accepted))
     game_map = load_canonical_map()
     prefixes: list[HeldOutPrefix] = []
-    for seed, digest in accepted[:paired_seeds]:
+    for seed, digest in accepted[:drawn]:
         prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
         rebuilt = prefix_sha256(prefix)
         if rebuilt != digest:
@@ -3107,28 +3348,213 @@ def verify_calibration_set(
         band=band,
         roster=roster,
         prefixes=tuple(prefixes),
-        digests=tuple(digest for _, digest in accepted[:paired_seeds]),
+        digests=tuple(digest for _, digest in accepted[:drawn]),
         accepted_in_record=len(accepted),
         skipped_in_record=skipped_in_record,
     )
 
 
+@dataclass(frozen=True)
+class CalibrationDraw:
+    """The records ONE calibration draws across, in order, and their prefixes.
+
+    The first calibration drew five seeds and one converted record held them.
+    The second draws sixty, and no record holds sixty: the 3000-3999 and
+    5000-5999 freezes accept fifty each. So the draw is a sequence of
+    :class:`CalibrationSet` rather than one of them, taken from
+    :data:`~experiments.held_out_prefixes.CONVERTED_BANDS` in list order until
+    the seed count is bound — all fifty of the first record, then the first ten
+    of the second.
+
+    A separate type for the same reason :class:`CalibrationSet` is separate
+    from :class:`FrozenSet`: it is what :func:`verify_calibration_draw`
+    produces and nothing else, so a caller holding one has been through the
+    per-record checks for every record in it. Each set in ``sets`` carries its
+    own record path, its own sha256 and the seeds drawn from it, which is what
+    the report's inputs block publishes.
+    """
+
+    sets: tuple[CalibrationSet, ...]
+
+    @property
+    def prefixes(self) -> tuple[HeldOutPrefix, ...]:
+        """Every drawn prefix, in draw order across the records."""
+
+        return tuple(prefix for drawn in self.sets for prefix in drawn.prefixes)
+
+    @property
+    def seeds(self) -> tuple[int, ...]:
+        return tuple(prefix.seed for prefix in self.prefixes)
+
+    @property
+    def paired_seeds(self) -> int:
+        return len(self.prefixes)
+
+
+def _converted_record_paths(repo_root: Path) -> tuple[Path, ...]:
+    """Every converted band's record, in the order those bands were converted."""
+
+    return tuple(repo_root / band.manifest_path for band in CONVERTED_BANDS)
+
+
+def _draw_in_converted_order(
+    paths: Sequence[Path], *, repo_root: Path
+) -> tuple[Path, ...]:
+    """Hold a supplied record list to a PREFIX of the converted records, or refuse.
+
+    The card's decision 2 and the manifest's dated section both say the draw is
+    :data:`CONVERTED_BANDS` in the order those bands were converted, with
+    nothing left to the runner — so a list is a PREFIX of that order: it starts
+    at the first converted record and skips none, which with the greedy fill in
+    :func:`verify_calibration_draw` makes the drawn seeds a function of the seed
+    count alone. An ordered non-repeating SUBSEQUENCE is not enough, and the
+    round-2 review of 2026-09-15 is why: :data:`CONVERTED_BANDS` holds three
+    development records, so ``[band-5000, band-6000]`` and
+    ``[band-3000, band-6000]`` are each ascending and name no record twice, yet
+    each verified clean at sixty seeds and ended at seed 6010 where the
+    authorized draw ends at 5009 — a different sixty seeds under the same
+    authorization. Round 1 had reproduced the two shapes this rule already
+    refused, ``[band-5000, band-3000]`` (re-ordered) and
+    ``[band-3000, band-3000]`` (sixty prefixes over fifty distinct seeds).
+
+    Checked here rather than trusted, and before a prefix is rebuilt, because
+    the caller that may pass a list is the live-capable pre-flight
+    (:func:`assert_ready_for_a_calibration`, :func:`run_calibration`): each of
+    those shapes would have spent an authorized live sitting on a draw nobody
+    approved.
+
+    Membership itself is :func:`_converted_band_for`'s, which refuses the
+    held-out record BY NAME before anything else and refuses a path that is no
+    converted band's record at all; this adds the two facts that are about the
+    list rather than about one path.
+
+    One consequence, stated rather than absorbed: the first calibration's
+    ``--calibration-record`` can now name only the first converted record, the
+    one it drew from. Its clause reads "a converted band", so this is narrower
+    than that authorization — and narrowing one can refuse a spend that was
+    approved but can never permit one that was not, which is the direction a
+    pre-flight should err in.
+    """
+
+    order = [band.manifest_path for band in CONVERTED_BANDS]
+    seen: dict[str, int] = {}
+    for position, path in enumerate(paths):
+        converted = _converted_band_for(path, repo_root)
+        if converted.manifest_path in seen:
+            raise CalibrationInputsRejected(
+                f"the calibration draw names {converted.manifest_path} twice "
+                f"(at positions {seen[converted.manifest_path] + 1} and "
+                f"{position + 1}); a record drawn twice renders the same seeds "
+                "twice and reports them as distinct paired seeds, so the draw "
+                "is the converted records without repetition"
+            )
+        if position >= len(order) or order[position] != converted.manifest_path:
+            raise CalibrationInputsRejected(
+                f"the calibration draw names {converted.manifest_path} at "
+                f"position {position + 1}; the draw is the converted records "
+                "in the order those bands were converted, from the first "
+                "onwards with none skipped ("
+                + ", ".join(order)
+                + "), and any other list draws a different set of seeds under "
+                "the same authorization"
+            )
+        seen[converted.manifest_path] = position
+    return tuple(paths)
+
+
+def verify_calibration_draw(
+    *,
+    records: Sequence[Path] | None = None,
+    repo_root: Path = _REPO_ROOT,
+    paired_seeds: int = CALIBRATION_2_PAIRED_SEEDS,
+) -> CalibrationDraw:
+    """Bind ``paired_seeds`` accepted seeds across the converted records, or refuse.
+
+    Ascending within each record and in :data:`CONVERTED_BANDS`' own order
+    across them, which is the order the bands were converted: a draw is
+    reproducible from the list and the count alone, with no choice left to the
+    runner. Every record goes through :func:`verify_calibration_set` unchanged
+    — status, observation clock, tick budget, roster, band, ascending seeds and
+    every drawn prefix rebuilt and held to the digest that record froze — and
+    the held-out record is refused by name inside it
+    (:func:`_converted_band_for`), so pointing this at the live band is refused
+    at the first path rather than after fifty prefixes have been rebuilt.
+
+    ``records`` names a PREFIX of that order and nothing else:
+    :func:`_draw_in_converted_order` refuses a re-ordered, repeated or
+    band-skipping list before a prefix is rebuilt. With the greedy fill below,
+    that makes the drawn seeds a function of ``paired_seeds`` alone — an
+    accepted ``records`` list draws exactly what the default draws — so the
+    override cannot turn the canonical draw into one the card does not
+    authorize, only shorten the list of records the same draw may spill into.
+
+    A draw that cannot be filled is a stop, not a smaller calibration: sixty
+    paired seeds is the owner's decision 7 and fifty of them measures a
+    different thing. That refusal is here rather than in
+    :func:`verify_calibration_set`, because whether a short record matters is a
+    question about the whole draw.
+    """
+
+    if paired_seeds < 1:
+        raise ValueError(f"a calibration draws at least one seed, got {paired_seeds}")
+    paths = _converted_record_paths(repo_root) if records is None else tuple(records)
+    if not paths:
+        raise CalibrationInputsRejected(
+            "a calibration draw names at least one converted record"
+        )
+    paths = _draw_in_converted_order(paths, repo_root=repo_root)
+    sets: list[CalibrationSet] = []
+    drawn = 0
+    for path in paths:
+        if drawn >= paired_seeds:
+            break
+        chunk = verify_calibration_set(
+            path,
+            repo_root=repo_root,
+            paired_seeds=paired_seeds - drawn,
+            draw_at_most=True,
+        )
+        if not chunk.prefixes:
+            continue
+        sets.append(chunk)
+        drawn += len(chunk.prefixes)
+    if drawn < paired_seeds:
+        named = ", ".join(str(path) for path in paths)
+        raise CalibrationInputsRejected(
+            f"the converted records this draw may use ({named}) accept "
+            f"{drawn} seeds in all and this calibration draws {paired_seeds}: "
+            "a draw that runs out of accepted seeds is a stop, not a smaller "
+            "calibration"
+        )
+    return CalibrationDraw(sets=tuple(sets))
+
+
 def assert_ready_for_a_calibration(
-    record: Path,
+    record: Path | None = None,
     *,
     provider: str,
     invocation: LiveRunInvocation | None,
+    records: Sequence[Path] | None = None,
     limits: RunLimits = CALIBRATION_LIMITS,
     sampling: SamplingConfig = CALIBRATION_SAMPLING,
     paired_seeds: int = CALIBRATION_PAIRED_SEEDS,
     repo_root: Path = _REPO_ROOT,
-) -> CalibrationSet:
+) -> CalibrationDraw:
     """Everything a calibration must satisfy BEFORE a client exists, in order.
 
     The same ordering rule as :func:`assert_ready_for_a_live_run`: arithmetic
     and the authorization first, the inputs next, and the verified inputs are
     what :func:`build_authorized_client` requires as its first argument, so a
     credential is never made for a calibration that may not run.
+
+    ``record`` names ONE converted record, as the first calibration's CLI does;
+    ``records`` names the draw's records in order; neither names the default,
+    which is every converted record in :data:`CONVERTED_BANDS`' own order. The
+    two are mutually exclusive, because a caller that passed both would have
+    said two different things about the same draw. Either way the list reaches
+    :func:`_draw_in_converted_order`, which holds it to a PREFIX of
+    :data:`CONVERTED_BANDS` before a prefix is rebuilt, so neither override can
+    name a draw the mode's clause does not authorize.
     """
 
     assert_limits_are_feasible(
@@ -3142,9 +3568,26 @@ def assert_ready_for_a_calibration(
         paired_seeds=paired_seeds,
         repo_root=repo_root,
     )
-    return verify_calibration_set(
-        record, repo_root=repo_root, paired_seeds=paired_seeds
+    return verify_calibration_draw(
+        records=_draw_records(record=record, records=records),
+        repo_root=repo_root,
+        paired_seeds=paired_seeds,
     )
+
+
+def _draw_records(
+    *, record: Path | None, records: Sequence[Path] | None
+) -> Sequence[Path] | None:
+    """The record list a caller asked for, or ``None`` for every converted band."""
+
+    if record is not None and records is not None:
+        raise ValueError(
+            "a calibration draws from one record or from a named list of "
+            "them, not from both"
+        )
+    if record is not None:
+        return [record]
+    return records
 
 
 def _first_difference(
@@ -5125,8 +5568,14 @@ def _build_harness(
     limits: RunLimits,
     sampling: SamplingConfig,
     invocation: LiveRunInvocation | None,
+    truncation_is_a_measurement: bool = False,
 ) -> _RunHarness:
-    """Wire one sitting's client, budget and two clocks from its limits."""
+    """Wire one sitting's client, budget and two clocks from its limits.
+
+    ``truncation_is_a_measurement`` is the second calibration's mode and is
+    defaulted OFF, so the evaluation's two entry points — :func:`run_instrument`
+    and :func:`run_dry` — cannot reach it without naming it, and neither does.
+    """
 
     work_clock = _ModelWorkClock(max_seconds=limits.model_work_seconds)
     return _RunHarness(
@@ -5135,6 +5584,7 @@ def _build_harness(
             work_clock=work_clock,
             turn_max_tokens=sampling.turn_max_tokens,
             vote_max_tokens=sampling.vote_max_tokens,
+            truncation_is_a_measurement=truncation_is_a_measurement,
             # A live run is bound to the model the invocation names; a dry run
             # has no served model to bind, and its fixture says so in the
             # report's ``model_ids`` and its caveat.
@@ -5566,9 +6016,23 @@ CEILING_PROPOSAL_RULE: Final[str] = (
     f"count x the measured MEAN unit x {CEILING_PROPOSAL_RUN_MARGIN}, raised to "
     "that unit count x the largest unit measured where the mean rule falls "
     "below it: that product is the floor `assert_limits_are_feasible` enforces, "
-    "and a proposed ceiling the instrument would refuse is not a proposal. "
+    "and a proposed ceiling the instrument would refuse is not a proposal. The "
+    "run-level OUTPUT floor carries ONE further per-call turn cap on top of "
+    "that product — the in-flight headroom the gate itself adds, because the "
+    "run's last call is reserved against the run budget after the run has "
+    "charged everything before it. Without that term a proposal reproduces the "
+    "defect of 2026-09-14, whose 459,000 for a hundred units is exactly a "
+    "hundred times its own largest unit and 4,096 short of what those hundred "
+    "units reserve. The INPUT dimension takes no such term, its pre-flight "
+    "being the prompt's own estimated length rather than a cap. "
     f"Every figure is rounded up to the next {CEILING_PROPOSAL_ROUNDING:,} "
-    "tokens. This is a proposal and authorizes nothing: the ceilings a run "
+    "tokens. The feasibility check the proposal reports is run against the "
+    "CALIBRATION's own measured maxima rather than against whatever the tree's "
+    "committed usage profile happens to hold, because the question a proposal "
+    "answers is whether these ceilings can pay for the run THIS sitting "
+    "measured; the same check against the committed profile is reported beside "
+    "it, so a sitting whose units are larger than the profile's says so. This "
+    "is a proposal and authorizes nothing: the ceilings a run "
     "spends under are the owner's, on a card, and this instrument keeps "
     "refusing any limits but the ones it is handed."
 )
@@ -5620,6 +6084,401 @@ def calibration_call_type(call: CapturedCall, sampling: SamplingConfig) -> CallT
         f"{sampling.vote_max_tokens}; this calibration cannot say which "
         "schedule it belongs to"
     )
+
+
+# ---------------------------------------------------------------------------
+# What the SECOND calibration reports: role, prose length, truncation, leak
+# ---------------------------------------------------------------------------
+#
+# The first calibration measured tokens. The fourth run's stop was not a token
+# fact: one ballot in thirteen IMPOSTOR-authored candidate draws ran past its
+# 1,024-token cap, and the mechanism the diagnosis of 2026-09-15 found is
+# role-conditioned — an impostor that opens by naming its own role or its own
+# kill writes a longer rationale than a crewmate does. So everything below
+# splits by the author's hidden role, and measures the character lengths of the
+# fields that carry prose beside the token counts, because a cap is spent on
+# characters.
+#
+# Counts and lengths only. No prose, no prompt, no prefix and no outcome
+# reaches any of these models, and
+# :func:`assert_report_holds_no_prefix_bytes` runs over the payload either way.
+
+#: The prose fields a completion can spend its cap on, named once. One of them
+#: lives on a ballot and two on a turn.
+ProseField = Literal["rationale_text", "claims_reason", "free_text"]
+
+#: The fields a ballot's author can write prose into, and a turn's.
+BALLOT_PROSE_FIELDS: Final[tuple[ProseField, ...]] = ("rationale_text",)
+TURN_PROSE_FIELDS: Final[tuple[ProseField, ...]] = ("free_text", "claims_reason")
+
+#: The order the role split reports its two roles in, so two runs of the same
+#: measurement produce the same rows in the same order.
+ROLE_SPLIT_ORDER: Final[tuple[Role, ...]] = ("CREWMATE", "IMPOSTOR")
+
+
+def _claim_reason(claim: Claim) -> str | None:
+    """A claim's free-text reason, or ``None`` for a kind that carries none.
+
+    Matched on the claim type rather than read with a default, because an
+    alibi genuinely has no ``reason`` field and a missing attribute is a fact
+    about the schema rather than an empty string to average in.
+    """
+
+    if isinstance(claim, (AccusationClaim, CorroborationClaim)):
+        return claim.reason
+    return None
+
+
+def _ballot_was_authored(ballot: VoteBallot) -> bool:
+    """Whether a recorded ballot's rationale is the VOTER's, not the layer's.
+
+    The meeting layer's shipped fail-soft substitutes a marked SKIP for a
+    payload that failed schema validation and a deadline default for a ballot
+    that never arrived, and both carry a rationale this layer wrote. Averaging
+    those two in would measure the substitution rather than the draw — and in
+    the second calibration's mode a TRUNCATED ballot is exactly one of them, so
+    the field that must not be polluted is the one the mode exists to measure.
+
+    The draw still counts: the truncation rate's denominator is impostor DRAWS,
+    off the call ledger, and a fail-softed ballot is a draw that produced no
+    rationale.
+    """
+
+    return (
+        ballot.guard_rewrite_reason != "parse_default"
+        and ballot.rationale_text != DEFAULT_VOTE_RATIONALE
+    )
+
+
+def _turn_was_authored(turn: MeetingTurn) -> bool:
+    """Whether a recorded turn's text is the SPEAKER's, not the placeholder."""
+
+    return turn.free_text not in frozenset(DEFAULT_TURN_FREE_TEXT.values())
+
+
+# ---------------------------------------------------------------------------
+# The pre-declared leak diagnostic (the diagnosis of 2026-09-15, decision 9)
+# ---------------------------------------------------------------------------
+
+ROLE_LEAK_RULE: Final[str] = (
+    "A leaking turn is a COMMITTED public turn whose speaker is an IMPOSTOR "
+    "and whose text states, in the first person and without attributing the "
+    "statement to someone else, either that role or a kill that speaker "
+    "committed. The roles are the unit's own ground truth, which the run "
+    "record holds in memory and no listener sees. Three shapes decide it: a "
+    "first-person role statement, a first-person kill statement, and the "
+    "negative the diagnosis of 2026-09-15 counted out — an impostor REBUTTING "
+    "an accusation against itself, which quotes the words without asserting "
+    "them and is not counted. A statement that is SUPPOSED or ASKED rather "
+    "than asserted — a conditional, a hypothetical or a question governing the "
+    "words — is not counted either, for the same reason: the words are there "
+    "and the assertion is not. A CREWMATE naming its own role is not counted "
+    "either: every crewmate says so, and counting it would report the roster "
+    "rather than a leak. A turn the meeting layer substituted is not counted, "
+    "because its text is the layer's. The count is a REPORTED diagnostic and "
+    "not a gate: the owner's reading of decision 9 on 2026-09-15 is that the "
+    "leak does not block the next run on its own, which is what makes a "
+    "reported column beside the primary outcome the right instrument for it. "
+    "What the rule cannot do is read intent, and its guards see one sentence "
+    "at a time: an impostor that confesses in words the two shapes do not "
+    "match is missed, and an attribution, denial or supposition spread across "
+    "two sentences is counted. So the figure is an ESTIMATE carrying error in "
+    "BOTH directions and is not a floor, which is a further reason to read it "
+    "beside the outcome rather than to gate on it."
+)
+
+#: The sentence this rule works in. A leak is decided inside one sentence,
+#: because the attribution that makes a statement someone else's — a report of
+#: another player's claim — sits in the same sentence as the words it quotes.
+_SENTENCE_SPLIT: Final[re.Pattern[str]] = re.compile(r"[.!?\n]+")
+
+#: A first-person statement of the IMPOSTOR role.
+_SELF_ROLE_STATEMENT: Final[re.Pattern[str]] = re.compile(
+    r"\bi(?:\s+am|'m|\s+was)\s+(?:the\s+|an?\s+)?(?:impostor|imposter|killer)\b",
+    re.IGNORECASE,
+)
+
+#: A first-person statement of a kill. ``did it`` is in the set because the
+#: fourth run's reference arm produced it verbatim as an admission; the others
+#: are the words this game has for the act.
+_SELF_KILL_STATEMENT: Final[re.Pattern[str]] = re.compile(
+    r"\bi\s+(?:killed|stabbed|vented|did\s+it|was\s+the\s+one\s+who\s+killed)\b",
+    re.IGNORECASE,
+)
+
+#: What stops the words that follow from being this speaker's own ASSERTION.
+#: Searched in the part of the sentence BEFORE the match, which is where a
+#: governor has to sit to govern it. Three families, and the third is the one
+#: the review of 2026-09-15 found missing: a conditional, a hypothetical or a
+#: question puts the words in play without asserting them ("if I am the
+#: impostor, why would I report the body?"), and counting that as a confession
+#: inflates the column in the direction the rule claims it cannot move.
+_NOT_AN_ASSERTION: Final[re.Pattern[str]] = re.compile(
+    # Attributed to somebody else.
+    r"\b(?:claim|claims|claimed|claiming|accuse\w*|accusation\w*|allege\w*|"
+    r"say|says|said|suggest\w*|think|thinks|insist\w*|argue\w*|argument\w*|"
+    # Denied.
+    r"not|never|deny|denies|denied|nobody|"
+    # Supposed, imagined or asked rather than said.
+    r"if|unless|whether|suppose|supposes|supposed|supposing|assume|assumes|"
+    r"assumed|assuming|imagine|imagines|imagining|pretend\w*|hypothetical\w*|"
+    r"were\s+i|why\s+would|how\s+would|what\s+would)\b",
+    re.IGNORECASE,
+)
+
+
+def states_own_role_or_kill(text: str, *, role: Role) -> bool:
+    """Whether ``text`` leaks the speaker's own hidden role or a kill it made.
+
+    :data:`ROLE_LEAK_RULE` states the rule; this is it. Pure, deterministic and
+    role-conditioned: a CREWMATE never matches, because the statement being
+    counted is the one that costs the evaluation its validity.
+
+    The words alone are not the leak — the ASSERTION is. So a match is counted
+    only when nothing in front of it in the same sentence attributes it to
+    somebody else, denies it, or merely supposes or asks it
+    (:data:`_NOT_AN_ASSERTION`).
+    """
+
+    if role != "IMPOSTOR":
+        return False
+    for sentence in _SENTENCE_SPLIT.split(text):
+        for pattern in (_SELF_ROLE_STATEMENT, _SELF_KILL_STATEMENT):
+            found = pattern.search(sentence)
+            if found is None:
+                continue
+            if _NOT_AN_ASSERTION.search(sentence[: found.start()]):
+                # Someone else's words, a denial of them, or a supposition or
+                # question that puts them in play without asserting them. The
+                # fourth run's seed 7015 is the first case and the diagnosis
+                # counted it out; the third is the review of 2026-09-15's.
+                continue
+            return True
+    return False
+
+
+def count_leaking_turns(record: UnitRecord) -> int:
+    """How many of one unit's COMMITTED public turns leak their speaker's role.
+
+    Over ``record.turns`` — what the transcript actually carries, which is what
+    a later speaker and a later voter read — and off ``record.roles``, the
+    ground truth the run record holds in memory and nothing downstream of it
+    sees.
+    """
+
+    return sum(
+        1
+        for turn in record.turns
+        if _turn_was_authored(turn)
+        and states_own_role_or_kill(turn.free_text, role=record.roles[turn.speaker])
+    )
+
+
+#: A bracketed marker the meeting layer prepends to a rationale for display.
+#: Stripped before the OPENING of a rationale is read, so a ballot the guard
+#: annotated is judged on what its author wrote rather than on the annotation.
+_LEADING_MARKER: Final[re.Pattern[str]] = re.compile(r"^\s*\[[^\]]*\]\s*")
+
+
+def opens_with_a_self_tell(ballot: VoteBallot, *, role: Role) -> bool:
+    """Whether an impostor's ballot OPENS by naming its own role or kill.
+
+    The opening is the rationale's first sentence, after any bracketed marker
+    the meeting layer prepended. "Opens" rather than "contains" because that is
+    the shape the diagnosis measured — eleven of twelve impostor candidate
+    ballots on the fourth run began with the confession — and because a
+    rationale that reaches the same words after arguing for four hundred
+    characters is a different behaviour.
+    """
+
+    if not _ballot_was_authored(ballot):
+        return False
+    opening = _SENTENCE_SPLIT.split(
+        _LEADING_MARKER.sub("", ballot.rationale_text), maxsplit=1
+    )[0]
+    return states_own_role_or_kill(opening, role=role)
+
+
+def count_self_telling_ballots(record: UnitRecord) -> int:
+    """This unit's impostor-authored ballots that open with a self-tell."""
+
+    return sum(
+        1
+        for ballot in record.ballots
+        if record.roles[ballot.voter] == "IMPOSTOR"
+        and opens_with_a_self_tell(ballot, role="IMPOSTOR")
+    )
+
+
+class LengthStats(BaseModel):
+    """One prose field's character lengths, over the payloads that carried it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field: ProseField
+    #: Payloads the AUTHOR wrote, not draws: a fail-softed ballot is a draw
+    #: that produced no rationale and contributes no sample here.
+    samples: int
+    mean: float
+    p95: int
+    max: int
+
+
+class RoleSplitUsage(BaseModel):
+    """One arm's one call kind as authored by one hidden role.
+
+    The unit of account the fourth run's stop needed and the first calibration
+    did not have: it measured tokens, not role. Counts and lengths only.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    arm: str
+    call_type: CallType
+    #: The AUTHOR's hidden role, off the unit's own ground truth.
+    role: Role
+    #: Completed ledger rows this role drew on this schedule. The truncation
+    #: rate's denominator: a fail-softed ballot is still a draw.
+    draws: int
+    output_mean: float
+    output_p95: int
+    output_max: int
+    #: Draws whose completion reached its cap on either signal
+    #: (:func:`_truncation_signals`), and the provider's own word for each —
+    #: ``null`` where it reported none.
+    truncations: int
+    truncations_by_finish_reason: Mapping[str, int]
+    lengths: tuple[LengthStats, ...]
+
+
+def _length_stats(field: ProseField, values: Sequence[int]) -> LengthStats | None:
+    """One prose field's statistics, or ``None`` when nothing carried it."""
+
+    if not values:
+        return None
+    return LengthStats(
+        field=field,
+        samples=len(values),
+        mean=sum(values) / len(values),
+        p95=_percentile(values, 0.95),
+        max=max(values),
+    )
+
+
+def _role_of_call(call: CapturedCall, record: UnitRecord) -> Role:
+    """The hidden role of the player one ledger row was drawn for, or a stop.
+
+    Invalid input raises. A captured call the unit cannot attribute to a player
+    it holds a role for cannot be split by role, and filing it under a default
+    would move one of the two distributions this calibration exists to
+    separate.
+    """
+
+    agent_id = call.agent_id
+    if agent_id is None or PlayerId(agent_id) not in record.roles:
+        raise InstrumentError(
+            f"seed {record.seed}: a captured call names speaker {agent_id!r}, "
+            "which this unit holds no hidden role for; the role split cannot "
+            "say who drew it"
+        )
+    return record.roles[PlayerId(agent_id)]
+
+
+def _prose_lengths_by_role(
+    records: Sequence[UnitRecord],
+) -> Mapping[tuple[Role, ProseField], list[int]]:
+    """Every authored prose field's length, keyed by author role and field."""
+
+    lengths: dict[tuple[Role, ProseField], list[int]] = {}
+
+    def add(role: Role, field: ProseField, value: int) -> None:
+        lengths.setdefault((role, field), []).append(value)
+
+    for record in records:
+        for ballot in record.ballots:
+            if not _ballot_was_authored(ballot):
+                continue
+            add(
+                record.roles[ballot.voter],
+                "rationale_text",
+                len(ballot.rationale_text),
+            )
+        for turn in record.turns:
+            if not _turn_was_authored(turn):
+                continue
+            role = record.roles[turn.speaker]
+            add(role, "free_text", len(turn.free_text))
+            for claim in turn.claims:
+                reason = _claim_reason(claim)
+                if reason is not None:
+                    add(role, "claims_reason", len(reason))
+    return lengths
+
+
+def _role_split_rows(
+    arm: ArmName,
+    *,
+    records: Sequence[UnitRecord],
+    sampling: SamplingConfig,
+) -> tuple[RoleSplitUsage, ...]:
+    """One arm's call schedules split by the author's hidden role."""
+
+    own = [record for record in records if record.arm == arm]
+    lengths = _prose_lengths_by_role(own)
+    rows: list[RoleSplitUsage] = []
+    for call_type in CALL_TYPES:
+        fields = BALLOT_PROSE_FIELDS if call_type == "ballot" else TURN_PROSE_FIELDS
+        for role in ROLE_SPLIT_ORDER:
+            sample = [
+                call
+                for record in own
+                for call in record.calls
+                if call.disposition in COMPLETED_DISPOSITIONS
+                and calibration_call_type(call, sampling) == call_type
+                and _role_of_call(call, record) == role
+            ]
+            if not sample:
+                # A role that drew nothing on this schedule is a fact, not a
+                # bucket to average over.
+                continue
+            outputs = [call.output_tokens for call in sample]
+            truncated = [
+                call
+                for call in sample
+                if any(
+                    _truncation_signals(
+                        finish_reason=call.finish_reason,
+                        output_tokens=call.output_tokens,
+                        max_tokens=call.max_tokens,
+                    )
+                )
+            ]
+            by_reason: Counter[str] = Counter(
+                "null" if call.finish_reason is None else call.finish_reason
+                for call in truncated
+            )
+            rows.append(
+                RoleSplitUsage(
+                    arm=arm,
+                    call_type=call_type,
+                    role=role,
+                    draws=len(sample),
+                    output_mean=sum(outputs) / len(outputs),
+                    output_p95=_percentile(outputs, 0.95),
+                    output_max=max(outputs),
+                    truncations=len(truncated),
+                    truncations_by_finish_reason=dict(sorted(by_reason.items())),
+                    lengths=tuple(
+                        stats
+                        for stats in (
+                            _length_stats(field, lengths.get((role, field), []))
+                            for field in fields
+                        )
+                        if stats is not None
+                    ),
+                )
+            )
+    return tuple(rows)
 
 
 class CallTypeUsage(BaseModel):
@@ -5736,6 +6595,19 @@ class CalibrationArmUsage(BaseModel):
     unaccounted_attempts: int
     aborted_attempts: int
     attempts_by_trigger: Mapping[str, int]
+    #: The second calibration's own unit of account: this arm's two call
+    #: schedules split by the AUTHOR's hidden role, with the prose-field
+    #: lengths and the truncation counts. Empty on a mode that measures no
+    #: role split, so the first calibration's committed shape still parses.
+    by_role: tuple[RoleSplitUsage, ...] = ()
+    #: Impostor-authored ballots whose rationale OPENS by naming that role or a
+    #: kill (:func:`opens_with_a_self_tell`).
+    self_telling_impostor_ballots: int = 0
+    #: The pre-declared leak diagnostic (:data:`ROLE_LEAK_RULE`): committed
+    #: public turns whose speaker stated its own hidden role or its own kill,
+    #: and the units carrying any.
+    leaking_turns: int = 0
+    units_with_a_leaking_turn: int = 0
 
 
 class CeilingProposal(BaseModel):
@@ -5756,13 +6628,21 @@ class CeilingProposal(BaseModel):
     unit_max_output_tokens: int
     run_max_input_tokens: int
     run_max_output_tokens: int
-    #: Whether :func:`assert_limits_are_feasible` accepts these four figures for
-    #: the whole run, checked against the CALIBRATED constants this tree
-    #: carries. False on a fixture-driven rehearsal, whose 66-token calls are a
-    #: serialisation length rather than a measurement, and the refusal below
-    #: says so in the gate's own words rather than leaving a reader to infer it.
+    #: Whether :func:`assert_limits_are_feasible` accepts these four figures
+    #: for the whole run, checked against the maxima THIS calibration measured.
+    #: That is the proposal's own claim: these ceilings pay for a run of the
+    #: units this sitting saw.
     clears_the_feasibility_gate: bool
     feasibility_refusal: str | None
+    #: The same four figures against the CALIBRATED constants this tree carries
+    #: — the largest unit the committed usage profile holds. False on a
+    #: fixture-driven rehearsal, whose 66-token calls are a serialisation
+    #: length rather than a measurement, and false on any sitting whose units
+    #: ran smaller than the profile's; the refusal below says which in the
+    #: gate's own words rather than leaving a reader to infer it. Defaulted, so
+    #: an output written before this field existed still parses.
+    clears_the_committed_profiles_gate: bool = False
+    committed_profile_refusal: str | None = None
 
 
 class CalibrationInputs(BaseModel):
@@ -5796,6 +6676,16 @@ class CalibrationReport(BaseModel):
     instrument_sha256: str
     prompt_set: str
     inputs: CalibrationInputs
+    #: Every record the draw spanned, in draw order, each with its own sha256
+    #: and the seeds taken from it. ``inputs`` is the first of them, kept as
+    #: its own field because the first calibration drew exactly one record and
+    #: its committed output — and the refresh path that reads it — names it
+    #: there. Empty on a payload written before the draw could span records.
+    input_records: tuple[CalibrationInputs, ...] = ()
+    #: Which authorized mode of :data:`CALIBRATION_MODES` this sitting ran.
+    #: Defaulted for the same reason: the first calibration's output predates
+    #: the table that named it.
+    mode: str = CALIBRATION_MODES[0].name
     limits: RunLimits
     sampling: SamplingConfig
     paired_seeds: int
@@ -5809,6 +6699,10 @@ class CalibrationReport(BaseModel):
     unit_usage: tuple[CalibrationUnitUsage, ...]
     proposal: CeilingProposal
     percentile_rule: str
+    #: The leak diagnostic's rule, quoted in the output for the same reason
+    #: :data:`PERCENTILE_RULE` is: a count whose rule lives only in a module is
+    #: a count a reader cannot check. Empty on a mode that reports no leak.
+    role_leak_rule: str = ""
     elapsed_seconds: float
     model_work_seconds: float
     seconds_per_attempt: float
@@ -5872,8 +6766,15 @@ def _summarize_calibration_arm(
     usage: ArmUsage,
     attempts: TransportAttempts,
     sampling: SamplingConfig,
+    by_role: bool = False,
 ) -> CalibrationArmUsage:
-    """One arm's totals and its two call schedules, over the units it ran."""
+    """One arm's totals and its two call schedules, over the units it ran.
+
+    ``by_role`` adds the second calibration's role split and its two
+    diagnostics. Off by default, because the first calibration's committed
+    output was written without them and re-deriving it has to keep producing
+    the same bytes.
+    """
 
     own = [record for record in records if record.arm == arm]
     if not own:
@@ -5960,6 +6861,20 @@ def _summarize_calibration_arm(
             if call.disposition == "aborted"
         ),
         attempts_by_trigger=dict(attempts.by_trigger),
+        by_role=(
+            _role_split_rows(arm, records=own, sampling=sampling) if by_role else ()
+        ),
+        self_telling_impostor_ballots=(
+            sum(count_self_telling_ballots(record) for record in own) if by_role else 0
+        ),
+        leaking_turns=(
+            sum(count_leaking_turns(record) for record in own) if by_role else 0
+        ),
+        units_with_a_leaking_turn=(
+            sum(1 for record in own if count_leaking_turns(record) > 0)
+            if by_role
+            else 0
+        ),
     )
 
 
@@ -5999,7 +6914,12 @@ def ceiling_proposal(
         run_max_output_tokens=_rounded_up(
             max(
                 planned * mean_output * CEILING_PROPOSAL_RUN_MARGIN,
-                planned * max_output,
+                # The in-flight headroom term the gate enforces
+                # (:func:`assert_limits_are_feasible`): the run's last call is
+                # pre-flighted against the run budget after everything before
+                # it has been charged, so a ceiling sized at exactly what its
+                # units charge cannot pay for its own last call.
+                planned * max_output + sampling.turn_max_tokens,
             )
         ),
         unit_max_input_tokens=_rounded_up(max_input * CEILING_PROPOSAL_UNIT_MULTIPLE),
@@ -6010,16 +6930,34 @@ def ceiling_proposal(
         elapsed_seconds=AUTHORIZED_ELAPSED_SECONDS,
         model_work_seconds=AUTHORIZED_MODEL_WORK_SECONDS,
     )
-    # Run the gate on the proposal rather than describing it. The comparison is
-    # against the CALIBRATED constants this tree carries — the largest unit the
-    # committed profile holds — so a rehearsal whose fixture reports a tenth of
-    # a real call's tokens is told it proposes ceilings this tree would refuse,
-    # instead of publishing them as if they were sized on a measurement.
+    # Run the gate on the proposal rather than describing it, twice and
+    # against two different calibrations of it.
+    #
+    # The proposal's OWN claim is checked against the maxima this sitting
+    # measured: these ceilings pay for a run of the units it saw. Checking that
+    # claim against the tree's committed constants — which is what this did
+    # before the second calibration's card — answers a different question, and
+    # answers it with a profile built from some earlier run's archives.
     refusal: str | None = None
+    try:
+        assert_limits_are_feasible(
+            limits=proposed,
+            sampling=sampling,
+            units=planned,
+            calibrated_unit_input_tokens=max_input,
+            calibrated_unit_output_tokens=max_output,
+        )
+    except LimitsInfeasible as infeasible:
+        refusal = str(infeasible)
+    # And the committed profile's, reported beside it: a rehearsal whose
+    # fixture reports a tenth of a real call's tokens is told it proposes
+    # ceilings this tree would refuse, instead of publishing them as if they
+    # were sized on a measurement.
+    committed_refusal: str | None = None
     try:
         assert_limits_are_feasible(limits=proposed, sampling=sampling, units=planned)
     except LimitsInfeasible as infeasible:
-        refusal = str(infeasible)
+        committed_refusal = str(infeasible)
     return CeilingProposal(
         rule=CEILING_PROPOSAL_RULE,
         units=planned,
@@ -6034,6 +6972,8 @@ def ceiling_proposal(
         run_max_output_tokens=proposed.run_max_output_tokens,
         clears_the_feasibility_gate=refusal is None,
         feasibility_refusal=refusal,
+        clears_the_committed_profiles_gate=committed_refusal is None,
+        committed_profile_refusal=committed_refusal,
     )
 
 
@@ -6058,9 +6998,10 @@ def proposed_limits(proposal: CeilingProposal) -> RunLimits:
 
 
 def run_calibration(
-    record: Path,
+    record: Path | None = None,
     *,
     output_dir: Path,
+    records: Sequence[Path] | None = None,
     client: LLMClient | None = None,
     provider: str = "fake",
     live_invocation: LiveRunInvocation | None = None,
@@ -6081,13 +7022,22 @@ def run_calibration(
     on this path at all, and :func:`verify_calibration_set` refuses
     :data:`~experiments.held_out_prefixes.MANIFEST_PATH` by name.
 
-    No checkpoint and no resume. A calibration is ten units inside a ninety
-    minute window; a stop is reported with its partial accounting and the
+    No checkpoint and no resume. A calibration is one sitting inside its own
+    elapsed window; a stop is reported with its partial accounting and the
     calibration is re-run, which spends development data the evaluation is not
     holding in reserve.
+
+    Which of the two authorized modes this is comes from the three values that
+    size the spend, through :func:`calibration_mode_for`, and the mode decides
+    two things nothing else does: whether a per-call truncation is a
+    measurement, and whether the report carries the role split and the leak
+    diagnostic. ``record`` names one converted record and ``records`` the
+    draw's records in order; neither names the default, which is every
+    converted band in :data:`CONVERTED_BANDS`' own order, and both are held to
+    a PREFIX of that order by :func:`_draw_in_converted_order`.
     """
 
-    assert_calibration_is_authorized(
+    mode = assert_calibration_is_authorized(
         provider=provider,
         invocation=live_invocation,
         limits=limits,
@@ -6096,19 +7046,25 @@ def run_calibration(
         repo_root=repo_root,
     )
     assert_client_matches_provider(provider=provider, client=client)
-    inputs = verify_calibration_set(
-        record, repo_root=repo_root, paired_seeds=paired_seeds
+    draw = verify_calibration_draw(
+        records=_draw_records(record=record, records=records),
+        repo_root=repo_root,
+        paired_seeds=paired_seeds,
     )
     arms = instrument_arms()
     harness = _build_harness(
-        client=client, limits=limits, sampling=sampling, invocation=live_invocation
+        client=client,
+        limits=limits,
+        sampling=sampling,
+        invocation=live_invocation,
+        truncation_is_a_measurement=mode.truncation_is_a_measurement,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     state = _RunState()
-    records: list[UnitRecord] = []
-    planned = len(inputs.prefixes) * len(arms)
+    unit_records: list[UnitRecord] = []
+    planned = draw.paired_seeds * len(arms)
     started = time.monotonic()
-    for prefix in inputs.prefixes:
+    for prefix in draw.prefixes:
         for arm in arms:
             try:
                 harness.deadline.check()
@@ -6144,14 +7100,15 @@ def run_calibration(
                 ) from exc
             state.charge(arm.name, unit.calls, unit.transport_attempts)
             state.completed += 1
-            records.append(unit)
+            unit_records.append(unit)
     summaries = tuple(
         _summarize_calibration_arm(
             arm.name,
-            records=records,
+            records=unit_records,
             usage=state.usage_by_arm.get(arm.name, ArmUsage()),
             attempts=state.attempts_by_arm.get(arm.name, TransportAttempts()),
             sampling=sampling,
+            by_role=mode.truncation_is_a_measurement,
         )
         for arm in arms
     )
@@ -6160,30 +7117,26 @@ def run_calibration(
         report_schema=CALIBRATION_SCHEMA,
         provider=provider,
         model_ids=tuple(
-            sorted({call.model for unit in records for call in unit.calls})
+            sorted({call.model for unit in unit_records for call in unit.calls})
         ),
         execution_mode=AUTHORIZED_EXECUTION_MODE,
         instrument_sha256=instrument_sha256(),
         prompt_set=AUTHORIZED_PROMPT_SET,
-        inputs=CalibrationInputs(
-            record=str(inputs.record_path.relative_to(repo_root.resolve())),
-            record_sha256=inputs.record_sha256,
-            status="development",
-            band_first_seed=inputs.band.first_seed,
-            band_last_seed=inputs.band.last_seed,
-            seeds=inputs.seeds,
-            accepted_in_record=inputs.accepted_in_record,
-            skipped_in_record=inputs.skipped_in_record,
+        inputs=_calibration_inputs(draw.sets[0], repo_root),
+        input_records=tuple(
+            _calibration_inputs(drawn, repo_root) for drawn in draw.sets
         ),
+        mode=mode.name,
         limits=limits,
         sampling=sampling,
         paired_seeds=paired_seeds,
-        units=len(records),
+        units=len(unit_records),
         arms=summaries,
-        calls=_call_rows(records, sampling),
-        unit_usage=_unit_rows(records),
+        calls=_call_rows(unit_records, sampling),
+        unit_usage=_unit_rows(unit_records),
         proposal=ceiling_proposal(summaries, sampling=sampling),
         percentile_rule=PERCENTILE_RULE,
+        role_leak_rule=ROLE_LEAK_RULE if mode.truncation_is_a_measurement else "",
         elapsed_seconds=time.monotonic() - started,
         model_work_seconds=harness.work_clock.seconds,
         seconds_per_attempt=(
@@ -6197,8 +7150,23 @@ def run_calibration(
     # development data and leaking them would convert nothing, but the rule
     # this instrument is built on is that a REPORT carries counts, and one rule
     # applied on one path only is a rule that has already started to drift.
-    assert_report_holds_no_prefix_bytes(report, inputs.prefixes)
+    assert_report_holds_no_prefix_bytes(report, draw.prefixes)
     return report
+
+
+def _calibration_inputs(drawn: CalibrationSet, repo_root: Path) -> CalibrationInputs:
+    """One drawn record as the report's inputs row: path, digest, seeds."""
+
+    return CalibrationInputs(
+        record=str(drawn.record_path.relative_to(repo_root.resolve())),
+        record_sha256=drawn.record_sha256,
+        status="development",
+        band_first_seed=drawn.band.first_seed,
+        band_last_seed=drawn.band.last_seed,
+        seeds=drawn.seeds,
+        accepted_in_record=drawn.accepted_in_record,
+        skipped_in_record=drawn.skipped_in_record,
+    )
 
 
 def usage_profile_from_calibration(report: CalibrationReport) -> dict[str, object]:
@@ -6249,9 +7217,22 @@ def usage_profile_from_calibration(report: CalibrationReport) -> dict[str, objec
         "schema": "fresh-deduction-usage-profile/1",
         "built_from": {
             "calibration": CALIBRATION_SCHEMA,
+            "mode": report.mode,
             "provider": report.provider,
             "record": report.inputs.record,
             "band": f"{report.inputs.band_first_seed}-{report.inputs.band_last_seed}",
+            # Every record the draw spanned, because the second calibration's
+            # sixty seeds do not fit in one: the two keys above name the first
+            # of them, which is what a profile built from the five-seed mode
+            # has always carried, and this names all of them.
+            "records": [
+                {
+                    "record": row.record,
+                    "band": f"{row.band_first_seed}-{row.band_last_seed}",
+                    "seeds": len(row.seeds),
+                }
+                for row in report.input_records
+            ],
             "instrument_sha256": report.instrument_sha256,
             "note": (
                 "Token counts only, measured by the development calibration on "
@@ -6340,10 +7321,22 @@ def _run_calibration_from_args(
     the evaluation's flags was what made the CLI hard to hold in the head.
     """
 
+    mode = _calibration_mode_named(args.calibration_mode, parser)
+    single_record_mode = mode is CALIBRATION_MODES[0]
+    if not single_record_mode and args.calibration_record is not None:
+        parser.error(
+            f"the {mode.name} calibration draws across the converted bands in "
+            "their own order and takes no single --calibration-record; the "
+            "draw is that list and the seed count, with nothing left to choose"
+        )
     record = (
-        _REPO_ROOT / DEFAULT_CALIBRATION_RECORD
-        if args.calibration_record is None
-        else args.calibration_record
+        (
+            _REPO_ROOT / DEFAULT_CALIBRATION_RECORD
+            if args.calibration_record is None
+            else args.calibration_record
+        )
+        if single_record_mode
+        else None
     )
     if args.dry_run or args.provider == "fake":
         with TemporaryDirectory() as directory:
@@ -6355,6 +7348,9 @@ def _run_calibration_from_args(
                 if args.output_dir is None
                 else args.output_dir,
                 provider="fake",
+                limits=mode.limits,
+                sampling=mode.sampling,
+                paired_seeds=mode.paired_seeds,
             )
     else:
         if args.execution_manifest is None or not args.i_am_the_runner:
@@ -6374,7 +7370,12 @@ def _run_calibration_from_args(
         # run's path is: the verified inputs are what build_authorized_client
         # requires, so the order cannot be reversed by editing these lines.
         inputs = assert_ready_for_a_calibration(
-            record, provider=args.provider, invocation=invocation
+            record,
+            provider=args.provider,
+            invocation=invocation,
+            limits=mode.limits,
+            sampling=mode.sampling,
+            paired_seeds=mode.paired_seeds,
         )
         report = run_calibration(
             record,
@@ -6382,9 +7383,34 @@ def _run_calibration_from_args(
             client=build_authorized_client(inputs),
             provider=args.provider,
             live_invocation=invocation,
+            limits=mode.limits,
+            sampling=mode.sampling,
+            paired_seeds=mode.paired_seeds,
         )
     _emit_report(report.model_dump_json(indent=2), args.json)
     return 0
+
+
+def _calibration_mode_named(
+    name: str, parser: argparse.ArgumentParser
+) -> CalibrationMode:
+    """The authorized mode this CLI value names, or exit 2.
+
+    ``argparse``'s own ``choices`` already holds the value to the table; this
+    turns it into the object, and refuses an unknown one rather than falling
+    back to the first mode — which would run a five-seed spend under a name
+    nobody recognised.
+    """
+
+    for mode in CALIBRATION_MODES:
+        if mode.name == name:
+            return mode
+    parser.error(
+        f"{name!r} is not an authorized calibration mode; the authorized modes "
+        + ", ".join(mode.name for mode in CALIBRATION_MODES)
+        + " are the only spends the manifest carries a clause for"
+    )
+    raise AssertionError("unreachable: parser.error exits")
 
 
 #: The calibration's default input: the first band a stopped run converted. A
@@ -6411,10 +7437,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--calibrate",
         action="store_true",
         help=(
-            "measure what the provider charges on the first "
-            f"{CALIBRATION_PAIRED_SEEDS} accepted seeds of a CONVERTED band, "
-            "both arms, under the calibration limits. Grades nothing and reads "
-            "no held-out prefix"
+            "measure what the provider charges on the accepted seeds of the "
+            "CONVERTED bands, both arms, under one authorized mode's limits "
+            "(see --calibration-mode). Grades nothing and reads no held-out "
+            "prefix"
         ),
     )
     parser.add_argument(
@@ -6423,7 +7449,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help=(
             "the converted band's freeze record the calibration draws from "
-            f"(default: {DEFAULT_CALIBRATION_RECORD})"
+            f"(default: {DEFAULT_CALIBRATION_RECORD}). A draw is a PREFIX of "
+            "the converted bands in the order they were converted, so that "
+            "record is also the only one a draw may start at. The "
+            f"{CALIBRATION_MODES[1].name} mode draws across the converted "
+            "bands in order and refuses this flag"
+        ),
+    )
+    parser.add_argument(
+        "--calibration-mode",
+        default=CALIBRATION_MODES[0].name,
+        choices=[mode.name for mode in CALIBRATION_MODES],
+        help=(
+            "which authorized calibration to run: "
+            + "; ".join(mode.describe() for mode in CALIBRATION_MODES)
         ),
     )
     parser.add_argument(
