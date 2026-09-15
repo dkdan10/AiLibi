@@ -48,6 +48,20 @@ This directory records the unadopted follow-through to the owner's independent
   per-arm, per-call-type token profile, zero refusals and zero defaults on the
   corrected account prompts, and a re-sized ceiling proposal that authorizes
   nothing.
+- [Development calibration 2, 2026-09-15](calibration-2-2026-09-15/CALIBRATION.md)
+  measures what the FIFTH run would draw: the first sixty accepted seeds across
+  the converted bands in the order they were converted — all fifty of the
+  3000–3999 record then 5000–5009 of the 5000–5999 record — both arms, once, at
+  the run's own caps and under the calibration-2 limits. It grades nothing
+  either, and for the same reasons. Its output adds the unit of account the
+  fourth run's stop needed: the two call schedules split by the author's hidden
+  role, with the prose-field lengths, the truncation count and its
+  `finish_reason`, the count of impostor ballots that open by naming that role
+  or a kill, and the pre-declared per-arm public-transcript role-leak count. It
+  measured zero truncations in sixty impostor-authored candidate ballot draws,
+  zero refusals and zero defaults, and a ceiling proposal whose run-level input
+  figure the standing authorization does not yet clear — which is a finding for
+  the fifth authorization card and authorizes nothing here.
 
 The reproducible development command is:
 

@@ -59,3 +59,11 @@ comparison. Fresh model decisions require the [preregistration](preregistration.
 a frozen execution manifest and an explicitly authorized provider/token/wall/cost
 budget. Neither this capture nor completion of offline implementation authorizes
 spending, adoption or merging into main.
+
+- 2026-09-15: the second development calibration of the fresh-model deduction
+  instrument ran once against the authorized provider on sixty paired
+  development seeds, and its aggregates are archived at
+  [calibration-2-2026-09-15/CALIBRATION.md](calibration-2-2026-09-15/CALIBRATION.md).
+  It measures spend and shape only — no grader ran, no paired statistic was
+  computed and no meeting outcome is recorded — so nothing in it authorizes
+  spending, adoption or merging into main either.
