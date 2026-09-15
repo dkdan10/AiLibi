@@ -43,6 +43,7 @@ from pydantic import BaseModel
 import experiments.fresh_deduction_instrument as instrument
 from experiments.fresh_deduction_instrument import DryRunProvider
 from llm.client import CallKind, LLMResponse, TokenUsage
+from llm.fake_provider import FAKE_FINISH_REASON
 from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot
 from tests.experiments.burned_call_double import (
     EMPTY_BODY_ERROR,
@@ -67,6 +68,16 @@ _ACCOUNTS_BALLOT_MARKER: Final[str] = "Living candidates:"
 _REFERENCE_BALLOT_MARKER: Final[str] = "## Valid ejection targets"
 
 
+#: What this double reports as the reason generation stopped when the archived
+#: row carries no reading of its own — which is every row of the profile
+#: committed on 2026-09-14, measured before the field existed. A DOUBLE's word
+#: and not an archive's: the replay re-serves a payload the dry-run provider
+#: writes, so `"stop"` describes THIS call honestly, while the archive's own
+#: silence stays visible on `UsageRow.finish_reason`. Where the archive DOES
+#: carry a reading, that reading is replayed instead.
+REPLAYED_FINISH_REASON: Final[str] = FAKE_FINISH_REASON
+
+
 @dataclass(frozen=True)
 class UsageRow:
     """One archived call, as the profile carries it.
@@ -84,6 +95,13 @@ class UsageRow:
     input_tokens: int
     output_tokens: int
     refused: bool = False
+    #: The provider's own word for why this archived call stopped, when the
+    #: calibration that measured it recorded one. ``None`` for every row of the
+    #: profile committed on 2026-09-14, which was measured before the reading
+    #: was captured: an archive's silence is carried as silence, and what the
+    #: double substitutes for it on the wire is a DOUBLE's ``"stop"``, said so
+    #: at :data:`REPLAYED_FINISH_REASON`.
+    finish_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +204,33 @@ def _row(entry: Mapping[str, object]) -> UsageRow:
         input_tokens=int(str(entry["input_tokens"])),
         output_tokens=int(str(entry["output_tokens"])),
         refused=entry.get("disposition") == "billed_and_refused",
+        # Read with ``entry.get`` exactly as ``refused`` is, so the profile
+        # committed before this field existed loads and reads null rather than
+        # raising.
+        finish_reason=_finish_reason(entry.get("finish_reason")),
+    )
+
+
+def _finish_reason(value: object) -> str | None:
+    """One archived row's reading, or ``None`` when the archive is silent."""
+
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"a profile row carries finish reason {value!r}")
+    return value
+
+
+def _replayed_finish_reason(row: UsageRow) -> str:
+    """What the replayed call reports: the archive's reading, or this double's.
+
+    :data:`REPLAYED_FINISH_REASON` where the archive is silent, so every
+    offline path exercises the field — and it is this double's own word, not a
+    measurement the calibration made.
+    """
+
+    return (
+        row.finish_reason if row.finish_reason is not None else REPLAYED_FINISH_REASON
     )
 
 
@@ -318,6 +363,7 @@ class UsageReplayProvider(DryRunProvider):
                 prompt=prompt,
                 input_tokens=row.input_tokens,
                 output_tokens=row.output_tokens,
+                finish_reason=_replayed_finish_reason(row),
             )
         response = await super().complete(
             prompt=prompt,
@@ -335,6 +381,7 @@ class UsageReplayProvider(DryRunProvider):
             ),
             cost_usd=response.cost_usd,
             model=response.model,
+            finish_reason=_replayed_finish_reason(row),
         )
 
     def _spoil(self, *, arm: str, schema: type[BaseModel], prompt: str) -> None:
@@ -345,6 +392,7 @@ class UsageReplayProvider(DryRunProvider):
                 prompt=prompt,
                 input_tokens=burned.input_tokens,
                 output_tokens=burned.output_tokens,
+                finish_reason=_replayed_finish_reason(burned),
             )
         if self.mode == "empty_body":
             raise RuntimeError(EMPTY_BODY_ERROR)
