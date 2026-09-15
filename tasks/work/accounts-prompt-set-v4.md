@@ -6,9 +6,9 @@
 
 The candidate arm's account templates carry the three bounds the reference
 family already carries: a rationale budget with the truncation warning on the
-ballot, the observation-id form with a literal example and a pre-filled
-skeleton, and a one-phrase reason with a "then stop" reply instruction on the
-turn. `ACCOUNT_PROMPT_SET_REVISION` reads `v4`, so no recorded stamp can
+ballot, the observation-id form shown as a literal example in prose over a
+skeleton that keeps the field null, and a one-phrase reason with a "then stop"
+reply instruction on the turn. `ACCOUNT_PROMPT_SET_REVISION` reads `v4`, so no recorded stamp can
 straddle two generations of the bodies, and the arm-surface digest moves with
 them. The execution manifest states, before the next run measures anything,
 both ways the candidate's measured surface moves on the treatment arm alone:
@@ -77,6 +77,36 @@ manifest; fix A is the only one that touches nothing the run is scored by.
 
 ## Acceptance
 
+- [x] Review correction: the v4 ballot skeleton keeps
+  `primary_reason_observation_id` null, as `vote_ballot.j2:267`'s skeleton
+  does. Three independent verifiers reproduced one residual: the skeleton
+  pre-filled the field with the literal `{{ voter_id }}:12:0`, and (a) a
+  literal is copyable verbatim into an EJECT, where an id that is not in the
+  voter's own valid set is nulled (`meetings/manager.py:3241-3250`, no
+  suffix-recovery branch by design, `:364-367`) and the now-uncited ejection
+  coerced to SKIP (`:3778-3800`) — the exact defect fix B repairs, re-entering
+  through its own example; (b) on the one voter whose real ids the literal
+  happens to match (voter `p-N`, tick 12, seq 0), `grade_supported` cannot
+  tell a copied example from a citation the voter made, so the treatment arm
+  could score a citation it never made; (c) the reference family keeps the
+  field `null` in its skeleton and shows the id FORM in prose only. The form
+  stays in the prose, built from the voter's own id and without the `obs ` tag
+  word, and the prose now says plainly that an ejection resting on a memory
+  line replaces that null with the id copied from one of the voter's OWN
+  memory lines. The skeleton is a SKIP, which the same line already says needs
+  no citation. No reference template is touched.
+  `tests/agents/test_public_account_prompts.py::test_every_citation_the_ballot_shows_is_the_bare_id_the_layer_accepts`
+  asserts both halves — the bare example in the prose, `null` in the skeleton
+  — with a planted failure below.
+- [x] Review correction: the third branch of `accusation_round_accounts.j2:16`
+  is rendered by a test. Fix C's bound was extended to the no-prior-turn
+  opt-in branch (decision 4 below), but every render case passed a
+  `prior_turn`, so that branch was reachable by no test and deleting its bound
+  left the suite green — a route-around a verifier reproduced and this round
+  reproduces again below. `::test_the_account_turn_asks_for_one_short_phrase_and_then_a_stop`
+  now also renders the statement with `prior_turn=None`, on every arm and both
+  roles, through the same renderer on the same synthetic, seed-free inputs,
+  with a planted failure below.
 - [x] Review correction: neither the manifest's dated section nor this card
   claims any more that the turn bound is measurement-neutral.
   `grade_citation_relevance` (`experiments/fresh_deduction_instrument.py:3765`)
@@ -119,8 +149,11 @@ manifest; fix A is the only one that touches nothing the run is scored by.
   the reference shows at `vote_ballot.j2:267`, the bare
   `{agent}:{tick}:{seq}` id WITHOUT the `obs ` tag word that
   `agents/memory/store.py:590` renders as the `[obs ...]` prefix, with a
-  literal example built from the voter's own id; `:23`'s skeleton pre-fills
-  `primary_reason_observation_id` with that example instead of `null`. No
+  literal example built from the voter's own id; `:23`'s skeleton keeps
+  `primary_reason_observation_id` null, as the reference skeleton does, so no
+  literal id sits in the object a model copies verbatim. (This item once
+  mandated the pre-fill, following the memo's fix-B sketch; round 3 of review
+  withdrew that half and the prose alone now carries the form.) No
   prose is aimed at `considered_alternatives`: it is
   `tuple[PlayerId, ...]` (`meetings/schemas.py:765`) and the arm already files
   non-id prose there.
@@ -288,7 +321,8 @@ moves, so the determinism story in `docs/architecture.md`'s "Determinism and
 the substrate ladder" is untouched and both account levers stay OFF by default.
 
 - `agents/strategic/prompts/qwen3_6_27b/vote_ballot_accounts.j2` — fixes A and
-  B, both on the instruction line and the response skeleton.
+  B, both on the instruction line and the response skeleton (which round 3
+  returned to `null`).
 - `agents/strategic/prompts/qwen3_6_27b/_account_rules.j2` — fix C's `"reason"`
   bound, on the accusation and the corroboration shape.
 - `agents/strategic/prompts/qwen3_6_27b/accusation_round_accounts.j2` — fix C's
@@ -312,16 +346,19 @@ the substrate ladder" is untouched and both account levers stay OFF by default.
    fields in the same words, which is the property that makes the reference
    arm's measured behaviour evidence for the candidate's.
 2. **The citation example is shown as a form, and said to be one.** The
-   skeleton pre-fills `primary_reason_observation_id` with the voter's own id
-   (`"{{ voter_id }}:12:0"`) as the card requires, and the line above it says in
-   as many words that the skeleton shows the FORM rather than the evidence and
-   must be replaced or nulled. Without that sentence a pre-filled example is an
-   invitation to copy a literal id, which the meeting layer would null exactly
-   as it nulled the tag-word ids.
+   prose shows the form — the bare id, built from the voter's own id — and the
+   skeleton keeps `primary_reason_observation_id` null, which is what the
+   reference skeleton does and what a SKIP exemplar needs. As first delivered
+   the skeleton pre-filled the literal instead, with a sentence beside it
+   saying the skeleton shows the FORM rather than the evidence; round 3 of
+   review withdrew the pre-fill, because a literal in the copied object is an
+   invitation to copy an id the meeting layer nulls exactly as it nulled the
+   tag-word ids, and a sentence asking a model not to copy it is the weaker
+   half of the pair.
 3. **The `[obs ...]` wrapper is named, and the id shown bare.** The prose says
    memory lines render as `[obs p-1:12:0]` and that the id to copy excludes the
    tag word; every id the prompt SHOWS is the bare `{agent}:{tick}:{seq}` form,
-   which is what a test now asserts over the whole rendered ballot. Naming the
+   which is what a test now asserts over its prose. Naming the
    wrapper is what the reference does, and the defect was not that voters did
    not cite — 14 of 17 candidate EJECTs did — but that they copied the dressing.
 4. **Fix C reached the third branch of the same line.** The card names the two
@@ -359,7 +396,7 @@ the substrate ladder" is untouched and both account levers stay OFF by default.
 | Fix | Before (`10a19df8`) | After |
 | --- | --- | --- |
 | A, rationale budget | "State a concise reason and honest confidence"; skeleton `"rationale_text":"<one short reason>"` | "ONE short sentence (~20 words) in your own voice ... Keep the whole object compact: a long rationale can overrun the output limit and truncate the JSON, which discards your vote"; skeleton `"<one short sentence, ~20 words>"` |
-| B, citation form | "a reference copied from YOUR OWN private memory"; skeleton `"primary_reason_observation_id":null` | the bare id named and shown — `(e.g. "primary_reason_observation_id": "p-1:12:0")` — with the `[obs ...]` wrapper named as dressing; skeleton pre-filled with that form |
+| B, citation form | "a reference copied from YOUR OWN private memory"; skeleton `"primary_reason_observation_id":null` | the bare id named and shown — `(e.g. "primary_reason_observation_id": "p-1:12:0")` — with the `[obs ...]` wrapper named as dressing; skeleton keeps the field `null` (round 3) |
 | C, turn bound | `"reason":"<reason>"` x2; "explain what it does and does not establish" | `"reason":"<one short phrase>"` x2; "Write your reply as 1-2 short sentences plus your structured items, then stop" (and the free-text and no-prior-turn branches likewise) |
 
 ### The one-sided effect, declared
@@ -423,7 +460,7 @@ tests/agents/test_public_account_prompts.py -q -k <selector>`.
 | Fix A: the truncation warning deleted | `-k bounds_its_rationale` | `1 failed, 89 deselected` — `assert 'a long rationale can overrun the output limit and truncate the JSON, which discards your vote' in ...` |
 | Fix A: the budget back to "state a concise reason" | `-k bounds_its_rationale` | `1 failed, 89 deselected` — `assert 'ONE short sentence (~20 words)' in ...` |
 | Fix B: the run's own defect — `obs ` put back into the example id | `-k bare_id` | `1 failed, 89 deselected` — `assert None ... re.compile('p-\d+:\d+:\d+').fullmatch('obs p-1:12:0')` |
-| Fix B: the skeleton back to `null` | `-k bare_id` | `1 failed, 89 deselected` — `'"primary_reason_observation_id":null' is contained here` |
+| Fix B: the skeleton pre-filled with the literal example again | `-k bare_id` | `1 failed, 89 deselected` — `assert '"primary_reason_observation_id":null' in '{"voter":"p-1",...'` (row replaced in round 3: the delivered skeleton is `null`, so the round-1 row's plant — "the skeleton back to `null`" — is no longer a plant at all) |
 | Fix C: `"reason":"<reason>"` restored on the accusation shape | `-k one_short_phrase` | `5 failed, 1 passed, 84 deselected` — every arm that renders the shape menu; the attributed-only impostor renders no menu and is correctly unaffected (count corrected in round 1 of review) |
 | The revision wound back to `v3` with the bodies bound | `-k older_revision` | `1 failed, 89 deselected` — `AssertionError: assert 'v3' not in frozenset({'v1', 'v2', 'v3'})` |
 

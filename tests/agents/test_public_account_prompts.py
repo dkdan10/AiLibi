@@ -1096,6 +1096,39 @@ def _v4_ballot() -> str:
     return vote
 
 
+def _account_statement(
+    *,
+    common: Literal[1] | None,
+    attributed: Literal[1] | None,
+    is_impostor: bool,
+    prior_turn: MeetingTurn | None,
+) -> str:
+    """One account turn prompt, with or without a turn to answer.
+
+    `_account_prompts` always passes a `prior_turn`, so the reply branches of
+    `accusation_round_accounts.j2` are the only ones its callers reach. This
+    renders the opt-in shape -- no prior turn -- through the same renderer on
+    the same synthetic, seed-free inputs.
+    """
+
+    renderers = build_prompt_renderers(
+        "qwen3_6_27b",
+        env={},
+        public_account_version=common,
+        attributed_testimony_version=attributed,
+    )
+    turn = _spoken_turn("Where were you?")
+    return renderers.statement(
+        agent_id="p-1",
+        rendered_memory="own memory",
+        transcript=MeetingTranscript(turns=(turn,)),
+        contradictions=(),
+        prior_turn=prior_turn,
+        turn_kind="reply" if prior_turn is not None else "opt_in",
+        is_impostor=is_impostor,
+    )
+
+
 def test_the_ballot_bounds_its_rationale_and_warns_what_a_long_one_costs() -> None:
     # Fix A. Both sentences, because the budget without the consequence is the
     # instruction the candidate family already carried in weaker words ("a
@@ -1107,22 +1140,34 @@ def test_the_ballot_bounds_its_rationale_and_warns_what_a_long_one_costs() -> No
 
 
 def test_every_citation_the_ballot_shows_is_the_bare_id_the_layer_accepts() -> None:
-    # Fix B. Two things have to hold: an example is shown at all (the
-    # reference's inoculation, which the candidate lacked), and EVERY id the
-    # prompt shows is the bare form -- an example carrying the `obs ` tag word
-    # would teach the exact string the meeting layer nulls.
+    # Fix B, as review corrected it in round 3. Two things have to hold, and
+    # they are not the same thing.
+    #
+    # The PROSE shows the form: an example at all (the reference's
+    # inoculation, which the candidate lacked), and every id it shows bare --
+    # an example carrying the `obs ` tag word would teach the exact string
+    # `meetings/manager.py` nulls.
+    #
+    # The SKELETON, which is the object a model copies verbatim, keeps
+    # `primary_reason_observation_id` null, exactly as `vote_ballot.j2`'s own
+    # skeleton does. A literal id pre-filled there is copyable into an EJECT,
+    # and a copied literal that is not in the voter's own valid set is nulled
+    # and the ejection then coerced to SKIP -- the defect this fix repairs,
+    # re-entering through its own example. On the one voter whose real ids the
+    # literal happens to match (p-N, tick 12, seq 0) it is worse, not better:
+    # `grade_supported` cannot tell a copied example from a citation the voter
+    # actually made. The skeleton is a SKIP, and a SKIP needs no citation.
     vote = _v4_ballot()
-    shown = _SHOWN_CITATION.findall(vote)
+    skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
+    assert len(skeleton) == 1
+    assert f'"{_CITATION_FIELD}":null' in skeleton[0]
+    assert _SHOWN_CITATION.search(skeleton[0]) is None
+    prose = vote.replace(skeleton[0], "")
+    shown = _SHOWN_CITATION.findall(prose)
     assert shown, "the ballot shows no citation example at all"
     for value in shown:
         assert _BARE_OBSERVATION_ID.fullmatch(value), value
         assert "obs" not in value
-    # The skeleton is the object a model copies, so the form has to be in it
-    # rather than only in the prose above it.
-    skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
-    assert len(skeleton) == 1
-    assert f'"{_CITATION_FIELD}":null' not in skeleton[0]
-    assert _SHOWN_CITATION.search(skeleton[0]) is not None
 
 
 @pytest.mark.parametrize("common,attributed", [(1, None), (None, 1), (1, 1)])
@@ -1149,6 +1194,20 @@ def test_the_account_turn_asks_for_one_short_phrase_and_then_a_stop(
         assert _UNBOUNDED_TURN_REASON not in prompt, name
         if '{"type":"accusation"' in prompt:
             assert _TURN_REASON_BOUND in prompt, name
+    # The THIRD branch of the same reply instruction, added in round 3 of
+    # review. `accusation_round_accounts.j2` branches three ways: a reply with
+    # structured items, a free-text-only reply, and the no-prior-turn opt-in
+    # turn. The card extended fix C's bound to that third branch, but every
+    # case above renders `prior_turn`, so the branch was reachable by no test
+    # and deleting its bound left the suite green. Same renderer, same
+    # synthetic inputs, `prior_turn` dropped.
+    opt_in = _account_statement(
+        common=common, attributed=attributed, is_impostor=is_impostor, prior_turn=None
+    )
+    assert _TURN_LENGTH_BOUND in opt_in
+    assert _TURN_STOP in opt_in
+    assert _UNBOUNDED_REPLY not in opt_in
+    assert _UNBOUNDED_TURN_REASON not in opt_in
 
 
 def test_a_body_carrying_the_v4_bounds_cannot_be_stamped_an_older_revision() -> None:

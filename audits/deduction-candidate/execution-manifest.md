@@ -780,9 +780,15 @@ what each edit is copied from rather than a re-invention of it:
 - **The citation form.** The same line shows the bare `{agent}:{tick}:{seq}`
   observation id — WITHOUT the `obs ` tag word `agents/memory/store.py` renders
   around it, which is render dressing rather than part of the id — with a
-  literal example built from the voter's own id, and the response skeleton
-  pre-fills `primary_reason_observation_id` with that example instead of
-  `null`.
+  literal example built from the voter's own id. The response skeleton keeps
+  `primary_reason_observation_id` NULL, exactly as `vote_ballot.j2`'s own
+  skeleton does: the form is shown in prose and never pre-filled into the
+  object a model copies verbatim. Corrected in round 3 of review — an earlier
+  draft of this bullet, and of the fix as delivered, pre-filled the skeleton
+  with the literal example, which is copyable into an EJECT, and a copied
+  literal that is not in the voter's own valid set is nulled and the ejection
+  coerced to SKIP: the very defect this bullet repairs, re-entering through
+  its own example.
 - **The turn bound.** `_account_rules.j2` asks for one short phrase in an
   accusation's and a corroboration's `"reason"`, and
   `accusation_round_accounts.j2`'s reply instruction asks for 1-2 short
