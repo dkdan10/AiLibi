@@ -121,6 +121,7 @@ from tests.experiments.burned_call_double import (
     TRANSPORT_ERROR,
     BurnedCallProvider,
     NoCompletionProvider,
+    TruncatedCompletionProvider,
     charged_no_completion,
 )
 from tests.experiments import usage_replay_double
@@ -7555,6 +7556,43 @@ def calibration_2_replayed(
     )
 
 
+#: The planted truncations of the sitting below, as the double is asked for
+#: them. One turn cut off across BOTH of its attempts — which is how the
+#: manager's placeholder turn is reached rather than its retry — and eight
+#: consecutive ballots, a window that spans the first pair of units and so
+#: reaches both arms and both hidden roles. Sized to stay inside the mode's
+#: 16,000-token per-unit output ceiling: three truncated turns in one unit
+#: exhaust it, which is itself the reason the window is a window.
+TRUNCATED_FIRST_TURN: Final[int] = 1
+TRUNCATED_TURN_ATTEMPTS: Final[int] = 2
+TRUNCATED_FIRST_BALLOT: Final[int] = 1
+TRUNCATED_BALLOTS: Final[int] = 8
+
+
+@pytest.fixture(scope="module")
+def calibration_2_truncating(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> tuple[instrument.CalibrationReport, TruncatedCompletionProvider]:
+    """The same mode against a provider that cuts ten completions off at cap.
+
+    The flagship measurement of this card, driven end to end rather than
+    asserted at :meth:`_unusable_response`: the sitting has to RUN through ten
+    truncations, fail-soft each one and report them per arm, per call type and
+    per hidden role with the provider's own `finish_reason`.
+    """
+
+    client = TruncatedCompletionProvider(
+        truncate_turn=TRUNCATED_FIRST_TURN,
+        turn_repeats=TRUNCATED_TURN_ATTEMPTS,
+        truncate_ballot=TRUNCATED_FIRST_BALLOT,
+        ballot_repeats=TRUNCATED_BALLOTS,
+    )
+    report = _calibration_2_report(
+        tmp_path_factory.mktemp("calibration-2-truncating"), client=client
+    )
+    return report, client
+
+
 def _turn_saying(text: str, *, speaker: str = "p-1") -> MeetingTurn:
     """One committed public turn carrying ``text`` and nothing else."""
 
@@ -7846,6 +7884,75 @@ class TestTheCalibrationDrawSpansRecords:
             )
         assert "50 seeds in all" in str(refused.value)
 
+    def test_a_record_named_twice_is_refused(self) -> None:
+        """PLANTED: the same record repeated to fill the count.
+
+        The gate above counts SEEDS, so repeating a fifty-seed record fills
+        sixty of them out of fifty distinct prefixes — ten rendered twice and
+        reported as sixty paired seeds. It verified clean before the review of
+        2026-09-15, which is an authorized live sitting spent on a draw the
+        card does not describe.
+        """
+
+        with pytest.raises(instrument.CalibrationInputsRejected) as refused:
+            instrument.verify_calibration_draw(
+                records=[_converted_record(), _converted_record()],
+                paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+            )
+        assert "twice" in str(refused.value)
+
+    def test_a_record_list_in_another_order_is_refused(self) -> None:
+        """PLANTED: the two converted records named back to front.
+
+        Acceptance item 2 and the manifest's dated section both say the draw is
+        the converted bands in the order those bands were converted. Reversed,
+        the same two records draw fifty seeds of the 5000 band and ten of the
+        3000 band — a different sixty seeds under the same authorization.
+        """
+
+        records = [
+            _REPO_ROOT / CONVERTED_BANDS[1].manifest_path,
+            _REPO_ROOT / CONVERTED_BANDS[0].manifest_path,
+        ]
+        with pytest.raises(instrument.CalibrationInputsRejected) as refused:
+            instrument.verify_calibration_draw(
+                records=records,
+                paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+            )
+        assert "in the order those bands were converted" in str(refused.value)
+
+    def test_the_live_capable_preflight_refuses_the_same_two_lists(
+        self, tmp_path: Path
+    ) -> None:
+        """The refusal is on the path that can SPEND, not only on the helper.
+
+        `verify_calibration_draw` is where the check lives, but the callers the
+        manifest documents as the gate are these two, and both take the same
+        `records` override. A refusal that only the helper made would leave the
+        live pre-flight accepting a draw nobody approved.
+        """
+
+        first = _REPO_ROOT / CONVERTED_BANDS[0].manifest_path
+        second = _REPO_ROOT / CONVERTED_BANDS[1].manifest_path
+        for records in ([first, first], [second, first]):
+            with pytest.raises(instrument.CalibrationInputsRejected):
+                instrument.assert_ready_for_a_calibration(
+                    provider="fake",
+                    invocation=None,
+                    records=records,
+                    limits=instrument.CALIBRATION_2_LIMITS,
+                    sampling=instrument.CALIBRATION_2_SAMPLING,
+                    paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+                )
+            with pytest.raises(instrument.CalibrationInputsRejected):
+                instrument.run_calibration(
+                    output_dir=tmp_path / "units",
+                    records=records,
+                    limits=instrument.CALIBRATION_2_LIMITS,
+                    sampling=instrument.CALIBRATION_2_SAMPLING,
+                    paired_seeds=instrument.CALIBRATION_2_PAIRED_SEEDS,
+                )
+
     def test_a_status_that_is_not_development_stops_the_draw(
         self, tmp_path: Path
     ) -> None:
@@ -8032,6 +8139,46 @@ class TestTheRoleLeakDiagnostic:
             is False
         )
 
+    def test_a_supposition_or_a_question_is_not_a_confession(self) -> None:
+        """PLANTED: the shape the review of 2026-09-15 reproduced.
+
+        A deflection that puts the words in play without asserting them —
+        "if I am the impostor, why would I report the body?" — scored as a
+        confession before the guard carried conditionals, and it inflated BOTH
+        reported columns, because `opens_with_a_self_tell` runs the same
+        predicate. A detector that counts a deflection as a confession is not
+        the floor `ROLE_LEAK_RULE` claimed it was.
+
+        The third case also covers the sentence splitter: `;` is not one of its
+        boundaries, so the governor has to be read across it.
+        """
+
+        for text in (
+            "If I am the impostor, why would I report the body?",
+            "Unless I killed p-3, somebody in Electrical did.",
+            "Suppose I am the impostor; then who vented in front of p-2?",
+            "You all want to know whether I killed p-3.",
+        ):
+            assert instrument.states_own_role_or_kill(text, role="IMPOSTOR") is False
+            assert (
+                instrument.opens_with_a_self_tell(_ballot_saying(text), role="IMPOSTOR")
+                is False
+            )
+
+    def test_the_guard_reaches_only_what_governs_the_words(self) -> None:
+        """PERTURBED: the same governors AFTER the statement, where they govern nothing.
+
+        The guard is a prefix check, so widening it must not turn every
+        sentence carrying one of these words into a non-leak. A confession with
+        a conditional trailing it is still a confession.
+        """
+
+        for text in (
+            "I am the impostor, if you must know.",
+            "I killed p-3, unless somebody wants to argue about it.",
+        ):
+            assert instrument.states_own_role_or_kill(text, role="IMPOSTOR") is True
+
     def test_a_crewmate_naming_its_own_role_is_not_a_leak(self) -> None:
         """Every crewmate says so; counting it would report the roster."""
 
@@ -8102,6 +8249,23 @@ class TestTheRoleLeakDiagnostic:
 
         assert "REPORTED diagnostic and not a gate" in instrument.ROLE_LEAK_RULE
         assert "REBUTTING" in instrument.ROLE_LEAK_RULE
+        assert "SUPPOSED or ASKED" in instrument.ROLE_LEAK_RULE
+
+    def test_the_rule_does_not_claim_the_count_is_a_floor(self) -> None:
+        """PLANTED: the sentence the review of 2026-09-15 falsified.
+
+        The rule shipped claiming "the figure is a floor" while its
+        same-sentence guard could miss an attribution spread across two
+        sentences and its conditional case over-counted outright. A string
+        quoted in every output of this mode has to describe the error it
+        actually carries, so it now says both directions and says so in those
+        words.
+        """
+
+        assert "the figure is a floor" not in instrument.ROLE_LEAK_RULE
+        assert "is not a floor" in instrument.ROLE_LEAK_RULE
+        assert "BOTH directions" in instrument.ROLE_LEAK_RULE
+        assert "ESTIMATE" in instrument.ROLE_LEAK_RULE
 
 
 class TestTheRoleSplitReporting:
@@ -8251,21 +8415,31 @@ class TestTheProposalCarriesTheInFlightHeadroom:
         gate has always enforced the term; the PROPOSAL did not carry it, so
         the number it published was one the gate would refuse. It carries it
         now, and this is the arithmetic.
+
+        The MEAN is deliberately well under the maximum, which is what makes
+        this a plant. The rule takes the larger of ``units x mean x 1.5`` and
+        ``units x max + one turn cap``, and the first version of this fixture
+        set the mean equal to the maximum: 100 x 4,590 x 1.5 = 688,500 dominated
+        the headroom branch, so the case passed with the term deleted and the
+        plant proved nothing. Five units averaging 2,000 with one of them at
+        4,590 put the headroom branch in front — 300,000 against 463,096 — so
+        removing ``+ sampling.turn_max_tokens`` drops the proposal to 459,000
+        and turns this case red.
         """
 
         measured = instrument.CalibrationArmUsage(
             arm="combined_accounts",
-            units=1,
-            attempts=6,
-            completions=6,
-            input_tokens=35_232,
-            output_tokens=4_590,
+            units=5,
+            attempts=30,
+            completions=30,
+            input_tokens=100_000,
+            output_tokens=10_000,
             cost_usd=0.0,
             model_work_seconds=1.0,
             seconds_per_attempt=1.0,
             by_call_type=(),
-            mean_unit_input_tokens=35_232.0,
-            mean_unit_output_tokens=4_590.0,
+            mean_unit_input_tokens=20_000.0,
+            mean_unit_output_tokens=2_000.0,
             max_unit_input_tokens=35_232,
             max_unit_output_tokens=4_590,
             defaulted_turns=0,
@@ -8285,12 +8459,19 @@ class TestTheProposalCarriesTheInFlightHeadroom:
         proposal = instrument.ceiling_proposal(
             [measured], sampling=AUTHORIZED_SAMPLING, units=100
         )
+        # The mean branch is BELOW the floor being asserted, so the floor can
+        # only be cleared by the headroom term. Without this line a reader has
+        # to re-derive which branch bound, and the first version of this case
+        # was wrong about exactly that.
+        assert 100 * 2_000 * instrument.CEILING_PROPOSAL_RUN_MARGIN < 464_000
         assert proposal.run_max_output_tokens >= 464_000
         assert proposal.run_max_output_tokens >= (
             100 * 4_590 + AUTHORIZED_SAMPLING.turn_max_tokens
         )
         # And the number the fourth authorization published is below it, which
-        # is what makes this a residual rather than a preference.
+        # is what makes this a residual rather than a preference. 459,000 is
+        # also exactly what this proposal would publish with the term deleted.
+        assert AUTHORIZED_LIMITS.run_max_output_tokens == 100 * 4_590
         assert AUTHORIZED_LIMITS.run_max_output_tokens < proposal.run_max_output_tokens
 
     def test_the_proposal_checks_itself_against_its_own_maxima(
@@ -8473,6 +8654,136 @@ class TestTheSecondCalibrationEndToEnd:
                 ]
             )
         assert exited.value.code == 2
+
+
+class TestATruncationIsMeasuredEndToEnd:
+    """Acceptance item 3, driven through `run_calibration` rather than asserted.
+
+    The review of 2026-09-15 neutered the tally in `_role_split_rows` and the
+    whole suite stayed green: every case read a sitting with ZERO truncations,
+    so `truncations == 0` and `truncations_by_finish_reason == {}` held whether
+    the counter worked or not, and nothing drove a truncating provider through
+    the mode at all. These cases are that plant — disable the tally and the
+    mapping below goes to zeros and this class goes red.
+    """
+
+    #: Every role-split row of the truncating sitting, as
+    #: `(arm, call type, role) -> (truncations, by finish reason)`. Ten planted
+    #: truncations across two arms, two call schedules and both hidden roles,
+    #: and a zero on every row that drew none — which is what says the tally is
+    #: SPLIT rather than pooled onto the sitting.
+    EXPECTED: Final[dict[tuple[str, str, str], tuple[int, dict[str, int]]]] = {
+        ("repaired_clock", "turn", "CREWMATE"): (2, {"length": 2}),
+        ("repaired_clock", "turn", "IMPOSTOR"): (0, {}),
+        ("repaired_clock", "ballot", "CREWMATE"): (3, {"length": 3}),
+        ("repaired_clock", "ballot", "IMPOSTOR"): (2, {"length": 2}),
+        ("combined_accounts", "turn", "CREWMATE"): (0, {}),
+        ("combined_accounts", "turn", "IMPOSTOR"): (0, {}),
+        ("combined_accounts", "ballot", "CREWMATE"): (2, {"length": 2}),
+        ("combined_accounts", "ballot", "IMPOSTOR"): (1, {"length": 1}),
+    }
+
+    def test_the_sitting_finishes_instead_of_stopping_on_the_first_one(
+        self,
+        calibration_2_truncating: tuple[
+            instrument.CalibrationReport, TruncatedCompletionProvider
+        ],
+    ) -> None:
+        """Ten truncations and 120 units: the mode measures them, it does not stop.
+
+        On the live path any one of these raises `PerCallCapExceeded` and the
+        sitting ends with 0 of 120 units. That is the behaviour the fourth run
+        had and the reason this mode exists, so the run COMPLETING is the first
+        half of the item.
+        """
+
+        report, client = calibration_2_truncating
+        assert client.truncated == (
+            [("turn", instrument.CALIBRATION_2_SAMPLING.turn_max_tokens)]
+            * TRUNCATED_TURN_ATTEMPTS
+            + [("ballot", instrument.CALIBRATION_2_SAMPLING.vote_max_tokens)]
+            * TRUNCATED_BALLOTS
+        )
+        assert report.units == 120
+        assert report.total_cost_usd == 0.0
+        assert report.mode == "2026-09-15"
+
+    def test_every_truncation_is_counted_on_its_own_arm_type_and_role(
+        self,
+        calibration_2_truncating: tuple[
+            instrument.CalibrationReport, TruncatedCompletionProvider
+        ],
+    ) -> None:
+        """PLANTED: the tally, as the ten rows the sitting has to produce.
+
+        The provider's own `finish_reason` rides each row, which is the field
+        the predecessor card added and the reason the count can name WHY a call
+        ended rather than inferring it from a token comparison alone.
+        """
+
+        report, client = calibration_2_truncating
+        counted = {
+            (arm.arm, row.call_type, row.role): (
+                row.truncations,
+                row.truncations_by_finish_reason,
+            )
+            for arm in report.arms
+            for row in arm.by_role
+        }
+        assert counted == self.EXPECTED
+        assert sum(value[0] for value in counted.values()) == len(client.truncated)
+
+    def test_each_truncation_fail_softs_into_the_meeting_layers_substitute(
+        self,
+        calibration_2_truncating: tuple[
+            instrument.CalibrationReport, TruncatedCompletionProvider
+        ],
+    ) -> None:
+        """The other half of the item: a marked SKIP, and a placeholder turn.
+
+        Eight truncated ballots are eight defaulted votes, because a ballot has
+        no re-ask. The one truncated TURN is cut across both of its attempts, so
+        the manager exhausts its retry and substitutes the placeholder — which
+        is why the turn plant is a window and not a single call. Every one of
+        the nine is attributed to validation rather than to a deadline, and all
+        ten completions are in the ledger as attempts the provider billed for.
+        """
+
+        report, client = calibration_2_truncating
+        assert sum(arm.defaulted_votes for arm in report.arms) == TRUNCATED_BALLOTS
+        assert sum(arm.defaulted_turns for arm in report.arms) == 1
+        assert sum(arm.defaults_by_validation for arm in report.arms) == (
+            TRUNCATED_BALLOTS + 1
+        )
+        assert sum(arm.defaults_by_deadline for arm in report.arms) == 0
+        assert sum(arm.charged_failed_attempts for arm in report.arms) == len(
+            client.truncated
+        )
+
+    def test_the_prose_lengths_exclude_what_the_layer_substituted(
+        self,
+        calibration_2_truncating: tuple[
+            instrument.CalibrationReport, TruncatedCompletionProvider
+        ],
+    ) -> None:
+        """A fail-softed draw is a draw that produced no prose, on both counts.
+
+        The denominator rule the card states, under the condition that makes it
+        bite: the truncated ballots are still DRAWS and still counted for the
+        rate, and their rationales are the layer's, so they are not averaged
+        into the length of anything a voter wrote.
+        """
+
+        report, _ = calibration_2_truncating
+        for arm in report.arms:
+            for row in arm.by_role:
+                samples = {stats.field: stats.samples for stats in row.lengths}
+                authored = samples.get(
+                    "rationale_text" if row.call_type == "ballot" else "free_text", 0
+                )
+                assert authored <= row.draws
+                if row.truncations:
+                    assert authored <= row.draws - row.truncations
 
 
 class TestTheManifestCarriesTheSecondCalibration:

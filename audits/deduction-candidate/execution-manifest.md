@@ -995,7 +995,12 @@ turn whose speaker is an IMPOSTOR and whose text states, in the first person and
 without attributing the statement to someone else, either that role or a kill
 that speaker committed; the rule is `ROLE_LEAK_RULE`, quoted in every
 calibration-2 output, and the fourth run's own three shapes are what it is held
-to — two positives and the rebuttal the diagnosis counted out. It is a reported
+to — two positives and the rebuttal the diagnosis counted out, with a
+supposition or a question ("if I am the impostor, why would I report the body?")
+counted out the same way. The count is an ESTIMATE carrying error in BOTH
+directions and is not a floor: the rule reads no intent, so a confession its
+shapes do not match is missed, and its guards see one sentence at a time, so an
+attribution spread across two is counted. It is a reported
 diagnostic and not a gate: no stop condition reads it, the decision rule below
 does not mention it, and it changes no primary outcome. The fifth run reports
 the same column, so the leak is visible beside the result rather than argued

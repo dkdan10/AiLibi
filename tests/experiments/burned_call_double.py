@@ -36,7 +36,7 @@ from experiments.fresh_deduction_instrument import DryRunProvider
 from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FAKE_FINISH_REASON
 from llm.provider import LLMCallFailure, _attach_parse_failure
-from meetings.schemas import ModelAuthoredVoteBallot
+from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot
 
 #: The payload this double sends and the schema refuses.
 BURNED_RESPONSE: Final[str] = '{"not_a_ballot": true}'
@@ -364,3 +364,113 @@ class NoCompletionProvider(DryRunProvider):
                 finish_reason=response.finish_reason,
             )
         return response
+
+
+def _within(seen: int, first: int | None, repeats: int) -> bool:
+    """Whether the `seen`th call of a kind falls in the planted window."""
+
+    return first is not None and first <= seen < first + repeats
+
+
+class TruncatedCompletionProvider(DryRunProvider):
+    """A dry-run provider that cuts one turn and one ballot off at their caps.
+
+    The shape the fourth run stopped on, as a provider: a body generated up to
+    `max_tokens`, reported with `finish_reason="length"`, which then fails
+    schema validation because it was cut mid-JSON. The endpoint bills for it and
+    re-raises with the usage attached, exactly as `charged_parse_failure`
+    describes, so both readings the instrument takes off it are real — the
+    provider's own word and the `output_tokens >= max_tokens` inference.
+
+    `BurnedCallProvider` reaches ballots only and burns one call in a whole run;
+    this one reaches both schedules, because the second calibration's mode has
+    to count a truncated TURN and a truncated BALLOT separately and fail-soft
+    each into its own substitute (a placeholder turn, a marked SKIP).
+    `truncate_turn` and `truncate_ballot` name WHICH call of each kind is cut,
+    1-based over the whole sitting, so a run of many units carries exactly the
+    planted number of truncations and the rest of it is ordinary. `turn_repeats`
+    and `ballot_repeats` cut that many CONSECUTIVE calls of the kind, which is
+    how the layer's substitute is reached rather than its retry: the manager
+    re-asks a turn that failed validation (`1 + retries` attempts), so cutting
+    one attempt measures a truncation the next attempt repairs and cutting the
+    whole set is what produces the placeholder turn.
+
+    `input_tokens` is what the endpoint charged for the prompt it read; the
+    output count is the cap itself and is not settable, because a completion
+    that stopped short of its cap is not the thing this double plants.
+    """
+
+    def __init__(
+        self,
+        *,
+        truncate_turn: int | None = 1,
+        truncate_ballot: int | None = 1,
+        turn_repeats: int = 1,
+        ballot_repeats: int = 1,
+        input_tokens: int = BURNED_INPUT_TOKENS,
+        served_model: str = instrument.DRY_RUN_MODEL,
+    ) -> None:
+        super().__init__()
+        if turn_repeats < 1 or ballot_repeats < 1:
+            raise ValueError("a planted truncation cuts off at least one call")
+        self.turns = 0
+        self.ballots = 0
+        #: `(call type, max_tokens)` for each call this double cut off, in order.
+        self.truncated: list[tuple[str, int]] = []
+        self.input_tokens = input_tokens
+        self._truncate_turn = truncate_turn
+        self._truncate_ballot = truncate_ballot
+        self._turn_repeats = turn_repeats
+        self._ballot_repeats = ballot_repeats
+        self._served_model = served_model
+
+    def _cut(self, schema: type[BaseModel] | None) -> str | None:
+        """Which call kind this send is, if this is one of the ones to cut off."""
+
+        if schema is MeetingTurn:
+            self.turns += 1
+            return (
+                "turn"
+                if _within(self.turns, self._truncate_turn, self._turn_repeats)
+                else None
+            )
+        if schema is ModelAuthoredVoteBallot:
+            self.ballots += 1
+            return (
+                "ballot"
+                if _within(self.ballots, self._truncate_ballot, self._ballot_repeats)
+                else None
+            )
+        return None
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        call_type = self._cut(schema)
+        if call_type is not None and schema is not None:
+            self.truncated.append((call_type, max_tokens))
+            raise charged_parse_failure(
+                schema,
+                prompt=prompt,
+                input_tokens=self.input_tokens,
+                output_tokens=max_tokens,
+                model=self._served_model,
+                finish_reason=instrument.TRUNCATION_FINISH_REASON,
+            )
+        return await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )

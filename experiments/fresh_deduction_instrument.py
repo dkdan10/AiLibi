@@ -3397,6 +3397,54 @@ def _converted_record_paths(repo_root: Path) -> tuple[Path, ...]:
     return tuple(repo_root / band.manifest_path for band in CONVERTED_BANDS)
 
 
+def _draw_in_converted_order(
+    paths: Sequence[Path], *, repo_root: Path
+) -> tuple[Path, ...]:
+    """Hold a supplied record list to the canonical draw, or refuse it.
+
+    The card's decision 2 and the manifest's dated section both say the draw is
+    :data:`CONVERTED_BANDS` in the order those bands were converted, with
+    nothing left to the runner — so a list is a SUBSEQUENCE of that order and
+    never a re-ordering or a repetition of it. Checked here rather than trusted,
+    because the caller that may pass one is the live-capable pre-flight
+    (:func:`assert_ready_for_a_calibration`, :func:`run_calibration`): the
+    review of 2026-09-15 reproduced ``[band-5000, band-3000]`` drawing the
+    5000 band first and ``[band-3000, band-3000]`` drawing sixty prefixes over
+    fifty distinct seeds, both of them verifying clean and both of them an
+    authorized live sitting spent on a draw nobody approved.
+
+    Membership itself is :func:`_converted_band_for`'s, which refuses the
+    held-out record BY NAME before anything else and refuses a path that is no
+    converted band's record at all; this adds the two facts that are about the
+    list rather than about one path.
+    """
+
+    order = [band.manifest_path for band in CONVERTED_BANDS]
+    seen: dict[str, int] = {}
+    previous = -1
+    for position, path in enumerate(paths):
+        converted = _converted_band_for(path, repo_root)
+        index = order.index(converted.manifest_path)
+        if converted.manifest_path in seen:
+            raise CalibrationInputsRejected(
+                f"the calibration draw names {converted.manifest_path} twice "
+                f"(at positions {seen[converted.manifest_path] + 1} and "
+                f"{position + 1}); a record drawn twice renders the same seeds "
+                "twice and reports them as distinct paired seeds, so the draw "
+                "is the converted records without repetition"
+            )
+        if index < previous:
+            raise CalibrationInputsRejected(
+                f"the calibration draw names {converted.manifest_path} after "
+                f"{order[previous]}; the draw is the converted records in the "
+                "order those bands were converted, and a list in another order "
+                "is a different set of seeds"
+            )
+        seen[converted.manifest_path] = position
+        previous = index
+    return tuple(paths)
+
+
 def verify_calibration_draw(
     *,
     records: Sequence[Path] | None = None,
@@ -3415,6 +3463,11 @@ def verify_calibration_draw(
     (:func:`_converted_band_for`), so pointing this at the live band is refused
     at the first path rather than after fifty prefixes have been rebuilt.
 
+    ``records`` names a SUBSEQUENCE of that order and nothing else:
+    :func:`_draw_in_converted_order` refuses a re-ordered or repeated list
+    before a prefix is rebuilt, so the override cannot turn the canonical draw
+    into one the card does not authorize.
+
     A draw that cannot be filled is a stop, not a smaller calibration: sixty
     paired seeds is the owner's decision 7 and fifty of them measures a
     different thing. That refusal is here rather than in
@@ -3429,6 +3482,7 @@ def verify_calibration_draw(
         raise CalibrationInputsRejected(
             "a calibration draw names at least one converted record"
         )
+    paths = _draw_in_converted_order(paths, repo_root=repo_root)
     sets: list[CalibrationSet] = []
     drawn = 0
     for path in paths:
@@ -6092,15 +6146,22 @@ ROLE_LEAK_RULE: Final[str] = (
     "first-person role statement, a first-person kill statement, and the "
     "negative the diagnosis of 2026-09-15 counted out — an impostor REBUTTING "
     "an accusation against itself, which quotes the words without asserting "
-    "them and is not counted. A CREWMATE naming its own role is not counted "
+    "them and is not counted. A statement that is SUPPOSED or ASKED rather "
+    "than asserted — a conditional, a hypothetical or a question governing the "
+    "words — is not counted either, for the same reason: the words are there "
+    "and the assertion is not. A CREWMATE naming its own role is not counted "
     "either: every crewmate says so, and counting it would report the roster "
     "rather than a leak. A turn the meeting layer substituted is not counted, "
     "because its text is the layer's. The count is a REPORTED diagnostic and "
     "not a gate: the owner's reading of decision 9 on 2026-09-15 is that the "
     "leak does not block the next run on its own, which is what makes a "
     "reported column beside the primary outcome the right instrument for it. "
-    "What the rule cannot do is read intent, so an impostor that confesses in "
-    "words it does not match is not counted and the figure is a floor."
+    "What the rule cannot do is read intent, and its guards see one sentence "
+    "at a time: an impostor that confesses in words the two shapes do not "
+    "match is missed, and an attribution, denial or supposition spread across "
+    "two sentences is counted. So the figure is an ESTIMATE carrying error in "
+    "BOTH directions and is not a floor, which is a further reason to read it "
+    "beside the outcome rather than to gate on it."
 )
 
 #: The sentence this rule works in. A leak is decided inside one sentence,
@@ -6122,13 +6183,23 @@ _SELF_KILL_STATEMENT: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 
-#: What turns the words that follow into someone ELSE's statement, or denies
-#: them. Searched in the part of the sentence BEFORE the match, which is where
-#: an attribution or a negation has to sit to govern it.
-_ATTRIBUTED_TO_ANOTHER: Final[re.Pattern[str]] = re.compile(
+#: What stops the words that follow from being this speaker's own ASSERTION.
+#: Searched in the part of the sentence BEFORE the match, which is where a
+#: governor has to sit to govern it. Three families, and the third is the one
+#: the review of 2026-09-15 found missing: a conditional, a hypothetical or a
+#: question puts the words in play without asserting them ("if I am the
+#: impostor, why would I report the body?"), and counting that as a confession
+#: inflates the column in the direction the rule claims it cannot move.
+_NOT_AN_ASSERTION: Final[re.Pattern[str]] = re.compile(
+    # Attributed to somebody else.
     r"\b(?:claim|claims|claimed|claiming|accuse\w*|accusation\w*|allege\w*|"
     r"say|says|said|suggest\w*|think|thinks|insist\w*|argue\w*|argument\w*|"
-    r"not|never|deny|denies|denied|nobody)\b",
+    # Denied.
+    r"not|never|deny|denies|denied|nobody|"
+    # Supposed, imagined or asked rather than said.
+    r"if|unless|whether|suppose|supposes|supposed|supposing|assume|assumes|"
+    r"assumed|assuming|imagine|imagines|imagining|pretend\w*|hypothetical\w*|"
+    r"were\s+i|why\s+would|how\s+would|what\s+would)\b",
     re.IGNORECASE,
 )
 
@@ -6139,6 +6210,11 @@ def states_own_role_or_kill(text: str, *, role: Role) -> bool:
     :data:`ROLE_LEAK_RULE` states the rule; this is it. Pure, deterministic and
     role-conditioned: a CREWMATE never matches, because the statement being
     counted is the one that costs the evaluation its validity.
+
+    The words alone are not the leak — the ASSERTION is. So a match is counted
+    only when nothing in front of it in the same sentence attributes it to
+    somebody else, denies it, or merely supposes or asks it
+    (:data:`_NOT_AN_ASSERTION`).
     """
 
     if role != "IMPOSTOR":
@@ -6148,9 +6224,11 @@ def states_own_role_or_kill(text: str, *, role: Role) -> bool:
             found = pattern.search(sentence)
             if found is None:
                 continue
-            if _ATTRIBUTED_TO_ANOTHER.search(sentence[: found.start()]):
-                # Someone else's words, or a denial of them. The fourth run's
-                # seed 7015 is this case and the diagnosis counted it out.
+            if _NOT_AN_ASSERTION.search(sentence[: found.start()]):
+                # Someone else's words, a denial of them, or a supposition or
+                # question that puts them in play without asserting them. The
+                # fourth run's seed 7015 is the first case and the diagnosis
+                # counted it out; the third is the review of 2026-09-15's.
                 continue
             return True
     return False
