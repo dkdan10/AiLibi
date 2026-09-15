@@ -191,7 +191,7 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   residual at `:4627` and the profile's own test at `:4786`. The two calibrated
   constants (`:477-478`) move with it, and 2026-09-14's eight-red-test hand-back
   is settled in Results.
-- [ ] Aggregates only, committed under
+- [x] Aggregates only, committed under
   `audits/deduction-candidate/calibration-2-<date>/` with per-unit usage rows,
   in the shape the first calibration committed, with
   `assert_report_holds_no_prefix_bytes` (`:4178`) over the payload. Prefixes
@@ -202,7 +202,7 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   limits and sampling table, the truncation ruling scoped to this mode, and the
   leak column pre-declared for the fifth run. The frozen analysis strings stay
   byte-identical (test) and the 2026-09-14 section is not edited.
-- [ ] The live sitting is run once, by a separate runner session on
+- [x] The live sitting is run once, by a separate runner session on
   `work/fresh-deduction-calibration-2-run` under the manifest's calibration-2
   clause, and its Results subsection records the role-split profile, the
   truncation rate with its Wilson interval (`scripts/paired_stats.py:115`), the
@@ -299,6 +299,12 @@ this card's Constraints reserve to a separate runner session ("The runner of the
 sitting is not this card's implementer"), so they stay unchecked and the card
 stays `active`; what each of them still needs is stated under **What is not
 done** below.
+
+That paragraph and the two sections below it are the implementer's record and
+are left as written. The runner session ran the sitting on 2026-09-15 and closed
+items 9 and 11; item 8 is still open, for a reason the sitting found rather than
+for the one the implementer anticipated, so the card stays `active`. See
+**The live sitting (2026-09-15)** below.
 
 ### Where this sits
 
@@ -692,6 +698,141 @@ the card already declares: `experiments/fresh_deduction_instrument.py` is in
 **What is still not done** is unchanged: items 8, 9 and 11 belong to the live
 sitting, which the Constraints reserve to a separate runner session. The card
 stays `active`.
+
+### The live sitting (2026-09-15)
+
+Run once by the runner session on `work/fresh-deduction-calibration-2-run`,
+based at `0495c08a`, under the manifest's calibration-2 clause and the mode's
+own limits. It began at `2026-09-15T13:39:46Z`, ended at `2026-09-15T15:43:16Z`
+and exited 0 with all 120 units complete and all 720 calls resolved. It was not
+re-run, resumed or restarted. The whole record — the design, the input binding,
+every table below and the commands that reproduce them — is
+[the archive](../../audits/deduction-candidate/calibration-2-2026-09-15/CALIBRATION.md);
+this is the summary the card's item 11 asks for. **It measured nothing about
+the candidate's merit**: no grader ran, no paired statistic was computed and no
+meeting outcome is recorded.
+
+**The inputs, bound before the spend.** `manifest-band-3000-3999.json` at
+`ca4cd057acb2119646190fb6fff923a897ec207d5f54c491c3e1dfae0944cf3c` (all 50
+accepted seeds, 3000–3057) and `manifest-band-5000-5999.json` at
+`4fc831dafeda0a6ee7fc311e6557c149506be1fabcf05c69b2117ddb436f7711` (the first
+10, 5000–5009); both `status: development`, both byte-identical to
+`origin/main`'s by `git diff --exit-code`. The held-out record was not read.
+
+**The role-split profile.** Per arm, per call type, by the author's hidden role:
+
+| Arm | Call | Role | draws | out mean | out p95 | out max | prose field | samples | chars mean | chars max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `repaired_clock` | turn | CREWMATE | 120 | 329.7 | 436 | 520 | `free_text` | 120 | 232.3 | 518 |
+| `repaired_clock` | turn | IMPOSTOR | 60 | 182.1 | 326 | 452 | `free_text` | 60 | 201.7 | 400 |
+| `repaired_clock` | ballot | CREWMATE | 120 | 100.9 | 123 | 160 | `rationale_text` | 120 | 107.9 | 201 |
+| `repaired_clock` | ballot | IMPOSTOR | 60 | 98.1 | 115 | 123 | `rationale_text` | 60 | 105.2 | 193 |
+| `combined_accounts` | turn | CREWMATE | 120 | 472.6 | 805 | 1,884 | `free_text` | 120 | 401.6 | 4,258 |
+| `combined_accounts` | turn | IMPOSTOR | 60 | 383.6 | 700 | 1,101 | `free_text` | 60 | 245.9 | 467 |
+| `combined_accounts` | ballot | CREWMATE | 120 | 97.1 | 124 | 135 | `rationale_text` | 120 | 133.7 | 262 |
+| `combined_accounts` | ballot | IMPOSTOR | 60 | 85.8 | 111 | 123 | `rationale_text` | 60 | 101.4 | 240 |
+
+The `claims[].reason` rows are in the archive; per unit the candidate arm
+charged mean 22,733.8 input / 1,608.9 output (max 38,440 / 4,176) against the
+reference arm's 20,862.4 / 1,141.5 (max 25,604 / 1,526).
+
+**The truncation rate, on the denominator the owner's decision 7 named.** Zero
+truncations in sixty impostor-authored candidate ballot draws: 0.00%, Wilson
+95% [0.00%, 6.02%] (`scripts/paired_stats.py:115`). Arm-wide on the candidate:
+0 of 360 draws, [0.00%, 1.06%]; the reference arm the same. `finish_reason` is
+`{"stop": 360}` on each arm, observed truncations 0, inferred 0, signal
+disagreements 0. The fourth run's figure on the same denominator was 1 of 13,
+7.7%, [1.4%, 33.3%]. The candidate ballot's largest draw is 135 output tokens
+against its 1,024 cap, where the fourth run resolved at 624 and was refused at
+1,024: the runaway the diagnosis named did not recur at revision v4.
+
+**The impostor self-tell**, which is the behaviour behind that stop rather than
+the stop: 39 of 60 impostor-authored candidate ballots still OPEN by naming
+that role or a kill (65.0%), against the fourth run's 11 of 12; the reference
+arm is 9 of 60 (15.0%) against its 2 of 13. The impulse is intact and is now
+bounded to about a hundred characters, which is the reference template's own
+result.
+
+**The pre-declared leak count.** `combined_accounts` 1 leaking turn in 1 of 60
+units; `repaired_clock` 0 of 60. The fourth run's were 2 of 13 candidate games
+and 0 of 39 reference turns. `ROLE_LEAK_RULE` is quoted in the payload and says
+in its own words that the count is an estimate carrying error in both
+directions and is not a floor.
+
+**Refusals, defaults, transport.** Zero on both arms in every category: 0
+charged failed attempts, 0 defaulted turns, 0 defaulted votes, 0 by validation,
+0 by deadline, 0 degraded openings, 0 retried calls, 0 unaccounted attempts. All
+720 `calls` rows read `resolved`.
+
+**Pace and usage.** 10.28 s per attempt pooled (8.91 reference, 11.65
+candidate), 7,403.0 s of model work inside 7,409.8 s elapsed. Against the
+calibration-2 limits: run input 2,615,769 / 4,500,000 (58.1%), run output
+165,021 / 450,000 (36.7%), largest unit input 38,440 / 60,000 (64.1%), largest
+unit output 4,176 / 16,000 (26.1%), model work 41.1%, elapsed 34.3%.
+**$0.00 marginal.**
+
+**The proposal**, for the hundred-unit design: per unit 116,000 input / 16,000
+output, run 3,844,000 / 422,000. `clears_the_feasibility_gate: true` — which is
+true by construction, the rule computing those figures from the same measured
+maxima it checks them against — and `clears_the_committed_profiles_gate: true`,
+which is not by construction: the same figures also clear this tree's committed
+24,282 / 3,116, because this sitting's units are larger. The output floor
+carries the in-flight headroom term this card added: 100 x 4,176 + 4,096 =
+421,696 -> 422,000. The proposal authorizes nothing.
+
+**Archive.** `audits/deduction-candidate/calibration-2-2026-09-15/`:
+`calibration.json` (199,101 bytes), `unit-usage.jsonl` (120 rows),
+`calibration-run.log` (whose stdout body is byte-identical to the payload, both
+sha256 `ddb2073aaa34276e3a5da9f14c4a37c76ab9b5dfe937a6fabdb02504fa7c9188`) and
+`CALIBRATION.md`. `assert_report_holds_no_prefix_bytes` was re-run over the
+archived payload against all sixty rebuilt prefixes and passed; the credential
+scan over every file returns zero on both the key's first six characters and
+the whole key. No prefix, prompt or rendered output is committed: the sitting's
+replays went to an `--output-dir` outside version control.
+
+**Item 8 is NOT closed, and the reason is a finding rather than a deferral.**
+The refresh command was run and its output compared against the committed
+profile through a $0 rehearsal on the replay double: the rehearsal's proposal
+moves from per unit 74,000 / 16,000 and run 3,139,000 / 343,000 on the committed
+profile to per unit 116,000 / 16,000 and run 3,844,000 / 422,000 on the
+refreshed one, reproducing this sitting's live proposal to the token. But the
+refreshed profile's largest charged unit is 38,440 input / 4,176 output, and
+moving `CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` to it
+makes `assert_limits_are_feasible` REFUSE two standing sets of ceilings:
+
+| Ceilings | Units | Run input | Needs | Run output | Needs |
+| --- | --- | --- | --- | --- | --- |
+| `AUTHORIZED_LIMITS` (fourth authorization) | 100 | 3,710,000 | **3,844,000 — refused** | 459,000 | 421,696 — clears |
+| `CALIBRATION_2_LIMITS` (this mode) | 120 | 4,500,000 | **4,612,800 — refused** | 450,000 | **505,216 — refused** |
+
+`pytest tests/experiments -q` on the refreshed profile with both constants moved
+is 27 failed, 459 passed: eleven are that refusal reaching cases written to
+check something else, eight are the archived FAULT modes a clean sitting carries
+none of, and eight are arithmetic following the constants — including
+`test_the_enforcement_section_quotes_the_reservation_policy`, because
+`RESERVATION_POLICY` embeds both constants in its own text and the execution
+manifest quotes that string verbatim. Every repair available to a runner is
+either moving an authorized ceiling or weakening the gate, and this card says in
+its own words that "nothing here moves an authorized figure". So the refresh is
+handed to the fifth authorization card with the numbers it needs — run-level
+input at least **3,844,000**, run-level output at least **421,696** (459,000
+already clears it), both constants to **38,440** and **4,176** in the same
+commit as the profile — and no committed profile byte or calibrated constant
+moved here. The card therefore stays `active`.
+
+Two results worth separating from that. The open item of 2026-09-14 is CLOSED by
+measurement on the OUTPUT dimension — 459,000 clears 421,696 with 37,304 to
+spare, where that day's own largest unit needed 463,096 — and the binding
+dimension moved to INPUT, where the largest unit grew from 35,232 (2026-09-14)
+through 36,743 (run 4) to 38,440 here, because the v4 revision added bytes to
+the candidate's prompts.
+
+**Deviations.** Three, all recorded in the archive's own Deviations section: the
+credential reached the process through `uv run --env-file <a 0600 file outside
+the repository>` rather than the ambient shell, exactly as 2026-09-14 recorded;
+the committed usage profile was not refreshed, for the reason above; and
+`audits/deduction-candidate/checkpoint.md` gained a dated line naming the
+sitting, which the first calibration did not add.
 
 ### Limitations
 
