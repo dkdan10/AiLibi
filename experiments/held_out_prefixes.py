@@ -342,12 +342,12 @@ class HeldOutPrefix(BaseModel):
         return self
 
 
-#: The band preregistered by ``tasks/work/held-out-prefix-freeze-4.md``. Seeds
-#: 7000 to 7999 drawn ascending; the first fifty that pass the filter are the
+#: The band preregistered by ``tasks/work/held-out-prefix-freeze-5.md``. Seeds
+#: 8000 to 8999 drawn ascending; the first fifty that pass the filter are the
 #: set. The preparer may not widen it: a band that cannot fill fifty is a stop,
-#: not a bigger band. The three bands this constant named before, 3000-3999,
-#: 5000-5999 and 6000-6999, are :data:`CONVERTED_BANDS`.
-PREREGISTERED_BAND: Final[SeedBand] = SeedBand(first_seed=7000, last_seed=7999, size=50)
+#: not a bigger band. The four bands this constant named before, 3000-3999,
+#: 5000-5999, 6000-6999 and 7000-7999, are :data:`CONVERTED_BANDS`.
+PREREGISTERED_BAND: Final[SeedBand] = SeedBand(first_seed=8000, last_seed=8999, size=50)
 
 
 @dataclass(frozen=True)
@@ -389,6 +389,12 @@ CONVERTED_BANDS: Final[tuple[ConvertedBand, ...]] = (
         band=SeedBand(first_seed=6000, last_seed=6999, size=50),
         manifest_path=(
             "audits/deduction-candidate/held-out/manifest-band-6000-6999.json"
+        ),
+    ),
+    ConvertedBand(
+        band=SeedBand(first_seed=7000, last_seed=7999, size=50),
+        manifest_path=(
+            "audits/deduction-candidate/held-out/manifest-band-7000-7999.json"
         ),
     ),
 )
@@ -1402,8 +1408,8 @@ _RESTAMP_NOTE: Final[str] = (
 #: undocumented restamp cannot pass quietly. It starts EMPTY at a freeze: the
 #: 3000-3999 band's four restamps are history and stay in that band's own
 #: record (:data:`CONVERTED_BANDS`), which this list does not carry forward.
-#: The 5000-5999 and 6000-6999 bands were each frozen and converted without a
-#: restamp, so their records carry none either.
+#: The 5000-5999, 6000-6999 and 7000-7999 bands were each frozen and converted
+#: without a restamp, so their records carry none either.
 DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = ()
 
 
@@ -1605,7 +1611,7 @@ if __name__ == "__main__":  # pragma: no cover - the freeze and tally commands
     if not _argv:
         written = write_manifest(
             Path(__file__).resolve().parents[1],
-            card="tasks/work/held-out-prefix-freeze-4.md",
+            card="tasks/work/held-out-prefix-freeze-5.md",
         )
         print(f"wrote {written}")
     elif _argv[0] == "--tally" and len(_argv) == 3:

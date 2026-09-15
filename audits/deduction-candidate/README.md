@@ -14,8 +14,8 @@ This directory records the unadopted follow-through to the owner's independent
   candidate and budget before live execution.
 - [Held-out freeze](held-out/manifest.json) records fifty proof-free scripted
   prefixes as HASHES ONLY, drawn from a preregistered seed band by a session
-  that runs no arm. No prefix bytes are committed anywhere. It holds the fourth
-  band, 7000–7999, frozen on 2026-09-14.
+  that runs no arm. No prefix bytes are committed anywhere. It holds the fifth
+  band, 8000–8999, frozen on 2026-09-15.
 - [The first held-out band](held-out/manifest-band-3000-3999.json), 3000–3999,
   is development data since 2026-09-10: the run of that date rendered seed 3000
   to the model before stopping on an instrument defect, and the preregistration
@@ -34,6 +34,16 @@ This directory records the unadopted follow-through to the owner's independent
   per-unit output ceiling stopped it in its fourth unit. Its `converted` block
   names that run and the re-sized ceilings the stop informed; its digests are
   the bytes frozen at `c06ee085`.
+- [The fourth held-out band](held-out/manifest-band-7000-7999.json), 7000–7999,
+  is development data since 2026-09-15, for the same reason and kept the same
+  way: the run of that date rendered thirteen of its prefixes — seeds 7001
+  through 7016 in accepted order — before a candidate-arm ballot on seed 7016
+  overran the 1,024-token per-call vote cap and came back as truncated JSON,
+  stopping it in its 26th unit of 100. Its `converted` block names that run,
+  the thirteen rendered seeds, [the diagnosis of
+  2026-09-15](../../tasks/diagnosis-2026-09-15-truncation-stop.md) and the
+  fifth authorization's limits card the stop informed; its digests are the
+  bytes frozen at `1323cd75`.
 - [Execution manifest](execution-manifest.md) binds every preregistration field
   for the fresh-model comparison, including the limits the owner authorized on
   2026-09-07. It authorizes no live call: a call additionally requires an
