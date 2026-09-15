@@ -655,3 +655,184 @@ no freeze restamp is due, and the arm-surface digest does not move again
 either: no file of `agents/strategic/prompts/qwen3_6_27b` and no
 `ARM_SURFACE_SOURCES` file changes in this round — the repairs are a manifest
 section, a card and one new test.
+
+### Review corrections, round 3 (2026-09-15)
+
+Numbered 3 to follow the coordinator's rounds; the card's Results carries
+round 1 above and no round-2 subsection, because that round was a
+verification pass and left no card-side repair of its own. One residual, found
+independently by three verifiers and reproduced by each, plus one cheap
+ungated branch. Both are repairs to the CHANGE this time rather than to what
+the record claims about it, so the delivered bytes move; nothing the run is
+judged by moves, and nothing is recorded.
+
+**The residual: the skeleton pre-filled a literal id.** As delivered, fix B
+put the example into BOTH places — the prose and the response skeleton —
+so `vote_ballot_accounts.j2`'s skeleton read
+`"primary_reason_observation_id":"{{ voter_id }}:12:0"`. Three findings, all
+valid and all reproduced:
+
+1. **A literal in the copied object is copyable.** The skeleton is the object
+   the prompt tells a model to return, and a model that copies it into an
+   EJECT files an id that is almost never one of its own. `meetings/manager.py`
+   nulls an observation id that is not in the voter's typed valid set
+   (`:3241-3250`), with no suffix-recovery branch by design (`:364-367`), and
+   then coerces the now-uncited EJECT to SKIP whenever the target carries no
+   contradiction flag (`:3778-3800`). That is the exact defect fix B exists to
+   repair — 13 of 14 candidate EJECT citations nulled and 12 ballots coerced on
+   the fourth run — re-entering through fix B's own example. The sentence
+   beside it ("the skeleton shows that FORM, not your evidence") is a
+   prohibition in words, and this card's own Evidence section says what a
+   prohibition in words is worth in this register.
+2. **Where the literal is not wrong it is worse.** For the one voter it names
+   — voter `p-N`, tick 12, seq 0 — the literal may coincide with a real
+   observation id in that voter's valid set. It then survives the null, and
+   `grade_supported` cannot tell a copied example from a citation the voter
+   actually made, so the treatment arm could score a citation that was never
+   a citation.
+3. **The reference does not do this.** `vote_ballot.j2:267` keeps
+   `"primary_reason_observation_id": null` in its skeleton and shows the id
+   FORM in prose only. This card's whole method is to port from the reference
+   rather than re-invent, and on this line it did not port — it went further
+   than the reference in the one direction the reference had a reason not to
+   go.
+
+**The repair.** The skeleton returns to `"primary_reason_observation_id":null`.
+The skeleton's `"target"` is `"SKIP"`, and the same instruction line already
+says a SKIP needs no citation, so the null exemplar is the consistent one. The
+prose keeps everything it had: the `[obs ...]` wrapper named as dressing, the
+bare `{agent}:{tick}:{seq}` form, and the literal example built from the
+voter's own id — `(e.g. "primary_reason_observation_id": "{{ voter_id }}:12:0")`
+— and its last sentence now says plainly what to do with the null instead of
+warning against copying a pre-fill: when the ejection rests on a memory line,
+replace the null with the id copied from one of the voter's OWN memory lines,
+without the tag word, and leave it null when a transcript turn carries the
+reason. No reference template is touched; the id form is still SHOWN, which is
+the inoculation the candidate lacked and the half of fix B the fourth run's
+evidence supports.
+
+**The ungated branch.** Decision 4 above extended fix C's bound to the third
+branch of `accusation_round_accounts.j2:16`, the no-prior-turn opt-in branch.
+Every render case in the suite passed a `prior_turn`, so no test reached that
+branch and deleting its bound left the suite green — a route-around a verifier
+reproduced and this round reproduces below.
+`::test_the_account_turn_asks_for_one_short_phrase_and_then_a_stop` now also
+renders the statement with `prior_turn=None`, on all three arms and both
+roles, through the same renderer on the same synthetic, seed-free inputs
+(`_account_statement`, new beside `_v4_ballot`), and asserts the same four
+things it asserts of the reply branches.
+
+**What the fix-B render test asserts now.** Two halves, and they are not the
+same half. The PROSE must show a citation example at all and every id it shows
+must be bare — an example carrying the `obs ` tag word teaches the exact string
+the meeting layer nulls, which is the fourth run's own defect. The SKELETON
+must carry `null` and no quoted id at all. The test splits the rendered ballot
+on the skeleton line and reads each half against its own rule, so the two
+cannot be satisfied by each other.
+
+**Planted failures, round 3** (red before, green after; each plant applied to
+the delivered tree — the merge of `origin/main` at `0a1d3b49` into `230f39ac`
+— the case run, the file restored byte-identical, `git status --porcelain`
+free of the plant afterwards). Commands are
+`.venv/bin/python -m pytest tests/agents/test_public_account_prompts.py -q -k <selector>`.
+
+| Plant | Selector | Output |
+| --- | --- | --- |
+| The skeleton pre-filled with the literal example again | `-k bare_id` | `1 failed, 89 deselected` — `assert '"primary_reason_observation_id":null' in '{"voter":"p-1","target":"SKIP",...,"primary_reason_observation_id":"p-1:12:0",...}'` |
+| The third branch's "Write 1-2 short sentences, then stop." deleted | `-k one_short_phrase` | `6 failed, 84 deselected` — every arm and both roles |
+| The route-around itself: the SAME third-branch plant against the pre-round-3 test file (`git show 25bab3d7:tests/agents/test_public_account_prompts.py`) | `-k one_short_phrase` | `6 passed, 84 deselected` — green, which is the finding |
+
+The four plants from the earlier rounds were re-run on the delivered tree and
+still reproduce: the `obs ` tag word back in the prose example,
+`1 failed, 89 deselected` (`assert None ... re.compile('p-\d+:\d+:\d+').fullmatch('obs p-1:12:0')`);
+the truncation warning deleted and the budget wound back to "state a concise
+reason", `1 failed, 89 deselected` each; `"reason":"<reason>"` restored on the
+accusation shape, `5 failed, 1 passed, 84 deselected`; the revision wound back
+to `v3`, `1 failed, 89 deselected`. The round-1 table's fix-B row "the skeleton
+back to `null`" is retired above and replaced by its inverse: with the
+delivered skeleton null, that plant is a no-op rather than a plant, and a row
+that no longer reproduces may not stand under a `- [x]`.
+
+**Limitations of this round — noted, not changed.**
+
+1. **`_PRE_V4_REVISIONS` is a literal set.** It is written
+   `frozenset({"v1", "v2", "v3"})` and nothing derives it from a history of
+   revisions, so the day a `v5` lands somebody has to remember to add `v4` to
+   it by hand. The case it guards is still the right case — a tree that renders
+   the v4 bounds may not compose a pre-v4 stamp — but the guard is an agreement
+   a future bump must keep, not a fact the tree enforces.
+2. **The opening turn carries no sentence-count bound.** Fix C bounds the
+   `"reason"` shape through `_account_rules.j2`, which `_account_opening.j2`
+   includes, and bounds the reply instruction in
+   `accusation_round_accounts.j2`. The opening turn's own free text is bounded
+   by neither. Adding a bound there would move a fourth candidate template and
+   shorten a third graded input, which is more surface than a review-correction
+   round may move without its own declaration.
+3. **The candidate drops the reference's "no tags" hedge.**
+   `vote_ballot.j2:267` also tells the voter to keep the field null when its
+   memory lines show no `[obs ...]` tags at all; the candidate's line says only
+   to keep it null when a transcript turn carries the reason. The candidate's
+   line does say "do not invent a reference", which covers the same voter by a
+   different route, so the gap is a wording difference between the families
+   rather than a live defect — and closing it would widen this round past its
+   two findings.
+
+Also unchanged, and deliberately: the memo's fix-B sketch
+(`tasks/diagnosis-2026-09-15-truncation-stop.md` §5 B) says "and pre-fill the
+skeleton". It keeps its bytes. It is a dated diagnosis, a record of what was
+proposed on 2026-09-15 and not a live instruction, and the card rather than
+the memo is where a proposal is answered.
+
+**Verification, round 3.** Run from the worktree with `.venv/bin/python` on
+the merged tree, fake and replay providers only; no live provider call, no
+calibration, no recording, and `scripts/verify_ml_evidence.py` was never run
+with `--complete`. No band prefix was generated, printed or committed, and the
+new render case uses the same synthetic, seed-free inputs as its siblings.
+
+| Command | Result |
+| --- | --- |
+| `pytest tests/agents/test_public_account_prompts.py tests/experiments/test_accounts_v4_measurement_surface.py -q` | `95 passed` (90 + 5; no case count moves — the opt-in render joins an existing parametrized case) |
+| `python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 59 work cards` |
+| `python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `python scripts/verify_ml_evidence.py` (offline) | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; every check passed |
+| `pytest tests/scripts/test_verify_ml_evidence.py -q` | `80 passed` |
+| `bash scripts/check.sh` | run to the end, real exit code captured directly rather than through a pipe: `0`. `7750 passed, 20 skipped, 3 xfailed` on the Python side (was 7722 in round 1; the difference is the finish-reason card's cases, arriving with the merge of `main`), `19 passed (19) / 515 passed (515)` on the frontend, `All checks passed!` The FIRST run of this round exited `1` on `::test_the_mechanics_check_paragraph_quotes_the_run_it_describes`, which is the follow-through recorded below; the run quoted here is the one after that paragraph was re-made. |
+
+**The merge of `main`, and the two derived lines.** `origin/main` at
+`0a1d3b49` carries the merged finish-reason PR (#459) and the fourth
+authorization card's closure. One conflict: `docs/artifacts.md`'s audits row,
+where both sides had recomputed the row against their own `audits/` byte
+change, so neither side's number is right for the merged tree. Resolved by
+recomputing rather than by taking a side — with every change of this round
+staged, the tracked `audits/` inventory is 211 files summing 15,105,918 bytes
+(the manifest moves twice in this round: the corrected citation-form bullet and
+the re-made mechanics paragraph), and `docs/artifacts.md:109` carries that. `tasks/README.md`'s derived sentence
+merged cleanly and was wrong afterwards for the same reason: each side flipped
+one card from ready to done and each wrote the same "4 ready, 55 done", so the
+merged tree holds both flips and the sentence now reads what
+`scripts/validate_task_docs.py` derives, `As of 2026-09-15, tasks/work/ holds
+59 cards: 3 ready, 56 done`. The execution manifest auto-merged: main's
+widened truncation reading and this card's v4 section are different sections
+of one document and both are kept.
+
+**The mechanics-check paragraph was re-made again.** It quotes the fake
+provider's per-arm input tokens, and a one-line prose change on a template the
+candidate arm renders moves the candidate figure:
+`combined_accounts` goes 640,552 to 643,779, so the paragraph's derived sum
+(1,536,435 to 1,539,662) moves with it and the re-make note now reads
+608,664 to 643,779, +5.8%. The reference arm's figure, every graded count and
+the larger arm's per-unit figure are unchanged, which is again the arithmetic
+a prompt-only revision of one arm should produce.
+`::test_the_mechanics_check_paragraph_quotes_the_run_it_describes` is red
+otherwise — it was, on the first `bash scripts/check.sh` of this round, which
+is how the follow-through was found rather than asserted. Directly necessary
+follow-through in an Expected-scope file, declared here rather than taken
+silently.
+
+**The arm surface moves again, by one line.** `vote_ballot_accounts.j2` is a
+file of `agents/strategic/prompts/qwen3_6_27b`, so this round's one-line
+template change moves `arm_surface_digests` a second time. Nothing recorded
+depends on it: no committed constant pins the digest, no recording renders
+these bodies, and the fourth run's sitting was already unresumable from round
+1. `GENERATOR_SOURCES` holds none of the files this round touches, so no freeze
+restamp is due.

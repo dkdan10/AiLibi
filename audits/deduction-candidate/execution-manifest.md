@@ -1524,16 +1524,18 @@ configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
 and the limits it ran under (3,710,000 / 459,000 run-level, 106,000 / 16,000 per
 unit), so this is the first mechanics check made under the authorized ceilings
 themselves rather than under a proposal. Input tokens by the fake provider's
-`len // 4` heuristic were 895,883 (`repaired_clock`) and 640,552
+`len // 4` heuristic were 895,883 (`repaired_clock`) and 643,779
 (`combined_accounts`); applying the decision memo's calibrated 1.28x real-input
-ratio to their sum (1,536,435) gives about 1.97 M against the 3,710,000 this
+ratio to their sum (1,539,662) gives about 1.97 M against the 3,710,000 this
 manifest binds (53%), and the larger arm's 17,918 per unit gives about 22,900
 against the 106,000 per-unit ceiling (22%) — headroom checks, not predictions,
 because a real model writes a different transcript. The figures this paragraph
 carried before this re-binding were the third band's, measured at `f0574950`;
 they are superseded with that band by the paragraph you are reading. Re-made again on
-2026-09-15 for the v4 account bodies: only the candidate arm's figure moves
-(608,664 to 640,552, +5.2%), because only its templates gained bytes. Every
+2026-09-15 for the v4 account bodies, and once more the same day when round 3
+of review returned the ballot skeleton to a null observation id and said in
+prose what to replace that null with: only the candidate arm's figure moves
+(608,664 to 643,779, +5.8%), because only its templates gained bytes. Every
 graded count, the reference arm's figure and the larger arm's per-unit figure
 are unchanged, which is the arithmetic a prompt-only revision of one arm should
 produce.
