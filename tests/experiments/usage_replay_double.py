@@ -52,8 +52,28 @@ from tests.experiments.burned_call_double import (
     charged_parse_failure,
 )
 
-#: The committed profile: aggregate rows only, built from the three run branches.
+#: The committed profile: aggregate rows only. Since the fifth authorization of
+#: 2026-09-15 it is the second live development calibration's 720 calls over 120
+#: units, refreshed by ``--refresh-usage-profile`` from
+#: ``audits/deduction-candidate/calibration-2-2026-09-15/calibration.json``, and
+#: it is what :data:`experiments.fresh_deduction_instrument.CALIBRATED_UNIT_INPUT_TOKENS`
+#: and its output twin are read off.
 PROFILE_PATH: Final[Path] = Path(__file__).with_name("deduction_usage_profile.json")
+
+#: The profile that stood there until that refresh: the three stopped live runs'
+#: 38 rows, 36 resolved and two the provider billed and then refused. It is kept
+#: because the FAULTS are only in it. The sitting of 2026-09-15 archived no
+#: refusal, no default and no truncation — the corrected prompts worked — so a
+#: rehearsal of the stop of 2026-09-13, of the archived refusal, of a
+#: manufactured truncation or of a mid-unit transport drop has nothing to replay
+#: in the current profile and everything to replay in this one. Splitting them
+#: is what keeps both true at once: the gate is calibrated on the largest unit
+#: this evaluation has measured, and the fault rehearsals still run on the calls
+#: that actually faulted.
+STOPPED_RUNS_PROFILE_PATH: Final[Path] = Path(__file__).with_name(
+    "deduction_stopped_runs_usage_profile.json"
+)
+
 
 CallType = Literal["turn", "ballot"]
 
@@ -191,6 +211,18 @@ class UsageProfile:
             max(unit.charged_input_tokens for unit in self.units),
             max(unit.charged_output_tokens for unit in self.units),
         )
+
+
+def stopped_runs_profile() -> UsageProfile:
+    """The three stopped live runs' rows, as a profile.
+
+    Named rather than spelled out at each call site, because "which profile is
+    this rehearsal replaying" is the question the split of 2026-09-15 makes
+    worth asking out loud: the eight cases that call this one are the eight
+    whose subject is a FAULT.
+    """
+
+    return UsageProfile.load(STOPPED_RUNS_PROFILE_PATH)
 
 
 def _row(entry: Mapping[str, object]) -> UsageRow:
@@ -421,18 +453,23 @@ def feasible_limits() -> instrument.RunLimits:
 
     The numbers decision 3 of `tasks/diagnosis-2026-09-13-live-run-stops.md`
     puts to the owner, used here as the rehearsal's "what a re-sized
-    authorization would look like", with one figure moved: the per-unit output
-    ceiling, 12,000 in that proposal, would no longer clear the 15,360-token
-    schedule the fourth authorization's turn cap reserves, so it is raised to
-    16,000 and the three other ceilings are left where the diagnosis put them.
-    They remain unauthorized for a live run — they differ from
-    `AUTHORIZED_LIMITS` on both run ceilings and on the per-unit input one — and
+    authorization would look like", with three figures moved since. The
+    per-unit output ceiling, 12,000 in that proposal, would not clear the
+    15,360-token schedule the fourth authorization's turn cap reserves, so it
+    is 16,000. The two RUN ceilings, 3,600,000 and 350,000 there, no longer
+    clear what a hundred units of the profile committed on 2026-09-15 charge —
+    3,844,000 input and 421,696 output including the last call's in-flight
+    reservation — so they are raised past both, to figures that are still
+    nobody's authorization. They remain unauthorized for a live run: they
+    differ from `AUTHORIZED_LIMITS` on all three, and
     `assert_live_run_is_authorized` refuses them there for exactly that reason.
+    What the double CHARGES does not depend on any of them, so the rehearsals
+    that quote their own totals into the manifest are unmoved by this.
     """
 
     return instrument.RunLimits(
-        run_max_input_tokens=3_600_000,
-        run_max_output_tokens=350_000,
+        run_max_input_tokens=3_900_000,
+        run_max_output_tokens=430_000,
         unit_max_input_tokens=60_000,
         unit_max_output_tokens=16_000,
         max_cost_usd=instrument.AUTHORIZED_MAX_COST_USD,

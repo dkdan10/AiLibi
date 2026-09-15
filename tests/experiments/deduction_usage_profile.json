@@ -1,416 +1,6753 @@
 {
   "built_from": {
-    "archives": [
+    "band": "3000-3999",
+    "calibration": "fresh-deduction-calibration/1",
+    "instrument_sha256": "3478a68c7589b3d2436b87c86cfe30fc9700834b4e97aa394f701c0090819de6",
+    "mode": "2026-09-15",
+    "note": "Token counts only, measured by the development calibration on a converted band. No prompt, no prefix, no response text.",
+    "provider": "featherless",
+    "record": "audits/deduction-candidate/held-out/manifest-band-3000-3999.json",
+    "records": [
       {
-        "attempt": 1,
-        "branch": "work/fresh-deduction-run",
-        "date": "2026-09-10",
-        "directory": "audits/deduction-candidate/run-2026-09-10",
-        "read_with": "git show origin/work/fresh-deduction-run:<directory>/<replay>.jsonl"
+        "band": "3000-3999",
+        "record": "audits/deduction-candidate/held-out/manifest-band-3000-3999.json",
+        "seeds": 50
       },
       {
-        "attempt": 2,
-        "branch": "work/fresh-deduction-run-2",
-        "date": "2026-09-13",
-        "directory": "audits/deduction-candidate/run-2026-09-13",
-        "read_with": "git show origin/work/fresh-deduction-run-2:<directory>/<replay>.jsonl"
-      },
-      {
-        "attempt": 3,
-        "branch": "work/fresh-deduction-run-3",
-        "date": "2026-09-13",
-        "directory": "audits/deduction-candidate/run-2026-09-13-3",
-        "read_with": "git show origin/work/fresh-deduction-run-3:<directory>/<replay>.jsonl"
+        "band": "5000-5999",
+        "record": "audits/deduction-candidate/held-out/manifest-band-5000-5999.json",
+        "seeds": 10
       }
-    ],
-    "call_type": "turn or ballot, read off the response payload's shape for a resolved call and off the unit's one missing turn for a refusal.",
-    "order": "Archive order, then unit order, then within a unit: its turns with the refused one last among them, then its ballots. Replaying a bucket in this order reconstructs the sequence the provider produced, which is why the rehearsal reaches the same stop.",
-    "what": "Every provider call the three stopped live runs of the fresh-model deduction instrument resolved, plus the two calls a real provider billed and then refused on its own schema validation. Token counts only: no prompt, no prefix, no response text, and no seed."
+    ]
   },
   "calls": [
     {
-      "arm": "combined_accounts",
-      "attempt": 1,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 2424,
-      "output_tokens": 400
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 1,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 3432,
-      "output_tokens": 683
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 1,
-      "call_type": "turn",
-      "disposition": "billed_and_refused",
-      "error_type": "ValidationError",
-      "input_tokens": 2228,
-      "output_tokens": 861
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 1,
-      "call_type": "ballot",
-      "disposition": "resolved",
-      "input_tokens": 2560,
-      "output_tokens": 152
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 1,
-      "call_type": "ballot",
-      "disposition": "resolved",
-      "input_tokens": 1835,
-      "output_tokens": 113
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 1,
-      "call_type": "ballot",
-      "disposition": "resolved",
-      "input_tokens": 3012,
-      "output_tokens": 100
-    },
-    {
       "arm": "repaired_clock",
-      "attempt": 1,
       "call_type": "turn",
       "disposition": "resolved",
+      "finish_reason": "stop",
       "input_tokens": 3434,
-      "output_tokens": 268
+      "output_tokens": 313
     },
     {
       "arm": "repaired_clock",
-      "attempt": 1,
       "call_type": "turn",
       "disposition": "resolved",
-      "input_tokens": 3441,
-      "output_tokens": 159
+      "finish_reason": "stop",
+      "input_tokens": 3471,
+      "output_tokens": 168
     },
     {
       "arm": "repaired_clock",
-      "attempt": 1,
       "call_type": "turn",
       "disposition": "resolved",
-      "input_tokens": 2702,
-      "output_tokens": 380
+      "finish_reason": "stop",
+      "input_tokens": 2726,
+      "output_tokens": 436
     },
     {
       "arm": "repaired_clock",
-      "attempt": 1,
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 3783,
-      "output_tokens": 73
+      "finish_reason": "stop",
+      "input_tokens": 3817,
+      "output_tokens": 85
     },
     {
       "arm": "repaired_clock",
-      "attempt": 1,
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 3045,
-      "output_tokens": 124
+      "finish_reason": "stop",
+      "input_tokens": 3079,
+      "output_tokens": 114
     },
     {
       "arm": "repaired_clock",
-      "attempt": 1,
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 4107,
-      "output_tokens": 88
+      "finish_reason": "stop",
+      "input_tokens": 4141,
+      "output_tokens": 81
     },
     {
-      "arm": "repaired_clock",
-      "attempt": 2,
+      "arm": "combined_accounts",
       "call_type": "turn",
       "disposition": "resolved",
-      "input_tokens": 3301,
+      "finish_reason": "stop",
+      "input_tokens": 2569,
+      "output_tokens": 568
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3961,
+      "output_tokens": 229
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3056,
       "output_tokens": 343
     },
     {
-      "arm": "repaired_clock",
-      "attempt": 2,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 3242,
-      "output_tokens": 210
-    },
-    {
-      "arm": "repaired_clock",
-      "attempt": 2,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 2784,
-      "output_tokens": 323
-    },
-    {
-      "arm": "repaired_clock",
-      "attempt": 2,
+      "arm": "combined_accounts",
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 3855,
-      "output_tokens": 117
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 2153,
-      "output_tokens": 528
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 3633,
-      "output_tokens": 1045
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 3949,
-      "output_tokens": 1011
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "ballot",
-      "disposition": "resolved",
-      "input_tokens": 4568,
-      "output_tokens": 204
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "ballot",
-      "disposition": "resolved",
-      "input_tokens": 4645,
-      "output_tokens": 160
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "ballot",
-      "disposition": "resolved",
-      "input_tokens": 5334,
+      "finish_reason": "stop",
+      "input_tokens": 3974,
       "output_tokens": 108
     },
     {
       "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "turn",
+      "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 2386,
-      "output_tokens": 744
+      "finish_reason": "stop",
+      "input_tokens": 3249,
+      "output_tokens": 68
     },
     {
       "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 2886,
-      "output_tokens": 694
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "billed_and_refused",
-      "error_type": "ValidationError",
-      "input_tokens": 4541,
-      "output_tokens": 1455
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 4145,
-      "output_tokens": 223
+      "finish_reason": "stop",
+      "input_tokens": 4426,
+      "output_tokens": 83
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
       "call_type": "turn",
       "disposition": "resolved",
-      "input_tokens": 3160,
-      "output_tokens": 361
+      "finish_reason": "stop",
+      "input_tokens": 2920,
+      "output_tokens": 259
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
       "call_type": "turn",
       "disposition": "resolved",
-      "input_tokens": 3459,
-      "output_tokens": 437
+      "finish_reason": "stop",
+      "input_tokens": 3460,
+      "output_tokens": 455
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
       "call_type": "turn",
       "disposition": "resolved",
-      "input_tokens": 4226,
-      "output_tokens": 487
+      "finish_reason": "stop",
+      "input_tokens": 3877,
+      "output_tokens": 158
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 3667,
-      "output_tokens": 104
-    },
-    {
-      "arm": "repaired_clock",
-      "attempt": 3,
-      "call_type": "ballot",
-      "disposition": "resolved",
-      "input_tokens": 3609,
+      "finish_reason": "stop",
+      "input_tokens": 4401,
       "output_tokens": 105
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 4438,
+      "finish_reason": "stop",
+      "input_tokens": 3850,
+      "output_tokens": 91
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3445,
+      "output_tokens": 73
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2064,
+      "output_tokens": 578
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3585,
+      "output_tokens": 292
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4604,
+      "output_tokens": 324
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4696,
+      "output_tokens": 83
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4124,
+      "output_tokens": 107
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3697,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3321,
+      "output_tokens": 338
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3316,
+      "output_tokens": 434
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4282,
+      "output_tokens": 452
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4736,
+      "output_tokens": 97
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3938,
+      "output_tokens": 96
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4125,
+      "output_tokens": 97
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2461,
+      "output_tokens": 805
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3700,
+      "output_tokens": 305
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4852,
+      "output_tokens": 342
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5020,
+      "output_tokens": 70
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4248,
+      "output_tokens": 68
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4448,
+      "output_tokens": 112
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3309,
+      "output_tokens": 269
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3448,
+      "output_tokens": 126
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3141,
+      "output_tokens": 257
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3953,
+      "output_tokens": 74
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3511,
+      "output_tokens": 86
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3369,
+      "output_tokens": 123
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2444,
+      "output_tokens": 569
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3941,
+      "output_tokens": 270
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3670,
+      "output_tokens": 402
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4665,
+      "output_tokens": 75
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4079,
+      "output_tokens": 78
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3940,
+      "output_tokens": 105
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3165,
+      "output_tokens": 341
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3352,
+      "output_tokens": 157
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2665,
+      "output_tokens": 273
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2899,
+      "output_tokens": 92
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3892,
+      "output_tokens": 101
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3456,
+      "output_tokens": 110
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2298,
+      "output_tokens": 610
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4012,
+      "output_tokens": 361
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3563,
+      "output_tokens": 254
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3585,
+      "output_tokens": 99
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4698,
+      "output_tokens": 79
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4142,
+      "output_tokens": 66
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2982,
+      "output_tokens": 303
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3526,
+      "output_tokens": 175
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3552,
+      "output_tokens": 381
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3866,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3312,
+      "output_tokens": 105
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4230,
+      "output_tokens": 100
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2122,
+      "output_tokens": 621
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4166,
+      "output_tokens": 516
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4729,
+      "output_tokens": 565
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5272,
+      "output_tokens": 105
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4746,
+      "output_tokens": 97
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5670,
+      "output_tokens": 104
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3330,
+      "output_tokens": 330
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3196,
+      "output_tokens": 152
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2723,
+      "output_tokens": 375
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2990,
+      "output_tokens": 84
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3653,
+      "output_tokens": 103
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3772,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2465,
+      "output_tokens": 429
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3350,
+      "output_tokens": 436
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3164,
+      "output_tokens": 206
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3106,
+      "output_tokens": 100
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3766,
+      "output_tokens": 120
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4036,
+      "output_tokens": 72
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3912,
+      "output_tokens": 360
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3712,
+      "output_tokens": 520
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4354,
+      "output_tokens": 343
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4749,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4224,
       "output_tokens": 107
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 3387,
-      "output_tokens": 294
-    },
-    {
-      "arm": "repaired_clock",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 3245,
-      "output_tokens": 396
-    },
-    {
-      "arm": "repaired_clock",
-      "attempt": 3,
-      "call_type": "turn",
-      "disposition": "resolved",
-      "input_tokens": 4163,
-      "output_tokens": 433
-    },
-    {
-      "arm": "repaired_clock",
-      "attempt": 3,
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 4224,
+      "finish_reason": "stop",
+      "input_tokens": 4653,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3050,
+      "output_tokens": 995
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4421,
+      "output_tokens": 227
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5165,
+      "output_tokens": 289
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5258,
+      "output_tokens": 82
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4759,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5204,
+      "output_tokens": 109
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3017,
+      "output_tokens": 285
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3239,
+      "output_tokens": 131
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2827,
+      "output_tokens": 426
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3304,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3124,
+      "output_tokens": 97
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3796,
+      "output_tokens": 89
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2157,
+      "output_tokens": 457
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2622,
+      "output_tokens": 293
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3819,
+      "output_tokens": 566
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3838,
+      "output_tokens": 90
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3645,
+      "output_tokens": 95
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4469,
+      "output_tokens": 99
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2860,
+      "output_tokens": 243
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3084,
+      "output_tokens": 170
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2856,
+      "output_tokens": 246
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3599,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3068,
+      "output_tokens": 103
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3055,
+      "output_tokens": 73
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2000,
+      "output_tokens": 320
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3139,
+      "output_tokens": 615
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3770,
+      "output_tokens": 402
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4643,
+      "output_tokens": 69
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3977,
+      "output_tokens": 100
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3970,
       "output_tokens": 94
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3134,
+      "output_tokens": 317
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3671,
+      "output_tokens": 158
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2942,
+      "output_tokens": 205
+    },
+    {
+      "arm": "repaired_clock",
       "call_type": "ballot",
       "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3399,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3124,
+      "output_tokens": 71
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4115,
+      "output_tokens": 97
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2262,
+      "output_tokens": 662
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3160,
+      "output_tokens": 321
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4760,
+      "output_tokens": 264
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3911,
+      "output_tokens": 67
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3643,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4769,
+      "output_tokens": 108
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2850,
+      "output_tokens": 289
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3244,
+      "output_tokens": 157
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2973,
+      "output_tokens": 290
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3233,
+      "output_tokens": 105
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3130,
+      "output_tokens": 78
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3818,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 1985,
+      "output_tokens": 403
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3398,
+      "output_tokens": 198
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2897,
+      "output_tokens": 437
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3174,
+      "output_tokens": 106
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3079,
+      "output_tokens": 94
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3895,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3890,
+      "output_tokens": 309
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3498,
+      "output_tokens": 192
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2831,
+      "output_tokens": 263
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4080,
+      "output_tokens": 97
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3063,
+      "output_tokens": 93
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4167,
+      "output_tokens": 112
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3025,
+      "output_tokens": 430
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3731,
+      "output_tokens": 564
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3674,
+      "output_tokens": 323
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4888,
+      "output_tokens": 70
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3736,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4826,
+      "output_tokens": 112
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3110,
+      "output_tokens": 338
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3571,
+      "output_tokens": 155
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2905,
+      "output_tokens": 283
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3385,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3134,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4245,
+      "output_tokens": 79
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2239,
+      "output_tokens": 598
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3952,
+      "output_tokens": 318
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3381,
+      "output_tokens": 480
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4000,
+      "output_tokens": 121
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3758,
+      "output_tokens": 111
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4833,
+      "output_tokens": 73
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3452,
+      "output_tokens": 273
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3532,
+      "output_tokens": 157
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3435,
+      "output_tokens": 346
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3791,
+      "output_tokens": 103
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4121,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3744,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2581,
+      "output_tokens": 415
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3665,
+      "output_tokens": 263
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3572,
+      "output_tokens": 306
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3672,
+      "output_tokens": 80
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4146,
+      "output_tokens": 105
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3631,
+      "output_tokens": 117
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2917,
+      "output_tokens": 329
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3603,
+      "output_tokens": 186
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3006,
+      "output_tokens": 281
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3253,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4144,
+      "output_tokens": 101
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3248,
+      "output_tokens": 85
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2050,
+      "output_tokens": 481
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3746,
+      "output_tokens": 235
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3053,
+      "output_tokens": 272
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3002,
+      "output_tokens": 70
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4024,
+      "output_tokens": 93
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2999,
+      "output_tokens": 99
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2865,
+      "output_tokens": 265
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3540,
+      "output_tokens": 400
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4177,
+      "output_tokens": 327
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3270,
+      "output_tokens": 84
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3852,
+      "output_tokens": 128
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4373,
+      "output_tokens": 91
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2000,
+      "output_tokens": 479
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3807,
+      "output_tokens": 265
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3626,
+      "output_tokens": 530
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3558,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4145,
+      "output_tokens": 78
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4664,
+      "output_tokens": 71
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3097,
+      "output_tokens": 302
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3524,
+      "output_tokens": 157
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3494,
+      "output_tokens": 386
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3364,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4176,
+      "output_tokens": 104
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3505,
+      "output_tokens": 99
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2225,
+      "output_tokens": 485
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3086,
+      "output_tokens": 337
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4321,
+      "output_tokens": 292
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3536,
+      "output_tokens": 119
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4363,
+      "output_tokens": 98
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3692,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3146,
+      "output_tokens": 266
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3448,
+      "output_tokens": 176
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2931,
+      "output_tokens": 358
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4353,
+      "output_tokens": 104
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3249,
+      "output_tokens": 101
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3606,
+      "output_tokens": 117
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2273,
+      "output_tokens": 605
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4165,
+      "output_tokens": 283
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3663,
+      "output_tokens": 595
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5228,
+      "output_tokens": 78
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4268,
+      "output_tokens": 97
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4490,
+      "output_tokens": 74
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2791,
+      "output_tokens": 330
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2722,
+      "output_tokens": 403
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3849,
+      "output_tokens": 219
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4070,
+      "output_tokens": 94
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3094,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3437,
+      "output_tokens": 91
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 1929,
+      "output_tokens": 575
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2690,
+      "output_tokens": 233
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3816,
+      "output_tokens": 271
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3884,
+      "output_tokens": 67
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3019,
+      "output_tokens": 118
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3256,
+      "output_tokens": 110
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3036,
+      "output_tokens": 291
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3348,
+      "output_tokens": 176
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2788,
+      "output_tokens": 283
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3039,
+      "output_tokens": 103
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3325,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3899,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2171,
+      "output_tokens": 463
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3532,
+      "output_tokens": 289
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2911,
+      "output_tokens": 335
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2996,
+      "output_tokens": 105
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3284,
+      "output_tokens": 119
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3991,
+      "output_tokens": 112
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3250,
+      "output_tokens": 399
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3561,
+      "output_tokens": 163
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3189,
+      "output_tokens": 434
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4188,
+      "output_tokens": 113
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3684,
+      "output_tokens": 96
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3535,
+      "output_tokens": 103
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2388,
+      "output_tokens": 753
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4367,
+      "output_tokens": 345
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4179,
+      "output_tokens": 383
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5251,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4621,
+      "output_tokens": 82
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4467,
+      "output_tokens": 70
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2907,
+      "output_tokens": 261
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3450,
+      "output_tokens": 152
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3083,
+      "output_tokens": 303
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3144,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4130,
+      "output_tokens": 112
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3330,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2042,
+      "output_tokens": 427
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3687,
+      "output_tokens": 254
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3236,
+      "output_tokens": 279
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3074,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4070,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3263,
+      "output_tokens": 68
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3019,
+      "output_tokens": 268
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3346,
+      "output_tokens": 153
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2979,
+      "output_tokens": 402
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3442,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3543,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4215,
+      "output_tokens": 121
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2148,
+      "output_tokens": 623
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3964,
+      "output_tokens": 439
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4050,
+      "output_tokens": 459
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4326,
+      "output_tokens": 82
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4388,
+      "output_tokens": 112
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5105,
+      "output_tokens": 72
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2970,
+      "output_tokens": 354
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3290,
+      "output_tokens": 174
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2651,
+      "output_tokens": 223
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2852,
+      "output_tokens": 85
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3785,
+      "output_tokens": 99
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3254,
+      "output_tokens": 106
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2108,
+      "output_tokens": 463
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3458,
+      "output_tokens": 402
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3003,
+      "output_tokens": 536
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3289,
+      "output_tokens": 124
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4357,
+      "output_tokens": 104
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3694,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3282,
+      "output_tokens": 321
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3567,
+      "output_tokens": 170
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3046,
+      "output_tokens": 352
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3582,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4135,
+      "output_tokens": 101
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3302,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2415,
+      "output_tokens": 538
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3978,
+      "output_tokens": 226
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3289,
+      "output_tokens": 588
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4172,
+      "output_tokens": 73
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4845,
+      "output_tokens": 79
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3887,
+      "output_tokens": 74
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3251,
+      "output_tokens": 424
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3326,
+      "output_tokens": 163
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3151,
+      "output_tokens": 446
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3907,
+      "output_tokens": 103
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3469,
+      "output_tokens": 107
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3670,
+      "output_tokens": 104
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2379,
+      "output_tokens": 556
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3626,
+      "output_tokens": 377
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3760,
+      "output_tokens": 473
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4665,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4101,
+      "output_tokens": 113
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4286,
+      "output_tokens": 77
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2972,
+      "output_tokens": 249
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3483,
+      "output_tokens": 164
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3650,
+      "output_tokens": 385
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3269,
+      "output_tokens": 103
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3701,
+      "output_tokens": 143
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4209,
+      "output_tokens": 111
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2107,
+      "output_tokens": 322
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3537,
+      "output_tokens": 220
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3331,
+      "output_tokens": 214
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2739,
+      "output_tokens": 117
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3188,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3696,
+      "output_tokens": 84
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3816,
+      "output_tokens": 420
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3656,
+      "output_tokens": 160
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2978,
+      "output_tokens": 333
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4179,
+      "output_tokens": 127
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3253,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4322,
+      "output_tokens": 115
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2953,
+      "output_tokens": 876
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4745,
+      "output_tokens": 1101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5878,
+      "output_tokens": 1884
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 8550,
+      "output_tokens": 108
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 7630,
+      "output_tokens": 98
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 8684,
+      "output_tokens": 109
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3186,
+      "output_tokens": 358
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3385,
+      "output_tokens": 153
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2828,
+      "output_tokens": 389
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3199,
+      "output_tokens": 115
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4103,
+      "output_tokens": 99
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3576,
+      "output_tokens": 103
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2324,
+      "output_tokens": 490
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2677,
+      "output_tokens": 340
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4130,
+      "output_tokens": 226
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3037,
+      "output_tokens": 104
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3997,
+      "output_tokens": 80
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3454,
+      "output_tokens": 81
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3021,
+      "output_tokens": 352
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3316,
+      "output_tokens": 152
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2725,
+      "output_tokens": 330
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3822,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3378,
+      "output_tokens": 101
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2993,
+      "output_tokens": 107
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2154,
+      "output_tokens": 472
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3452,
+      "output_tokens": 336
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3095,
+      "output_tokens": 432
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4441,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3867,
+      "output_tokens": 69
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3495,
+      "output_tokens": 72
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2989,
+      "output_tokens": 265
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3374,
+      "output_tokens": 174
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2767,
+      "output_tokens": 335
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3312,
+      "output_tokens": 105
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3056,
+      "output_tokens": 117
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3962,
+      "output_tokens": 84
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2129,
+      "output_tokens": 474
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2592,
+      "output_tokens": 216
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3837,
+      "output_tokens": 628
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3757,
+      "output_tokens": 99
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3487,
+      "output_tokens": 117
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4530,
+      "output_tokens": 81
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3124,
+      "output_tokens": 288
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3371,
+      "output_tokens": 166
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
       "input_tokens": 3388,
+      "output_tokens": 319
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3649,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3413,
+      "output_tokens": 92
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3923,
+      "output_tokens": 96
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2257,
+      "output_tokens": 636
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4073,
+      "output_tokens": 255
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4073,
+      "output_tokens": 178
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3969,
+      "output_tokens": 74
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3727,
+      "output_tokens": 99
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4372,
+      "output_tokens": 74
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3579,
+      "output_tokens": 250
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3632,
+      "output_tokens": 170
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3337,
+      "output_tokens": 350
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3627,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3931,
+      "output_tokens": 94
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4241,
+      "output_tokens": 100
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2714,
+      "output_tokens": 429
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3810,
+      "output_tokens": 251
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3350,
+      "output_tokens": 360
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3584,
+      "output_tokens": 73
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3890,
+      "output_tokens": 75
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4332,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3248,
+      "output_tokens": 241
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3464,
+      "output_tokens": 164
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3410,
+      "output_tokens": 359
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3549,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4058,
+      "output_tokens": 108
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3390,
+      "output_tokens": 90
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2392,
+      "output_tokens": 689
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4343,
+      "output_tokens": 417
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4568,
+      "output_tokens": 621
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5147,
+      "output_tokens": 133
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5643,
+      "output_tokens": 103
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4981,
+      "output_tokens": 84
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3253,
+      "output_tokens": 251
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3447,
+      "output_tokens": 118
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3163,
+      "output_tokens": 458
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3555,
+      "output_tokens": 107
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3496,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4040,
+      "output_tokens": 75
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2391,
+      "output_tokens": 612
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4189,
+      "output_tokens": 360
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4179,
+      "output_tokens": 453
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4594,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4526,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5200,
+      "output_tokens": 84
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3154,
+      "output_tokens": 340
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3475,
+      "output_tokens": 172
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3127,
+      "output_tokens": 210
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3973,
+      "output_tokens": 86
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3324,
+      "output_tokens": 79
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3415,
+      "output_tokens": 106
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2294,
+      "output_tokens": 469
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3678,
+      "output_tokens": 375
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3445,
+      "output_tokens": 388
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4430,
+      "output_tokens": 83
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3643,
+      "output_tokens": 135
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3739,
+      "output_tokens": 124
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2759,
+      "output_tokens": 257
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3537,
+      "output_tokens": 176
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2871,
+      "output_tokens": 373
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4290,
+      "output_tokens": 101
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3052,
+      "output_tokens": 123
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3166,
+      "output_tokens": 99
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 1886,
+      "output_tokens": 299
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3593,
+      "output_tokens": 303
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3002,
+      "output_tokens": 393
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4358,
+      "output_tokens": 90
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3114,
+      "output_tokens": 104
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3222,
+      "output_tokens": 96
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3550,
+      "output_tokens": 274
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3454,
+      "output_tokens": 163
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2874,
+      "output_tokens": 405
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3164,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3848,
+      "output_tokens": 85
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4073,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2685,
+      "output_tokens": 564
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4152,
+      "output_tokens": 570
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4294,
+      "output_tokens": 306
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4379,
+      "output_tokens": 72
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5052,
+      "output_tokens": 78
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5415,
+      "output_tokens": 81
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2892,
+      "output_tokens": 252
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3278,
+      "output_tokens": 149
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2758,
+      "output_tokens": 419
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3926,
+      "output_tokens": 87
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3083,
+      "output_tokens": 121
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3186,
+      "output_tokens": 71
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2027,
+      "output_tokens": 628
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3979,
+      "output_tokens": 811
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4579,
+      "output_tokens": 366
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5723,
+      "output_tokens": 123
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4742,
       "output_tokens": 116
     },
     {
-      "arm": "repaired_clock",
-      "attempt": 3,
+      "arm": "combined_accounts",
       "call_type": "ballot",
       "disposition": "resolved",
-      "input_tokens": 3698,
+      "finish_reason": "stop",
+      "input_tokens": 4832,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3149,
+      "output_tokens": 357
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3590,
+      "output_tokens": 160
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2815,
+      "output_tokens": 257
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3459,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3059,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4099,
+      "output_tokens": 105
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2287,
+      "output_tokens": 601
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4203,
+      "output_tokens": 278
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3455,
+      "output_tokens": 402
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4057,
+      "output_tokens": 108
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3654,
+      "output_tokens": 121
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4823,
+      "output_tokens": 111
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2909,
+      "output_tokens": 273
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3432,
+      "output_tokens": 142
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3333,
+      "output_tokens": 359
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4019,
+      "output_tokens": 89
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3631,
+      "output_tokens": 110
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3191,
+      "output_tokens": 84
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2049,
+      "output_tokens": 313
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3485,
+      "output_tokens": 234
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3237,
+      "output_tokens": 315
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3829,
+      "output_tokens": 74
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3292,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2857,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3717,
+      "output_tokens": 284
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3279,
+      "output_tokens": 158
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3132,
+      "output_tokens": 480
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3991,
       "output_tokens": 94
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4145,
+      "output_tokens": 79
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3540,
+      "output_tokens": 107
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2852,
+      "output_tokens": 840
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4426,
+      "output_tokens": 393
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4514,
+      "output_tokens": 215
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5024,
+      "output_tokens": 82
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5043,
+      "output_tokens": 73
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4447,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3197,
+      "output_tokens": 391
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3490,
+      "output_tokens": 398
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3777,
+      "output_tokens": 169
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3587,
+      "output_tokens": 89
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4279,
+      "output_tokens": 104
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3635,
+      "output_tokens": 105
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2326,
+      "output_tokens": 631
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4224,
+      "output_tokens": 349
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4153,
+      "output_tokens": 479
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4531,
+      "output_tokens": 103
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5220,
+      "output_tokens": 77
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4523,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3839,
+      "output_tokens": 328
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3288,
+      "output_tokens": 186
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3161,
+      "output_tokens": 432
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3888,
+      "output_tokens": 123
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3469,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4243,
+      "output_tokens": 105
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2979,
+      "output_tokens": 522
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3561,
+      "output_tokens": 320
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3515,
+      "output_tokens": 361
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4295,
+      "output_tokens": 86
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3750,
+      "output_tokens": 126
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4518,
+      "output_tokens": 77
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3440,
+      "output_tokens": 365
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3599,
+      "output_tokens": 134
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3335,
+      "output_tokens": 393
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3748,
+      "output_tokens": 117
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3607,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4108,
+      "output_tokens": 87
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2573,
+      "output_tokens": 817
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4643,
+      "output_tokens": 280
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4505,
+      "output_tokens": 462
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4932,
+      "output_tokens": 112
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4804,
+      "output_tokens": 99
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5438,
+      "output_tokens": 76
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3272,
+      "output_tokens": 310
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3588,
+      "output_tokens": 149
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3407,
+      "output_tokens": 404
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3608,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3491,
+      "output_tokens": 99
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4284,
+      "output_tokens": 87
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2405,
+      "output_tokens": 531
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3934,
+      "output_tokens": 700
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4580,
+      "output_tokens": 325
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4889,
+      "output_tokens": 125
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4778,
+      "output_tokens": 106
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5586,
+      "output_tokens": 67
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2863,
+      "output_tokens": 248
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3527,
+      "output_tokens": 154
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3346,
+      "output_tokens": 337
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3628,
+      "output_tokens": 96
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3143,
+      "output_tokens": 110
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4107,
+      "output_tokens": 87
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2003,
+      "output_tokens": 530
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4096,
+      "output_tokens": 298
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3979,
+      "output_tokens": 318
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4069,
+      "output_tokens": 79
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3584,
+      "output_tokens": 100
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4660,
+      "output_tokens": 71
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3145,
+      "output_tokens": 248
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2983,
+      "output_tokens": 158
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2867,
+      "output_tokens": 360
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3684,
+      "output_tokens": 84
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3913,
+      "output_tokens": 105
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3363,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2285,
+      "output_tokens": 452
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3265,
+      "output_tokens": 377
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3238,
+      "output_tokens": 614
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4235,
+      "output_tokens": 97
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4509,
+      "output_tokens": 97
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3942,
+      "output_tokens": 68
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3037,
+      "output_tokens": 251
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2794,
+      "output_tokens": 174
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3126,
+      "output_tokens": 338
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3390,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3403,
+      "output_tokens": 119
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3339,
+      "output_tokens": 91
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2181,
+      "output_tokens": 447
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3085,
+      "output_tokens": 350
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3465,
+      "output_tokens": 416
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3857,
+      "output_tokens": 78
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3750,
+      "output_tokens": 122
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3682,
+      "output_tokens": 85
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3301,
+      "output_tokens": 336
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3231,
+      "output_tokens": 192
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2756,
+      "output_tokens": 323
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3803,
+      "output_tokens": 115
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3009,
+      "output_tokens": 102
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3630,
+      "output_tokens": 104
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2441,
+      "output_tokens": 532
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3591,
+      "output_tokens": 247
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2953,
+      "output_tokens": 290
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3921,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2993,
+      "output_tokens": 94
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3616,
+      "output_tokens": 100
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2964,
+      "output_tokens": 254
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3144,
+      "output_tokens": 162
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2982,
+      "output_tokens": 277
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3705,
+      "output_tokens": 79
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3193,
+      "output_tokens": 92
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3222,
+      "output_tokens": 102
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2108,
+      "output_tokens": 618
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3876,
+      "output_tokens": 626
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4575,
+      "output_tokens": 427
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5527,
+      "output_tokens": 71
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4884,
+      "output_tokens": 108
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4907,
+      "output_tokens": 99
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3304,
+      "output_tokens": 329
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4099,
+      "output_tokens": 373
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4320,
+      "output_tokens": 309
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4020,
+      "output_tokens": 123
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4770,
+      "output_tokens": 96
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4519,
+      "output_tokens": 100
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2442,
+      "output_tokens": 384
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3645,
+      "output_tokens": 223
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3978,
+      "output_tokens": 278
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3295,
+      "output_tokens": 108
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4036,
+      "output_tokens": 70
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3912,
+      "output_tokens": 67
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3103,
+      "output_tokens": 251
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2982,
+      "output_tokens": 395
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4002,
+      "output_tokens": 319
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4248,
+      "output_tokens": 104
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3424,
+      "output_tokens": 107
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3675,
+      "output_tokens": 90
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2241,
+      "output_tokens": 483
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3508,
+      "output_tokens": 308
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3190,
+      "output_tokens": 260
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4043,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3261,
+      "output_tokens": 123
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3512,
+      "output_tokens": 93
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3048,
+      "output_tokens": 264
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3048,
+      "output_tokens": 142
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2982,
+      "output_tokens": 243
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3577,
+      "output_tokens": 87
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3263,
+      "output_tokens": 109
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3219,
+      "output_tokens": 108
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2175,
+      "output_tokens": 395
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3255,
+      "output_tokens": 392
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3487,
+      "output_tokens": 466
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4372,
+      "output_tokens": 73
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3910,
+      "output_tokens": 111
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3890,
+      "output_tokens": 133
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3655,
+      "output_tokens": 400
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4126,
+      "output_tokens": 443
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4287,
+      "output_tokens": 275
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4134,
+      "output_tokens": 160
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4387,
+      "output_tokens": 113
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4462,
+      "output_tokens": 99
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2788,
+      "output_tokens": 970
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4725,
+      "output_tokens": 265
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5163,
+      "output_tokens": 700
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5888,
+      "output_tokens": 78
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 6145,
+      "output_tokens": 72
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 6227,
+      "output_tokens": 83
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2937,
+      "output_tokens": 292
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3480,
+      "output_tokens": 160
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3171,
+      "output_tokens": 215
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3168,
+      "output_tokens": 92
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3370,
+      "output_tokens": 71
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3983,
+      "output_tokens": 94
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2081,
+      "output_tokens": 637
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4172,
+      "output_tokens": 736
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4931,
+      "output_tokens": 449
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5044,
+      "output_tokens": 109
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5248,
+      "output_tokens": 113
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5990,
+      "output_tokens": 96
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3476,
+      "output_tokens": 357
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3411,
+      "output_tokens": 321
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4101,
+      "output_tokens": 326
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4294,
+      "output_tokens": 108
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3597,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3890,
+      "output_tokens": 109
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2609,
+      "output_tokens": 668
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3369,
+      "output_tokens": 373
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4516,
+      "output_tokens": 524
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 5007,
+      "output_tokens": 123
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4362,
+      "output_tokens": 117
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4640,
+      "output_tokens": 117
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3187,
+      "output_tokens": 230
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2865,
+      "output_tokens": 168
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2837,
+      "output_tokens": 357
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3454,
+      "output_tokens": 98
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3514,
+      "output_tokens": 95
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3134,
+      "output_tokens": 101
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2322,
+      "output_tokens": 535
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2838,
+      "output_tokens": 195
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3550,
+      "output_tokens": 292
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3415,
+      "output_tokens": 81
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3619,
+      "output_tokens": 82
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3088,
+      "output_tokens": 86
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3335,
+      "output_tokens": 373
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3111,
+      "output_tokens": 421
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3897,
+      "output_tokens": 139
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4430,
+      "output_tokens": 106
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3452,
+      "output_tokens": 103
+    },
+    {
+      "arm": "repaired_clock",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3895,
+      "output_tokens": 111
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2473,
+      "output_tokens": 537
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 2955,
+      "output_tokens": 225
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "turn",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4268,
+      "output_tokens": 251
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 4191,
+      "output_tokens": 77
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3195,
+      "output_tokens": 80
+    },
+    {
+      "arm": "combined_accounts",
+      "call_type": "ballot",
+      "disposition": "resolved",
+      "finish_reason": "stop",
+      "input_tokens": 3609,
+      "output_tokens": 81
     }
   ],
   "schema": "fresh-deduction-usage-profile/1",
   "totals": {
-    "largest_charged_unit_input_tokens": 24282,
-    "largest_charged_unit_output_tokens": 3116,
-    "refused_calls_with_usage": 2,
-    "resolved_calls": 36,
-    "units": 7
+    "largest_charged_unit_input_tokens": 38440,
+    "largest_charged_unit_output_tokens": 4176,
+    "refused_calls_with_usage": 0,
+    "resolved_calls": 720,
+    "units": 120
   },
   "units": [
     {
-      "arm": "combined_accounts",
-      "attempt": 1,
-      "charged_input_tokens": 15491,
-      "charged_output_tokens": 2309,
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20668,
+      "charged_output_tokens": 1197,
       "complete": true,
-      "date": "2026-09-10",
-      "refused_calls": 1,
-      "resolved_calls": 5
+      "refused_calls": 0,
+      "resolved_calls": 6
     },
     {
-      "arm": "repaired_clock",
-      "attempt": 1,
-      "charged_input_tokens": 20512,
-      "charged_output_tokens": 1092,
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21235,
+      "charged_output_tokens": 1399,
       "complete": true,
-      "date": "2026-09-10",
       "refused_calls": 0,
       "resolved_calls": 6
     },
     {
       "arm": "repaired_clock",
-      "attempt": 2,
-      "charged_input_tokens": 13182,
+      "charged_input_tokens": 21953,
+      "charged_output_tokens": 1141,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22770,
+      "charged_output_tokens": 1486,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 23718,
+      "charged_output_tokens": 1514,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 24729,
+      "charged_output_tokens": 1702,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20731,
+      "charged_output_tokens": 935,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22739,
+      "charged_output_tokens": 1499,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19429,
+      "charged_output_tokens": 1074,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22298,
+      "charged_output_tokens": 1469,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21468,
+      "charged_output_tokens": 1164,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 26705,
+      "charged_output_tokens": 2008,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19664,
+      "charged_output_tokens": 1145,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 19887,
+      "charged_output_tokens": 1363,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 25604,
+      "charged_output_tokens": 1526,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 27857,
+      "charged_output_tokens": 1783,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19307,
+      "charged_output_tokens": 1128,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 20550,
+      "charged_output_tokens": 1600,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 18522,
+      "charged_output_tokens": 937,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21499,
+      "charged_output_tokens": 1600,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20385,
+      "charged_output_tokens": 950,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22505,
+      "charged_output_tokens": 1524,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19248,
+      "charged_output_tokens": 1021,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 18428,
+      "charged_output_tokens": 1344,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21529,
+      "charged_output_tokens": 1066,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 23880,
+      "charged_output_tokens": 1580,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20350,
+      "charged_output_tokens": 1048,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22163,
+      "charged_output_tokens": 1701,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 22075,
+      "charged_output_tokens": 1076,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21267,
+      "charged_output_tokens": 1286,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20171,
+      "charged_output_tokens": 1077,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 18874,
+      "charged_output_tokens": 1250,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 22077,
+      "charged_output_tokens": 1295,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21800,
+      "charged_output_tokens": 1504,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21160,
+      "charged_output_tokens": 1154,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21223,
+      "charged_output_tokens": 1431,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20733,
+      "charged_output_tokens": 1122,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 24087,
+      "charged_output_tokens": 1732,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19963,
+      "charged_output_tokens": 1239,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 18594,
+      "charged_output_tokens": 1374,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19435,
+      "charged_output_tokens": 1057,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 18885,
+      "charged_output_tokens": 1423,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21407,
+      "charged_output_tokens": 1308,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 25273,
+      "charged_output_tokens": 1714,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20044,
+      "charged_output_tokens": 1036,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 19372,
+      "charged_output_tokens": 1232,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20544,
+      "charged_output_tokens": 1144,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 23981,
+      "charged_output_tokens": 1787,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 18802,
+      "charged_output_tokens": 1041,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 19909,
+      "charged_output_tokens": 1724,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20914,
+      "charged_output_tokens": 1152,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22586,
+      "charged_output_tokens": 1578,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20774,
+      "charged_output_tokens": 1347,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22817,
+      "charged_output_tokens": 1677,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21284,
+      "charged_output_tokens": 1155,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 18598,
+      "charged_output_tokens": 1059,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 22204,
+      "charged_output_tokens": 1255,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 38440,
+      "charged_output_tokens": 4176,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20277,
+      "charged_output_tokens": 1217,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 19619,
+      "charged_output_tokens": 1321,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19255,
+      "charged_output_tokens": 1137,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 20504,
+      "charged_output_tokens": 1462,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19460,
+      "charged_output_tokens": 1080,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 20332,
+      "charged_output_tokens": 1615,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20868,
+      "charged_output_tokens": 1067,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22471,
+      "charged_output_tokens": 1316,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 22347,
+      "charged_output_tokens": 1062,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21680,
+      "charged_output_tokens": 1290,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21119,
+      "charged_output_tokens": 1060,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 27074,
+      "charged_output_tokens": 2047,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20954,
+      "charged_output_tokens": 1107,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 25079,
+      "charged_output_tokens": 1711,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20468,
       "charged_output_tokens": 993,
-      "complete": false,
-      "date": "2026-09-13",
-      "refused_calls": 0,
-      "resolved_calls": 4
-    },
-    {
-      "arm": "combined_accounts",
-      "attempt": 3,
-      "charged_input_tokens": 24282,
-      "charged_output_tokens": 3056,
       "complete": true,
-      "date": "2026-09-13",
       "refused_calls": 0,
       "resolved_calls": 6
     },
     {
       "arm": "combined_accounts",
-      "attempt": 3,
-      "charged_input_tokens": 13958,
-      "charged_output_tokens": 3116,
-      "complete": false,
-      "date": "2026-09-13",
-      "refused_calls": 1,
-      "resolved_calls": 3
-    },
-    {
-      "arm": "repaired_clock",
-      "attempt": 3,
-      "charged_input_tokens": 22559,
-      "charged_output_tokens": 1601,
+      "charged_input_tokens": 21229,
+      "charged_output_tokens": 1574,
       "complete": true,
-      "date": "2026-09-13",
       "refused_calls": 0,
       "resolved_calls": 6
     },
     {
       "arm": "repaired_clock",
-      "attempt": 3,
-      "charged_input_tokens": 22105,
-      "charged_output_tokens": 1427,
+      "charged_input_tokens": 19675,
+      "charged_output_tokens": 1129,
       "complete": true,
-      "date": "2026-09-13",
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 19175,
+      "charged_output_tokens": 1285,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20963,
+      "charged_output_tokens": 1130,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 25977,
+      "charged_output_tokens": 1671,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19123,
+      "charged_output_tokens": 1099,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 25882,
+      "charged_output_tokens": 2139,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20171,
+      "charged_output_tokens": 1081,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22479,
+      "charged_output_tokens": 1621,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20515,
+      "charged_output_tokens": 1057,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 18749,
+      "charged_output_tokens": 1139,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21804,
+      "charged_output_tokens": 1202,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 26306,
+      "charged_output_tokens": 1709,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21965,
+      "charged_output_tokens": 1256,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 24977,
+      "charged_output_tokens": 1745,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21888,
+      "charged_output_tokens": 1272,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22618,
+      "charged_output_tokens": 1492,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21837,
+      "charged_output_tokens": 1196,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 26895,
+      "charged_output_tokens": 1846,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21650,
+      "charged_output_tokens": 1149,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 26172,
+      "charged_output_tokens": 1854,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20614,
+      "charged_output_tokens": 1032,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 22391,
+      "charged_output_tokens": 1396,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19955,
+      "charged_output_tokens": 1056,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21474,
+      "charged_output_tokens": 1705,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19089,
+      "charged_output_tokens": 1079,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 20020,
+      "charged_output_tokens": 1498,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19730,
+      "charged_output_tokens": 1172,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 19515,
+      "charged_output_tokens": 1344,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19210,
+      "charged_output_tokens": 966,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 25877,
+      "charged_output_tokens": 1949,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 25032,
+      "charged_output_tokens": 1330,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21308,
+      "charged_output_tokens": 1130,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 21434,
+      "charged_output_tokens": 1266,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 19755,
+      "charged_output_tokens": 1348,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 19137,
+      "charged_output_tokens": 953,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 21089,
+      "charged_output_tokens": 1570,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 25051,
+      "charged_output_tokens": 1490,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 30936,
+      "charged_output_tokens": 2168,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 20109,
+      "charged_output_tokens": 924,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 27466,
+      "charged_output_tokens": 2140,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 22769,
+      "charged_output_tokens": 1319,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 24503,
+      "charged_output_tokens": 1922,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 18991,
+      "charged_output_tokens": 1049,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 18832,
+      "charged_output_tokens": 1271,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "repaired_clock",
+      "charged_input_tokens": 22120,
+      "charged_output_tokens": 1253,
+      "complete": true,
+      "refused_calls": 0,
+      "resolved_calls": 6
+    },
+    {
+      "arm": "combined_accounts",
+      "charged_input_tokens": 20691,
+      "charged_output_tokens": 1251,
+      "complete": true,
       "refused_calls": 0,
       "resolved_calls": 6
     }

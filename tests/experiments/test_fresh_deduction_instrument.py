@@ -127,11 +127,12 @@ from tests.experiments.burned_call_double import (
 )
 from tests.experiments import usage_replay_double
 from tests.experiments.usage_replay_double import (
-    PROFILE_PATH,
+    STOPPED_RUNS_PROFILE_PATH,
     CallTypeBlindReplayProvider,
     UsageProfile,
     UsageReplayProvider,
     feasible_limits,
+    stopped_runs_profile,
 )
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
@@ -2987,15 +2988,26 @@ class TestTruncationIsObservedAsWellAsInferred:
         assert calls, "the committed calibration carries no call rows"
         assert {call.finish_reason for call in calls} == {None}
 
+        # The profile committed BEFORE the reading was captured — the three
+        # stopped runs' rows, kept beside the current one since 2026-09-15 —
+        # still loads and still reads null, which is the compatibility claim.
+        archived = json.loads(
+            usage_replay_double.STOPPED_RUNS_PROFILE_PATH.read_text(encoding="utf-8")
+        )
+        assert archived["schema"] == "fresh-deduction-usage-profile/1"
+        assert {row.finish_reason for row in stopped_runs_profile().calls} == {None}
+        # What the double puts on the wire for a silent archive is its own word,
+        # said so at the constant rather than mistaken for a measurement.
+        assert usage_replay_double.REPLAYED_FINISH_REASON == "stop"
+        # And the profile the fifth authorization refreshed answers that null
+        # with a reading of its own, on every row: a MEASUREMENT this time,
+        # written by `--refresh-usage-profile` off the calibration's rows.
         profile = json.loads(
             usage_replay_double.PROFILE_PATH.read_text(encoding="utf-8")
         )
         assert profile["schema"] == "fresh-deduction-usage-profile/1"
         loaded = usage_replay_double.UsageProfile.load()
-        assert {row.finish_reason for row in loaded.calls} == {None}
-        # What the double puts on the wire for a silent archive is its own word,
-        # said so at the constant rather than mistaken for a measurement.
-        assert usage_replay_double.REPLAYED_FINISH_REASON == "stop"
+        assert {row.finish_reason for row in loaded.calls} == {"stop"}
 
 
 class TestBurnedCallStopConditions:
@@ -3894,8 +3906,8 @@ class TestExecutionManifest:
             "`Qwen/Qwen3.6-27B`",
             "turn 4,096 output / vote 1,024",
             "turn temperature 0.4 / vote temperature 0.2",
-            "3,710,000 input / 459,000 output run-level",
-            "106,000 input / 16,000 output per unit",
+            "3,844,000 input / 422,000 output run-level",
+            "116,000 input / 16,000 output per unit",
             "6 h of model work within an 8 h elapsed deadline",
             "$0.00 marginal",
             "4p1i with 3 living voters at meeting open",
@@ -4821,20 +4833,60 @@ class TestFeasibility:
         assert self._drive_one_unit(_CEILINGS_MERGED_2026_09_07) < 6
         assert self._drive_one_unit(instrument.unit_output_reservation()) == 6
 
-    def test_the_gate_accepts_the_fourth_authorizations_limits(self) -> None:
+    def test_the_gate_accepts_the_fifth_authorizations_limits(self) -> None:
         """The committed ceilings pay for the run they authorize.
 
-        The fourth authorization card re-sized them from the live calibration of
-        2026-09-14 precisely so this holds: 16,000 per-unit output against a
-        15,360 schedule, 106,000 per-unit input against the largest archived
-        unit, and both run ceilings above a hundred units at that unit.
+        The fifth authorization card re-sized them from the second live
+        calibration of 2026-09-15 precisely so this holds: 16,000 per-unit
+        output against a 15,360 schedule, 116,000 per-unit input against the
+        largest unit the committed profile carries, and both run ceilings above
+        a hundred units at that unit — the OUTPUT one above it plus the turn cap
+        its last call reserves. Named for the fourth authorization until that
+        day, when the refreshed profile stopped the fourth's own ceilings
+        clearing it: the case below.
         """
 
         instrument.assert_limits_are_feasible()
         assert AUTHORIZED_LIMITS.unit_max_output_tokens >= (
             instrument.unit_output_reservation()
         )
+        assert AUTHORIZED_LIMITS.unit_max_input_tokens >= (
+            instrument.CALIBRATED_UNIT_INPUT_TOKENS
+        )
         assert self._drive_one_unit(AUTHORIZED_LIMITS.unit_max_output_tokens) == 6
+
+    def test_the_fourth_authorizations_run_input_ceiling_is_refused_on_this_profile(
+        self,
+    ) -> None:
+        """PLANTED: 3,710,000, the run-level input ceiling in force until 2026-09-15.
+
+        The finding that opened the fifth authorization, held as arithmetic. The
+        second calibration's largest unit charged 38,440 input tokens, so a
+        hundred of them need 3,844,000 and the previous ceiling refuses a run of
+        the units this evaluation has now measured. Only that one comparison
+        moved: the OUTPUT dimension clears the old ceiling with room, which is
+        why the same rule LOWERED that one rather than raising it.
+        """
+
+        planted = AUTHORIZED_LIMITS.model_copy(
+            update={"run_max_input_tokens": 3_710_000}
+        )
+        with pytest.raises(instrument.LimitsInfeasible) as refused:
+            instrument.assert_limits_are_feasible(limits=planted)
+        message = str(refused.value)
+        assert "run-level input" in message
+        assert "3,710,000" in message
+        assert "3,844,000" in message
+        assert (
+            instrument.CALIBRATED_UNIT_INPUT_TOKENS * instrument.planned_units()
+            == 3_844_000
+        )
+        # The output dimension of that same authorization is not what moved.
+        instrument.assert_limits_are_feasible(
+            limits=AUTHORIZED_LIMITS.model_copy(
+                update={"run_max_output_tokens": 459_000}
+            )
+        )
 
     def test_the_ceilings_merged_on_2026_09_07_are_still_refused(self) -> None:
         """PLANTED with attempt 3's own number: 4,000 against 15,360.
@@ -4934,37 +4986,29 @@ class TestFeasibility:
         )
         assert AUTHORIZED_LIMITS.run_max_output_tokens >= charged + turn_cap
 
-    def test_the_run_output_ceiling_does_not_clear_the_calibrations_largest_unit(
+    def test_the_run_output_ceiling_clears_the_calibrations_largest_unit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """PLANTED: the usage profile refreshed to the calibration's own figures.
+        """SETTLED (2026-09-15): the authorized ceiling now carries the term.
 
-        The authorized run-level OUTPUT ceiling is a hundred units at the
-        largest unit the calibration of 2026-09-14 measured — 100 x 4,590 =
-        459,000 — which is exactly the shape
-        `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused`
-        plants and the corrected gate refuses. The gate accepts
-        `AUTHORIZED_LIMITS` on this tree only because
-        `deduction_usage_profile.json` still carries the three stopped live
-        runs' 3,116: the stale profile is LOAD-BEARING here rather than
-        neutral, and this case is what says so. The INPUT dimension clears
-        either figure, so the residual is one comparison wide. Nothing here
-        moves an authorized number — 459,000 is the owner's, on the fourth
-        authorization card — and the hand-back is recorded in the limits
-        card's Results.
+        The residual this case held from 2026-09-14 to 2026-09-15 was one
+        comparison wide. The fourth authorization's run-level OUTPUT ceiling was
+        a hundred units at the largest unit the calibration of that day measured
+        — 100 x 4,590 = 459,000 — which is exactly the shape
+        `test_a_run_output_ceiling_sized_at_exactly_its_units_is_refused` plants
+        and the corrected gate refuses, and the gate accepted
+        `AUTHORIZED_LIMITS` only because the committed profile still carried the
+        three stopped runs' smaller 3,116. That profile was LOAD-BEARING, and
+        this case said so.
 
-        WHERE IT IS SETTLED (2026-09-15, the second calibration's card). The
-        cause is closed at the source: `ceiling_proposal` now adds the
-        in-flight headroom term the gate enforces, so a proposal can no longer
-        publish a run-level output ceiling the gate would refuse, and
-        `TestTheProposalCarriesTheInFlightHeadroom` plants exactly this
-        arithmetic — 4,590 over a hundred units must now propose at least
-        464,000. What stays is the NUMBER already authorized: 459,000 is the
-        owner's, and re-sizing it is the fifth authorization card's, on the
-        profile the second calibration's sitting refreshes. So this case keeps
-        its plant and its meaning until that card lands, and the residual it
-        holds is now one authorized figure rather than a rule that would keep
-        producing more of them.
+        The fifth authorization settles it on both sides at once. The profile is
+        refreshed to the second calibration's own 4,176, so nothing stale holds
+        the gate open; the ceiling is re-sized by the rule that now carries the
+        in-flight term, to 422,000 against a floor of 100 x 4,176 + 4,096 =
+        421,696. So the statement flips from "does not clear" to "clears", and
+        the plant flips with it: the SUPERSEDED pairing — the old ceiling under
+        the old calibration's figures — is what goes red here now, which is the
+        same arithmetic this case always asserted, read from the other end.
         """
 
         measured = json.loads(
@@ -4980,22 +5024,36 @@ class TestFeasibility:
         largest_input = int(measured["measured_max_unit_input_tokens"])
         units = instrument.planned_units()
         turn_cap = AUTHORIZED_SAMPLING.turn_max_tokens
-        # As committed, on the archived profile: the gate passes.
+        # On the profile as committed today: the gate passes, and it passes with
+        # the in-flight term included rather than in spite of it.
         instrument.assert_limits_are_feasible()
-        archived = instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units + turn_cap
-        assert archived <= AUTHORIZED_LIMITS.run_max_output_tokens
-        # The ceiling is the calibration's largest unit times the unit count,
-        # to the token, which is the bound this gate refuses.
-        assert largest_output * units == AUTHORIZED_LIMITS.run_max_output_tokens
+        needed = instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units + turn_cap
+        assert needed == 421_696
+        assert needed <= AUTHORIZED_LIMITS.run_max_output_tokens
+        # And the ceiling is no longer the bare product of a largest unit and a
+        # unit count, which is the shape that made the residual.
+        assert AUTHORIZED_LIMITS.run_max_output_tokens != (
+            instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units
+        )
+        # PLANTED, as the superseded pairing: the fourth authorization's ceiling
+        # under the figures that sized it. 100 x 4,590 is 459,000 to the token,
+        # and those hundred units reserve 4,096 more than that.
         monkeypatch.setattr(instrument, "CALIBRATED_UNIT_OUTPUT_TOKENS", largest_output)
         monkeypatch.setattr(instrument, "CALIBRATED_UNIT_INPUT_TOKENS", largest_input)
+        superseded = AUTHORIZED_LIMITS.model_copy(
+            update={
+                "run_max_input_tokens": 3_710_000,
+                "run_max_output_tokens": largest_output * units,
+            }
+        )
         with pytest.raises(instrument.LimitsInfeasible) as refused:
-            instrument.assert_limits_are_feasible()
+            instrument.assert_limits_are_feasible(limits=superseded)
         message = str(refused.value)
         assert "run-level output" in message
         assert f"{largest_output * units + turn_cap:,}" in message
-        # One dimension only: the input side clears the refreshed figure.
-        assert largest_input * units <= AUTHORIZED_LIMITS.run_max_input_tokens
+        # One dimension only, then as now: the 2026-09-14 input figure cleared
+        # the ceiling of its own day.
+        assert largest_input * units <= 3_710_000
 
     def test_a_per_unit_ceiling_below_a_unit_already_run_is_refused(self) -> None:
         """PLANTED: a per-unit input ceiling under the largest archived unit."""
@@ -5102,7 +5160,7 @@ class TestUsageReplay:
     """The rehearsal sees what the provider did, keyed by arm and call type."""
 
     def _profile_payload(self) -> dict[str, Any]:
-        loaded = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+        loaded = json.loads(STOPPED_RUNS_PROFILE_PATH.read_text(encoding="utf-8"))
         assert isinstance(loaded, dict)
         return loaded
 
@@ -5113,6 +5171,14 @@ class TestUsageReplay:
         a call type, two token counts, its attempt and its disposition, and a
         profile that grew a prompt, a response, a seed or a room would fail here
         rather than be committed.
+
+        The subject is the STOPPED RUNS' profile since 2026-09-15, when the
+        fifth authorization refreshed the committed one to the second
+        calibration's 720 clean calls. These 38 rows are the only archived
+        FAULTS this evaluation has — two the provider billed and refused — and
+        the eight cases whose subject is a fault read them from
+        `deduction_stopped_runs_usage_profile.json` rather than from a profile
+        that has none.
         """
 
         payload = self._profile_payload()
@@ -5182,9 +5248,14 @@ class TestUsageReplay:
         ceilings #437 merged AND the 2,048 turn cap the run drew at, because a
         rehearsal at today's 4,096 would be refused on its FIRST call and would
         reproduce a different stop.
+
+        Its profile is the stopped runs' own, committed beside the current one
+        since the refresh of 2026-09-15: the unit whose calls this replays is in
+        that archive and in no other, and a rehearsal of the live stop has to
+        replay the calls that made it.
         """
 
-        double = UsageReplayProvider()
+        double = UsageReplayProvider(profile=stopped_runs_profile())
         with pytest.raises(InstrumentAborted) as stopped:
             run_dry(
                 output_dir=tmp_path,
@@ -5215,9 +5286,15 @@ class TestUsageReplay:
         totals are the measured profile's rather than the fixture's 66 tokens a
         call — which is the whole point: the headroom check below reads a number
         a real endpoint produced.
+
+        On the stopped runs' profile, because the per-arm totals below are the
+        ones the manifest's output-headroom paragraph quotes and they are that
+        archive's: replaying the current profile here would re-measure the
+        paragraph rather than check it, and the defaulted turns it also quotes
+        come from the two refusals only that archive carries.
         """
 
-        double = UsageReplayProvider()
+        double = UsageReplayProvider(profile=stopped_runs_profile())
         report = run_dry(output_dir=tmp_path, client=double, limits=feasible_limits())
         assert [arm.units for arm in report.arms] == [50, 50]
         assert report.total_cost_usd == 0.0
@@ -5240,7 +5317,8 @@ class TestUsageReplay:
         assert f"{run_input:,}" in manifest
         assert f"{run_output:,}" in manifest
         share = 100 * run_output / AUTHORIZED_LIMITS.run_max_output_tokens
-        assert f"{share:.1f}% of the 459,000 run-level" in manifest
+        ceiling = AUTHORIZED_LIMITS.run_max_output_tokens
+        assert f"{share:.1f}% of the {ceiling:,} run-level" in manifest
         assert share < 100
         # And the figure that made the re-sizing necessary, against the ceiling
         # this manifest bound until 2026-09-14: the same measured total, over
@@ -5277,7 +5355,7 @@ class TestUsageReplay:
         """
 
         instrument.assert_limits_are_feasible()
-        double = UsageReplayProvider()
+        double = UsageReplayProvider(profile=stopped_runs_profile())
         report = run_dry(
             output_dir=tmp_path,
             client=double,
@@ -5311,6 +5389,60 @@ class TestUsageReplay:
             assert f"{arm.output_tokens:,}" in manifest, arm.arm
             assert f"{arm.terminal_units} terminal units" in manifest, arm.arm
 
+    def test_the_rehearsal_is_green_on_the_refreshed_profile_under_the_new_limits(
+        self, tmp_path: Path
+    ) -> None:
+        """The fifth authorization's own pair: its ceilings, its measurement.
+
+        The two rehearsals above replay the three stopped runs' archive, because
+        what they check is a manifest paragraph those runs' numbers wrote. This
+        one replays the profile the fifth authorization is SIZED on — the second
+        calibration's 720 calls over 120 units — under the ceilings it re-sized
+        them to, which is the pairing nothing else in this file makes.
+
+        It clears the feasibility gate first, completes all 100 units and 600
+        calls at $0.00, and stays inside every ceiling it is measured against on
+        both dimensions and at both levels. The v4 prompts are why the output
+        side has so much room: the candidate arm's per-unit output mean fell
+        from 3,481.5 at v3 to 1,608.9, which is the same fact that LOWERED the
+        run-level output ceiling.
+
+        The band it runs on is whatever the live freeze record holds, and what
+        the double charges does not depend on it — the rows are keyed by arm and
+        call type — so this case survives the re-binding to band 8000-8999
+        without being re-measured.
+        """
+
+        instrument.assert_limits_are_feasible()
+        double = UsageReplayProvider()
+        report = run_dry(
+            output_dir=tmp_path,
+            client=double,
+            limits=AUTHORIZED_LIMITS,
+            sampling=AUTHORIZED_SAMPLING,
+        )
+        assert double.attempts == 600
+        assert report.total_cost_usd == 0.0
+        assert report.limits == AUTHORIZED_LIMITS
+        assert [arm.units for arm in report.arms] == [50, 50]
+        for arm in report.arms:
+            assert arm.output_tokens / arm.units < (
+                AUTHORIZED_LIMITS.unit_max_output_tokens
+            )
+            assert arm.input_tokens / arm.units < (
+                AUTHORIZED_LIMITS.unit_max_input_tokens
+            )
+        run_input = sum(arm.input_tokens for arm in report.arms)
+        run_output = sum(arm.output_tokens for arm in report.arms)
+        assert run_input < AUTHORIZED_LIMITS.run_max_input_tokens
+        assert run_output < AUTHORIZED_LIMITS.run_max_output_tokens
+        # Pinned, so the figures the limits card's Results quotes cannot drift
+        # from the rehearsal that produced them.
+        assert _arm_rows(report) == {
+            "repaired_clock": (1_038_160, 56_765, 300),
+            "combined_accounts": (1_134_054, 80_441, 300),
+        }
+
     def test_a_call_type_blind_sampler_manufactures_a_truncation(
         self, tmp_path: Path
     ) -> None:
@@ -5325,14 +5457,14 @@ class TestUsageReplay:
         with pytest.raises(InstrumentAborted) as stopped:
             run_dry(
                 output_dir=tmp_path,
-                client=CallTypeBlindReplayProvider(),
+                client=CallTypeBlindReplayProvider(profile=stopped_runs_profile()),
                 limits=feasible_limits(),
             )
         assert "reached its 1024-token output cap" in stopped.value.partial.reason
         # And the keyed sampler does not, on the same units and the same limits.
         keyed = run_dry(
             output_dir=tmp_path / "keyed",
-            client=UsageReplayProvider(),
+            client=UsageReplayProvider(profile=stopped_runs_profile()),
             units=4,
             limits=feasible_limits(),
         )
@@ -5363,6 +5495,7 @@ class TestUsageReplay:
         """
 
         double = UsageReplayProvider(
+            profile=stopped_runs_profile(),
             spoil_call=instrument.UNIT_TURN_CALLS + instrument.UNIT_BALLOT_CALLS + 1,
             mode=cast(Any, mode),
         )
@@ -5398,7 +5531,7 @@ class TestUsageReplay:
         defaulted-turn rate rather than a clean run the archives do not show.
         """
 
-        double = UsageReplayProvider()
+        double = UsageReplayProvider(profile=stopped_runs_profile())
         report = run_dry(
             output_dir=tmp_path, units=1, limits=feasible_limits(), client=double
         )
@@ -5677,6 +5810,7 @@ class TestCheckpointAndResume:
         limits = feasible_limits()
         checkpoint_path = tmp_path / "checkpoint.json"
         stopper = UsageReplayProvider(
+            profile=stopped_runs_profile(),
             spoil_call=28,
             spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
             mode="transport_error",
@@ -5721,13 +5855,13 @@ class TestCheckpointAndResume:
             output_dir=tmp_path / "whole",
             units=4,
             limits=limits,
-            client=UsageReplayProvider(),
+            client=UsageReplayProvider(profile=stopped_runs_profile()),
         )
         resumed = run_dry(
             output_dir=tmp_path / "resumed",
             units=4,
             limits=limits,
-            client=UsageReplayProvider(seed=6),
+            client=UsageReplayProvider(profile=stopped_runs_profile(), seed=6),
             resume=checkpoint,
         )
         assert _less_the_stops_own_calls(resumed, checkpoint) == _without_wall(whole)
@@ -6757,7 +6891,7 @@ class TestCalibrationRun:
         assert proposal.run_max_input_tokens % 1_000 == 0
 
     def test_a_fixture_sized_proposal_says_it_clears_no_gate(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """PERTURBED by the provider: the same rule on two distributions.
 
@@ -6765,24 +6899,36 @@ class TestCalibrationRun:
         serialises, so a proposal computed from it is a tenth of a real one and
         the instrument's feasibility gate refuses it AGAINST THE COMMITTED
         PROFILE. The report says so in the gate's words instead of publishing
-        the numbers as a measurement.
-
-        That comparison moved fields on the second calibration's card, and the
-        perturbation moved with it. `clears_the_feasibility_gate` is now the
+        the numbers as a measurement. `clears_the_feasibility_gate` is the
         proposal's own claim — these ceilings pay for a run of the units THIS
         sitting measured — which a proposal computed from any distribution
-        clears by construction, and is therefore no longer where a fixture and
-        a measurement differ. `clears_the_committed_profiles_gate` is that
-        comparison, reported beside it, and it is what this case reads.
+        clears by construction, so it is not where the two differ;
+        `clears_the_committed_profiles_gate` is, and it is what this case reads.
+
+        The two constants are patched to the STOPPED RUNS' archive, which is
+        the profile the double below replays. That identity is the condition the
+        comparison was written under and the refresh of 2026-09-15 broke: the
+        committed profile is now a 120-unit sitting, and a five-seed calibration
+        subsamples 30 of its 360 rows per bucket, so its maximum is legitimately
+        below the profile's and every proposal computed from it is told so. The
+        last block reads that unpatched state directly, and reads it as the
+        arithmetic of a subsample rather than as a defect.
         """
 
+        archive = stopped_runs_profile()
+        largest_input, largest_output = archive.largest_unit()
+        monkeypatch.setattr(instrument, "CALIBRATED_UNIT_INPUT_TOKENS", largest_input)
+        monkeypatch.setattr(instrument, "CALIBRATED_UNIT_OUTPUT_TOKENS", largest_output)
         fixture = self._calibrate(tmp_path / "fixture")
         assert fixture.proposal.clears_the_committed_profiles_gate is False
         assert fixture.proposal.committed_profile_refusal is not None
         assert "run-level output ceiling" in fixture.proposal.committed_profile_refusal
         # Its own claim still holds: the ceilings pay for the units it saw.
         assert fixture.proposal.clears_the_feasibility_gate is True
-        measured = self._calibrate(tmp_path / "measured", client=UsageReplayProvider())
+        measured = self._calibrate(
+            tmp_path / "measured",
+            client=UsageReplayProvider(profile=archive),
+        )
         assert measured.proposal.clears_the_committed_profiles_gate is True
         assert measured.proposal.committed_profile_refusal is None
         assert measured.proposal.clears_the_feasibility_gate is True
@@ -6793,6 +6939,20 @@ class TestCalibrationRun:
             # reports clearing is that one, and saying so here is what keeps the
             # report's claim and this check the same claim.
             sampling=instrument.CALIBRATION_SAMPLING,
+            calibrated_unit_input_tokens=largest_input,
+            calibrated_unit_output_tokens=largest_output,
+        )
+        # Unpatched, against the profile this tree actually commits: a five-seed
+        # sitting proposes below a 120-unit sitting's maxima and is told so.
+        monkeypatch.undo()
+        subsample = self._calibrate(
+            tmp_path / "subsample", client=UsageReplayProvider()
+        )
+        assert subsample.proposal.clears_the_feasibility_gate is True
+        assert subsample.proposal.clears_the_committed_profiles_gate is False
+        assert (
+            subsample.proposal.measured_max_unit_output_tokens
+            < instrument.CALIBRATED_UNIT_OUTPUT_TOKENS
         )
 
     def test_a_stop_reports_its_partial_accounting(self, tmp_path: Path) -> None:
@@ -6972,8 +7132,22 @@ class TestCalibrationProfileRefresh:
         instrument.write_usage_profile(report, profile_path)
         refreshed = UsageProfile.load(profile_path)
         limits = instrument.proposed_limits(report.proposal)
+        assert report.proposal.clears_the_feasibility_gate is True
         instrument.assert_limits_are_feasible(
-            limits=limits, sampling=instrument.CALIBRATION_SAMPLING
+            limits=limits,
+            sampling=instrument.CALIBRATION_SAMPLING,
+            # At THIS sitting's own measured maxima, which is the claim the
+            # proposal makes and the one the rehearsal below then runs under.
+            # Against the module's constants it is a different question — a
+            # five-seed sitting against a 120-unit profile — and
+            # `clears_the_committed_profiles_gate` is where that one is
+            # reported.
+            calibrated_unit_input_tokens=(
+                report.proposal.measured_max_unit_input_tokens
+            ),
+            calibrated_unit_output_tokens=(
+                report.proposal.measured_max_unit_output_tokens
+            ),
         )
         rehearsed = run_dry(
             output_dir=tmp_path / "rehearsal",
@@ -7443,12 +7617,15 @@ class TestAuthorizedConstants:
 
     def test_the_limits_object_is_the_authorized_numbers(self) -> None:
         assert AUTHORIZED_LIMITS == RunLimits(
-            # Re-sized on 2026-09-14 by the fourth authorization card, whose
+            # Re-sized on 2026-09-15 by the fifth authorization card, whose
             # Constraints table the manifest's token-budget row now copies, from
-            # the live development calibration of that day.
-            run_max_input_tokens=3_710_000,
-            run_max_output_tokens=459_000,
-            unit_max_input_tokens=106_000,
+            # the SECOND live development calibration of that day. The output
+            # ceiling FELL from the fourth authorization's 459,000 because the
+            # rule was followed and v4 made units smaller on output; the input
+            # one rose because its largest unit grew to 38,440.
+            run_max_input_tokens=3_844_000,
+            run_max_output_tokens=422_000,
+            unit_max_input_tokens=116_000,
             unit_max_output_tokens=16_000,
             max_cost_usd=0.0,
             # Widened on 2026-09-13 by the third authorization card, whose
@@ -7786,9 +7963,20 @@ class TestTheTwoAuthorizedCalibrationModes:
         """The arithmetic of the Constraints table, against the shipped gate.
 
         Per-unit output 16,000 against the 15,360 schedule; per-unit input
-        60,000 against the largest archived unit; and both run ceilings against
-        120 units of that archived unit, the OUTPUT one with a further turn cap
-        of in-flight headroom on top.
+        60,000 against the largest unit the mode was SIZED on; and both run
+        ceilings against 120 units of that unit, the OUTPUT one with a further
+        turn cap of in-flight headroom on top.
+
+        The two figures are `CALIBRATION_SIZING_UNIT_*_TOKENS` rather than the
+        module's live calibration, and passing them through the gate's own
+        parameters is what the two calibration gates do. A mode's ceilings are
+        the record of a spend the manifest authorizes ONCE, and this mode's was
+        made on 2026-09-15; the profile that sitting then refreshed is the
+        measurement the LIVE run's ceilings are checked against, and checking a
+        spent mode against it would ask whether a sitting that already happened
+        could be authorized under numbers that did not exist when it was. The
+        case below is the other half: the mode read against the refreshed
+        profile, refused, with the two figures named.
         """
 
         units = instrument.calibration_units(instrument.CALIBRATION_2_PAIRED_SEEDS)
@@ -7797,6 +7985,12 @@ class TestTheTwoAuthorizedCalibrationModes:
             limits=instrument.CALIBRATION_2_LIMITS,
             sampling=instrument.CALIBRATION_2_SAMPLING,
             units=units,
+            calibrated_unit_input_tokens=(
+                instrument.CALIBRATION_SIZING_UNIT_INPUT_TOKENS
+            ),
+            calibrated_unit_output_tokens=(
+                instrument.CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS
+            ),
         )
         assert (
             instrument.unit_output_reservation(
@@ -7805,14 +7999,62 @@ class TestTheTwoAuthorizedCalibrationModes:
             == 15_360
         )
         needed = (
-            instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units
+            instrument.CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS * units
             + instrument.CALIBRATION_2_SAMPLING.turn_max_tokens
         )
         assert needed <= instrument.CALIBRATION_2_RUN_MAX_OUTPUT_TOKENS
         assert (
-            instrument.CALIBRATED_UNIT_INPUT_TOKENS * units
+            instrument.CALIBRATION_SIZING_UNIT_INPUT_TOKENS * units
             <= instrument.CALIBRATION_2_RUN_MAX_INPUT_TOKENS
         )
+
+    def test_the_sizing_figures_are_the_committed_stopped_runs_archive(self) -> None:
+        """The two sizing constants are read off committed evidence.
+
+        `deduction_stopped_runs_usage_profile.json` is the profile that stood in
+        `deduction_usage_profile.json` when both modes were authorized, kept
+        beside it since the refresh of 2026-09-15. Its maxima are these two
+        constants, so the gate a spent mode is checked against is the one it was
+        approved under rather than two numbers typed into the module.
+        """
+
+        largest_input, largest_output = stopped_runs_profile().largest_unit()
+        assert instrument.CALIBRATION_SIZING_UNIT_INPUT_TOKENS == largest_input
+        assert instrument.CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS == largest_output
+        # And they are NOT the live run's, which is the whole point of the
+        # split: the fifth authorization moved those and left these.
+        assert instrument.CALIBRATED_UNIT_INPUT_TOKENS != largest_input
+        assert instrument.CALIBRATED_UNIT_OUTPUT_TOKENS != largest_output
+
+    def test_the_second_mode_is_refused_on_the_refreshed_profile(self) -> None:
+        """PLANTED: the mode read against the measurement its own sitting made.
+
+        120 units of the refreshed profile's largest unit need 4,612,800 input
+        and 505,216 output — both above the 4,500,000 / 450,000 the mode binds —
+        so a gate reading the live constants refuses it. That refusal is
+        correct and is why no further sitting of this mode is authorized; it is
+        NOT a reason to re-size `CALIBRATION_2_LIMITS`, which records a spend
+        already made. Both numbers are named here so the refusal is a
+        measurement rather than a shrug.
+        """
+
+        units = instrument.calibration_units(instrument.CALIBRATION_2_PAIRED_SEEDS)
+        assert instrument.CALIBRATED_UNIT_INPUT_TOKENS * units == 4_612_800
+        assert (
+            instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * units
+            + instrument.CALIBRATION_2_SAMPLING.turn_max_tokens
+            == 505_216
+        )
+        with pytest.raises(instrument.LimitsInfeasible) as refused:
+            instrument.assert_limits_are_feasible(
+                limits=instrument.CALIBRATION_2_LIMITS,
+                sampling=instrument.CALIBRATION_2_SAMPLING,
+                units=units,
+            )
+        assert "505,216" in str(refused.value)
+        # The mode itself did not move.
+        assert instrument.CALIBRATION_2_RUN_MAX_INPUT_TOKENS == 4_500_000
+        assert instrument.CALIBRATION_2_RUN_MAX_OUTPUT_TOKENS == 450_000
 
     def test_the_first_modes_per_unit_output_cannot_pay_for_this_draw(self) -> None:
         """PLANTED: 12,000 output a unit against a 15,360-token schedule."""
@@ -8565,9 +8807,18 @@ class TestTheProposalCarriesTheInFlightHeadroom:
             100 * 4_590 + AUTHORIZED_SAMPLING.turn_max_tokens
         )
         # And the number the fourth authorization published is below it, which
-        # is what makes this a residual rather than a preference. 459,000 is
-        # also exactly what this proposal would publish with the term deleted.
-        assert AUTHORIZED_LIMITS.run_max_output_tokens == 100 * 4_590
+        # is what made this a residual rather than a preference. 459,000 is
+        # also exactly what this proposal would publish with the term deleted,
+        # and it is exactly what that authorization published. The fifth
+        # authorization re-sized the ceiling on a later measurement, so the
+        # residual is closed at both ends: the rule carries the term, and the
+        # number in force was computed with it.
+        assert 459_000 == 100 * 4_590
+        assert AUTHORIZED_LIMITS.run_max_output_tokens != 459_000
+        assert AUTHORIZED_LIMITS.run_max_output_tokens >= (
+            instrument.CALIBRATED_UNIT_OUTPUT_TOKENS * 100
+            + AUTHORIZED_SAMPLING.turn_max_tokens
+        )
         assert AUTHORIZED_LIMITS.run_max_output_tokens < proposal.run_max_output_tokens
 
     def test_the_proposal_checks_itself_against_its_own_maxima(
