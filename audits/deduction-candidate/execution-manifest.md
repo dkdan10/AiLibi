@@ -805,10 +805,30 @@ on the reference arm. Supplying the format therefore converts coerced SKIPs
 into live ejections ON THE TREATMENT ARM ONLY: the fix raises the candidate's
 ejection RATE, which is precisely the failure `WRONGFUL_EJECTION_TRADEOFF`
 polices, and the next run reads the wrongful-ejection bound against this entry
-rather than reading a higher ejection count as a finding. The other two edits
-are measurement-neutral in intent — no grader reads rationale or turn prose,
-the primary outcome being the ejected player's hidden role, citation presence
-and citation relevance — but they move prompt bytes like any other.
+rather than reading a higher ejection count as a finding.
+
+**ONE-SIDED EFFECT, second channel — the turn bound reaches a grader too.**
+An earlier draft of this section called the other two edits measurement-neutral
+on the ground that neither a ballot's rationale nor a turn's prose is an input
+to any grader. Half of that is WITHDRAWN: turn prose IS one.
+`grade_citation_relevance` grades a ballot that cites a TURN through
+`_turn_bears_on`, which walks the cited turn's dumped structure rather than a
+named field list — `CITATION_RELEVANCE_RUBRIC` says so in as many words, "its
+claims and its free text included" — so a cited turn is RELEVANT to the ejected
+player when it is that player's own or names them anywhere in its content, the
+turn's `free_text` and each claim's `"reason"` included. Those are exactly the
+two fields the turn bound shortens, and `every_citation_relevant` is a conjunct
+of the primary outcome `supported_correct_ejection`. The declared direction is
+DOWNWARD and on the candidate arm alone: shorter prose names fewer players, so
+a ballot citing a bounded turn is likelier to be graded OFF_TARGET for the
+ejected player and its unit likelier to score 0. The next calibration therefore
+may not attribute a shift in the candidate's citation relevance to the citation
+repair alone — two of the three edits move graded inputs, and they push in
+opposite directions. Only the rationale half of the withdrawn claim survives:
+no grader reads a ballot's `rationale_text`, so the rationale budget moves
+prompt bytes and no graded input. Both halves are behavioural facts about the
+instrument rather than a reading of it, and
+`tests/experiments/test_accounts_v4_measurement_surface.py` pins them.
 
 **Run 4's 24 complete units are not poolable with what follows.** The three
 edits move the candidate's measured surface, so a unit recorded before them and

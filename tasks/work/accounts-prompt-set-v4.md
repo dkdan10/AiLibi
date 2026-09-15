@@ -11,9 +11,11 @@ skeleton, and a one-phrase reason with a "then stop" reply instruction on the
 turn. `ACCOUNT_PROMPT_SET_REVISION` reads `v4`, so no recorded stamp can
 straddle two generations of the bodies, and the arm-surface digest moves with
 them. The execution manifest states, before the next run measures anything,
-that the citation repair raises the candidate's ejection rate on the treatment
-arm alone. The reference family does not change, nothing is recorded, and no
-limit, outcome or rule the run is judged by moves.
+both ways the candidate's measured surface moves on the treatment arm alone:
+the citation repair raises its ejection rate, and the turn bound shortens the
+two fields the citation-relevance grader reads. The reference family does not
+change, nothing is recorded, and no limit, outcome or rule the run is judged by
+moves.
 
 ## Evidence
 
@@ -59,14 +61,54 @@ impostor committed its own role and kill to the public transcript anyway. A
 prohibition alone did not hold in this register, which is why the length bound
 is the lever with evidence behind it (memo section 5 C).
 
-No grader reads rationale prose: the primary outcome and its rubric are about
-the ejected player's hidden role, citation presence and citation relevance
-(`experiments/fresh_deduction_instrument.py:556-565`). Fixes A and C are
-therefore measurement-neutral in intent. Fix B is not, and this card says so
-under Acceptance and in the manifest.
+No grader reads a ballot's `rationale_text`, so fix A is measurement-neutral:
+the primary outcome and its rubric are about the ejected player's hidden role,
+citation presence and citation relevance
+(`experiments/fresh_deduction_instrument.py:556-565`). Turn prose is a
+different matter, corrected in round 1 of review: `grade_citation_relevance`
+(`:3765`) grades a cited TURN through `_turn_bears_on` (`:3726`), which walks
+the turn's dumped structure rather than a named field list —
+`CITATION_RELEVANCE_RUBRIC` (`:3637-3653`) says "its claims and its free text
+included" — and `every_citation_relevant` is a conjunct of
+`supported_correct_ejection` (`:3869-3877`). Fix C shortens exactly those two
+fields, so it moves a graded input on the treatment arm alone and downward.
+Fixes B and C are therefore both declared under Acceptance and in the
+manifest; fix A is the only one that touches nothing the run is scored by.
 
 ## Acceptance
 
+- [x] Review correction: neither the manifest's dated section nor this card
+  claims any more that the turn bound is measurement-neutral.
+  `grade_citation_relevance` (`experiments/fresh_deduction_instrument.py:3765`)
+  grades a cited TURN through `_turn_bears_on` (`:3726`), which walks the
+  turn's dumped structure rather than a named field list —
+  `CITATION_RELEVANCE_RUBRIC` (`:3637-3653`) says "its claims and its free text
+  included" — so fix C's two shortened fields, a turn's `free_text` and a
+  claim's `"reason"`, are inputs to `every_citation_relevant`, itself a
+  conjunct of `supported_correct_ejection` (`:3869-3877`). The ONE-SIDED EFFECT
+  declaration now covers fix C's direction as well — shorter prose names the
+  ejected player less often, so more `off_target` verdicts on the candidate arm
+  alone — so the second calibration may not attribute a relevance shift to fix
+  B alone. Proved by
+  `tests/experiments/test_accounts_v4_measurement_surface.py::test_a_cited_turns_free_text_decides_whether_the_citation_is_relevant`
+  and `::test_a_cited_turns_claim_reason_decides_relevance_too`, each with a
+  planted failure below.
+- [x] Review correction: the surviving half of the withdrawn claim is asserted
+  rather than merely written down. No grader reads a ballot's `rationale_text`
+  — which is why fix A moves no graded input — and
+  `::test_no_ballot_grader_reads_the_rationale_text` grades two ballots
+  differing only in that field, requiring identical verdicts from both
+  `grade_citation_relevance` and `grade_supported`. The withdrawn sentence may
+  not come back:
+  `::test_the_manifest_does_not_call_the_turn_bound_measurement_neutral` reads
+  the dated manifest section and requires it to name the grader path instead.
+- [x] Review correction: the planted-failure table's fix C row reads
+  `5 failed, 1 passed, 84 deselected`, which is what
+  `.venv/bin/python -m pytest tests/agents/test_public_account_prompts.py -q -k
+  one_short_phrase` prints with `"reason":"<reason>"` restored on the accusation
+  shape. That selector collects 6 of 90 (`--collect-only`), so the cell's
+  earlier "2 passed, 83 deselected" could not occur; the prose beside it, which
+  names exactly one correctly unaffected case, was already right.
 - [x] Fix A, the ballot bound: `vote_ballot_accounts.j2:21` carries
   `vote_ballot.j2:270`'s two sentences, the "~20 words" rationale budget and
   the warning that a long rationale can overrun the output limit and truncate
@@ -330,8 +372,11 @@ alone. That is a change in the arm's ejection RATE, which
 `WRONGFUL_EJECTION_TRADEOFF` polices and the next run reads the
 wrongful-ejection bound against. Run 4's 24 complete units are not poolable
 with anything measured after this card, because the candidate's measured
-surface moved. Fixes A and C are measurement-neutral in intent — no grader
-reads rationale or turn prose — and still move prompt bytes.
+surface moved. Fix A is measurement-neutral — no grader reads a ballot's
+`rationale_text` — and fix C is NOT: it shortens the two turn fields
+`grade_citation_relevance` reads, so it too moves a graded input, downward and
+on the candidate arm alone. Corrected in round 1 of review; see
+[the dated subsection below](#review-corrections-round-1-2026-09-15).
 
 ### The arm-surface digest, declared rather than discovered
 
@@ -379,7 +424,7 @@ tests/agents/test_public_account_prompts.py -q -k <selector>`.
 | Fix A: the budget back to "state a concise reason" | `-k bounds_its_rationale` | `1 failed, 89 deselected` — `assert 'ONE short sentence (~20 words)' in ...` |
 | Fix B: the run's own defect — `obs ` put back into the example id | `-k bare_id` | `1 failed, 89 deselected` — `assert None ... re.compile('p-\d+:\d+:\d+').fullmatch('obs p-1:12:0')` |
 | Fix B: the skeleton back to `null` | `-k bare_id` | `1 failed, 89 deselected` — `'"primary_reason_observation_id":null' is contained here` |
-| Fix C: `"reason":"<reason>"` restored on the accusation shape | `-k one_short_phrase` | `5 failed, 2 passed, 83 deselected` — every arm that renders the shape menu; the attributed-only impostor renders no menu and is correctly unaffected |
+| Fix C: `"reason":"<reason>"` restored on the accusation shape | `-k one_short_phrase` | `5 failed, 1 passed, 84 deselected` — every arm that renders the shape menu; the attributed-only impostor renders no menu and is correctly unaffected (count corrected in round 1 of review) |
 | The revision wound back to `v3` with the bodies bound | `-k older_revision` | `1 failed, 89 deselected` — `AssertionError: assert 'v3' not in frozenset({'v1', 'v2', 'v3'})` |
 
 ### Verification
@@ -445,3 +490,131 @@ restamp and was not touched.
    which the docstring bullet moves to `:1248`. The record keeps its `v3` stamp
    and its commit-time citation by design; editing a recorded calibration to
    chase a line number is not in this card's scope.
+
+### Review corrections, round 1 (2026-09-15)
+
+Three blocking findings from independent review, read against
+`a88168ed2db2a9279e4e039f4c91a69f4e85269f`. All three are valid; none is
+refuted. Two of them are one defect seen from two lenses, and the third is an
+arithmetic error in a quoted count. Nothing the run is judged by moves in this
+round either: the repair is to what the record CLAIMS about the change, not to
+the change.
+
+**The defect.** The manifest and this card said fixes A and C were
+"measurement-neutral in intent — no grader reads rationale or turn prose". The
+rationale half is true; the turn-prose half is false, and the diagnosis this
+card cites never said it — it says "rationale prose", and the widened clause
+was new here. `grade_citation_relevance`
+(`experiments/fresh_deduction_instrument.py:3765`) grades a ballot that cites a
+TURN through `_turn_bears_on` (`:3726`), which walks
+`_every_string_in(turn.model_dump(mode="json"))` rather than a named field
+list, deliberately (`:3729-3734`). A turn's `free_text`
+(`meetings/schemas.py:591`) and each claim's `reason` (`:417`) are in that
+walk, and `CITATION_RELEVANCE_RUBRIC` (`:3637-3653`) says so in as many words:
+"its claims and its free text included". `every_citation_relevant` is a
+conjunct of `supported_correct_ejection` (`:3869-3877`), which is
+`PRIMARY_OUTCOME` (`:556`) and whose rubric names relevance (`:558-565`). Fix C
+shortens exactly those two fields and only on the candidate arm
+(`_account_rules.j2`'s `"reason"`, `accusation_round_accounts.j2`'s reply
+instruction), so it moves a graded input. Reproduced on a synthetic turn at
+`a88168ed`:
+
+```
+$ PYTHONPATH=. .venv/bin/python -c "
+from experiments.fresh_deduction_instrument import _turn_bears_on
+from meetings.schemas import MeetingTurn
+t = lambda s: MeetingTurn(turn_id='t-1', turn_index=0, speaker='p-9',
+    turn_kind='opening', reply_to=None, observations=(), claims=(), free_text=s)
+print(_turn_bears_on(t('p-2 was in Reactor at tick 12 and never left.'), 'p-2'),
+      _turn_bears_on(t('I have nothing further.'), 'p-2'))
+"
+True False
+```
+
+The same two turns are the committed case
+`::test_a_cited_turns_free_text_decides_whether_the_citation_is_relevant`,
+which grades a ballot citing each of them and reads `relevant` against
+`off_target` rather than the helper's boolean.
+
+**What the record says now.** The manifest's dated section keeps its fix-B
+paragraph byte-for-byte and gains a second bolded declaration, "ONE-SIDED
+EFFECT, second channel — the turn bound reaches a grader too": it names the
+`grade_citation_relevance` / `_turn_bears_on` path and the rubric clause,
+states the direction (shorter prose names fewer players, so a ballot citing a
+bounded turn is likelier to be graded OFF_TARGET and its unit likelier to score
+0), states that the direction is DOWNWARD and on the candidate arm alone, and
+states the consequence for the next calibration: two of the three edits move
+graded inputs and they push in opposite directions, so a shift in candidate
+citation relevance may not be attributed to the citation repair alone. The
+surviving half is stated as narrowly as it is true: no grader reads a ballot's
+`rationale_text`, so fix A moves prompt bytes and no graded input. This card's
+Evidence paragraph and its "one-sided effect, declared" paragraph carry the
+same correction in place, because leaving a false sentence standing under a
+`- [x]` is what the round is for.
+
+**The claim is enforced, not just written.**
+`tests/experiments/test_accounts_v4_measurement_surface.py` is new: five cases
+on hand-written turns and ballots — no seed of any band is read, rendered or
+constructed in it — asserting the rubric clause, that a cited turn's
+`free_text` decides its relevance, that a claim's `reason` decides it too (the
+accusation is against a THIRD player, so the subject can only be named in the
+`reason`), that two ballots differing only in `rationale_text` grade identically
+under `grade_citation_relevance` and `grade_supported`, and that the manifest's
+dated section neither carries the withdrawn sentence nor omits the grader path.
+It lives beside the instrument it grades rather than in
+`tests/agents/test_public_account_prompts.py`, which is where the prompt-byte
+gates belong and which would otherwise import `experiments/` across a layer;
+`tests/experiments/test_fresh_deduction_instrument.py` is left alone because
+the sibling finish-reason card is its one writer this week. A file outside the
+card's Expected scope is declared here rather than taken silently.
+
+**The corrected count.** The fix C planted-failure cell said
+`5 failed, 2 passed, 83 deselected`. The `one_short_phrase` selector collects 6
+of 90 (`--collect-only` prints `6/90 tests collected (84 deselected)`), so
+seven cases could never run. Reproduced at `a88168ed` with
+`"reason":"<reason>"` restored on the accusation shape:
+`5 failed, 1 passed, 84 deselected in 0.17s`, the one pass being the
+attributed-only impostor that renders no shape menu — the prose beside the cell
+already said exactly that. The cell now reads `5 failed, 1 passed, 84
+deselected`. The other five rows were re-checked by the reviewer and reproduce
+as written.
+
+**Planted failures for the new gates** (red before, green after; each plant
+applied to the working tree, the case run, the file restored byte-identical,
+`git status --porcelain` clean afterwards). Commands are
+`.venv/bin/python -m pytest tests/experiments/test_accounts_v4_measurement_surface.py -q`:
+
+| Plant | Result |
+| --- | --- |
+| The withdrawn sentence restored to the manifest's dated section | `1 failed, 4 deselected` (`-k manifest`) — `assert _WITHDRAWN_CLAIM not in section` |
+| `free_text` dropped from `_turn_bears_on`'s walk | `2 failed, 3 passed` — the free-text case and the rationale-invariance case, whose cited turn names the subject in its free text |
+| `claims` dropped from `_turn_bears_on`'s walk | `1 failed, 4 passed` — the claim-`reason` case only |
+| `grade_citation_relevance` made to consult `ballot.rationale_text` | `3 failed, 2 passed` — including the invariance case, which is the point of it |
+
+**Verification, round 1.** Run from the worktree with `.venv/bin/python`, fake
+and replay providers only; no live provider call, no calibration, no recording,
+and `scripts/verify_ml_evidence.py` was never run with `--complete`.
+
+| Command | Result |
+| --- | --- |
+| `pytest tests/experiments/test_accounts_v4_measurement_surface.py -q` | `5 passed` |
+| `pytest tests/agents/test_public_account_prompts.py -q` | `90 passed` |
+| `pytest tests/agents tests/meetings tests/experiments -q` | `3039 passed in 193.81s` (was 3034; the five new cases are the difference) |
+| `python scripts/validate_task_docs.py` | `390 historical phase tasks and 390 prompts; 59 work cards` |
+| `python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `python scripts/verify_ml_evidence.py` (offline) | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`; every check passed |
+| `pytest tests/scripts/test_verify_ml_evidence.py -q` | `80 passed` |
+| `bash scripts/verify_samples.sh` | `All 50 samples verified clean` for `4p1i` and for `9p2i` |
+| `python scripts/build_sample_report.py --sample-dir <set> --check` x 4 | each of the four consistent with its replays |
+| `bash scripts/check.sh` | run to the end, real exit code 0: `7722 passed, 20 skipped, 3 xfailed` on the Python side (was 7717), `19 passed (19) / 515 passed (515)` on the frontend, `All checks passed!` |
+
+The `audits/` byte change is re-accounted: the dated section is longer, so
+`docs/artifacts.md`'s audits row is recomputed again with the manifest staged
+— the tracked `audits/` inventory is 211 files summing 15,103,940 bytes (was
+15,102,525 / 211) and `docs/artifacts.md:109` carries the recomputed row.
+`tasks/README.md`'s derived sentence does not move: Status stays `done` and no
+card's status flips in this round. No `GENERATOR_SOURCES` file is touched, so
+no freeze restamp is due, and the arm-surface digest does not move again
+either: no file of `agents/strategic/prompts/qwen3_6_27b` and no
+`ARM_SURFACE_SOURCES` file changes in this round — the repairs are a manifest
+section, a card and one new test.
