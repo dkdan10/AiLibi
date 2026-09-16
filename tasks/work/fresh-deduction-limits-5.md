@@ -1,6 +1,6 @@
 # Move the fresh-model deduction instrument to the fifth authorization's limits
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -127,7 +127,7 @@ this card must be present and OPEN in the tree that freeze merges into.
   new strings and the frozen analysis stays byte-identical
   (`test_no_frozen_analysis_byte_has_moved_since_the_last_logged_amendment`,
   `:4358`).
-- [ ] After [the fifth freeze](held-out-prefix-freeze-5.md) merges into this
+- [x] After [the fifth freeze](held-out-prefix-freeze-5.md) merges into this
   branch, the Inputs table binds band 8000-8999 with the accepted seed range
   and skip count read off the new
   `audits/deduction-candidate/held-out/manifest.json`, names all four converted
@@ -141,7 +141,7 @@ this card must be present and OPEN in the tree that freeze merges into.
   `test_the_gate_says_which_bands_actually_moved`
   (`tests/experiments/test_fresh_deduction_instrument.py:1476`) pass against
   the merged record.
-- [ ] The replay-double rehearsal of the full pipeline runs on the refreshed
+- [x] The replay-double rehearsal of the full pipeline runs on the refreshed
   profile under the new limits, clears the feasibility gate and completes at $0
   (`run_dry`, `experiments/fresh_deduction_instrument.py:5908`;
   `test_the_rehearsal_on_a_refreshed_profile_runs_under_the_proposal`,
@@ -205,14 +205,17 @@ scripts/check.sh`. Do not run the live evaluation as a check.
 
 ## Results
 
-Round 1 of two. Every acceptance item that does not depend on
+Round 1 of two, and then the stacking round below. Every acceptance item that
+does not depend on
 [the fifth freeze](held-out-prefix-freeze-5.md) is done and verified offline at
 $0, on a fake or replay provider; no live call was made and no band prefix was
-generated, printed or opened. Items 6 and 7 stay unchecked and this card stays
-`active`: they re-bind the Inputs table to band 8000-8999, extend the Roles
-table's preparer row and re-run the rehearsal on the new band, and all three
-need that freeze merged into this branch first. The pull request is opened
-against `main` and is retargeted onto `work/held-out-prefix-freeze-5` once that
+generated, printed or opened. Items 6 and 7 were left unchecked in round 1 and
+the card stayed `active`: they re-bind the Inputs table to band 8000-8999,
+extend the Roles table's preparer row and re-run the rehearsal on the new band,
+and all three needed that freeze merged into this branch first. That merge and
+those three are **"Stacking and re-binding (2026-09-15)"** below, which closes
+them and the card. The pull request was opened
+against `main` and is retargeted onto `work/held-out-prefix-freeze-5` now that
 branch is verified.
 
 ### The three ceilings, and where they reach the run
@@ -478,15 +481,148 @@ All checks passed!
 `scripts/check.sh` was run directly and its real exit code read: 0. The live
 evaluation was not run and is not a check here.
 
+### Stacking and re-binding (2026-09-15)
+
+The stacking round closes items 6 and 7, and with them the card. Still offline
+and still $0: the two rehearsals below are replay doubles and the dry run is the
+fake provider, no live call was made, and no prefix of any band was generated,
+printed, logged or written anywhere — the dry run and both rehearsals write to a
+temporary directory they make for themselves.
+
+**The merge.** `work/held-out-prefix-freeze-5` is verified at `2465b4ab`
+(PR #463) and is merged into this branch with `git merge --no-ff`, never
+rebased, as the merge commit `d0d59a2b`. Its held-out records — the new
+`audits/deduction-candidate/held-out/manifest.json` for band 8000-8999 and
+`audits/deduction-candidate/held-out/manifest-band-7000-7999.json` for the band
+it converted — come from the freeze side untouched. Two files were resolved by
+recomputation rather than by taking a side:
+
+* `docs/artifacts.md`'s `audits/` row. Both branches moved it, so neither
+  number describes the merged tree. Recomputed with the merge staged, by
+  `git ls-files audits` and the summed sizes of those paths, it is
+  **15,612,853 tracked bytes / 216 files** at the merge commit.
+* `tasks/README.md`'s derived inventory sentence. Both sides wrote
+  `3 ready, 1 active, 57 done` for different reasons — the freeze closed its own
+  card; this branch closed the second calibration's and made this one active —
+  so git merged the line cleanly into a sentence true of neither tree.
+  `scripts/validate_task_docs.py` re-derives it: `2 ready, 1 active, 58 done` at
+  the merge commit, and `2 ready, 59 done` once this card's Status flips below.
+
+`audits/deduction-candidate/README.md` did not conflict: only the freeze side
+touched it, and its new fourth-band paragraph is kept as written.
+
+**Item 6, the re-binding.** Every number in the Inputs table is read off the
+merged `held-out/manifest.json` rather than retyped. The Seed band row now binds
+**8000–8999** drawn ascending, accepted seeds **8000–8057**, **8 skips**, all
+`witnessed_kill` — which `test_the_manifest_binds_a_committed_held_out_record`
+holds against that record — and names all four converted bands with their dates
+and their record paths: 3000-3999 since 2026-09-10, 5000-5999 since 2026-09-13,
+6000-6999 since 2026-09-13, and **7000-7999 since 2026-09-15** as
+`held-out/manifest-band-7000-7999.json`, whose stopped run of that date rendered
+thirteen prefixes (seeds 7001 to 7016 in accepted order, that span less its three
+skips). `test_the_inputs_row_names_every_converted_band` reads those from
+`CONVERTED_BANDS` and each record's own `converted` block, so the next conversion
+turns it red rather than leaving the row a band behind. The Held-out inputs row
+names [the fifth freeze card](held-out-prefix-freeze-5.md) and PR #463, and the
+Roles table's preparer row gains the fifth preparer session, the band it drew,
+the record it marked `development` and PR #463. With the row moved,
+`assert_manifest_binds_the_live_band` passes instead of refusing, and
+`test_the_gate_says_which_bands_actually_moved` passes with 7000-7999 and its
+date in the gate's own docstring. A dated **"Stacking round, same date"** entry
+inside the existing "Fifth authorization (2026-09-15)" section records all of
+it; no earlier dated section is edited and no authorized figure moves.
+
+**Item 7, the rehearsal on the new band, and the verification section.** Three
+runs, all under `AUTHORIZED_LIMITS` and `AUTHORIZED_SAMPLING`, all clearing
+`assert_limits_are_feasible` first and all completing 100 units / 600 calls at
+`total_cost_usd` 0.0:
+
+| Run | `repaired_clock` | `combined_accounts` | run total |
+| --- | --- | --- | --- |
+| dry run, fake provider (band-dependent) | 892,718 in / 19,800 out | 641,246 in / 19,800 out | 1,533,964 in |
+| replay of the refreshed profile | 1,038,160 in / 56,765 out | 1,134,054 in / 80,441 out | 2,172,214 in / 137,206 out |
+| replay of the stopped runs' archive | 1,072,642 in / 66,105 out | 1,015,417 in / 145,889 out | 2,088,059 in / 211,994 out |
+
+The refreshed-profile replay is the fifth authorization's own pair — its
+ceilings against the measurement they were sized on — at 56.5% of the 3,844,000
+run-level input ceiling and 32.5% of the 422,000 output one. Its per-arm totals
+are the ones round 1 recorded, **to the token**: the double answers from a
+distribution keyed by arm and call type, so what it charges cannot depend on
+which prefix a unit ran, and the re-run on band 8000-8999 is the confirmation
+that claim predicted rather than a re-measurement. The same holds for the
+stopped-runs replay, whose totals the manifest's output-headroom paragraphs
+quote.
+
+What the band DOES move is the shape, and the verification section is re-made on
+it. The dry run's graded counts are the fifth band's: **50 of each arm's 50
+units** reach a graded terminal outcome with none `partial` (the fourth band's
+were 49 and one), 50 ejections an arm, 16 role-correct, 34 wrongful, 16
+supported-correct, 100 ballots naming the ejected player, and 150 supported
+ballots an arm with 1 guard-rewritten among them. So is the fake provider's
+input heuristic: 892,718 and 641,246 against the fourth band's 895,883 and
+643,779, which at the memo's 1.28x ratio is about 1.96 M against the 3,844,000
+ceiling (51%) and 17,854 per unit in the larger arm, about 22,900 against the
+116,000 per-unit ceiling (20%). `terminal_units` moves from 49 to 50 in the
+stopped-runs rehearsal paragraph too. Both changed paragraphs are held to the
+runs that produced them by
+`TestDryRun.test_the_mechanics_check_paragraph_quotes_the_run_it_describes` and
+`TestUsageReplay.test_the_rehearsal_is_green_under_the_fourth_authorizations_limits`,
+which until the re-binding returned early on `_the_document_is_mid_rebinding()`
+and now read the document — so this is a gate closing, not prose. No new gate is
+added in this round and nothing needed a fresh plant: the re-binding's planted
+case is the freeze card's own, the limits card's Status flipped to `done` with a
+stale row, which
+`test_a_binding_to_a_converted_record_stays_an_open_obligation` refuses, and it
+is that refusal the re-binding lifts.
+
+**Recomputation with the manifest change staged.** `docs/artifacts.md`'s
+`audits/` row is recomputed once more for the re-bound manifest:
+**15,617,098 tracked bytes / 216 files**, by `git ls-files audits` and the summed
+sizes of those paths. `scripts/verify_ml_evidence.py` (offline, never
+`--complete`) and `tests/scripts/test_verify_ml_evidence.py` agree.
+
+**Reproduction**, pinned to the merge commit `d0d59a2b` — the tree this entry
+describes, before the record commit that carries the entry itself:
+
+```sh
+git checkout d0d59a2b
+uv run python -m experiments.fresh_deduction_instrument --dry-run
+uv run pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -k "TestUsageReplay or TestFeasibility" -q
+```
+
+### Verification, stacking round (2026-09-15)
+
+```
+$ .venv/bin/pytest tests/experiments -q
+491 passed
+$ .venv/bin/python scripts/validate_task_docs.py
+Task docs validation passed: 390 historical phase tasks and 390 prompts; 61 work cards.
+$ .venv/bin/python scripts/check_doc_facts.py
+$ .venv/bin/python scripts/verify_ml_evidence.py
+checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5
+$ .venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q
+80 passed
+$ bash scripts/verify_samples.sh
+All 50 samples verified clean.  (x2: replays/samples/{4p1i,9p2i})
+$ .venv/bin/python scripts/build_sample_report.py --sample-dir <set> --check   # x4
+replays/samples/{4p1i,9p2i} and replays/ml_corpus/{4p1i,9p2i}: consistent with their replays
+$ bash scripts/check.sh
+7824 passed, 20 skipped, 3 xfailed, 10 warnings   (frontend: 515 tests, 19 files)
+All checks passed!
+```
+
+`scripts/check.sh` was run directly, not through a pipe, and its real exit code
+read: 0. No live evaluation was run.
+
 ### Limitations
 
-* Items 6 and 7 are not finished. The Inputs table still binds the fourth band,
-  the Roles table's preparer row still ends at the fourth freeze, and the
-  rehearsal has not been run on band 8000-8999. All three wait on
-  [the fifth freeze](held-out-prefix-freeze-5.md) merging into this branch.
-  `assert_manifest_binds_the_live_band` and
-  `test_the_gate_says_which_bands_actually_moved` pass against the record this
-  tree holds, which is the fourth band's.
+* The three rehearsal figures above are a REPLAY and a fake provider, not a
+  prediction of the fifth run. The two replay totals are band-independent by
+  construction, which is why re-running them on 8000-8999 confirmed them to the
+  token rather than re-measuring them; the dry run's graded counts and input
+  heuristic are the band's, and a live model writes a different transcript than
+  either.
 * The rehearsal's numbers are a REPLAY of an archived distribution, not a
   prediction of the fifth run. They say the pipeline completes inside these
   ceilings on the units this evaluation has measured; a live model writes a
