@@ -72,6 +72,21 @@ This directory records the unadopted follow-through to the owner's independent
   zero refusals and zero defaults, and a ceiling proposal whose run-level input
   figure the standing authorization does not yet clear — which is a finding for
   the fifth authorization card and authorizes nothing here.
+- [Run of 2026-09-16](run-2026-09-16/RESULTS.md) is the fifth held-out attempt
+  and the first COMPLETE one: fifty paired seeds of band 8000–8999, both arms,
+  one sitting, 601 attempts, all 100 units, no stop and no resumption, $0.00
+  marginal. Unlike the calibrations it DOES grade, and its result is a
+  measurement rather than an adoption: `repaired_clock` scored the primary
+  outcome 0 of 50 and `combined_accounts` 2, so `b = 2`, `c = 0`, the exact
+  McNemar p is 0.5 against a bar of 0.05 and the net paired difference is 2
+  against a bar of 10; the candidate ejected 12 players to the reference's 1
+  with 8 of the 12 wrongful, so the wrongful-ejection bound fails at +7 against
+  a permitted 2. All three clauses of the decision rule fail, the result is
+  inconclusive, the candidate does not advance and is not rejected, and the two
+  one-sided effects the manifest declared for the v4 revision are what the
+  reading has to be held against. The pre-declared leak column and the
+  role-split ballot profile are reported beside it, and every accepted seed of
+  the band is now development data.
 
 The reproducible development command is:
 

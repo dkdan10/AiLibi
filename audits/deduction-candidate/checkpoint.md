@@ -67,3 +67,15 @@ spending, adoption or merging into main.
   It measures spend and shape only — no grader ran, no paired statistic was
   computed and no meeting outcome is recorded — so nothing in it authorizes
   spending, adoption or merging into main either.
+
+- 2026-09-16: the fifth held-out run of the fresh-model deduction instrument ran
+  once against the authorized provider on the fifty paired seeds of band
+  8000-8999 and COMPLETED all one hundred units — the first complete run this
+  evaluation has produced — with its report, replays, checkpoint, reconciliation
+  and rendered prefixes archived at
+  [run-2026-09-16/RESULTS.md](run-2026-09-16/RESULTS.md). It grades, unlike the
+  two calibrations, and the result is inconclusive under the frozen decision
+  rule: `b = 2`, `c = 0`, p 0.5, and a wrongful-ejection bound that fails at +7
+  against a permitted 2. A result is a measurement and never an adoption, so
+  nothing in it authorizes spending, adoption or merging into main either; every
+  candidate lever stays default-OFF.
