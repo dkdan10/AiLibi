@@ -1,6 +1,6 @@
 # Run a second development calibration sized for the impostor ballot mode
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -183,7 +183,7 @@ rendering. Sixty paired seeds is all fifty of the 3000 band plus 5000 to 5009.
   own feasibility check (`:5862-5870`) runs against the CALIBRATION's maxima
   rather than the tree's constants, with `CEILING_PROPOSAL_RULE` (`:5415`)
   stating it. Planted: 4,590 over 100 units, which must propose 464,000 or more.
-- [ ] The rehearsal double's usage profile is refreshed from this calibration
+- [x] The rehearsal double's usage profile is refreshed from this calibration
   by the documented `--refresh-usage-profile` command, and the dependent tests
   are updated with it rather than deferred again:
   `test_the_calibration_is_the_largest_unit_the_archives_charged`
@@ -302,9 +302,45 @@ done** below.
 
 That paragraph and the two sections below it are the implementer's record and
 are left as written. The runner session ran the sitting on 2026-09-15 and closed
-items 9 and 11; item 8 is still open, for a reason the sitting found rather than
-for the one the implementer anticipated, so the card stays `active`. See
-**The live sitting (2026-09-15)** below.
+items 9 and 11; item 8 was still open, for a reason the sitting found rather
+than for the one the implementer anticipated. It is now closed by
+[the limits card](fresh-deduction-limits-5.md) and this card is `done`. See
+**The live sitting (2026-09-15)** and **Item 8 closed by the fifth
+authorization's limits card (2026-09-15)** below.
+
+### Item 8 closed by the fifth authorization's limits card (2026-09-15)
+
+Closed by [the limits card](fresh-deduction-limits-5.md), which is where the
+sitting's hand-back landed: the refresh moves an owner-authorized ceiling, and
+that is the owner's on a card rather than the runner's in a report.
+
+`tests/experiments/deduction_usage_profile.json` is now this sitting's own 720
+calls over 120 units, rebuilt by the documented `--refresh-usage-profile`
+command, and `CALIBRATED_UNIT_INPUT_TOKENS` / `CALIBRATED_UNIT_OUTPUT_TOKENS`
+moved with it in the same commit, from the three stopped runs' 24,282 / 3,116 to
+this sitting's **38,440 / 4,176**. Those two maxima moved three authorized
+ceilings, copied verbatim from
+[the fifth authorization](fresh-deduction-authorization-5.md)'s Constraints
+table: `AUTHORIZED_RUN_MAX_INPUT_TOKENS` 3,710,000 to **3,844,000**,
+`AUTHORIZED_RUN_MAX_OUTPUT_TOKENS` 459,000 to **422,000** (it FALLS, because the
+rule is followed and v4 made units smaller on output) and
+`AUTHORIZED_UNIT_MAX_INPUT_TOKENS` 106,000 to **116,000**. The per-unit output
+ceiling, the turn cap and the vote cap did not move.
+
+The 27 red cases this directory's `CALIBRATION.md` enumerated are settled there
+as well, in the three classes it named: the eleven feasibility refusals by the
+re-sized ceilings and by pinning the two spent calibration modes to the profile
+they were sized on, the eight archived-FAULT replays by committing the stopped
+runs' rows as `tests/experiments/deduction_stopped_runs_usage_profile.json` and
+pointing them at it, and the eight arithmetic cases by following the constants.
+The pin this card named,
+`test_the_calibration_is_the_largest_unit_the_archives_charged`, passes on the
+refreshed profile.
+
+The last limitation below — "`CALIBRATED_UNIT_INPUT_TOKENS` and
+`CALIBRATED_UNIT_OUTPUT_TOKENS` are still the three stopped live runs' figures"
+— is superseded by that commit and left as written, as the record of what was
+true when this card reported.
 
 ### Where this sits
 

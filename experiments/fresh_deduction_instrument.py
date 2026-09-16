@@ -219,26 +219,33 @@ AUTHORIZED_VOTE_MAX_TOKENS: Final[int] = DEFAULT_VOTE_MAX_TOKENS
 AUTHORIZED_TURN_TEMPERATURE: Final[float] = 0.4
 AUTHORIZED_VOTE_TEMPERATURE: Final[float] = 0.2
 
-#: The run-level hard stop, both token dimensions. Re-sized by the fourth
-#: authorization from the live development calibration of 2026-09-14
-#: (``audits/deduction-candidate/calibration-2026-09-14/calibration.json``)
-#: rather than from a projection: the larger of a hundred units at the measured
-#: mean x 1.5 and a hundred units at the largest measured unit, on each
-#: dimension. The figures merged on 2026-09-07 were 2,400,000 / 200,000, and a
-#: complete run measured over a hundred units would have stopped near its end on
-#: the output one.
-AUTHORIZED_RUN_MAX_INPUT_TOKENS: Final[int] = 3_710_000
-AUTHORIZED_RUN_MAX_OUTPUT_TOKENS: Final[int] = 459_000
+#: The run-level hard stop, both token dimensions. Re-sized by the FIFTH
+#: authorization (``tasks/work/fresh-deduction-authorization-5.md``, 2026-09-15)
+#: from the second live development calibration of that day
+#: (``audits/deduction-candidate/calibration-2-2026-09-15/calibration.json``)
+#: rather than from a projection: :data:`CEILING_PROPOSAL_RULE`, computed by
+#: :func:`ceiling_proposal` over that sitting's 120 units — the larger of a
+#: hundred units at the measured mean x 1.5 and a hundred units at the largest
+#: measured unit on each dimension, with ONE further turn cap on the output side
+#: for the run's last in-flight reservation (100 x 4,176 + 4,096 = 421,696,
+#: rounded up). The fourth authorization's figures were 3,710,000 / 459,000;
+#: the INPUT ceiling RISES because v4's largest unit charged 38,440 against the
+#: 37,100 a hundred of them were allowed, and the OUTPUT ceiling FALLS because
+#: the rule is followed and v4 made units smaller on output. The figures merged
+#: on 2026-09-07 were 2,400,000 / 200,000.
+AUTHORIZED_RUN_MAX_INPUT_TOKENS: Final[int] = 3_844_000
+AUTHORIZED_RUN_MAX_OUTPUT_TOKENS: Final[int] = 422_000
 
 #: The per-unit hard stop, charged upward into the run-level parent. Also the
-#: fourth authorization's, from the same calibration: three times the largest
-#: measured unit (35,232 input; 4,590 output gives 13,770), with the OUTPUT
-#: figure lifted to clear the reservation schedule the raised turn cap makes —
-#: :func:`unit_output_reservation` is 15,360 — and rounded up to 16,000. The
-#: figures merged on 2026-09-07 were 45,000 / 4,000, and
-#: :func:`assert_limits_are_feasible` refuses that output ceiling under either
-#: turn cap.
-AUTHORIZED_UNIT_MAX_INPUT_TOKENS: Final[int] = 106_000
+#: fifth authorization's, from the same sitting: three times the largest
+#: measured unit (38,440 input; 4,176 output gives 12,528), with the OUTPUT
+#: figure held to the reservation schedule the raised turn cap makes —
+#: :func:`unit_output_reservation` is 15,360 — and rounded up to 16,000, which
+#: is why the output ceiling does not move while the input one rises from the
+#: fourth authorization's 106,000. The figures merged on 2026-09-07 were
+#: 45,000 / 4,000, and :func:`assert_limits_are_feasible` refuses that output
+#: ceiling under either turn cap.
+AUTHORIZED_UNIT_MAX_INPUT_TOKENS: Final[int] = 116_000
 AUTHORIZED_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 16_000
 
 #: 6 h of model work inside an 8 h elapsed window: two limits and therefore two
@@ -535,17 +542,41 @@ CALIBRATION_2_SAMPLING: Final[SamplingConfig] = AUTHORIZED_SAMPLING
 UNIT_TURN_CALLS: Final[int] = AUTHORIZED_LIVING_VOTERS
 UNIT_BALLOT_CALLS: Final[int] = AUTHORIZED_LIVING_VOTERS
 
-#: The largest input and output a single unit has been CHARGED, over the seven
-#: units the three stopped live runs archived (their per-call rows are in
-#: ``tests/experiments/deduction_usage_profile.json``, whose ``units`` block a
-#: test holds these two numbers to). The input figure is a complete six-call
-#: unit; the output figure is a unit that stopped after four of its six calls,
-#: so it is a floor on what a complete unit of that arm charges rather than a
-#: measurement of one. They are what the run-level ceilings are checked
-#: against, because a ceiling is an anomaly detector and the largest thing this
-#: evaluation has measured is the anomaly's lower edge.
-CALIBRATED_UNIT_INPUT_TOKENS: Final[int] = 24_282
-CALIBRATED_UNIT_OUTPUT_TOKENS: Final[int] = 3_116
+#: The largest input and output a single unit has been CHARGED, over the 120
+#: units the second live development calibration of 2026-09-15 measured (their
+#: per-call rows are in ``tests/experiments/deduction_usage_profile.json``,
+#: whose ``units`` block a test holds these two numbers to). Both figures are
+#: complete six-call units this time, measured at accounts revision v4 on a
+#: converted band: the profile the fourth authorization was sized against held
+#: the seven units of the three stopped live runs — 24,282 input and 3,116
+#: output, the latter a unit that stopped after four of its six calls — and
+#: those rows now live beside it in
+#: ``tests/experiments/deduction_stopped_runs_usage_profile.json``, where the
+#: rehearsals of the archived FAULTS read them. They are what the run-level
+#: ceilings are checked against, because a ceiling is an anomaly detector and
+#: the largest thing this evaluation has measured is the anomaly's lower edge.
+CALIBRATED_UNIT_INPUT_TOKENS: Final[int] = 38_440
+CALIBRATED_UNIT_OUTPUT_TOKENS: Final[int] = 4_176
+
+#: The same two figures as the profile committed when the two CALIBRATION modes
+#: were authorized — the three stopped live runs' seven units, now committed as
+#: ``tests/experiments/deduction_stopped_runs_usage_profile.json`` — and what
+#: :func:`assert_calibration_is_authorized` and
+#: :func:`assert_ready_for_a_calibration` check a mode's ceilings against.
+#:
+#: A calibration mode's limits are the record of a spend the manifest authorizes
+#: ONCE, and both have been spent: the 2026-09-14 mode on that day and the
+#: 2026-09-15 mode on the sitting that produced the profile above. Checking
+#: their ceilings against a profile measured BY one of them asks whether a
+#: sitting that already happened could be authorized under numbers that did not
+#: exist when it was authorized, which is not a question this gate exists to
+#: answer — and answering it would force a re-sizing of ``CALIBRATION_2_LIMITS``,
+#: which is to say a second sitting nobody authorized. The live EVALUATION's
+#: ceilings keep reading the constants above, which is where a refreshed
+#: measurement belongs. A test holds these two to the committed stopped-runs
+#: fixture's own maxima, so they are read off evidence rather than typed.
+CALIBRATION_SIZING_UNIT_INPUT_TOKENS: Final[int] = 24_282
+CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS: Final[int] = 3_116
 
 
 def planned_units() -> int:
@@ -601,9 +632,11 @@ RESERVATION_POLICY: Final[str] = (
     "starts, rather than discovering it partway through one. The run-level "
     "ceilings are the same question one level up, because the pre-flight "
     "recurses into the parent budget, and are checked against the "
-    "largest per-unit spend the live archives have charged — "
+    "largest per-unit spend the committed usage profile carries — "
     f"{CALIBRATED_UNIT_INPUT_TOKENS:,} input and "
-    f"{CALIBRATED_UNIT_OUTPUT_TOKENS:,} output — rather than against a mean "
+    f"{CALIBRATED_UNIT_OUTPUT_TOKENS:,} output, the largest of the 120 units "
+    "the second live development calibration of 2026-09-15 measured at "
+    "accounts revision v4 — rather than against a mean "
     "projection: a hundred units at the largest unit this evaluation has "
     "measured is what a run ceiling has to be able to pay for, because a "
     "ceiling that cannot is a stop rule that fires on arithmetic near the end "
@@ -1306,21 +1339,29 @@ def assert_limits_are_feasible(
     It runs first in :func:`assert_ready_for_a_live_run` and again inside
     :func:`assert_live_run_is_authorized`, so neither the CLI's path nor a
     direct :func:`run_instrument` call can reach a provider without it. It
-    ACCEPTS :data:`AUTHORIZED_LIMITS` since the fourth authorization of
-    2026-09-14 re-sized them, and it still refuses the ceilings merged on
-    2026-09-07 — 4,000 per-unit output against a schedule of
+    ACCEPTS :data:`AUTHORIZED_LIMITS` since the fifth authorization of
+    2026-09-15 re-sized them on the refreshed profile — the fourth
+    authorization's 3,710,000 run-level input ceiling is REFUSED on it, a
+    hundred units of 38,440 needing 3,844,000 — and it still refuses the
+    ceilings merged on 2026-09-07 — 4,000 per-unit output against a schedule of
     :func:`unit_output_reservation`, under either turn cap — which is what
     ``test_the_ceilings_merged_on_2026_09_07_are_still_refused`` plants.
 
     The two calibrated figures default to the module's constants — the largest
     unit the committed usage profile holds — and are parameters so that a
-    CALIBRATION can run this same gate against its OWN measured maxima.
-    :func:`ceiling_proposal` does exactly that: a proposal sized on what a
-    sitting measured is feasible or not against that sitting's numbers, and
-    checking it against a profile built from some earlier run's archives
-    answers a question nobody asked. Read from module scope at call time rather
-    than bound as parameter defaults, so a test that moves either constant
-    moves this gate with it.
+    caller can run this same gate against a DIFFERENT measurement. Two do:
+
+    * :func:`ceiling_proposal` runs it against the sitting's OWN measured
+      maxima, because a proposal sized on what a sitting measured is feasible
+      or not against that sitting's numbers, and checking it against a profile
+      built from some earlier run's archives answers a question nobody asked;
+    * the two calibration gates run it against
+      :data:`CALIBRATION_SIZING_UNIT_INPUT_TOKENS` and its output twin, the
+      profile each authorized MODE was sized on, because a mode's ceilings
+      record a spend the manifest authorizes once and both have been spent.
+
+    Read from module scope at call time rather than bound as parameter
+    defaults, so a test that moves either constant moves this gate with it.
     """
 
     planned = planned_units() if units is None else units
@@ -1704,7 +1745,14 @@ def assert_calibration_is_authorized(
             "inputs is recorded in the manifest or it is not authorized"
         )
     assert_limits_are_feasible(
-        limits=limits, sampling=sampling, units=calibration_units(paired_seeds)
+        limits=limits,
+        sampling=sampling,
+        units=calibration_units(paired_seeds),
+        # A mode's ceilings are checked against the profile the mode was SIZED
+        # on, not against whatever a later sitting refreshed the committed one
+        # to: see :data:`CALIBRATION_SIZING_UNIT_INPUT_TOKENS`.
+        calibrated_unit_input_tokens=CALIBRATION_SIZING_UNIT_INPUT_TOKENS,
+        calibrated_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
     )
     return mode
 
@@ -3558,7 +3606,12 @@ def assert_ready_for_a_calibration(
     """
 
     assert_limits_are_feasible(
-        limits=limits, sampling=sampling, units=calibration_units(paired_seeds)
+        limits=limits,
+        sampling=sampling,
+        units=calibration_units(paired_seeds),
+        # As above: the profile the mode was sized on.
+        calibrated_unit_input_tokens=CALIBRATION_SIZING_UNIT_INPUT_TOKENS,
+        calibrated_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
     )
     assert_calibration_is_authorized(
         provider=provider,
