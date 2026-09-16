@@ -106,6 +106,17 @@ bands 3000-3999, 5000-5999, 6000-6999 and 7000-7999 all being development data.
   (development data once archived) land under
   `audits/deduction-candidate/run-<date>/`, indexed from the candidate's
   README, with the `docs/artifacts.md` audits row (`:109`) recomputed.
+- [x] Review correction: the reference arm's single counted leaking turn is a
+  QUESTION, which `ROLE_LEAK_RULE`'s own text excludes and its
+  `_NOT_AN_ASSERTION` guard fails to catch, so RESULTS.md reports both the
+  frozen implementation's 1 of 50 and the rule-as-written 0 of 50, withdraws
+  the two sentences that rested on the 1, and routes the guard's word-list gap
+  to a separate instrument card rather than moving an instrument byte here.
+- [x] Review correction: the usage reconciliation names both usage bases per
+  unit — `completed_*` for the resolved completions and `charged_*` for those
+  plus the billed-and-refused attempt, itemised in `charged_failed_*` — and
+  every per-unit mean published beside an arm total is on the charged basis, so
+  no figure in RESULTS.md mixes the two.
 
 ## Constraints
 
@@ -349,6 +360,18 @@ against the whole key and against its first six characters, over all 107 files
 — and both counts are 0, and `assert_report_holds_no_prefix_bytes` was re-run
 over the committed report against all fifty rebuilt prefixes and passed.
 
+Every command above was run again, in the same order and directly rather than
+through a pipe, over the tree the **Review corrections (2026-09-16)** below
+leave behind, and every figure in the block is unchanged — 491, 61 work cards,
+60 / 48 / 0 / 7 / 5, 80, and 7,824 passed with 20 skipped and 3 xfailed beside
+515 frontend tests in 19 files, at a real `scripts/check.sh` exit code of 0. In
+addition, the reconciliation was re-derived and still reprints
+`usage-reconciliation.json` byte for byte:
+`.venv/bin/python audits/deduction-candidate/run-2026-09-16/reconcile.py
+audits/deduction-candidate/run-2026-09-16 | cmp -
+audits/deduction-candidate/run-2026-09-16/usage-reconciliation.json` is silent.
+No live call was made in any of it.
+
 ### Limitations
 
 * **The two declared one-sided effects are not separated.** The citation repair
@@ -373,3 +396,85 @@ over the committed report against all fifty rebuilt prefixes and passed.
 * **One model, one prompt set, one roster.** 4p1i with three living voters on
   Featherless `Qwen/Qwen3.6-27B`; nothing here carries to another model, a
   metered provider or the 9p2i shape.
+
+### Review corrections (2026-09-16)
+
+Review of head `3b880582` returned two blocking findings, each reported by more
+than one lens and each matching an unresolved Codex P2 comment on PR #465. Both
+are record defects — a diagnostic read against its own rule, and a published
+mean read on the wrong basis — and neither touches the primary outcome, the
+exact McNemar p, the net paired difference or the wrongful-ejection bound. The
+card stays **done**; the paragraphs below say what the record used to claim,
+why that was wrong, and what it says now. Both were reproduced before they were
+repaired, and no instrument byte moves.
+
+**1. The reference arm's leak count of 1 is a rule artifact** (Codex
+4025371048). `ROLE_LEAK_RULE`
+(`experiments/fresh_deduction_instrument.py:6216`) says in its own words that a
+statement "SUPPOSED or ASKED rather than asserted — a conditional, a
+hypothetical or a question governing the words — is not counted".
+`repaired_clock` seed 8014's sole counted turn is interrogative: the sentence
+the role pattern matched inside opens with the two words `how do` and is closed
+by `?`. It is counted anyway because `_NOT_AN_ASSERTION` (`:6269`) lists `were
+i`, `why would`, `how would` and `what would` and does not list `how do`, so no
+governor is found in front of the match and `states_own_role_or_kill` returns
+True; adding `how do` to that list makes the guard fire and drops the turn.
+`combined_accounts` seed 8042 is unaffected — a first-person declarative closed
+by a full stop — so the rule as written gives 1 of 50 on the candidate and **0
+of 50 on the reference**, against the frozen implementation's 1 and 1.
+
+Two sentences rested on the 1 and are WITHDRAWN: that this run "is the first
+measurement in which the REFERENCE arm leaks at all", and that "at one event
+per fifty units on each arm the diagnostic no longer separates the arms". Under
+the rule the owner's decision 9 pre-declared, the reference arm did not leak
+here and this run continues the earlier runs' candidate-only reading rather
+than contradicting it. RESULTS.md's role-leak section now carries both counts
+with the guard gap named, its table and its calibration-comparison row carry
+both, its Limitations bullet names the false positive, and a shell block
+recomputes both readings from the archive with no turn text printed. This
+pull request's body is corrected the same way. The guard's word list is an
+INSTRUMENT defect and is NOT repaired here, because this card's Expected scope
+forbids moving an instrument byte in the run's own pull request: it is routed
+to a separate instrument card, which is to complete the interrogative
+auxiliaries beside `would` and re-derive this column from the archive
+afterwards. Opening that card is a coordinator action on `main`, not a byte
+this pull request may add.
+
+**2. The per-unit usage rows excluded a charged attempt** (Codex 4025371054).
+`reconcile.py` built each `per_unit` row's `calls`, `input_tokens` and
+`output_tokens` from the replay's `llm_calls` alone, which hold the resolved
+completions and not the attempt the provider billed and then refused
+(`combined_accounts` seed 8010, 1 attempt, 3,460 input / 245 output). The arm
+totals beside them come from the checkpoint, which does include it. So the
+candidate arm's rows summed to 300 / 1,180,749 / 85,005 against arm totals of
+301 / 1,184,209 / 85,250, and RESULTS.md published "23,615 / 1,700" as the
+candidate's per-unit mean — the completions-only mean — beside arm totals
+implying 23,684 / 1,705, and reprinted the same pair in the calibration
+comparison table. The reference arm charged no failed attempt and is
+unaffected on either basis, as is the calibration column of that table.
+
+Repaired by naming both bases rather than silently picking one. Each `per_unit`
+row now carries `completed_calls` / `completed_input_tokens` /
+`completed_output_tokens` beside `charged_calls` / `charged_input_tokens` /
+`charged_output_tokens`, with the difference itemised in
+`charged_failed_attempts` / `charged_failed_input_tokens` /
+`charged_failed_output_tokens`, and `largest_call_output` now considers the
+charged failed rows too. `usage-reconciliation.json` was regenerated from the
+corrected derivation and still reprints byte for byte from it, which is the
+invariant RESULTS.md claims for that file. RESULTS.md's per-unit means are
+restated on the charged basis — `combined_accounts` **23,684 / 1,705**,
+`repaired_clock` 21,194 / 1,189 unchanged — the comparison-table row is
+corrected, the "within 6%" sentence names its widest gap (+5.97%, the
+candidate's output mean) so the claim is checkable, and a shell block asserts
+that each unit's `charged_*` triple equals that unit's checkpoint
+`telemetry.usage` on all 100 units and prints the arm totals beside the means.
+
+**Neither correction is a re-measurement.** No model was called, no seed was
+re-recorded, no replay, checkpoint, report, log or rendered prefix byte moved,
+and the third Codex comment on this pull request (P1, per-call `finish_reason`)
+is the one the record already dispositions in Decisions item 6 and in
+Limitations, unchanged. The gates were re-run over the corrected tree and are
+in the Verification block above, whose figures still hold: the only files that
+moved are RESULTS.md, `reconcile.py`, `usage-reconciliation.json` and this
+card, and `docs/artifacts.md`'s `audits/` row is recomputed because `audits/`
+bytes moved.

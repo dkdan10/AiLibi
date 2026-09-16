@@ -265,24 +265,116 @@ result because the owner's decision 9 of 2026-09-15 said they would be.
 IMPOSTOR and whose text states, in the first person and without attributing the
 statement to someone else, either that role or a kill that speaker committed.
 
-| Arm | Leaking turns | Units with a leaking turn | Units |
-| --- | --- | --- | --- |
-| `combined_accounts` | **1** | **1** (seed 8042) | 50 |
-| `repaired_clock` | **1** | **1** (seed 8014) | 50 |
+| Arm | Leaking turns, frozen implementation | Leaking turns, rule AS WRITTEN | Units with a leaking turn, frozen / as written | Units |
+| --- | --- | --- | --- | --- |
+| `combined_accounts` | **1** (seed 8042) | **1** | **1 / 1** | 50 |
+| `repaired_clock` | **1** (seed 8014) | **0** — see below | **1 / 0** | 50 |
+
+**The reference arm's single counted turn is a QUESTION, which
+`ROLE_LEAK_RULE`'s own text excludes.** The rule says a statement "SUPPOSED or
+ASKED rather than asserted — a conditional, a hypothetical or a question
+governing the words — is not counted". Seed 8014's sole counted turn is exactly
+that: the sentence the role pattern matched inside is interrogative — it opens
+with the two words `how do` and the character that closes it is `?`. It is
+counted anyway because the guard that implements that clause,
+`_NOT_AN_ASSERTION` (`experiments/fresh_deduction_instrument.py:6269`), carries
+`why would`, `how would` and `what would` in its word list and does NOT carry
+`how do`, so nothing in front of the match fires and
+`states_own_role_or_kill` returns True. Adding `how do` to that list makes the
+guard fire and the turn drop out; the candidate arm is unaffected, because seed
+8042's counted turn is a first-person declarative closed by a full stop.
+
+So the honest reading is two numbers, not one: **the frozen implementation
+returns 1 of 50 on each arm, and the rule as written gives 1 of 50 on
+`combined_accounts` and 0 of 50 on `repaired_clock`.** Two sentences this
+section first carried are WITHDRAWN on that basis — that this run "is the first
+measurement in which the REFERENCE arm leaks at all", and that "at one event
+per fifty units on each arm the diagnostic no longer separates the arms".
+Neither survives: under the rule the owner's decision 9 pre-declared, the
+reference arm did not leak here, and this run reproduces the earlier runs'
+candidate-only reading rather than contradicting it. What can be said is the
+narrower thing: the candidate arm leaks in 1 unit of 50 by both readings, and
+the reference arm leaks in 0 or 1 depending on which of the two is used.
+
+The `_NOT_AN_ASSERTION` word-list gap is an INSTRUMENT defect, not a record
+one, and it is not repaired here: no instrument byte moves in the run's own
+pull request, which is what
+[this run's card](../../../tasks/work/fresh-deduction-authorization-5.md)'s
+Expected scope requires. It is routed to a separate instrument card, whose work
+is to complete that list — the interrogative auxiliaries beside `would`, `do`
+among them — and to re-derive this column from the archive afterwards. Until
+that card lands, the frozen implementation's 1 stands as the number the
+committed derivation emits, and this section is the reason it is not the number
+to reason from.
+
+Nothing above is a gate in either reading. The leak is a reported diagnostic
+under decision 9, no stop condition reads it, the decision rule does not name
+it, and the primary outcome, the McNemar p and the wrongful-ejection bound are
+untouched by which of the two counts a reader takes.
 
 **The count is an ESTIMATE carrying error in BOTH directions and is not a
 floor.** The rule says so in its own words: it reads no intent, so a confession
 whose shapes it does not match is missed, and its guards see one sentence at a
-time, so an attribution spread across two is counted. One leaking turn per arm
-is a numerator of one on a two-sided rule, so it bounds the leak loosely rather
-than measuring it.
+time, so an attribution spread across two is counted. Seed 8014 is a third
+error the prose does not itemise and this section has now measured: a governor
+sitting in the right sentence, in the right position, in a form the guard's
+word list does not carry. One leaking turn per arm is a numerator of one on a
+two-sided rule, so it bounds the leak loosely rather than measuring it.
 
 Read against what came before: the fourth run counted 2 of 13 candidate games
 and 0 of 39 reference turns, and the second calibration 1 of 60 candidate units
-and 0 of 60 reference. This run is the first measurement in which the REFERENCE
-arm leaks at all, which is worth stating rather than smoothing: at one event
-per fifty units on each arm the diagnostic no longer separates the arms, and
-the fourth run's 2-of-13 candidate-only reading is not reproduced here.
+and 0 of 60 reference. Against the rule as written, this run's 1-of-50
+candidate and 0-of-50 reference is the same candidate-only shape at the same
+order of rate as the calibration — 2.0% of candidate units against its 1.7% —
+and against the frozen implementation it is 1 and 1. Either way the fourth
+run's 2-of-13 candidate rate, 15.4%, is not reproduced here; but a numerator of
+one on either arm cannot distinguish 2.0% from 1.7%, so the only claim these
+three measurements jointly support is that the candidate arm leaks rarely and
+the reference arm has not yet been seen to leak under the rule as written.
+
+Both readings recompute from the archive — the frozen one through the
+instrument's own `states_own_role_or_kill`, the written one through the same
+function with `how do` added to the guard, with no turn text printed:
+
+```sh
+.venv/bin/python -c "
+import json, re, sys
+from collections import Counter
+from pathlib import Path
+sys.path.insert(0, 'audits/deduction-candidate/run-2026-09-16')
+from reconcile import PLACEHOLDER_TURNS, _impostor_of
+from experiments.fresh_deduction_instrument import (
+    _NOT_AN_ASSERTION, _SELF_KILL_STATEMENT, _SELF_ROLE_STATEMENT,
+    _SENTENCE_SPLIT, states_own_role_or_kill)
+GUARD = re.compile(
+    _NOT_AN_ASSERTION.pattern.replace(r'how\\s+would', r'how\\s+would|how\\s+do'),
+    re.IGNORECASE)
+def as_written(text):
+    for sentence in _SENTENCE_SPLIT.split(text):
+        for pattern in (_SELF_ROLE_STATEMENT, _SELF_KILL_STATEMENT):
+            found = pattern.search(sentence)
+            if found is not None and not GUARD.search(sentence[: found.start()]):
+                return True
+    return False
+frozen, written = Counter(), Counter()
+for path in sorted(Path('audits/deduction-candidate/run-2026-09-16').glob('*.jsonl')):
+    arm, _, _seed = path.stem.partition('-seed-')
+    rows = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    meeting = next(r for r in rows if r['kind'].startswith('meeting'))
+    impostor = _impostor_of(rows)
+    for turn in meeting['transcript']['turns']:
+        if turn['free_text'] in PLACEHOLDER_TURNS or turn['speaker'] != impostor:
+            continue
+        frozen[arm] += states_own_role_or_kill(turn['free_text'], role='IMPOSTOR')
+        written[arm] += as_written(turn['free_text'])
+print('frozen implementation:', dict(sorted(frozen.items())))
+print('rule as written      :', dict(sorted(written.items())))"
+```
+
+```
+frozen implementation: {'combined_accounts': 1, 'repaired_clock': 1}
+rule as written      : {'combined_accounts': 1, 'repaired_clock': 0}
+```
 
 ### The role-split ballot profile
 
@@ -324,7 +416,9 @@ model still writes the concealment plan from the private truth forward in about
 three impostor ballots in five on the candidate arm, but it now does so in
 about a hundred characters instead of five hundred.
 
-Both diagnostics recompute from the archive:
+Both diagnostics recompute from the archive. The `leaking_turns` this prints is
+the FROZEN implementation's count, which for `repaired_clock` is the question
+the section above shows the rule's own text excludes:
 
 ```sh
 .venv/bin/python -c "
@@ -426,11 +520,61 @@ Per-unit and per-call profiles, for the record:
 | `combined_accounts` | turn | 150 | 3,392.3 | 4,755 | 5,791 | 472.3 | 857 | 1,075 |
 | `combined_accounts` | ballot | 150 | 4,479.3 | 5,993 | 7,301 | 94.4 | 126 | 132 |
 
-Per unit: `repaired_clock` 21,194 input / 1,189 output mean, largest unit
-24,282 / 1,581; `combined_accounts` 23,615 / 1,700 mean, largest unit 34,683 /
-2,898. (The reference arm's largest unit being 24,282 exactly is a coincidence:
-the same number is `CALIBRATION_SIZING_UNIT_INPUT_TOKENS`, which is the three
-stopped runs' archive maximum and has nothing to do with this sitting.)
+Per unit, on the CHARGED basis — the one the arm totals above and the
+checkpoint's own `telemetry.usage` use, so the billed-and-refused attempt is
+inside it: `repaired_clock` 21,194 input / 1,189 output mean, largest unit
+24,282 / 1,581; `combined_accounts` **23,684 / 1,705** mean, largest unit
+34,683 / 2,898. Every arm's mean is that arm's total divided by its 50 units
+(1,184,209 / 50 and 85,250 / 50 on the candidate), so the means and the totals
+are one basis and not two. (The reference arm's largest unit being 24,282
+exactly is a coincidence: the same number is
+`CALIBRATION_SIZING_UNIT_INPUT_TOKENS`, which is the three stopped runs'
+archive maximum and has nothing to do with this sitting.)
+
+**A correction, stated rather than quietly re-typed.** This paragraph first
+published the candidate's per-unit mean as 23,615 / 1,700. That was the
+COMPLETIONS-only mean — `combined_accounts` seed 8010's billed refusal
+(1 attempt, 3,460 input / 245 output) is not among the replay's `llm_calls`,
+and the first revision of [reconcile.py](reconcile.py) summed only those into
+each `per_unit` row while the arm totals beside it came from the checkpoint,
+which does include the refusal. Two bases, one table. The derivation now emits
+both under names that say which is which — `completed_calls` /
+`completed_input_tokens` / `completed_output_tokens` beside `charged_calls` /
+`charged_input_tokens` / `charged_output_tokens`, with the difference itemised
+in `charged_failed_attempts` / `charged_failed_input_tokens` /
+`charged_failed_output_tokens` — and every figure published here is on the
+charged basis. The check that this is now one basis: each unit's `charged_*`
+triple equals that unit's checkpoint `telemetry.usage` on all 100 units, and
+the reference arm is unaffected because it charged no failed attempt.
+
+```sh
+.venv/bin/python -c "
+import json
+from collections import defaultdict
+from pathlib import Path
+D = Path('audits/deduction-candidate/run-2026-09-16')
+rec = json.loads((D / 'usage-reconciliation.json').read_text())
+cp = json.loads((D / 'checkpoint-final.json').read_text())
+usage = {(u['arm'], u['seed']): u['telemetry']['usage'] for u in cp['units']}
+agg = defaultdict(lambda: [0, 0, 0, 0])
+for r in rec['per_unit']:
+    a = agg[r['arm']]
+    a[0] += r['charged_calls']; a[1] += r['charged_input_tokens']
+    a[2] += r['charged_output_tokens']; a[3] += 1
+    u = usage[(r['arm'], r['seed'])]
+    assert (r['charged_calls'], r['charged_input_tokens'], r['charged_output_tokens']) == (
+        u['calls'], u['input_tokens'], u['output_tokens']), r['seed']
+for arm, (calls, tin, tout, n) in sorted(agg.items()):
+    a = rec['arms'][arm]
+    print(arm, calls, tin, tout, '| arm totals',
+          a['resolved_calls'], a['resolved_input_tokens'], a['resolved_output_tokens'],
+          '| per-unit mean', round(tin / n, 1), round(tout / n, 1))"
+```
+
+```
+combined_accounts 301 1184209 85250 | arm totals 301 1184209 85250 | per-unit mean 23684.2 1705.0
+repaired_clock 300 1059714 59427 | arm totals 300 1059714 59427 | per-unit mean 21194.3 1188.5
+```
 
 ### Side by side with the calibration that sized these limits
 
@@ -438,22 +582,24 @@ stopped runs' archive maximum and has nothing to do with this sitting.)
 | --- | --- | --- |
 | Units / attempts | 120 / 720 | 100 / 601 |
 | `repaired_clock` per unit | 20,862 in / 1,142 out | 21,194 in / 1,189 out |
-| `combined_accounts` per unit | 22,734 in / 1,609 out | 23,615 in / 1,700 out |
+| `combined_accounts` per unit | 22,734 in / 1,609 out | 23,684 in / 1,705 out |
 | Largest unit | 38,440 in / 4,176 out | 34,683 in / 2,898 out |
 | Largest candidate turn | 1,884 (46.0% of the 4,096 cap) | 1,075 (26.2%) |
 | Largest candidate ballot | 135 (13.2% of the 1,024 cap) | 132 (12.9%) |
 | Impostor candidate ballot truncations | 0 of 60 | **0 of 50** |
 | Candidate impostor self-tells | 39 of 60 (65.0%) | 29 of 50 (58.0%) |
 | Candidate units with a leaking turn | 1 of 60 | 1 of 50 |
-| Reference units with a leaking turn | 0 of 60 | 1 of 50 |
+| Reference units with a leaking turn | 0 of 60 | 1 of 50 as the frozen implementation counts it, **0 of 50 under the rule as written** (see the role-leak section) |
 | Pace per attempt | 10.28 s pooled | 11.46 s pooled |
 | Refusals / defaults / retries | 0 / 0 / 0 | 1 / 1 / 0 |
 
-The calibration's per-unit means held to within 6% on both arms and its maxima
-came in ABOVE what the held-out run charged on every dimension, so the ceilings
-it sized were, if anything, conservative. The dimension the fourth run's stop
-turned on — the candidate impostor ballot's tail — is where the two agree most
-closely and where both are now an order of magnitude below the cap.
+The calibration's per-unit means held to within 6% on both arms — the widest
+gap, on the charged basis this table now reads throughout, is the candidate's
+output mean, 1,608.9 to 1,705.0, **+5.97%** — and its maxima came in ABOVE what
+the held-out run charged on every dimension, so the ceilings it sized were, if
+anything, conservative. The dimension the fourth run's stop turned on — the
+candidate impostor ballot's tail — is where the two agree most closely and
+where both are now an order of magnitude below the cap.
 
 ### `finish_reason` and the cap signal
 
@@ -684,10 +830,14 @@ bounded.
   inside the noise this sample carries — `b = 6, c = 0` is the smallest
   difference the exact test can call at all. A larger sample might resolve a
   real effect of this size; nothing here says whether one exists.
-* **Both diagnostics are loose at these numerators.** One leaking turn per arm
-  and a rule with two-sided error bound the leak rather than measure it, and
-  the self-tell is counted on the ballot's OPENING only, so a confession that
-  arrives later in a rationale is not in the 29 or the 3.
+* **Both diagnostics are loose at these numerators, and the leak column has a
+  demonstrated false positive in it.** One leaking turn per arm and a rule with
+  two-sided error bound the leak rather than measure it; and the reference
+  arm's single counted turn is a question the rule's own prose excludes but its
+  `_NOT_AN_ASSERTION` guard does not catch, so the rule-as-written reference
+  count is 0 of 50 against the frozen implementation's 1. The self-tell is
+  counted on the ballot's OPENING only, so a confession that arrives later in a
+  rationale is not in the 29 or the 3.
 * **No per-call `finish_reason` distribution exists for this run**, for the
   reason given above: it is a calibration-mode field and the run's card forbids
   moving an instrument byte in the run's own pull request. The cap-signal
@@ -697,3 +847,29 @@ bounded.
   with three living voters, and the manifest is explicit that a change of
   roster invalidates the token budget and needs a new authorization. Nothing
   here carries over to another model, a metered provider, or the 9p2i shape.
+
+## Review corrections (2026-09-16)
+
+Review of this record at head `3b880582` returned two blocking findings, both
+matching unresolved Codex P2 comments on the pull request. Both are corrected
+in place above, each beside the figure it corrects rather than only here, and
+neither is a re-measurement: no model was called, no seed re-recorded, and no
+replay, checkpoint, report, log or rendered-prefix byte moved. The primary
+outcome, the exact McNemar p, the net paired difference and the
+wrongful-ejection bound are unchanged.
+
+| Finding | What the record claimed | What it says now |
+| --- | --- | --- |
+| The reference arm's leak count of 1 is a rule artifact (Codex 4025371048) | `repaired_clock` leaks 1 turn in 1 unit; "the first measurement in which the REFERENCE arm leaks at all"; "the diagnostic no longer separates the arms" | The turn is a question `ROLE_LEAK_RULE`'s own text excludes and `_NOT_AN_ASSERTION` fails to catch. Both counts are published — frozen implementation 1, rule as written **0** — and both sentences are withdrawn. [The role-leak section](#the-public-transcript-role-leak) |
+| The per-unit usage rows excluded a charged attempt (Codex 4025371054) | `combined_accounts` per-unit mean 23,615 / 1,700, printed beside arm totals that imply 23,684 / 1,705 | `reconcile.py` names both bases — `completed_*` and `charged_*`, with `charged_failed_*` itemising the difference — `usage-reconciliation.json` is regenerated and still reprints byte for byte, and every per-unit mean here is on the charged basis: **23,684 / 1,705** |
+
+The third Codex comment on the pull request (P1, the per-call `finish_reason`
+distribution) is the one this record already dispositions, in the `finish_reason`
+section and in Limitations; it is unchanged. Two follow-ups leave this record
+for cards of their own: completing `_NOT_AN_ASSERTION`'s interrogative
+auxiliaries, which is an instrument change this pull request may not make, and
+serializing the per-call `finish_reason`, which is the same.
+
+The files this correction moved are this one, [reconcile.py](reconcile.py),
+[usage-reconciliation.json](usage-reconciliation.json), the run's card and
+`docs/artifacts.md`'s `audits/` row, recomputed because `audits/` bytes moved.

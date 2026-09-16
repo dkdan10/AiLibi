@@ -7,6 +7,16 @@ no per-ballot text reaches the output. It exists so that
 [usage-reconciliation.json](usage-reconciliation.json) is a derivation anybody
 can repeat rather than a table somebody typed.
 
+Usage is reported on TWO named bases, because a provider that bills an attempt
+it then refuses makes them differ. Each ``per_unit`` row carries
+``completed_*`` (the completions the replay's ``llm_calls`` hold) beside
+``charged_*`` (those plus the attempts billed and refused, itemised in the
+``charged_failed_*`` fields). ``charged_*`` is the basis the run's own
+checkpoint uses in each unit's ``telemetry.usage``, and it is therefore the
+basis the per-arm totals here and every per-unit mean in RESULTS.md are read
+on. The per-arm ``resolved_*`` fields are those checkpoint sums and are on the
+charged basis too, their name notwithstanding; nothing here is on a mixed one.
+
 Beside the accounting it computes the two diagnostics the fifth authorization
 pre-declared, using the instrument's own frozen rules rather than a second
 implementation of them: the per-arm public-transcript role-leak column
@@ -291,16 +301,43 @@ def main(directory: Path) -> int:
         arm["leaking_turns"] += leaking
         arm["units_with_a_leaking_turn"] += int(leaking > 0)
 
+        # Two bases, both named, because they differ and the difference is a
+        # real charge. ``completed_*`` counts only the completions the provider
+        # returned, which is what ``meeting["llm_calls"]`` holds. ``charged_*``
+        # adds the attempts the provider billed and then refused, which is the
+        # basis the checkpoint's own per-unit ``telemetry.usage`` uses — and so
+        # the basis every arm total, every run total and every per-unit MEAN in
+        # RESULTS.md is read on. On this run the two differ on exactly one unit
+        # (``combined_accounts`` seed 8010: one refused attempt, 3,460 in /
+        # 245 out), and the ``charged_*`` triple below equals that unit's
+        # checkpoint ``telemetry.usage`` on all 100 units. The first revision
+        # of this file published the completions-only triple under the
+        # unqualified names ``calls``, ``input_tokens`` and ``output_tokens``,
+        # which silently dropped that charge from the candidate arm's per-unit
+        # figures; the review correction of 2026-09-16 named both bases.
+        completed_input = sum(c["input_tokens"] for c in calls)
+        completed_output = sum(c["output_tokens"] for c in calls)
+        failed_input = sum(r["input_tokens"] for r in charged_failed)
+        failed_output = sum(r["output_tokens"] for r in charged_failed)
         per_unit.append(
             {
                 "arm": arm_name,
                 "seed": int(seed_text),
                 "replay_kind": meeting["kind"],
-                "calls": len(calls),
-                "input_tokens": sum(c["input_tokens"] for c in calls),
-                "output_tokens": sum(c["output_tokens"] for c in calls),
-                "largest_call_output": max([0] + [c["output_tokens"] for c in calls]),
+                "completed_calls": len(calls),
+                "completed_input_tokens": completed_input,
+                "completed_output_tokens": completed_output,
+                "charged_calls": len(calls) + len(charged_failed),
+                "charged_input_tokens": completed_input + failed_input,
+                "charged_output_tokens": completed_output + failed_output,
+                "largest_call_output": max(
+                    [0]
+                    + [c["output_tokens"] for c in calls]
+                    + [r["output_tokens"] for r in charged_failed]
+                ),
                 "charged_failed_attempts": len(charged_failed),
+                "charged_failed_input_tokens": failed_input,
+                "charged_failed_output_tokens": failed_output,
                 "deadline_default_rows": sum(
                     1
                     for r in rows
