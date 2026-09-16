@@ -1975,13 +1975,21 @@ The figures this section carried before the re-bindings of 2026-09-10,
 three are development data, and a dry run over any of them would measure a set
 this manifest no longer authorizes.
 
-The relevance amendment costs this fixture no unit on this band either, and the
-figures say so more directly than on any band before it: the dry-run provider
-produced no off-target citation at all on either arm across its 98 naming
-ballots, and supported-correct is the same 13 as role-correct, so the rule
-removed no role-correct ejection here. That the rule bites at all is established
-by its planted cases, not by this run — the fixture cites the transcript's last
-turn whatever it says, so what it exercises is the path, not the judgment.
+The relevance amendment costs this fixture no role-correct unit on this band
+either, though the figures say so less bluntly than on the band before it: the
+dry-run provider carried 2 off-target citations an arm across its 100 naming
+ballots, and supported-correct is the same 16 as role-correct, so both of those
+citations fell on an ejection the role pass had already scored wrong and the
+rule removed no role-correct ejection here. That the rule bites at all is
+established by its planted cases, not by this run — the fixture cites the
+transcript's last turn whatever it says, so what it exercises is the path, not
+the judgment. The figures this paragraph carried before this re-binding were the
+fourth band's: no off-target citation at all on either arm across 98 naming
+ballots, with supported-correct the same 13 as role-correct. They are superseded
+with that band by the paragraph you are reading. Whether a band produces any
+off-target citation is the prefixes' arithmetic rather than a property of the
+rule — the third band produced four an arm, the fourth none and this one two —
+and on none of them has the rule cost a role-correct ejection.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
 the prompt for a valid target and a real turn id and returns them; it establishes

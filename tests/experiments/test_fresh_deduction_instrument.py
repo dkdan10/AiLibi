@@ -7430,10 +7430,14 @@ class TestDryRun:
             # meanwhile, and the obligation case keeps the window from lasting.
             return
         manifest = _MANIFEST.read_text(encoding="utf-8")
+        # The slice runs past `**The output dimension` to the end of the
+        # section, because the dry-run paragraph is not the only prose the band
+        # moves: the relevance paragraph below quotes the same run's naming
+        # ballots and its off-target citations, and those are the band's too.
         paragraph = " ".join(
             manifest[
                 manifest.index("## Verification of this manifest") : manifest.index(
-                    "**The output dimension"
+                    "**A green dry run"
                 )
             ].split()
         )
@@ -7467,6 +7471,22 @@ class TestDryRun:
         total = sum(arm.input_tokens for arm in report.arms)
         assert f"{total:,}" in paragraph
         assert f"{round(larger.input_tokens / larger.units):,} per unit" in paragraph
+
+        # The relevance paragraph, further down the same section. Its two
+        # figures are graded counts and move with the band exactly as the ones
+        # above do, and its claim -- that the rule removed no role-correct
+        # ejection -- is the equality it reads off them, asserted here rather
+        # than trusted.
+        for arm in report.arms:
+            assert f"{arm.naming_ballots} naming ballots" in paragraph, arm.arm
+            assert f"{arm.off_target_citations} off-target citations" in paragraph, (
+                arm.arm
+            )
+            assert arm.supported_correct_ejections == arm.role_correct, arm.arm
+            assert (
+                f"the same {arm.supported_correct_ejections} as role-correct"
+                in paragraph
+            ), arm.arm
 
     def test_the_full_dry_run_survives_one_empty_completion(
         self, tmp_path: Path

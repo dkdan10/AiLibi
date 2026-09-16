@@ -61,12 +61,29 @@ declared one-sided effects stand, are not edited here.
 [The fifth freeze](held-out-prefix-freeze-5.md) names this card in its
 converted record's `converted.informed`, which
 `test_a_binding_to_a_converted_record_stays_an_open_obligation`
-(`tests/experiments/test_fresh_deduction_instrument.py:4722`; the freeze card
-cites `:4412`, which is not that test at this tree) reads as a card path, so
-this card must be present and OPEN in the tree that freeze merges into.
+(`tests/experiments/test_fresh_deduction_instrument.py:4788` at this head; the
+freeze card cites `:4722`, which is not that test at this tree) reads as a card
+path, so this card must be present and OPEN in the tree that freeze merges
+into.
 
 ## Acceptance
 
+- [x] Review correction: the manifest's relevance paragraph is re-made on band
+  8000-8999. Inside "Verification of this manifest" it still carried the FOURTH
+  band's figures, written at `b5028a6d` — "no off-target citation at all on
+  either arm across its 98 naming ballots", "supported-correct is the same 13 as
+  role-correct", and the claim that the figures say so "more directly than on
+  any band before it" — and all three are false on the band the Inputs table now
+  binds, where the dry run charges 100 naming ballots, 2 off-target citations
+  and 16 supported-correct against 16 role-correct per arm. The paragraph
+  carries this band's figures, drops the superlative, and marks the fourth
+  band's 98 / 13 superseded the way the dry-run paragraph above it marks its
+  own. The slice that
+  `test_the_mechanics_check_paragraph_quotes_the_run_it_describes` reads now
+  runs past `**The output dimension` to the end of the section, so the relevance
+  figures are pinned to the dry run as well; planted by restoring the superseded
+  ones. Two stale line citations in this card's Evidence are corrected and the
+  two Codex P1 comments left on `14ff11ab` are dispositioned, both in Results.
 - [x] The three moved ceilings are copied verbatim from
   [the fifth authorization](fresh-deduction-authorization-5.md)'s Constraints
   table: `AUTHORIZED_UNIT_MAX_INPUT_TOKENS` 106,000 to 116,000,
@@ -638,3 +655,131 @@ read: 0. No live evaluation was run.
   is a fresh stamp before the fifth run, not a re-record: no recording, report,
   DTO, metric or weight byte moves, no experiment becomes ON, and no constant
   pins the digest.
+
+### Review corrections, final round (2026-09-16)
+
+Three verifiers read `f801162c`. Correctness and integrity found nothing; the
+documentation lens found one blocking defect and three documentary nits, and all
+four are repaired here. Nothing the run is judged by moves: no constant, no
+ceiling, no recorded byte and no gate's subject changes. The round is offline
+and $0 — one dry run on the fake provider, writing to a temporary directory
+outside the repository, and no prefix of any band generated, printed, logged or
+written anywhere.
+
+**The defect: the relevance paragraph was still the fourth band's.** The
+re-binding at `f801162c` re-made the dry-run paragraph of "Verification of this
+manifest" on band 8000-8999 but left the relevance paragraph at the end of that
+same section carrying the figures `b5028a6d` wrote for band 7000-7999.
+Reproduced first, into a temporary directory outside the repository:
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument --dry-run \
+  --output-dir "$(mktemp -d)"
+```
+
+| Per arm, band 8000-8999 | The paragraph said | The run says |
+| --- | --- | --- |
+| naming ballots | 98 | **100** |
+| off-target citations | none at all, on either arm | **2** |
+| supported-correct against role-correct | 13 = 13 | **16 = 16** |
+
+Both arms report the same three figures. The paragraph now carries them. Its
+third claim — that the figures say so "more directly than on any band before
+it" — is dropped rather than re-pointed, because it is false as a ranking: the
+third band produced four off-target citations an arm (`da521f46`), the fourth
+none, and this one two. What survives is the reading that matters and that this
+band still supports: supported-correct is the same 16 as role-correct, so both
+off-target citations an arm fell on an ejection the role pass had already scored
+wrong and the rule removed no role-correct ejection here. The fourth band's
+98 / 13 are marked superseded in the paragraph's own words, the way the dry-run
+paragraph above marks its 895,883 / 643,779 / 49 / 13.
+
+**The gate, extended.**
+`test_the_mechanics_check_paragraph_quotes_the_run_it_describes` sliced the
+section from its heading to `**The output dimension`, which is where the dry-run
+paragraph ends — and is why the relevance paragraph could go a band stale under
+a green suite. The slice now runs to `**A green dry run`, the end of the
+section, and three assertions per arm read the relevance paragraph's figures off
+the same report: `naming_ballots`, `off_target_citations`, and the equality the
+paragraph asserts (`supported_correct_ejections == role_correct`) together with
+the sentence stating it. The two paragraphs keep different vocabularies — "100
+ballots naming the ejected player" in the dry-run one, "100 naming ballots" in
+the relevance one — so the wider slice does not let either satisfy the other's
+assertions.
+
+**Planted (red before, green after).** The superseded figures restored into the
+re-made paragraph:
+
+| Planted | Case | Failure |
+| --- | --- | --- |
+| the relevance paragraph put back at the fourth band's 98 / none / 13 | `test_the_mechanics_check_paragraph_quotes_the_run_it_describes` | `AssertionError: repaired_clock` on `assert '100 naming ballots' in '## Verification of this manifest ...'` |
+
+```
+$ .venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -q \
+    -p no:randomly -k test_the_mechanics_check_paragraph_quotes_the_run_it_describes
+1 failed, 403 deselected     # planted
+1 passed, 403 deselected     # restored
+```
+
+**The two citations.**
+`test_a_binding_to_a_converted_record_stays_an_open_obligation` is at
+`tests/experiments/test_fresh_deduction_instrument.py:4788` at this head, not
+`:4722`, and this card's Evidence paragraph said the fifth freeze card cites
+`:4412` when the merged tree has it citing `:4722`. Both are corrected above.
+[The fifth freeze card](held-out-prefix-freeze-5.md) is NOT edited: it is the
+freeze branch's record, closed there and merged here. Its citation had already
+drifted on its own branch — at that branch's head `2465b4ab` the test sat at
+`:4776`, not the `:4722` the card names — and the drift is recorded here rather
+than chased into a closed card.
+
+**Codex's two P1 comments on `14ff11ab`, dispositioned.** Both were left on the
+pre-stacking head and neither was answered in any card until now. Nothing is
+posted to the pull request in reply.
+
+1. *"Keep the live-run gate closed until the fifth freeze."* Already fixed by
+   the stacking round rather than outstanding. The Inputs row binds 8000-8999
+   off the merged `held-out/manifest.json`, the 7000-7999 record it replaced is
+   `development`, and `assert_manifest_binds_the_live_band` passes instead of
+   refusing — which is what "Stacking and re-binding (2026-09-15)" records and
+   what `test_the_gate_says_which_bands_actually_moved` holds.
+2. *"Refuse already-spent calibration modes."* Accurate about the sizing
+   override and not a regression. `CALIBRATION_SIZING_UNIT_INPUT_TOKENS` /
+   `CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS` do hold the second mode's
+   feasibility at the profile the mode was sized on rather than at the refreshed
+   one — which is acceptance item 4's declared choice, with its reasons under
+   "The `CALIBRATION_2_LIMITS` assertion: pinned, not re-sized" above — but it
+   restores no capability. `main` at `b720d764` already cleared that mode on its
+   own 24,282 / 3,116 constants, so nothing here makes a spent sitting newly
+   acceptable; the manifest's "ONCE" is prose in a record, not a gate; and the
+   refusal survives as its own named case,
+   `test_the_second_mode_is_refused_on_the_refreshed_profile`. Making the
+   production path refuse a spent mode outright stays available to a later card
+   and is not taken here, because that earlier raise is exactly what would mask
+   the two draw-preflight plants item 4 names.
+
+**Recomputation.** The manifest's bytes move, so `docs/artifacts.md`'s `audits/`
+row is recomputed once more with the change staged: **15,617,711 tracked bytes /
+216 files**, by `git ls-files audits` and the summed sizes of those paths.
+`scripts/verify_ml_evidence.py` (offline, never `--complete`) and
+`tests/scripts/test_verify_ml_evidence.py` agree.
+
+### Verification, final round (2026-09-16)
+
+```
+$ .venv/bin/pytest tests/experiments -q
+491 passed
+$ .venv/bin/python scripts/validate_task_docs.py
+Task docs validation passed: 390 historical phase tasks and 390 prompts; 61 work cards.
+$ .venv/bin/python scripts/check_doc_facts.py
+$ .venv/bin/python scripts/verify_ml_evidence.py
+checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5
+$ .venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q
+80 passed
+$ bash scripts/check.sh
+7824 passed, 20 skipped, 3 xfailed, 10 warnings   (frontend: 515 tests, 19 files)
+All checks passed!
+```
+
+`scripts/check.sh` was run directly, not through a pipe, and its real exit code
+read: 0. No live evaluation was run, and
+`scripts/verify_ml_evidence.py --complete` was not run.
