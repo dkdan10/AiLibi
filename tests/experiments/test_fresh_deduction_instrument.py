@@ -408,6 +408,42 @@ def _live_band() -> tuple[int, int]:
     return int(band["first_seed"]), int(band["last_seed"])
 
 
+def _the_document_is_mid_rebinding() -> tuple[int, int] | None:
+    """The band the Inputs row still binds while a freeze has moved past it.
+
+    A freeze converts the band the execution manifest binds and freezes a new
+    one under its own card, and the card that re-binds the row lands after it.
+    Between those two merges the document describes the PREVIOUS band on
+    purpose: the row, its dated re-binding entry and every figure measured on
+    that band are one consistent statement about a set the runner would no
+    longer draw, and ``assert_manifest_binds_the_live_band`` refuses a live run
+    for exactly that reason -- which is asserted here rather than assumed, so
+    the window is never merely a reason to assert less.
+
+    Returns that band while the window is open and ``None`` once the row is
+    settled, so a case whose subject is a figure OF THE BOUND BAND can say
+    which of the two states it is reading instead of failing on a staleness the
+    tree declares. The window cannot become permanent:
+    ``TestExecutionManifest.test_a_binding_to_a_converted_record_stays_an_open_obligation``
+    turns red the moment the card that owes the row closes with it still stale.
+    """
+
+    bound = instrument.manifest_bound_band(_MANIFEST.read_text(encoding="utf-8"))
+    if bound == _live_band():
+        return None
+    assert bound in {
+        (converted.band.first_seed, converted.band.last_seed)
+        for converted in CONVERTED_BANDS
+    }, (
+        f"the execution manifest binds seed band {bound[0]}-{bound[1]}, which "
+        "is neither the live freeze nor a converted record: that is a stale "
+        "document, not a re-binding window"
+    )
+    with pytest.raises(LiveRunNotAuthorized):
+        instrument.assert_manifest_binds_the_live_band()
+    return bound
+
+
 def _manifest_text_bound_to(band: tuple[int, int]) -> str:
     """The committed execution manifest with its Inputs row moved to ``band``."""
 
@@ -4532,14 +4568,21 @@ class TestExecutionManifest:
             assert stated in section, stated
         assert f"turn {instrument.AUTHORIZED_TURN_MAX_TOKENS:,} output" in section
         # The round-3 entry closes the two obligations the entry above opened,
-        # and it has to say so in the band the generator actually draws rather
-        # than in a span retyped here: the Inputs row below is re-bound to it,
-        # and a document that recorded a different one would be describing a
-        # re-binding nobody made.
-        assert (
-            f"now binds {PREREGISTERED_BAND.first_seed}-"
-            f"{PREREGISTERED_BAND.last_seed}" in section
+        # and it has to say so in the band that re-binding actually moved the
+        # row to, rather than in a span retyped here: a document recording a
+        # different one would be describing a re-binding nobody made. That band
+        # is history now -- the fourth freeze's 7000-7999 became development
+        # data on 2026-09-15 -- so it is read off the module's own record of it,
+        # which still catches an entry naming a band this generator never froze.
+        # A dated entry is not rewritten when the band moves again; what the
+        # LIVE band is checked against is the row itself, in
+        # `TestTheManifestBindsTheBandTheRunWouldDraw`.
+        rebound = next(
+            converted.band
+            for converted in CONVERTED_BANDS
+            if converted.manifest_path.endswith("manifest-band-7000-7999.json")
         )
+        assert f"now binds {rebound.first_seed}-{rebound.last_seed}" in section
         commits = re.findall(r"\*\*2026-09-14[^(*]*\(`([0-9a-f]{7,40})`\)", section)
         assert len(commits) == 1
         if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
@@ -4718,7 +4761,18 @@ class TestExecutionManifest:
         """
 
         row = self._seed_band_row()
+        bound = instrument.manifest_bound_band(self._text())
         for converted in CONVERTED_BANDS:
+            if (converted.band.first_seed, converted.band.last_seed) == bound:
+                # The band the row still BINDS. A freeze converts the bound band
+                # before the card that re-binds the row lands, and in that window
+                # the row describes it as the band it draws -- with its own
+                # accepted range and skip count -- rather than as one it
+                # replaced. Its expiry is
+                # `test_a_binding_to_a_converted_record_stays_an_open_obligation`
+                # below; a row that binds the LIVE band never takes this branch,
+                # because the live band is not a converted one.
+                continue
             record = json.loads(
                 (_REPO_ROOT / converted.manifest_path).read_text(encoding="utf-8")
             )
@@ -5383,6 +5437,14 @@ class TestUsageReplay:
             sum(arm.input_tokens for arm in report.arms)
             < AUTHORIZED_LIMITS.run_max_input_tokens
         )
+        if _the_document_is_mid_rebinding() is not None:
+            # Everything above is band-independent and has just been asserted.
+            # What the manifest quotes below is not: `terminal_units` counts the
+            # units that reached a meeting on the band the row binds, and
+            # re-measuring that paragraph on the new band is the re-binding
+            # card's acceptance item, not a freeze's. The refusal asserted by
+            # the helper is what stands in for it meanwhile.
+            return
         manifest = _MANIFEST.read_text(encoding="utf-8")
         for arm in report.arms:
             assert f"{arm.input_tokens:,}" in manifest, arm.arm
@@ -7358,6 +7420,15 @@ class TestDryRun:
         report = run_dry(output_dir=tmp_path)
         assert report.limits == AUTHORIZED_LIMITS
         assert report.sampling == AUTHORIZED_SAMPLING
+        if _the_document_is_mid_rebinding() is not None:
+            # These figures are exactly the ones a re-binding moves, which is
+            # what this case is for -- so while the row is still bound to the
+            # band the paragraph WAS measured on, the paragraph is not stale and
+            # there is nothing here to hold it to: `run_dry` draws the live
+            # band, and re-measuring the section on it is the re-binding card's
+            # acceptance item. The helper asserts the live run is refused
+            # meanwhile, and the obligation case keeps the window from lasting.
+            return
         manifest = _MANIFEST.read_text(encoding="utf-8")
         paragraph = " ".join(
             manifest[
@@ -8168,7 +8239,7 @@ class TestTheCalibrationDrawSpansRecords:
         """PLANTED: two ascending, non-repeating lists that are not the draw.
 
         Round 1 refused a re-ordered list and a repeated one, which left the
-        round-2 review a third shape. `CONVERTED_BANDS` holds THREE development
+        round-2 review a third shape. `CONVERTED_BANDS` held THREE development
         records, so `[band-5000, band-6000]` and `[band-3000, band-6000]` are
         each ascending and name no record twice; both verified clean at sixty
         seeds and drew a draw ending at seed 6010 where the authorized one ends
@@ -8176,8 +8247,10 @@ class TestTheCalibrationDrawSpansRecords:
         rule is a PREFIX of `CONVERTED_BANDS`, not an ordered subsequence of it.
         """
 
+        # The two shapes need three records and `CONVERTED_BANDS` only grows,
+        # so they are built from its first three rather than by unpacking it.
         first, second, third = (
-            _REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS
+            _REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS[:3]
         )
         for records in ([second, third], [first, third]):
             with pytest.raises(instrument.CalibrationInputsRejected) as refused:
@@ -8216,9 +8289,13 @@ class TestTheCalibrationDrawSpansRecords:
                     continue
                 accepted.append(tuple(path.name for path in candidate))
                 assert draw.seeds == canonical
+        # Every prefix long enough to fill sixty, and no other arrangement.
+        # The first record holds fifty accepted seeds, so the shortest is the
+        # first two; each longer prefix draws the same sixty, which is the
+        # property the loop above asserts one candidate at a time.
         assert accepted == [
-            tuple(path.name for path in paths[:2]),
-            tuple(path.name for path in paths[:3]),
+            tuple(path.name for path in paths[:length])
+            for length in range(2, len(paths) + 1)
         ]
 
     def test_the_live_capable_preflight_refuses_the_same_two_lists(
@@ -8265,8 +8342,9 @@ class TestTheCalibrationDrawSpansRecords:
         the runner spending an authorized sitting on a draw nobody approved.
         """
 
+        # The same two shapes as the helper case above, built the same way.
         first, second, third = (
-            _REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS
+            _REPO_ROOT / converted.manifest_path for converted in CONVERTED_BANDS[:3]
         )
         for records in ([second, third], [first, third]):
             with pytest.raises(

@@ -129,10 +129,14 @@ this card must be present and OPEN in the tree that freeze merges into.
   `:4358`).
 - [ ] After [the fifth freeze](held-out-prefix-freeze-5.md) merges into this
   branch, the Inputs table binds band 8000-8999 with the accepted seed range
-  and skip count read off the new `held-out/manifest.json`, names all four
-  converted bands as development data with their dates (3000-3999, 5000-5999,
-  6000-6999, 7000-7999), and the Roles table's preparer row gains the fifth
-  session with its pull request; `assert_manifest_binds_the_live_band`
+  and skip count read off the new
+  `audits/deduction-candidate/held-out/manifest.json`, names all four converted
+  bands as development data with their dates and their records (3000-3999,
+  5000-5999, 6000-6999 and
+  `audits/deduction-candidate/held-out/manifest-band-7000-7999.json` for
+  7000-7999, which that freeze marked `development` on 2026-09-15), and the
+  Roles table's preparer row gains the fifth session with its pull request;
+  `assert_manifest_binds_the_live_band`
   (`experiments/fresh_deduction_instrument.py:1060`) and
   `test_the_gate_says_which_bands_actually_moved`
   (`tests/experiments/test_fresh_deduction_instrument.py:1476`) pass against
