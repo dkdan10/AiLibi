@@ -70,6 +70,10 @@ bands 3000-3999, 5000-5999, 6000-6999 and 7000-7999 all being development data.
 
 ## Acceptance
 
+- [x] Review correction: the credential-scan claim named 107 files where the
+  committed archive holds 108; the count is corrected and the count-only scan
+  was re-run over all 108 files at `d27adb03` with both counts 0 (see the
+  review corrections).
 - [x] The execution manifest's authorization fields carry exactly the values in
   Constraints, the instrument's constants equal them, and
   `assert_limits_are_feasible` (`experiments/fresh_deduction_instrument.py:1273`)
@@ -356,8 +360,9 @@ All checks passed!
 `scripts/check.sh` was run directly, not through a pipe, and its real exit code
 read: 0. The live evaluation is not a check and was not re-run. The archive was
 scanned for the API key before it was committed — a count-only comparison
-against the whole key and against its first six characters, over all 107 files
-— and both counts are 0, and `assert_report_holds_no_prefix_bytes` was re-run
+against the whole key and against its first six characters, over all 108 files
+the directory holds — and both counts are 0 (re-run over the same 108 files
+at `d27adb03`, after the review corrections, with both counts again 0), and `assert_report_holds_no_prefix_bytes` was re-run
 over the committed report against all fifty rebuilt prefixes and passed.
 
 Every command above was run again, in the same order and directly rather than
@@ -386,7 +391,9 @@ No live call was made in any of it.
   of that size exists.
 * **The fourth run's 24 complete units are not pooled**, and this record does
   not pool them.
-* **Both diagnostics are loose at these numerators.** One leaking turn per arm
+* **Both diagnostics are loose at these numerators.** One counted leaking turn
+  per arm at the frozen rule, of which the reference's is a question the rule's
+  own text excludes (as written, one against none; see the review corrections),
   on a rule with two-sided error bounds the leak rather than measuring it, and
   the self-tell counts the ballot's OPENING only.
 * **Every accepted seed of band 8000-8999 is now development data**, and there
@@ -478,3 +485,13 @@ in the Verification block above, whose figures still hold: the only files that
 moved are RESULTS.md, `reconcile.py`, `usage-reconciliation.json` and this
 card, and `docs/artifacts.md`'s `audits/` row is recomputed because `audits/`
 bytes moved.
+
+**3. The credential-scan count named 107 files; the archive holds 108.** The
+pre-commit scan's substance was clean and independently reproduced, but the
+count asserted totality one file short of the directory. At `d27adb03` the
+count-only comparison (whole key and first six characters, never printed)
+was re-run over every one of the 108 committed files under
+`audits/deduction-candidate/run-2026-09-16/`, including the three the
+corrections changed (RESULTS.md, reconcile.py, usage-reconciliation.json):
+both counts 0. The Limitations bullet on the leak diagnostic now carries the
+as-written reference count too.
