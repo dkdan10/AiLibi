@@ -249,8 +249,20 @@ def main(directory: Path) -> int:
             prompts=frozen_prompts,
         )
         before = _graded(before_record)
+        # The cross-check is the whole basis for believing the after-column, so
+        # a replay the checkpoint has no row for is a STOP rather than a unit
+        # that quietly skips it: an archive and a checkpoint that disagree about
+        # which units exist is exactly the case where the before-column is not
+        # the record's, and `.get(...) is not None` would pass the whole
+        # directory through unchecked if the two ever came apart.
         archived = recorded.get((arm_name, seed))
-        if archived is not None and (
+        if archived is None:
+            raise CounterfactualError(
+                f"{arm_name} seed {seed} has a replay in this archive and no "
+                "row in its final checkpoint, so its before-column cannot be "
+                "checked against the record it claims to be a counterfactual of"
+            )
+        if (
             bool(archived["role_correct"]) != before[1]
             or bool(archived["supported_correct_ejection"]) != before[2]
         ):

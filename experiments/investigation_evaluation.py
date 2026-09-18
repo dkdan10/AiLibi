@@ -236,6 +236,12 @@ def run_case(
         "AILIBI_PUBLIC_ACCOUNTS": str(config.public_account_version or 0),
         "AILIBI_ATTRIBUTED_TESTIMONY": str(config.attributed_testimony_version or 0),
         "AILIBI_BOUNDED_REBUTTAL": str(config.bounded_rebuttal_version or 0),
+        # The sibling export of `experiments/deduction_scenarios.py::run_case`,
+        # and for the same reason: every field of `EXPERIMENT_ENV_NAMES`
+        # (`meetings/evidence_profile.py`) is stated, so a lever the config
+        # carries cannot be dropped on the way to the renderer. Resolves to 0
+        # for every arm this harness builds today.
+        "AILIBI_CITATION_RELEVANCE": str(config.citation_relevance_version or 0),
     }
     runner = build_default_meeting_runner(
         llm_client=provider, env=env, public_map=public_map

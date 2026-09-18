@@ -1394,6 +1394,216 @@ offline mechanics check in the verification section below IS re-made on this
 tree, because the fake provider's ballots meet the new gate: its graded counts
 move and its input heuristics do not, the rule carrying no prompt bytes.
 
+## Development calibration 3 (2026-09-18)
+
+The owner's decision 1 of
+[the diagnosis of the fifth run](../../tasks/diagnosis-2026-09-18-fifth-run.md),
+approved with the rest of that memo's section 11 as a set on the same day and
+written up as
+[the third calibration card](../../tasks/work/fresh-deduction-calibration-3.md).
+A THIRD calibration beside the two above and a replacement of neither: the
+2026-09-14 and 2026-09-15 sections, their clauses and their numbers are the
+records of spends that have been made, and nothing here edits them.
+
+Why a third one. The three entries above moved the prompt bytes on both arms —
+the v5 accounts revision on the candidate, the relevance-aware citation guard on
+both — so the second calibration's token profile measures a surface this tree no
+longer renders, and its per-unit maxima are the sizing input the next
+authorization would otherwise be built on. This sitting re-measures that profile
+on the SAME sixty seeds at the SAME caps, so the wave's prompt bytes are the
+only thing that moved between the two, and it reports the authored-ballot
+diagnostics beside the profile because the question the memo's section 7 asks is
+whether the three cards moved the mechanisms it names. It is a DEVELOPMENT
+measurement and not the evaluation: no held-out band is read, no grader runs, no
+paired statistic is computed and no primary outcome is reported. The clause,
+quoted verbatim and checked for by `assert_calibration_is_authorized`, which
+refuses a live third calibration without these bytes in this file:
+
+> A third development calibration may spend on the first sixty accepted seeds of the converted bands, taken in the order those bands were converted, both arms, once and under the calibration-3 limits, with the revision of 2026-09-18 enabled on both arms; it grades nothing, reads no held-out prefix, counts a per-call truncation as a measurement rather than a stop, reports the authored-ballot diagnostics beside the token profile, and computes no paired statistic, evaluates no decision rule and reports no primary outcome.
+
+**The mode.** `experiments/fresh_deduction_instrument.py --calibrate
+--calibration-mode 2026-09-18`. The same path the evaluation runs — `run_unit`,
+the same client wrapper, the same budgets, the same arms in the same order.
+`CALIBRATION_MODES` now carries THREE modes and `calibration_mode_for` accepts a
+calibration only when its limits, its sampling configuration and its seed count
+are ONE of them together, so every crossing of the three is refused with the
+fields named. Each mode's clause authorizes that mode's spend and no other.
+
+**The inputs — calibration 2's draw, to the seed.** The first
+`CALIBRATION_3_PAIRED_SEEDS = 60` accepted seeds, ascending, taken across
+`CONVERTED_BANDS` in the order those bands were converted: all fifty of
+[held-out/manifest-band-3000-3999.json](held-out/manifest-band-3000-3999.json)
+(seeds 3000 to 3057, 8 skipped) and then the first ten of
+[held-out/manifest-band-5000-5999.json](held-out/manifest-band-5000-5999.json)
+(seeds 5000 to 5009 of an accepted range ending at 5052, 3 skipped).
+
+| Record drawn | sha256 | Seeds taken |
+| --- | --- | --- |
+| `audits/deduction-candidate/held-out/manifest-band-3000-3999.json` | `ca4cd057acb2119646190fb6fff923a897ec207d5f54c491c3e1dfae0944cf3c` | all fifty accepted, 3000 to 3057 |
+| `audits/deduction-candidate/held-out/manifest-band-5000-5999.json` | `4fc831dafeda0a6ee7fc311e6557c149506be1fabcf05c69b2117ddb436f7711` | the first ten accepted, 5000 to 5009 |
+
+The draw is a PREFIX of `CONVERTED_BANDS` and the seed count, with nothing left
+to the runner, and the CLI refuses a `--calibration-record` in this mode for
+that reason. Each prefix is rebuilt with the unchanged generator and held to the
+digest its record froze; a mismatch is a stop, in every record of the draw.
+`verify_calibration_draw` refuses [the held-out record](held-out/manifest.json)
+by name, refuses any path that is no converted band's record, refuses a record
+whose `status` is not `development`, and refuses a draw that runs out of
+accepted seeds before sixty.
+
+**Band 8000-8999 is not drawable here.** The fifth run rendered every accepted
+seed of it, so those prefixes are development data by the preregistration — but
+its freeze record is still the live held-out one at
+`experiments/held_out_prefixes.py`'s `MANIFEST_PATH`, which `_converted_band_for`
+refuses BY NAME before anything else. Only a freeze card moves and flips it, and
+[the sixth freeze](../../tasks/work/held-out-prefix-freeze-6.md) is dispatched
+after this calibration reports. A prefix draw bound at sixty cannot reach a
+record appended to `CONVERTED_BANDS` afterwards either, which a test asserts by
+appending one, so this sitting's sixty seeds do not move when that freeze lands.
+
+| Field | Value |
+| --- | --- |
+| Calibration-3 paired seeds | 60, ascending across `CONVERTED_BANDS` in order: all fifty of `held-out/manifest-band-3000-3999.json`, then 5000-5009 of `-5000-5999.json` |
+| Calibration-3 per-unit token ceiling | 116,000 input / 16,000 output |
+| Calibration-3 run-level token ceiling | 4,700,000 input / 520,000 output |
+| Calibration-3 wall-clock deadline | 5 h of model work within a 6 h elapsed deadline, one sitting |
+| Calibration-3 per-call token cap | turn 4,096 output / vote 1,024 — `AUTHORIZED_SAMPLING` itself, so the draw is the one a run makes |
+| Calibration-3 sampling temperature | turn 0.4 / vote 0.2 — the run's own, unchanged |
+| Calibration-3 transport bound | 4 attempts per call at a 180 s per-attempt wall — the run's own, unchanged |
+| Calibration-3 units | 60 paired seeds x 2 arms = 120 units, about 720 model calls |
+| Calibration-3 dollar limit | $0.00 marginal, on the same flat-rate subscription and for the same reason as the run's cost statement above |
+| Calibration-3 levers, both arms | `AILIBI_CITATION_RELEVANCE=1`, `AILIBI_PROMPT_SET=qwen3_6_27b`; candidate additionally `AILIBI_PUBLIC_ACCOUNTS=1` and `AILIBI_ATTRIBUTED_TESTIMONY=1`, both arms `AILIBI_EVIDENCE_REASONING=2` and `AILIBI_TEMPORAL_OBSERVATIONS=2` |
+
+**The ceilings are sized on THIS mode's own profile.** A mode's ceilings record
+a spend the manifest authorizes once, so each mode carries the profile it was
+sized against as a frozen field and `assert_limits_are_feasible` is handed that
+pair. The two spent modes carry the three stopped runs' 24,282 / 3,116; this one
+carries 38,440 / 4,176, the largest of the 120 units the 2026-09-15 sitting
+measured on these same sixty seeds
+([its committed output](calibration-2-2026-09-15/calibration.json),
+`proposal.measured_max_unit_*_tokens`). Against that pair the gate accepts the
+table above for 120 units: per-unit output 16,000 against the 15,360-token
+schedule `unit_output_reservation` computes for the raised turn cap; per-unit
+input 116,000 against 38,440; run-level input 4,700,000 against 4,612,800; and
+run-level output 520,000 against 120 x 4,176 + 4,096 = 505,216. The run-level
+pair therefore carries 1.9% on input and 2.9% on output, because the wave adds
+prompt bytes to the candidate ballot that no calibration has measured and a
+ceiling pinned at the floor is a stop rule that fires on the first unit larger
+than any of calibration 2's. The figure is a FROZEN LITERAL rather than a read
+of the committed usage profile: the refresh
+[the limits card](../../tasks/work/fresh-deduction-limits-6.md) makes FROM this
+sitting moves that profile to this sitting's own maxima, and a mode whose gate
+read it would then be checked against the measurement it produced.
+
+The wall is the binding limit and is stated rather than absorbed: 720 calls in
+5 h allows 25.0 s per call, against about 12.9 s per call on the fifth run's
+candidate arm (3,897.6 s over 301 calls) and 11.65 s per attempt on calibration
+2's candidate arm — a margin of 1.9x at the slowest pace measured on these
+inputs. A calibration has no checkpoint and no resume: a stop is reported with
+its partial accounting, and a second sitting needs the owner's say.
+
+**A per-call truncation is a MEASUREMENT in this mode, as in the 2026-09-15
+one.** The cap branch of `_unusable_response` returns no stop here, the
+truncated ballot or turn takes the meeting layer's shipped fail-soft, and the
+call is counted per arm, per call type and per voter role with the
+`finish_reason` the provider reported. The identity branch still stops: a
+response from a model this run is not authorized for is never a datum.
+`STOP_RULE` below is unedited and the live evaluation still stops on a
+truncation; the relaxation is scoped to the two calibration modes that carry it.
+
+**Both arms run with the revision of 2026-09-18 enabled.** The v5 accounts
+prompts on the candidate and `citation_relevance_version=1` on BOTH arms. That
+lever's declared default stays `None`, where `None` preserves recorded
+behaviour, so this sitting passes it explicitly:
+`assert_the_revised_wave_is_enabled` refuses this mode before a client exists if
+either arm resolves `AILIBI_CITATION_RELEVANCE` to anything but `1`, and each
+arm's resolved lever profile is published in the report beside that arm's
+counts. What the pre-flight cannot check is which accounts REVISION the prompt
+templates are at — it can say the arms render `qwen3_6_27b` and no more — so the
+v5 half is pinned by the accounts card's own version test and by the
+prompt-version markers a run records, and this sentence is here so the limit is
+stated rather than implied.
+
+**What it reports.** Per arm, as aggregates and never per seed: the 2026-09-15
+output's `by_call_type` and `by_role` token profile with its prose lengths; the
+truncation rows with their `finish_reason`; the leak column under
+`ROLE_LEAK_RULE`; the resolved lever profile; and the authored-ballot
+DIAGNOSTICS block — the crew per-ballot precision always beside its harm
+counter on the same denominator, the illegal-target column, the authored
+coalition funnel with its cleared and converted columns, gate survival by voter
+role, guard rewrites by reason over `BallotTargetRewriteReason` (including the
+citation guard's `off_target_coerced`), and ejections by role-correctness.
+Counts only — no prose, no prompt, no prefix, no step and no per-seed outcome —
+with `assert_report_holds_no_prefix_bytes` over the payload and
+`assert_calibration_reports_no_outcome` beside it, which refuses a calibration
+payload carrying a paired block, a decision or the primary outcome's own field.
+This mode publishes its own caveat, `CALIBRATION_3_CAVEAT`, beside the one the
+two spent sittings were published under, which is byte-identical. The
+diagnostics block it publishes carries its own note for the same reason,
+`CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE` and never the live run's
+`AUTHORED_DIAGNOSTICS_NOTE`: that string tells its reader the counts are
+reported beside the primary outcome and that a cross-arm reading waits on the
+v5 prompt set, and this payload reports no primary outcome and renders v5 on
+both arms. What the two notes share is the half that makes the block safe to
+read — authoring-conditioned, the precision never without its harm counter, the
+illegal-target column, never preregistered and never a decision input — and
+`assert_every_reporting_mode_has_its_note` refuses a mode that reports the block
+without a note of its own, so a fourth mode cannot inherit either
+(`tasks/work/fresh-deduction-calibration-3.md`, review corrections of
+2026-09-18).
+
+**The six predictions, fixed BEFORE the sitting.** Read from the memo's section
+7 against the fifth run's own figures, which were measured on the 8000-8999
+prefixes rather than on this draw's. They are copied verbatim from the card and
+a test holds the card, this table and
+`experiments.fresh_deduction_instrument.CALIBRATION_3_PREDICTIONS` to the same
+six rows.
+
+| # | Mechanism | Fifth run | Prediction |
+| --- | --- | --- | --- |
+| P1 | F6 costs the impostor its free pass (§3) | impostor EJECTs survive 86.8%, crew 51.9% | the gap narrows |
+| P2 | F6 attacks stage 2 (§2) | wrongful coalitions convert 36.4%, correct 18.2% | wrongful falls to or below correct |
+| P3 | F7 equalises the register (§4) | candidate authors 119 EJECT / 31 SKIP of 150 | authored EJECTs fall toward 14 |
+| P4 | F4 revives the turn channel (§3) | 0 of 150 keep a `primary_reason_id`; 27 nulled; 44 coerced | surviving ids rise, coercions fall |
+| P5 | The deduction signal is real (§5) | crew authored EJECTs name the impostor 51 of 81 | holds near 63% once volume falls |
+| P6 | The vocabulary un-collapses (§4) | 1 contradiction flag against 14 | flags rise above 1 |
+
+> These six are PREDICTIONS and none of them is a gate. They are read against the fifth run's figures, which were measured on different prefixes, so each is a direction rather than a threshold: a miss is neither a stop nor a verdict, and no decision rule reads any of them.
+
+**What it writes.** One aggregate JSON committed under
+`audits/deduction-candidate/calibration-3-<date>/`, in the shape the second
+calibration committed with the diagnostics block and the resolved levers added,
+beside its per-unit usage rows. Its rendered prompts are development data and
+are still not committed: its replays go to the `--output-dir` the runner names,
+which is not under version control, and a per-seed reading of the six
+predictions is available there and nowhere else.
+
+**The proposal rule** (`CEILING_PROPOSAL_RULE`) and `ceiling_proposal` are
+unchanged, and the proposal is published for the hundred-unit run as calibration
+2's was. The refresh it feeds — the committed usage profile and the two
+calibrated constants — belongs to
+[the limits card](../../tasks/work/fresh-deduction-limits-6.md), not to this
+mode and not to the runner of this sitting.
+
+**The commands.** The live third calibration, which is the runner's and nobody
+else's:
+
+```sh
+.venv/bin/python -m experiments.fresh_deduction_instrument \
+  --calibrate \
+  --calibration-mode 2026-09-18 \
+  --provider featherless \
+  --execution-manifest audits/deduction-candidate/execution-manifest.md \
+  --i-am-the-runner \
+  --output-dir <a directory outside version control> \
+  --json audits/deduction-candidate/calibration-3-<date>/calibration.json
+```
+
+**This section authorizes no run.** It authorizes a spend, once, on development
+inputs, under the limits in its table; the call itself still needs the runner's
+explicit invocation naming this file, and the sixth held-out run is a separate
+authorization on a separate card.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and

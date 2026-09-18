@@ -1,6 +1,6 @@
 # Run a third development calibration that measures the revised wave
 
-**Status:** ready
+**Status:** active
 
 ## Outcome
 
@@ -77,7 +77,27 @@ the fifth run's own figures. None is a gate.
 
 ## Acceptance
 
-- [ ] A THIRD dated clause and constant set beside the 2026-09-14 and
+- [x] Review correction: `## Results` counts its own boxes. Its opening
+  paragraph numbered the outstanding items one low — it called the committed
+  aggregates item 8 and the live sitting item 9, against a list whose item 8 is
+  `CEILING_PROPOSAL_RULE` and is checked — so a reader reconciling the prose
+  against the boxes met a contradiction about what is outstanding. Renumbered
+  against the list as it now stands, review corrections included, and re-derived
+  by `uv run python scripts/validate_task_docs.py`, which holds a `done` card to
+  no unchecked box and this `active` one to the inventory sentence.
+- [x] Review correction: the 2026-09-18 artifact no longer publishes the live
+  evaluation's `AUTHORED_DIAGNOSTICS_NOTE`, which says the counts are "reported
+  beside the primary outcome" and that a cross-arm reading is confounded "until
+  the v5 prompt set equalises the register" — both false of a payload that
+  reports no primary outcome and renders v5 on both arms. The block's note is a
+  parameter, `CALIBRATION_DIAGNOSTICS_NOTES` names one per reporting mode, and
+  `assert_every_reporting_mode_has_its_note` refuses a table that does not match
+  the modes or that points a calibration at the live note. Proved by
+  `test_the_published_block_is_not_the_live_runs_note`,
+  `test_the_third_modes_block_publishes_its_own_note`,
+  `test_a_note_table_that_does_not_match_the_modes_is_refused` (planted three
+  ways) and `test_a_calibration_may_not_publish_the_live_runs_note`.
+- [x] A THIRD dated clause and constant set beside the 2026-09-14 and
   2026-09-15 sets, neither edited: `CALIBRATION_3_PAIRED_SEEDS = 60`,
   `CALIBRATION_3_LIMITS`, `CALIBRATION_3_SAMPLING` equal to
   `AUTHORIZED_SAMPLING` (`:438`), a `CALIBRATION_3_CLAUSE` the manifest quotes
@@ -85,7 +105,7 @@ the fifth run's own figures. None is a gate.
   (`:1551`) carrying `truncation_is_a_measurement=True`. `calibration_mode_for`
   (`:1580`) accepts exactly one mode whole. Planted: sixty seeds under the
   2026-09-15 mode's limits, and this mode's limits at the 2026-09-14 sampling.
-- [ ] The clause NAMES the draw and the shipped rule verifies it: all fifty
+- [x] The clause NAMES the draw and the shipped rule verifies it: all fifty
   accepted seeds of `held-out/manifest-band-3000-3999.json` then the first ten
   of `held-out/manifest-band-5000-5999.json` (5000 to 5009). A test asserts
   `verify_calibration_draw` at `CALIBRATION_3_PAIRED_SEEDS` yields exactly those
@@ -97,7 +117,7 @@ the fifth run's own figures. None is a gate.
   since a prefix draw cannot reach it. Planted: a list naming the held-out
   record, a `status` that is not `development`, a moved prefix digest, a record
   named twice, and a draw of fifty-nine.
-- [ ] The feasibility gate bites on this mode's own sizing profile. The profile
+- [x] The feasibility gate bites on this mode's own sizing profile. The profile
   a mode's ceilings were sized against becomes a frozen field of
   `CalibrationMode`, 24,282 / 3,116 on the two spent modes and 38,440 / 4,176 on
   this one, and `assert_ready_for_a_calibration` (`:3613-3614`) passes the
@@ -107,7 +127,7 @@ the fifth run's own figures. None is a gate.
   38,440, run input 4,700,000 over 4,612,800, run output 520,000 over 120 x
   4,176 + 4,096 = 505,216. Planted: a run-level input ceiling of 4,600,000,
   refused here and passing against 24,282.
-- [ ] Both arms run with the wave enabled: the v5 accounts prompts on the
+- [x] Both arms run with the wave enabled: the v5 accounts prompts on the
   candidate ([their card](accounts-prompt-set-v5.md)) and
   `citation_relevance_version=1` on BOTH arms
   ([the guard card](relevance-aware-citation-guard.md)). That lever's declared
@@ -117,13 +137,13 @@ the fifth run's own figures. None is a gate.
   recorded behaviour; this sitting passes it explicitly and the report records
   the resolved profile per arm. Planted: mode 3 with the guard resolved OFF on
   either arm is refused before a client exists.
-- [ ] In THIS mode a per-call truncation is a measurement, as in the 2026-09-15
+- [x] In THIS mode a per-call truncation is a measurement, as in the 2026-09-15
   mode: the cap branch that builds `PerCallCapExceeded` (`:2815`) does not raise
   here, the call takes the meeting layer's shipped fail-soft, and it is counted
   per arm, per call type and per role with its `finish_reason`. `STOP_RULE`
   (`:722`) is not edited and the live path still stops. Planted: a live
   evaluation invocation still raises on that response.
-- [ ] The report carries, per arm and as aggregates: calibration 2's
+- [x] The report carries, per arm and as aggregates: calibration 2's
   `by_call_type` and `by_role` profile, the truncation rows, the leak column
   under `ROLE_LEAK_RULE` (`:6216`), and the diagnostics block, which is authored
   precision with its harm counter on the same denominator, the coalition funnel,
@@ -132,13 +152,13 @@ the fifth run's own figures. None is a gate.
   `off_target_coerced`, and ejections by role-correctness. Counts only: no
   prose, prompt, prefix or per-seed outcome, with
   `assert_report_holds_no_prefix_bytes` (`:4808`) over the payload.
-- [ ] This mode carries its OWN caveat beside `CALIBRATION_CAVEAT` (`:6093`),
+- [x] This mode carries its OWN caveat beside `CALIBRATION_CAVEAT` (`:6093`),
   which stays byte-identical, being what the two spent sittings were published
   under. The new string says what is and is not reported: aggregate ballot and
   ejection diagnostics off development units, no primary outcome, no paired
   statistic, no decision rule. Planted: a mode-3 report carrying a `paired`
   block or a `supported_correct_ejection` field is refused.
-- [ ] `CEILING_PROPOSAL_RULE` (`:6061`) and `ceiling_proposal` (`:6934`) are
+- [x] `CEILING_PROPOSAL_RULE` (`:6061`) and `ceiling_proposal` (`:6934`) are
   unchanged and the proposal is published for the hundred-unit run as
   calibration 2's was, while the refresh it feeds stays out of scope.
 - [ ] Aggregates committed under
@@ -253,3 +273,310 @@ held-out record at `MANIFEST_PATH` is untouched.
 `bash scripts/check.sh` run whole, in a clean worktree, so no gate after the
 first failure is masked. Neither the live calibration nor the live evaluation is
 a check here.
+
+## Results
+
+**Status `active`, and why.** `## Acceptance` carries TWELVE items: the two
+review corrections of round 1, prepended and checked, and the card's original
+ten. Items 1-10 are met and checked. Item 11 is split: its manifest half — the
+dated "Development calibration 3 (2026-09-18)" section, the clause verbatim, the
+named draw with each record's sha256 and seeds, the limits/sampling/lever table
+and the six predictions — is committed here, because the live gate reads that
+document and the sitting cannot be authorized without it; its
+`audits/deduction-candidate/calibration-3-<date>/` aggregates are a product of
+the sitting and do not exist yet. Item 12, the last, is the live sitting itself,
+which is a separate runner session on
+`work/fresh-deduction-calibration-3-run` after this merges. Both stay unchecked
+and the card stays `active`; `tasks/README.md`'s derived inventory sentence is
+updated for that status.
+
+### The design this follows
+
+`docs/architecture.md` **Layering** and **Enforced boundaries**: nothing here
+moves the firewall, `agents/` still does not import `engine/`, and
+`experiments/` stays outside the root packages (`.importlinter:5-7`), so
+"`meetings/` must not import `experiments/`" remains a design rule this card
+restates rather than a linter gate. The four contracts at `.importlinter:20-52`
+are untouched. **Determinism and the substrate ladder**: the relevance lever
+keeps its declared default of `None`, which preserves recorded behaviour, and
+this card turns nothing on by default — the 2026-09-18 mode passes it
+explicitly and is refused if either arm resolves it off. AGENTS.md load-bearing
+rule 5 (no module-level mutable state; invalid input raises) is why
+`CALIBRATION_CAVEATS` is a `MappingProxyType` checked at import against
+`CALIBRATION_MODES`, and why `assert_calibration_reports_no_outcome` raises
+rather than dropping a field.
+
+### Decisions
+
+1. **The sizing profile is a FIELD of `CalibrationMode`, not a module constant.**
+   `assert_ready_for_a_calibration` and `assert_calibration_is_authorized`
+   passed one pair — `CALIBRATION_SIZING_UNIT_*` — for both modes. The
+   2026-09-18 mode is sized on 38,440 / 4,176 instead, so the pair moved onto
+   the mode and each gate now hands the gate the matched mode's own. Consequence
+   stated rather than absorbed: `assert_ready_for_a_calibration` now resolves
+   the mode BEFORE the feasibility arithmetic. `calibration_mode_for` reads no
+   file and needs no credential, so the ordering rule the module documents —
+   arithmetic and authorization before the inputs, the inputs before a client —
+   is unchanged.
+2. **38,440 / 4,176 are FROZEN LITERALS.** They equal `CALIBRATED_UNIT_*` today.
+   `tasks/work/fresh-deduction-limits-6.md` refreshes those two constants FROM
+   this sitting, and a mode reading them would then be checked against the
+   measurement it produced. The test anchors them to
+   `calibration-2-2026-09-15/calibration.json`'s own
+   `proposal.measured_max_unit_*_tokens` — a committed record that does not move
+   — rather than to a live constant or a typed number.
+3. **Three new mode fields instead of reusing `truncation_is_a_measurement` as a
+   proxy.** That flag decided the report SHAPE (`by_role`, the leak rule) as
+   well as the stop discipline. `reports_the_role_split`,
+   `reports_authored_diagnostics` and `requires_the_revised_wave` state each
+   decision, and the three spent/unspent modes now differ explicitly rather than
+   by coincidence.
+4. **`authored_diagnostics` is `None`, not an empty block, on the two spent
+   modes.** An empty `AuthoredBallotDiagnostics` is not empty in the payload: it
+   carries `AUTHORED_DIAGNOSTICS_NOTE`, a paragraph about authored ejections and
+   the primary outcome. Publishing it beside the 2026-09-14 output's zeros would
+   have the first calibration explaining a block it never measured — and it
+   turned `TestCalibrationRun::test_the_report_grades_nothing` red, which is how
+   this was found. Absent means absent.
+5. **A third caveat beside the first, which stays byte-identical.** This mode
+   reports more than a spend measurement, so the string that says "no meeting
+   outcome is reported" would contradict its own payload. `CALIBRATION_CAVEAT`
+   is unchanged and is checked against what the 2026-09-15 sitting actually
+   published.
+6. **`assert_calibration_reports_no_outcome` scans KEYS, not values.** Both
+   caveats and the diagnostics note SAY "no primary outcome" in those words; a
+   value scan would refuse the sentence that makes the promise. It runs on every
+   mode, not on the third alone, because a guard applied on one path only has
+   already started to drift.
+7. **The wave gate checks what it can and states what it cannot.** It refuses a
+   mode-3 sitting whose arms do not resolve `AILIBI_CITATION_RELEVANCE=1` and
+   `AILIBI_PROMPT_SET=qwen3_6_27b`. It cannot say which accounts REVISION those
+   templates are at; that half is pinned by the accounts card's own version test
+   and by the prompt-version markers a run records, and the manifest says so.
+
+### Verification
+
+Run in this worktree at the head of this branch, each with its real exit code.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/experiments -q` | 603 passed |
+| `uv run python scripts/validate_task_docs.py` | passed: 390 historical phase tasks and 390 prompts; 66 work cards |
+| `uv run python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `uv run python scripts/verify_ml_evidence.py` | checks 60, OK 48, FAIL 0, ABSENT 7 (the class-(c) evidence branch, expected on a fresh checkout), INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/verify_samples.sh` | 50 + 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/samples/4p1i` | consistent with its replays |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/samples/9p2i` | consistent with its replays |
+| `bash scripts/check.sh` | exit 0, run whole and captured directly: ruff, ruff format, lint-imports, `validate_task_docs.py`, `generate_prompts.py --check`, strict mypy over 484 sources, 7,980 passed / 20 skipped / 3 xfailed, and the four frontend legs at 515 tests |
+
+Neither the live calibration nor the live evaluation was run: no provider call
+was made by this card, and every case above uses the fake provider, the replay
+double or a synthetic input.
+
+### Planted and perturbed failures
+
+Each was demonstrated by editing the shipped code, running the case, and
+restoring it.
+
+| Guard | Plant | Observed |
+| --- | --- | --- |
+| `ballot_rewrites_that_fired` anchored to the marker stack | the pre-repair substring search restored | `test_a_model_echoing_a_marker_phrase_is_not_a_guard_that_fired` → `AssertionError: assert ('off_target_coerced',) == ()` |
+| the counterfactual's before-column cross-check | `if archived is not None and (...)`, the pre-repair silent skip | `test_a_replay_with_no_checkpoint_row_is_a_stop` → DID NOT RAISE; the command printed its aggregates from an unchecked before-column |
+| the relevance lever's export in `run_case` | the key removed from the env dict | `test_the_scenario_harness_exports_the_relevance_lever` and `test_a_config_without_the_lever_still_resolves_it_off` → `KeyError: 'AILIBI_CITATION_RELEVANCE'` |
+| `assert_the_revised_wave_is_enabled` | the gate's body short-circuited to `return` | 4 failures in `TestTheRevisedWaveIsRequiredByTheThirdMode`, including the run path |
+| the mode's own sizing pair | mode 3 pointed at `CALIBRATION_SIZING_UNIT_*` | `test_a_run_input_ceiling_below_the_floor_is_refused_here` → DID NOT RAISE (4,600,000 clears 120 x 24,282) |
+| `assert_calibration_reports_no_outcome` | `present` forced empty | all three `test_a_payload_carrying_an_outcome_is_refused` cases → DID NOT RAISE |
+| `reports_authored_diagnostics` | set `False` on mode 3 | `test_the_diagnostics_block_is_reported_per_arm` and `test_each_arms_resolved_levers_are_published` → `KeyError` / `assert block is not None` |
+
+Plants that live in the suite rather than in an edit: every crossing of the
+three modes (`test_every_crossing_of_the_three_modes_is_refused` enumerates all
+27 orderings and accepts exactly the three authorized ones), the held-out record
+named in the draw, a record named twice, a `status` that is not `development`, a
+moved prefix digest, a draw of fifty-nine, a manifest without the third clause,
+and a live evaluation invocation that still raises `PerCallCapExceeded` on a
+capped completion.
+
+### What the mode does and does not do
+
+`--calibrate --calibration-mode 2026-09-18` renders the sixty seeds of the
+shipped prefix draw on both arms at `AUTHORIZED_SAMPLING`, counts a per-call
+truncation as a measurement, and reports per arm: the `by_call_type` and
+`by_role` token profile, truncations with their `finish_reason`, the leak column
+under `ROLE_LEAK_RULE`, the resolved lever profile, and the authored-ballot
+diagnostics block — precision beside its harm counter, the illegal-target
+column, the coalition funnel with `cleared` and `converted` apart, gate survival
+by voter role, guard rewrites by reason including `off_target_coerced`, and
+ejections by role-correctness. It computes no paired statistic, evaluates no
+decision rule and reports no primary outcome; `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
+are byte-identical and the frozen-analysis test passes.
+
+### Record impact, as made
+
+The instrument is in `ARM_SURFACE_SOURCES`, so the arm-surface digest MOVES: a
+fresh stamp before the sixth run, not a re-record, and no committed constant
+pins it. `experiments/fresh_deduction_instrument.py` is NOT in
+`GENERATOR_SOURCES` (`experiments/held_out_prefixes.py:155-178`), so no freeze
+restamp is owed by this card. The held-out record at `MANIFEST_PATH` is
+untouched and is refused by name inside the draw, before and after the sixth
+freeze — which a test proves by appending a sixth band to `CONVERTED_BANDS` and
+showing the draw does not move. No recording, report, DTO, metric or weight byte
+moves; no experiment becomes ON by default; the committed usage profile and the
+two calibrated constants do not move here.
+
+`audits/` bytes moved (the manifest's new section), so the `docs/artifacts.md`
+inventory row was recomputed with the change staged: **25,997,781 → 26,011,418
+tracked bytes, 324 files unchanged**.
+
+### Deviations
+
+Three files outside the card's Expected scope were touched, all of them the
+carry-over repairs the dispatch names, each small and each with a planted case:
+
+* `experiments/citation_relevance_counterfactual.py` — the before-column
+  cross-check now fails loudly on a replay the checkpoint has no row for;
+* `experiments/deduction_scenarios.py` and
+  `experiments/investigation_evaluation.py` — both export
+  `AILIBI_CITATION_RELEVANCE` from the config, so every field of
+  `meetings.evidence_profile.EXPERIMENT_ENV_NAMES` reaches the renderer. It
+  resolves to `0` for every arm either harness builds today, which is what an
+  absent key already resolved to, so no capture's behaviour moves;
+* `tests/experiments/test_citation_relevance_consumers.py` — a new file for
+  those two repairs, rather than mixing an unrelated module's cases into the
+  instrument's 11k-line test file. The marker-anchor repair's cases live with
+  the function they test, in `TestTheAuthoredLayerIsRecoverable`.
+
+One rename inside the Expected scope: `TestTheTwoAuthorizedCalibrationModes` is
+now `TestTheTwoSpentCalibrationModes`, because its docstring said "two sets" and
+there are three.
+
+### Limitations
+
+* **The predictions are directions, not thresholds.** They are read against the
+  fifth run's figures, which were measured on the 8000-8999 prefixes and not on
+  this draw's. A miss is neither a stop nor a verdict, and no decision rule
+  reads any of them. The manifest says so beside the table.
+* **Cross-sitting comparison is on inputs, not on arms.** The draw is
+  calibration 2's to the seed, so the token profile compares; the reference arm
+  was RE-BASELINED by the citation guard, so no cell of the fifth run may be
+  carried across.
+* **The wave gate cannot read the accounts revision.** It checks the lever and
+  the prompt set; v5 itself is pinned elsewhere.
+* **`ballot_rewrites_that_fired` is anchored, not proof against every echo.** It
+  reads the contiguous marker block at position zero and stops at the first
+  chunk that is not a marker this codebase writes. A model echo INSIDE that
+  block is impossible because the block is built by prepending; a marker head
+  with no `"] "` terminator is treated as a truncated record and ends the walk
+  rather than being guessed at.
+* **The sizing pair is frozen and will look stale.** After
+  `fresh-deduction-limits-6.md` refreshes the committed profile, 38,440 / 4,176
+  will no longer equal `CALIBRATED_UNIT_*`. That is the intent, and the
+  perturbed case
+  (`test_a_refreshed_committed_profile_does_not_move_this_modes_gate`) is what
+  keeps it from being read as drift.
+* **No live measurement exists yet.** Every figure in this section is arithmetic
+  over constants or a $0 rehearsal. The sitting's own numbers, the six
+  predictions read as met or missed, the proposal and the archive path are the
+  runner's Results subsection on the second pull request.
+
+### Review corrections, round 1 (2026-09-18)
+
+Two findings from the independent verifiers, both valid, both repaired here on
+`work/fresh-deduction-calibration-3` before merge. Neither moves the draw, the
+limits, the sampling, the clause, a prompt byte or a frozen analysis string, and
+no provider call was made for either. Every command below was run at this
+subsection's commit.
+
+**Finding 1 — `## Results` miscounted its own boxes.** The opening paragraph read
+"Acceptance items 1-7 are met and checked. Item 8 is split … Item 9 is the live
+sitting", against a list of ten items of which EIGHT were checked: it called the
+committed aggregates item 8 and the live sitting item 9, while the card's own
+item 8 is the `CEILING_PROPOSAL_RULE` one and is `[x]`. A reader reconciling the
+prose against the boxes was told the outstanding work began one item earlier than
+it does. Card text only; no code, no gate and no number moves. The paragraph is
+now renumbered against the list AS IT NOW STANDS — twelve items, the two review
+corrections prepended and checked, the original ten after them, items 1-10
+checked, item 11 the split one and item 12 the live sitting — rather than against
+the pre-correction list, so it stays true after the reopen rather than becoming
+wrong by two.
+
+**Finding 2 — the mode-3 artifact published the live evaluation's note.**
+`authored_ballot_block` hard-coded `AUTHORED_DIAGNOSTICS_NOTE`, so
+`--calibrate --calibration-mode 2026-09-18` wrote, into every arm of
+`calibration.json`, a paragraph saying the counts "are reported beside the
+primary outcome" and that "a cross-arm reading of these counts is confounded
+until the v5 prompt set equalises the register". Both are false of this payload:
+`CALIBRATION_3_CAVEAT`, three lines away in the same file, says no primary
+outcome is reported, and `resolved_levers` on the candidate arm shows
+`AILIBI_PUBLIC_ACCOUNTS=1` — the v5 set, rendering. This is decision 4's own
+reasoning (an empty block "is not empty in the payload: it carries
+`AUTHORED_DIAGNOSTICS_NOTE`, a paragraph about … the primary outcome") applied to
+the two spent modes and not to the third.
+
+The repair, on the shape the caveats already use rather than an `if`:
+
+* `CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE` is a second string beside the live
+  one, which stays byte-identical because it is what the live run's block is
+  published under. It drops the two false clauses, keeps the half that makes the
+  block safe to read — authoring-conditioned, flatters whichever arm authors
+  more, the precision ONLY beside its harm counter, the illegal-target column,
+  never preregistered, NEVER a decision input — and states what this payload is:
+  no primary outcome reported, no paired statistic computed, no decision rule
+  evaluated, predictions rather than gates. Where the live note asserts the
+  register confound, this one says the register is one of the things the counts
+  are read FOR (prediction P3), because whether v5 equalised it is this
+  sitting's question and not its premise.
+* `note` is a keyword parameter of `authored_ballot_block`, defaulting to the
+  live evaluation's, so `_summarize_arm` (the run path) is byte-unchanged in
+  behaviour.
+* `CALIBRATION_DIAGNOSTICS_NOTES` is a closed `MappingProxyType` naming one note
+  per mode that REPORTS the block, and `_summarize_calibration_arm` now takes
+  `diagnostics_note: str | None` in place of `with_diagnostics: bool`: the block
+  is requested BY its note, so "report the block" and "supply its note" cannot
+  disagree.
+* `assert_every_reporting_mode_has_its_note` runs at import and refuses a table
+  that does not name exactly the modes with `reports_authored_diagnostics`, or
+  that points a calibration at `AUTHORED_DIAGNOSTICS_NOTE`. A function rather
+  than a bare `if`, so the invariant can be planted from the suite.
+
+| Guard | Plant | Observed |
+| --- | --- | --- |
+| the mode's own note reaches the artifact | the pre-repair `authored_ballot_block(_authored_counts_over(own))` restored | `test_the_published_block_is_not_the_live_runs_note` and `test_the_diagnostics_block_is_reported_per_arm` → `AssertionError`, the left set carrying "confounded until the v5 prompt set equalises the register" |
+| `assert_every_reporting_mode_has_its_note` | in-suite, three ways: an empty table, a note for a mode that reports no block, an extra mode | `test_a_note_table_that_does_not_match_the_modes_is_refused` → `InstrumentError: … needs its OWN note here` |
+| the same guard, on the note itself | in-suite: the table pointed at `AUTHORED_DIAGNOSTICS_NOTE` | `test_a_calibration_may_not_publish_the_live_runs_note` → `InstrumentError: a calibration may not publish the live evaluation's note` |
+
+`test_the_published_block_is_not_the_live_runs_note` reads the PAYLOAD rather
+than the constructed model — the bytes a reader of the artifact holds — and
+asserts the live note appears nowhere in the file.
+`test_the_prose_that_promises_no_outcome_is_not_itself_refused` now scans the new
+note too, so decision 6's key-only guard keeps being proved against every string
+that promises no outcome. The live evaluation's own path is unmoved:
+`test_the_block_reaches_the_report_beside_the_outcome` still asserts a dry run's
+arms carry `AUTHORED_DIAGNOSTICS_NOTE`.
+
+**Record impact of this round.** The manifest's calibration-3 section gains the
+paragraph that states the note split beside the caveat split, so `audits/` bytes
+moved again and the `docs/artifacts.md` row was recomputed with the change
+staged: **26,011,418 → 26,012,257 tracked bytes, 324 files unchanged**. The
+arm-surface digest moves again for the same reason the first commit moved it: the
+instrument is in `ARM_SURFACE_SOURCES`, and this is a fresh stamp rather than a
+re-record. `experiments/fresh_deduction_instrument.py` is still not in
+`GENERATOR_SOURCES`, so no freeze restamp is owed. No recording, report, DTO,
+metric or weight byte moves; no lever changes default; the held-out record at
+`MANIFEST_PATH` is untouched; `CALIBRATION_CAVEAT`, `AUTHORED_DIAGNOSTICS_NOTE`,
+`PRIMARY_OUTCOME`, `DECISION_RULE`, `MINIMUM_ACTIONABLE_EFFECT_UNITS`,
+`WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE` are byte-identical. No file outside
+the Expected scope was touched in this round.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/experiments -q` | 610 passed (603 before, plus this round's seven cases) |
+| `uv run python scripts/validate_task_docs.py` | passed: 390 historical phase tasks and 390 prompts; 66 work cards |
+| `uv run python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `uv run python scripts/verify_ml_evidence.py` | checks 60, OK 48, FAIL 0, ABSENT 7 (the class-(c) branch, expected on a fresh checkout), INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/verify_samples.sh` | 50 + 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/samples/4p1i` and `…/9p2i` | both consistent with their replays |
+| `bash scripts/check.sh` | exit 0, run whole and captured directly: 7,987 passed / 20 skipped / 3 xfailed, strict mypy over 484 sources, four frontend legs at 515 tests |
+| `uv run python -m experiments.fresh_deduction_instrument --calibrate --calibration-mode 2026-09-18 --json <tmp>/calibration.json` | exit 0, 120 units, 720 calls, `$0.00`, `dry_run: true`; the artifact's own bytes carry neither "reported beside the primary outcome" nor "until the v5 prompt set", and both arms' blocks carry this mode's note (the uncommitted rehearsal the finding was raised on, re-run after the repair) |
