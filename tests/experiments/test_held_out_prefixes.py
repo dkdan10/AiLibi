@@ -1150,8 +1150,16 @@ def test_the_converted_fourth_band_keeps_the_blocks_it_was_frozen_with() -> None
     assert "tasks/diagnosis-2026-09-15-truncation-stop.md" in record.note
 
 
-def test_the_current_freeze_is_the_fifth_band_and_starts_without_restamps() -> None:
-    """The live record is the new band; the old ones sit beside it, not under it."""
+def test_the_current_freeze_is_the_fifth_band_and_records_its_restamps() -> None:
+    """The live record is the new band; the old ones sit beside it, not under it.
+
+    The band started with an EMPTY restamp list and gains one entry per commit
+    that edits a ``GENERATOR_SOURCES`` file without moving the set. Each is
+    asserted to name its date, its commit, the files it moved and the card that
+    authorised it, and the committed manifest's copy is asserted to be the
+    module's -- an undocumented restamp cannot pass quietly, which is the whole
+    point of the list being part of the generated manifest.
+    """
 
     manifest = _committed_manifest()
     assert manifest["status"] == "held_out"
@@ -1163,10 +1171,19 @@ def test_the_current_freeze_is_the_fifth_band_and_starts_without_restamps() -> N
         "last_seed": PREREGISTERED_BAND.last_seed,
         "size": PREREGISTERED_BAND.size,
     }
-    assert DEPENDENCY_RESTAMPS == ()
     restamps = manifest["dependency_restamps"]
     assert isinstance(restamps, dict)
-    assert restamps["entries"] == []
+    assert restamps["entries"] == [dict(entry) for entry in DEPENDENCY_RESTAMPS]
+    for entry in DEPENDENCY_RESTAMPS:
+        assert set(entry) == {"card", "commit", "date", "note", "sources"}
+        assert entry["card"].startswith("tasks/work/")
+        assert (REPO_ROOT / entry["card"]).is_file()
+    # The one this band has: the relevance-aware citation guard's edit to
+    # `orchestrator/game.py`. The set itself is untouched by it -- generation
+    # runs with no meeting runner at all -- which is why it is a restamp and
+    # not a re-freeze.
+    assert [entry["commit"] for entry in DEPENDENCY_RESTAMPS] == ["6a144038"]
+    assert "orchestrator/game.py" in DEPENDENCY_RESTAMPS[0]["sources"]
 
     accepted = manifest["accepted"]
     assert isinstance(accepted, list)
