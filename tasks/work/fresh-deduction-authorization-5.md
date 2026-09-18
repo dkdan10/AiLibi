@@ -1,6 +1,6 @@
 # Fifth run of the fresh-model deduction evaluation, on re-sized ceilings
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -70,18 +70,22 @@ bands 3000-3999, 5000-5999, 6000-6999 and 7000-7999 all being development data.
 
 ## Acceptance
 
-- [ ] The execution manifest's authorization fields carry exactly the values in
+- [x] Review correction: the credential-scan claim named 107 files where the
+  committed archive holds 108; the count is corrected and the count-only scan
+  was re-run over all 108 files at `d27adb03` with both counts 0 (see the
+  review corrections).
+- [x] The execution manifest's authorization fields carry exactly the values in
   Constraints, the instrument's constants equal them, and
   `assert_limits_are_feasible` (`experiments/fresh_deduction_instrument.py:1273`)
   accepts `AUTHORIZED_LIMITS` on the REFRESHED profile, with
   `CALIBRATED_UNIT_INPUT_TOKENS` and `CALIBRATED_UNIT_OUTPUT_TOKENS` (`:547`,
   `:548`) at 38,440 and 4,176, and the 16,000 per-unit output ceiling clearing
   the 15,360 reservation schedule. A planted test at the old 3,710,000 goes red.
-- [ ] The runner regenerates the frozen set from the band the manifest binds,
+- [x] The runner regenerates the frozen set from the band the manifest binds,
   and `verify_frozen_set` (`:3043`) verifies every digest and the skip list
   before any client is constructed; the runner opens no prefix of band
   8000-8999 before the run, and none of the other four at all.
-- [ ] The run records tokens, attempts including retried and unaccounted ones,
+- [x] The run records tokens, attempts including retried and unaccounted ones,
   each call's `finish_reason` with the count of rows where it disagrees with
   the inferred `output_tokens >= max_tokens` cap signal, wall, model work and
   the $0.00 cost against every limit in Constraints, per arm and for the run;
@@ -89,7 +93,7 @@ bands 3000-3999, 5000-5999, 6000-6999 and 7000-7999 all being development data.
   truncation among them, final and buying no retry. An environmental stop may be
   resumed once per stop under the manifest's resumption clause, carrying and
   reporting the interrupted unit's spend.
-- [ ] The paired result is evaluated under the frozen decision rule (`:644`):
+- [x] The paired result is evaluated under the frozen decision rule (`:644`):
   the two-sided exact McNemar p, the net paired difference bar of 10 units and
   the wrongful-ejection bound (`:660`). It is ALSO read against the two
   one-sided effects the manifest's "Accounts prompt set v4 (2026-09-15)"
@@ -98,14 +102,25 @@ bands 3000-3999, 5000-5999, 6000-6999 and 7000-7999 all being development data.
   edits a primary-outcome input through citation relevance, downward. The
   wrongful-ejection bound is read against the first by name: an ejection rate
   is what it polices. The fourth run's 24 complete units are NOT pooled.
-- [ ] The pre-declared leak column (`ROLE_LEAK_RULE`, `:6163`) and the per-arm,
+- [x] The pre-declared leak column (`ROLE_LEAK_RULE`, `:6163`) and the per-arm,
   per-role ballot profile (draws, output mean, p95, max, truncations and
   self-tells) are reported beside the result as diagnostics: no stop condition
   reads either, and the decision rule names neither.
-- [ ] The results, per-unit records, usage reconciliation and rendered prefixes
+- [x] The results, per-unit records, usage reconciliation and rendered prefixes
   (development data once archived) land under
   `audits/deduction-candidate/run-<date>/`, indexed from the candidate's
   README, with the `docs/artifacts.md` audits row (`:109`) recomputed.
+- [x] Review correction: the reference arm's single counted leaking turn is a
+  QUESTION, which `ROLE_LEAK_RULE`'s own text excludes and its
+  `_NOT_AN_ASSERTION` guard fails to catch, so RESULTS.md reports both the
+  frozen implementation's 1 of 50 and the rule-as-written 0 of 50, withdraws
+  the two sentences that rested on the 1, and routes the guard's word-list gap
+  to a separate instrument card rather than moving an instrument byte here.
+- [x] Review correction: the usage reconciliation names both usage bases per
+  unit — `completed_*` for the resolved completions and `charged_*` for those
+  plus the billed-and-refused attempt, itemised in `charged_failed_*` — and
+  every per-unit mean published beside an arm total is on the charged basis, so
+  no figure in RESULTS.md mixes the two.
 
 ## Constraints
 
@@ -198,3 +213,285 @@ run, the single authorized live invocation the manifest documents, then `uv run
 python` over `scripts/validate_task_docs.py`, `scripts/check_doc_facts.py` and
 `scripts/verify_ml_evidence.py` (offline; never `--complete`), `uv run pytest
 tests/scripts/test_verify_ml_evidence.py -q`, and `bash scripts/check.sh`.
+
+## Results
+
+The run was made, once, and it COMPLETED — the first complete run of this
+evaluation, after four attempts that stopped at 1, 0, 3 and 25 units of 100.
+Its whole record is
+[audits/deduction-candidate/run-2026-09-16/RESULTS.md](../../audits/deduction-candidate/run-2026-09-16/RESULTS.md),
+and every figure below is read off that directory rather than retyped from a
+console.
+
+**The outcome, in one paragraph.** On the fifty paired units of band 8000-8999,
+`repaired_clock` scored `supported_correct_ejection` 0 times and
+`combined_accounts` 2, so `b = 2`, `c = 0`, the two-sided exact McNemar p is 0.5
+and the net paired difference is 2. All three clauses of `DECISION_RULE` fail:
+p is not below 0.05, the net is not at least 10, and the candidate's net
+increase in wrongful crew ejections is +7 (8 against the reference's 1) against
+a permitted 2. **`combined_accounts` does not advance to an explicitly scoped
+adopting review; the result is inconclusive, and inconclusive is not success.**
+It is not rejected either, for the reason the manifest declared before the run:
+the v4 citation repair raises this arm's ejection rate one-sidedly, so its 12
+ejections against the reference's 1 are a joint product of the candidate and of
+a prompt fix made to let the arm be measured at all, and this design cannot
+separate them. A result is a measurement and never an adoption: nothing here
+flips a flag, and both candidate levers stay default-OFF.
+
+### Architecture and design references
+
+Nothing in this pull request moves a design. The run is the one
+[the execution manifest](../../audits/deduction-candidate/execution-manifest.md)
+binds — its Inputs table (band 8000-8999), its authorized-values table, its
+"Fifth authorization (2026-09-15)" section, its live gate and its frozen
+analysis — under
+[the preregistration](../../audits/deduction-candidate/preregistration.md)'s
+design. The two one-sided effects the result is read against are the manifest's
+"Accounts prompt set v4 (2026-09-15)" section's, declared before any unit ran.
+The band is [the fifth freeze card](held-out-prefix-freeze-5.md)'s, the ceilings
+[the limits card](fresh-deduction-limits-5.md)'s, and the sizing measurement
+[the second calibration](fresh-deduction-calibration-2.md)'s. No instrument,
+generator, manifest, prompt or frozen-analysis byte moves here, which is what
+this card's Expected scope requires.
+
+### What was checked before the spend
+
+All offline, all at $0, on commit `a495fec5`:
+
+* `.venv/bin/pytest tests/experiments -q` — **491 passed**.
+* One fake-provider dry run over two units, into a directory outside the
+  repository: 2 units an arm, 12 calls an arm, `total_cost_usd` 0.0, limits
+  3,844,000 / 422,000 run-level and 116,000 / 16,000 per unit, sampling
+  4,096 / 0.4 and 1,024 / 0.2, freeze record sha256 `46f2ba61…fb4c1e`. Its
+  output was not committed.
+* The replay-double rehearsal on the refreshed profile under these limits:
+  `.venv/bin/pytest tests/experiments/test_fresh_deduction_instrument.py -k
+  "TestUsageReplay or TestFeasibility" -q` — **27 passed**, including
+  `test_the_rehearsal_is_green_on_the_refreshed_profile_under_the_new_limits`
+  and the planted
+  `test_the_fourth_authorizations_run_input_ceiling_is_refused_on_this_profile`.
+* The offline gate, which constructs no client:
+  `assert_limits_are_feasible(limits=AUTHORIZED_LIMITS)` returned,
+  `assert_manifest_binds_the_live_band()` returned, and
+  `assert_ready_for_a_live_run` returned the verified frozen set — 50 accepted
+  seeds 8000 to 8057, 8 skips, record sha256 `46f2ba61…fb4c1e`.
+* The authorized values the instrument will enforce, read out of the module and
+  compared against Constraints: provider `featherless`, model
+  `Qwen/Qwen3.6-27B`, prompt set `qwen3_6_27b` at `ACCOUNT_PROMPT_SET_REVISION`
+  **v4**, caps 4,096 / 1,024, temperatures 0.4 / 0.2, run 3,844,000 / 422,000,
+  per unit 116,000 / 16,000, 21,600 s of model work inside 28,800 s elapsed,
+  `max_cost_usd` 0.0, roster 4/1/3, sequential, transport 4 attempts at 180 s,
+  `CALIBRATED_UNIT_*` 38,440 / 4,176, `unit_output_reservation()` 15,360. The
+  manifest carries `RESUMPTION_CLAUSE` verbatim. Nothing disagreed, so the run
+  proceeded.
+
+### The sitting
+
+One sitting, `2026-09-16T08:33:05Z` to `2026-09-16T10:27:58Z`, exit 0, **no
+stop and no resumption**. 100 of 100 units, 601 attempts, 600 completions and
+one completion the provider billed and refused. Against every authorized limit:
+
+| Limit | Authorized | Actual | Used |
+| --- | --- | --- | --- |
+| Run input / output tokens | 3,844,000 / 422,000 | 2,243,923 / 144,677 | 58.4% / 34.3% |
+| Per-unit input / output tokens | 116,000 / 16,000 | 34,683 / 2,898 (largest unit) | 29.9% / 18.1% |
+| Elapsed wall / model work | 28,800 s / 21,600 s | 6,891.9 s / 6,885.9 s | 23.93% / 31.88% |
+| Per-call cap, turn / vote | 4,096 / 1,024 | 1,075 / 132 | 26.2% / 12.9% |
+| Transport attempts | 4 per call at 180 s | 1 per call, 601 of 601 | 25% of the bound |
+| Dollar | $0.00 marginal | $0.00 | not an enforcement mechanism here |
+
+`repaired_clock`: 300 attempts, 300 completions, 1,059,714 in / 59,427 out,
+2,988.2 s of model work, 0 charged failed attempts, 0 defaults, 0 retries.
+`combined_accounts`: 301 attempts, 300 completions, 1,184,209 in / 85,250 out,
+3,897.6 s, 1 charged failed attempt (3,460 in / 245 out), 1 defaulted turn by
+validation, 0 retries. Cap-signal disagreements 0 on both arms; no truncation by
+either signal. Every one of `STOP_RULE`'s conditions is tabulated in RESULTS.md
+with its evidence, and none fired.
+
+### Decisions this run took
+
+1. **The stop rule was never reached, so the resumption clause was never
+   used.** One sitting, one invocation, no `--resume`, and the final checkpoint
+   carries an empty `abandoned` block.
+2. **The archive is named for the UTC date its own records carry**
+   (`run-2026-09-16`), as the fourth run's was, so a reader comparing a
+   timestamp against the folder never reconciles two clocks.
+3. **Everything was committed.** The archive is about 10 MB — the report, the
+   log, all 100 replays, the final checkpoint, the reconciliation and its
+   derivation, and all fifty rendered prefixes with the derivation that writes
+   them — which is inside the size at which this card would have made the
+   runner choose what to keep.
+4. **The reconciliation is a committed derivation, not a typed table**, and it
+   computes the two pre-declared diagnostics with the instrument's own frozen
+   rules rather than a second implementation of them: `ROLE_LEAK_RULE` through
+   `states_own_role_or_kill` over committed turns, and the role-split profile
+   with `PERCENTILE_RULE`'s nearest-rank p95, with each seed's ground-truth
+   impostor read off its own replay's scripted kill.
+5. **The runner flag is elided in `run.log`.** No committed file outside the
+   manifest and the instrument may carry it, and a `.log` is not exempt by
+   being unscanned.
+6. **The `finish_reason` acceptance item is met as far as the unchanged
+   instrument allows, and the gap is stated rather than papered over.** The cap
+   check reads each call's `finish_reason` live and either signal stops the run,
+   and the report records `cap_signal_disagreements` per arm (0 and 0); the
+   per-call reading itself is a calibration-mode field that the evaluation's
+   `InstrumentReport` and the replays do not serialize. Recording it would have
+   meant moving an instrument byte, which this card's Expected scope forbids in
+   the run's own pull request. RESULTS.md says exactly what the archive does and
+   does not support.
+
+### Verification
+
+```
+$ .venv/bin/pytest tests/experiments -q
+491 passed
+$ .venv/bin/python scripts/validate_task_docs.py
+Task docs validation passed: 390 historical phase tasks and 390 prompts; 61 work cards.
+$ .venv/bin/python scripts/check_doc_facts.py
+$ .venv/bin/python scripts/verify_ml_evidence.py
+checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5
+$ .venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q
+80 passed
+$ bash scripts/check.sh
+7824 passed, 20 skipped, 3 xfailed, 10 warnings   (frontend: 515 tests, 19 files)
+All checks passed!
+```
+
+`scripts/check.sh` was run directly, not through a pipe, and its real exit code
+read: 0. The live evaluation is not a check and was not re-run. The archive was
+scanned for the API key before it was committed — a count-only comparison
+against the whole key and against its first six characters, over all 108 files
+the directory holds — and both counts are 0 (re-run over the same 108 files
+at `d27adb03`, after the review corrections, with both counts again 0), and `assert_report_holds_no_prefix_bytes` was re-run
+over the committed report against all fifty rebuilt prefixes and passed.
+
+Every command above was run again, in the same order and directly rather than
+through a pipe, over the tree the **Review corrections (2026-09-16)** below
+leave behind, and every figure in the block is unchanged — 491, 61 work cards,
+60 / 48 / 0 / 7 / 5, 80, and 7,824 passed with 20 skipped and 3 xfailed beside
+515 frontend tests in 19 files, at a real `scripts/check.sh` exit code of 0. In
+addition, the reconciliation was re-derived and still reprints
+`usage-reconciliation.json` byte for byte:
+`.venv/bin/python audits/deduction-candidate/run-2026-09-16/reconcile.py
+audits/deduction-candidate/run-2026-09-16 | cmp -
+audits/deduction-candidate/run-2026-09-16/usage-reconciliation.json` is silent.
+No live call was made in any of it.
+
+### Limitations
+
+* **The two declared one-sided effects are not separated.** The citation repair
+  raises the candidate's ejection rate and the turn bound lowers its citation
+  relevance, both on the treatment arm alone. The wrongful-ejection bound fails,
+  and this design cannot apportion that failure between the candidate and the
+  revision that made its ejections visible. Seven of the candidate's 24 naming
+  ballots were graded off-target and 44 of its 46 guard rewrites are still
+  `uncited_coerced`, so both channels are visibly live.
+* **Fifty paired units resolve a net of 10, not a net of 2.** A net of 2 is
+  inside the noise this sample carries; nothing here says whether a real effect
+  of that size exists.
+* **The fourth run's 24 complete units are not pooled**, and this record does
+  not pool them.
+* **Both diagnostics are loose at these numerators.** One counted leaking turn
+  per arm at the frozen rule, of which the reference's is a question the rule's
+  own text excludes (as written, one against none; see the review corrections),
+  on a rule with two-sided error bounds the leak rather than measuring it, and
+  the self-tell counts the ballot's OPENING only.
+* **Every accepted seed of band 8000-8999 is now development data**, and there
+  is no unrendered remainder to salvage: any future confirmation claim needs a
+  new band frozen under a new card by a preparer who has not read the run's
+  record.
+* **One model, one prompt set, one roster.** 4p1i with three living voters on
+  Featherless `Qwen/Qwen3.6-27B`; nothing here carries to another model, a
+  metered provider or the 9p2i shape.
+
+### Review corrections (2026-09-16)
+
+Review of head `3b880582` returned two blocking findings, each reported by more
+than one lens and each matching an unresolved Codex P2 comment on PR #465. Both
+are record defects — a diagnostic read against its own rule, and a published
+mean read on the wrong basis — and neither touches the primary outcome, the
+exact McNemar p, the net paired difference or the wrongful-ejection bound. The
+card stays **done**; the paragraphs below say what the record used to claim,
+why that was wrong, and what it says now. Both were reproduced before they were
+repaired, and no instrument byte moves.
+
+**1. The reference arm's leak count of 1 is a rule artifact** (Codex
+4025371048). `ROLE_LEAK_RULE`
+(`experiments/fresh_deduction_instrument.py:6216`) says in its own words that a
+statement "SUPPOSED or ASKED rather than asserted — a conditional, a
+hypothetical or a question governing the words — is not counted".
+`repaired_clock` seed 8014's sole counted turn is interrogative: the sentence
+the role pattern matched inside opens with the two words `how do` and is closed
+by `?`. It is counted anyway because `_NOT_AN_ASSERTION` (`:6269`) lists `were
+i`, `why would`, `how would` and `what would` and does not list `how do`, so no
+governor is found in front of the match and `states_own_role_or_kill` returns
+True; adding `how do` to that list makes the guard fire and drops the turn.
+`combined_accounts` seed 8042 is unaffected — a first-person declarative closed
+by a full stop — so the rule as written gives 1 of 50 on the candidate and **0
+of 50 on the reference**, against the frozen implementation's 1 and 1.
+
+Two sentences rested on the 1 and are WITHDRAWN: that this run "is the first
+measurement in which the REFERENCE arm leaks at all", and that "at one event
+per fifty units on each arm the diagnostic no longer separates the arms". Under
+the rule the owner's decision 9 pre-declared, the reference arm did not leak
+here and this run continues the earlier runs' candidate-only reading rather
+than contradicting it. RESULTS.md's role-leak section now carries both counts
+with the guard gap named, its table and its calibration-comparison row carry
+both, its Limitations bullet names the false positive, and a shell block
+recomputes both readings from the archive with no turn text printed. This
+pull request's body is corrected the same way. The guard's word list is an
+INSTRUMENT defect and is NOT repaired here, because this card's Expected scope
+forbids moving an instrument byte in the run's own pull request: it is routed
+to a separate instrument card, which is to complete the interrogative
+auxiliaries beside `would` and re-derive this column from the archive
+afterwards. Opening that card is a coordinator action on `main`, not a byte
+this pull request may add.
+
+**2. The per-unit usage rows excluded a charged attempt** (Codex 4025371054).
+`reconcile.py` built each `per_unit` row's `calls`, `input_tokens` and
+`output_tokens` from the replay's `llm_calls` alone, which hold the resolved
+completions and not the attempt the provider billed and then refused
+(`combined_accounts` seed 8010, 1 attempt, 3,460 input / 245 output). The arm
+totals beside them come from the checkpoint, which does include it. So the
+candidate arm's rows summed to 300 / 1,180,749 / 85,005 against arm totals of
+301 / 1,184,209 / 85,250, and RESULTS.md published "23,615 / 1,700" as the
+candidate's per-unit mean — the completions-only mean — beside arm totals
+implying 23,684 / 1,705, and reprinted the same pair in the calibration
+comparison table. The reference arm charged no failed attempt and is
+unaffected on either basis, as is the calibration column of that table.
+
+Repaired by naming both bases rather than silently picking one. Each `per_unit`
+row now carries `completed_calls` / `completed_input_tokens` /
+`completed_output_tokens` beside `charged_calls` / `charged_input_tokens` /
+`charged_output_tokens`, with the difference itemised in
+`charged_failed_attempts` / `charged_failed_input_tokens` /
+`charged_failed_output_tokens`, and `largest_call_output` now considers the
+charged failed rows too. `usage-reconciliation.json` was regenerated from the
+corrected derivation and still reprints byte for byte from it, which is the
+invariant RESULTS.md claims for that file. RESULTS.md's per-unit means are
+restated on the charged basis — `combined_accounts` **23,684 / 1,705**,
+`repaired_clock` 21,194 / 1,189 unchanged — the comparison-table row is
+corrected, the "within 6%" sentence names its widest gap (+5.97%, the
+candidate's output mean) so the claim is checkable, and a shell block asserts
+that each unit's `charged_*` triple equals that unit's checkpoint
+`telemetry.usage` on all 100 units and prints the arm totals beside the means.
+
+**Neither correction is a re-measurement.** No model was called, no seed was
+re-recorded, no replay, checkpoint, report, log or rendered prefix byte moved,
+and the third Codex comment on this pull request (P1, per-call `finish_reason`)
+is the one the record already dispositions in Decisions item 6 and in
+Limitations, unchanged. The gates were re-run over the corrected tree and are
+in the Verification block above, whose figures still hold: the only files that
+moved are RESULTS.md, `reconcile.py`, `usage-reconciliation.json` and this
+card, and `docs/artifacts.md`'s `audits/` row is recomputed because `audits/`
+bytes moved.
+
+**3. The credential-scan count named 107 files; the archive holds 108.** The
+pre-commit scan's substance was clean and independently reproduced, but the
+count asserted totality one file short of the directory. At `d27adb03` the
+count-only comparison (whole key and first six characters, never printed)
+was re-run over every one of the 108 committed files under
+`audits/deduction-candidate/run-2026-09-16/`, including the three the
+corrections changed (RESULTS.md, reconcile.py, usage-reconciliation.json):
+both counts 0. The Limitations bullet on the leak diagnostic now carries the
+as-written reference count too.
