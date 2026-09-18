@@ -90,10 +90,16 @@ from experiments.held_out_prefixes import (
 from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FAKE_FINISH_REASON
+from meetings.citation_relevance import names_player
 from meetings.manager import (
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
+    INVALID_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
     DefaultedCall,
+    SuspicionEntry,
+    guard_ballot_citation,
+    guard_ballot_target_graph,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -3598,10 +3604,14 @@ class TestGraders:
     def test_a_longer_id_is_not_the_player_it_starts_with(self) -> None:
         """PLANTED: a substring match would read `p-10` as naming `p-1`. A ten
         player table is not this roster, but a rule that cannot tell the two
-        apart is wrong wherever it is applied."""
+        apart is wrong wherever it is applied.
 
-        assert instrument._names_player("tick 4: p-10 in MEDBAY.", "p-1") is False
-        assert instrument._names_player("tick 4: p-1 in MEDBAY.", "p-1") is True
+        The rule now lives in the meeting layer, where the recording-time guard
+        can reach it too; this grader-side pin stays because this is where the
+        verdict it decides is consumed."""
+
+        assert names_player("tick 4: p-10 in MEDBAY.", "p-1") is False
+        assert names_player("tick 4: p-1 in MEDBAY.", "p-1") is True
 
     def test_relevance_reads_no_role(self) -> None:
         """The rule is public-information-only: the same ballots and turns grade
@@ -9493,15 +9503,21 @@ def _ballot_for(
     *,
     authored: str | None = None,
     reason: str | None = None,
+    rationale_text: str = "because.",
 ) -> VoteBallot:
-    """One recorded ballot, with the guard pair set as the meeting layer sets it."""
+    """One recorded ballot, with the guard pair set as the meeting layer sets it.
+
+    ``rationale_text`` matters to the rewrite COUNT, which reads the marker
+    stack rather than the typed reason; the default carries no marker, which is
+    what a ballot no guard touched looks like.
+    """
 
     return VoteBallot(
         voter=voter,
         target=target,
         confidence=0.7,
         primary_reason_id=None,
-        rationale_text="because.",
+        rationale_text=rationale_text,
         guard_redirected_from=authored,
         guard_rewrite_reason=cast(Any, reason),
     )
@@ -9527,7 +9543,14 @@ class TestTheAuthoredLayerIsRecoverable:
 
         counts = instrument.authored_ballot_diagnostics(
             ballots=(
-                _ballot_for("p-1", "SKIP", authored="p-4", reason="uncited_coerced"),
+                _ballot_for(
+                    "p-1",
+                    "SKIP",
+                    authored="p-4",
+                    reason="uncited_coerced",
+                    rationale_text=UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-4")
+                    + "because.",
+                ),
             ),
             roles=cast(Any, {"p-1": "CREWMATE", "p-4": "IMPOSTOR"}),
             ejected_player_id=None,
@@ -9536,6 +9559,89 @@ class TestTheAuthoredLayerIsRecoverable:
         assert counts.crew_authored_naming_impostor == 1
         assert counts.crew_authored_ejects_cleared == 0
         assert counts.guard_rewrites_by_reason["uncited_coerced"] == 1
+
+    def test_the_new_reason_reaches_the_block_with_no_edit_to_it(self) -> None:
+        """A reason ADDED to the schema union is a row here by derivation.
+
+        ``BALLOT_REWRITE_REASONS`` reads ``BallotTargetRewriteReason`` itself, so
+        ``off_target_coerced`` arrived in this block with a zero count and no
+        edit to the block. PERTURBED: a hand-written list would have had to be
+        edited, and the seeded zero below is what makes its absence visible
+        rather than silent.
+        """
+
+        assert "off_target_coerced" in instrument.BALLOT_REWRITE_REASONS
+        assert instrument.BALLOT_REWRITE_REASONS == tuple(
+            sorted(get_args(BallotTargetRewriteReason))
+        )
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(_ballot_for("p-1", "p-2"),),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-2": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        assert counts.guard_rewrites_by_reason["off_target_coerced"] == 0
+
+    def test_a_doubly_rewritten_ballot_is_counted_under_both_reasons(self) -> None:
+        """PLANTED: the trap the typed field sets, at the count that fell into it.
+
+        The fifth run's seed 8006 class, built by the REAL guards rather than by
+        hand: an under-gate eject of p-2 is redirected onto p-3 and keeps a
+        citation about p-2, and the relevance gate then coerces the redirected
+        ballot. ``ballot_target_rewrite_provenance`` refuses to overwrite a
+        reason, so ``guard_rewrite_reason`` still reads ``under_gate_redirect``
+        while BOTH markers sit on the rationale. Reading the single field --
+        what this block did before this card -- reports zero coercions on a run
+        full of them; reading the stack reports one of each.
+        """
+
+        redirected = guard_ballot_target_graph(
+            ballot=VoteBallot(
+                voter="p-1",
+                target="p-2",
+                confidence=0.7,
+                primary_reason_id="m-1:turn-0",
+                rationale_text="because.",
+            ),
+            voter_id="p-1",
+            suspicion_graph=(
+                SuspicionEntry(player_id="p-2", suspicion=0.40, trust=0.5),
+                SuspicionEntry(player_id="p-3", suspicion=0.80, trust=0.5),
+            ),
+            candidate_targets=("p-2", "p-3"),
+            skip_confidence_threshold=0.6,
+        )
+        coerced = guard_ballot_citation(
+            ballot=redirected,
+            contradictions=(),
+            citation_relevance_version=1,
+            turns=(
+                MeetingTurn(
+                    turn_id="m-1:turn-0",
+                    turn_index=0,
+                    speaker="p-4",
+                    turn_kind="opening",
+                    reply_to=None,
+                    free_text="p-2 was nowhere near ADMIN.",
+                ),
+            ),
+        )
+        assert coerced.target == "SKIP"
+        assert coerced.guard_rewrite_reason == "under_gate_redirect"
+        assert instrument.ballot_rewrites_that_fired(coerced) == (
+            "off_target_coerced",
+            "under_gate_redirect",
+        )
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(coerced,),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-3": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        assert counts.guard_rewrites_by_reason["off_target_coerced"] == 1
+        assert counts.guard_rewrites_by_reason["under_gate_redirect"] == 1
+        # The old rule, restated so its failure is on the record: one row, and
+        # the coercion invisible.
+        assert Counter([coerced.guard_rewrite_reason]) == {"under_gate_redirect": 1}
 
     def test_a_coalition_can_clear_the_gate_without_converting(self) -> None:
         """PLANTED: the two meanings the memo's single "cleared" column carried.
@@ -9637,7 +9743,14 @@ class TestTheAuthoredLayerIsRecoverable:
         counts = instrument.authored_ballot_diagnostics(
             ballots=(
                 _ballot_for(
-                    "p-1", "SKIP", authored="p-99-ghost", reason="invalid_target"
+                    "p-1",
+                    "SKIP",
+                    authored="p-99-ghost",
+                    reason="invalid_target",
+                    rationale_text=INVALID_VOTE_TARGET_MARKER.format(
+                        target="p-99-ghost"
+                    )
+                    + "because.",
                 ),
             ),
             roles=cast(Any, {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"}),

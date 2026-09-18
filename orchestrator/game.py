@@ -2215,6 +2215,7 @@ class HeadlessGame:
                 "bounded_rebuttal_version",
                 "public_account_version",
                 "attributed_testimony_version",
+                "citation_relevance_version",
             ):
                 recorded_version = getattr(experiment, key)
                 served_version = getattr(profile, key)

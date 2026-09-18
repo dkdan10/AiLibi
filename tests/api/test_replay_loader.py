@@ -1781,12 +1781,15 @@ def test_the_killed_victim_arm_survives_the_recorded_path() -> None:
     assert read_off.preempted == frozenset({"p-1"})
 
 
-def test_the_target_rewrite_labels_are_the_five_typed_reasons() -> None:
+def test_the_target_rewrite_labels_are_the_six_typed_reasons() -> None:
     """The display class is DERIVED from the recorded union, not restated.
 
-    Pinning the five keeps the contract explicit: a sixth reason added to
+    Pinning the six keeps the contract explicit: a seventh reason added to
     ``BallotTargetRewriteReason`` reaches the finale recap automatically, and a
-    citation-only label never does.
+    citation-only label never does. ``off_target_coerced`` is the sixth and
+    arrived exactly that way: the relevance half of the citation gate registered
+    one new member and the display class widened by derivation, with no edit to
+    the loader's own set.
     """
 
     assert replay_loader._TARGET_REWRITE_LABELS == frozenset(
@@ -1796,6 +1799,7 @@ def test_the_target_rewrite_labels_are_the_five_typed_reasons() -> None:
             "teammate_coerced",
             "under_gate_redirect",
             "uncited_coerced",
+            "off_target_coerced",
         }
     )
     assert replay_loader._TARGET_REWRITE_LABELS == frozenset(

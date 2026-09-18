@@ -1410,7 +1410,35 @@ _RESTAMP_NOTE: Final[str] = (
 #: record (:data:`CONVERTED_BANDS`), which this list does not carry forward.
 #: The 5000-5999, 6000-6999 and 7000-7999 bands were each frozen and converted
 #: without a restamp, so their records carry none either.
-DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = ()
+DEPENDENCY_RESTAMPS: Final[tuple[Mapping[str, str], ...]] = (
+    MappingProxyType(
+        {
+            "card": "tasks/work/relevance-aware-citation-guard.md",
+            "commit": "6a144038",
+            "date": "2026-09-18",
+            "note": (
+                "The relevance-aware ballot citation guard. It adds "
+                "citation_relevance_version to the recorded experiment config "
+                "and to the served meeting profile, and orchestrator/game.py "
+                "gains that key in the runner-agreement tuple so the two cannot "
+                "differ. Prefix generation runs with no meeting runner at all -- "
+                "it halts at MEETING_PHASE_REACHED -- so a meeting-layer lever "
+                "cannot reach it, and all fifty accepted digests and all "
+                "EIGHT skips -- every skip this band has, all witnessed_kill "
+                "-- were unchanged. held_out_prefixes.py moved in the restamp "
+                "commit that follows the one named here, because this record "
+                "was added to it there, and again in this card's round-1 "
+                "review correction, which rewrote this note's skip count from "
+                "a wrong 'two' to the eight the manifest below records; "
+                "neither edit generates a prefix and neither changes one."
+            ),
+            "sources": (
+                "orchestrator/game.py, experiments/held_out_prefixes.py "
+                "(this record itself)"
+            ),
+        }
+    ),
+)
 
 
 class ConvertedRecord(BaseModel):

@@ -110,6 +110,7 @@ from agents.memory.beliefs import (
 )
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
+from meetings.citation_relevance import citations_bear_on
 from meetings.constants import (
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
 )
@@ -140,6 +141,7 @@ from meetings.schemas import (
     MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
+    BallotTargetRewriteReason,
     Claim,
     CompletedTaskObservation,
     TaskActivityAccount,
@@ -399,6 +401,20 @@ INVALID_OBSERVATION_ID_MARKER: Final[str] = (
 # exactly.
 UNCITED_ZERO_FLAG_EJECT_MARKER: Final[str] = (
     "[uncited zero-flag eject target {target!r} coerced to SKIP] "
+)
+
+# The RELEVANCE half of the same gate, and its sibling in every respect: same
+# prefix shape, same ``{x!r}`` repr interpolation, same mark-and-coerce
+# discipline, same spectator-chip registration
+# (``api.replay_loader._BALLOT_PREFIX_MARKERS`` as ``"off_target_coerced"``,
+# mirrored by ``training.surrogate.dataset.BALLOT_AUDIT_MARKERS``). It differs
+# in ONE thing: this ballot DID cite something, and what it cited was about
+# somebody other than the player it named, so the citation fields ride into the
+# record intact -- nulling a real id would erase the evidence the coercion is
+# justified by. Minted only while ``citation_relevance_version`` is ON, so no
+# recording made before that lever carries it.
+OFF_TARGET_CITATION_EJECT_MARKER: Final[str] = (
+    "[off-target citation for eject target {target!r} coerced to SKIP] "
 )
 
 # The recorded-bytes shape of the ``invalid_accusation_target`` annotation:
@@ -2385,9 +2401,22 @@ class MeetingManager:
         # never a crash, never a re-prompt. The POST-REDIRECT slot is the
         # contract: a redirected ballot is judged on the REDIRECTED target's
         # flag status, not the original's.
+        #
+        # Under ``citation_relevance_version`` (DEFAULT OFF) the same gate also
+        # asks whether a citation that IS present is ABOUT the recorded target,
+        # and the surfaces are handed in here because only this scope holds
+        # them: this meeting's final transcript turns, and the lines of the
+        # ballot prompt THIS voter was served -- the only memory surface a
+        # private observation id could have been read off. ``None`` leaves the
+        # call byte-identical to the pre-lever one.
         normalized = guard_ballot_citation(
             ballot=normalized,
             contradictions=contradictions,
+            citation_relevance_version=(
+                self._evidence_profile.citation_relevance_version
+            ),
+            turns=transcript.turns,
+            prompt_lines=prompt.splitlines(),
         )
         return normalized.model_copy(update={"voter": participant.agent_id})
 
@@ -3711,8 +3740,11 @@ def guard_ballot_citation(
     *,
     ballot: VoteBallot,
     contradictions: tuple[ContradictionRef, ...],
+    citation_relevance_version: Literal[1] | None = None,
+    turns: Sequence[MeetingTurn] = (),
+    prompt_lines: Sequence[str] = (),
 ) -> VoteBallot:
-    """Coerce an uncited zero-flag EJECT ballot to ``SKIP`` (Task 16.6, J2).
+    """Coerce an uncited (and, under the lever, off-target) EJECT to ``SKIP``.
 
     The enforcement tooth of the citation chain
     (audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2): a claim
@@ -3725,20 +3757,46 @@ def guard_ballot_citation(
       meeting names it in ``subjects``. A flagged target is convictable
       uncited -- the flag IS the in-game source, already on the public
       record;
-    * the ballot cites NOTHING: ``primary_reason_id`` (the transcript-turn
-      channel) AND ``primary_reason_observation_id`` (the 16.5 private-
-      observation channel) are BOTH null. The upstream validators
-      (:func:`_normalize_ballot_reason_id` /
-      :func:`_normalize_ballot_observation_id`) have already nulled any
-      fabricated id with its own marker, so a hallucinated citation gates
-      exactly like a bare null -- nulls-then-coerces, two markers.
+    * the ballot's citation does not carry it. Two classes here, and the
+      second one exists only while the lever is ON:
 
-    A gated ballot COERCES to ``SKIP`` with
-    :data:`UNCITED_ZERO_FLAG_EJECT_MARKER` prepended to ``rationale_text``
-    (the mark-and-coerce pattern of :func:`coerce_teammate_ballot_to_skip`);
-    the gate never rejects, never crashes, never re-prompts. Both citation
-    fields are already null on every coerced ballot by the predicate above,
-    so there is no stale reason id to null.
+      - UNCITED -- ``primary_reason_id`` (the transcript-turn channel) AND
+        ``primary_reason_observation_id`` (the 16.5 private-observation
+        channel) are BOTH null. The upstream validators
+        (:func:`_normalize_ballot_reason_id` /
+        :func:`_normalize_ballot_observation_id`) have already nulled any
+        fabricated id with its own marker, so a hallucinated citation gates
+        exactly like a bare null -- nulls-then-coerces, two markers;
+      - OFF TARGET -- ``citation_relevance_version`` is ``1`` and a citation
+        that IS present does not bear on this ballot's own target
+        (:func:`meetings.citation_relevance.citations_bear_on`, over
+        ``turns`` and ``prompt_lines``). Marked with
+        :data:`OFF_TARGET_CITATION_EJECT_MARKER` and recorded under
+        ``off_target_coerced``; the citation fields ride into the record
+        intact, because a real id is the evidence the coercion rests on.
+
+    The zero-flag exemption is evaluated ONCE and shared by both classes, so
+    the guard cannot hold two opinions about a flagged target. The three new
+    parameters are keyword-only and defaulted -- ``None`` lever, empty turns,
+    empty lines -- so every existing call site keeps its exact behaviour and
+    the OFF path is the pre-lever function byte for byte.
+
+    ``citation_relevance_version`` is the lever declared on
+    :class:`~meetings.evidence_profile.MeetingEvidenceProfile` and
+    :class:`~orchestrator.experiment_config.RecordedExperimentConfig`, switched
+    by ``AILIBI_CITATION_RELEVANCE``, DEFAULT OFF. The surfaces are the
+    caller's: the production call site hands this guard THIS meeting's
+    transcript turns and the lines of the ballot prompt this voter was served,
+    which is the only memory surface the voter could have drawn a private
+    observation id from.
+
+    A gated ballot COERCES to ``SKIP`` with its class's marker prepended to
+    ``rationale_text`` (the mark-and-coerce pattern of
+    :func:`coerce_teammate_ballot_to_skip`); the gate never rejects, never
+    crashes, never re-prompts. On the UNCITED class both citation fields are
+    already null by the predicate above, so there is no stale reason id to
+    null; on the OFF-TARGET class they are non-null by construction and are
+    kept, which is the one respect in which the two dispositions differ.
 
     Scope honesty (the planning doc's own analysis): the gate cannot
     distinguish an honest memory-only conviction from a bare pile-on when the
@@ -3760,28 +3818,45 @@ def guard_ballot_citation(
     ``primary_reason_id`` (the cited turn still drove the decision to
     EJECT; that guard constrains only the target), so a cited under-gate
     eject redirected onto a zero-flag argmax passes this gate on the kept
-    citation. Deliberate, and pinned by fixture: the gate enforces citation
-    VALIDITY, never relevance -- neither upstream validator links a
-    citation to the ballot's target (a voter naming any target may cite any
-    real turn / own observation), so the direct-vote twin passes
-    identically and the redirect opens no new hole. Nulling the citation at
-    the redirect instead would edit ``guard_ballot_target_graph``'s recorded
-    behavior, which this gate does not own; citation QUALITY is
-    16.15/16.17's measured business. The zero-flag predicate reads only this
-    meeting's detected ``contradictions`` -- never suspicion values -- so
-    the absence delta (which moves suspicion and mints no flag) cannot
-    change the gate's decision by construction. Pure function of its inputs
-    (no RNG, no clock, no env read), so replaying the same ballot + flags
-    yields the same coercion.
+    citation while the lever is OFF. That was a scope choice, stated as one:
+    with the lever OFF the gate enforces citation VALIDITY, never relevance
+    -- neither upstream validator links a citation to the ballot's target (a
+    voter naming any target may cite any real turn / own observation), so the
+    direct-vote twin passes identically and the redirect opens no new hole.
+    The lever is what closes that gap, and it closes it for the redirect and
+    the direct-vote twin alike, because it reads the RECORDED target either
+    way: a redirect that kept a citation about the ORIGINAL target now coerces
+    (the fifth run's seed 8006 is exactly that ballot). Nulling the citation
+    at the redirect instead would edit ``guard_ballot_target_graph``'s
+    recorded behavior, which this gate does not own. The zero-flag predicate
+    reads only this meeting's detected ``contradictions`` -- never suspicion
+    values -- so the absence delta (which moves suspicion and mints no flag)
+    cannot change the gate's decision by construction. Pure function of its
+    inputs (no RNG, no clock, no env read), so replaying the same ballot +
+    flags + surfaces yields the same coercion.
     """
 
     if ballot.target == _SKIP_TARGET:
         return ballot
-    if (
-        ballot.primary_reason_id is not None
-        or ballot.primary_reason_observation_id is not None
-    ):
+    uncited = (
+        ballot.primary_reason_id is None
+        and ballot.primary_reason_observation_id is None
+    )
+    off_target = (
+        not uncited
+        and citation_relevance_version is not None
+        and not citations_bear_on(
+            cited_turn_id=ballot.primary_reason_id,
+            cited_observation_id=ballot.primary_reason_observation_id,
+            subject=ballot.target,
+            turns_by_id={turn.turn_id: turn for turn in turns},
+            lines=prompt_lines,
+        )
+    )
+    if not uncited and not off_target:
         return ballot
+    # ONE exemption read, shared: a flagged target is convictable on the flag
+    # alone, and the two classes must not be able to disagree about that.
     flagged = frozenset(
         subject
         for contradiction in contradictions
@@ -3789,12 +3864,17 @@ def guard_ballot_citation(
     )
     if ballot.target in flagged:
         return ballot
-    marker = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target=ballot.target)
+    if uncited:
+        marker = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target=ballot.target)
+        reason: BallotTargetRewriteReason = "uncited_coerced"
+    else:
+        marker = OFF_TARGET_CITATION_EJECT_MARKER.format(target=ballot.target)
+        reason = "off_target_coerced"
     return ballot.model_copy(
         update={
             "target": _SKIP_TARGET,
             "rationale_text": marker + ballot.rationale_text,
-            **ballot_target_rewrite_provenance(ballot, "uncited_coerced"),
+            **ballot_target_rewrite_provenance(ballot, reason),
         }
     )
 

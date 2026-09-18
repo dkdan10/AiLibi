@@ -1290,7 +1290,109 @@ tree: the candidate arm's input heuristic reads 685,904 against 641,246 under
 the v4 bodies, the reference arm's 892,718 is unmoved, and every graded count
 of that paragraph is unchanged. The candidate figure read 678,772 until the
 review correction recorded in the F4 bullet above moved it again; that reading
-is superseded.
+is superseded. (That "every graded count is unchanged" is a claim about THIS
+entry's edit alone. The relevance-aware citation guard entry below, landing the
+same day, moves the graded counts of that paragraph and re-makes them; the input
+heuristics are the ones this entry left.)
+
+## Relevance-aware citation guard (2026-09-18)
+
+Decision 5 of
+[the diagnosis of the fifth run](../../tasks/diagnosis-2026-09-18-fifth-run.md),
+approved by the owner as a set on 2026-09-18 and recorded in that memo's
+section 11, written up as
+[the citation guard card](../../tasks/work/relevance-aware-citation-guard.md).
+Dated apart from the authorizations above because it is not one: it moves what
+a ballot must CITE and nothing the run is judged by. The primary outcome and
+its rubrics (`experiments/fresh_deduction_instrument.py:659`), the decision rule
+(`:672`), the minimum actionable effect (`:677`), `WRONGFUL_EJECTION_TRADEOFF`
+(`:693`) and `STOP_RULE` (`:722`) are the bytes the sections below quote and are
+byte-identical; every cap, ceiling, wall, transport bound and dollar limit in
+the table above is unchanged; no unit has been run under this rule, and none is
+authorized by this entry.
+
+**What changed.** `meetings.manager.guard_ballot_citation` gains a versioned
+lever, `citation_relevance_version`, DEFAULT `None` and switched by
+`AILIBI_CITATION_RELEVANCE`. With the lever ON the gate asks a second question
+of an EJECT ballot: not only whether its citation RESOLVES, but whether the
+thing it resolves to is ABOUT the player the ballot names. An off-target
+citation takes exactly the disposition an uncited EJECT takes — exempt when the
+target carries a contradiction flag this meeting, coerced to SKIP otherwise —
+under its own audit marker and its own `BallotTargetRewriteReason` member,
+`off_target_coerced`. The aboutness rule itself now has ONE definition,
+`meetings/citation_relevance.py`, which the instrument's
+`grade_citation_relevance` imports instead of keeping its own copy, so the
+recording-time gate and the primary outcome's third conjunct cannot disagree
+about a ballot. With the lever OFF nothing moves: every committed recording,
+sample, report and DTO keeps its bytes, and no committed recording carries the
+new reason.
+
+**BOTH ARMS ENABLE IT, so the REFERENCE ARM IS RE-BASELINED.** `instrument_arms()`
+sets `citation_relevance_version=1` on `repaired_clock` and on
+`combined_accounts` alike, so the two arms still differ in the accounts channels
+alone. The consequence is stated here rather than discovered later: this rule
+changes WHICH EJECTIONS HAPPEN on both sides, so **the fifth run's reference
+figures are not comparable with the next run's, and no reference cell of the
+fifth run may be carried across as a baseline for the sixth.** The pairing is
+internal to a run; that is what still makes the two arms comparable with each
+other.
+
+**CANDIDATE-WEIGHTED IN PRACTICE, though the code is symmetric.** Re-tallied
+offline over `run-2026-09-16/` with no provider call:
+
+```sh
+.venv/bin/python experiments/citation_relevance_counterfactual.py \
+  audits/deduction-candidate/run-2026-09-16
+```
+
+| Fifth run's archive, under the rule | reference | candidate |
+| --- | --- | --- |
+| Recorded EJECT ballots the rule reaches | 1 | 20 |
+| — by voter role (crew / impostor) | 1 / 0 | 6 / 14 |
+| Naming ballots, off target of them | 0 of 2 | 7 of 24 |
+| — the impostor's, the crew's | 0 of 1, 0 of 1 | 4 of 8, 3 of 16 |
+| Ejections, before → after | 1 → 1 | 12 → 5 |
+| Role-correct, before → after | 0 → 0 | 4 → 3 |
+| Wrongful, before → after | 1 → 1 | 8 → 2 |
+| `supported_correct_ejection`, before → after | 0 → 0 | 2 → 2 |
+
+It reaches 20 candidate ballots against 1 reference ballot, and it costs the
+impostor 4 of its 8 naming ballots against the crew's 3 of 16 — the asymmetry
+the memo's section 2 stage 2 names, the impostor's 86.8% survival through a gate
+that never asked what its citations were about. The counterfactual is a re-tally
+of RECORDED ballots, not a re-run: nothing downstream of a coerced vote is
+predicted, and coercion only ever removes an EJECT vote and adds a SKIP one, so
+the re-tally can lose an ejection and never invent one (the command asserts
+that, unit by unit, and reports zero inventions here).
+
+The reference arm's role split read `0 of 0, 0 of 2` until round 1 of this
+card's review; that reading is superseded. The archive's two reference naming
+ballots are one crew ballot and one the seed's own impostor cast, both on
+target, so the row reads `0 of 1, 0 of 1`. The command now prints
+`naming_ballots_by_voter_role` beside the off-target split, so both
+denominators are read off the documented run rather than counted by hand.
+
+**The arm-surface digest MOVES, and no committed constant pins it.**
+`ARM_SURFACE_SOURCES` names seven files and this entry moves four of them —
+`experiments/fresh_deduction_instrument.py`, `meetings/manager.py`,
+`meetings/schemas.py` and `orchestrator/game.py` — so `arm_surface_digests()`
+no longer matches the tree that produced `run-2026-09-16/`'s
+`checkpoint-final.json`. The v5 accounts entry above already moved that mapping
+through the prompt directory; this entry moves it again through the code side.
+The digest is recomputed from the tree rather than pinned by a literal, so no
+recorded byte needs editing — but `assert_checkpoint_matches` compares a
+resuming run against the checkpoint's recorded digests, so any sitting begun
+before this entry is refused, by design. No `agents/strategic/prompts/` byte
+changed and the lever renders no prompt text: what moves is the code both arms
+run, not the surface they render.
+
+**What this entry costs the fifth run's units.** Nothing under
+`run-2026-09-16/` is edited and no figure of that record is withdrawn; its 100
+units were recorded with the rule OFF and stay readable as what they are. They
+are not poolable with anything measured after this entry, on both arms. The
+offline mechanics check in the verification section below IS re-made on this
+tree, because the fake provider's ballots meet the new gate: its graded counts
+move and its input heuristics do not, the rule carrying no prompt bytes.
 
 ## The instrument
 
@@ -2030,18 +2132,18 @@ uv run python -m experiments.fresh_deduction_instrument --dry-run
 
 100 units (50 prefixes × 2 arms), 600 calls, `total_cost_usd` 0.0, in about two
 seconds of wall, written to the temporary directory the run makes for itself.
-Every one of the 150 ballots an arm cast was a non-SKIP decision — 150 supported
-ballots an arm, 1 guard-rewritten one among them rather than beside them,
-because the guard column overlays the verdict columns rather than adding to
-them (300 ballots over the two arms, one for each of the 600 calls that is not
-a turn) — and 50 of each arm's 50 units reached a graded terminal outcome: 50
-ejections each, 16 role-correct, 34 wrongful, 16 supported-correct, and 100
-ballots naming the ejected player, two per ejection. No unit of either arm is
-graded `partial` on this band, where the fourth band left one of each arm's
-fifty: that was a fixture outcome rather than a stop — its three ballots named
-three different players, so no majority formed — and which of the two shapes a
-band produces is the prefixes' arithmetic, not a property of the pipeline. The
-run completed all 100 units. The report carries the sampling
+Each of the 150 ballots an arm cast is a supported one — 150 supported ballots
+an arm, 33 guard-rewritten among them rather than beside them, because the guard
+column overlays the verdict columns rather than adding to them (300 ballots over
+the two arms, one for each of the
+600 calls that is not a turn) — and 49 of each arm's 50 units reached a graded
+terminal outcome: 49 ejections each, 16 role-correct, 33 wrongful, 16
+supported-correct, and 98 ballots naming the ejected player, two per ejection.
+One unit of each arm is graded `partial` on this band, as one of each arm's
+fifty was on the fourth: a fixture outcome rather than a stop — its ballots
+named no majority — and which of the two shapes a band produces is the
+prefixes' arithmetic, not a property of the pipeline. The run completed all 100
+units. The report carries the sampling
 configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
 4,096 / 1,024 — the caps the fourth authorization above raised the turn half of)
 and the limits it ran under (3,844,000 / 422,000 run-level, 116,000 / 16,000 per
@@ -2056,7 +2158,13 @@ because a real model writes a different transcript. The figures this paragraph
 carried before this re-binding were the fourth band's, measured under these same
 ceilings on 2026-09-15: 895,883 and 643,779 over 1,539,662, 49 ejections an arm
 with 13 role-correct, 36 wrongful and 13 supported-correct, and 98 ballots
-naming the ejected player. They are superseded with that band by the paragraph
+naming the ejected player. The graded counts this paragraph carried on the
+fifth band with the relevance lever OFF — 50 ejections an arm, 16 role-correct,
+34 wrongful, 16 supported-correct, 100 naming ballots, 1 guard-rewritten ballot
+and no `partial` unit — are superseded by the reading above, which is the same
+band under the rule the entry of 2026-09-18 records; the input heuristics are
+unmoved by that rule, which renders nothing.
+They are superseded with that band by the paragraph
 you are reading, and the two sets differing only in the second significant digit
 on input is what a re-binding between two draws of the same generator should
 produce. The v4 account bodies and the round-3 ballot-skeleton revision of
@@ -2116,8 +2224,15 @@ accepts `AUTHORIZED_LIMITS`, so the rehearsal can be made under the authorized
 ceilings themselves, and it is —
 `tests/experiments/test_fresh_deduction_instrument.py::TestUsageReplay::test_the_rehearsal_is_green_under_the_fourth_authorizations_limits`,
 600 calls over 100 units at $0.00, `assert_limits_are_feasible` cleared first
-and 50 terminal units with no `partial` on either arm, the fifth band's own
-shape (the fourth band's was 49 and one). The token totals are the paragraph
+and 49 terminal units with one `partial` on `repaired_clock`,
+against 16 terminal units and 34 `partial` on
+`combined_accounts`. That split is the relevance rule
+of 2026-09-18 meeting an ARCHIVED distribution: the double answers from the
+three stopped runs' recorded ballots, whose candidate-arm citations are the ones
+the diagnosis found off target, so most of that arm's meetings now decide
+nothing. It is a property of the archive the double replays, not a prediction
+about a live run, and the shape read 50 and none on both arms with the rule OFF
+(the fourth band's was 49 and one). The token totals are the paragraph
 above's to the token, and that is the
 point rather than a coincidence: the double replays an archived distribution
 keyed by arm and call type, so what it charges depends on which arm and which
@@ -2192,19 +2307,21 @@ three are development data, and a dry run over any of them would measure a set
 this manifest no longer authorizes.
 
 The relevance amendment costs this fixture no role-correct unit on this band
-either, though the figures say so less bluntly than on the band before it: the
-dry-run provider carried 2 off-target citations an arm across its 100 naming
-ballots, and supported-correct is the same 16 as role-correct, so both of those
-citations fell on an ejection the role pass had already scored wrong and the
-rule removed no role-correct ejection here. That the rule bites at all is
-established by its planted cases, not by this run — the fixture cites the
-transcript's last turn whatever it says, so what it exercises is the path, not
-the judgment. The figures this paragraph carried before this re-binding were the
-fourth band's: no off-target citation at all on either arm across 98 naming
-ballots, with supported-correct the same 13 as role-correct. They are superseded
-with that band by the paragraph you are reading. Whether a band produces any
-off-target citation is the prefixes' arithmetic rather than a property of the
-rule — the third band produced four an arm, the fourth none and this one two —
+either: the dry-run provider carries 0 off-target citations an arm across its 98
+naming ballots, and supported-correct is the same 16 as role-correct. Those
+figures are read under the relevance GUARD of 2026-09-18, which is why the
+off-target column is now zero rather than two — the two citations the grader
+used to find on this band are coerced at the ballot, before a meeting can eject
+on them, so the count the grader is left with is the count after the gate rather
+than before it. That the rule bites at all is established by its planted cases,
+not by this run — the fixture cites the transcript's last turn whatever it says,
+so what it exercises is the path, not the judgment. The figures this paragraph
+carried before this re-binding were the fourth band's: no off-target citation at
+all on either arm across 98 naming ballots, with supported-correct the same 13
+as role-correct; the fifth band read two an arm across 100 naming ballots with
+the guard OFF. They are superseded by the paragraph you are reading. Whether a
+band produces any off-target citation is the prefixes' arithmetic rather than a
+property of the rule — the third band produced four an arm and the fourth none —
 and on none of them has the rule cost a role-correct ejection.
 
 **A green dry run says nothing about model judgment.** The dry-run provider reads
