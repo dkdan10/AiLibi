@@ -79,3 +79,15 @@ spending, adoption or merging into main.
   against a permitted 2. A result is a measurement and never an adoption, so
   nothing in it authorizes spending, adoption or merging into main either; every
   candidate lever stays default-OFF.
+
+- 2026-09-18: the third development calibration of the fresh-model deduction
+  instrument ran once against the authorized provider on the same sixty paired
+  development seeds the second drew, with the revised wave of 2026-09-18 enabled
+  on both arms, and its aggregates are archived at
+  [calibration-3-2026-09-18/CALIBRATION.md](calibration-3-2026-09-18/CALIBRATION.md).
+  It measures spend, shape and the aggregate authored-ballot diagnostics — no
+  grader ran, no paired statistic was computed, no decision rule was evaluated
+  and no primary outcome is reported — and the six predictions it is read against
+  are directions fixed before the sitting rather than gates. Nothing in it
+  authorizes spending, adoption or merging into main either, and no held-out
+  prefix was read, rendered or touched.

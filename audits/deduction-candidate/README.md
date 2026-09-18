@@ -72,6 +72,27 @@ This directory records the unadopted follow-through to the owner's independent
   zero refusals and zero defaults, and a ceiling proposal whose run-level input
   figure the standing authorization does not yet clear — which is a finding for
   the fifth authorization card and authorizes nothing here.
+- [Development calibration 3, 2026-09-18](calibration-3-2026-09-18/CALIBRATION.md)
+  re-measures that same draw — the same sixty seeds at the same caps — after the
+  revised wave of 2026-09-18 moved the prompt bytes on both arms: the v5 accounts
+  templates on the candidate and the relevance-aware citation guard, which BOTH
+  arms enable. It grades nothing either, and it adds one thing to the second
+  calibration's shape: the labelled authored-ballot DIAGNOSTICS block — the crew
+  per-ballot precision always beside its harm counter, the illegal-target column,
+  the authored coalition funnel with its cleared and converted columns, gate
+  survival by voter role, guard rewrites by reason including the new
+  `off_target_coerced`, and ejections by role-correctness. It computes NO paired
+  statistic, evaluates NO decision rule and reports NO primary outcome, and it is
+  read against six predictions the manifest fixed BEFORE the sitting, none of
+  which is a gate: four held (the gate's role asymmetry inverted, the wrongful
+  coalition conversion is no longer above the correct one, the candidate's
+  authored-ejection rate fell by a factor of 3.7, and the turn-citation channel
+  came back with zero nulled ids and zero `uncited_coerced` coercions), and two
+  did not (the crew per-ballot precision fell to chance, and the candidate's
+  contradiction flags fell to zero on a claim vocabulary that is still
+  accusations only). Zero truncations, zero leaking turns on either arm, one
+  billed refusal and one defaulted turn, $0.00 marginal, and a ceiling proposal
+  that authorizes nothing.
 - [Run of 2026-09-16](run-2026-09-16/RESULTS.md) is the fifth held-out attempt
   and the first COMPLETE one: fifty paired seeds of band 8000–8999, both arms,
   one sitting, 601 attempts, all 100 units, no stop and no resumption, $0.00
