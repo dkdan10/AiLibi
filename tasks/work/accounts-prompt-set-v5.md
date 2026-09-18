@@ -1,6 +1,6 @@
 # Revise the accounts prompts to v5: a citable turn id and the SKIP register
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -77,7 +77,7 @@ clause each at `:1` and `:21`.
 
 ## Acceptance
 
-- [ ] F4, the shape and the warning, on `vote_ballot_accounts.j2:21`. It names
+- [x] F4, the shape and the warning, on `vote_ballot_accounts.j2:21`. It names
   the bracket at the head of each transcript turn line as the one id a ballot
   may cite in `primary_reason_id`, names the `[turn:...:claim:N]` rows as
   pointers to evidence INSIDE a turn that are not ballot ids, and ports
@@ -85,10 +85,10 @@ clause each at `:1` and `:21`.
   never abbreviate, never append a row suffix, with the consequence, that an id
   which is not this meeting's turn id is nulled (`meetings/manager.py:3203`)
   and the uncited ejection coerced (`:3792-3799`).
-- [ ] F4, no prefill and no second id: the skeleton at `:23` still reads
+- [x] F4, no prefill and no second id: the skeleton at `:23` still reads
   `"primary_reason_id":null`, no real turn id of the rendered meeting appears in
   the ballot prompt, and `_account_transcript.j2` keeps its bytes.
-- [ ] F7, the SKIP register. `vote_ballot_accounts.j2:21` carries
+- [x] F7, the SKIP register. `vote_ballot_accounts.j2:21` carries
   `vote_ballot.j2:259`'s two clauses, that a thin strongest suspect makes SKIP
   the sound call and that ejecting anyway must rest on evidence you can cite
   and never on momentum; `:1` carries `vote_ballot.j2:114`'s "if the evidence
@@ -97,7 +97,7 @@ clause each at `:1` and `:21`.
   confidence 0.711 against 0.543 having moved no ejection, with 0 authored
   EJECT in either arm below the 0.6 cutoff `tally_ballots` applies
   (`meetings/voting.py:187`).
-- [ ] `ACCOUNT_PROMPT_SET_REVISION` advances `v4` to `v5`
+- [x] `ACCOUNT_PROMPT_SET_REVISION` advances `v4` to `v5`
   (`agents/strategic/prompts/loader.py:1248`), so the four account bodies
   advance as a unit (`loader.py:1259-1267`) and every stamp
   `public_account_prompt_versions` composes (`:1276-1289`) carries `v5`. Every
@@ -105,13 +105,13 @@ clause each at `:1` and `:21`.
   a literal: `tests/agents/test_public_account_prompts.py:190`,
   `_account_stamps` (`:155-172`), the recorded-capture pin (`:204-216`) and the
   pre-v4 frozenset at `:1089`, which becomes the pre-v5 set (`:1228`).
-- [ ] The arm-surface digest move is declared, not discovered. Every file of
+- [x] The arm-surface digest move is declared, not discovered. Every file of
   `agents/strategic/prompts/qwen3_6_27b` is hashed into `arm_surface_digests`
   (`experiments/fresh_deduction_instrument.py:4941-4969`, `ARM_SURFACE_SOURCES`
   at `:4927-4935`), so this edit moves it and the comparison at `:5430-5435`
   refuses a resume begun before this card; the card names the fifth run's
   `checkpoint-final.json` as what stops matching.
-- [ ] `audits/deduction-candidate/execution-manifest.md` gains a dated section
+- [x] `audits/deduction-candidate/execution-manifest.md` gains a dated section
   "Accounts prompt set v5 (2026-09-18)" stating the change, its basis (the
   diagnosis, linked) and its DECLARED EFFECTS, both one-sided and both on the
   candidate arm. F4 alone RAISES the wrongful net: restoring only the sub-row
@@ -122,14 +122,14 @@ clause each at `:1` and `:21`.
   removes the register confound, without which the [diagnostics
   card](fresh-deduction-instrument-diagnostics.md)'s per-ballot figures do not
   compare across arms; the frozen analysis is unmoved.
-- [ ] Planted proofs, each red before the fix and green after, on synthetic
+- [x] Planted proofs, each red before the fix and green after, on synthetic
   seed-free inputs through `build_prompt_renderers("qwen3_6_27b",
   public_account_version=1, attributed_testimony_version=1)`, in the idiom of
   `tests/agents/test_public_account_prompts.py:1092-1171`: drop the shape
   sentence; drop the row-suffix clause; prefill the skeleton's
   `primary_reason_id` with the meeting's last turn id; drop either
   SKIP-register sentence; set the revision back to `v4`.
-- [ ] No recording and no re-record. These templates are reachable only
+- [x] No recording and no re-record. These templates are reachable only
   behind two default-OFF levers: `public_account_version` and
   `attributed_testimony_version` default to `None`
   (`orchestrator/experiment_config.py:44-45`,
@@ -217,3 +217,184 @@ replay providers only), `uv run python scripts/validate_task_docs.py`,
 `uv run pytest tests/scripts/test_verify_ml_evidence.py -q`, and
 `bash scripts/check.sh` run whole in a clean worktree, so no gate after the
 first failure is masked. No live evaluation, calibration or provider call.
+
+## Results
+
+Delivered on `work/accounts-prompt-set-v5`, based on `66d5c480`. One rendered
+template moves, one constant, one test module, one `audits/` document and the
+two derived inventory lines. The engine is untouched, `agents/` gained no
+import (`.importlinter:20-26` unmoved), and nothing was recorded.
+
+**Where this sits.** `DESIGN.md` §5.2 (the meeting protocol that mints the
+`turn_id` a ballot cites) and §5.5 (the tally the ballot feeds);
+`docs/architecture.md` "Layering" and "Packages" — the prompt bodies are
+`agents/` assets rendered by `agents/strategic/prompts/loader.py`, and the
+meeting layer that nulls a non-canonical id is `meetings/`, which this card did
+not touch. The design record for the change itself is
+[the diagnosis of 2026-09-18](../diagnosis-2026-09-18-fifth-run.md) §3 (the
+dead turn channel), §4 (the register confound) and §11 (the owner's rulings),
+and the new manifest section
+`audits/deduction-candidate/execution-manifest.md` "Accounts prompt set v5
+(2026-09-18)".
+
+### Decisions
+
+1. **The shape is named, never shown filled.** `vote_ballot_accounts.j2:21`
+   names the bracket at the HEAD of a transcript turn line as the one id
+   `primary_reason_id` may carry and writes the sub-row tags as
+   `[turn:<that turn's id>:claim:N]` and its two siblings — placeholders, so no
+   turn id of the rendered meeting reaches the instructions or the skeleton.
+   The skeleton at `:23` still reads `"primary_reason_id":null`. This follows
+   the v4 precedent for the observation id and the memo's §6: the reference
+   skeleton prefills `transcript.turns[-1].turn_id` and 7 of its 14 surviving
+   citations were that id, support without relevance.
+2. **The warning is ported, not re-invented.** "Never invent or abbreviate an
+   id" is `vote_ballot.j2:266`'s own sentence, asserted against the reference's
+   bytes in
+   `test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation` so
+   that a re-invention that merely reads similar fails the same test a dropped
+   clause does. The never-append-a-row-suffix clause is the candidate-only
+   addition the reference has no need of, because only the accounts transcript
+   renders sub-rows.
+3. **The consequence is stated in the prompt.** "anything that is not one of
+   this meeting's turn ids is nulled, and a nulled id leaves your ejection
+   uncited, which coerces it to SKIP" — `meetings/manager.py:3203` and the
+   zero-flag branch at `:3792-3799`. Stated flatly rather than hedged with the
+   guard's flag exception: the branch was live in 49 of the fifth run's 50
+   candidate units, and a voter reading a hedge has a reason to gamble.
+4. **The skeleton sentence covers both fields.** `:21`'s "The skeleton below is
+   a SKIP" sentence now says which null to replace for a public turn and which
+   for a memory line. Without it the turn channel is described and then never
+   connected to the object the model copies — the defect F4 exists to repair,
+   half-repaired.
+5. **`_account_transcript.j2` keeps its bytes**, as the card decided on the
+   archive: `:17` already prints the bare canonical turn id at the head of
+   every turn line, and a per-row bare id would mint a third vocabulary and
+   move `accusation_round_accounts.j2:8` with it. `git diff --stat` over
+   `agents/strategic/prompts/qwen3_6_27b/` names one file.
+6. **The register only.** `vote_ballot.j2:114`'s "SKIP if the evidence is too
+   thin" is on `:1` and `:259`'s two clauses are on `:21`, word for word. The
+   reference's confidence sentence does NOT ship, and
+   `test_the_ballot_carries_the_references_skip_register_and_nothing_else`
+   asserts its absence from the candidate and its presence in the reference, so
+   a later "while we are here" port is red.
+7. **The dry-run paragraph was re-measured, not left stale.** The prompt gained
+   bytes, so the fake provider's `len // 4` input heuristic moves on the
+   candidate arm, and `tests/experiments/test_fresh_deduction_instrument.py`'s
+   `test_the_mechanics_check_paragraph_quotes_the_run_it_describes` pins that
+   paragraph to a live `run_dry`. Re-measured on this tree: `combined_accounts`
+   678,772 against 641,246 under the v4 bodies (+5.9%), `repaired_clock`
+   892,718 unmoved, sum 1,571,490, about 2.01 M at the memo's 1.28x ratio
+   against the 3,844,000 bound (52%). Every graded count in that paragraph —
+   50 ejections, 16 role-correct, 34 wrongful, 16 supported-correct, 100 naming
+   ballots, 150 supported ballots and 1 guard-rewritten, an arm — is byte-for-
+   byte what it was. Editing that paragraph is inside the Expected scope's
+   manifest file and is the change's own follow-through, not a second change.
+
+### Verification
+
+Run whole, in this clean worktree, at the head this card delivers.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/agents tests/meetings tests/experiments -q` | `3132 passed in 218.08s` |
+| `uv run python scripts/validate_task_docs.py` | `Task docs validation passed: 390 historical phase tasks and 390 prompts; 66 work cards.` |
+| `uv run python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified`, exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`, `every check passed` |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | `80 passed in 86.97s` |
+| `bash scripts/check.sh` | exit 0: ruff, `lint-imports`, `validate_task_docs`, `generate_prompts --check`, `mypy` (`Success: no issues found in 480 source files`), `7827 passed, 20 skipped, 3 xfailed` in 242.81s, frontend `19` files / `515` tests and a green build |
+| `bash scripts/verify_samples.sh` (not listed by this card; run anyway, the account bodies being reachable from no committed replay) | exit 0, `All 50 samples verified clean.` for `4p1i` and for `9p2i` |
+
+The `audits/` byte change recomputes `docs/artifacts.md:109`: 25,974,591 →
+25,980,491 tracked bytes over the same 324 files
+(`git ls-files audits` with the change staged), and
+`scripts/verify_ml_evidence.py` compares that row against disk offline.
+`tasks/README.md:43`'s derived sentence moves 6 ready / 60 done → 5 ready /
+61 done for this card's own flip; the sibling diagnostics card of wave A
+touches the same sentence and the same `audits/` row, and the coordinator
+reconciles both at merge.
+
+### Planted failures
+
+Five, one per gate this card adds, each perturbed in the tree, run, and
+restored from the index. Run as
+`uv run pytest tests/agents/test_public_account_prompts.py -q` each time; the
+suite is 93 tests and green on the delivered bytes.
+
+| Perturbation | Red | Failure |
+| --- | --- | --- |
+| Drop the turn-id shape sentence from `vote_ballot_accounts.j2:21` | `2 failed, 91 passed` | `test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation`, `test_a_body_carrying_the_v5_bounds_cannot_be_stamped_an_older_revision` |
+| Drop the never-append-a-row-suffix clause | `2 failed, 91 passed` | the same two |
+| Drop `:259`'s "never on momentum" clause | `1 failed, 92 passed` | `test_the_ballot_carries_the_references_skip_register_and_nothing_else`: `assert 'ejecting anyway must rest on evidence you can cite below, never on momentum' in ...` |
+| Prefill the skeleton with `{{ transcript.turns[-1].turn_id }}` | `1 failed, 92 passed` | `test_the_ballot_shows_the_turn_id_shape_without_prefilling_a_real_one`: `assert '"primary_reason_id":null' in '{"voter":"p-1",...,"primary_reason_id":"m-77:turn-1",...}'` |
+| Set `ACCOUNT_PROMPT_SET_REVISION` back to `"v4"` | `1 failed, 92 passed` | `test_a_body_carrying_the_v5_bounds_cannot_be_stamped_an_older_revision`: `AssertionError: assert 'v4' not in frozenset({'v1', 'v2', 'v3', 'v4'})` |
+
+Every case renders through
+`build_prompt_renderers("qwen3_6_27b", public_account_version=1,
+attributed_testimony_version=1)` on synthetic, seed-free inputs — the
+`_account_prompts` helper's own one-turn transcript, and for the prefill case a
+two-turn transcript with the hand-written ids `m-77:turn-0` and `m-77:turn-1`,
+so a prefill of "the last turn" is visible as a plain substring. No band is
+generated, opened or read anywhere in this card.
+
+### The arm-surface digest, declared
+
+Every file of `agents/strategic/prompts/qwen3_6_27b` is hashed into
+`arm_surface_digests` (`experiments/fresh_deduction_instrument.py:4941-4969`,
+`ARM_SURFACE_SOURCES` at `:4927-4935`), so moving
+`vote_ballot_accounts.j2` moves that mapping and `loader.py` moves it twice
+over. The comparison at `:5430-5435` therefore refuses any resume whose
+checkpoint was written before this card: concretely
+`audits/deduction-candidate/run-2026-09-16/checkpoint-final.json`, the fifth
+run's own, which recorded
+`vote_ballot_accounts.qwen3_6_27b.v4.accounts1.attributed1` and the pre-v5
+digest for that file. That is the intended refusal, and it is why the fifth
+run's 100 units are not poolable with anything measured after this card. No
+constant pins the digest, so nothing needed re-pinning.
+
+### The stamp derives, it is not typed
+
+`ACCOUNT_PROMPT_SET_REVISION` is `"v5"` (`agents/strategic/prompts/loader.py`),
+with a docstring bullet naming the two edits. The four account bodies advance
+as a unit, so every stamp `public_account_prompt_versions` composes reads
+`..._accounts.qwen3_6_27b.v5.accounts<N>.attributed<M>`. Every test that
+composes a stamp reads it off the constant: `_account_stamps`, the arm test,
+the recorded-capture pin (which asserts each composed stamp is absent from the
+two 2026-09-06 candidate captures) and the revision test, whose frozenset is
+now `_PRE_V5_REVISIONS = {"v1", "v2", "v3", "v4"}`. No literal `"v5"` is typed
+into a test.
+
+### Limitations
+
+- **This card cannot say the repair works.** It changes what the candidate is
+  asked for; whether a 27B model then cites the head bracket is a question for
+  [the third calibration](fresh-deduction-calibration-3.md), on converted
+  development bands. Everything measured here is a render assertion and an
+  offline heuristic.
+- **F4 alone makes the tradeoff worse, by the memo's own re-tally**: 20
+  ejections, 6 role-correct, 14 wrongful, wrongful net +7 → +13 against a
+  permitted 2. That figure is a counterfactual over the committed archive, not
+  a measurement, and it is why no run may be authorized on a tree carrying `v5`
+  without [the relevance-aware guard](relevance-aware-citation-guard.md)
+  merged. The manifest section states this before anything is measured.
+- **F7's direction is asserted from the reference's behaviour, not measured**:
+  the reference authored 14 EJECTs under this register against the candidate's
+  119 under one clause of it, which is a correlation across two arms that also
+  differ in the accounts surface. The claim that F7 LOWERS the candidate's
+  volume is a design expectation the third calibration tests, and the reason it
+  ships is that leaving the register unequal leaves the diagnostics card's
+  per-ballot figures uninterpretable across arms either way.
+- **The prompt's stated consequence is slightly stronger than the code's.**
+  `guard_ballot_citation` coerces an uncited EJECT only when the target carries
+  no contradiction flag; the prompt says it coerces. The gap is deliberate
+  (decision 3 above) and is one-way: a voter who cites correctly is never
+  penalised by the simplification.
+- **"No real turn id in the ballot prompt" is scoped to the instructions.** The
+  rendered transcript necessarily prints every turn's id — that is the channel
+  being taught. The test excises the `<transcript>`…`</transcript>` block and
+  asserts no meeting turn id survives anywhere else, which is the honest
+  reading of the acceptance item.
+- **Contradiction flags are not addressed.** The candidate's detector went
+  nearly silent on the fifth run (1 flag against 14), which is what makes the
+  guard's zero-flag branch live in 49 of 50 units. That is F6's and F8's
+  territory and out of scope of every card of this wave.
