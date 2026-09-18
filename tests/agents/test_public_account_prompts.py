@@ -1042,7 +1042,8 @@ def test_the_default_sets_response_examples_are_copyable_json_too(
 
 
 # ---------------------------------------------------------------------------
-# Revision v4: the three bounds the reference family already carried
+# Revisions v4 and v5: what the candidate ballot carries because the reference
+# family already carried it
 # ---------------------------------------------------------------------------
 #
 # The candidate account family commissioned deliberation and gave it one
@@ -1052,10 +1053,14 @@ def test_the_default_sets_response_examples_are_copyable_json_too(
 # `[obs ...]` tag word into `primary_reason_observation_id`, which
 # `meetings/manager.py` nulls before coercing the now-uncited ejection to SKIP.
 # The reference family bounds the same three fields and its ballots did
-# neither. These read the ported bytes out of the RENDERED prompt -- synthetic,
-# seed-free inputs through the real renderers, no held-out seed anywhere near
-# them -- so a later edit that drops a bound is red here rather than at a
-# provider.
+# neither. v5 ports the two the fifth live run then measured
+# (`tasks/diagnosis-2026-09-18-fifth-run.md`): the TURN channel, dead on 0 of
+# the candidate's 150 ballots against the reference's 14, and the SKIP
+# register, which the reference states twice and the candidate stated once
+# while authoring 119 EJECTs against the reference's 14. These read the ported
+# bytes out of the RENDERED prompt -- synthetic, seed-free inputs through the
+# real renderers, no held-out seed anywhere near them -- so a later edit that
+# drops a bound is red here rather than at a provider.
 
 #: The ballot's rationale budget and its consequence, ported from
 #: `vote_ballot.j2`'s `"rationale_text"` bullet.
@@ -1082,18 +1087,117 @@ _UNBOUNDED_TURN_REASON: Final[str] = '"reason":"<reason>"'
 _TURN_LENGTH_BOUND: Final[str] = "1-2 short sentences"
 _TURN_STOP: Final[str] = ", then stop"
 _UNBOUNDED_REPLY: Final[str] = "explain what it does and does not establish"
-#: The revisions that name the bodies BEFORE these three bounds. A tree whose
+#: The reference ballot the candidate's bounds are PORTED from. Every span
+#: below that claims to be ported is asserted against these bytes as well as
+#: against the rendered candidate, so a re-invention that merely reads similar
+#: fails the same test that a dropped clause does.
+_REFERENCE_BALLOT_PATH: Final[str] = (
+    "agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2"
+)
+#: F4, the turn channel (the fifth run: 0 of 150 candidate ballots carried a
+#: surviving `primary_reason_id`, against 14 of 150 on the reference). Three
+#: spans, and they are three separate facts:
+#:
+#: * the SHAPE -- which bracket on the page is a ballot citation. The head of
+#:   each transcript turn line (`_account_transcript.j2:17`) is the canonical
+#:   `turn_id`; nothing else on the page is.
+#: * the ROW SUFFIX -- `_account_transcript.j2:19,22` renders sub-rows tagged
+#:   `[turn:<id>:claim|obs|whereabouts:N]`, a second id vocabulary
+#:   `meetings.manager._REASON_ID_TURN_SUFFIX` has no entry for. 20 of the 27
+#:   ids the run nulled ended `:claim:N` and 6 `:obs:N`.
+#: * the CONSEQUENCE -- `meetings/manager.py:3203` nulls the id and
+#:   `guard_ballot_citation` then coerces the now-uncited EJECT to SKIP.
+_TURN_ID_SHAPE: Final[str] = (
+    "the turn id in the bracket that OPENS that turn's transcript line — the "
+    'one printed before "said:" — copied VERBATIM'
+)
+_ROW_SUFFIX_CLAUSE: Final[str] = (
+    'never append a row suffix (":claim:N", ":obs:N", ":whereabouts:N") to it'
+)
+_PORTED_ID_WARNING: Final[str] = "Never invent or abbreviate an id"
+_NULLED_CONSEQUENCE: Final[str] = (
+    "is nulled, and a nulled id leaves your ejection uncited, which coerces it to SKIP"
+)
+#: F7, the SKIP register, ported from `vote_ballot.j2:114,259` so that the two
+#: families differ in the accounts SURFACE and not in how readily each asks for
+#: an ejection (the fifth run: 119 authored EJECTs against the reference's 14).
+_SKIP_TOO_THIN: Final[str] = "SKIP if the evidence is too thin"
+_SKIP_SOUND_CALL: Final[str] = (
+    "when even your strongest living suspect is thin, SKIP is the sound call"
+)
+_SKIP_NOT_MOMENTUM: Final[str] = (
+    "ejecting anyway must rest on evidence you can cite below, never on momentum"
+)
+#: What the register port must NOT drag along. The reference's confidence
+#: sentence was not put for decision and moved no ejection in the fifth run:
+#: mean ballot confidence 0.711 against the reference's 0.543, with 0 authored
+#: EJECT in either arm below the 0.6 cutoff `tally_ballots` applies
+#: (`meetings/voting.py:187`).
+_CONFIDENCE_SENTENCE: Final[str] = '"confidence" to your honest probability'
+#: The revisions that name the bodies BEFORE these bounds. A tree whose
 #: templates carry the bounds may not compose a stamp from any of them: the
 #: revision exists so that two generations of one body never share a
 #: `MeetingReplayEntry.prompt_versions` marker.
-_PRE_V4_REVISIONS: Final[frozenset[str]] = frozenset({"v1", "v2", "v3"})
+_PRE_V5_REVISIONS: Final[frozenset[str]] = frozenset({"v1", "v2", "v3", "v4"})
 
 
-def _v4_ballot() -> str:
+def _candidate_ballot() -> str:
     """The candidate ballot as the combined arm renders it, on synthetic input."""
 
     _statement, vote = _account_prompts(_spoken_turn("Where were you?"))
     return vote
+
+
+def _reference_ballot_source() -> str:
+    """The reference ballot's bytes, the source every ported span is held to."""
+
+    return Path(_REFERENCE_BALLOT_PATH).read_text(encoding="utf-8")
+
+
+def _ballot_over_named_turns() -> tuple[str, tuple[str, ...]]:
+    """The candidate ballot plus the turn ids the rendered meeting owns.
+
+    The ids are synthetic and seed-free, and distinctive enough that a prefill
+    anywhere in the instructions or in the response skeleton is visible as a
+    plain substring. Two turns, so "the last turn" is a different id from the
+    first -- the shape `vote_ballot.j2:263` prefills and this body must not.
+    """
+
+    turn_ids = ("m-77:turn-0", "m-77:turn-1")
+    turns = (
+        MeetingTurn(
+            turn_id=turn_ids[0],
+            turn_index=0,
+            speaker="p-3",
+            turn_kind="opening",
+            reply_to=None,
+            free_text="Where were you?",
+        ),
+        MeetingTurn(
+            turn_id=turn_ids[1],
+            turn_index=1,
+            speaker="p-2",
+            turn_kind="reply",
+            reply_to=turn_ids[0],
+            free_text="STORAGE, the whole time.",
+        ),
+    )
+    renderers = build_prompt_renderers(
+        "qwen3_6_27b",
+        env={},
+        public_account_version=1,
+        attributed_testimony_version=1,
+    )
+    vote = renderers.vote(
+        voter_id="p-1",
+        rendered_memory="own memory",
+        transcript=MeetingTranscript(turns=turns),
+        contradiction_flags=(),
+        suspicion_graph=(),
+        candidate_targets=("p-2", "p-3"),
+        skip_confidence_threshold=0.6,
+    )
+    return vote, turn_ids
 
 
 def _account_statement(
@@ -1133,7 +1237,7 @@ def test_the_ballot_bounds_its_rationale_and_warns_what_a_long_one_costs() -> No
     # Fix A. Both sentences, because the budget without the consequence is the
     # instruction the candidate family already carried in weaker words ("a
     # concise reason") and the run truncated under it anyway.
-    vote = _v4_ballot()
+    vote = _candidate_ballot()
     assert _RATIONALE_BUDGET in vote
     assert _TRUNCATION_WARNING in vote
     assert "<one short reason>" not in vote
@@ -1157,7 +1261,7 @@ def test_every_citation_the_ballot_shows_is_the_bare_id_the_layer_accepts() -> N
     # literal happens to match (p-N, tick 12, seq 0) it is worse, not better:
     # `grade_supported` cannot tell a copied example from a citation the voter
     # actually made. The skeleton is a SKIP, and a SKIP needs no citation.
-    vote = _v4_ballot()
+    vote = _candidate_ballot()
     skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
     assert len(skeleton) == 1
     assert f'"{_CITATION_FIELD}":null' in skeleton[0]
@@ -1168,6 +1272,70 @@ def test_every_citation_the_ballot_shows_is_the_bare_id_the_layer_accepts() -> N
     for value in shown:
         assert _BARE_OBSERVATION_ID.fullmatch(value), value
         assert "obs" not in value
+
+
+def test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation() -> None:
+    # F4, the dead turn channel. The candidate arm cited a public turn on 0 of
+    # its 150 ballots because its page carries TWO bracketed vocabularies and
+    # its prompt named neither: `_account_transcript.j2:17` prints the
+    # canonical `turn_id` at the head of a turn line, and `:19,22` print
+    # `[turn:<id>:claim|obs|whereabouts:N]` sub-rows beneath it.
+    # `meetings.manager._REASON_ID_TURN_SUFFIX` is end-anchored on
+    # `:turn-(\d+)`, so a row suffix blocks recovery, `:3203` nulls the id and
+    # `guard_ballot_citation` coerces the uncited EJECT to SKIP.
+    #
+    # Three spans, asserted separately because they are three separate
+    # failures: naming the shape without the suffix warning leaves the 20
+    # `:claim:N` copies intact, and either without the consequence leaves the
+    # model no reason to prefer the head bracket.
+    vote = _candidate_ballot()
+    assert _TURN_ID_SHAPE in vote
+    assert _ROW_SUFFIX_CLAUSE in vote
+    assert _PORTED_ID_WARNING in vote
+    assert _NULLED_CONSEQUENCE in vote
+    # Ported, not re-invented: the warning is the reference's own sentence.
+    assert _PORTED_ID_WARNING in _reference_ballot_source()
+    # The sub-row tags are named as pointers INSIDE a turn rather than as
+    # ballot ids, in the shape the transcript actually renders them.
+    for suffix in (":claim:N", ":obs:N", ":whereabouts:N"):
+        assert f"[turn:<that turn's id>{suffix}]" in vote
+
+
+def test_the_ballot_shows_the_turn_id_shape_without_prefilling_a_real_one() -> None:
+    # F4's other half, on the v4 precedent. `vote_ballot.j2:263` prefills
+    # `transcript.turns[-1].turn_id` into the object a model copies verbatim,
+    # and 7 of the reference's 14 surviving citations were that last-turn id:
+    # support without relevance. The candidate's skeleton stays a SKIP, so the
+    # shape travels in prose only and no real turn id of the rendered meeting
+    # appears outside the transcript block it belongs to.
+    vote, turn_ids = _ballot_over_named_turns()
+    skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
+    assert len(skeleton) == 1
+    assert '"primary_reason_id":null' in skeleton[0]
+    opened = vote.index("<transcript>")
+    closed = vote.index("</transcript>") + len("</transcript>")
+    outside = vote[:opened] + vote[closed:]
+    for turn_id in turn_ids:
+        assert turn_id in vote[opened:closed], turn_id
+        assert turn_id not in outside, turn_id
+
+
+def test_the_ballot_carries_the_references_skip_register_and_nothing_else() -> None:
+    # F7, the register confound. The reference states the SKIP discipline at
+    # `vote_ballot.j2:114` and again at `:259`; the candidate gave one clause
+    # each at `:1` and `:21`, and authored 119 EJECTs against the reference's
+    # 14. Ported word for word, so the two arms differ in the accounts surface
+    # and not in how readily each asks for an ejection.
+    vote = _candidate_ballot()
+    reference = _reference_ballot_source()
+    for span in (_SKIP_TOO_THIN, _SKIP_SOUND_CALL, _SKIP_NOT_MOMENTUM):
+        assert span in vote, span
+        assert span in reference, span
+    # The register is ALL that is ported. The reference's confidence sentence
+    # was not put for decision and moved no ejection in the fifth run, so it
+    # stays on the reference side of the comparison.
+    assert _CONFIDENCE_SENTENCE in reference
+    assert _CONFIDENCE_SENTENCE not in vote
 
 
 @pytest.mark.parametrize("common,attributed", [(1, None), (None, 1), (1, 1)])
@@ -1210,22 +1378,25 @@ def test_the_account_turn_asks_for_one_short_phrase_and_then_a_stop(
     assert _UNBOUNDED_TURN_REASON not in opt_in
 
 
-def test_a_body_carrying_the_v4_bounds_cannot_be_stamped_an_older_revision() -> None:
+def test_a_body_carrying_the_v5_bounds_cannot_be_stamped_an_older_revision() -> None:
     # The revision and the bodies are one fact. `ACCOUNT_PROMPT_SET_REVISION`
     # exists so that two generations of one template never share a stamp, so a
-    # tree that RENDERS the three bounds and still composes `v1`, `v2` or `v3`
-    # would record the new bodies under an identifier that already names the
-    # old ones. Read off the constant rather than against a literal: what is
-    # asserted is that the stamp is not one of the pre-v4 generations and that
+    # tree that RENDERS these bounds and still composes `v1` through `v4` would
+    # record the new bodies under an identifier that already names the old
+    # ones. Read off the constant rather than against a literal: what is
+    # asserted is that the stamp is not one of the pre-v5 generations and that
     # every arm's stamp carries whatever the constant says.
-    vote = _v4_ballot()
+    vote = _candidate_ballot()
     statement = _every_account_prompt(common=1, attributed=1, is_impostor=False)[
         "statement"
     ]
     assert _RATIONALE_BUDGET in vote and _TRUNCATION_WARNING in vote
     assert _SHOWN_CITATION.findall(vote)
     assert _TURN_REASON_BOUND in statement
-    assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V4_REVISIONS
+    # The v5 bodies: the turn channel and the SKIP register (F4 and F7).
+    assert _TURN_ID_SHAPE in vote and _ROW_SUFFIX_CLAUSE in vote
+    assert _SKIP_TOO_THIN in vote and _SKIP_SOUND_CALL in vote
+    assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V5_REVISIONS
     stamps = _account_stamps()
     assert stamps
     for stamp in stamps:
