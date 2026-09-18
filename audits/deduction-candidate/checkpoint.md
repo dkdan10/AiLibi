@@ -88,6 +88,11 @@ spending, adoption or merging into main.
   It measures spend, shape and the aggregate authored-ballot diagnostics — no
   grader ran, no paired statistic was computed, no decision rule was evaluated
   and no primary outcome is reported — and the six predictions it is read against
-  are directions fixed before the sitting rather than gates. Nothing in it
-  authorizes spending, adoption or merging into main either, and no held-out
-  prefix was read, rendered or touched.
+  are directions fixed before the sitting rather than gates: three held and three
+  did not, after the publishing pull request's review re-labelled the wrongful
+  coalition conversion as MISSED (it rose to 100% rather than falling). Four of
+  the figures it reports are read off replays that are not committed and do not
+  recompute on a clean checkout; its "Review corrections (2026-09-19)" section
+  carries that disposition and three others. Nothing in it authorizes spending,
+  adoption or merging into main either, and no held-out prefix was read, rendered
+  or touched.

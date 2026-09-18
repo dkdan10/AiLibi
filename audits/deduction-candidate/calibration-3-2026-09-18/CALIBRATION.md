@@ -96,10 +96,23 @@ Arm totals: 1,467,113 input, 103,696 output over 360 attempts.
 
 The candidate arm charges **1.48x** the reference arm's output (103,696 against
 69,981) and **1.17x** its input. On the same sixty seeds at revision v4 the two
-ratios were 1.41x and 1.09x: the wave's bytes land on the candidate's INPUT
-side, and its ballot prompt is where they land — 4,753.1 mean input against
-4,272.6 on 2026-09-15, a 11.2% rise on a call type whose output did not move
-(99.8 against 93.3).
+ratios were 1.41x and 1.09x, and the candidate's ballot call is where the
+cross-sitting input difference sits: 4,753.1 mean input against 4,272.6 on
+2026-09-15, **+11.2%**, on a call type whose output did not move (99.8 against
+93.3).
+
+**That 11.2% is an OBSERVED difference between two sittings and not an estimate
+of the wave's template bytes.** A seed holds the scripted prefix constant, not
+the meeting the sitting then generates, and a ballot prompt renders that
+generated transcript: this sitting's candidate turns are longer — turn output
+mean 476.2 against the 2026-09-15 sitting's 443.0, on the same sixty seeds — so
+the ballot prompt they feed is longer before a single template byte is counted.
+The figure therefore mixes the v5 templates' static bytes with the growth of the
+transcript they produce, in a proportion this sitting cannot separate; splitting
+them needs a controlled-transcript measurement, which no sitting has made. What
+does not depend on the split is the sizing: the largest charged unit is 34,412
+input however the rise is apportioned, and every ceiling figure below is read off
+that maximum rather than off this delta.
 
 **Neither arm approaches a per-call cap.** The candidate's largest turn is 1,187
 of 4,096 (29.0%) and its largest ballot 130 of 1,024 (12.7%); the reference's are
@@ -250,6 +263,21 @@ changes no primary outcome. A numerator of zero on a two-sided rule bounds the
 leak loosely rather than measuring it, and zero leaking turns does not mean zero
 leaks.
 
+**The `role_leak_rule` string this payload quotes is the LIVE evaluation's, and
+two of its sentences do not fit a calibration.** It says the count is "a reported
+column beside the primary outcome" and "a further reason to read it beside the
+outcome rather than to gate on it", while this mode reports no primary outcome
+at all — `CALIBRATION_3_CAVEAT` says so and
+`assert_calibration_reports_no_outcome` enforces it over these same bytes. It is
+the same split the third calibration card already made for
+`AUTHORED_DIAGNOSTICS_NOTE`, not yet made for this string; `ROLE_LEAK_RULE` is an
+instrument byte, and a run pull request may not move one, so the repair is routed
+to the sixth authorization's instrument work with the four missing counters
+above. Nothing in this directory is misread in the meantime: the two clauses
+argue that the column is not a gate, which is what this mode also says, the
+column is 0 on BOTH arms, and there is no outcome here to read it beside. The
+full disposition is under "Review corrections".
+
 ## Refusals, defaults and charged failed attempts
 
 | Per arm | `repaired_clock` | `combined_accounts` |
@@ -304,6 +332,11 @@ result, and none was preregistered.
 
 ### Authored register, over the 180 recorded ballots of each arm
 
+The AUTHORED columns recompute from the committed payload —
+`authored_diagnostics.by_voter_role[].authored` sums to 23 on the reference and
+39 on the candidate. The RECORDED columns are read off the replays and do not;
+see "Review corrections".
+
 | Arm | authored EJECT | authored SKIP | recorded EJECT | recorded SKIP |
 | --- | --- | --- | --- | --- |
 | `repaired_clock` | 23 | 157 | 22 | 158 |
@@ -353,8 +386,11 @@ prepends rather than off a substring search.
 
 ### The citation channel, and the contradiction detector
 
-Read off the sitting's own replays, which are not committed; the derivation is
-quoted below.
+**Read off the sitting's own replays, which are NOT committed, so no figure in
+the two tables below recomputes on a clean checkout.** The derivation is quoted
+in "What was archived" and the disposition is under "Review corrections": the
+counters that would close this are instrument bytes, which a run pull request may
+not move, and they are routed to the sixth authorization's instrument work.
 
 | Arm | ballots | surviving `primary_reason_id` | nulled (model emitted one, the record holds none) | surviving `…_observation_id` | model emitted BOTH ids null |
 | --- | --- | --- | --- | --- | --- |
@@ -386,11 +422,18 @@ DIRECTION rather than a threshold. The manifest says so beside its own copy:
 | # | Prediction, as the manifest states it | Fifth run | This sitting (candidate arm) | Verdict |
 | --- | --- | --- | --- | --- |
 | P1 | F6 costs the impostor its free pass: **the gap narrows** | impostor EJECTs survive 86.8%, crew 51.9% (impostor ahead by 34.9 pp) | impostor 10 of 12 = 83.3%, crew 26 of 27 = 96.3% (crew ahead by 13.0 pp) | **held** — the gap did not narrow, it inverted |
-| P2 | F6 attacks stage 2: **wrongful falls to or below correct** | wrongful coalitions convert 36.4% (8 of 22), correct 18.2% (2 of 11) | wrongful 8 of 8 = 100.0%, correct 1 of 1 = 100.0% | **held by the letter, on n = 1** — wrongful is no longer ABOVE correct, but both rose to 100% and the correct denominator is a single coalition |
+| P2 | F6 attacks stage 2: **wrongful falls to or below correct** | wrongful coalitions convert 36.4% (8 of 22), correct 18.2% (2 of 11) | wrongful 8 of 8 = 100.0%, correct 1 of 1 = 100.0% | **did not hold** — the wrongful rate did not fall, it ROSE from 36.4% to 100.0%; the relative-order clause is satisfied only by a tie at the ceiling, against a correct denominator of one. Re-labelled on review; see "Review corrections" |
 | P3 | F7 equalises the register: **authored EJECTs fall toward 14** | candidate authors 119 EJECT / 31 SKIP of 150 (79.3%) | 39 EJECT / 141 SKIP of 180 (21.7%), against this sitting's reference at 23 of 180 (12.8%) | **held** — the candidate's authoring rate fell by a factor of 3.7 and now sits within 9 points of its own reference |
-| P4 | F4 revives the turn channel: **surviving ids rise, coercions fall** | 0 of 150 keep a `primary_reason_id`; 27 nulled; 44 coerced (`uncited_coerced`) | 32 of 180 keep one; **0** nulled; **0** `uncited_coerced` | **held on both halves** |
+| P4 | F4 revives the turn channel: **surviving ids rise, coercions fall** | 0 of 150 keep a `primary_reason_id`; 27 nulled; 44 coerced (`uncited_coerced`) | 32 of 180 keep one; **0** nulled; **0** `uncited_coerced` | **held on both halves** — the coercion half recomputes from the committed payload; the surviving/nulled-id half is replay-derived and does NOT, see "Review corrections" |
 | P5 | The deduction signal is real: **holds near 63% once volume falls** | crew authored EJECTs name the impostor 51 of 81 (63.0%, p 0.013) | 13 of 27 (48.1%, p 0.649) | **did not hold** — the rate fell to chance on a denominator a third the size |
-| P6 | The vocabulary un-collapses: **flags rise above 1** | 1 contradiction flag against the reference's 14 | **0** flags against the reference's 7; claims 175 accusation / 0 alibi / 0 corroboration against 174 / 42 / 12 | **did not hold** — the candidate's claim vocabulary is still accusations only, and its detector is now silent rather than nearly silent |
+| P6 | The vocabulary un-collapses: **flags rise above 1** | 1 contradiction flag against the reference's 14 | **0** flags against the reference's 7; claims 175 accusation / 0 alibi / 0 corroboration against 174 / 42 / 12 | **did not hold** — the candidate's claim vocabulary is still accusations only, and its detector is now silent rather than nearly silent. Every figure in this row is replay-derived and does NOT recompute from the committed payload, see "Review corrections" |
+
+**Three of the six held and three did not**: P1 and P3 held, P4 held on both of
+its halves, and P2, P5 and P6 did not. P2's verdict was re-labelled on review —
+it was first published as "held by the letter, on n = 1" — because the
+prediction is that the wrongful conversion rate FALLS to or below the correct
+one and it rose instead; the paragraph under "Review corrections" is that
+disposition. Nothing in the tally is a gate or a bar, and no decision reads it.
 
 **What this table is not.** The baseline column is the fifth run, measured on
 DIFFERENT prefixes at a different sample size; a difference between the two
@@ -541,7 +584,11 @@ constants move, and whether, is the limits card's.
 
 **Cross-sitting comparison is on INPUTS, not on arms.** The 2026-09-15 column is
 the same sixty seeds, so the token profile compares directly and the wave's
-prompt bytes are the only thing that moved between those two. The reference arm
+prompt bytes are the only CONFIGURED thing that moved between those two — but a
+seed fixes the scripted prefix and not the meeting each sitting generates, so a
+difference between the two columns mixes the wave's bytes with the difference
+between two hosted generations at nonzero temperature, and is an observed
+difference rather than an effect estimate. The reference arm
 was RE-BASELINED by the citation guard, which both arms of this sitting enable,
 so no reference cell of the fifth run or of either earlier calibration is a
 like-for-like control for this one; and the fifth run's column is a different
@@ -553,7 +600,7 @@ Everything in this directory:
 
 | File | What it is |
 | --- | --- |
-| `calibration.json` | the mode's whole output, 206,332 bytes; every figure above is read from it |
+| `calibration.json` | the mode's whole output, 206,332 bytes; every figure above is read from it EXCEPT the four replay-derived ones named below |
 | `unit-usage.jsonl` | the 120 per-unit usage rows, extracted verbatim from `calibration.json`'s `unit_usage` block |
 | `calibration-run.log` | the sitting's log: the start and end stamps, the documented command with its credential and output paths elided, the exit code, and the payload the mode printed to stdout |
 | `CALIBRATION.md` | this file |
@@ -703,9 +750,16 @@ And the per-unit rows, which are the same bytes as `unit-usage.jsonl`:
 The authored register, the citation channel and the contradiction detector are
 the four figures this file reads off the REPLAYS rather than the payload — the
 authored EJECT/SKIP split, the surviving and nulled `primary_reason_id` counts,
-the contradiction flags and the claim vocabulary. They recompute from the
-sitting's output directory with the derivation below, which prints counts and
-never a rationale, a prompt or a model output:
+the contradiction flags and the claim vocabulary. **They do NOT recompute on a
+clean checkout**, because the replays they are read off are development data that
+the manifest keeps outside version control and this directory holds none of them;
+the command below needs the sitting's own `--output-dir`, which no longer exists.
+"Review corrections" below states that disposition in full, names the manifest
+clause it rests on, and separates the sub-claims that DO recompute from the
+payload from the ones that do not. The derivation is recorded here because it is
+the definition of each count and because the next sitting's instrument work is to
+fold these four counters into the payload; it prints counts and never a
+rationale, a prompt or a model output:
 
 ```sh
 .venv/bin/python - <<'PY'
@@ -779,16 +833,26 @@ PY
   reference 23, and the precision figures rest on 27 and 15 crew ballots
   respectively — denominators at which neither arm separates from the 0.5 null.
 * **The coalition funnel rests on single figures.** One correct coalition on the
-  candidate arm and none on the reference: P2's "wrongful falls to or below
-  correct" is satisfied against a denominator of one, and the reading that
-  survives is the narrower one — the gate now converts everything that clears it,
-  on both classes and on both arms.
+  candidate arm and none on the reference. P2's "wrongful falls to or below
+  correct" reads as MISSED on this funnel: the wrongful rate rose to 100.0% (8 of
+  8) rather than falling, and its order against the correct rate is a tie at the
+  ceiling on a correct denominator of one. The reading that survives is the
+  narrower one — the gate now converts everything that clears it, on both classes
+  and on both arms — and it is a statement about the funnel rather than about F6.
 * **Nine ejections and three are small numerators.** The ejection precision rows
   cannot separate 1-of-9 from the 1/3 chance rate (p 0.974), and the reference's
   0-of-3 says nothing at all.
 * **Zero truncations in sixty impostor-authored candidate ballot draws bounds the
   rate; it does not prove it is zero.** The Wilson 95% upper bound is 6.02% on
   that denominator.
+* **Four of the figures above do not recompute on a clean checkout.** The
+  recorded EJECT/SKIP column, the surviving and nulled `primary_reason_id`
+  counts, the contradiction flags and the claim vocabulary are read off replays
+  the manifest keeps outside version control, so they carry this record's word
+  and no in-tree check. They are P4's surviving-id half and the whole of P6.
+  "Review corrections" names the clause, separates what does recompute, and
+  routes the closing repair — those counters inside `authored_diagnostics` — to
+  the sixth authorization's instrument work.
 * **The leak detector is a lexical rule** over committed turn text gated on the
   speaker's ground-truth role; `ROLE_LEAK_RULE` states in its own words that the
   count is an estimate carrying error in both directions and is not a floor. Zero
@@ -834,3 +898,109 @@ Three, all recorded rather than silent.
 Nothing else departs from the manifest's documented third calibration. The
 `--json` destination — this dated directory — did not exist beforehand and the
 invocation made it, as the manifest's command section says it does.
+
+## Review corrections (2026-09-19)
+
+Four findings were raised against this record on the pull request that publishes
+it, all four by the repository's automated reviewer and all four valid as
+observations. They are dispositioned here, in the record itself, before the
+record merges. **No instrument, prompt, manifest, profile or constant byte moves
+for any of them, no provider call was made, and the sitting was not re-run** —
+this card authorizes exactly one spend and that spend is spent. What moved is
+this file, `../README.md`, `../checkpoint.md`, the card, and the
+`docs/artifacts.md` `audits/` row that any `audits/` byte change recomputes.
+
+**1. P2 is re-labelled MISSED, and the headline that propagated from it is
+corrected.** The prediction the manifest fixed before the sitting is that the
+wrongful coalition conversion rate **falls** to or below the correct one. It did
+not fall: it rose, 36.4% (8 of 22) to 100.0% (8 of 8), and its order against the
+correct rate is a tie at the ceiling on a correct denominator of one. The first
+publication called that "held by the letter, on n = 1", which reads the
+relative-order clause as the whole prediction and drops the fall the mechanism
+claim rests on — F6 was to ATTACK stage 2, and stage 2 converted everything that
+reached it, on both classes and on both arms. Calling it held overstated the
+sitting and carried a "four held, two did not" summary into `../README.md`,
+`../checkpoint.md` and the card. The verdict cell, the tally, the Limitations
+bullet and all three of those documents now read **three held (P1, P3, P4) and
+three did not (P2, P5, P6)**. The prediction's own text did NOT move: it is
+frozen before the sitting in the manifest's "Development calibration 3
+(2026-09-18)" section and in the card's Evidence table, a test holds those two
+copies to the same six rows, and re-reading a verdict is the only correction a
+record may make to a preregistered direction after the fact. Nothing downstream
+changes: no decision rule reads P2, none of the six is a gate, and the owner's
+reading of the sixth band is made from the six verdicts as they now stand.
+
+**2. P4's surviving-id half and the whole of P6 do NOT recompute from committed
+bytes, and that is now stated rather than implied.** AGENTS.md craft rule 5
+(`AGENTS.md:68-69`) requires a number to be reproducible from committed evidence
+with its command in the record. Four figures here are not: the authored
+EJECT/SKIP split's recorded column, the surviving and nulled `primary_reason_id`
+counts, the contradiction flags and the claim vocabulary. They are read off the
+sitting's replays, and the replays are development data that
+[the manifest](../execution-manifest.md)'s "Development calibration 3
+(2026-09-18)" section puts outside version control by name — *"Its rendered
+prompts are development data and are still not committed: its replays go to the
+`--output-dir` the runner names, which is not under version control, and a
+per-seed reading of the six predictions is available there and nowhere else"* —
+which the card's own aggregates acceptance item restates. That clause is the
+authority this record rests on, and it is a deliberate held-out-discipline trade
+rather than an oversight: a replay row carries rendered prompts and model-output
+prose, which this directory's aggregates-only rule forbids and which
+`assert_report_holds_no_prefix_bytes` is run over the payload to prove absent.
+
+What DOES recompute from `calibration.json` is stated so the line is exact.
+P4's coercion half recomputes: `authored_diagnostics.guard_rewrites_by_reason`
+carries `uncited_coerced` 0 on both arms. P3's authored-EJECT numerator
+recomputes: `authored_diagnostics.by_voter_role[].authored` sums to 23 on the
+reference and 39 on the candidate, over 180 ballots per arm. So do the coalition
+funnel, gate survival by role, crew precision with its harm counter, the ejection
+rows, the leak and self-tell columns, and every token, pace and ceiling figure in
+this file. P4's "32 of 180 keep a `primary_reason_id`, 0 nulled" and every figure
+of P6 do not: the payload carries no citation, contradiction or claim field,
+which is why they were derived off the replays in the first place. The verdict
+cells and the section header now say so in place.
+
+The repair that closes this is an INSTRUMENT byte — those four counters belong in
+`authored_diagnostics` beside the ones it already carries — and a run pull
+request may not move an instrument byte. It is routed, with item 3 below, to the
+sixth authorization's instrument work, so the next sitting archives them as
+aggregates instead of deriving them off a directory that does not survive it. It
+cannot be closed retroactively here: the sitting's `--output-dir` no longer
+exists, re-deriving the counts needs a second live spend this card does not
+authorize, and committing the replays themselves is refused by the
+aggregates-only rule above. Until then, P4's surviving-id half and P6 are
+readings this record makes that a clean checkout cannot check, and they are
+marked as such wherever they appear.
+
+**3. The archived `role_leak_rule` is the live evaluation's string, and two of
+its sentences do not fit a no-outcome payload.** It tells the reader that the
+leak count is "a reported column beside the primary outcome" and gives "a further
+reason to read it beside the outcome rather than to gate on it", while this mode
+reports no primary outcome — the same defect the card already repaired for
+`AUTHORED_DIAGNOSTICS_NOTE` by giving mode 3 its own note, and not repaired for
+this string. It is `ROLE_LEAK_RULE`, an instrument constant, so the fix is a
+calibration-specific or outcome-neutral description routed to the sixth
+authorization's instrument work beside item 2, and the live evaluation's own text
+stays byte-identical because it is what the live run publishes under. Nothing in
+this directory is misread meanwhile: both clauses argue the column is NOT a gate,
+which is also this mode's position; the count is **0 on both arms**; and there is
+no outcome in this payload for a reader to read it beside. It is recorded in the
+leak section above as well, so a reader meets the caveat where the number is.
+
+**4. The 11.2% ballot-input rise is re-stated as an observed cross-sitting
+difference.** It was published as the wave's bytes landing on the candidate's
+input side. A seed holds the scripted prefix constant and not the meeting the
+sitting generates, and a ballot prompt renders that generated transcript, so two
+sittings at nonzero temperature do not hold the ballot's input text fixed: this
+sitting's candidate turn output mean is 476.2 against the 2026-09-15 sitting's
+443.0 on the same sixty seeds, and a longer transcript enlarges the ballot prompt
+before a template byte is counted. The measured-profile section now says the
+figure mixes the v5 templates' static bytes with the growth of the transcript
+they produce, that separating the two needs a controlled-transcript measurement
+no sitting has made, and that the sizing conclusion does not rest on the split —
+the largest charged unit is 34,412 input however the rise is apportioned, and
+every ceiling figure is read off that maximum. The comparison section's
+"Cross-sitting comparison is on INPUTS" paragraph is corrected the same way: the
+wave's bytes are the only CONFIGURED difference between the two sittings, and a
+difference between their columns is an observed difference rather than an effect
+estimate.

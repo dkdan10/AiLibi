@@ -84,15 +84,18 @@ This directory records the unadopted follow-through to the owner's independent
   `off_target_coerced`, and ejections by role-correctness. It computes NO paired
   statistic, evaluates NO decision rule and reports NO primary outcome, and it is
   read against six predictions the manifest fixed BEFORE the sitting, none of
-  which is a gate: four held (the gate's role asymmetry inverted, the wrongful
-  coalition conversion is no longer above the correct one, the candidate's
-  authored-ejection rate fell by a factor of 3.7, and the turn-citation channel
-  came back with zero nulled ids and zero `uncited_coerced` coercions), and two
-  did not (the crew per-ballot precision fell to chance, and the candidate's
-  contradiction flags fell to zero on a claim vocabulary that is still
-  accusations only). Zero truncations, zero leaking turns on either arm, one
-  billed refusal and one defaulted turn, $0.00 marginal, and a ceiling proposal
-  that authorizes nothing.
+  which is a gate: three held (the gate's role asymmetry inverted, the
+  candidate's authored-ejection rate fell by a factor of 3.7, and the
+  turn-citation channel came back with zero nulled ids and zero
+  `uncited_coerced` coercions), and three did not (the wrongful coalition
+  conversion rose to 100% instead of falling, the crew per-ballot precision fell
+  to chance, and the candidate's contradiction flags fell to zero on a claim
+  vocabulary that is still accusations only). Zero truncations, zero leaking
+  turns on either arm, one billed refusal and one defaulted turn, $0.00
+  marginal, and a ceiling proposal that authorizes nothing. Its "Review
+  corrections (2026-09-19)" section carries the four dispositions the publishing
+  pull request drew, including that re-labelled verdict and the four
+  replay-derived figures a clean checkout cannot recompute.
 - [Run of 2026-09-16](run-2026-09-16/RESULTS.md) is the fifth held-out attempt
   and the first COMPLETE one: fifty paired seeds of band 8000–8999, both arms,
   one sitting, 601 attempts, all 100 units, no stop and no resumption, $0.00

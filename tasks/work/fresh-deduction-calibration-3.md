@@ -77,6 +77,57 @@ the fifth run's own figures. None is a gate.
 
 ## Acceptance
 
+- [x] Review correction: P2 is re-labelled **did not hold**. The manifest's
+  prediction is that the wrongful coalition conversion rate FALLS to or below the
+  correct one; it rose, 36.4% (8 of 22) to 100.0% (8 of 8), and its order against
+  the correct rate is a tie at the ceiling on a correct denominator of one. The
+  first publication called that "held by the letter, on n = 1", which reads the
+  relative-order clause as the whole prediction and drops the fall the F6
+  mechanism claim rests on. The verdict cell, the tally, the Limitations bullet
+  and the three documents the "four held" headline reached —
+  `audits/deduction-candidate/calibration-3-2026-09-18/CALIBRATION.md`,
+  `audits/deduction-candidate/README.md` and
+  `audits/deduction-candidate/checkpoint.md` — now read three held (P1, P3, P4)
+  and three did not (P2, P5, P6). The prediction's own text does NOT move: it is
+  frozen before the sitting in the manifest and in this card's Evidence table,
+  and `TestTheSixPredictionsAreFixedBeforeTheSitting`
+  (`test_the_module_carries_the_cards_six_rows`,
+  `test_the_manifest_copies_them_verbatim`) holds those two copies and the
+  module's `CALIBRATION_3_PREDICTIONS` to the same six rows.
+- [x] Review correction: the four replay-derived figures are marked as NOT
+  reproducible from committed bytes, with the clause that authorizes it named.
+  AGENTS.md craft rule 5 (`AGENTS.md:68-69`) requires numbers reproducible from
+  committed evidence; the recorded EJECT/SKIP column, the surviving and nulled
+  `primary_reason_id` counts, the contradiction flags and the claim vocabulary
+  are read off replays the manifest's "Development calibration 3 (2026-09-18)"
+  section puts outside version control by name, and this card's aggregates item
+  restates. The record now separates what DOES recompute from `calibration.json`
+  (P4's coercion half via `guard_rewrites_by_reason.uncited_coerced`, P3's
+  numerator via `by_voter_role[].authored` = 23 and 39) from what does not (P4's
+  surviving-id half, all of P6), marks the verdict cells and the section header,
+  and routes the closing repair — those four counters in `authored_diagnostics` —
+  to the sixth authorization's instrument work, an instrument byte this run pull
+  request may not move.
+- [x] Review correction: the archived `role_leak_rule` is dispositioned. It is
+  the live evaluation's `ROLE_LEAK_RULE`, which calls the leak count a column
+  "beside the primary outcome" in a payload that reports none — the defect this
+  card already repaired for `AUTHORED_DIAGNOSTICS_NOTE` and not for this string.
+  `ROLE_LEAK_RULE` is an instrument constant, so the calibration-specific or
+  outcome-neutral description is routed to the sixth authorization's instrument
+  work beside the item above, and the live text stays byte-identical because it
+  is what the live run publishes under. The record states that both clauses argue
+  the column is not a gate, which is also this mode's position, and that the
+  count is 0 on both arms with no outcome beside it to read.
+- [x] Review correction: the 11.2% ballot-input rise is re-stated as an OBSERVED
+  cross-sitting difference rather than as the wave's template bytes. A seed holds
+  the scripted prefix constant and not the meeting the sitting generates, and a
+  ballot prompt renders that generated transcript: this sitting's candidate turn
+  output mean is 476.2 against the 2026-09-15 sitting's 443.0 on the same sixty
+  seeds. The record now says the figure mixes static template bytes with the
+  growth of the transcript they produce, that separating them needs a
+  controlled-transcript measurement no sitting has made, and that the sizing
+  conclusion is unaffected — the largest charged unit is 34,412 input however the
+  rise is apportioned.
 - [x] Review correction: `## Results` counts its own boxes. Its opening
   paragraph numbered the outstanding items one low — it called the committed
   aggregates item 8 and the live sitting item 9, against a list whose item 8 is
@@ -284,20 +335,22 @@ a check here.
 
 ## Results
 
-**Status `done`, and why.** `## Acceptance` carries TWELVE items: the two review
-corrections of round 1, prepended and checked, and the card's original ten. All
-twelve are now met and checked.
+**Status `done`, and why.** `## Acceptance` carries SIXTEEN items: this round's
+FOUR review corrections, prepended and checked; the two review corrections of
+round 1 after them; and the card's original ten. All sixteen are now met and
+checked.
 
-Items 1-10 were met by the implementer, on `work/fresh-deduction-calibration-3`,
+Items 5-14 were met by the implementer, on `work/fresh-deduction-calibration-3`,
 merged as PR #469 (`ef8081c3`); everything below `### The design this follows`
 and above `### The live sitting (2026-09-18)` is that session's record and is
-unedited. Item 11 was split there: its manifest half — the dated "Development
-calibration 3 (2026-09-18)" section, the clause verbatim, the named draw with
-each record's sha256 and seeds, the limits/sampling/lever table and the six
-predictions — was committed then, because the live gate reads that document and
-the sitting could not be authorized without it, while its
+unedited apart from the two cells `### Review corrections (2026-09-19)` names.
+Item 15 was split there: its manifest half — the dated "Development calibration 3
+(2026-09-18)" section, the clause verbatim, the named draw with each record's
+sha256 and seeds, the limits/sampling/lever table and the six predictions — was
+committed then, because the live gate reads that document and the sitting could
+not be authorized without it, while its
 `audits/deduction-candidate/calibration-3-<date>/` aggregates were a product of
-a sitting that had not happened. Item 12 was the sitting itself.
+a sitting that had not happened. Item 16 was the sitting itself.
 
 Both were closed by the RUNNER session on
 `work/fresh-deduction-calibration-3-run`, which is this card's second pull
@@ -514,7 +567,10 @@ now renumbered against the list AS IT NOW STANDS — twelve items, the two revie
 corrections prepended and checked, the original ten after them, items 1-10
 checked, item 11 the split one and item 12 the live sitting — rather than against
 the pre-correction list, so it stays true after the reopen rather than becoming
-wrong by two.
+wrong by two. (That was the list at round 1, and this sentence is left as it was
+written. Round 2 prepends four more corrections, so the opening paragraph is
+renumbered again — sixteen items, 5-14 the implementer's, 15 the split one and 16
+the live sitting.)
 
 **Finding 2 — the mode-3 artifact published the live evaluation's note.**
 `authored_ballot_block` hard-coded `AUTHORED_DIAGNOSTICS_NOTE`, so
@@ -604,8 +660,12 @@ The runner session's record, on `work/fresh-deduction-calibration-3-run` at
 restarted — and wrote no instrument, prompt, manifest or constant byte. The whole
 record is
 [`audits/deduction-candidate/calibration-3-2026-09-18/CALIBRATION.md`](../../audits/deduction-candidate/calibration-3-2026-09-18/CALIBRATION.md);
-every figure below is read from `calibration.json` beside it, or, for the four
-replay-derived rows, recomputed by the derivation that file quotes.
+every figure below is read from `calibration.json` beside it, EXCEPT the four
+replay-derived rows — the recorded EJECT/SKIP column, the surviving and nulled
+`primary_reason_id` counts, the contradiction flags and the claim vocabulary —
+which were computed by the derivation that file quotes off replays the manifest
+keeps outside version control and which therefore do NOT recompute on a clean
+checkout. `### Review corrections (2026-09-19)` is that disposition.
 
 **Pre-flight, before any spend.** `.venv/bin/pytest tests/experiments -q` 610
 passed; both input records bound by `shasum -a 256` to the digests the manifest
@@ -631,10 +691,16 @@ that `assert_calibration_is_authorized` accepts the committed manifest for the
 | `combined_accounts` | ballot | 180 | 4,753.1 | 6,227 | 7,354 | 99.8 | 123 | 130 | 1,024 |
 
 Per unit: reference 20,895.1 in / 1,166.3 out mean, largest 25,247 / 1,602;
-candidate 24,451.9 / 1,728.3 mean, largest **34,412 / 2,764**. The wave's bytes
-land on the candidate's ballot INPUT — 4,753.1 against the 2026-09-15 sitting's
-4,272.6 on the same seeds, +11.2%, with that call's output unmoved. The role
-split and its prose lengths are in the archive.
+candidate 24,451.9 / 1,728.3 mean, largest **34,412 / 2,764**. The candidate's
+ballot INPUT is where the cross-sitting difference sits — 4,753.1 against the
+2026-09-15 sitting's 4,272.6 on the same seeds, +11.2%, with that call's output
+unmoved. That is an OBSERVED difference between two sittings and not an estimate
+of the wave's template bytes: a seed holds the scripted prefix constant and not
+the meeting the sitting generates, the ballot prompt renders that generated
+transcript, and this sitting's candidate turns are longer (turn output mean 476.2
+against 443.0), so the figure mixes static template bytes with transcript growth
+in a proportion no sitting has separated. The sizing conclusion does not rest on
+the split. The role split and its prose lengths are in the archive.
 
 **Truncations: zero**, on both arms, both call types and both roles, by both
 signals. `finish_reason` is `{"stop": 361}` on the reference and `{"stop": 360}`
@@ -678,11 +744,11 @@ decision rule was evaluated.
 | # | Fifth run | This sitting (candidate) | Verdict |
 | --- | --- | --- | --- |
 | P1 the gap narrows | impostor 86.8%, crew 51.9% | impostor 83.3%, crew 96.3% | **held** — inverted rather than narrowed |
-| P2 wrongful falls to or below correct | 36.4% vs 18.2% | 100.0% (8 of 8) vs 100.0% (1 of 1) | **held by the letter, on n = 1** — both rose to 100% |
+| P2 wrongful falls to or below correct | 36.4% vs 18.2% | 100.0% (8 of 8) vs 100.0% (1 of 1) | **did not hold** — wrongful ROSE rather than falling; the order is a tie at the ceiling on n = 1 (re-labelled in round 2) |
 | P3 authored EJECTs fall toward 14 | 119 / 31 of 150 (79.3%) | 39 / 141 of 180 (21.7%), reference 12.8% | **held** |
-| P4 surviving ids rise, coercions fall | 0 of 150 keep one; 27 nulled; 44 coerced | 32 of 180 keep one; 0 nulled; 0 `uncited_coerced` | **held on both halves** |
+| P4 surviving ids rise, coercions fall | 0 of 150 keep one; 27 nulled; 44 coerced | 32 of 180 keep one; 0 nulled; 0 `uncited_coerced` | **held on both halves** — the coercion half recomputes from the payload, the surviving-id half is replay-derived and does not |
 | P5 holds near 63% | 51 of 81 (63.0%, p 0.013) | 13 of 27 (48.1%, p 0.649) | **did not hold** |
-| P6 flags rise above 1 | 1 against 14 | 0 against 7 | **did not hold** |
+| P6 flags rise above 1 | 1 against 14 | 0 against 7 | **did not hold** — every figure in the row is replay-derived and does not recompute from the payload |
 
 **Pace and usage.** 14.89 s per attempt pooled (13.49 s reference, 16.30 s
 candidate), 10,737.2 s of model work inside 10,744.1 s elapsed. Against the
@@ -770,3 +836,123 @@ exit code captured directly rather than through a pipe:
 bytes, 324 → 328 files**. The credential scan is count-only and returned 0 and 0
 on three denominators: the 4 files of the archive directory, the 9 files this
 pull request changes, and all 22,280 files of the worktree.
+
+### Review corrections (2026-09-19)
+
+Four findings were raised against the sitting's record on PR #470, all four by
+the repository's automated reviewer and all four valid as observations. They are
+the four `Review correction:` acceptance items at the top of `## Acceptance`, and
+each is dispositioned IN THE RECORD, under
+[`CALIBRATION.md`'s own "Review corrections (2026-09-19)"](../../audits/deduction-candidate/calibration-3-2026-09-18/CALIBRATION.md)
+section as well as in place where each number sits. The card stays `done`.
+
+**Nothing measured moved.** The sitting was not re-run and **no provider call was
+made in this round**: this card authorizes exactly one live spend and that spend
+is spent, so every repair is a reading of bytes already committed. No instrument,
+prompt, manifest, profile, constant, recording, report, DTO, metric or weight
+byte moves; no lever changes default; no experiment becomes ON; the held-out
+record at `MANIFEST_PATH` is untouched; `calibration.json`, `unit-usage.jsonl` and
+`calibration-run.log` are byte-identical, so the log's stdout body still matches
+the payload at sha256 `ce5e9561…6984`; `CALIBRATION_CAVEAT`, `CALIBRATION_3_CAVEAT`,
+`AUTHORED_DIAGNOSTICS_NOTE`, `ROLE_LEAK_RULE`, `PRIMARY_OUTCOME`, `DECISION_RULE`,
+`MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE`
+are byte-identical; and the six predictions themselves are untouched in both the
+manifest and this card's Evidence table, which
+`TestTheSixPredictionsAreFixedBeforeTheSitting` holds to the same six rows. The
+arm-surface digest does not move, because the instrument did not.
+
+**Finding 1 — P2 was recorded as held although wrongful conversion ROSE.** Valid,
+and repaired by re-labelling rather than by argument. The prediction is that the
+wrongful coalition conversion rate FALLS to or below the correct one; it rose
+from 36.4% (8 of 22) to 100.0% (8 of 8), and its order against the correct rate
+is a tie at the ceiling on a correct denominator of one. "Held by the letter, on
+n = 1" reads the relative-order clause as the whole prediction and drops the fall
+that the F6 mechanism claim — F6 ATTACKS stage 2 — rests on. P2 now reads **did
+not hold** in the archive's prediction table, in the live-sitting table above, in
+the archive's Limitations bullet on the funnel, and the "four held, two did not"
+headline reads **three held (P1, P3, P4), three did not (P2, P5, P6)** in
+`audits/deduction-candidate/README.md` and `audits/deduction-candidate/checkpoint.md`
+as well. The owner's reading of the sixth band is made from the six verdicts as
+they now stand.
+
+**Finding 2 — P4 and P6 are not reproducible from any committed byte.** Valid,
+and dispositioned rather than closed, because closing it here is not available.
+AGENTS.md craft rule 5 (`AGENTS.md:68-69`) requires numbers reproducible from
+committed evidence. Four figures are not: the recorded EJECT/SKIP column, the
+surviving and nulled `primary_reason_id` counts, the contradiction flags and the
+claim vocabulary. They are read off the sitting's replays, which
+`audits/deduction-candidate/execution-manifest.md`'s "Development calibration 3
+(2026-09-18)" section puts outside version control BY NAME — *"its replays go to
+the `--output-dir` the runner names, which is not under version control, and a
+per-seed reading of the six predictions is available there and nowhere else"* —
+and which this card's own aggregates item restates. That is the clause, and it is
+a held-out-discipline trade rather than an oversight: a replay row carries
+rendered prompts and model-output prose, which this directory's aggregates-only
+rule forbids. The record now separates the sub-claims exactly: P4's coercion half
+recomputes (`authored_diagnostics.guard_rewrites_by_reason.uncited_coerced` = 0
+on both arms) and P3's numerator recomputes
+(`authored_diagnostics.by_voter_role[].authored` sums to 23 and 39 over 180
+ballots per arm), while P4's "32 of 180 keep one, 0 nulled" and every figure of
+P6 do not, the payload carrying no citation, contradiction or claim field. The
+closing repair is those four counters in `authored_diagnostics` — an INSTRUMENT
+byte, which a run pull request may not move — and it is routed to the sixth
+authorization's instrument work. It cannot be closed retroactively: the sitting's
+`--output-dir` no longer exists, re-deriving the counts needs a second live spend
+this card does not authorize, and committing the replays is refused by the
+aggregates-only rule.
+
+**Finding 3 — the archived `role_leak_rule` tells the reader to read the leak
+count beside a primary outcome this payload does not report.** Valid. It is
+`ROLE_LEAK_RULE`, the live evaluation's string, carrying the same defect this
+card already repaired for `AUTHORED_DIAGNOSTICS_NOTE` by giving mode 3 its own
+note. The fix is a calibration-specific or outcome-neutral description, which is
+an instrument constant and therefore out of this run pull request's scope; it is
+routed to the sixth authorization's instrument work beside finding 2, and the
+live text stays byte-identical because it is what the live run publishes under.
+The archive's leak section now records that the archived text is the live-run
+string, that both of the disputed clauses argue the column is NOT a gate — which
+is also this mode's position — and that the count is **0 on both arms** with no
+outcome in the payload for a reader to read it beside.
+
+**Finding 4 — the 11.2% ballot-input rise was attributed to v5 template bytes.**
+Valid. A seed holds the scripted prefix constant and not the meeting the sitting
+generates, and a ballot prompt renders that generated transcript, so two sittings
+at nonzero temperature do not hold the ballot's input text fixed. The confound is
+measurable in the committed payloads: this sitting's candidate turn output mean
+is 476.2 against `calibration-2-2026-09-15/calibration.json`'s 443.0 on the same
+sixty seeds. Both the archive's measured-profile section and the token-profile
+paragraph above now state the figure as an OBSERVED cross-sitting difference that
+mixes static template bytes with transcript growth, say that separating them
+needs a controlled-transcript measurement no sitting has made, and say that the
+sizing conclusion does not rest on the split — the largest charged unit is 34,412
+input however the rise is apportioned.
+
+**Record impact of this round.** `audits/` bytes moved (three files: the
+archive's `CALIBRATION.md`, `README.md` and `checkpoint.md`), so
+`docs/artifacts.md`'s inventory row was recomputed from `git ls-files audits/`
+with the change staged: **26,509,796 → 26,522,872 tracked bytes, 328 files
+unchanged**. Five files move in this round and no sixth: the archive's
+`CALIBRATION.md`, `docs/artifacts.md`'s `audits/` row and this card are Expected
+scope; `audits/deduction-candidate/README.md` and
+`audits/deduction-candidate/checkpoint.md` are the sitting's already-recorded
+deviation 3, corrected here rather than newly touched, because the headline this
+round re-labels is the one they carry. This round
+adds no committed byte that a credential could reach — every change is prose this
+session wrote, plus one number in `docs/artifacts.md` — and a count-only scan of
+its whole diff for key-shaped strings (`FEATHERLESS`, `API_KEY`, `sk-…`, `secret`
+and any run of 32 or more identifier characters) returns matches that are **all
+symbol names** — `assert_calibration_reports_no_outcome`,
+`assert_report_holds_no_prefix_bytes`,
+`TestTheSixPredictionsAreFixedBeforeTheSitting` and its two case names — and zero
+credentials. The sitting's own three-denominator scan stands from the subsection
+above: none of the archive's four files moved in this round except
+`CALIBRATION.md`, whose added bytes are this section's prose.
+
+| Command | Result |
+| --- | --- |
+| `uv run python scripts/validate_task_docs.py` | passed: 390 historical phase tasks and 390 prompts; 66 work cards |
+| `uv run python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `uv run pytest tests/experiments -q` | 610 passed |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7 (the class-(c) evidence branch, expected on a fresh checkout), INFO 5 — and FAIL 1 on the in-tree family inventory until the `audits/` row above was recomputed, which is the gate that catches an un-recomputed row |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | see below, run whole with its real exit code |
