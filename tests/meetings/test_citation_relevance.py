@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from experiments.fresh_deduction_instrument import (
     grade_citation_relevance,
 )
 from meetings.citation_relevance import (
+    carries_citation,
     citations_bear_on,
     cited_line_names,
     every_string_in,
@@ -79,6 +81,30 @@ class TestWholeTokenMatch:
     def test_punctuation_still_bounds_the_token(self) -> None:
         assert names_player("I accuse p-1.", "p-1") is True
         assert names_player("(p-1)", "p-1") is True
+
+    def test_a_longer_observation_id_is_not_the_citation_it_starts_with(
+        self,
+    ) -> None:
+        # PLANTED, and the same defect as the player half: an observation id is
+        # `{agent}:{tick}:{seq}`, so a substring match reads the line of
+        # `p-1:4:10` as carrying a citation of `p-1:4:1`. That is the voter's
+        # TENTH observation of tick 4 answering for its FIRST.
+        assert carries_citation("[obs p-1:4:10] tick 4: p-2 vented.", "p-1:4:1") is (
+            False
+        )
+        assert carries_citation("[obs p-1:4:1] tick 4: p-2 vented.", "p-1:4:1") is True
+
+    def test_the_citation_token_is_bounded_on_both_sides(self) -> None:
+        # The lookbehind too, for the same reason the player rule has one: an
+        # id that ENDS with the cited id is not the cited id. Today's agent ids
+        # cannot build that collision, and a boundary rule that only holds on
+        # one side is wrong wherever it is applied.
+        assert carries_citation("[obs xp-1:4:1] tick 4: p-2 vented.", "p-1:4:1") is (
+            False
+        )
+        # A bare id with no wrapper still matches: the rule is the id, not the
+        # `[obs ...]` render dressing.
+        assert carries_citation("cited p-1:4:1, which I saw.", "p-1:4:1") is True
 
 
 class TestTurnAboutness:
@@ -144,6 +170,22 @@ class TestCitedLineRule:
             player="p-2",
         )
 
+    def test_a_longer_id_does_not_answer_for_a_shorter_citation(self) -> None:
+        # PLANTED against the substring rule this module shipped with: the
+        # cited record is about p-3, and the only line naming p-2 belongs to a
+        # DIFFERENT observation whose id merely starts with the cited one. A
+        # substring test answers True here, which is the gate failing OPEN on
+        # the exact class it exists to close.
+        lines = [
+            "[obs p-1:4:1] tick 4: p-3 left ELECTRICAL.",
+            "[obs p-1:4:10] tick 4: p-2 vented in MEDBAY.",
+        ]
+        assert not cited_line_names(lines, citation="p-1:4:1", player="p-2")
+        # The collision is one-directional: the longer id's own citation still
+        # reads its own line.
+        assert cited_line_names(lines, citation="p-1:4:10", player="p-2")
+        assert cited_line_names(lines, citation="p-1:4:1", player="p-3")
+
 
 class TestTheTwoWalkersAgree:
     """The instrument keeps its own walker; the two must read a turn the same.
@@ -198,6 +240,10 @@ class TestTheImportDirection:
         assert "experiments" not in imported
         assert "engine" not in imported
         assert imported <= {"__future__", "re", "collections", "typing", "meetings"}
+
+
+#: The rendered observation handle, as ``agents/memory/store.py`` folds it in.
+_RENDERED_OBSERVATION_ID = re.compile(r"\[obs ([0-9A-Za-z_:-]+)\]")
 
 
 def _committed_meeting_rows() -> list[dict[str, Any]]:
@@ -292,6 +338,97 @@ class TestGuardAndGraderCannotDisagree:
         assert compared == 578, compared
         # PLANTED would be silent on a set the rule never bites: it bites here.
         assert coerced > 0, coerced
+
+    def test_a_prefix_colliding_citation_is_off_target_for_both_callers(self) -> None:
+        """One rule, so a WRONG rule is wrong in both callers and they agree.
+
+        The case above pins agreement and cannot pin correctness: the shared
+        substring rule this module shipped with answered ``relevant`` in both
+        callers on this ballot. So the verdict itself is stated here, on both
+        callers, over the one surface the rule can be fooled by -- a cited id
+        that is a strict PREFIX of another id rendered in the same prompt.
+        """
+
+        ballot = VoteBallot(
+            voter="p-1",
+            target="p-2",
+            confidence=0.8,
+            primary_reason_id=None,
+            primary_reason_observation_id="p-1:4:1",
+            considered_alternatives=(),
+            rationale_text="they vented.",
+        )
+        prompt = "\n".join(
+            [
+                "- [obs p-1:4:1] tick 4: p-3 left ELECTRICAL.",
+                "- [obs p-1:4:10] tick 4: p-2 vented in MEDBAY.",
+            ]
+        )
+        guarded = guard_ballot_citation(
+            ballot=ballot,
+            contradictions=(),
+            citation_relevance_version=1,
+            prompt_lines=prompt.splitlines(),
+        )
+        assert guarded.target == "SKIP"
+        assert guarded.guard_rewrite_reason == "off_target_coerced"
+        assert guarded.rationale_text.startswith(
+            OFF_TARGET_CITATION_EJECT_MARKER.format(target="p-2")
+        )
+        grade = grade_citation_relevance(
+            [ballot],
+            subject="p-2",
+            turns=(),
+            prompts_by_agent={"p-1": (prompt,)},
+        )[0]
+        assert grade.verdict == "off_target"
+        # And the ballot that really does cite the vent line still stands, in
+        # both callers: the fix is a boundary, not a blanket refusal.
+        on_target = ballot.model_copy(
+            update={"primary_reason_observation_id": "p-1:4:10"}
+        )
+        assert (
+            guard_ballot_citation(
+                ballot=on_target,
+                contradictions=(),
+                citation_relevance_version=1,
+                prompt_lines=prompt.splitlines(),
+            )
+            is on_target
+        )
+        assert (
+            grade_citation_relevance(
+                [on_target],
+                subject="p-2",
+                turns=(),
+                prompts_by_agent={"p-1": (prompt,)},
+            )[0].verdict
+            == "relevant"
+        )
+
+    def test_the_collision_is_reachable_on_committed_bytes(self) -> None:
+        """The case above is not hypothetical: committed prompts render it.
+
+        A voter's tenth observation within one tick is what mints the pair, and
+        the committed sample prompts hold 244 of them. The count is pinned the
+        way this module pins ``compared``: over bytes that move only when a card
+        deliberately moves them.
+        """
+
+        colliding = 0
+        for row in _committed_meeting_rows():
+            for call in row["llm_calls"]:
+                prompt = call.get("prompt")
+                if not isinstance(prompt, str) or not prompt:
+                    continue
+                ids = sorted(set(_RENDERED_OBSERVATION_ID.findall(prompt)))
+                if any(
+                    other != one and other.startswith(one)
+                    for one in ids
+                    for other in ids
+                ):
+                    colliding += 1
+        assert colliding == 244, colliding
 
 
 class TestTheCompositionIsShared:

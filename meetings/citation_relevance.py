@@ -39,11 +39,37 @@ from meetings.schemas import MeetingTurn, PlayerId
 #: ``-2`` suffix can satisfy a shorter one.
 PLAYER_TOKEN: Final[str] = r"(?<![0-9A-Za-z_-]){player}(?![0-9A-Za-z_-])"
 
+#: A CITATION is a whole token for the same reason, and the reason bites harder:
+#: an observation id is ``{agent}:{tick}:{seq}``
+#: (:func:`agents.memory.episodic.derive_observation_id`), so ``p-1:4:1`` is a
+#: string prefix of ``p-1:4:10`` the moment a voter's tenth observation of that
+#: tick renders. A substring test would let the LONGER id's line answer for the
+#: SHORTER id's citation -- and the gate would fail OPEN on exactly the class it
+#: exists to close, because that other line is the one naming somebody else. The
+#: class is the player alphabet plus ``:``, the only characters that can extend
+#: an id on either side.
+CITATION_TOKEN: Final[str] = r"(?<![0-9A-Za-z_:-]){citation}(?![0-9A-Za-z_:-])"
+
 
 def names_player(text: str, player: str) -> bool:
     """Whether ``text`` names ``player`` as a whole id rather than as a prefix."""
 
     return re.search(PLAYER_TOKEN.format(player=re.escape(player)), text) is not None
+
+
+def carries_citation(text: str, citation: str) -> bool:
+    """Whether ``text`` carries ``citation`` as a whole id rather than as a prefix.
+
+    The citation twin of :func:`names_player`, and deliberately a boundary rule
+    rather than a match on the rendered ``[obs {id}] `` wrapper
+    (:func:`agents.memory.store.render_for_prompt`): the wrapper is render
+    dressing that a caller's surface may or may not carry, while the id is what
+    a ballot actually cites.
+    """
+
+    return (
+        re.search(CITATION_TOKEN.format(citation=re.escape(citation)), text) is not None
+    )
 
 
 def every_string_in(value: object) -> list[str]:
@@ -99,9 +125,17 @@ def cited_line_names(lines: Sequence[str], *, citation: str, player: PlayerId) -
     The line is the unit because the rendered memory prints one observation per
     line: an id and a name in the same line are the same record, an id and a
     name in the same prompt are not.
+
+    BOTH halves are whole-token matches (:func:`carries_citation`,
+    :func:`names_player`). A substring test on either half reads a record the
+    line does not hold: ``p-1`` inside ``p-10`` on the name half, and the line
+    of ``p-1:4:10`` answering for a citation of ``p-1:4:1`` on the id half.
     """
 
-    return any(citation in line and names_player(line, player) for line in lines)
+    return any(
+        carries_citation(line, citation) and names_player(line, player)
+        for line in lines
+    )
 
 
 def citations_bear_on(

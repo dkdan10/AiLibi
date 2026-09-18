@@ -78,6 +78,39 @@ redirect-keeps-citation ballot passing, the fixture the lever flips.
 
 ## Acceptance
 
+- [x] Review correction: the shared aboutness rule matches the cited
+  observation id as a WHOLE TOKEN, so the line of `p-1:4:10` can no longer
+  answer for a citation of `p-1:4:1`. `meetings/citation_relevance.py` gains
+  `CITATION_TOKEN` / `carries_citation` beside the player pair, and
+  `cited_line_names` composes both halves, so the guard and the grader move
+  together. Proved by
+  `tests/meetings/test_citation_relevance.py::TestCitedLineRule::
+  test_a_longer_id_does_not_answer_for_a_shorter_citation` and
+  `::TestGuardAndGraderCannotDisagree::
+  test_a_prefix_colliding_citation_is_off_target_for_both_callers`, which
+  asserts the verdict on `guard_ballot_citation` under the lever AND on
+  `grade_citation_relevance`; restoring `citation in line` reds both plus
+  `tests/meetings/test_citation_gate.py::TestCitationRelevanceLever::
+  test_a_cited_id_is_not_satisfied_by_a_longer_ids_line`.
+- [x] Review correction: the class is pinned as REACHABLE on committed bytes
+  rather than argued, and the published counterfactual is re-run under the
+  corrected rule.
+  `tests/meetings/test_citation_relevance.py::TestGuardAndGraderCannotDisagree::
+  test_the_collision_is_reachable_on_committed_bytes` counts 244 committed
+  sample prompts holding a prefix-colliding id pair, and
+  `.venv/bin/python experiments/citation_relevance_counterfactual.py
+  audits/deduction-candidate/run-2026-09-16` reproduces every published cell
+  unchanged. Same defect as the item above, raised by a second lens and closed
+  by the same one-line change to the one shared rule.
+- [x] Review correction: the round-1 plant claim about
+  `test_every_restamp_note_counts_the_band_the_manifest_actually_holds` is
+  corrected. Editing the note in `experiments/held_out_prefixes.py` alone reds
+  THREE tests, not one, because the note and that module's digest are both
+  fields of the committed manifest. The isolating plant is the pre-correction
+  PAIR: `git checkout 13b085a1 -- experiments/held_out_prefixes.py
+  audits/deduction-candidate/held-out/manifest.json` then
+  `.venv/bin/python -m pytest tests/experiments/test_held_out_prefixes.py -q`
+  gives `1 failed, 35 passed`, the one red being this gate.
 - [x] Review correction: the reference arm's naming-ballot role split reads
   `0 of 1 / 0 of 1`, not `0 of 0 / 0 of 2`, in this card's Results table and in
   the execution manifest's dated section. The archive's two reference naming
@@ -688,9 +721,9 @@ test_every_restamp_note_counts_the_band_the_manifest_actually_holds` reads every
 `<count> digests` and `<count> skips` claim out of every restamp note, in words
 or digits, and compares it with the committed manifest's own lists — and fails a
 note that states neither, because the restamp rule rests on both. Planted:
-restoring "the two skips" gives `assert {2} == {8}` on that test, with the rest
-of the module green, so the gate fails on exactly the defect it was written for
-and on nothing else.
+restoring "the two skips" gives `assert {2} == {8}` on that test. It is not the
+only red, and the round-2 subsection below carries the correction and the plant
+that does isolate.
 
 **Record impact of this round.** Two `audits/` files moved again — the execution
 manifest's dated section and the regenerated held-out manifest — so
@@ -710,3 +743,155 @@ round flips no Status and adds no card. No provider call of any kind was made.
 | `bash scripts/verify_samples.sh` | exit 0; "All 50 samples verified clean" on each of the two sets |
 | `build_sample_report.py --sample-dir <set> --check`, four sets | exit 0 each |
 | `experiments/citation_relevance_counterfactual.py audits/deduction-candidate/run-2026-09-16` | exit 0; the split above |
+
+### Review corrections, round 2 (2026-09-18)
+
+Three findings from the independent verifiers, two distinct defects: one in the
+shipped rule — the first real behaviour defect this card has had — and one in a
+claim about a plant. Delivered in one further commit on this branch; the
+commands below are pinned to it. No lever semantics changed, no primary
+outcome, decision rule, tradeoff bound or stop rule moved, no `audits/` byte
+moved, and every published cell of the counterfactual reproduces unchanged.
+
+**1. The shared aboutness rule matched the cited id by SUBSTRING (findings 1
+and 2).** `cited_line_names` asked `citation in line`. An observation id is
+`{agent}:{tick}:{seq}` (`agents/memory/episodic.py::derive_observation_id`),
+rendered `[obs <id>] ` into the line (`agents/memory/store.py`), so `p-1:4:1` is
+a string prefix of `p-1:4:10`: a voter's TENTH observation of a tick could
+answer for its FIRST. The half of the rule that matches the PLAYER has been a
+whole-token match since the module was written (`p-1` must not match inside
+`p-10`); the half that matches the CITATION was not, and that is the half the
+gate turns on. Reproduced before the fix, on two lines the memory renderer can
+emit:
+
+```
+lines = ["[obs p-1:4:1] tick 4: p-3 left ELECTRICAL.",
+         "[obs p-1:4:10] tick 4: p-2 vented in MEDBAY."]
+ballot: p-1 EJECT p-2 citing p-1:4:1
+guard under the lever -> target p-2, no rewrite      grader -> "relevant"
+```
+
+The cited record is about `p-3`; the only line naming `p-2` is a different
+observation. So the gate failed OPEN on exactly the class it exists to close,
+and because the guard and the grader share one rule they agreed on the wrong
+answer — which is why `TestGuardAndGraderCannotDisagree`, the case that pins
+agreement, could not see it.
+
+Fixed in the ONE shared rule, so both callers moved together:
+`meetings/citation_relevance.py` gains `CITATION_TOKEN` and `carries_citation`
+beside `PLAYER_TOKEN` and `names_player`, a lookaround over the id alphabet
+plus `:` — the only characters that can extend an id — and `cited_line_names`
+now composes two whole-token matches. A boundary rule rather than a match on
+the rendered `[obs {id}] ` wrapper, because the wrapper is render dressing a
+caller's surface may or may not carry while the id is what a ballot cites; the
+bare-id case is asserted. `CITATION_RELEVANCE_RUBRIC` is a frozen-analysis
+constant and does NOT move: the fix brings the code to what the rubric already
+says — "the rendered `[obs ...]` memory line the id was copied from" — and the
+frozen-analysis byte-identity walk stays green.
+
+Three planted cases, one per caller and one on the rule:
+`tests/meetings/test_citation_relevance.py::TestCitedLineRule::
+test_a_longer_id_does_not_answer_for_a_shorter_citation`,
+`::TestGuardAndGraderCannotDisagree::
+test_a_prefix_colliding_citation_is_off_target_for_both_callers` (the verdict
+asserted on `guard_ballot_citation` under the lever AND on
+`grade_citation_relevance`, with the on-target twin still standing in both), and
+`tests/meetings/test_citation_gate.py::TestCitationRelevanceLever::
+test_a_cited_id_is_not_satisfied_by_a_longer_ids_line`. Planted: restoring
+`citation in line` in `cited_line_names` reds exactly those three and nothing
+else in the two modules — `assert 'p-2' == 'SKIP'` on the guard — while
+`test_every_committed_ballot_gets_one_verdict` stays GREEN, which is the
+finding's point about a shared defect stated as a test result. Two whole-token
+unit cases sit beside the player ones in `TestWholeTokenMatch`.
+
+The class is reachable, and pinned rather than argued:
+`::TestGuardAndGraderCannotDisagree::
+test_the_collision_is_reachable_on_committed_bytes` counts the committed sample
+prompts that render a prefix-colliding id pair and pins the count at 244, the
+way that class already pins `compared == 578`.
+
+**The published counterfactual does not move.** Re-run under the corrected rule:
+
+```sh
+.venv/bin/python experiments/citation_relevance_counterfactual.py \
+  audits/deduction-candidate/run-2026-09-16
+```
+
+Every cell of both tables above reproduces byte for byte — reach 20 / 1, naming
+24 / 2, `{off_target: 7, relevant: 15, uncited: 2}`, crew-impostor 16 / 8 and
+3 / 4, ejections 12 → 5 and 1 → 1, role-correct 4 → 3, wrongful 8 → 2,
+`supported_correct_ejection` 2 → 2, 7 units moved, 0 invented. The fifth run's
+archive renders no colliding pair inside a cited ballot's own surface (its
+highest rendered seq is single-digit), so no published figure needed restating.
+The defect was a forward risk, not a retrospective error.
+
+**2. A Results claim about the held-out gate's plant did not reproduce (finding
+3).** The round-1 subsection said restoring "the two skips" reds that gate "with
+the rest of the module green". It does not: editing the note in
+`experiments/held_out_prefixes.py` alone gives `3 failed, 33 passed` —
+`test_every_restamp_note_counts_the_band_the_manifest_actually_holds`
+(`assert {2} == {8}`), plus
+`test_the_committed_manifest_regenerates_from_its_own_band` and
+`test_the_current_freeze_is_the_fifth_band_and_records_its_restamps`. Both extra
+reds are structural and expected: the note TEXT and that module's own
+`source_sha256` are both fields of the committed manifest, so any edit to the
+note moves the regenerated manifest away from the committed one. The round-1
+sentence is corrected in place above and the claim is restated here.
+
+The plant that ISOLATES restores the pre-correction PAIR — module and manifest
+together, exactly as `13b085a1` shipped them, which is the state in which the
+wrong note was live:
+
+```sh
+git checkout 13b085a1 -- experiments/held_out_prefixes.py \
+  audits/deduction-candidate/held-out/manifest.json
+.venv/bin/python -m pytest tests/experiments/test_held_out_prefixes.py -q
+git checkout HEAD -- experiments/held_out_prefixes.py \
+  audits/deduction-candidate/held-out/manifest.json
+```
+
+`1 failed, 35 passed`, the one red being the new gate with `assert {2} == {8}`.
+That is the load-bearing claim the round-1 wording was reaching for and stated
+too strongly: a note that was wrong from birth was regenerated INTO the
+manifest and stayed green there, so the regeneration test cannot catch it and
+only the new gate can. Restoring the two paths from `HEAD` returns the module
+to `36 passed`.
+
+**Considered and not done: the new module is not in `ARM_SURFACE_SOURCES`.**
+This card moved the aboutness rule out of `experiments/fresh_deduction_instrument.py`
+(a named arm-surface source) into `meetings/citation_relevance.py` (not one), so
+an edit to the rule — this round's included — changes what both arms record
+under the lever without moving `arm_surface_digests()`, and a resume would
+accept it. Not closed here: the round-1 acceptance item and the manifest's dated
+section both fix the surface at the seven files that tuple names today, so an
+eighth entry is a declaration change in an `audits/` document rather than a
+review correction, and this round moves no `audits/` byte. Flagged for the owner
+in the pull request alongside the DTO limitation. It is not a hole in THIS
+merge: the digest already moves on four of the seven, so no sitting begun before
+this merge is resumable either way.
+
+**Record impact of this round.** Nothing under `audits/`, `tests/fixtures/`,
+`replays/` or any recording, report, DTO, metric or weight moved, so
+`docs/artifacts.md`'s inventory rows are untouched and no restamp is due: the
+three files this round edits are `meetings/citation_relevance.py`,
+`tests/meetings/test_citation_relevance.py` and
+`tests/meetings/test_citation_gate.py`, none of them a `GENERATOR_SOURCES`
+member (`meetings/` holds none). `tasks/README.md`'s inventory sentence is
+unchanged: this round flips no Status and adds no card. `verify_samples.sh` and
+the four `--check` runs pass untouched, and the lever is still DEFAULT OFF, so
+no committed byte can reach the corrected rule. No provider call of any kind was
+made and no band was generated, printed or opened beyond the committed
+regeneration test.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 (ruff, format 512 files, lint-imports 4 kept / 0 broken, validate_task_docs 66 work cards, generate_prompts --check 390 in sync, mypy 483 files, 7,921 passed / 20 skipped / 3 xfailed, frontend 515 vitest + build) |
+| `.venv/bin/python -m pytest tests/meetings tests/experiments tests/api tests/orchestrator tests/test_firewall.py -q` | 2975 passed, 2 skipped, 3 xfailed, exit 0 |
+| `.venv/bin/python -m pytest tests/meetings/test_citation_relevance.py tests/meetings/test_citation_gate.py -q` | 51 passed, exit 0 |
+| `.venv/bin/python -m pytest tests/experiments/test_held_out_prefixes.py -q` | 36 passed, exit 0; `1 failed, 35 passed` under the isolating plant above |
+| `.venv/bin/python scripts/check_doc_facts.py` | passed; the 5-switch experiment registry |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | 60 checks, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed, exit 0 |
+| `bash scripts/verify_samples.sh` | exit 0; "All 50 samples verified clean" on each of the two sets |
+| `build_sample_report.py --sample-dir <set> --check`, four sets | exit 0 each; "consistent with its replays" |
+| `experiments/citation_relevance_counterfactual.py audits/deduction-candidate/run-2026-09-16` | exit 0; every cell unmoved |

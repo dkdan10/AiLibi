@@ -718,6 +718,38 @@ class TestCitationRelevanceLever:
             is on_target
         )
 
+    def test_a_cited_id_is_not_satisfied_by_a_longer_ids_line(self) -> None:
+        # PLANTED against the substring rule the shared module shipped with:
+        # `p-1:4:1` is a string prefix of `p-1:4:10`, so the voter's TENTH
+        # observation of tick 4 -- the only line naming p-2 -- answered for its
+        # FIRST, and this EJECT passed the gate ON. Ids are
+        # `{agent}:{tick}:{seq}`, so every voter reaching a tenth observation in
+        # a tick renders the collision.
+        ballot = _ballot(target="p-2", primary_reason_observation_id="p-1:4:1")
+        lines = [
+            "[obs p-1:4:1] tick 4: p-3 left ELECTRICAL.",
+            "[obs p-1:4:10] tick 4: p-2 vented in MEDBAY.",
+        ]
+        coerced = guard_ballot_citation(
+            ballot=ballot,
+            contradictions=(),
+            citation_relevance_version=1,
+            prompt_lines=lines,
+        )
+        assert coerced.target == "SKIP"
+        assert coerced.guard_rewrite_reason == "off_target_coerced"
+        # The ballot that cites the vent line itself still ejects.
+        on_target = _ballot(target="p-2", primary_reason_observation_id="p-1:4:10")
+        assert (
+            guard_ballot_citation(
+                ballot=on_target,
+                contradictions=(),
+                citation_relevance_version=1,
+                prompt_lines=lines,
+            )
+            is on_target
+        )
+
     def test_an_uncited_eject_keeps_its_own_reason_under_the_lever(self) -> None:
         # The lever adds a class; it does not relabel the one that was there.
         ballot = _ballot(target="p-2")
