@@ -339,7 +339,7 @@ def main(directory: Path) -> int:
             for name, arm in sorted(arms.items())
         },
     }
-    invented = sum(a["ejections_invented"] for a in payload["arms"].values())  # type: ignore[union-attr]
+    invented = sum(arm["ejections_invented"] for arm in arms.values())
     if invented:
         raise CounterfactualError(
             f"{invented} unit(s) gained an ejection the archive did not have; "
