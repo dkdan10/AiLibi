@@ -501,6 +501,11 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "bounded_rebuttal_version",
         "public_account_version",
         "attributed_testimony_version",
+        # The relevance half of the ballot citation gate, carried on
+        # RecordedExperimentConfig and so reachable from the report's
+        # provenance. A lever version number, not engine or role state, and
+        # serialized only when it is ON — so no committed report's bytes move.
+        "citation_relevance_version",
         "provenance_groups",
         "game_ids",
         "skip_confidence_threshold",

@@ -133,6 +133,7 @@ from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
+    OFF_TARGET_CITATION_EJECT_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -183,9 +184,14 @@ _MARKER_REPR_VALUE: str = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 # (label, marker) for every audit marker the meeting layer PREPENDS to a ballot's
 # ``rationale_text``, built from the imported production literals so a rename
 # breaks loudly here. Mirrors ``api.replay_loader._BALLOT_PREFIX_MARKERS`` — the
-# display layer's table over the same six kinds — and a test pins the two label
-# sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the seventh kind and
+# display layer's table over the same seven kinds — and a test pins the two label
+# sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the eighth kind and
 # sits apart: it is the WHOLE rationale, not a prefix.
+#
+# ``off_target_coerced`` is the relevance half of the citation gate and is minted
+# only while ``citation_relevance_version`` is ON, so no committed recording
+# carries it; it is registered here because a label the fit cannot name is a
+# rewritten ballot the fit reads as the voter's own.
 BALLOT_AUDIT_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_target", INVALID_VOTE_TARGET_MARKER),
     ("teammate_coerced", TEAMMATE_VOTE_TARGET_MARKER),
@@ -193,6 +199,7 @@ BALLOT_AUDIT_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_reason_id", INVALID_REASON_ID_MARKER),
     ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
     ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
+    ("off_target_coerced", OFF_TARGET_CITATION_EJECT_MARKER),
 )
 _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 

@@ -139,6 +139,7 @@ from meetings.manager import (
     INVALID_CORROBORATION_SUPPORTS_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
+    OFF_TARGET_CITATION_EJECT_MARKER,
     OPENING_UNSURE_DEGRADE_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
@@ -3559,6 +3560,12 @@ def _gate_view(
 # uncited zero-flag eject coerced to SKIP, mirroring ``teammate_coerced``). They
 # stack (16.5 nulls the citation, 16.6 then coerces the now-uncited ballot), so
 # both chips surface in stack order via the front-to-back strip below.
+#
+# ``OFF_TARGET_CITATION_EJECT_MARKER`` is 16.6's relevance half, minted only
+# while ``citation_relevance_version`` is ON: no committed replay carries it, and
+# it stacks the same way (a 10.9.2 redirect keeps a citation about the ORIGINAL
+# target, and this gate then coerces the redirected ballot -- two chips, in
+# order, over one ``guard_rewrite_reason`` naming the FIRST rewrite).
 _BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_target", INVALID_VOTE_TARGET_MARKER),
     ("teammate_coerced", TEAMMATE_VOTE_TARGET_MARKER),
@@ -3566,6 +3573,7 @@ _BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_reason_id", INVALID_REASON_ID_MARKER),
     ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
     ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
+    ("off_target_coerced", OFF_TARGET_CITATION_EJECT_MARKER),
 )
 _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 

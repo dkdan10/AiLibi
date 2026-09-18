@@ -114,11 +114,18 @@ from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FAKE_FINISH_REASON, FakeProvider
 from llm.provider import extract_parse_failure
+from meetings.citation_relevance import citations_bear_on
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_TURN_MAX_TOKENS,
     DEFAULT_VOTE_MAX_TOKENS,
     DEFAULT_VOTE_RATIONALE,
+    INVALID_VOTE_TARGET_MARKER,
+    OFF_TARGET_CITATION_EJECT_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
     MeetingConfig,
 )
 from meetings.schemas import (
@@ -1020,6 +1027,9 @@ class InstrumentArm(BaseModel):
                     config.attributed_testimony_version or 0
                 ),
                 "AILIBI_BOUNDED_REBUTTAL": str(config.bounded_rebuttal_version or 0),
+                "AILIBI_CITATION_RELEVANCE": str(
+                    config.citation_relevance_version or 0
+                ),
             }
         )
 
@@ -1030,13 +1040,23 @@ def instrument_arms() -> tuple[InstrumentArm, InstrumentArm]:
     Investigation is deliberately absent: it changes the world the prefix
     froze, so it cannot be paired on an identical prefix and the card puts it
     out of scope.
+
+    ``citation_relevance_version=1`` is on BOTH arms, so the pair still differs
+    in the accounts channels alone and the relevance rule is not a second
+    treatment (``test_the_arms_differ_only_in_the_account_channels`` is the
+    assertion). It RE-BASELINES the reference arm: it changes which ejections
+    happen on both sides, so the fifth run's reference figures are not
+    comparable with the next run's and no reference cell may be carried across.
+    The manifest's dated section of 2026-09-18 says so in full.
     """
 
     return (
         InstrumentArm(
             name="repaired_clock",
             experiment_config=RecordedExperimentConfig(
-                format_version=2, evidence_reasoning_version=2
+                format_version=2,
+                evidence_reasoning_version=2,
+                citation_relevance_version=1,
             ),
         ),
         InstrumentArm(
@@ -1046,6 +1066,7 @@ def instrument_arms() -> tuple[InstrumentArm, InstrumentArm]:
                 evidence_reasoning_version=2,
                 public_account_version=1,
                 attributed_testimony_version=1,
+                citation_relevance_version=1,
             ),
         ),
     )
@@ -4379,44 +4400,14 @@ def grade_supported(
 
 RelevanceVerdict = Literal["relevant", "off_target", "uncited"]
 
-#: A player id is a whole token: ``p-1`` must not match inside ``p-10``.
-_PLAYER_TOKEN: Final[str] = r"(?<![0-9A-Za-z_-]){player}(?![0-9A-Za-z_-])"
-
-
-def _names_player(text: str, player: str) -> bool:
-    """Whether ``text`` names ``player`` as a whole id rather than as a prefix."""
-
-    return re.search(_PLAYER_TOKEN.format(player=re.escape(player)), text) is not None
-
-
-def _turn_bears_on(turn: MeetingTurn, player: PlayerId) -> bool:
-    """Whether a recorded turn is the player's own or names them in its content.
-
-    The content is walked as the DUMPED STRUCTURE (:func:`_every_string_in`)
-    rather than field by field: a turn carries a dozen observation and claim
-    shapes, each naming players under a different key (``subject``, ``against``,
-    ``supports``, ``body_of``, ``co_present``), and a rule enumerating them would
-    silently stop covering the ones a later schema adds.
-    """
-
-    if turn.speaker == player:
-        return True
-    return any(
-        _names_player(text, player)
-        for text in _every_string_in(turn.model_dump(mode="json"))
-    )
-
-
-def _cited_line_names(
-    prompts: Sequence[str], *, citation: str, player: PlayerId
-) -> bool:
-    """Whether a line of these prompts carrying ``citation`` also names ``player``."""
-
-    return any(
-        citation in line and _names_player(line, player)
-        for prompt in prompts
-        for line in prompt.splitlines()
-    )
+# The aboutness rule itself lives in the MEETING layer
+# (:mod:`meetings.citation_relevance`) and is imported at the top of this
+# module. It used to live here, which is why the recording-time gate could not
+# ask it: ``meetings/`` may not import ``experiments/``, while this module
+# imports ``meetings`` freely. One definition, two callers -- this grader and
+# :func:`meetings.manager.guard_ballot_citation` under its lever -- and
+# ``tests/meetings/test_citation_relevance.py`` asserts the two cannot reach
+# different verdicts about the same ballot.
 
 
 @dataclass(frozen=True)
@@ -4452,17 +4443,25 @@ def grade_citation_relevance(
         if cited_turn is None and cited_observation is None:
             verdict: RelevanceVerdict = "uncited"
         else:
-            relevant = True
-            if cited_turn is not None:
-                turn = by_id.get(cited_turn)
-                relevant = turn is not None and _turn_bears_on(turn, subject)
-            if relevant and cited_observation is not None:
-                relevant = _cited_line_names(
-                    tuple(prompts_by_agent.get(ballot.voter, ())),
-                    citation=cited_observation,
-                    player=subject,
+            # The grader's surface is EVERY prompt this voter received during
+            # the unit, split into lines here: the recording-time guard holds
+            # only the ballot prompt, and the shared rule takes lines so
+            # neither caller has to fake the other's surface.
+            verdict = (
+                "relevant"
+                if citations_bear_on(
+                    cited_turn_id=cited_turn,
+                    cited_observation_id=cited_observation,
+                    subject=subject,
+                    turns_by_id=by_id,
+                    lines=[
+                        line
+                        for prompt in prompts_by_agent.get(ballot.voter, ())
+                        for line in prompt.splitlines()
+                    ],
                 )
-            verdict = "relevant" if relevant else "off_target"
+                else "off_target"
+            )
         grades.append(
             RelevanceGrade(voter=ballot.voter, target=ballot.target, verdict=verdict)
         )
@@ -4636,6 +4635,64 @@ AUTHORED_DIAGNOSTICS_NOTE: Final[str] = (
 BALLOT_REWRITE_REASONS: Final[tuple[str, ...]] = tuple(
     sorted(get_args(BallotTargetRewriteReason))
 )
+
+#: The audit marker each target-rewriting reason writes onto ``rationale_text``,
+#: from the production literals so a rename breaks loudly here. The block counts
+#: over THIS rather than over ``VoteBallot.guard_rewrite_reason``, because the
+#: typed field records the FIRST rewrite only: ``ballot_target_rewrite_provenance``
+#: (``meetings/voting.py``) returns ``{}`` once a reason is set, so a ballot
+#: re-aimed by ``under_gate_redirect`` and THEN coerced by the citation gate
+#: keeps ``under_gate_redirect`` in the field while both markers stack on the
+#: rationale. The fifth run's seed 8006 is exactly that ballot, and reading the
+#: single field would report zero coercions on a run full of them. The typed
+#: field keeps its own jobs -- the AUTHORED target and whether the ballot reached
+#: the tally -- which are properties of the first rewrite and are read from it.
+#:
+#: ``parse_default`` is the one that is not a prefix: it is the WHOLE rationale
+#: of a ballot that authored nothing, so it is matched the same way (its head is
+#: still at position zero) and cannot stack with anything.
+_TARGET_REWRITE_MARKERS: Mapping[str, str] = MappingProxyType(
+    {
+        "invalid_target": INVALID_VOTE_TARGET_MARKER,
+        "teammate_coerced": TEAMMATE_VOTE_TARGET_MARKER,
+        "under_gate_redirect": BALLOT_TARGET_REDIRECT_MARKER,
+        "uncited_coerced": UNCITED_ZERO_FLAG_EJECT_MARKER,
+        "off_target_coerced": OFF_TARGET_CITATION_EJECT_MARKER,
+        "parse_default": VOTE_PARSE_DEFAULT_MARKER,
+    }
+)
+
+if set(_TARGET_REWRITE_MARKERS) != set(BALLOT_REWRITE_REASONS):  # pragma: no cover
+    raise InstrumentError(
+        "every ballot target-rewrite reason needs its marker here: a reason "
+        "without one is a rewrite this diagnostic cannot see"
+    )
+
+#: The static head of each marker -- everything before its ``{...!r}`` payload.
+#: Matching the head is enough to say the marker fired and is what keeps this
+#: independent of the payload's repr quoting.
+_TARGET_REWRITE_MARKER_HEADS: Mapping[str, str] = MappingProxyType(
+    {
+        reason: marker.split("{", 1)[0]
+        for reason, marker in _TARGET_REWRITE_MARKERS.items()
+    }
+)
+
+
+def ballot_rewrites_that_fired(ballot: VoteBallot) -> tuple[str, ...]:
+    """Every target rewrite this ballot's marker stack records, sorted by reason.
+
+    One ballot can carry two (the redirect-then-coerce class); the typed
+    ``guard_rewrite_reason`` names only the first, which is why this reads the
+    stack. A ballot no guard touched returns ``()``.
+    """
+
+    return tuple(
+        reason
+        for reason in BALLOT_REWRITE_REASONS
+        if _TARGET_REWRITE_MARKER_HEADS[reason] in ballot.rationale_text
+    )
+
 
 #: The null a crew ballot's target is read against: two legal targets. The crew
 #: pair's common candidate set on this prefix is the impostor and the other
@@ -4864,8 +4921,9 @@ def authored_ballot_diagnostics(
     impostor_cleared = 0
     impostor_illegal = 0
     for ballot in ballots:
-        if ballot.guard_rewrite_reason is not None:
-            reasons[ballot.guard_rewrite_reason] += 1
+        # The marker STACK, not the typed field: see _TARGET_REWRITE_MARKERS.
+        for reason in ballot_rewrites_that_fired(ballot):
+            reasons[reason] += 1
         if not _authored_an_ejection(ballot):
             continue
         authored = authored_ballot_target(ballot)

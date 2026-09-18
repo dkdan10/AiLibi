@@ -728,16 +728,23 @@ BallotTargetRewriteReason: TypeAlias = Literal[
     "under_gate_redirect",
     "teammate_coerced",
     "uncited_coerced",
+    "off_target_coerced",
     "invalid_target",
     "parse_default",
 ]
 """Why a recorded ballot's ``target`` is not the one the voter authored.
 
-The five classes under which the meeting layer redirected, coerced,
+The six classes under which the meeting layer redirected, coerced,
 normalized, or wholly defaulted a target -- as opposed to the citation-only
 rewrites, which null a reference and leave the authored target intact. A
 consumer that judges what a voter BELIEVED must exclude a ballot carrying any
 of these.
+
+``off_target_coerced`` is the relevance half of the citation gate and rides the
+``citation_relevance_version`` lever: the citation resolved, but it was not
+about the player the ballot named. No recording made before that lever exists
+carries it, and the default-``None`` lever means none is created until a run
+turns it on.
 """
 
 
