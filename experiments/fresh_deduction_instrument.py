@@ -79,10 +79,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import MappingProxyType
-from typing import Final, Literal, Self
+from typing import Any, Final, Literal, Self, get_args
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from agents.base import AgentInterface
 from agents.memory.store import AgentMemory
@@ -123,6 +123,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AccusationClaim,
+    BallotTargetRewriteReason,
     Claim,
     CorroborationClaim,
     MeetingTurn,
@@ -130,6 +131,7 @@ from meetings.schemas import (
     TurnAnnotationKind,
     VoteBallot,
 )
+from meetings.voting import SKIP_TARGET
 from observation.action_intent import ActionIntent, WaitIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -162,7 +164,7 @@ for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
     if str(_bootstrap_path) not in sys.path:
         sys.path.insert(0, str(_bootstrap_path))
 
-from paired_stats import exact_mcnemar_p  # noqa: E402
+from paired_stats import exact_mcnemar_p, one_sided_binomial_p  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -1955,6 +1957,33 @@ def _cap_signals_disagree(call: CapturedCall) -> bool:
     return observed != inferred
 
 
+#: The key an ABSENT ``finish_reason`` is counted under, so "the provider
+#: reported nothing" is a row of the distribution rather than a hole in it. The
+#: same word :func:`_role_split_rows` already keys a null reading under.
+NULL_FINISH_REASON: Final[str] = "null"
+
+
+def _finish_reason_key(call: CapturedCall) -> str:
+    """The distribution key one ledger row's ``finish_reason`` counts under."""
+
+    return NULL_FINISH_REASON if call.finish_reason is None else call.finish_reason
+
+
+def _summed_finish_reasons(
+    left: Mapping[str, int], right: Mapping[str, int]
+) -> Mapping[str, int]:
+    """Two distributions of the same arm, summed and sorted.
+
+    Sorted and rebuilt as a plain ``dict`` so two tallies that saw the same
+    readings in a different order compare equal — which ``abandoned_spend``
+    depends on, testing a summed row against a default-constructed one.
+    """
+
+    counts: Counter[str] = Counter(left)
+    counts.update(right)
+    return dict(sorted(counts.items()))
+
+
 @dataclass(frozen=True)
 class ArmUsage:
     """One arm's spend, kept separate so the arms' asymmetry stays visible.
@@ -1962,6 +1991,14 @@ class ArmUsage:
     ``cap_signal_disagreements`` is not spend; it rides here because this is
     the tally that walks the captured rows, and the count is derived from them
     (:func:`_cap_signals_disagree`) rather than accumulated separately.
+    ``finish_reasons`` rides here for the same reason and answers what that one
+    aggregate cannot: what the provider actually said, per call.
+
+    The default distribution is EMPTY and must stay comparable across
+    instances: :func:`abandoned_spend` decides whether an arm spent anything at
+    all by testing ``spend == ArmUsage()``, so a default that did not compare
+    equal — or a :meth:`plus` over no calls that seeded a key — would write an
+    abandoned row for an arm that made no call.
     """
 
     calls: int = 0
@@ -1970,6 +2007,7 @@ class ArmUsage:
     cost_usd: float = 0.0
     model_work_seconds: float = 0.0
     cap_signal_disagreements: int = 0
+    finish_reasons: Mapping[str, int] = field(default_factory=dict)
 
     def plus(self, calls: Sequence[CapturedCall]) -> ArmUsage:
         return ArmUsage(
@@ -1981,6 +2019,9 @@ class ArmUsage:
             cap_signal_disagreements=(
                 self.cap_signal_disagreements
                 + sum(1 for c in calls if _cap_signals_disagree(c))
+            ),
+            finish_reasons=_summed_finish_reasons(
+                self.finish_reasons, Counter(_finish_reason_key(c) for c in calls)
             ),
         )
 
@@ -2000,6 +2041,9 @@ class ArmUsage:
             model_work_seconds=self.model_work_seconds + other.model_work_seconds,
             cap_signal_disagreements=(
                 self.cap_signal_disagreements + other.cap_signal_disagreements
+            ),
+            finish_reasons=_summed_finish_reasons(
+                self.finish_reasons, other.finish_reasons
             ),
         )
 
@@ -4551,6 +4595,439 @@ def grade_unit(record: UnitRecord) -> UnitGrade:
 
 
 # ---------------------------------------------------------------------------
+# The authored-ballot diagnostics (the diagnosis of 2026-09-18, decision 2)
+# ---------------------------------------------------------------------------
+#
+# What the crew AUTHORED, before the guards rewrote it. The meeting layer
+# already records the authored target on every rewritten ballot
+# (``VoteBallot.guard_redirected_from`` beside ``guard_rewrite_reason``), so the
+# layer BELOW the recorded tally is recoverable from the ballots alone and no
+# new recording is needed for it. Every count here is a labelled diagnostic:
+# nothing in the run path reads one, no stop condition mentions one, and none of
+# them is on :class:`PairedResult`.
+
+#: What the block says about itself, in the report and in the manifest alike.
+#: Held as a constant so the two cannot drift, and stated in full because a
+#: reader meeting a 63% precision figure beside a 2-of-12 outcome will otherwise
+#: supply the wrong reading of it.
+AUTHORED_DIAGNOSTICS_NOTE: Final[str] = (
+    "AUTHORING-CONDITIONED DIAGNOSTICS. Every count below is conditioned on a "
+    "ballot having been AUTHORED as an ejection, so it flatters whichever arm "
+    "authors more ejections and says nothing about how often an arm decides "
+    "correctly. They are reported beside the primary outcome and are NEVER a "
+    "decision input: no stop condition reads one, the decision rule does not "
+    "mention one, none of them is a field of the paired result, and they were "
+    "never preregistered — they were approved on 2026-09-18 as a labelled "
+    "diagnostic only (decision 2 of the diagnosis of that day). The crew "
+    "per-ballot precision is therefore reported ONLY beside its harm counter, "
+    "the crew-on-crew authored ejections and the units carrying one, because "
+    "an arm can raise both together. The arms also differ in the ballot "
+    "REGISTER as well as in the accounts surface, so a cross-arm reading of "
+    "these counts is confounded until the v5 prompt set equalises the register."
+)
+
+#: The rewrite reasons the tally reports, read off the schema's own alias rather
+#: than listed here: a reason ADDED to
+#: :data:`~meetings.schemas.BallotTargetRewriteReason` has to appear in this
+#: block with a zero count without another edit to this module.
+BALLOT_REWRITE_REASONS: Final[tuple[str, ...]] = tuple(
+    sorted(get_args(BallotTargetRewriteReason))
+)
+
+#: The null a crew ballot's target is read against: two legal targets. The crew
+#: pair's common candidate set on this prefix is the impostor and the other
+#: crewmate (``meetings/manager.py`` ``_candidate_targets``, living-minus-voter,
+#: on a four-player roster with one dead), so a crewmate authoring an ejection
+#: at random names the impostor half the time.
+CREW_PRECISION_NULL: Final[float] = 0.5
+
+#: The null an EJECTION is read against: one of the three living players.
+EJECTION_CHANCE_NULL: Final[float] = 1.0 / 3.0
+
+
+def authored_ballot_target(ballot: VoteBallot) -> str | None:
+    """The target the VOTER wrote, or ``None`` when the voter wrote none.
+
+    The guard pair is the meeting layer's own typed testimony about its rewrite
+    (``meetings/schemas.py``), written by ``ballot_target_rewrite_provenance``
+    at every rewrite site and serialized only when a guard fired. So the
+    authored target is ``guard_redirected_from`` where one did and ``target``
+    where none did — and ``None`` under ``parse_default``, where nothing parsed
+    and therefore nothing was authored.
+    """
+
+    if ballot.guard_rewrite_reason is None:
+        return ballot.target
+    return ballot.guard_redirected_from
+
+
+def _authored_an_ejection(ballot: VoteBallot) -> bool:
+    """Whether this voter authored an EJECTION rather than a SKIP or nothing."""
+
+    authored = authored_ballot_target(ballot)
+    return authored is not None and authored != SKIP_TARGET
+
+
+def _reached_the_tally(ballot: VoteBallot) -> bool:
+    """Whether the recorded ballot still names a player rather than SKIP.
+
+    "Cleared the citation gate" in the block's terms. Read off the RECORDED
+    target rather than off the rewrite reason, because more than one guard can
+    coerce a ballot to SKIP and the question asked is what the tally saw.
+    """
+
+    return ballot.target != SKIP_TARGET
+
+
+def _converted(ballot: VoteBallot) -> bool:
+    """Whether the recorded ballot reached the tally on its AUTHORED target.
+
+    Strictly stronger than :func:`_reached_the_tally`: a ballot the under-gate
+    redirect re-aimed cleared the gate and voted for somebody its voter did not
+    name.
+    """
+
+    return ballot.target == authored_ballot_target(ballot)
+
+
+class AuthoredBallotCounts(BaseModel):
+    """One unit's authored-ballot counts, additive across units.
+
+    Counts only, so a unit's row carries no ballot, no target and no role — the
+    same rule :class:`UnitTelemetry` follows, and the reason this projection
+    happens at unit close rather than at report time: a resumed run summarises
+    units it did not run, and the only thing it has of them is the checkpoint.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    crew_authored_ejects: int = 0
+    crew_authored_naming_impostor: int = 0
+    crew_authored_ejects_cleared: int = 0
+    crew_on_crew_authored_ejects: int = 0
+    #: 0 or 1 per unit, so the arm's sum is the number of units carrying one.
+    units_with_crew_on_crew: int = 0
+    impostor_authored_ejects: int = 0
+    impostor_authored_ejects_cleared: int = 0
+    correct_coalitions: int = 0
+    correct_coalitions_cleared: int = 0
+    correct_coalitions_converted: int = 0
+    wrongful_coalitions: int = 0
+    wrongful_coalitions_cleared: int = 0
+    wrongful_coalitions_converted: int = 0
+    ejections: int = 0
+    role_correct_ejections: int = 0
+    crew_authored_role_correct_ejections: int = 0
+    guard_rewrites_by_reason: Mapping[str, int] = {}
+
+    def plus(self, other: AuthoredBallotCounts) -> AuthoredBallotCounts:
+        """Two units' counts, summed. The arm's block is this folded over units."""
+
+        reasons: Counter[str] = Counter(self.guard_rewrites_by_reason)
+        reasons.update(other.guard_rewrites_by_reason)
+        return AuthoredBallotCounts(
+            crew_authored_ejects=self.crew_authored_ejects + other.crew_authored_ejects,
+            crew_authored_naming_impostor=(
+                self.crew_authored_naming_impostor + other.crew_authored_naming_impostor
+            ),
+            crew_authored_ejects_cleared=(
+                self.crew_authored_ejects_cleared + other.crew_authored_ejects_cleared
+            ),
+            crew_on_crew_authored_ejects=(
+                self.crew_on_crew_authored_ejects + other.crew_on_crew_authored_ejects
+            ),
+            units_with_crew_on_crew=(
+                self.units_with_crew_on_crew + other.units_with_crew_on_crew
+            ),
+            impostor_authored_ejects=(
+                self.impostor_authored_ejects + other.impostor_authored_ejects
+            ),
+            impostor_authored_ejects_cleared=(
+                self.impostor_authored_ejects_cleared
+                + other.impostor_authored_ejects_cleared
+            ),
+            correct_coalitions=self.correct_coalitions + other.correct_coalitions,
+            correct_coalitions_cleared=(
+                self.correct_coalitions_cleared + other.correct_coalitions_cleared
+            ),
+            correct_coalitions_converted=(
+                self.correct_coalitions_converted + other.correct_coalitions_converted
+            ),
+            wrongful_coalitions=self.wrongful_coalitions + other.wrongful_coalitions,
+            wrongful_coalitions_cleared=(
+                self.wrongful_coalitions_cleared + other.wrongful_coalitions_cleared
+            ),
+            wrongful_coalitions_converted=(
+                self.wrongful_coalitions_converted + other.wrongful_coalitions_converted
+            ),
+            ejections=self.ejections + other.ejections,
+            role_correct_ejections=(
+                self.role_correct_ejections + other.role_correct_ejections
+            ),
+            crew_authored_role_correct_ejections=(
+                self.crew_authored_role_correct_ejections
+                + other.crew_authored_role_correct_ejections
+            ),
+            guard_rewrites_by_reason=dict(sorted(reasons.items())),
+        )
+
+
+def authored_ballot_diagnostics(
+    *,
+    ballots: Sequence[VoteBallot],
+    roles: Mapping[PlayerId, Role],
+    ejected_player_id: PlayerId | None,
+) -> AuthoredBallotCounts:
+    """One unit's authored layer, counted. Pure; never called mid-run.
+
+    Three readings, all off the ballots the meeting recorded and the ground
+    truth the run record holds in memory:
+
+    * **Per voter role** — how many ejections that role AUTHORED, how many of
+      them reached the tally, and (for the crew) how many named the impostor
+      and how many named a crewmate.
+    * **The coalition funnel** — an authored coalition is two or more ballots
+      authored at the SAME target in one unit. It is CORRECT when that target
+      is the impostor and WRONGFUL otherwise. ``cleared`` and ``converted`` are
+      different counts: a coalition clears when every one of its ballots
+      reached the tally, and converts when every one of them reached it ON THE
+      AUTHORED TARGET, which an under-gate redirect breaks.
+    * **The ejection** — whether it was role-correct, and whether every
+      recorded ballot naming the ejected player was its voter's own rather than
+      a guard's rewrite (the ``voter_authored`` condition the primary outcome
+      already applies, read here on the ejection rather than on the ballot).
+
+    ``roles`` is the unit's own ground truth, the same mapping
+    :func:`count_leaking_turns` reads; nothing downstream of the run sees it.
+    """
+
+    reasons: Counter[str] = Counter(dict.fromkeys(BALLOT_REWRITE_REASONS, 0))
+    impostors = {player for player, role in roles.items() if role == "IMPOSTOR"}
+    crew_authored = 0
+    crew_naming_impostor = 0
+    crew_cleared = 0
+    crew_on_crew = 0
+    impostor_authored = 0
+    impostor_cleared = 0
+    for ballot in ballots:
+        if ballot.guard_rewrite_reason is not None:
+            reasons[ballot.guard_rewrite_reason] += 1
+        if not _authored_an_ejection(ballot):
+            continue
+        authored = authored_ballot_target(ballot)
+        if roles[ballot.voter] == "IMPOSTOR":
+            impostor_authored += 1
+            impostor_cleared += int(_reached_the_tally(ballot))
+            continue
+        crew_authored += 1
+        crew_cleared += int(_reached_the_tally(ballot))
+        if authored in impostors:
+            crew_naming_impostor += 1
+        else:
+            crew_on_crew += 1
+
+    by_target: dict[str, list[VoteBallot]] = {}
+    for ballot in ballots:
+        if not _authored_an_ejection(ballot):
+            continue
+        target = authored_ballot_target(ballot)
+        assert target is not None  # _authored_an_ejection said so
+        by_target.setdefault(target, []).append(ballot)
+    correct = [0, 0, 0]
+    wrongful = [0, 0, 0]
+    for target, bloc in by_target.items():
+        if len(bloc) < 2:
+            continue
+        row = correct if target in impostors else wrongful
+        row[0] += 1
+        row[1] += int(all(_reached_the_tally(ballot) for ballot in bloc))
+        row[2] += int(all(_converted(ballot) for ballot in bloc))
+
+    ejections = 0
+    role_correct = 0
+    crew_authored_role_correct = 0
+    if ejected_player_id is not None:
+        ejections = 1
+        if ejected_player_id in impostors:
+            role_correct = 1
+            naming = [
+                ballot for ballot in ballots if ballot.target == ejected_player_id
+            ]
+            crew_authored_role_correct = int(
+                bool(naming)
+                and all(ballot.guard_rewrite_reason is None for ballot in naming)
+            )
+
+    return AuthoredBallotCounts(
+        crew_authored_ejects=crew_authored,
+        crew_authored_naming_impostor=crew_naming_impostor,
+        crew_authored_ejects_cleared=crew_cleared,
+        crew_on_crew_authored_ejects=crew_on_crew,
+        units_with_crew_on_crew=int(crew_on_crew > 0),
+        impostor_authored_ejects=impostor_authored,
+        impostor_authored_ejects_cleared=impostor_cleared,
+        correct_coalitions=correct[0],
+        correct_coalitions_cleared=correct[1],
+        correct_coalitions_converted=correct[2],
+        wrongful_coalitions=wrongful[0],
+        wrongful_coalitions_cleared=wrongful[1],
+        wrongful_coalitions_converted=wrongful[2],
+        ejections=ejections,
+        role_correct_ejections=role_correct,
+        crew_authored_role_correct_ejections=crew_authored_role_correct,
+        guard_rewrites_by_reason=dict(sorted(reasons.items())),
+    )
+
+
+class AuthoredEjectRow(BaseModel):
+    """One voter role's authored ejections, and what the gate did with them."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    role: Role
+    authored: int
+    cleared: int
+    coerced: int
+
+
+#: The precision half of the block, and the harm half it may never be reported
+#: without. Two named sets so the rule is a lookup rather than a sentence in a
+#: docstring, and so the refusal can say which key is missing.
+_PRECISION_KEYS: Final[tuple[str, ...]] = (
+    "crew_authored_ejects",
+    "crew_authored_naming_impostor",
+    "crew_authored_precision_p",
+)
+_HARM_KEYS: Final[tuple[str, ...]] = (
+    "crew_on_crew_authored_ejects",
+    "units_with_crew_on_crew",
+)
+
+
+class AuthoredBallotDiagnostics(BaseModel):
+    """One arm's labelled DIAGNOSTICS block: the authored layer, summed.
+
+    Defaulted throughout, so an ``ArmSummary`` written before this block existed
+    still parses and reads an empty one rather than a fabricated reading. What
+    is NOT optional is the pairing: a payload carrying the crew per-ballot
+    precision and dropping the harm counter beside it is refused, because the
+    precision alone is the figure that reads as an achievement and the harm
+    counter is the one that says what the same authoring bought.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    note: str = AUTHORED_DIAGNOSTICS_NOTE
+    # The precision pair and its harm counter, which travel together.
+    crew_authored_ejects: int = 0
+    crew_authored_naming_impostor: int = 0
+    crew_authored_precision_p: float = 1.0
+    crew_on_crew_authored_ejects: int = 0
+    units_with_crew_on_crew: int = 0
+    # The gate's survival rate, by the voter's hidden role.
+    by_voter_role: tuple[AuthoredEjectRow, ...] = ()
+    # The funnel. ``cleared`` and ``converted`` are different counts.
+    correct_coalitions: int = 0
+    correct_coalitions_cleared: int = 0
+    correct_coalitions_converted: int = 0
+    wrongful_coalitions: int = 0
+    wrongful_coalitions_cleared: int = 0
+    wrongful_coalitions_converted: int = 0
+    # The ejections, against the 1/3 chance rate of a three-player table.
+    ejections: int = 0
+    role_correct_ejections: int = 0
+    role_correct_p: float = 1.0
+    crew_authored_role_correct_ejections: int = 0
+    crew_authored_role_correct_p: float = 1.0
+    guard_rewrites_by_reason: Mapping[str, int] = {}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _harm_counter_travels_with_the_precision(cls, data: Any) -> Any:
+        """Refuse a block that reports the precision and drops the harm counter.
+
+        Checked on the PAYLOAD rather than after construction, so it catches a
+        caller that assembled the block by hand and a report re-read from a file
+        alike; an empty block carries neither half and is not a claim about
+        anything.
+        """
+
+        if not isinstance(data, Mapping):
+            return data
+        if not any(key in data for key in _PRECISION_KEYS):
+            return data
+        missing = [key for key in _HARM_KEYS if key not in data]
+        if missing:
+            raise ValueError(
+                "the crew per-ballot precision is never reported without its "
+                "harm counter; this block is missing " + ", ".join(missing)
+            )
+        return data
+
+
+def authored_ballot_block(counts: AuthoredBallotCounts) -> AuthoredBallotDiagnostics:
+    """One arm's summed counts, with the three chance-rate tails computed on them.
+
+    The tails are computed HERE rather than per unit because a p value is not
+    additive: the question is asked of the arm's whole count.
+    """
+
+    # CREWMATE first, the order the calibration's role split already reports.
+    by_role: tuple[tuple[Role, int, int], ...] = (
+        (
+            "CREWMATE",
+            counts.crew_authored_ejects,
+            counts.crew_authored_ejects_cleared,
+        ),
+        (
+            "IMPOSTOR",
+            counts.impostor_authored_ejects,
+            counts.impostor_authored_ejects_cleared,
+        ),
+    )
+    return AuthoredBallotDiagnostics(
+        crew_authored_ejects=counts.crew_authored_ejects,
+        crew_authored_naming_impostor=counts.crew_authored_naming_impostor,
+        crew_authored_precision_p=one_sided_binomial_p(
+            counts.crew_authored_naming_impostor,
+            counts.crew_authored_ejects,
+            CREW_PRECISION_NULL,
+        ),
+        crew_on_crew_authored_ejects=counts.crew_on_crew_authored_ejects,
+        units_with_crew_on_crew=counts.units_with_crew_on_crew,
+        by_voter_role=tuple(
+            AuthoredEjectRow(
+                role=role,
+                authored=authored,
+                cleared=cleared,
+                coerced=authored - cleared,
+            )
+            for role, authored, cleared in by_role
+        ),
+        correct_coalitions=counts.correct_coalitions,
+        correct_coalitions_cleared=counts.correct_coalitions_cleared,
+        correct_coalitions_converted=counts.correct_coalitions_converted,
+        wrongful_coalitions=counts.wrongful_coalitions,
+        wrongful_coalitions_cleared=counts.wrongful_coalitions_cleared,
+        wrongful_coalitions_converted=counts.wrongful_coalitions_converted,
+        ejections=counts.ejections,
+        role_correct_ejections=counts.role_correct_ejections,
+        role_correct_p=one_sided_binomial_p(
+            counts.role_correct_ejections, counts.ejections, EJECTION_CHANCE_NULL
+        ),
+        crew_authored_role_correct_ejections=(
+            counts.crew_authored_role_correct_ejections
+        ),
+        crew_authored_role_correct_p=one_sided_binomial_p(
+            counts.crew_authored_role_correct_ejections,
+            counts.ejections,
+            EJECTION_CHANCE_NULL,
+        ),
+        guard_rewrites_by_reason=dict(counts.guard_rewrites_by_reason),
+    )
+
+
+# ---------------------------------------------------------------------------
 # The paired comparison
 # ---------------------------------------------------------------------------
 
@@ -4702,6 +5179,20 @@ class ArmSummary(BaseModel):
     # agree. Zero on an arm whose provider reported no reading at all, because
     # an absent reading contradicts nothing.
     cap_signal_disagreements: int
+    # The per-call distribution the count above collapses: how many of this
+    # arm's ledger rows carried each ``finish_reason`` the provider reported,
+    # with an absent reading keyed ``"null"`` the way the role split already
+    # keys it. Reported beside the disagreement count because that count is one
+    # aggregate and this is the reading it was derived from — a run whose
+    # provider maps no reading at all and one whose completions all stopped
+    # cleanly are indistinguishable without it. Defaulted, so a report written
+    # before this field parses and reads an EMPTY distribution rather than a
+    # fabricated ``"stop"`` on every call.
+    finish_reasons: Mapping[str, int] = {}
+    # The labelled authored-ballot block. Defaulted for the same reason, and
+    # never a decision input: :data:`AUTHORED_DIAGNOSTICS_NOTE`, which the block
+    # itself carries, says so in the report.
+    authored_diagnostics: AuthoredBallotDiagnostics = AuthoredBallotDiagnostics()
     prompt_versions: Mapping[str, str]
     calls: int
     input_tokens: int
@@ -4856,9 +5347,11 @@ def _summarize_arm(
     own_records = [unit for unit in telemetry if unit.arm == arm]
     defaults = DefaultedAttempts()
     attempts = TransportAttempts()
+    diagnostics = AuthoredBallotCounts()
     for record in own_records:
         defaults = defaults.plus(record.defaults())
         attempts = attempts.plus(record.attempts())
+        diagnostics = diagnostics.plus(record.diagnostics)
     return ArmSummary(
         arm=arm,
         units=len(own),
@@ -4890,6 +5383,8 @@ def _summarize_arm(
             1 for record in own_records if record.attempts().unaccounted_attempts > 0
         ),
         cap_signal_disagreements=usage.cap_signal_disagreements,
+        finish_reasons=dict(usage.finish_reasons),
+        authored_diagnostics=authored_ballot_block(diagnostics),
         prompt_versions=dict(_one_prompt_version_set(telemetry, arm=arm)),
         calls=usage.calls,
         input_tokens=usage.input_tokens,
@@ -4984,6 +5479,11 @@ class CarriedUsage(BaseModel):
     #: would report an arm's disagreements as the tail's alone. Defaulted, so a
     #: checkpoint written before this field parses and reads zero.
     cap_signal_disagreements: int = 0
+    #: And the distribution that count collapses, carried for the same reason:
+    #: a resumed run whose earlier sitting saw a reading the tail never sees
+    #: would otherwise report the tail's readings as the run's. Defaulted, so a
+    #: checkpoint written before this field parses and reads an empty one.
+    finish_reasons: Mapping[str, int] = {}
 
     def arm_usage(self) -> ArmUsage:
         return ArmUsage(
@@ -4993,6 +5493,7 @@ class CarriedUsage(BaseModel):
             cost_usd=self.cost_usd,
             model_work_seconds=self.model_work_seconds,
             cap_signal_disagreements=self.cap_signal_disagreements,
+            finish_reasons=dict(self.finish_reasons),
         )
 
 
@@ -5025,6 +5526,12 @@ class UnitTelemetry(BaseModel):
     prompt_versions: Mapping[str, str] = {}
     model_ids: tuple[str, ...] = ()
     usage: CarriedUsage = CarriedUsage()
+    #: The authored layer of this unit's ballots, projected here at unit close
+    #: for the same reason everything else on this model is: the report is built
+    #: by walking these rows, and a resumed run restores the earlier ones from
+    #: the checkpoint alone. Defaulted, so a checkpoint written before this
+    #: field parses and reads zeros rather than a fabricated reading.
+    diagnostics: AuthoredBallotCounts = AuthoredBallotCounts()
 
     def defaults(self) -> DefaultedAttempts:
         return DefaultedAttempts(
@@ -5060,6 +5567,11 @@ def unit_telemetry(record: UnitRecord) -> UnitTelemetry:
         attempts_by_trigger=dict(record.transport_attempts.by_trigger),
         prompt_versions=dict(record.prompt_versions),
         model_ids=tuple(sorted({call.model for call in record.calls})),
+        diagnostics=authored_ballot_diagnostics(
+            ballots=record.ballots,
+            roles=record.roles,
+            ejected_player_id=record.ejected_player_id,
+        ),
         usage=CarriedUsage(
             calls=usage.calls,
             input_tokens=usage.input_tokens,
@@ -5067,6 +5579,7 @@ def unit_telemetry(record: UnitRecord) -> UnitTelemetry:
             cost_usd=usage.cost_usd,
             model_work_seconds=usage.model_work_seconds,
             cap_signal_disagreements=usage.cap_signal_disagreements,
+            finish_reasons=dict(usage.finish_reasons),
         ),
     )
 
@@ -5260,6 +5773,7 @@ def abandoned_spend(
                     cost_usd=spend.cost_usd,
                     model_work_seconds=spend.model_work_seconds,
                     cap_signal_disagreements=spend.cap_signal_disagreements,
+                    finish_reasons=dict(spend.finish_reasons),
                 ),
                 retried_calls=tally.retried_calls,
                 unaccounted_attempts=tally.unaccounted_attempts,
@@ -6266,6 +6780,19 @@ _SELF_KILL_STATEMENT: Final[re.Pattern[str]] = re.compile(
 #: question puts the words in play without asserting them ("if I am the
 #: impostor, why would I report the body?"), and counting that as a confession
 #: inflates the column in the direction the rule claims it cannot move.
+#:
+#: **2026-09-18 — the interrogative family is completed.** The third family
+#: carried only the MODAL interrogatives (``why would``, ``how would``,
+#: ``what would``), so an equally plain question in the present or the past
+#: — "how do I get accused of this?" — fell through and counted as a
+#: confession; the fifth run's reference arm leaked once by exactly that
+#: shape (its RESULTS published both readings, and the memo of 2026-09-18
+#: ruled the repair decision 9). The three question words are now crossed with
+#: the four auxiliaries rather than listed, so the family is complete by
+#: construction and a fifth auxiliary is one word rather than three entries.
+#: Widening a guard can only REMOVE counts from a diagnostic that is already an
+#: estimate carrying error in both directions, which is why it is a word-list
+#: repair and not a change to :data:`ROLE_LEAK_RULE`'s own text.
 _NOT_AN_ASSERTION: Final[re.Pattern[str]] = re.compile(
     # Attributed to somebody else.
     r"\b(?:claim|claims|claimed|claiming|accuse\w*|accusation\w*|allege\w*|"
@@ -6275,7 +6802,7 @@ _NOT_AN_ASSERTION: Final[re.Pattern[str]] = re.compile(
     # Supposed, imagined or asked rather than said.
     r"if|unless|whether|suppose|supposes|supposed|supposing|assume|assumes|"
     r"assumed|assuming|imagine|imagines|imagining|pretend\w*|hypothetical\w*|"
-    r"were\s+i|why\s+would|how\s+would|what\s+would)\b",
+    r"were\s+i|(?:why|how|what)\s+(?:would|do|does|did))\b",
     re.IGNORECASE,
 )
 

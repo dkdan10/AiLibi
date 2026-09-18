@@ -31,6 +31,7 @@ import json
 import re
 import subprocess
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final, cast, get_args
@@ -96,6 +97,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AccusationClaim,
+    BallotTargetRewriteReason,
     MeetingTurn,
     ModelAuthoredVoteBallot,
     VoteBallot,
@@ -108,6 +110,7 @@ from meetings.schemas import (
 from orchestrator.game import _deadline_default_message
 from orchestrator.replay import (
     FailedCallReplayEntry,
+    LLMCallRecord,
     MeetingReplayEntry,
     read_all_entries,
 )
@@ -589,6 +592,14 @@ def _less_the_stops_own_calls(
         arm["output_tokens"] -= row.usage.output_tokens
         arm["cost_usd"] -= row.usage.cost_usd
         arm["cap_signal_disagreements"] -= row.usage.cap_signal_disagreements
+        # The per-call readings the abandoned rows carry come out the same way:
+        # a key the stop alone contributed disappears rather than reaching zero,
+        # so the two payloads compare as dicts.
+        remaining = Counter(arm["finish_reasons"])
+        remaining.subtract(row.usage.finish_reasons)
+        arm["finish_reasons"] = {
+            reason: count for reason, count in sorted(remaining.items()) if count
+        }
         payload["total_cost_usd"] -= row.usage.cost_usd
     return payload
 
@@ -8615,6 +8626,89 @@ class TestTheRoleLeakDiagnostic:
         ):
             assert instrument.states_own_role_or_kill(text, role="IMPOSTOR") is True
 
+    @pytest.mark.parametrize(
+        "governor",
+        ["how do", "how does", "how did", "why do", "why does", "why did"],
+    )
+    def test_a_question_in_the_present_or_the_past_is_not_a_confession(
+        self, governor: str
+    ) -> None:
+        """PLANTED: the gap the fifth run's reference arm fell through (F2).
+
+        `ROLE_LEAK_RULE` counts out "a conditional, a hypothetical or a question
+        governing the words", but the guard carried only the MODAL
+        interrogatives, so a question in the present or the past asserted
+        nothing and was counted anyway. One seed-free string per governor, in
+        the style of the supposition case above: no seed, no prefix and no
+        rendered prompt is quoted here — the shape is what is under test.
+        """
+
+        for statement in ("I am the impostor", "I killed p-3"):
+            text = f"{governor.capitalize()} you get {statement} out of that?"
+            assert instrument.states_own_role_or_kill(text, role="IMPOSTOR") is False
+            assert (
+                instrument.opens_with_a_self_tell(_ballot_saying(text), role="IMPOSTOR")
+                is False
+            )
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "What do you make of I am the impostor as a reading?",
+            "What does it mean that I am the impostor?",
+            "What did it look like when I killed p-3?",
+        ],
+    )
+    def test_the_third_question_word_is_carried_too(self, text: str) -> None:
+        """PLANTED: `what would` was carried and its siblings were not.
+
+        Split from the pair above only because "what" takes a different frame;
+        it is the same defect and the same repair, and the audit that found
+        `how do` found these by enumeration rather than by another example.
+        Each string carries exactly ONE governor — the one under test — so a
+        pass cannot come from a word the old list already held.
+        """
+
+        assert instrument.states_own_role_or_kill(text, role="IMPOSTOR") is False
+        assert (
+            instrument.opens_with_a_self_tell(_ballot_saying(text), role="IMPOSTOR")
+            is False
+        )
+
+    def test_the_widened_family_still_reaches_only_what_precedes_the_words(
+        self,
+    ) -> None:
+        """PERTURBED: the same three words AFTER the statement govern nothing.
+
+        The suffix perturbation `test_the_guard_reaches_only_what_governs_the_words`
+        already pins, re-run against the widening: a confession is still a
+        confession when one of the new governors trails it, and widening a
+        prefix check must not turn every sentence carrying the word into a
+        non-leak.
+        """
+
+        for text in (
+            "I am the impostor, and how do you like that.",
+            "I killed p-3, what did you expect.",
+            "I vented, why did nobody look.",
+        ):
+            assert instrument.states_own_role_or_kill(text, role="IMPOSTOR") is True
+
+    def test_the_governors_are_crossed_rather_than_listed(self) -> None:
+        """The family is complete by construction, not by enumeration.
+
+        Twelve pairings from three question words and four auxiliaries, every
+        one of them counted out: a guard built by listing the ones somebody
+        thought of is how `how do` went missing in the first place.
+        """
+
+        for question in ("why", "how", "what"):
+            for auxiliary in ("would", "do", "does", "did"):
+                text = f"{question} {auxiliary} anyone believe I am the impostor?"
+                assert (
+                    instrument.states_own_role_or_kill(text, role="IMPOSTOR") is False
+                ), text
+
     def test_a_crewmate_naming_its_own_role_is_not_a_leak(self) -> None:
         """Every crewmate says so; counting it would report the roster."""
 
@@ -9297,3 +9391,785 @@ class TestTheManifestCarriesTheSecondCalibration:
         assert "role leak" in text.lower()
         assert "reported diagnostic" in text.lower()
         assert "does not block" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# The authored-ballot diagnostics
+# (tasks/work/fresh-deduction-instrument-diagnostics.md)
+# ---------------------------------------------------------------------------
+
+#: The fifth run's committed archive. READ here and never written: the tests
+#: below walk its hundred replays, parse each ballot back into the schema the
+#: run recorded it under, and feed the run path's own function. No prefix, no
+#: rendered prompt and no seed's text is printed by any of them.
+_FIFTH_RUN: Final[Path] = (
+    _REPO_ROOT / "audits" / "deduction-candidate" / "run-2026-09-16"
+)
+
+
+def _fifth_run_impostors() -> dict[int, str]:
+    """``{seed: impostor id}`` for the fifth run, off the archive's own prefixes.
+
+    The archive records no role — the run held them in memory and nothing
+    downstream of it ever saw them — so the ground truth is recovered from the
+    one action in a prefix that only an impostor can take: its single scripted
+    kill. Player IDS only; no step, no prefix and no rendered prompt leaves
+    this function.
+    """
+
+    payload = json.loads(
+        (_FIFTH_RUN / "rendered-prefixes.json").read_text(encoding="utf-8")
+    )
+    impostors: dict[int, str] = {}
+    for entry in payload["rendered"]:
+        kills = [
+            step
+            for step in entry["canonical_json"]["steps"]
+            if step["action"]["type"] == "kill"
+        ]
+        assert len(kills) == 1, entry["seed"]
+        impostors[int(entry["seed"])] = str(kills[0]["action"]["actor"])
+    return impostors
+
+
+def _fifth_run_meeting(path: Path) -> Mapping[str, Any]:
+    """The one meeting row of one archived replay."""
+
+    rows = [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    meetings = [row for row in rows if row.get("kind") == "meeting"]
+    assert len(meetings) == 1, path.name
+    return cast(Mapping[str, Any], meetings[0])
+
+
+def _fifth_run_counts(
+    arm: str, *, authored_off_the_recorded_target: bool = False
+) -> instrument.AuthoredBallotCounts:
+    """One arm of the fifth run, through the run path's own function.
+
+    ``authored_off_the_recorded_target`` is the perturbation the archive test
+    plants: it drops the guard pair, so the authored target is read off
+    ``target`` — what the TALLY saw — which is the whole difference between the
+    authored layer and the recorded one.
+    """
+
+    impostors = _fifth_run_impostors()
+    total = instrument.AuthoredBallotCounts()
+    for path in sorted(_FIFTH_RUN.glob(f"{arm}-seed-*.jsonl")):
+        seed = int(path.stem.rsplit("-", 1)[-1])
+        meeting = _fifth_run_meeting(path)
+        ballots = tuple(VoteBallot.model_validate(row) for row in meeting["ballots"])
+        if authored_off_the_recorded_target:
+            ballots = tuple(
+                ballot.model_copy(
+                    update={
+                        "guard_redirected_from": None,
+                        "guard_rewrite_reason": None,
+                    }
+                )
+                for ballot in ballots
+            )
+        impostor = impostors[seed]
+        roles = {
+            ballot.voter: ("IMPOSTOR" if ballot.voter == impostor else "CREWMATE")
+            for ballot in ballots
+        }
+        total = total.plus(
+            instrument.authored_ballot_diagnostics(
+                ballots=ballots,
+                roles=cast(Any, roles),
+                ejected_player_id=meeting["ejected_player_id"],
+            )
+        )
+    return total
+
+
+def _ballot_for(
+    voter: str,
+    target: str,
+    *,
+    authored: str | None = None,
+    reason: str | None = None,
+) -> VoteBallot:
+    """One recorded ballot, with the guard pair set as the meeting layer sets it."""
+
+    return VoteBallot(
+        voter=voter,
+        target=target,
+        confidence=0.7,
+        primary_reason_id=None,
+        rationale_text="because.",
+        guard_redirected_from=authored,
+        guard_rewrite_reason=cast(Any, reason),
+    )
+
+
+class TestTheAuthoredLayerIsRecoverable:
+    """The pure function over one unit's ballots, roles and ejected player."""
+
+    def test_the_authored_target_is_the_guards_own_testimony(self) -> None:
+        """Three readings, and the third is why ``target`` is not enough."""
+
+        plain = _ballot_for("p-1", "p-2")
+        redirected = _ballot_for(
+            "p-1", "p-4", authored="p-2", reason="under_gate_redirect"
+        )
+        unparsed = _ballot_for("p-1", "SKIP", reason="parse_default")
+        assert instrument.authored_ballot_target(plain) == "p-2"
+        assert instrument.authored_ballot_target(redirected) == "p-2"
+        assert instrument.authored_ballot_target(unparsed) is None
+
+    def test_a_coerced_ballot_is_authored_but_never_cleared(self) -> None:
+        """The citation gate's SKIP: the voter named a player, the tally saw none."""
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(
+                _ballot_for("p-1", "SKIP", authored="p-4", reason="uncited_coerced"),
+            ),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-4": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        assert counts.crew_authored_ejects == 1
+        assert counts.crew_authored_naming_impostor == 1
+        assert counts.crew_authored_ejects_cleared == 0
+        assert counts.guard_rewrites_by_reason["uncited_coerced"] == 1
+
+    def test_a_coalition_can_clear_the_gate_without_converting(self) -> None:
+        """PLANTED: the two meanings the memo's single "cleared" column carried.
+
+        Both authored ballots pass ``guard_ballot_citation``, so the coalition
+        CLEARS; one of them is then re-aimed by ``under_gate_redirect``, so it
+        reached the tally naming somebody its voter did not, and the coalition
+        does NOT convert. Counting those two as one figure is what made "10
+        wrongful coalitions cleared" and "8 converted" read as one number.
+        """
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(
+                _ballot_for("p-1", "p-2"),
+                _ballot_for("p-3", "p-4", authored="p-2", reason="under_gate_redirect"),
+            ),
+            roles=cast(
+                Any,
+                {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-3": "IMPOSTOR"},
+            ),
+            ejected_player_id=None,
+        )
+        assert counts.wrongful_coalitions == 1
+        assert counts.wrongful_coalitions_cleared == 1
+        assert counts.wrongful_coalitions_converted == 0
+
+    def test_a_coalition_both_of_whose_ballots_land_converts(self) -> None:
+        """The control for the case above: no rewrite, so cleared and converted."""
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(_ballot_for("p-1", "p-4"), _ballot_for("p-2", "p-4")),
+            roles=cast(
+                Any,
+                {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"},
+            ),
+            ejected_player_id="p-4",
+        )
+        assert (
+            counts.correct_coalitions,
+            counts.correct_coalitions_cleared,
+            counts.correct_coalitions_converted,
+        ) == (1, 1, 1)
+        assert counts.ejections == 1
+        assert counts.role_correct_ejections == 1
+        assert counts.crew_authored_role_correct_ejections == 1
+
+    def test_a_guard_made_ejection_is_role_correct_but_not_crew_authored(self) -> None:
+        """PLANTED: the correction refutation 3 of the diagnosis forced.
+
+        The ejection lands on the impostor because a guard re-aimed a ballot
+        the voter wrote against a crewmate. Role-correct, and not the crew's
+        deduction — which is why the two counts are reported as a pair.
+        """
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(
+                _ballot_for("p-1", "p-4"),
+                _ballot_for("p-2", "p-4", authored="p-1", reason="under_gate_redirect"),
+            ),
+            roles=cast(
+                Any,
+                {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"},
+            ),
+            ejected_player_id="p-4",
+        )
+        assert counts.role_correct_ejections == 1
+        assert counts.crew_authored_role_correct_ejections == 0
+
+    def test_the_units_with_crew_on_crew_column_is_a_unit_flag(self) -> None:
+        """Two harmful ballots in one unit are two ballots and one unit."""
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(_ballot_for("p-1", "p-2"), _ballot_for("p-2", "p-1")),
+            roles=cast(
+                Any,
+                {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"},
+            ),
+            ejected_player_id=None,
+        )
+        assert counts.crew_on_crew_authored_ejects == 2
+        assert counts.units_with_crew_on_crew == 1
+
+    def test_the_rewrite_tally_keys_over_the_schemas_own_alias(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PLANTED: a member ADDED to the alias appears with a zero count.
+
+        The relevance-aware citation guard adds ``off_target_coerced`` on top of
+        this branch. A tally keyed on a literal list would silently drop it, so
+        the list is read off ``BallotTargetRewriteReason`` and this plants the
+        member the guard card will add.
+        """
+
+        assert instrument.BALLOT_REWRITE_REASONS == tuple(
+            sorted(get_args(BallotTargetRewriteReason))
+        )
+        monkeypatch.setattr(
+            instrument,
+            "BALLOT_REWRITE_REASONS",
+            tuple(sorted((*instrument.BALLOT_REWRITE_REASONS, "off_target_coerced"))),
+        )
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(_ballot_for("p-1", "p-4"),),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-4": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        assert counts.guard_rewrites_by_reason["off_target_coerced"] == 0
+        assert set(counts.guard_rewrites_by_reason) == set(
+            instrument.BALLOT_REWRITE_REASONS
+        )
+
+
+class TestTheFifthRunsArchiveReproducesTheEvidenceTable:
+    """The card's Evidence table, recomputed from the hundred committed replays.
+
+    Not a description of the archive: the run path's own
+    ``authored_ballot_diagnostics`` is what produces every figure here, over
+    ballots parsed back into ``VoteBallot`` with no new parser. What the owner's
+    merge authorizes is these numbers, so a later edit that moves one of them
+    turns this red rather than quietly re-describing a run that already
+    happened.
+    """
+
+    def test_the_candidate_arms_crew_rows_are_the_memos(self) -> None:
+        """51 of 81 naming the impostor, 30 of 81 on a crewmate, in 27 units."""
+
+        counts = _fifth_run_counts("combined_accounts")
+        assert counts.crew_authored_ejects == 81
+        assert counts.crew_authored_naming_impostor == 51
+        assert counts.crew_on_crew_authored_ejects == 30
+        assert counts.units_with_crew_on_crew == 27
+
+    def test_the_reference_arms_crew_rows_are_the_memos(self) -> None:
+        """4 of 10 naming the impostor, 6 of 10 on a crewmate, in 6 units."""
+
+        counts = _fifth_run_counts("repaired_clock")
+        assert counts.crew_authored_ejects == 10
+        assert counts.crew_authored_naming_impostor == 4
+        assert counts.crew_on_crew_authored_ejects == 6
+        assert counts.units_with_crew_on_crew == 6
+
+    def test_the_coalition_funnel_separates_cleared_from_converted(self) -> None:
+        """11 correct and 22 wrongful authored; 2 and 8 convert; 10 wrongful clear.
+
+        The figure the memo carried once and meant twice. Two of the ten
+        wrongful coalitions that cleared the citation gate never converted —
+        their swing ballot was re-aimed onto the impostor — and those two are
+        the "guard-made" role-correct ejections.
+        """
+
+        candidate = _fifth_run_counts("combined_accounts")
+        assert candidate.correct_coalitions == 11
+        assert candidate.correct_coalitions_converted == 2
+        assert candidate.wrongful_coalitions == 22
+        assert candidate.wrongful_coalitions_cleared == 10
+        assert candidate.wrongful_coalitions_converted == 8
+        reference = _fifth_run_counts("repaired_clock")
+        assert reference.correct_coalitions == 0
+        assert (
+            reference.wrongful_coalitions,
+            reference.wrongful_coalitions_cleared,
+        ) == (
+            1,
+            1,
+        )
+        assert reference.wrongful_coalitions_converted == 1
+
+    def test_the_gate_survival_is_role_asymmetric(self) -> None:
+        """42 of 81 crew and 33 of 38 impostor: the funnel's second stage."""
+
+        candidate = _fifth_run_counts("combined_accounts")
+        assert candidate.crew_authored_ejects_cleared == 42
+        assert candidate.impostor_authored_ejects == 38
+        assert candidate.impostor_authored_ejects_cleared == 33
+        reference = _fifth_run_counts("repaired_clock")
+        assert reference.crew_authored_ejects_cleared == 10
+        assert (
+            reference.impostor_authored_ejects,
+            reference.impostor_authored_ejects_cleared,
+        ) == (4, 4)
+
+    def test_the_ejections_are_four_role_correct_and_two_crew_authored(self) -> None:
+        """Of 12: 4 role-correct, and 2 of those the crew actually authored."""
+
+        candidate = _fifth_run_counts("combined_accounts")
+        assert candidate.ejections == 12
+        assert candidate.role_correct_ejections == 4
+        assert candidate.crew_authored_role_correct_ejections == 2
+        reference = _fifth_run_counts("repaired_clock")
+        assert (
+            reference.ejections,
+            reference.role_correct_ejections,
+            reference.crew_authored_role_correct_ejections,
+        ) == (1, 0, 0)
+
+    def test_the_precision_tail_is_the_one_the_memo_quotes(self) -> None:
+        """63.0% of 81 against the 0.5 null, one-sided p = 0.013."""
+
+        block = instrument.authored_ballot_block(_fifth_run_counts("combined_accounts"))
+        assert round(block.crew_authored_precision_p, 3) == 0.013
+        # And the reference arm's 4 of 10 is nowhere near it.
+        reference = instrument.authored_ballot_block(
+            _fifth_run_counts("repaired_clock")
+        )
+        assert reference.crew_authored_precision_p > 0.5
+
+    def test_reading_the_authored_target_off_the_recorded_one_moves_the_row(
+        self,
+    ) -> None:
+        """PLANTED: the recorded target is the TALLY's reading, not the voter's.
+
+        Dropping the guard pair — reading ``target`` as though the voter had
+        written it — collapses the candidate's crew row from 81 authored
+        ejections to the 42 that survived the citation gate, which is exactly
+        the layer this block exists to see under. The reference arm barely
+        moves, because almost nothing of it was rewritten, which is why the
+        defect would have been invisible on that arm alone.
+        """
+
+        perturbed = _fifth_run_counts(
+            "combined_accounts", authored_off_the_recorded_target=True
+        )
+        assert perturbed.crew_authored_ejects == 42
+        assert perturbed.crew_authored_ejects != 81
+
+    def test_the_walk_writes_nothing_to_the_archive(self) -> None:
+        """A test that reads a committed record must leave it byte-identical."""
+
+        def fingerprint() -> dict[str, tuple[int, str]]:
+            return {
+                path.name: (
+                    path.stat().st_size,
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                )
+                for path in sorted(_FIFTH_RUN.iterdir())
+                if path.is_file()
+            }
+
+        before = fingerprint()
+        _fifth_run_counts("combined_accounts")
+        _fifth_run_counts("repaired_clock")
+        assert fingerprint() == before
+
+    def test_the_archive_holds_the_hundred_replays_the_walk_expects(self) -> None:
+        """A silent zero would pass every pin above; the denominator is checked."""
+
+        for arm in ("combined_accounts", "repaired_clock"):
+            assert len(list(_FIFTH_RUN.glob(f"{arm}-seed-*.jsonl"))) == 50
+
+
+class TestTheDiagnosticsBlockIsLabelledAndNeverGates:
+    """A labelled diagnostic: it says what it is, and nothing reads it."""
+
+    def test_the_precision_is_refused_without_its_harm_counter(self) -> None:
+        """PLANTED: the pairing the owner's decision 2 made a condition.
+
+        The precision figure is the one that reads as an achievement. A payload
+        that carries it and drops the crew-on-crew counter beside it is refused
+        by name rather than reported half-told.
+        """
+
+        with pytest.raises(ValidationError) as refused:
+            instrument.AuthoredBallotDiagnostics(
+                crew_authored_ejects=81,
+                crew_authored_naming_impostor=51,
+                crew_authored_precision_p=0.013,
+            )
+        message = str(refused.value)
+        assert "never reported without its harm counter" in message
+        assert "crew_on_crew_authored_ejects" in message
+
+    def test_a_block_carrying_both_halves_is_accepted(self) -> None:
+        """The control: the same payload with the harm counter is a block."""
+
+        block = instrument.AuthoredBallotDiagnostics(
+            crew_authored_ejects=81,
+            crew_authored_naming_impostor=51,
+            crew_authored_precision_p=0.013,
+            crew_on_crew_authored_ejects=30,
+            units_with_crew_on_crew=27,
+        )
+        assert block.crew_on_crew_authored_ejects == 30
+
+    def test_an_empty_block_claims_nothing_and_is_accepted(self) -> None:
+        """A default block carries neither half, so it is not a half-told claim."""
+
+        assert instrument.AuthoredBallotDiagnostics().crew_authored_ejects == 0
+
+    def test_the_block_says_what_it_is_in_the_report(self) -> None:
+        """The four statements the card requires of the report text."""
+
+        note = instrument.AUTHORED_DIAGNOSTICS_NOTE
+        assert "AUTHORING-CONDITIONED" in note
+        assert "flatters whichever arm authors more" in note
+        assert "NEVER a decision input" in note
+        assert "never preregistered" in note
+        assert "REGISTER" in note
+        # And the block carries it, so a reader of the report meets it.
+        assert instrument.AuthoredBallotDiagnostics().note == note
+
+    def test_no_decision_reads_the_block(self) -> None:
+        """PLANTED: no stop condition, no paired field, no decision branch.
+
+        The three places a diagnostic could become an outcome, checked by name:
+        the frozen rule texts the report publishes, the paired result's own
+        fields, and the source of the function that computes the decision.
+        """
+
+        # ``ejections`` is left out of the prose scan below and only out of
+        # that: it is an ordinary English word the frozen rules use for the
+        # thing they DO judge, so its presence there says nothing about this
+        # block. It is still checked against the paired result's fields.
+        names = set(instrument.AuthoredBallotDiagnostics.model_fields) - {"note"}
+        assert names.isdisjoint(instrument.PairedResult.model_fields)
+        names -= {"ejections"}
+        for rule in (
+            instrument.STOP_RULE,
+            instrument.DECISION_RULE,
+            instrument.WRONGFUL_EJECTION_TRADEOFF,
+            instrument.PRIMARY_OUTCOME_RUBRIC,
+        ):
+            for name in names:
+                assert name not in rule
+        deciding = inspect.getsource(instrument.paired_result)
+        for symbol in (
+            "authored_diagnostics",
+            "authored_ballot_block",
+            "AuthoredBallotCounts",
+            "diagnostics",
+        ):
+            assert symbol not in deciding
+
+    def test_the_block_reaches_the_report_beside_the_outcome(
+        self, tmp_path: Path
+    ) -> None:
+        """A dry run's report carries one block per arm, with its note."""
+
+        report = run_dry(
+            output_dir=tmp_path / "run",
+            units=_SMOKE_UNITS,
+            limits=feasible_limits(),
+            client=UsageReplayProvider(),
+        )
+        assert len(report.arms) == 2
+        for arm in report.arms:
+            assert arm.authored_diagnostics.note == instrument.AUTHORED_DIAGNOSTICS_NOTE
+            assert [row.role for row in arm.authored_diagnostics.by_voter_role] == [
+                "CREWMATE",
+                "IMPOSTOR",
+            ]
+            for row in arm.authored_diagnostics.by_voter_role:
+                assert row.authored == row.cleared + row.coerced
+
+    def test_the_report_carries_no_prefix_bytes_with_the_block_on_it(
+        self, tmp_path: Path
+    ) -> None:
+        """Counts only, so the report's own secrecy check passes over the block."""
+
+        report = run_dry(
+            output_dir=tmp_path / "run",
+            units=_SMOKE_UNITS,
+            limits=feasible_limits(),
+            client=UsageReplayProvider(),
+        )
+        frozen = verify_frozen_set(_REPO_ROOT)
+        instrument.assert_report_holds_no_prefix_bytes(
+            report, frozen.prefixes[:_SMOKE_UNITS]
+        )
+
+    def test_the_block_is_projected_at_unit_close_not_at_report_time(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: a resumed run reports the totals the whole run reports.
+
+        The earlier units of a resumed sitting exist only as checkpoint rows —
+        there is no ``UnitRecord`` for them — so a block computed at report time
+        from the in-memory records would report the TAIL's authored layer as the
+        run's. The projection happens in ``unit_telemetry``, which is what the
+        checkpoint carries, and this is the statement that makes the difference
+        visible.
+        """
+
+        limits = feasible_limits()
+        whole = run_dry(
+            output_dir=tmp_path / "whole",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(),
+        )
+        checkpoint_path = tmp_path / "checkpoint.json"
+        stopper = UsageReplayProvider(
+            spoil_call=25,
+            spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+            mode="transport_error",
+        )
+        with pytest.raises(InstrumentAborted):
+            run_dry(
+                output_dir=tmp_path / "stopped",
+                units=4,
+                limits=limits,
+                client=stopper,
+                checkpoint_path=checkpoint_path,
+            )
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+        assert len(checkpoint.completed_seeds) == 2
+        # The checkpoint really does carry the authored layer of the units it
+        # graded; without it the resume below would have nothing to sum.
+        assert any(
+            unit.telemetry.diagnostics != instrument.AuthoredBallotCounts()
+            for unit in checkpoint.units
+        )
+        resumed = run_dry(
+            output_dir=tmp_path / "resumed",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(seed=6),
+            resume=checkpoint,
+        )
+        assert {arm.arm: arm.authored_diagnostics for arm in resumed.arms} == {
+            arm.arm: arm.authored_diagnostics for arm in whole.arms
+        }
+
+
+class _LengthOnceProvider(DryRunProvider):
+    """A dry-run provider that reports ``"length"`` on one call and ``"stop"`` after.
+
+    The reading a completed RUN can never carry — the truncation gate stops on
+    it — so the distribution is read off the partial accounting the stop
+    reports, which is where a run's spend goes when it stops.
+    """
+
+    def __init__(self, *, at_call: int = 3) -> None:
+        super().__init__()
+        self._at_call = at_call
+        self._calls = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        response = await super().complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+        self._calls += 1
+        if self._calls != self._at_call:
+            return response
+        return LLMResponse(
+            text=response.text,
+            usage=response.usage,
+            cost_usd=response.cost_usd,
+            model=response.model,
+            finish_reason="length",
+        )
+
+
+class TestPerCallFinishReasonsReachTheRun:
+    """`finish_reason` was recorded per call and folded away; now it is reported."""
+
+    def _call(self, finish_reason: str | None) -> instrument.CapturedCall:
+        return instrument.CapturedCall(
+            agent_id="p-1",
+            prompt="x",
+            max_tokens=1024,
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.0,
+            model=AUTHORIZED_MODEL,
+            seconds=0.1,
+            finish_reason=finish_reason,
+        )
+
+    def test_an_absent_reading_is_keyed_null_rather_than_dropped(self) -> None:
+        """ "The provider reported nothing" is a row, not a hole."""
+
+        usage = instrument.ArmUsage().plus(
+            [self._call("stop"), self._call(None), self._call("stop")]
+        )
+        assert usage.finish_reasons == {"null": 1, "stop": 2}
+        assert sum(usage.finish_reasons.values()) == usage.calls
+
+    def test_the_empty_distribution_compares_equal_across_instances(self) -> None:
+        """PLANTED: `abandoned_spend` decides on `spend == ArmUsage()`.
+
+        A default that did not compare equal — or a fold over NO calls that
+        seeded a key — would make an arm that spent nothing look like an arm
+        that spent something, and the checkpoint would carry an abandoned row
+        for a pair nobody ran.
+        """
+
+        assert instrument.ArmUsage() == instrument.ArmUsage()
+        assert instrument.ArmUsage().plus([]) == instrument.ArmUsage()
+        assert instrument.ArmUsage().merged(instrument.ArmUsage()) == (
+            instrument.ArmUsage()
+        )
+        assert (
+            instrument.abandoned_spend(
+                instrument.AbandonedSpend(),
+                arms=["repaired_clock", "combined_accounts"],
+                usage_by_arm={"repaired_clock": instrument.ArmUsage()},
+                attempts_by_arm={},
+                model_work_seconds=0.0,
+            ).arms
+            == ()
+        )
+
+    def test_two_tallies_of_one_arm_sum_their_readings(self) -> None:
+        """A resumed sitting carries totals, not the calls they came from."""
+
+        first = instrument.ArmUsage().plus([self._call("stop"), self._call("length")])
+        second = instrument.ArmUsage().plus([self._call("stop")])
+        assert first.merged(second).finish_reasons == {"length": 1, "stop": 2}
+
+    def test_a_run_reports_both_readings_rather_than_one_aggregate(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: one `"length"` and `"stop"` otherwise, reported as two rows.
+
+        `cap_signal_disagreements` collapses every reading to one integer, so a
+        run whose provider said `"length"` once and a run whose provider said
+        nothing at all were indistinguishable in the report. The stop this
+        reading earns is unchanged — a truncation is still a stop — and its
+        partial accounting now names what the provider said.
+        """
+
+        with pytest.raises(InstrumentAborted) as stopped:
+            run_dry(
+                output_dir=tmp_path / "run",
+                units=_SMOKE_UNITS,
+                limits=feasible_limits(),
+                client=_LengthOnceProvider(at_call=3),
+            )
+        readings = {
+            arm: dict(usage.finish_reasons)
+            for arm, usage in stopped.value.partial.usage_by_arm.items()
+        }
+        assert readings == {"repaired_clock": {"length": 1, "stop": 2}}
+        assert "finish_reason 'length'" in stopped.value.partial.reason
+
+    def test_the_readings_of_an_abandoned_pair_survive_a_resume(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the calls a stop abandoned are on no unit row.
+
+        They are on the checkpoint's abandoned rows, and a resumed run charges
+        them. Their readings ride with them, so a run stopped once reports what
+        both sittings' providers said rather than what the tail's did.
+        """
+
+        limits = feasible_limits()
+        checkpoint_path = tmp_path / "checkpoint.json"
+        stopper = UsageReplayProvider(
+            profile=stopped_runs_profile(),
+            spoil_call=28,
+            spoil_repeats=instrument.MAX_TRANSPORT_ATTEMPTS,
+            mode="transport_error",
+        )
+        with pytest.raises(InstrumentAborted):
+            run_dry(
+                output_dir=tmp_path / "stopped",
+                units=4,
+                limits=limits,
+                client=stopper,
+                checkpoint_path=checkpoint_path,
+            )
+        checkpoint = instrument.read_checkpoint(checkpoint_path)
+        abandoned = checkpoint.abandoned.usage_by_arm()
+        assert abandoned, "a mid-unit stop abandoned no spend at all"
+        for name, spend in abandoned.items():
+            assert spend.finish_reasons, name
+            assert sum(spend.finish_reasons.values()) == spend.calls
+        resumed = run_dry(
+            output_dir=tmp_path / "resumed",
+            units=4,
+            limits=limits,
+            client=UsageReplayProvider(seed=6),
+            resume=checkpoint,
+        )
+        for summary in resumed.arms:
+            assert sum(summary.finish_reasons.values()) == summary.calls
+
+    def test_a_dry_runs_report_carries_the_distribution_per_arm(
+        self, tmp_path: Path
+    ) -> None:
+        """The field reaches the report, summing to the arm's own call count."""
+
+        report = run_dry(
+            output_dir=tmp_path / "run",
+            units=_SMOKE_UNITS,
+            limits=feasible_limits(),
+            client=UsageReplayProvider(),
+        )
+        for arm in report.arms:
+            assert arm.finish_reasons
+            assert sum(arm.finish_reasons.values()) == arm.calls
+
+    def test_records_written_before_this_card_read_empty(self) -> None:
+        """PLANTED: an archive whose provider reading nobody recorded.
+
+        The fifth run's committed report and checkpoint predate the field. They
+        must parse through the current models and read an EMPTY distribution —
+        "nothing was recorded" — rather than a fabricated `"stop"` on every
+        call. The checkpoint payload version and the replay row are unchanged,
+        so the archive is still the archive.
+        """
+
+        report = InstrumentReport.model_validate_json(
+            (_FIFTH_RUN / "report.json").read_text(encoding="utf-8")
+        )
+        assert report.arms
+        for arm in report.arms:
+            assert arm.finish_reasons == {}
+            assert arm.calls > 0
+            # And the block this card adds beside it reads empty too.
+            assert arm.authored_diagnostics.crew_authored_ejects == 0
+        checkpoint = instrument.read_checkpoint(_FIFTH_RUN / "checkpoint-final.json")
+        assert len(checkpoint.units) == 100
+        for unit in checkpoint.units:
+            assert unit.telemetry.usage.finish_reasons == {}
+            assert unit.telemetry.diagnostics == instrument.AuthoredBallotCounts()
+        assert instrument.CHECKPOINT_SCHEMA == "fresh-deduction-checkpoint/1"
+        assert checkpoint.schema_version == instrument.CHECKPOINT_SCHEMA
+        # The RECORDING path is untouched: the replay row still carries no
+        # finish reason, so no committed replay's bytes move for this.
+        assert "finish_reason" not in LLMCallRecord.model_fields
