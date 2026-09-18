@@ -1,6 +1,6 @@
 # Run a third development calibration that measures the revised wave
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -161,7 +161,7 @@ the fifth run's own figures. None is a gate.
 - [x] `CEILING_PROPOSAL_RULE` (`:6061`) and `ceiling_proposal` (`:6934`) are
   unchanged and the proposal is published for the hundred-unit run as
   calibration 2's was, while the refresh it feeds stays out of scope.
-- [ ] Aggregates committed under
+- [x] Aggregates committed under
   `audits/deduction-candidate/calibration-3-<date>/` in the shape calibration 2
   committed, with per-unit usage rows; replays go to the runner's
   `--output-dir`, outside version control, which is where a per-seed reading of
@@ -171,12 +171,20 @@ the fifth run's own figures. None is a gate.
   six predictions copied verbatim as predictions rather than gates, with the
   sentence that a miss is neither a stop nor a verdict. A test holds the card's
   table and the manifest's copy to the same six rows; the frozen analysis
-  strings stay byte-identical and no earlier dated section is edited.
-- [ ] The live sitting runs once, by a separate runner session on
+  strings stay byte-identical and no earlier dated section is edited. The
+  manifest half was committed by the implementer; the aggregates are now at
+  [`calibration-3-2026-09-18/`](../../audits/deduction-candidate/calibration-3-2026-09-18/CALIBRATION.md)
+  — `calibration.json` (206,332 bytes), `unit-usage.jsonl` (120 rows),
+  `calibration-run.log` and `CALIBRATION.md` — with the replays in the runner's
+  `--output-dir` outside version control and nothing committed from them but
+  counts.
+- [x] The live sitting runs once, by a separate runner session on
   `work/fresh-deduction-calibration-3-run` under the manifest's calibration-3
   clause. Its Results subsection records the profile, the truncation rows, the
   leak counts, the diagnostics block, each prediction as met or missed, the
-  proposal, usage at $0.00 and the archive path.
+  proposal, usage at $0.00 and the archive path. Ran `2026-09-18T17:17:08Z` to
+  `2026-09-18T20:16:13Z`, exit 0, all 120 units and all 721 attempts, once and
+  not resumed: `### The live sitting (2026-09-18)` below.
 
 ## Constraints
 
@@ -276,19 +284,26 @@ a check here.
 
 ## Results
 
-**Status `active`, and why.** `## Acceptance` carries TWELVE items: the two
-review corrections of round 1, prepended and checked, and the card's original
-ten. Items 1-10 are met and checked. Item 11 is split: its manifest half — the
-dated "Development calibration 3 (2026-09-18)" section, the clause verbatim, the
-named draw with each record's sha256 and seeds, the limits/sampling/lever table
-and the six predictions — is committed here, because the live gate reads that
-document and the sitting cannot be authorized without it; its
-`audits/deduction-candidate/calibration-3-<date>/` aggregates are a product of
-the sitting and do not exist yet. Item 12, the last, is the live sitting itself,
-which is a separate runner session on
-`work/fresh-deduction-calibration-3-run` after this merges. Both stay unchecked
-and the card stays `active`; `tasks/README.md`'s derived inventory sentence is
-updated for that status.
+**Status `done`, and why.** `## Acceptance` carries TWELVE items: the two review
+corrections of round 1, prepended and checked, and the card's original ten. All
+twelve are now met and checked.
+
+Items 1-10 were met by the implementer, on `work/fresh-deduction-calibration-3`,
+merged as PR #469 (`ef8081c3`); everything below `### The design this follows`
+and above `### The live sitting (2026-09-18)` is that session's record and is
+unedited. Item 11 was split there: its manifest half — the dated "Development
+calibration 3 (2026-09-18)" section, the clause verbatim, the named draw with
+each record's sha256 and seeds, the limits/sampling/lever table and the six
+predictions — was committed then, because the live gate reads that document and
+the sitting could not be authorized without it, while its
+`audits/deduction-candidate/calibration-3-<date>/` aggregates were a product of
+a sitting that had not happened. Item 12 was the sitting itself.
+
+Both were closed by the RUNNER session on
+`work/fresh-deduction-calibration-3-run`, which is this card's second pull
+request: the sitting ran once on 2026-09-18 and its aggregates are committed at
+`audits/deduction-candidate/calibration-3-2026-09-18/`. `tasks/README.md`'s
+derived inventory sentence is updated for the status flip.
 
 ### The design this follows
 
@@ -580,3 +595,178 @@ the Expected scope was touched in this round.
 | `uv run python scripts/build_sample_report.py --check --sample-dir replays/samples/4p1i` and `…/9p2i` | both consistent with their replays |
 | `bash scripts/check.sh` | exit 0, run whole and captured directly: 7,987 passed / 20 skipped / 3 xfailed, strict mypy over 484 sources, four frontend legs at 515 tests |
 | `uv run python -m experiments.fresh_deduction_instrument --calibrate --calibration-mode 2026-09-18 --json <tmp>/calibration.json` | exit 0, 120 units, 720 calls, `$0.00`, `dry_run: true`; the artifact's own bytes carry neither "reported beside the primary outcome" nor "until the v5 prompt set", and both arms' blocks carry this mode's note (the uncommitted rehearsal the finding was raised on, re-run after the repair) |
+
+### The live sitting (2026-09-18)
+
+The runner session's record, on `work/fresh-deduction-calibration-3-run` at
+`ef8081c3`. It ran the sitting ONCE — `2026-09-18T17:17:08Z` to
+`2026-09-18T20:16:13Z`, exit 0, 120 units, 721 attempts, not resumed and not
+restarted — and wrote no instrument, prompt, manifest or constant byte. The whole
+record is
+[`audits/deduction-candidate/calibration-3-2026-09-18/CALIBRATION.md`](../../audits/deduction-candidate/calibration-3-2026-09-18/CALIBRATION.md);
+every figure below is read from `calibration.json` beside it, or, for the four
+replay-derived rows, recomputed by the derivation that file quotes.
+
+**Pre-flight, before any spend.** `.venv/bin/pytest tests/experiments -q` 610
+passed; both input records bound by `shasum -a 256` to the digests the manifest
+names and by `git diff --exit-code origin/main` to `origin/main`'s bytes (both
+exit 0); one fake-provider calibration-3 at $0 which wrote 120 units, 720 calls,
+the role split, the leak column, the per-record inputs block and both arms'
+diagnostics blocks carrying this mode's own note; and an offline confirmation
+that `assert_calibration_is_authorized` accepts the committed manifest for the
+2026-09-18 mode and that `assert_limits_are_feasible` accepts
+`CALIBRATION_3_LIMITS` for 120 units — per unit 116,000 / 16,000, run 4,700,000 /
+520,000, 18,000 s of model work inside 21,600 s elapsed, `AUTHORIZED_SAMPLING`
+(turn 4,096 / vote 1,024), 4 transport attempts at 180 s, `featherless` /
+`Qwen/Qwen3.6-27B` / `qwen3_6_27b` at `ACCOUNT_PROMPT_SET_REVISION` v5, and
+`AILIBI_CITATION_RELEVANCE=1` resolved on BOTH arms.
+
+**The token profile.**
+
+| Arm | Call | n | in mean | in p95 | in max | out mean | out p95 | out max | cap |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `repaired_clock` | turn | 181 | 3,278.1 | 4,091 | 4,344 | 286.4 | 426 | 540 | 4,096 |
+| `repaired_clock` | ballot | 180 | 3,668.7 | 4,337 | 4,721 | 100.8 | 123 | 143 | 1,024 |
+| `combined_accounts` | turn | 180 | 3,397.5 | 4,736 | 5,477 | 476.2 | 835 | 1,187 | 4,096 |
+| `combined_accounts` | ballot | 180 | 4,753.1 | 6,227 | 7,354 | 99.8 | 123 | 130 | 1,024 |
+
+Per unit: reference 20,895.1 in / 1,166.3 out mean, largest 25,247 / 1,602;
+candidate 24,451.9 / 1,728.3 mean, largest **34,412 / 2,764**. The wave's bytes
+land on the candidate's ballot INPUT — 4,753.1 against the 2026-09-15 sitting's
+4,272.6 on the same seeds, +11.2%, with that call's output unmoved. The role
+split and its prose lengths are in the archive.
+
+**Truncations: zero**, on both arms, both call types and both roles, by both
+signals. `finish_reason` is `{"stop": 361}` on the reference and `{"stop": 360}`
+on the candidate, and the cap-signal disagreement count is **0 per arm**.
+
+**Leak and self-tell.** Leaking turns 0 on each arm and 0 units carrying one, on
+the repaired `_NOT_AN_ASSERTION` guard; the count is an estimate carrying error
+in BOTH directions and is not a floor. Self-telling impostor ballots 28 of 60
+candidate (46.7%) and 3 of 60 reference (5.0%).
+
+**Refusals, defaults and transport.** Reference: 0 charged failed attempts, 0
+defaults, 0 retries, 0 unaccounted. Candidate: **1** billed-and-refused attempt
+(2,885 in / 459 out) and **1** defaulted turn by schema validation — the same
+call, in 1 unit of 60 — with 0 defaulted votes, 0 retried calls, 0 unaccounted
+and 0 aborted attempts. The reference arm made one extra call (361 for 360 slots)
+on the meeting layer's shipped single re-ask, which is neither a retry nor a
+default.
+
+**The DIAGNOSTICS block**, per arm, precision never without its harm counter:
+
+| Figure | `repaired_clock` | `combined_accounts` |
+| --- | --- | --- |
+| authored EJECT / SKIP of 180 ballots | 23 / 157 | **39 / 141** |
+| crew authored EJECTs naming the impostor | 6 of 15 (40.0%, p 0.849) | 13 of 27 (48.1%, p 0.649) |
+| HARM: crew-on-crew authored EJECTs / units carrying one | 9 / 9 of 60 | 14 / 14 of 60 |
+| gate survival, CREWMATE (authored / cleared / coerced / illegal) | 15 / 15 / 0 / 0 = 100.0% | 27 / 26 / 1 / 0 = 96.3% |
+| gate survival, IMPOSTOR | 8 / 7 / 1 / 0 = 87.5% | 12 / 10 / 2 / 0 = 83.3% |
+| correct coalitions authored / cleared / converted | 0 / 0 / 0 | 1 / 1 / 1 |
+| wrongful coalitions authored / cleared / converted | 3 / 3 / 3 | 8 / 8 / 8 |
+| ejections / role-correct / crew-authored role-correct | 3 / 0 / 0 (p 1.0) | 9 / 1 / 1 (p 0.974) |
+| guard rewrites `off_target_coerced` / `uncited_coerced` / `under_gate_redirect` | 1 / 0 / 0 | 3 / 0 / 1 |
+| surviving `primary_reason_id` / nulled | 19 of 180 / **0** | **32 of 180** / **0** |
+| contradiction flags / units carrying one | 7 / 6 of 60 | **0** / 0 of 60 |
+| claims accusation / alibi / corroboration | 174 / 42 / 12 | 175 / 0 / 0 |
+
+**The six predictions, read as directions and not as gates.** The baseline is the
+fifth run, measured on the 8000-8999 prefixes at 50 paired seeds rather than on
+this draw's 60; no paired statistic was computed and no primary outcome or
+decision rule was evaluated.
+
+| # | Fifth run | This sitting (candidate) | Verdict |
+| --- | --- | --- | --- |
+| P1 the gap narrows | impostor 86.8%, crew 51.9% | impostor 83.3%, crew 96.3% | **held** — inverted rather than narrowed |
+| P2 wrongful falls to or below correct | 36.4% vs 18.2% | 100.0% (8 of 8) vs 100.0% (1 of 1) | **held by the letter, on n = 1** — both rose to 100% |
+| P3 authored EJECTs fall toward 14 | 119 / 31 of 150 (79.3%) | 39 / 141 of 180 (21.7%), reference 12.8% | **held** |
+| P4 surviving ids rise, coercions fall | 0 of 150 keep one; 27 nulled; 44 coerced | 32 of 180 keep one; 0 nulled; 0 `uncited_coerced` | **held on both halves** |
+| P5 holds near 63% | 51 of 81 (63.0%, p 0.013) | 13 of 27 (48.1%, p 0.649) | **did not hold** |
+| P6 flags rise above 1 | 1 against 14 | 0 against 7 | **did not hold** |
+
+**Pace and usage.** 14.89 s per attempt pooled (13.49 s reference, 16.30 s
+candidate), 10,737.2 s of model work inside 10,744.1 s elapsed. Against the
+calibration-3 limits: run input 2,720,819 / 4,700,000 (57.9%), run output 173,677
+/ 520,000 (33.4%), largest unit input 34,412 / 116,000 (29.7%), largest unit
+output 2,764 / 16,000 (17.3%), model work 59.7%, elapsed 49.7%. No ceiling fired.
+**$0.00 marginal.**
+
+**The ceiling proposal**, by the unchanged `CEILING_PROPOSAL_RULE`, for 100
+units: per unit **104,000 / 16,000**, run **3,442,000 / 281,000** — the max floor
+binding on both dimensions, the output floor carrying the in-flight headroom term
+(100 x 2,764 + 4,096 = 280,496 -> 281,000). `clears_the_feasibility_gate: true`,
+which is true BY CONSTRUCTION because the rule computes those figures from the
+maxima the check reads; `clears_the_committed_profiles_gate: false`, because this
+sitting's units are SMALLER on output than the committed profile's 4,176 and a
+proposal sized on the smaller does not clear the larger. The proposal authorizes
+nothing.
+
+**The committed usage profile was NOT refreshed and neither calibrated constant
+moved**, by this card's own Constraints: that work is
+[the limits card](fresh-deduction-limits-6.md)'s. Run into a path outside version
+control so the numbers exist for it: 721 call rows, 120 unit rows,
+`largest_charged_unit_input_tokens` **34,412**,
+`largest_charged_unit_output_tokens` **2,764**. One consequence, stated and not
+acted on: a hundred units of that largest unit need 3,441,200 input and 280,496
+output, and the standing `AUTHORIZED_LIMITS` run ceilings (3,844,000 / 422,000)
+clear both.
+
+**Guards re-run over the archived payload.**
+`assert_report_holds_no_prefix_bytes` passed against all sixty rebuilt prefixes,
+and `assert_calibration_reports_no_outcome` passed over the same bytes. The
+credential scan over all four files of the archive directory, comparing counts
+only against the whole key and its first six characters, returns 0 and 0. The
+log's stdout body is byte-identical to `calibration.json` (both sha256
+`ce5e95610ba390a9bd0c871252baf42188316c036620c76164dc4a8570556984`).
+
+**Record impact of the sitting.** `audits/` bytes moved, so the
+`docs/artifacts.md` inventory row was recomputed with the change staged. No
+instrument, prompt, recording, report, DTO, metric or weight byte moves; no lever
+changes default; no experiment becomes ON; the held-out record at `MANIFEST_PATH`
+is untouched and was refused by name inside the draw; `CALIBRATION_CAVEAT`,
+`CALIBRATION_3_CAVEAT`, `AUTHORED_DIAGNOSTICS_NOTE`, `PRIMARY_OUTCOME`,
+`DECISION_RULE`, `MINIMUM_ACTIONABLE_EFFECT_UNITS`, `WRONGFUL_EJECTION_TRADEOFF`
+and `STOP_RULE` are byte-identical. `experiments/fresh_deduction_instrument.py`
+did not move, so the arm-surface digest does not move on this pull request.
+
+**Limitations of the sitting**, in full in the archive's own section: it measured
+cost, shape and the authored layer and not merit; the six predictions are
+directions and not thresholds, read against a different band at a different
+sample size; cross-sitting comparison holds on INPUTS, the reference arm having
+been re-baselined by the citation guard both arms enable; the diagnostics are
+authoring-conditioned and neither arm's crew precision separates from its 0.5
+null; the coalition funnel rests on one correct coalition; nine ejections and
+three cannot separate from the 1/3 chance rate; zero truncations bounds the rate
+rather than proving it; and the leak rule carries two-sided error.
+
+**Deviations.** Three, each recorded in the archive: the credential reached the
+process through `uv run --env-file` from a 0600 file outside the repository
+(deleted afterwards) rather than through the manifest's bare `.venv/bin/python`
+form, with every other argument identical; the committed usage profile was not
+refreshed, which is this card's own instruction; and
+`audits/deduction-candidate/checkpoint.md` and `README.md` gained a dated line
+and an index paragraph, which the dispatch asked for.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/pytest tests/experiments -q` (pre-flight, and again at the head of this branch) | 610 passed |
+| `.venv/bin/python -m experiments.fresh_deduction_instrument --calibrate --calibration-mode 2026-09-18 --output-dir <tmp> --json <tmp>/calibration.json` | exit 0, $0, 120 units / 720 calls, `dry_run: true` |
+| the live sitting, once | exit 0, 120 units, 721 attempts, `$0.00`, `dry_run: false` |
+
+The gates, run in this worktree at the head of this branch, each with its real
+exit code captured directly rather than through a pipe:
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed: 390 historical phase tasks and 390 prompts; 66 work cards (the inventory sentence now reads 2 ready, 64 done) |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `.venv/bin/pytest tests/experiments -q` | 610 passed |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7 (the class-(c) evidence branch, expected on a fresh checkout), INFO 5 |
+| `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | **exit 0**, run whole: ruff, ruff format, lint-imports, `validate_task_docs.py`, `generate_prompts.py --check`, strict mypy over 484 sources, 7,987 passed / 20 skipped / 3 xfailed, and the four frontend legs at 515 tests |
+
+`docs/artifacts.md`'s `audits/` inventory row was recomputed from
+`git ls-files audits/` with this change staged: **26,012,257 → 26,509,796 tracked
+bytes, 324 → 328 files**. The credential scan is count-only and returned 0 and 0
+on three denominators: the 4 files of the archive directory, the 9 files this
+pull request changes, and all 22,280 files of the worktree.
