@@ -1538,7 +1538,19 @@ with `assert_report_holds_no_prefix_bytes` over the payload and
 `assert_calibration_reports_no_outcome` beside it, which refuses a calibration
 payload carrying a paired block, a decision or the primary outcome's own field.
 This mode publishes its own caveat, `CALIBRATION_3_CAVEAT`, beside the one the
-two spent sittings were published under, which is byte-identical.
+two spent sittings were published under, which is byte-identical. The
+diagnostics block it publishes carries its own note for the same reason,
+`CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE` and never the live run's
+`AUTHORED_DIAGNOSTICS_NOTE`: that string tells its reader the counts are
+reported beside the primary outcome and that a cross-arm reading waits on the
+v5 prompt set, and this payload reports no primary outcome and renders v5 on
+both arms. What the two notes share is the half that makes the block safe to
+read — authoring-conditioned, the precision never without its harm counter, the
+illegal-target column, never preregistered and never a decision input — and
+`assert_every_reporting_mode_has_its_note` refuses a mode that reports the block
+without a note of its own, so a fourth mode cannot inherit either
+(`tasks/work/fresh-deduction-calibration-3.md`, review corrections of
+2026-09-18).
 
 **The six predictions, fixed BEFORE the sitting.** Read from the memo's section
 7 against the fifth run's own figures, which were measured on the 8000-8999

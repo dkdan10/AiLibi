@@ -77,6 +77,26 @@ the fifth run's own figures. None is a gate.
 
 ## Acceptance
 
+- [x] Review correction: `## Results` counts its own boxes. Its opening
+  paragraph numbered the outstanding items one low — it called the committed
+  aggregates item 8 and the live sitting item 9, against a list whose item 8 is
+  `CEILING_PROPOSAL_RULE` and is checked — so a reader reconciling the prose
+  against the boxes met a contradiction about what is outstanding. Renumbered
+  against the list as it now stands, review corrections included, and re-derived
+  by `uv run python scripts/validate_task_docs.py`, which holds a `done` card to
+  no unchecked box and this `active` one to the inventory sentence.
+- [x] Review correction: the 2026-09-18 artifact no longer publishes the live
+  evaluation's `AUTHORED_DIAGNOSTICS_NOTE`, which says the counts are "reported
+  beside the primary outcome" and that a cross-arm reading is confounded "until
+  the v5 prompt set equalises the register" — both false of a payload that
+  reports no primary outcome and renders v5 on both arms. The block's note is a
+  parameter, `CALIBRATION_DIAGNOSTICS_NOTES` names one per reporting mode, and
+  `assert_every_reporting_mode_has_its_note` refuses a table that does not match
+  the modes or that points a calibration at the live note. Proved by
+  `test_the_published_block_is_not_the_live_runs_note`,
+  `test_the_third_modes_block_publishes_its_own_note`,
+  `test_a_note_table_that_does_not_match_the_modes_is_refused` (planted three
+  ways) and `test_a_calibration_may_not_publish_the_live_runs_note`.
 - [x] A THIRD dated clause and constant set beside the 2026-09-14 and
   2026-09-15 sets, neither edited: `CALIBRATION_3_PAIRED_SEEDS = 60`,
   `CALIBRATION_3_LIMITS`, `CALIBRATION_3_SAMPLING` equal to
@@ -256,14 +276,16 @@ a check here.
 
 ## Results
 
-**Status `active`, and why.** Acceptance items 1-7 are met and checked. Item 8 is
-split: its manifest half — the dated "Development calibration 3 (2026-09-18)"
-section, the clause verbatim, the named draw with each record's sha256 and
-seeds, the limits/sampling/lever table and the six predictions — is committed
-here, because the live gate reads that document and the sitting cannot be
-authorized without it; its `audits/deduction-candidate/calibration-3-<date>/`
-aggregates are a product of the sitting and do not exist yet. Item 9 is the live
-sitting itself, which is a separate runner session on
+**Status `active`, and why.** `## Acceptance` carries TWELVE items: the two
+review corrections of round 1, prepended and checked, and the card's original
+ten. Items 1-10 are met and checked. Item 11 is split: its manifest half — the
+dated "Development calibration 3 (2026-09-18)" section, the clause verbatim, the
+named draw with each record's sha256 and seeds, the limits/sampling/lever table
+and the six predictions — is committed here, because the live gate reads that
+document and the sitting cannot be authorized without it; its
+`audits/deduction-candidate/calibration-3-<date>/` aggregates are a product of
+the sitting and do not exist yet. Item 12, the last, is the live sitting itself,
+which is a separate runner session on
 `work/fresh-deduction-calibration-3-run` after this merges. Both stay unchecked
 and the card stays `active`; `tasks/README.md`'s derived inventory sentence is
 updated for that status.
@@ -457,3 +479,104 @@ there are three.
   over constants or a $0 rehearsal. The sitting's own numbers, the six
   predictions read as met or missed, the proposal and the archive path are the
   runner's Results subsection on the second pull request.
+
+### Review corrections, round 1 (2026-09-18)
+
+Two findings from the independent verifiers, both valid, both repaired here on
+`work/fresh-deduction-calibration-3` before merge. Neither moves the draw, the
+limits, the sampling, the clause, a prompt byte or a frozen analysis string, and
+no provider call was made for either. Every command below was run at this
+subsection's commit.
+
+**Finding 1 — `## Results` miscounted its own boxes.** The opening paragraph read
+"Acceptance items 1-7 are met and checked. Item 8 is split … Item 9 is the live
+sitting", against a list of ten items of which EIGHT were checked: it called the
+committed aggregates item 8 and the live sitting item 9, while the card's own
+item 8 is the `CEILING_PROPOSAL_RULE` one and is `[x]`. A reader reconciling the
+prose against the boxes was told the outstanding work began one item earlier than
+it does. Card text only; no code, no gate and no number moves. The paragraph is
+now renumbered against the list AS IT NOW STANDS — twelve items, the two review
+corrections prepended and checked, the original ten after them, items 1-10
+checked, item 11 the split one and item 12 the live sitting — rather than against
+the pre-correction list, so it stays true after the reopen rather than becoming
+wrong by two.
+
+**Finding 2 — the mode-3 artifact published the live evaluation's note.**
+`authored_ballot_block` hard-coded `AUTHORED_DIAGNOSTICS_NOTE`, so
+`--calibrate --calibration-mode 2026-09-18` wrote, into every arm of
+`calibration.json`, a paragraph saying the counts "are reported beside the
+primary outcome" and that "a cross-arm reading of these counts is confounded
+until the v5 prompt set equalises the register". Both are false of this payload:
+`CALIBRATION_3_CAVEAT`, three lines away in the same file, says no primary
+outcome is reported, and `resolved_levers` on the candidate arm shows
+`AILIBI_PUBLIC_ACCOUNTS=1` — the v5 set, rendering. This is decision 4's own
+reasoning (an empty block "is not empty in the payload: it carries
+`AUTHORED_DIAGNOSTICS_NOTE`, a paragraph about … the primary outcome") applied to
+the two spent modes and not to the third.
+
+The repair, on the shape the caveats already use rather than an `if`:
+
+* `CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE` is a second string beside the live
+  one, which stays byte-identical because it is what the live run's block is
+  published under. It drops the two false clauses, keeps the half that makes the
+  block safe to read — authoring-conditioned, flatters whichever arm authors
+  more, the precision ONLY beside its harm counter, the illegal-target column,
+  never preregistered, NEVER a decision input — and states what this payload is:
+  no primary outcome reported, no paired statistic computed, no decision rule
+  evaluated, predictions rather than gates. Where the live note asserts the
+  register confound, this one says the register is one of the things the counts
+  are read FOR (prediction P3), because whether v5 equalised it is this
+  sitting's question and not its premise.
+* `note` is a keyword parameter of `authored_ballot_block`, defaulting to the
+  live evaluation's, so `_summarize_arm` (the run path) is byte-unchanged in
+  behaviour.
+* `CALIBRATION_DIAGNOSTICS_NOTES` is a closed `MappingProxyType` naming one note
+  per mode that REPORTS the block, and `_summarize_calibration_arm` now takes
+  `diagnostics_note: str | None` in place of `with_diagnostics: bool`: the block
+  is requested BY its note, so "report the block" and "supply its note" cannot
+  disagree.
+* `assert_every_reporting_mode_has_its_note` runs at import and refuses a table
+  that does not name exactly the modes with `reports_authored_diagnostics`, or
+  that points a calibration at `AUTHORED_DIAGNOSTICS_NOTE`. A function rather
+  than a bare `if`, so the invariant can be planted from the suite.
+
+| Guard | Plant | Observed |
+| --- | --- | --- |
+| the mode's own note reaches the artifact | the pre-repair `authored_ballot_block(_authored_counts_over(own))` restored | `test_the_published_block_is_not_the_live_runs_note` and `test_the_diagnostics_block_is_reported_per_arm` → `AssertionError`, the left set carrying "confounded until the v5 prompt set equalises the register" |
+| `assert_every_reporting_mode_has_its_note` | in-suite, three ways: an empty table, a note for a mode that reports no block, an extra mode | `test_a_note_table_that_does_not_match_the_modes_is_refused` → `InstrumentError: … needs its OWN note here` |
+| the same guard, on the note itself | in-suite: the table pointed at `AUTHORED_DIAGNOSTICS_NOTE` | `test_a_calibration_may_not_publish_the_live_runs_note` → `InstrumentError: a calibration may not publish the live evaluation's note` |
+
+`test_the_published_block_is_not_the_live_runs_note` reads the PAYLOAD rather
+than the constructed model — the bytes a reader of the artifact holds — and
+asserts the live note appears nowhere in the file.
+`test_the_prose_that_promises_no_outcome_is_not_itself_refused` now scans the new
+note too, so decision 6's key-only guard keeps being proved against every string
+that promises no outcome. The live evaluation's own path is unmoved:
+`test_the_block_reaches_the_report_beside_the_outcome` still asserts a dry run's
+arms carry `AUTHORED_DIAGNOSTICS_NOTE`.
+
+**Record impact of this round.** The manifest's calibration-3 section gains the
+paragraph that states the note split beside the caveat split, so `audits/` bytes
+moved again and the `docs/artifacts.md` row was recomputed with the change
+staged: **26,011,418 → 26,012,257 tracked bytes, 324 files unchanged**. The
+arm-surface digest moves again for the same reason the first commit moved it: the
+instrument is in `ARM_SURFACE_SOURCES`, and this is a fresh stamp rather than a
+re-record. `experiments/fresh_deduction_instrument.py` is still not in
+`GENERATOR_SOURCES`, so no freeze restamp is owed. No recording, report, DTO,
+metric or weight byte moves; no lever changes default; the held-out record at
+`MANIFEST_PATH` is untouched; `CALIBRATION_CAVEAT`, `AUTHORED_DIAGNOSTICS_NOTE`,
+`PRIMARY_OUTCOME`, `DECISION_RULE`, `MINIMUM_ACTIONABLE_EFFECT_UNITS`,
+`WRONGFUL_EJECTION_TRADEOFF` and `STOP_RULE` are byte-identical. No file outside
+the Expected scope was touched in this round.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/experiments -q` | 610 passed (603 before, plus this round's seven cases) |
+| `uv run python scripts/validate_task_docs.py` | passed: 390 historical phase tasks and 390 prompts; 66 work cards |
+| `uv run python scripts/check_doc_facts.py` | doc facts, front door, `docs/ml-program.md` and budgets all verified |
+| `uv run python scripts/verify_ml_evidence.py` | checks 60, OK 48, FAIL 0, ABSENT 7 (the class-(c) branch, expected on a fresh checkout), INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/verify_samples.sh` | 50 + 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/samples/4p1i` and `…/9p2i` | both consistent with their replays |
+| `bash scripts/check.sh` | exit 0, run whole and captured directly: 7,987 passed / 20 skipped / 3 xfailed, strict mypy over 484 sources, four frontend legs at 515 tests |
+| `uv run python -m experiments.fresh_deduction_instrument --calibrate --calibration-mode 2026-09-18 --json <tmp>/calibration.json` | exit 0, 120 units, 720 calls, `$0.00`, `dry_run: true`; the artifact's own bytes carry neither "reported beside the primary outcome" nor "until the v5 prompt set", and both arms' blocks carry this mode's note (the uncommitted rehearsal the finding was raised on, re-run after the repair) |

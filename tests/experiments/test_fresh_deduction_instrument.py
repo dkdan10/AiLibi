@@ -11244,6 +11244,87 @@ class TestTheThirdModesCaveatAndOutcomeGuard:
             mode.name for mode in instrument.CALIBRATION_MODES
         }
 
+    def test_the_third_modes_block_publishes_its_own_note(self) -> None:
+        """Review correction, round 1: not the live evaluation's paragraph.
+
+        The live note tells its reader the counts are reported BESIDE THE
+        PRIMARY OUTCOME and that a cross-arm reading waits on the v5 prompt
+        set. This payload reports no primary outcome and both its arms render
+        v5, so it says neither — while the half that makes the block safe to
+        read is carried over word for word.
+        """
+
+        note = instrument.CALIBRATION_DIAGNOSTICS_NOTES["2026-09-18"]
+        assert note is instrument.CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE
+        assert note != instrument.AUTHORED_DIAGNOSTICS_NOTE
+        for dropped in (
+            "reported beside the primary outcome",
+            "until the v5 prompt set",
+        ):
+            assert dropped in instrument.AUTHORED_DIAGNOSTICS_NOTE, dropped
+            assert dropped not in note, dropped
+        for kept in (
+            "AUTHORING-CONDITIONED",
+            "flatters whichever arm authors more",
+            "NEVER a decision input",
+            "never preregistered",
+            "ONLY beside its harm counter",
+            "illegal-target",
+        ):
+            assert kept in note, kept
+        for stated in (
+            "no primary outcome is reported",
+            "no paired statistic was computed",
+            "no decision rule was evaluated",
+            "none of those is a gate",
+        ):
+            assert stated in note, stated
+
+    def test_every_mode_that_reports_the_block_has_its_own_note(self) -> None:
+        """The shipped table names exactly the modes that publish one."""
+
+        instrument.assert_every_reporting_mode_has_its_note(
+            instrument.CALIBRATION_DIAGNOSTICS_NOTES
+        )
+        assert set(instrument.CALIBRATION_DIAGNOSTICS_NOTES) == {
+            mode.name
+            for mode in instrument.CALIBRATION_MODES
+            if mode.reports_authored_diagnostics
+        }
+
+    @pytest.mark.parametrize(
+        "planted",
+        [
+            {},
+            {"2026-09-15": "a note for a mode that reports no block"},
+            {
+                "2026-09-18": "a note",
+                "2026-09-14": "another",
+            },
+        ],
+        ids=["no-note-at-all", "a-mode-that-reports-none", "an-extra-mode"],
+    )
+    def test_a_note_table_that_does_not_match_the_modes_is_refused(
+        self, planted: dict[str, str]
+    ) -> None:
+        """PLANTED: the failure is a fourth mode inheriting somebody's note.
+
+        Without the entry, a mode that switched `reports_authored_diagnostics`
+        on would fall through to the block's default, which is the live
+        evaluation's note.
+        """
+
+        with pytest.raises(instrument.InstrumentError, match="its OWN note"):
+            instrument.assert_every_reporting_mode_has_its_note(planted)
+
+    def test_a_calibration_may_not_publish_the_live_runs_note(self) -> None:
+        """PLANTED: the table pointed at the paragraph it exists to avoid."""
+
+        with pytest.raises(instrument.InstrumentError, match="live evaluation's note"):
+            instrument.assert_every_reporting_mode_has_its_note(
+                {"2026-09-18": instrument.AUTHORED_DIAGNOSTICS_NOTE}
+            )
+
     @pytest.mark.parametrize(
         "planted",
         [
@@ -11281,9 +11362,11 @@ class TestTheThirdModesCaveatAndOutcomeGuard:
 
         for caveat in set(instrument.CALIBRATION_CAVEATS.values()):
             instrument.assert_calibration_reports_no_outcome({"caveat": caveat})
-        instrument.assert_calibration_reports_no_outcome(
-            {"note": instrument.AUTHORED_DIAGNOSTICS_NOTE}
-        )
+        for note in (
+            instrument.AUTHORED_DIAGNOSTICS_NOTE,
+            *instrument.CALIBRATION_DIAGNOSTICS_NOTES.values(),
+        ):
+            instrument.assert_calibration_reports_no_outcome({"note": note})
 
     def test_the_live_evaluation_still_stops_on_a_truncation(self) -> None:
         """PLANTED: the relaxation is the calibration's and reaches no run.
@@ -11404,7 +11487,7 @@ class TestTheThirdCalibrationEndToEnd:
         for arm in report.arms:
             block = arm.authored_diagnostics
             assert block is not None
-            assert block.note == instrument.AUTHORED_DIAGNOSTICS_NOTE
+            assert block.note == instrument.CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE
             assert [row.role for row in block.by_voter_role] == ["CREWMATE", "IMPOSTOR"]
             for row in block.by_voter_role:
                 assert row.authored == row.cleared + row.coerced
@@ -11423,6 +11506,29 @@ class TestTheThirdCalibrationEndToEnd:
             )
             assert "off_target_coerced" in block.guard_rewrites_by_reason
         assert sum(arm.units for arm in report.arms) == 120
+
+    def test_the_published_block_is_not_the_live_runs_note(
+        self, calibration_3_fake: instrument.CalibrationReport
+    ) -> None:
+        """Review correction, round 1: over the PAYLOAD a reader holds.
+
+        The mode-3 artifact's own bytes, not the constructed model: the block
+        each arm publishes carries this mode's note, and the live evaluation's
+        paragraph — with its "beside the primary outcome" and its v5 confound —
+        appears nowhere in the file.
+        """
+
+        payload = json.loads(calibration_3_fake.model_dump_json())
+        notes = {row["authored_diagnostics"]["note"] for row in payload["arms"]}
+        assert notes == {instrument.CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE}
+        encoded = json.dumps(payload)
+        assert instrument.AUTHORED_DIAGNOSTICS_NOTE not in encoded
+        for dropped in (
+            "reported beside the primary outcome",
+            "until the v5 prompt set",
+        ):
+            assert dropped not in encoded, dropped
+        assert payload["caveat"] == instrument.CALIBRATION_3_CAVEAT
 
     def test_each_arms_resolved_levers_are_published(
         self, calibration_3_fake: instrument.CalibrationReport

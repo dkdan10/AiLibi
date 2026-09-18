@@ -4952,6 +4952,39 @@ AUTHORED_DIAGNOSTICS_NOTE: Final[str] = (
     "these counts is confounded until the v5 prompt set equalises the register."
 )
 
+#: The same block as published by the 2026-09-18 CALIBRATION, which reports no
+#: primary outcome for it to sit beside and runs the v5 prompt set on both arms.
+#: A second string rather than an edit of the one above, for the reason
+#: :data:`CALIBRATION_3_CAVEAT` is a second caveat: the live run's note is what
+#: that run's block is published under and it stays byte-identical, while a
+#: reader of THIS payload would be told two things it contradicts — that the
+#: counts sit beside a primary outcome, and that the register confound waits on
+#: a prompt set this sitting already renders. The half that does not change is
+#: the half that matters: authoring-conditioned, paired precision and harm,
+#: never preregistered, never a decision input.
+CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE: Final[str] = (
+    "AUTHORING-CONDITIONED DIAGNOSTICS. Every count below is conditioned on a "
+    "ballot having been AUTHORED as an ejection, so it flatters whichever arm "
+    "authors more ejections and says nothing about how often an arm decides "
+    "correctly. This is a DEVELOPMENT calibration: no primary outcome is "
+    "reported beside them, no paired statistic was computed and no decision "
+    "rule was evaluated. They are NEVER a decision input: no stop condition "
+    "reads one, the decision rule does not mention one, none of them is a "
+    "field of the paired result, and they were never preregistered — they were "
+    "approved on 2026-09-18 as a labelled diagnostic only (decision 2 of the "
+    "diagnosis of that day). The crew per-ballot precision is therefore "
+    "reported ONLY beside its harm counter, the crew-on-crew authored "
+    "ejections and the units carrying one, because an arm can raise both "
+    "together. An authored ejection the meeting could not act on — an id "
+    "naming no living candidate — is reported in its own illegal-target "
+    "column and counted in no other, naming as it does neither the impostor "
+    "nor a crewmate. Both arms of this sitting render the revision of "
+    "2026-09-18, so whether the ballot REGISTER is now equal across them is "
+    "one of the things these counts are read FOR rather than something a "
+    "reader may assume; they are read against the predictions the manifest "
+    "fixed BEFORE the sitting, and none of those is a gate."
+)
+
 #: The rewrite reasons the tally reports, read off the schema's own alias rather
 #: than listed here: a reason ADDED to
 #: :data:`~meetings.schemas.BallotTargetRewriteReason` has to appear in this
@@ -5468,11 +5501,20 @@ class AuthoredBallotDiagnostics(BaseModel):
         return data
 
 
-def authored_ballot_block(counts: AuthoredBallotCounts) -> AuthoredBallotDiagnostics:
+def authored_ballot_block(
+    counts: AuthoredBallotCounts, *, note: str = AUTHORED_DIAGNOSTICS_NOTE
+) -> AuthoredBallotDiagnostics:
     """One arm's summed counts, with the three chance-rate tails computed on them.
 
     The tails are computed HERE rather than per unit because a p value is not
     additive: the question is asked of the arm's whole count.
+
+    ``note`` is what the block says about itself, and it defaults to the live
+    evaluation's: that path publishes the block beside the primary outcome and
+    its note says so. A calibration passes its own mode's
+    (:data:`CALIBRATION_DIAGNOSTICS_NOTES`), because a payload that reports no
+    outcome may not carry a paragraph telling a reader the counts sit beside
+    one.
     """
 
     # CREWMATE first, the order the calibration's role split already reports.
@@ -5491,6 +5533,7 @@ def authored_ballot_block(counts: AuthoredBallotCounts) -> AuthoredBallotDiagnos
         ),
     )
     return AuthoredBallotDiagnostics(
+        note=note,
         crew_authored_ejects=counts.crew_authored_ejects,
         crew_authored_naming_impostor=counts.crew_authored_naming_impostor,
         crew_authored_precision_p=one_sided_binomial_p(
@@ -5843,9 +5886,9 @@ def _every_key_in(value: object) -> list[str]:
     """Every mapping KEY in a dumped payload, at any depth.
 
     Keys and not values, deliberately: :data:`CALIBRATION_3_CAVEAT` and
-    :data:`AUTHORED_DIAGNOSTICS_NOTE` both SAY that no primary outcome is
-    reported, and a guard that searched values would refuse the sentence that
-    makes the promise.
+    :data:`CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE` both SAY that no primary
+    outcome is reported, and a guard that searched values would refuse the
+    sentence that makes the promise.
     """
 
     if isinstance(value, Mapping):
@@ -7251,6 +7294,46 @@ if set(CALIBRATION_CAVEATS) != {
         "measured"
     )
 
+#: Which note the authored-ballot block carries in each mode that REPORTS one.
+#: A closed table for the same reason the caveats are one, and keyed on the mode
+#: rather than defaulted, because the default is the live evaluation's note: a
+#: calibration that fell through to it would publish "they are reported beside
+#: the primary outcome" on a payload whose own caveat says no primary outcome is
+#: reported. A mode that reports no block is absent here, not mapped to a note.
+CALIBRATION_DIAGNOSTICS_NOTES: Final[Mapping[str, str]] = MappingProxyType(
+    {"2026-09-18": CALIBRATION_3_AUTHORED_DIAGNOSTICS_NOTE}
+)
+
+
+def assert_every_reporting_mode_has_its_note(
+    notes: Mapping[str, str],
+    modes: Sequence[CalibrationMode] = CALIBRATION_MODES,
+) -> None:
+    """Refuse a table that does not name exactly the modes reporting a block.
+
+    A function rather than a bare ``if`` so the invariant can be planted: the
+    failure it guards is a fourth mode switching ``reports_authored_diagnostics``
+    on and silently inheriting the live evaluation's note.
+    """
+
+    reporting = {mode.name for mode in modes if mode.reports_authored_diagnostics}
+    if set(notes) != reporting:
+        raise InstrumentError(
+            "every calibration mode that reports the authored-ballot block "
+            "needs its OWN note here, and a mode that reports none needs no "
+            f"entry: this table names {sorted(notes)} against "
+            f"{sorted(reporting)}"
+        )
+    if AUTHORED_DIAGNOSTICS_NOTE in notes.values():
+        raise InstrumentError(
+            "a calibration may not publish the live evaluation's note: that "
+            "string says the counts are reported beside the primary outcome, "
+            "and a calibration reports none"
+        )
+
+
+assert_every_reporting_mode_has_its_note(CALIBRATION_DIAGNOSTICS_NOTES)
+
 
 def _percentile(values: Sequence[int], fraction: float) -> int:
     """The nearest-rank percentile of ``values``. See :data:`PERCENTILE_RULE`."""
@@ -7827,15 +7910,17 @@ class CalibrationArmUsage(BaseModel):
     #: a number without a subject. Empty on the two spent modes, whose committed
     #: outputs predate the field.
     resolved_levers: Mapping[str, str] = {}
-    #: The authored-ballot DIAGNOSTICS block (:data:`AUTHORED_DIAGNOSTICS_NOTE`)
-    #: summed over this arm's units. Counts only, never per seed.
+    #: The authored-ballot DIAGNOSTICS block summed over this arm's units,
+    #: carrying the note of the MODE that reported it
+    #: (:data:`CALIBRATION_DIAGNOSTICS_NOTES`, and never the live evaluation's
+    #: :data:`AUTHORED_DIAGNOSTICS_NOTE`). Counts only, never per seed.
     #:
     #: ``None`` — not an empty block — on a mode that reports none, which is
     #: both spent modes. An empty :class:`AuthoredBallotDiagnostics` is not
-    #: empty in the payload: it carries the note, which is a paragraph about
-    #: authored ejections and the primary outcome, and publishing that beside
-    #: the 2026-09-14 output's zeros would have the first calibration explaining
-    #: a block it never measured. Absent means absent.
+    #: empty in the payload: it carries a note, which is a paragraph about
+    #: authored ejections, and publishing that beside the 2026-09-14 output's
+    #: zeros would have the first calibration explaining a block it never
+    #: measured. Absent means absent.
     authored_diagnostics: AuthoredBallotDiagnostics | None = None
 
 
@@ -7996,17 +8081,22 @@ def _summarize_calibration_arm(
     attempts: TransportAttempts,
     sampling: SamplingConfig,
     by_role: bool = False,
-    with_diagnostics: bool = False,
+    diagnostics_note: str | None = None,
     levers: Mapping[str, str] | None = None,
 ) -> CalibrationArmUsage:
     """One arm's totals and its two call schedules, over the units it ran.
 
     ``by_role`` adds the second calibration's role split and its two
-    diagnostics; ``with_diagnostics`` adds the third calibration's
-    authored-ballot block, and ``levers`` the surface it was measured on. All
-    three are off by default, because the earlier calibrations' committed
-    outputs were written without them and re-deriving those has to keep
-    producing the same bytes.
+    diagnostics; ``diagnostics_note`` adds the third calibration's
+    authored-ballot block, carrying that note, and ``levers`` the surface it was
+    measured on. All three are off by default, because the earlier
+    calibrations' committed outputs were written without them and re-deriving
+    those has to keep producing the same bytes.
+
+    The block is requested BY its note rather than by a boolean beside one,
+    because those two could disagree: a caller that asked for the block and
+    supplied no note would publish the live evaluation's paragraph on a payload
+    that reports no outcome.
     """
 
     own = [record for record in records if record.arm == arm]
@@ -8110,8 +8200,8 @@ def _summarize_calibration_arm(
         ),
         resolved_levers=dict(levers) if levers is not None else {},
         authored_diagnostics=(
-            authored_ballot_block(_authored_counts_over(own))
-            if with_diagnostics
+            authored_ballot_block(_authored_counts_over(own), note=diagnostics_note)
+            if diagnostics_note is not None
             else None
         ),
     )
@@ -8371,7 +8461,11 @@ def run_calibration(
             attempts=state.attempts_by_arm.get(arm.name, TransportAttempts()),
             sampling=sampling,
             by_role=mode.reports_the_role_split,
-            with_diagnostics=mode.reports_authored_diagnostics,
+            diagnostics_note=(
+                CALIBRATION_DIAGNOSTICS_NOTES[mode.name]
+                if mode.reports_authored_diagnostics
+                else None
+            ),
             levers=(
                 arm_lever_profile(arm) if mode.reports_authored_diagnostics else None
             ),
