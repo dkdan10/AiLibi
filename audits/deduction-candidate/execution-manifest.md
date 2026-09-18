@@ -1166,6 +1166,108 @@ re-binds inputs and re-measures headroom, and the ceilings, the caps, the frozen
 analysis and the refreshed profile recorded above are the bytes the paragraphs
 above left.
 
+## Accounts prompt set v5 (2026-09-18)
+
+Decisions 4 and 6 of
+[the diagnosis of the fifth run](../../tasks/diagnosis-2026-09-18-fifth-run.md),
+approved by the owner as a set on 2026-09-18 and recorded in that memo's
+section 11, written up as
+[the v5 accounts revision card](../../tasks/work/accounts-prompt-set-v5.md).
+Dated apart from the authorizations above because, like the v4 entry, it is not
+one: it moves what the CANDIDATE ARM IS ASKED FOR and nothing it is judged by.
+The primary outcome and its rubrics, the decision rule, the minimum actionable
+effect, `WRONGFUL_EJECTION_TRADEOFF` and the stop rule are the bytes the
+sections below quote; every cap, ceiling, wall, transport bound and dollar
+limit in the table above is unchanged; the schema, the meeting layer and the
+reference family are untouched; and no unit has been run under these bodies,
+nor is one authorized by this entry.
+
+**2026-09-18 — the candidate ballot gains the turn id's SHAPE and the
+reference's SKIP register, and `ACCOUNT_PROMPT_SET_REVISION` advances `v4` to
+`v5` (`agents/strategic/prompts/loader.py`).** One rendered template moves,
+`vote_ballot_accounts.j2`, which only the `combined_accounts` arm renders; the
+reference `vote_ballot.j2` is what both edits are copied FROM and keeps its
+bytes, as do `_account_transcript.j2` and the other three account bodies, whose
+stamps advance with the unit so that no two generations of one body can share a
+`MeetingReplayEntry.prompt_versions` marker.
+
+- **The turn channel (F4).** The ballot now names the id INSIDE the brackets
+  that open a transcript turn line — copied without the brackets themselves,
+  which is what the meeting layer accepts — as the one id `primary_reason_id`
+  may carry, names the `[turn:<id>:claim|obs|whereabouts:N]` bullet rows
+  `_account_transcript.j2` renders after it as pointers INSIDE a turn rather
+  than ballot ids, and carries
+  `vote_ballot.j2`'s own copy-VERBATIM / never-invent-or-abbreviate warning
+  with a never-append-a-row-suffix clause and the consequence: a
+  non-canonical id is nulled by the meeting layer and the now-uncited ejection
+  is coerced to SKIP. The response skeleton keeps `primary_reason_id` NULL —
+  the shape travels in prose and is never pre-filled into the object a model
+  copies verbatim, on the ground the v4 entry above records for the
+  observation id, and reinforced here: the reference's skeleton DOES prefill
+  its latest turn id, and 7 of that arm's 14 surviving citations on the fifth
+  run were exactly that id, support without relevance. The transcript is not
+  given a second bare id per row: it already prints the canonical `turn_id` at
+  the head of every turn line, and a per-row bare id would mint a third
+  vocabulary. **Corrected in review on 2026-09-18, before merge and before any
+  unit was run:** the sentence as first written said the field "takes the turn
+  id in the bracket that OPENS that turn's transcript line", which a voter
+  satisfies by copying the bracketed token — and `[<id>]` matches neither the
+  exact-id branch nor the END-ANCHORED `:turn-{k}` recovery of
+  `meetings.manager._normalize_ballot_reason_id`, so it is nulled and the
+  ejection coerced: F4's repair carrying F4's defect. It now says the id is what
+  is printed INSIDE those brackets, copied without them, and gives the form
+  `<meeting id>:turn-<n>` as a placeholder — the one form
+  `meetings.manager._turn_id` mints. The same sentence called the evidence rows
+  "indented"; `_account_transcript.j2:19,22` renders them at column 0, so they
+  are now described as the bullets they are.
+- **The SKIP register (F7).** `vote_ballot.j2:114`'s "SKIP if the evidence is
+  too thin" and `:259`'s two clauses — that a thin strongest suspect makes SKIP
+  the sound call, and that ejecting anyway must rest on evidence you can cite
+  and never on momentum — are ported word for word into the candidate ballot,
+  which carried one clause of each. The register is ALL that is ported: the
+  reference's confidence sentence does not ship, decision 6 having put the
+  register and nothing else, and mean ballot confidence (0.711 candidate,
+  0.543 reference) moved no ejection on the fifth run, with 0 authored EJECT in
+  either arm below the 0.6 cutoff `tally_ballots` applies.
+
+**ONE-SIDED EFFECT, declared here before anything is measured — and the first
+of the two makes the tradeoff WORSE.** Both edits are on the candidate arm
+alone, so neither is measurement-neutral and neither is a style note.
+
+F4 RAISES the wrongful net by itself. On the fifth run's archive the candidate
+authored 119 EJECTs and 44 were coerced by `guard_ballot_citation`, 21 of them
+for copying a sub-row id that the meeting layer then nulled. Restoring only
+those 21 gives 20 ejections, 6 role-correct and 14 wrongful: precision
+33.3% → 30.0% and the wrongful net +7 → +13, against the 2 this manifest's
+tradeoff bound permits. That counterfactual is a re-tally of the committed
+archive, not a new measurement, and it is why decision 4 ships F4 ONLY in the
+wave that also carries the relevance-aware citation guard — the one change that
+costs the impostor arm its free pass through the gate. A tree carrying `v5`
+without that guard merged authorizes no run.
+
+F7 LOWERS the candidate's ejection volume and removes a design confound. The
+fifth run's arms differed in the accounts surface AND in the ballot register —
+119 authored EJECTs against the reference's 14, an 8.5x gap in willingness to
+accuse that the run could attribute to neither — so any per-ballot figure
+counting authored ballots inherits it. With the register equalised, the
+diagnostics the
+[instrument diagnostics card](../../tasks/work/fresh-deduction-instrument-diagnostics.md)
+reports become comparable across arms; without it they are not. The frozen
+analysis is unmoved by either edit.
+
+**What this entry costs the fifth run's units.** Every file of
+`agents/strategic/prompts/qwen3_6_27b` is hashed into the instrument's
+`arm_surface_digests`, so this edit moves that mapping: the fifth run's
+`audits/deduction-candidate/run-2026-09-16/checkpoint-final.json` no longer
+matches the tree and a resume begun before this entry is refused, by design.
+Its 100 units are not poolable with anything measured after this entry. The
+offline mechanics check in the verification section below was re-made on this
+tree: the candidate arm's input heuristic reads 685,904 against 641,246 under
+the v4 bodies, the reference arm's 892,718 is unmoved, and every graded count
+of that paragraph is unchanged. The candidate figure read 678,772 until the
+review correction recorded in the F4 bullet above moved it again; that reading
+is superseded.
+
 ## The instrument
 
 `experiments/fresh_deduction_instrument.py`, new for this evaluation and
@@ -1838,10 +1940,10 @@ configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
 and the limits it ran under (3,844,000 / 422,000 run-level, 116,000 / 16,000 per
 unit — the fifth authorization's, since 2026-09-15; the paragraph read
 3,710,000 / 459,000 and 106,000 with the fourth's). Input tokens by the fake provider's
-`len // 4` heuristic were 892,718 (`repaired_clock`) and 641,246
+`len // 4` heuristic were 892,718 (`repaired_clock`) and 685,904
 (`combined_accounts`); applying the decision memo's calibrated 1.28x real-input
-ratio to their sum (1,533,964) gives about 1.96 M against the 3,844,000 this
-manifest binds (51%), and the larger arm's 17,854 per unit gives about 22,900
+ratio to their sum (1,578,622) gives about 2.02 M against the 3,844,000 this
+manifest binds (53%), and the larger arm's 17,854 per unit gives about 22,900
 against the 116,000 per-unit ceiling (20%) — headroom checks, not predictions,
 because a real model writes a different transcript. The figures this paragraph
 carried before this re-binding were the fourth band's, measured under these same
@@ -1853,7 +1955,14 @@ on input is what a re-binding between two draws of the same generator should
 produce. The v4 account bodies and the round-3 ballot-skeleton revision of
 2026-09-15 moved the candidate arm's figure alone (608,664 to 643,779, +5.8%, on
 the fourth band), because only its templates gained bytes; on this band the same
-one-arm gap reads 641,246 against the reference arm's 892,718.
+one-arm gap read 641,246 against the reference arm's 892,718 until the v5 ballot
+of 2026-09-18 moved the candidate's figure alone again, to 678,772 (+5.9%); the
+review correction of the same date, which repaired two wordings of that ballot's
+own new sentence, moved it once more to 685,904 (+7.0% over the v4 bodies), and
+678,772 is superseded by the figure you are reading exactly as 643,779 was. The
+reference arm's 892,718 is the byte-for-byte figure it was through all three
+revisions, which is what "one-arm" means here: the candidate's ballot is the
+only body that has gained bytes since the fourth band was drawn.
 
 **The output dimension, measured rather than assumed (2026-09-13).** The
 paragraph above is an INPUT headroom check, and until this amendment it was the

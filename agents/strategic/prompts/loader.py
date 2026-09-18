@@ -1245,7 +1245,25 @@ def _require_testimony_shapes_bodies(
 #:   live defect rather than a style note: an id carrying the tag word is
 #:   nulled by the meeting layer, which then coerces the uncited ejection
 #:   to SKIP.
-ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v4"
+#: * ``v5`` -- the ballot's TURN channel and its SKIP register, both on
+#:   ``vote_ballot_accounts.j2`` alone. The turn channel: the prompt now
+#:   names the bracket at the HEAD of a transcript turn line as the one id
+#:   ``primary_reason_id`` may carry, names the ``[turn:<id>:claim|obs|
+#:   whereabouts:N]`` rows ``_account_transcript.j2`` renders beneath it as
+#:   pointers INSIDE a turn rather than ballot ids, and ports
+#:   ``vote_ballot.j2``'s copy-VERBATIM / never-invent-or-abbreviate warning
+#:   with a never-append-a-row-suffix clause and the consequence (a
+#:   non-canonical id is nulled by ``meetings.manager`` and the uncited
+#:   ejection coerced to SKIP). The skeleton keeps ``primary_reason_id``
+#:   null: the shape is shown in prose and never pre-filled into the object
+#:   a model copies verbatim, on the same ground the observation id was not.
+#:   The SKIP register: ``vote_ballot.j2``'s "SKIP if the evidence is too
+#:   thin" and its "SKIP is the sound call ... never on momentum" clauses
+#:   are ported word for word, so the two families differ in the accounts
+#:   surface rather than in how readily each asks for an ejection. The
+#:   reference's confidence sentence is NOT ported: the register is all the
+#:   fifth run's diagnosis put for decision.
+ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v5"
 
 
 def public_account_prompt_versions(
