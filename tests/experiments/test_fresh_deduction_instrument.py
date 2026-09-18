@@ -9618,6 +9618,139 @@ class TestTheAuthoredLayerIsRecoverable:
         assert counts.crew_on_crew_authored_ejects == 2
         assert counts.units_with_crew_on_crew == 1
 
+    def test_the_refused_reason_is_a_member_of_the_schemas_own_alias(self) -> None:
+        """A renamed member would otherwise turn the exclusion into a no-op."""
+
+        assert instrument.ILLEGAL_TARGET_REASON in get_args(BallotTargetRewriteReason)
+
+    def test_an_illegal_authored_target_moves_no_harm_counter(self) -> None:
+        """PLANTED: ``invalid_target`` is neither the impostor nor a crewmate.
+
+        The id ``guard_redirected_from`` preserves under that reason is the one
+        the meeting layer REFUSED — a hallucination here — so the ballot named
+        nobody. It may not raise the crew-on-crew harm counter, may not flag
+        the unit as carrying one, and may not enter the denominator read
+        against the 0.5 null of TWO LEGAL TARGETS, which it had none of. It is
+        counted in its own column, and the rewrite tally still sees it.
+        """
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(
+                _ballot_for(
+                    "p-1", "SKIP", authored="p-99-ghost", reason="invalid_target"
+                ),
+            ),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        assert counts.crew_authored_ejects == 0
+        assert counts.crew_authored_naming_impostor == 0
+        assert counts.crew_on_crew_authored_ejects == 0
+        assert counts.units_with_crew_on_crew == 0
+        assert counts.crew_authored_illegal_targets == 1
+        assert counts.guard_rewrites_by_reason["invalid_target"] == 1
+
+    def test_two_ballots_at_one_refused_id_are_no_coalition(self) -> None:
+        """PLANTED: a bloc the meeting could not have ejected anybody on.
+
+        Two voters naming the same hallucinated id agreed about NOBODY, so the
+        funnel counts no wrongful coalition and the harm counter stays at zero.
+        """
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(
+                _ballot_for(
+                    "p-1", "SKIP", authored="p-99-ghost", reason="invalid_target"
+                ),
+                _ballot_for(
+                    "p-2", "SKIP", authored="p-99-ghost", reason="invalid_target"
+                ),
+            ),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        assert counts.wrongful_coalitions == 0
+        assert counts.wrongful_coalitions_cleared == 0
+        assert counts.crew_on_crew_authored_ejects == 0
+        assert counts.crew_authored_illegal_targets == 2
+
+    def test_a_self_vote_and_a_dead_target_are_illegal_too(self) -> None:
+        """The other two shapes the same reason is minted for.
+
+        ``normalize_ballot_target`` refuses a vote for oneself and a vote for a
+        player no longer living, because the manager's candidate set is
+        living-minus-voter. Both are on the roster, so the reason is what
+        settles them; the impostor's own row is counted the same way.
+        """
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(
+                _ballot_for("p-1", "SKIP", authored="p-1", reason="invalid_target"),
+                _ballot_for("p-4", "SKIP", authored="p-3", reason="invalid_target"),
+            ),
+            roles=cast(
+                Any,
+                {
+                    "p-1": "CREWMATE",
+                    "p-2": "CREWMATE",
+                    "p-3": "CREWMATE",
+                    "p-4": "IMPOSTOR",
+                },
+            ),
+            ejected_player_id=None,
+        )
+        assert counts.crew_authored_ejects == 0
+        assert counts.crew_authored_illegal_targets == 1
+        assert counts.impostor_authored_ejects == 0
+        assert counts.impostor_authored_illegal_targets == 1
+
+    def test_an_id_nobody_on_the_roster_carries_is_illegal_unrewritten(self) -> None:
+        """The belt to the reason's brace: the roster is checked as well.
+
+        Nothing in the meeting layer records an unrewritten ballot at an id off
+        the roster, and if one ever arrived it would still be a trial with no
+        legal target rather than crew-on-crew harm.
+        """
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(_ballot_for("p-1", "p-99-ghost"),),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        assert counts.crew_authored_ejects == 0
+        assert counts.crew_on_crew_authored_ejects == 0
+        assert counts.crew_authored_illegal_targets == 1
+
+    def test_the_illegal_column_leaves_the_legal_denominator_alone(self) -> None:
+        """The arm's block: one legal trial, not two, and the column beside it.
+
+        The precision tail is the figure the exclusion protects — a refused id
+        in the denominator would drag a 1-of-1 toward a 1-of-2.
+        """
+
+        counts = instrument.authored_ballot_diagnostics(
+            ballots=(
+                _ballot_for("p-1", "p-4"),
+                _ballot_for(
+                    "p-2", "SKIP", authored="p-99-ghost", reason="invalid_target"
+                ),
+            ),
+            roles=cast(Any, {"p-1": "CREWMATE", "p-2": "CREWMATE", "p-4": "IMPOSTOR"}),
+            ejected_player_id=None,
+        )
+        block = instrument.authored_ballot_block(counts)
+        assert block.crew_authored_ejects == 1
+        assert block.crew_authored_naming_impostor == 1
+        assert block.crew_on_crew_authored_ejects == 0
+        crew = next(row for row in block.by_voter_role if row.role == "CREWMATE")
+        assert (crew.authored, crew.cleared, crew.coerced) == (1, 1, 0)
+        assert crew.illegal_targets == 1
+        # The tail is asked of 1 of 1 against the 0.5 null — P(X >= 1 | n = 1)
+        # = 0.5 — where the refused ballot in the denominator would make it
+        # 1 of 2 and P(X >= 1 | n = 2) = 0.75.
+        assert instrument.CREW_PRECISION_NULL == 0.5
+        assert block.crew_authored_precision_p == pytest.approx(0.5)
+
     def test_the_rewrite_tally_keys_over_the_schemas_own_alias(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -10143,6 +10276,38 @@ class TestPerCallFinishReasonsReachTheRun:
         for arm in report.arms:
             assert arm.finish_reasons
             assert sum(arm.finish_reasons.values()) == arm.calls
+
+    def test_a_carried_distribution_that_is_not_one_row_per_call_is_refused(
+        self,
+    ) -> None:
+        """PLANTED: a checkpoint is a file, and a resumed run merges it whole.
+
+        The contract is that a populated distribution counts calls. A row
+        claiming three readings over two calls, or a negative reading, would
+        otherwise cross into ``ArmUsage`` and be reported as a reading nobody
+        saw, so both are refused at the boundary rather than downstream.
+        """
+
+        with pytest.raises(ValidationError, match="one row per call"):
+            instrument.CarriedUsage(calls=2, finish_reasons={"stop": 3})
+        with pytest.raises(ValidationError, match="negative"):
+            instrument.CarriedUsage(calls=0, finish_reasons={"stop": 2, "length": -2})
+
+    def test_an_empty_carried_distribution_stays_legal_at_any_call_count(
+        self,
+    ) -> None:
+        """The legacy reading the refusal above may not take with it.
+
+        A checkpoint written before the field carries calls and no reading at
+        all, and the committed fifth run is exactly that record.
+        """
+
+        carried = instrument.CarriedUsage(calls=7)
+        assert carried.finish_reasons == {}
+        assert carried.arm_usage().calls == 7
+        assert instrument.CarriedUsage(
+            calls=2, finish_reasons={"stop": 1, "null": 1}
+        ).arm_usage().finish_reasons == {"stop": 1, "null": 1}
 
     def test_records_written_before_this_card_read_empty(self) -> None:
         """PLANTED: an archive whose provider reading nobody recorded.

@@ -1718,6 +1718,22 @@ table, each with the same one-sided tail. The guard-rewrite tally keys over
 every member of the recorded reason alias, so a reason a later card adds appears
 here with a zero count rather than silently disappearing.
 
+One authored ejection is counted in a column of its own and in NO other: the one
+whose authored target the meeting layer refused as an `invalid_target`, that
+being its own typed verdict that the id the voter wrote named no living
+candidate other than the voter — a hallucinated id, a player already dead, or
+the voter itself. Such a ballot named neither the impostor nor a crewmate, so it
+raises no crew-on-crew harm counter, flags no unit as carrying one, forms no
+coalition, and is in neither precision denominator: the null the crew row is
+read against is the null of the crew pair's TWO LEGAL TARGETS, and a trial that
+had none is not a trial of it. The rewrite tally still counts the reason, and
+the `illegal_targets` column beside each voter role is where the ballot is
+reported, so nothing recorded is dropped and nothing is scored as harm that
+harmed nobody. The fifth run's archive carries none of these, so no figure of
+that run's recomputation moves for this rule
+(`tasks/work/fresh-deduction-instrument-diagnostics.md`, review corrections of
+2026-09-18).
+
 These are AUTHORING-CONDITIONED diagnostics and the block says so in the report
 (`AUTHORED_DIAGNOSTICS_NOTE`): every count is conditioned on a ballot having
 been authored as an ejection, so they flatter whichever arm authors more and say

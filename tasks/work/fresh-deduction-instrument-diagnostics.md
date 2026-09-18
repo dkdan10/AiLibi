@@ -150,6 +150,27 @@ therefore project at unit close, onto `UnitTelemetry.usage` (`:4999-5011`) and
   module) and the authorized limits table is untouched. `docs/artifacts.md`'s
   `audits/` row (`:109`) and `tasks/README.md`'s inventory sentence (`:43`) are
   recomputed with it, and `scripts/verify_ml_evidence.py` passes offline.
+- [x] Review correction: an authored target the meeting layer refused as an
+  `invalid_target` — a hallucinated id, a player already dead, or the voter
+  itself — is counted in an `illegal_targets` column of its own and in no
+  other, so it raises no crew-on-crew harm counter, flags no unit as carrying
+  one, forms no coalition and enters neither precision denominator, the 0.5
+  null being the null of two LEGAL targets. Planted: one such crew ballot
+  leaves every harm counter and the denominator at zero; two at one refused id
+  are no coalition; a self-vote and a dead target are settled the same way; an
+  off-roster id is illegal even unrewritten. Stated in the manifest's Measures
+  paragraph and in the block's own note. The archive carries none, so no pinned
+  figure moves.
+- [x] Review correction: the Codex review on `bba09ec2` is dispositioned in
+  full — the P2 by the fix above, two P1s by a fix (the detector comment
+  condensed to current intent with one trailing provenance line; a populated
+  carried `finish_reasons` distribution refused unless it is one non-negative
+  row per call, the empty legacy mapping staying legal) and two by a reasoned
+  refutation recorded in Results.
+- [x] Review correction: the recordings row says what its command verifies.
+  `scripts/verify_samples.sh` walks `AILIBI_SAMPLES_ROOT` only, so a bare run
+  is 100 (50 + 50) and the other 200 are a second run against
+  `replays/ml_corpus`; both runs are recorded.
 
 ## Constraints
 
@@ -397,7 +418,7 @@ restoring the edit; the edits are not in the delivered tree.
 | `.venv/bin/python scripts/verify_ml_evidence.py` | 60 checks, OK 48, FAIL 0, ABSENT 7, INFO 5 |
 | `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
 | `bash scripts/check.sh` | exit 0 — 7,876 Python passed, 20 skipped, 3 xfailed; 515 frontend tests in 19 files; strict mypy on 480 sources; 4 import contracts kept, 0 broken; 390 prompts in sync; lint, format and the production build |
-| `bash scripts/verify_samples.sh` | exit 0 — all 300 canonical recordings verified clean |
+| `bash scripts/verify_samples.sh` | exit 0 — 100 canonical recordings verified clean (`replays/samples/{4p1i,9p2i}`, 50 + 50; the row said 300 and is corrected in round 1 below) |
 | `scripts/build_sample_report.py --check` x 4 (`replays/samples/{4p1i,9p2i}`, `replays/ml_corpus/{4p1i,9p2i}`) | all exit 0, "consistent with its replays." each |
 
 The frozen analysis is byte-identical: `-k "frozen_analysis or amendment"` →
@@ -412,6 +433,154 @@ untouched.
 `tasks/README.md`'s derived inventory sentence is updated for this card's flip
 (6 ready / 60 done → 5 ready / 61 done, 66 cards).
 
+### Review corrections, round 1 (2026-09-18)
+
+Four blocking findings from independent review, read against `bba09ec2`. Two of
+them are one defect seen from two lenses — the Codex P2 on the authored layer —
+a third asks that the whole Codex review on that head be dispositioned, and the
+fourth is a claim about what one verification command verifies. All four are
+valid and none is refuted; two of the Codex P1s carried in the third are.
+Nothing the run is judged by moves in this round: the primary outcome, the
+decision rule, the minimum actionable effect, the tradeoff bound and the stop
+rule are byte-identical, no band was read, no provider was called, and no byte
+under `run-2026-09-16/` was rewritten.
+
+**The defect: an id the meeting REFUSED was scored as harm.** Under
+`guard_rewrite_reason="invalid_target"` the id preserved on
+`guard_redirected_from` is the one the meeting layer normalized away
+(`meetings/voting.py` `normalize_ballot_target`, the manager's own
+`_normalize_ballot_target`), and `meetings/schemas.py` says in as many words
+that it "need not name a live player" — it is a hallucinated id, a player
+already dead, or the voter itself, the manager's candidate set being
+living-minus-voter. The block's `else` branch scored such a ballot as
+crew-on-crew and put it in the denominator read against `CREW_PRECISION_NULL`,
+whose own justification is the crew pair's "two legal targets". A trial that had
+no legal target is in neither half of that null. `_authored_a_legal_target` now
+settles it off the layer's own typed verdict, with the unit's roster as the belt
+to that brace, and the ballot is counted in an `illegal_targets` column beside
+its voter role and in no other — not in `crew_authored_ejects`, not in the harm
+counter, not in `units_with_crew_on_crew`, and in no coalition, two voters
+naming one refused id having agreed about nobody. The perturbation is the old
+branch:
+
+```
+$ PYTHONPATH=. .venv/bin/python -c "
+import experiments.fresh_deduction_instrument as I
+from meetings.schemas import VoteBallot
+b = VoteBallot(voter='p-1', target='SKIP', confidence=0.7, primary_reason_id=None,
+               rationale_text='because.', guard_redirected_from='p-99-ghost',
+               guard_rewrite_reason='invalid_target')
+roles = {'p-1': 'CREWMATE', 'p-2': 'CREWMATE', 'p-4': 'IMPOSTOR'}
+row = lambda c: (c.crew_authored_ejects, c.crew_on_crew_authored_ejects,
+                 c.units_with_crew_on_crew, c.crew_authored_illegal_targets)
+print('now      ', row(I.authored_ballot_diagnostics(ballots=(b,), roles=roles, ejected_player_id=None)))
+I._authored_a_legal_target = lambda ballot, roles: True
+print('perturbed', row(I.authored_ballot_diagnostics(ballots=(b,), roles=roles, ejected_player_id=None)))
+"
+now       (0, 0, 0, 1)
+perturbed (1, 1, 1, 0)
+```
+
+Six cases pin it inside the suite — the reason is a member of the schema's own
+alias, so a rename cannot turn the exclusion into a no-op; the single refused
+ballot; two at one refused id forming no coalition; the self-vote and the dead
+target; an off-roster id that is illegal even unrewritten; and the arm block
+whose crew row reads 1 of 1 with the refused ballot in its own column rather
+than 1 of 2. The manifest's Measures addition gains a paragraph stating the rule
+and its denominator consequence — in place, under the same dated 2026-09-18
+heading, so the three places this card amends stay three — and the block's own
+serialized note states it too, so a report reader meets the column explained.
+**No pinned figure moves**: the fifth run's archive carries no `invalid_target`
+ballot at all (44 `uncited_coerced`, 3 `under_gate_redirect`, counted over the
+100 committed replays), which both reviewers established independently and the
+archive walk re-confirms:
+
+```
+.venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py \
+  -q --no-header -k "FifthRunsArchive"
+9 passed, 445 deselected
+```
+
+— the same nine pins, the deselected count moving only because this round adds
+cases to the module.
+
+**The Codex review on `bba09ec2`, dispositioned in full.** Its P2 is the defect
+above. Of its four P1s, two are valid and fixed here:
+
+1. *Condense the detector comment to current intent* — valid. The craft rule
+   allows one trailing provenance line and the comment above `_NOT_AN_ASSERTION`
+   had grown a dated account of the fifth run and the ruling that followed it.
+   The comment now explains the crossing (a question in the present or the past
+   asserts as little as a modal one, and a fifth auxiliary is one word rather
+   than three entries) and carries one trailing line: crossed on 2026-09-18,
+   `ROLE_LEAK_RULE` unchanged. The history stays in the manifest's dated leak
+   paragraph, which is the record for it.
+2. *Reject inconsistent finish-reason totals in checkpoints* — valid. A
+   checkpoint is a file and a resumed run merges it whole, so `CarriedUsage` now
+   refuses a POPULATED distribution that is not what it claims to be: no
+   negative reading, and one row per call of that same row's `calls`. The empty
+   mapping stays legal at any call count, because that is exactly what a record
+   written before the field reads — the committed fifth run is that record, and
+   `test_records_written_before_this_card_read_empty` still passes on it.
+   Planted both ways.
+
+The other two are refuted:
+
+3. *Gate the widened regex default-OFF behind an experimental lever* —
+   refuted. The craft rule it cites governs prompt bytes and substrate
+   detectors: things that change what a run RECORDS and therefore need an
+   adopting record and a replay stamp, declared the way `public_account_version`
+   and `attributed_testimony_version` are in
+   `orchestrator/experiment_config.py`.
+   `_NOT_AN_ASSERTION` is none of those. It lives in `experiments/`, is read
+   only by `count_leaking_turns` over a transcript that has ALREADY been
+   recorded, changes no recorded byte, no agent behaviour and no replay, and
+   gates nothing — the leak column is a reported diagnostic. There is no lever
+   surface to declare it on, and the repository's own precedent is this guard's:
+   the whole third family was added ungated as a round-1 review fix on
+   2026-09-15 (`0eb5eeb8`). Gating a measurement repair default-OFF would leave
+   the default path counting a question as a confession, which contradicts
+   `ROLE_LEAK_RULE`'s published text; the "preserve earlier experiment verdicts"
+   half of the same rule is honoured instead, the fifth run keeping BOTH
+   readings in its own `RESULTS.md` and the manifest saying so.
+4. *Remove the audit reference from the serialized note* — refuted. The rule it
+   cites is about user-facing copy and model speech: what a player, a spectator
+   or a model is shown. This string is emitted into `report.json` under
+   `audits/deduction-candidate/`, an audit artifact read beside the execution
+   manifest, and a dated reference to the ruling that approved a diagnostic is
+   what that record is FOR — the same document's measures are cited the same way
+   throughout. Nothing renders it to a player and no model is handed it. The
+   note is self-contained on its own terms even so: it says what the block is,
+   what it flatters, that it is never a decision input and was never
+   preregistered, and it now also explains the illegal-target column, all
+   without requiring the reader to open the memo.
+
+**The recordings row said 300 where the command verifies 100.**
+`scripts/verify_samples.sh` walks `AILIBI_SAMPLES_ROOT` (default
+`replays/samples`) and nothing else, so a bare run covers `4p1i` and `9p2i`
+there — 50 + 50 — and never touches the 200 under `replays/ml_corpus/`
+(50 + 150). The row above is corrected to what the bare run verifies, and the
+second root is run rather than the claim shrunk; the four
+`build_sample_report.py --check` runs beside it already named all four sets and
+are unchanged by this round, which touches no replay and no report byte.
+
+**Verification, round 1.** Re-run whole on the corrected tree:
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments tests/scripts -q` | 1915 passed |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed — 66 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | passed |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | 60 checks, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0 — 7,884 Python passed, 20 skipped, 3 xfailed; 515 frontend tests in 19 files; strict mypy on 480 sources; 4 import contracts kept, 0 broken; 390 prompts in sync; lint, format and the production build |
+| `bash scripts/verify_samples.sh` | exit 0 — 50 + 50 clean |
+| `AILIBI_SAMPLES_ROOT=replays/ml_corpus bash scripts/verify_samples.sh` | exit 0 — 50 + 150 clean |
+
+`docs/artifacts.md`'s `audits/` row is recomputed again for the manifest's
+round-1 bytes: 25,981,220 → 25,982,290 over the same 324 files, which
+`scripts/verify_ml_evidence.py` compares against disk offline.
+
 ### Limitations
 
 - **These are diagnostics and only diagnostics.** They are authoring-conditioned,
@@ -419,6 +588,12 @@ untouched.
   report and the manifest says so in the record. They were not preregistered,
   nothing gates on them, and a cross-arm reading of them stays confounded until
   the v5 prompt set equalises the ballot register.
+- **An illegal authored target is excluded, not interpreted.** The block says
+  the ballot happened and that the meeting could not act on it; it does not say
+  whether the voter MEANT a crewmate and mistyped, because nothing recorded can
+  answer that. The count is reported per voter role so a run in which the
+  column stops being zero is visible rather than absorbed, and the fifth run's
+  archive has none, so this rule is the instrument for the next run only.
 - **The archive test recovers roles from each prefix's scripted kill.** The
   archive records no role. The recovery is sound for this design — only an
   impostor kills — but it is a derivation rather than a recorded fact, and a

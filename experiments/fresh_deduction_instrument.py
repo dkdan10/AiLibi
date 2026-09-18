@@ -4621,7 +4621,10 @@ AUTHORED_DIAGNOSTICS_NOTE: Final[str] = (
     "diagnostic only (decision 2 of the diagnosis of that day). The crew "
     "per-ballot precision is therefore reported ONLY beside its harm counter, "
     "the crew-on-crew authored ejections and the units carrying one, because "
-    "an arm can raise both together. The arms also differ in the ballot "
+    "an arm can raise both together. An authored ejection the meeting could "
+    "not act on — an id naming no living candidate — is reported in its own "
+    "illegal-target column and counted in no other, naming as it does neither "
+    "the impostor nor a crewmate. The arms also differ in the ballot "
     "REGISTER as well as in the accounts surface, so a cross-arm reading of "
     "these counts is confounded until the v5 prompt set equalises the register."
 )
@@ -4638,7 +4641,10 @@ BALLOT_REWRITE_REASONS: Final[tuple[str, ...]] = tuple(
 #: pair's common candidate set on this prefix is the impostor and the other
 #: crewmate (``meetings/manager.py`` ``_candidate_targets``, living-minus-voter,
 #: on a four-player roster with one dead), so a crewmate authoring an ejection
-#: at random names the impostor half the time.
+#: at random names the impostor half the time. The denominator it is read
+#: against therefore holds LEGAL authored targets only
+#: (:func:`_authored_a_legal_target`): a trial with no legal target is not a
+#: trial of this null.
 CREW_PRECISION_NULL: Final[float] = 0.5
 
 #: The null an EJECTION is read against: one of the three living players.
@@ -4666,6 +4672,36 @@ def _authored_an_ejection(ballot: VoteBallot) -> bool:
 
     authored = authored_ballot_target(ballot)
     return authored is not None and authored != SKIP_TARGET
+
+
+#: The recorded reason under which the AUTHORED target is not one the meeting
+#: could have acted on: the layer normalized it because it named no living
+#: candidate — a hallucinated id, a player already dead, or the voter itself
+#: (``meetings/voting.py`` ``normalize_ballot_target`` and the manager's own
+#: ``_normalize_ballot_target``, both of which preserve the id verbatim).
+ILLEGAL_TARGET_REASON: Final[str] = "invalid_target"
+
+
+def _authored_a_legal_target(
+    ballot: VoteBallot, roles: Mapping[PlayerId, Role]
+) -> bool:
+    """Whether the voter's authored target was one the meeting could act on.
+
+    The meeting layer decides this and not the instrument: ``invalid_target``
+    is its own typed verdict that the id the voter wrote named no living
+    candidate other than the voter, so what ``guard_redirected_from`` preserved
+    under that reason is a hallucination, a dead player or the voter itself.
+    Such a ballot named neither the impostor nor a crewmate, and the null the
+    crew row is read against is the null of the crew pair's TWO LEGAL TARGETS —
+    a trial that had none is in neither half of it and in neither denominator.
+    The roster test is the belt to that brace: an id nobody on this unit's
+    roster carries is illegal whatever reason the layer recorded.
+    """
+
+    if ballot.guard_rewrite_reason == ILLEGAL_TARGET_REASON:
+        return False
+    authored = authored_ballot_target(ballot)
+    return authored is not None and authored in roles and authored != ballot.voter
 
 
 def _reached_the_tally(ballot: VoteBallot) -> bool:
@@ -4707,8 +4743,13 @@ class AuthoredBallotCounts(BaseModel):
     crew_on_crew_authored_ejects: int = 0
     #: 0 or 1 per unit, so the arm's sum is the number of units carrying one.
     units_with_crew_on_crew: int = 0
+    #: Authored ejections at a target the meeting could not act on, counted in
+    #: their own column and in NO other: neither naming the impostor nor naming
+    #: a crewmate, and so in neither precision denominator.
+    crew_authored_illegal_targets: int = 0
     impostor_authored_ejects: int = 0
     impostor_authored_ejects_cleared: int = 0
+    impostor_authored_illegal_targets: int = 0
     correct_coalitions: int = 0
     correct_coalitions_cleared: int = 0
     correct_coalitions_converted: int = 0
@@ -4739,12 +4780,19 @@ class AuthoredBallotCounts(BaseModel):
             units_with_crew_on_crew=(
                 self.units_with_crew_on_crew + other.units_with_crew_on_crew
             ),
+            crew_authored_illegal_targets=(
+                self.crew_authored_illegal_targets + other.crew_authored_illegal_targets
+            ),
             impostor_authored_ejects=(
                 self.impostor_authored_ejects + other.impostor_authored_ejects
             ),
             impostor_authored_ejects_cleared=(
                 self.impostor_authored_ejects_cleared
                 + other.impostor_authored_ejects_cleared
+            ),
+            impostor_authored_illegal_targets=(
+                self.impostor_authored_illegal_targets
+                + other.impostor_authored_illegal_targets
             ),
             correct_coalitions=self.correct_coalitions + other.correct_coalitions,
             correct_coalitions_cleared=(
@@ -4785,7 +4833,11 @@ def authored_ballot_diagnostics(
 
     * **Per voter role** — how many ejections that role AUTHORED, how many of
       them reached the tally, and (for the crew) how many named the impostor
-      and how many named a crewmate.
+      and how many named a crewmate. An authored ejection the meeting layer
+      normalized as an ``invalid_target`` named neither — the id preserved
+      there is a hallucination, a dead player or the voter — so it is counted
+      in its own column and left out of every other one
+      (:func:`_authored_a_legal_target`).
     * **The coalition funnel** — an authored coalition is two or more ballots
       authored at the SAME target in one unit. It is CORRECT when that target
       is the impostor and WRONGFUL otherwise. ``cleared`` and ``converted`` are
@@ -4807,15 +4859,24 @@ def authored_ballot_diagnostics(
     crew_naming_impostor = 0
     crew_cleared = 0
     crew_on_crew = 0
+    crew_illegal = 0
     impostor_authored = 0
     impostor_cleared = 0
+    impostor_illegal = 0
     for ballot in ballots:
         if ballot.guard_rewrite_reason is not None:
             reasons[ballot.guard_rewrite_reason] += 1
         if not _authored_an_ejection(ballot):
             continue
         authored = authored_ballot_target(ballot)
-        if roles[ballot.voter] == "IMPOSTOR":
+        voter_is_impostor = roles[ballot.voter] == "IMPOSTOR"
+        if not _authored_a_legal_target(ballot, roles):
+            if voter_is_impostor:
+                impostor_illegal += 1
+            else:
+                crew_illegal += 1
+            continue
+        if voter_is_impostor:
             impostor_authored += 1
             impostor_cleared += int(_reached_the_tally(ballot))
             continue
@@ -4829,6 +4890,11 @@ def authored_ballot_diagnostics(
     by_target: dict[str, list[VoteBallot]] = {}
     for ballot in ballots:
         if not _authored_an_ejection(ballot):
+            continue
+        # A coalition is a bloc the meeting could have ejected somebody on, so
+        # an illegal authored target forms none: two voters naming one
+        # hallucinated id agreed about nobody.
+        if not _authored_a_legal_target(ballot, roles):
             continue
         target = authored_ballot_target(ballot)
         assert target is not None  # _authored_an_ejection said so
@@ -4864,8 +4930,10 @@ def authored_ballot_diagnostics(
         crew_authored_ejects_cleared=crew_cleared,
         crew_on_crew_authored_ejects=crew_on_crew,
         units_with_crew_on_crew=int(crew_on_crew > 0),
+        crew_authored_illegal_targets=crew_illegal,
         impostor_authored_ejects=impostor_authored,
         impostor_authored_ejects_cleared=impostor_cleared,
+        impostor_authored_illegal_targets=impostor_illegal,
         correct_coalitions=correct[0],
         correct_coalitions_cleared=correct[1],
         correct_coalitions_converted=correct[2],
@@ -4888,6 +4956,11 @@ class AuthoredEjectRow(BaseModel):
     authored: int
     cleared: int
     coerced: int
+    #: Authored ejections at a target the meeting could not act on, reported
+    #: here and counted nowhere else — not in ``authored``, and so not in the
+    #: precision denominator either. Defaulted, so a row written before this
+    #: column existed parses and reads zero.
+    illegal_targets: int = 0
 
 
 #: The precision half of the block, and the harm half it may never be reported
@@ -4973,16 +5046,18 @@ def authored_ballot_block(counts: AuthoredBallotCounts) -> AuthoredBallotDiagnos
     """
 
     # CREWMATE first, the order the calibration's role split already reports.
-    by_role: tuple[tuple[Role, int, int], ...] = (
+    by_role: tuple[tuple[Role, int, int, int], ...] = (
         (
             "CREWMATE",
             counts.crew_authored_ejects,
             counts.crew_authored_ejects_cleared,
+            counts.crew_authored_illegal_targets,
         ),
         (
             "IMPOSTOR",
             counts.impostor_authored_ejects,
             counts.impostor_authored_ejects_cleared,
+            counts.impostor_authored_illegal_targets,
         ),
     )
     return AuthoredBallotDiagnostics(
@@ -5001,8 +5076,9 @@ def authored_ballot_block(counts: AuthoredBallotCounts) -> AuthoredBallotDiagnos
                 authored=authored,
                 cleared=cleared,
                 coerced=authored - cleared,
+                illegal_targets=illegal,
             )
-            for role, authored, cleared in by_role
+            for role, authored, cleared, illegal in by_role
         ),
         correct_coalitions=counts.correct_coalitions,
         correct_coalitions_cleared=counts.correct_coalitions_cleared,
@@ -5484,6 +5560,36 @@ class CarriedUsage(BaseModel):
     #: would otherwise report the tail's readings as the run's. Defaulted, so a
     #: checkpoint written before this field parses and reads an empty one.
     finish_reasons: Mapping[str, int] = {}
+
+    @model_validator(mode="after")
+    def _a_populated_distribution_is_one_row_per_call(self) -> CarriedUsage:
+        """Refuse a carried distribution that is not what it claims to be.
+
+        A checkpoint is a FILE, and a resumed run merges what it reads here
+        straight into the arm summary the report is built from, so a malformed
+        row would be reported as a reading nobody saw. The EMPTY mapping stays
+        legal — that is what a record written before the field reads — but a
+        populated one has to be a count of calls: no negative reading, and one
+        row per call of this same row's ``calls``.
+        """
+
+        if not self.finish_reasons:
+            return self
+        negative = sorted(
+            reason for reason, count in self.finish_reasons.items() if count < 0
+        )
+        if negative:
+            raise ValueError(
+                "a finish-reason distribution counts calls, so no reading is "
+                "negative; this one carries " + ", ".join(negative)
+            )
+        total = sum(self.finish_reasons.values())
+        if total != self.calls:
+            raise ValueError(
+                "a populated finish-reason distribution is one row per call: "
+                f"this one sums to {total} over {self.calls} calls"
+            )
+        return self
 
     def arm_usage(self) -> ArmUsage:
         return ArmUsage(
@@ -6779,20 +6885,12 @@ _SELF_KILL_STATEMENT: Final[re.Pattern[str]] = re.compile(
 #: the review of 2026-09-15 found missing: a conditional, a hypothetical or a
 #: question puts the words in play without asserting them ("if I am the
 #: impostor, why would I report the body?"), and counting that as a confession
-#: inflates the column in the direction the rule claims it cannot move.
-#:
-#: **2026-09-18 — the interrogative family is completed.** The third family
-#: carried only the MODAL interrogatives (``why would``, ``how would``,
-#: ``what would``), so an equally plain question in the present or the past
-#: — "how do I get accused of this?" — fell through and counted as a
-#: confession; the fifth run's reference arm leaked once by exactly that
-#: shape (its RESULTS published both readings, and the memo of 2026-09-18
-#: ruled the repair decision 9). The three question words are now crossed with
-#: the four auxiliaries rather than listed, so the family is complete by
-#: construction and a fifth auxiliary is one word rather than three entries.
-#: Widening a guard can only REMOVE counts from a diagnostic that is already an
-#: estimate carrying error in both directions, which is why it is a word-list
-#: repair and not a change to :data:`ROLE_LEAK_RULE`'s own text.
+#: inflates the column in the direction the rule claims it cannot move. The
+#: three question words are CROSSED with their four auxiliaries rather than
+#: listed, so the interrogative family is complete by construction — a question
+#: in the present or the past asserts as little as a modal one, and a fifth
+#: auxiliary is one word here rather than three entries.
+#: Crossed on 2026-09-18; :data:`ROLE_LEAK_RULE`'s own text is unchanged.
 _NOT_AN_ASSERTION: Final[re.Pattern[str]] = re.compile(
     # Attributed to somebody else.
     r"\b(?:claim|claims|claimed|claiming|accuse\w*|accusation\w*|allege\w*|"
