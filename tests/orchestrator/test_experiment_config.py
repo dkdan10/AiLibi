@@ -131,7 +131,7 @@ def test_the_citation_relevance_key_is_absent_until_the_lever_is_on() -> None:
 
     for version in (1, 2):
         off = RecordedExperimentConfig(
-            format_version=version,  # type: ignore[arg-type]
+            format_version=version,
             evidence_reasoning_version=2 if version == 2 else 1,
         )
         assert "citation_relevance_version" not in off.model_dump()
