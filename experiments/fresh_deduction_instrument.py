@@ -121,6 +121,8 @@ from meetings.manager import (
     DEFAULT_TURN_MAX_TOKENS,
     DEFAULT_VOTE_MAX_TOKENS,
     DEFAULT_VOTE_RATIONALE,
+    INVALID_OBSERVATION_ID_MARKER,
+    INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     OFF_TARGET_CITATION_EJECT_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
@@ -536,6 +538,78 @@ CALIBRATION_2_SAMPLING: Final[SamplingConfig] = AUTHORIZED_SAMPLING
 
 
 # ---------------------------------------------------------------------------
+# The THIRD development calibration
+# (tasks/work/fresh-deduction-calibration-3.md)
+# ---------------------------------------------------------------------------
+#
+# A fourth authorization, approved by the owner on 2026-09-18 as decision 1 of
+# ``tasks/diagnosis-2026-09-18-fifth-run.md``, and a THIRD set beside the two
+# above rather than a replacement of either. Both of those record spends that
+# have been MADE — the 2026-09-14 sitting and the 2026-09-15 one — so their
+# seeds, ceilings, sampling and clauses are history and nothing here edits them.
+#
+# What makes it a different authorization rather than a re-run of the second:
+# the wave of 2026-09-18 moved the prompt bytes on both arms (the v5 accounts
+# revision on the candidate, the relevance-aware citation guard on both), so the
+# second calibration's token profile is a measurement of a surface this tree no
+# longer renders. This mode draws the SAME sixty seeds at the SAME caps, which
+# is what makes the two comparable on identical inputs, and it reports the
+# authored-ballot DIAGNOSTICS block beside the token profile because the
+# question this sitting is sent to answer is whether the three wave cards moved
+# the mechanisms the diagnosis names.
+#
+# What it is NOT: an evaluation. It computes no paired statistic, evaluates no
+# decision rule and reports no primary outcome, and the frozen analysis below is
+# untouched by it.
+
+#: Paired seeds the third calibration renders: the second calibration's draw to
+#: the seed — all fifty accepted seeds of the 3000-3999 record then the first
+#: ten of the 5000-5999 one — so the only thing that moved between the two
+#: sittings is the wave's prompt bytes.
+CALIBRATION_3_PAIRED_SEEDS: Final[int] = 60
+
+#: The per-unit ceilings of a third-calibration unit. The output figure clears
+#: the 15,360-token reservation schedule of :data:`CALIBRATION_3_SAMPLING`; the
+#: input figure is about 3x the largest unit the second calibration charged
+#: (38,440), the headroom being for prompt bytes the wave adds that no
+#: calibration has measured.
+CALIBRATION_3_UNIT_MAX_INPUT_TOKENS: Final[int] = 116_000
+CALIBRATION_3_UNIT_MAX_OUTPUT_TOKENS: Final[int] = 16_000
+
+#: The run-level ceilings. 120 units of the second calibration's largest unit is
+#: 4,612,800 input and 505,216 output including the in-flight headroom term, so
+#: these carry 1.9% and 2.9% of margin over the floors the gate enforces. A
+#: ceiling pinned AT the floor is a stop rule that fires on the first unit larger
+#: than any of calibration 2's, which is exactly what the wave is expected to
+#: produce.
+CALIBRATION_3_RUN_MAX_INPUT_TOKENS: Final[int] = 4_700_000
+CALIBRATION_3_RUN_MAX_OUTPUT_TOKENS: Final[int] = 520_000
+
+#: Five hours of model work inside a six-hour elapsed window, one sitting. 720
+#: calls in 5 h allows 25.0 s per call, against about 12.9 s on the fifth run's
+#: candidate arm (3,897.6 s over 301 calls) and 11.65 s per attempt on
+#: calibration 2's candidate arm — a margin of 1.9x at the slowest pace measured
+#: on these inputs.
+CALIBRATION_3_MODEL_WORK_SECONDS: Final[float] = 5 * 60 * 60
+CALIBRATION_3_ELAPSED_SECONDS: Final[float] = 6 * 60 * 60
+
+CALIBRATION_3_LIMITS: Final[RunLimits] = RunLimits(
+    run_max_input_tokens=CALIBRATION_3_RUN_MAX_INPUT_TOKENS,
+    run_max_output_tokens=CALIBRATION_3_RUN_MAX_OUTPUT_TOKENS,
+    unit_max_input_tokens=CALIBRATION_3_UNIT_MAX_INPUT_TOKENS,
+    unit_max_output_tokens=CALIBRATION_3_UNIT_MAX_OUTPUT_TOKENS,
+    max_cost_usd=AUTHORIZED_MAX_COST_USD,
+    elapsed_seconds=CALIBRATION_3_ELAPSED_SECONDS,
+    model_work_seconds=CALIBRATION_3_MODEL_WORK_SECONDS,
+)
+
+#: The draw the third calibration makes: the RUN's own, as the second's is.
+#: Written as the same object for the same reason — what is measured has to be
+#: what a run would do, and a copy is a place for the two to part silently.
+CALIBRATION_3_SAMPLING: Final[SamplingConfig] = AUTHORIZED_SAMPLING
+
+
+# ---------------------------------------------------------------------------
 # What a unit RESERVES, and what a unit has actually COST
 # ---------------------------------------------------------------------------
 #
@@ -567,11 +641,13 @@ UNIT_BALLOT_CALLS: Final[int] = AUTHORIZED_LIVING_VOTERS
 CALIBRATED_UNIT_INPUT_TOKENS: Final[int] = 38_440
 CALIBRATED_UNIT_OUTPUT_TOKENS: Final[int] = 4_176
 
-#: The same two figures as the profile committed when the two CALIBRATION modes
-#: were authorized — the three stopped live runs' seven units, now committed as
-#: ``tests/experiments/deduction_stopped_runs_usage_profile.json`` — and what
-#: :func:`assert_calibration_is_authorized` and
-#: :func:`assert_ready_for_a_calibration` check a mode's ceilings against.
+#: The same two figures as the profile committed when the two SPENT CALIBRATION
+#: modes were authorized — the three stopped live runs' seven units, now
+#: committed as ``tests/experiments/deduction_stopped_runs_usage_profile.json``
+#: — and what :func:`assert_calibration_is_authorized` and
+#: :func:`assert_ready_for_a_calibration` check THOSE two modes' ceilings
+#: against. Carried as each mode's own ``sizing_unit_input_tokens`` field, so a
+#: later mode sized on a later profile cannot be checked against this one.
 #:
 #: A calibration mode's limits are the record of a spend the manifest authorizes
 #: ONCE, and both have been spent: the 2026-09-14 mode on that day and the
@@ -586,6 +662,24 @@ CALIBRATED_UNIT_OUTPUT_TOKENS: Final[int] = 4_176
 #: fixture's own maxima, so they are read off evidence rather than typed.
 CALIBRATION_SIZING_UNIT_INPUT_TOKENS: Final[int] = 24_282
 CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS: Final[int] = 3_116
+
+#: The profile the 2026-09-18 mode's ceilings were sized against: the largest of
+#: the 120 units the second calibration measured on these same sixty seeds, as
+#: its committed output publishes them
+#: (``audits/deduction-candidate/calibration-2-2026-09-15/calibration.json``,
+#: ``proposal.measured_max_unit_*_tokens``; a test reads both off that archive).
+#:
+#: A FROZEN LITERAL rather than a read of :data:`CALIBRATED_UNIT_INPUT_TOKENS`,
+#: which today holds the same two numbers. The refresh
+#: ``tasks/work/fresh-deduction-limits-6.md`` makes FROM this sitting moves
+#: those two constants to this sitting's own maxima, and a mode whose gate read
+#: them would then be checked against the measurement it produced — the
+#: circularity :data:`CALIBRATION_SIZING_UNIT_INPUT_TOKENS` above exists to
+#: refuse, one authorization later. Against 24,282 this mode's run-level input
+#: ceiling passes anything (120 units is 2,913,840); against 38,440 it bites at
+#: 4,612,800, which is the margin the Constraints table states.
+CALIBRATION_3_SIZING_UNIT_INPUT_TOKENS: Final[int] = 38_440
+CALIBRATION_3_SIZING_UNIT_OUTPUT_TOKENS: Final[int] = 4_176
 
 
 def planned_units() -> int:
@@ -924,6 +1018,10 @@ class ProvenanceMismatch(InstrumentError):
 
 class PrefixBytesLeaked(InstrumentError):
     """A report payload carries held-out prefix bytes."""
+
+
+class CalibrationReportsAnOutcome(InstrumentError):
+    """A calibration payload carries a paired statistic or a graded outcome."""
 
 
 @dataclass(frozen=True)
@@ -1378,10 +1476,13 @@ def assert_limits_are_feasible(
       maxima, because a proposal sized on what a sitting measured is feasible
       or not against that sitting's numbers, and checking it against a profile
       built from some earlier run's archives answers a question nobody asked;
-    * the two calibration gates run it against
-      :data:`CALIBRATION_SIZING_UNIT_INPUT_TOKENS` and its output twin, the
-      profile each authorized MODE was sized on, because a mode's ceilings
-      record a spend the manifest authorizes once and both have been spent.
+    * the two calibration gates run it against the matched mode's own
+      ``sizing_unit_input_tokens`` and its output twin, the profile THAT mode
+      was sized on, because a mode's ceilings record a spend the manifest
+      authorizes once. The two spent modes carry
+      :data:`CALIBRATION_SIZING_UNIT_INPUT_TOKENS`; the 2026-09-18 mode carries
+      :data:`CALIBRATION_3_SIZING_UNIT_INPUT_TOKENS`, the measurement the
+      2026-09-15 sitting made on the same sixty seeds.
 
     Read from module scope at call time rather than bound as parameter
     defaults, so a test that moves either constant moves this gate with it.
@@ -1537,17 +1638,109 @@ CALIBRATION_2_CLAUSE: Final[str] = (
     "measurement rather than a stop, and writes aggregates only."
 )
 
+#: The owner's THIRD calibration clause, approved on 2026-09-18 with the rest of
+#: that diagnosis's section-11 rulings and quoted verbatim by the manifest's
+#: dated "Development calibration 3 (2026-09-18)" section. A third clause rather
+#: than an edited second one, for the reason the second gives about the first:
+#: both earlier sittings have been spent, and their clauses are what authorized
+#: those spends.
+CALIBRATION_3_CLAUSE: Final[str] = (
+    "A third development calibration may spend on the first sixty accepted "
+    "seeds of the converted bands, taken in the order those bands were "
+    "converted, both arms, once and under the calibration-3 limits, with the "
+    "revision of 2026-09-18 enabled on both arms; it grades nothing, reads no "
+    "held-out prefix, counts a per-call truncation as a measurement rather than "
+    "a stop, reports the authored-ballot diagnostics beside the token profile, "
+    "and computes no paired statistic, evaluates no decision rule and reports "
+    "no primary outcome."
+)
+
+
+@dataclass(frozen=True)
+class CalibrationPrediction:
+    """One directional reading the 2026-09-18 sitting is read against.
+
+    Held here so the card's table, the manifest's dated section and this module
+    cannot drift: a test holds all three to these six rows. They are fixed
+    BEFORE the sitting for the only reason a prediction is worth writing down —
+    a reading chosen after the numbers are in is a description of them.
+    """
+
+    #: ``P1`` to ``P6``, as the card and the manifest number them.
+    id: str
+    #: The mechanism the wave was supposed to move, with its memo section.
+    mechanism: str
+    #: What the fifth run measured, on DIFFERENT prefixes.
+    fifth_run: str
+    #: The direction this sitting is read for. Never a threshold.
+    prediction: str
+
+
+#: The six predictions, verbatim from the card's Evidence table and copied
+#: verbatim into the manifest's dated section. Read from memo section 7 against
+#: the fifth run's own figures, which were measured on the 8000-8999 prefixes
+#: rather than on this draw's — so every one of them is a DIRECTION and none of
+#: them is a threshold this sitting can pass or fail.
+CALIBRATION_3_PREDICTIONS: Final[tuple[CalibrationPrediction, ...]] = (
+    CalibrationPrediction(
+        id="P1",
+        mechanism="F6 costs the impostor its free pass (§3)",
+        fifth_run="impostor EJECTs survive 86.8%, crew 51.9%",
+        prediction="the gap narrows",
+    ),
+    CalibrationPrediction(
+        id="P2",
+        mechanism="F6 attacks stage 2 (§2)",
+        fifth_run="wrongful coalitions convert 36.4%, correct 18.2%",
+        prediction="wrongful falls to or below correct",
+    ),
+    CalibrationPrediction(
+        id="P3",
+        mechanism="F7 equalises the register (§4)",
+        fifth_run="candidate authors 119 EJECT / 31 SKIP of 150",
+        prediction="authored EJECTs fall toward 14",
+    ),
+    CalibrationPrediction(
+        id="P4",
+        mechanism="F4 revives the turn channel (§3)",
+        fifth_run="0 of 150 keep a `primary_reason_id`; 27 nulled; 44 coerced",
+        prediction="surviving ids rise, coercions fall",
+    ),
+    CalibrationPrediction(
+        id="P5",
+        mechanism="The deduction signal is real (§5)",
+        fifth_run="crew authored EJECTs name the impostor 51 of 81",
+        prediction="holds near 63% once volume falls",
+    ),
+    CalibrationPrediction(
+        id="P6",
+        mechanism="The vocabulary un-collapses (§4)",
+        fifth_run="1 contradiction flag against 14",
+        prediction="flags rise above 1",
+    ),
+)
+
+#: What the six rows above are and are not. Quoted by the manifest's dated
+#: section beside the table, because a table of predictions published without
+#: this sentence reads as a table of bars.
+CALIBRATION_3_PREDICTIONS_NOTE: Final[str] = (
+    "These six are PREDICTIONS and none of them is a gate. They are read "
+    "against the fifth run's figures, which were measured on different "
+    "prefixes, so each is a direction rather than a threshold: a miss is "
+    "neither a stop nor a verdict, and no decision rule reads any of them."
+)
+
 
 @dataclass(frozen=True)
 class CalibrationMode:
     """One authorized calibration, as the whole set of values it was approved as.
 
-    The reason this is a value object and not five module constants read
-    independently: the two modes differ on every axis at once — seeds, limits,
-    sampling, clause and what a truncation means — and each set was approved as
-    a set. Five constants read independently authorize the sixteen crossings
-    nobody approved, which is exactly how a sixty-seed draw could end up running
-    under ceilings sized for ten units.
+    The reason this is a value object and not nine module constants read
+    independently: the three modes differ on every axis at once — seeds, limits,
+    sampling, clause, the profile their ceilings were sized against and what a
+    truncation means — and each set was approved as a set. Constants read
+    independently authorize the crossings nobody approved, which is exactly how
+    a sixty-seed draw could end up running under ceilings sized for ten units.
     """
 
     #: The dated name, which is also the manifest heading and the CLI value.
@@ -1560,6 +1753,31 @@ class CalibrationMode:
     #: first, and on every live evaluation: see :data:`STOP_RULE`, which this
     #: flag does not edit and does not reach.
     truncation_is_a_measurement: bool
+    #: The largest unit this mode's ceilings were SIZED against, which is what
+    #: :func:`assert_limits_are_feasible` checks them by. A field of the mode
+    #: rather than one module constant for all of them, because a mode's
+    #: ceilings record a spend the manifest authorizes once and the profile that
+    #: spend was approved under is a property of that approval: the two spent
+    #: modes were sized on the three stopped runs' archives
+    #: (:data:`CALIBRATION_SIZING_UNIT_INPUT_TOKENS`) and the 2026-09-18 mode on
+    #: what the 2026-09-15 sitting then measured.
+    sizing_unit_input_tokens: int
+    sizing_unit_output_tokens: int
+    #: Whether the report carries the per-role call schedules and the leak
+    #: column. Stated rather than inferred from
+    #: ``truncation_is_a_measurement``: the two happen to agree on all three
+    #: modes, and a report SHAPE decided by a stop-discipline flag is a coupling
+    #: that survives only until a mode disagrees with it.
+    reports_the_role_split: bool
+    #: Whether the report carries the authored-ballot DIAGNOSTICS block. False
+    #: on both spent modes, whose committed outputs were written without it and
+    #: have to keep re-deriving the same bytes.
+    reports_authored_diagnostics: bool
+    #: Whether this mode requires the revision of 2026-09-18 resolved ON for
+    #: both arms. See :func:`assert_the_revised_wave_is_enabled`: the 2026-09-18
+    #: sitting exists to measure that wave, so a sitting of it with the lever
+    #: resolved off would measure the surface it was sent to replace.
+    requires_the_revised_wave: bool
 
     def describe(self) -> str:
         return (
@@ -1579,6 +1797,11 @@ CALIBRATION_MODES: Final[tuple[CalibrationMode, ...]] = (
         sampling=CALIBRATION_SAMPLING,
         clause=CALIBRATION_CLAUSE,
         truncation_is_a_measurement=False,
+        sizing_unit_input_tokens=CALIBRATION_SIZING_UNIT_INPUT_TOKENS,
+        sizing_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
+        reports_the_role_split=False,
+        reports_authored_diagnostics=False,
+        requires_the_revised_wave=False,
     ),
     CalibrationMode(
         name="2026-09-15",
@@ -1587,6 +1810,24 @@ CALIBRATION_MODES: Final[tuple[CalibrationMode, ...]] = (
         sampling=CALIBRATION_2_SAMPLING,
         clause=CALIBRATION_2_CLAUSE,
         truncation_is_a_measurement=True,
+        sizing_unit_input_tokens=CALIBRATION_SIZING_UNIT_INPUT_TOKENS,
+        sizing_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
+        reports_the_role_split=True,
+        reports_authored_diagnostics=False,
+        requires_the_revised_wave=False,
+    ),
+    CalibrationMode(
+        name="2026-09-18",
+        paired_seeds=CALIBRATION_3_PAIRED_SEEDS,
+        limits=CALIBRATION_3_LIMITS,
+        sampling=CALIBRATION_3_SAMPLING,
+        clause=CALIBRATION_3_CLAUSE,
+        truncation_is_a_measurement=True,
+        sizing_unit_input_tokens=CALIBRATION_3_SIZING_UNIT_INPUT_TOKENS,
+        sizing_unit_output_tokens=CALIBRATION_3_SIZING_UNIT_OUTPUT_TOKENS,
+        reports_the_role_split=True,
+        reports_authored_diagnostics=True,
+        requires_the_revised_wave=True,
     ),
 )
 
@@ -1637,6 +1878,69 @@ def calibration_mode_for(
     )
 
 
+def arm_lever_profile(arm: InstrumentArm) -> Mapping[str, str]:
+    """The SUBSTRATE levers one arm resolves, without the transport key.
+
+    One reader for two callers that must not disagree:
+    :func:`assert_the_revised_wave_is_enabled`, which refuses a sitting whose
+    levers are not the ones its mode was authorized for, and the calibration
+    report, which publishes what each arm actually resolved. The provider is
+    dropped because it is transport rather than substrate and the report names
+    it once at the top level; the value passed in is therefore immaterial.
+    """
+
+    resolved = dict(arm.environment(provider=AUTHORIZED_PROVIDER))
+    resolved.pop("AILIBI_LLM_PROVIDER", None)
+    return MappingProxyType(dict(sorted(resolved.items())))
+
+
+#: What the revision of 2026-09-18 resolves to on an arm that carries it. The
+#: relevance-aware citation guard is the lever the wave puts on BOTH arms
+#: (``tasks/work/relevance-aware-citation-guard.md``); its declared default stays
+#: ``None``, where ``None`` preserves recorded behaviour, so a sitting that
+#: measures the wave has to pass it explicitly and a sitting that forgot to is a
+#: sitting of the surface the wave replaced.
+#:
+#: The prompt SET is here for the same reason and with a stated limit: this gate
+#: can say the arms render ``qwen3_6_27b`` and cannot say which accounts
+#: revision those templates are at. The v5 revision is pinned by the accounts
+#: card's own version test and by the prompt-version markers the run records; a
+#: pre-flight that claimed to check it would be claiming a mechanism this module
+#: does not have.
+REVISED_WAVE_LEVERS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "AILIBI_CITATION_RELEVANCE": "1",
+        "AILIBI_PROMPT_SET": AUTHORIZED_PROMPT_SET,
+    }
+)
+
+
+def assert_the_revised_wave_is_enabled(mode: CalibrationMode) -> None:
+    """Refuse a mode that measures the wave while an arm resolves it OFF.
+
+    Arithmetic over :func:`instrument_arms` and nothing else — no file, no
+    client — so it runs inside the calibration gate before a credential exists.
+    A mode that does not require the wave passes untouched: the two spent modes
+    measured the surface they were run on, and holding them to a lever that did
+    not exist then would refuse a spend the manifest already records.
+    """
+
+    if not mode.requires_the_revised_wave:
+        return
+    for arm in instrument_arms():
+        resolved = arm_lever_profile(arm)
+        for name, expected in REVISED_WAVE_LEVERS.items():
+            if resolved.get(name) != expected:
+                raise LiveRunNotAuthorized(
+                    f"the {mode.name} calibration measures the revision of "
+                    f"2026-09-18 and arm {arm.name} resolves {name} to "
+                    f"{resolved.get(name)!r}, not {expected!r}: a sitting with "
+                    "the revision off on either arm measures the surface that "
+                    "revision replaced, under a clause that authorized the "
+                    "other one"
+                )
+
+
 def assert_resume_is_authorized(*, provider: str, repo_root: Path = _REPO_ROOT) -> None:
     """Refuse a LIVE resume until the manifest carries the owner's clause.
 
@@ -1677,18 +1981,24 @@ def assert_calibration_is_authorized(
 
     * the three values that size the spend — the limits, the sampling
       configuration and the seed count — have to be ONE authorized mode of
-      :data:`CALIBRATION_MODES`, whole. Two modes are authorized: the five-seed
-      calibration of 2026-09-14 at :data:`CALIBRATION_SAMPLING`, and the
-      sixty-seed calibration of 2026-09-15 at :data:`CALIBRATION_2_SAMPLING`.
-      Every crossing of them is refused by :func:`calibration_mode_for` —
-      sixty seeds under the first mode's ceilings is a run its per-unit output
-      figure cannot pay for, five seeds under the second's is a spend nobody
-      approved, and either mode drawing at the other's caps measures a
-      distribution the run it sizes does not draw from. That last refusal is
-      the one the fourth authorization created: it raised the RUN's turn cap to
-      4,096, so a calibration sizing that run has to draw at 4,096 under
-      ceilings that clear its 15,360-token schedule, which is what the second
-      mode is;
+      :data:`CALIBRATION_MODES`, whole. Three modes are authorized: the
+      five-seed calibration of 2026-09-14 at :data:`CALIBRATION_SAMPLING`, the
+      sixty-seed calibration of 2026-09-15 at :data:`CALIBRATION_2_SAMPLING`,
+      and the sixty-seed calibration of 2026-09-18 at
+      :data:`CALIBRATION_3_SAMPLING` under its own, larger ceilings. Every
+      crossing of them is refused by :func:`calibration_mode_for` — sixty seeds
+      under the first mode's ceilings is a run its per-unit output figure
+      cannot pay for, five seeds under the second's is a spend nobody approved,
+      the 2026-09-15 draw under the 2026-09-18 ceilings is a bigger spend than
+      the one that was authorized for it, and any mode drawing at another's
+      caps measures a distribution the run it sizes does not draw from. That
+      last refusal is the one the fourth authorization created: it raised the
+      RUN's turn cap to 4,096, so a calibration sizing that run has to draw at
+      4,096 under ceilings that clear its 15,360-token schedule, which is what
+      the second and third modes are;
+    * a mode that measures the revision of 2026-09-18 is refused unless both
+      arms resolve that revision's levers ON
+      (:func:`assert_the_revised_wave_is_enabled`);
     * ``fake`` passes without an invocation, and refuses one, exactly as
       :func:`assert_live_run_is_authorized` does — a rehearsal is not a run.
       The mode lookup above still runs for it, so a rehearsal of a crossing is
@@ -1714,6 +2024,10 @@ def assert_calibration_is_authorized(
     mode = calibration_mode_for(
         limits=limits, sampling=sampling, paired_seeds=paired_seeds
     )
+    # Before the fake-provider return, for the reason the mode lookup is: a
+    # rehearsal of a sitting no live run could take rehearses nothing, and the
+    # levers are the whole subject of the 2026-09-18 mode.
+    assert_the_revised_wave_is_enabled(mode)
     if provider == "fake":
         if invocation is not None:
             raise LiveRunNotAuthorized(
@@ -1771,11 +2085,11 @@ def assert_calibration_is_authorized(
         limits=limits,
         sampling=sampling,
         units=calibration_units(paired_seeds),
-        # A mode's ceilings are checked against the profile the mode was SIZED
+        # A mode's ceilings are checked against the profile THAT MODE was SIZED
         # on, not against whatever a later sitting refreshed the committed one
         # to: see :data:`CALIBRATION_SIZING_UNIT_INPUT_TOKENS`.
-        calibrated_unit_input_tokens=CALIBRATION_SIZING_UNIT_INPUT_TOKENS,
-        calibrated_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
+        calibrated_unit_input_tokens=mode.sizing_unit_input_tokens,
+        calibrated_unit_output_tokens=mode.sizing_unit_output_tokens,
     )
     return mode
 
@@ -3668,15 +3982,25 @@ def assert_ready_for_a_calibration(
     :func:`_draw_in_converted_order`, which holds it to a PREFIX of
     :data:`CONVERTED_BANDS` before a prefix is rebuilt, so neither override can
     name a draw the mode's clause does not authorize.
+
+    The mode is resolved FIRST, before the feasibility arithmetic rather than
+    after it, because the profile a mode's ceilings are checked against is a
+    field of the mode (:class:`CalibrationMode`) and the three modes do not
+    share one. :func:`calibration_mode_for` reads no file and needs no
+    credential, so nothing about the ordering rule — arithmetic and the
+    authorization before the inputs, the inputs before a client — changes.
     """
 
+    mode = calibration_mode_for(
+        limits=limits, sampling=sampling, paired_seeds=paired_seeds
+    )
     assert_limits_are_feasible(
         limits=limits,
         sampling=sampling,
         units=calibration_units(paired_seeds),
-        # As above: the profile the mode was sized on.
-        calibrated_unit_input_tokens=CALIBRATION_SIZING_UNIT_INPUT_TOKENS,
-        calibrated_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
+        # As above: the profile THIS mode was sized on.
+        calibrated_unit_input_tokens=mode.sizing_unit_input_tokens,
+        calibrated_unit_output_tokens=mode.sizing_unit_output_tokens,
     )
     assert_calibration_is_authorized(
         provider=provider,
@@ -4678,6 +5002,20 @@ _TARGET_REWRITE_MARKER_HEADS: Mapping[str, str] = MappingProxyType(
     }
 )
 
+#: The OTHER markers the ballot chain prepends: the two citation-id validators,
+#: which run before the target rewrites and so sit deeper in the same stack
+#: (``meetings/manager.py`` ``_normalize_ballot_reason_id`` and
+#: ``_normalize_ballot_observation_id``). They rewrite no target and are counted
+#: nowhere here; they are listed so the walk below can step OVER one instead of
+#: stopping at it and missing a rewrite behind it.
+_OTHER_BALLOT_MARKER_HEADS: Final[tuple[str, ...]] = (
+    INVALID_REASON_ID_MARKER.split("{", 1)[0],
+    INVALID_OBSERVATION_ID_MARKER.split("{", 1)[0],
+)
+
+#: What ends every marker in the chain: the closing bracket and its space.
+_BALLOT_MARKER_TERMINATOR: Final[str] = "] "
+
 
 def ballot_rewrites_that_fired(ballot: VoteBallot) -> tuple[str, ...]:
     """Every target rewrite this ballot's marker stack records, sorted by reason.
@@ -4685,13 +5023,47 @@ def ballot_rewrites_that_fired(ballot: VoteBallot) -> tuple[str, ...]:
     One ballot can carry two (the redirect-then-coerce class); the typed
     ``guard_rewrite_reason`` names only the first, which is why this reads the
     stack. A ballot no guard touched returns ``()``.
+
+    ANCHORED to the stack rather than searched for anywhere in the rationale.
+    Every guard in the ballot chain PREPENDS its marker and none of them edits
+    the body -- ``meetings/manager.py``'s ``_preserved_ballot_markers`` raises
+    if that is ever untrue -- so the markers are a contiguous block at position
+    zero and the model's own text is the suffix. A substring search over the
+    whole rationale therefore counts a model that ECHOES a marker phrase as a
+    guard that fired: the vote prompt renders coerced ballots back to later
+    voters, so "[off-target citation for eject target 'p-2' coerced to SKIP]"
+    is a phrase the model has seen and can reproduce, and one echo would move
+    the rewrite tally of a sitting the guard never touched. This walks the
+    block from position zero, consuming one recognised marker at a time and
+    stopping at the first thing that is not one, which is where this codebase's
+    text ends and the model's begins.
     """
 
-    return tuple(
-        reason
-        for reason in BALLOT_REWRITE_REASONS
-        if _TARGET_REWRITE_MARKER_HEADS[reason] in ballot.rationale_text
-    )
+    text = ballot.rationale_text
+    fired: set[str] = set()
+    offset = 0
+    while offset < len(text):
+        matched = next(
+            (
+                reason
+                for reason, head in _TARGET_REWRITE_MARKER_HEADS.items()
+                if text.startswith(head, offset)
+            ),
+            None,
+        )
+        if matched is None and not any(
+            text.startswith(head, offset) for head in _OTHER_BALLOT_MARKER_HEADS
+        ):
+            break
+        end = text.find(_BALLOT_MARKER_TERMINATOR, offset)
+        if end < 0:
+            # A marker head with no terminator is a truncated record rather
+            # than a fired guard; stop here rather than guess where it ended.
+            break
+        if matched is not None:
+            fired.add(matched)
+        offset = end + len(_BALLOT_MARKER_TERMINATOR)
+    return tuple(reason for reason in BALLOT_REWRITE_REASONS if reason in fired)
 
 
 #: The null a crew ballot's target is read against: two legal targets. The crew
@@ -5464,6 +5836,67 @@ def assert_report_holds_no_prefix_bytes(
     if leaked:
         raise PrefixBytesLeaked(
             "the report carries a legacy body handle: " + ", ".join(sorted(set(leaked)))
+        )
+
+
+def _every_key_in(value: object) -> list[str]:
+    """Every mapping KEY in a dumped payload, at any depth.
+
+    Keys and not values, deliberately: :data:`CALIBRATION_3_CAVEAT` and
+    :data:`AUTHORED_DIAGNOSTICS_NOTE` both SAY that no primary outcome is
+    reported, and a guard that searched values would refuse the sentence that
+    makes the promise.
+    """
+
+    if isinstance(value, Mapping):
+        found: list[str] = []
+        for key, item in value.items():
+            if isinstance(key, str):
+                found.append(key)
+            found.extend(_every_key_in(item))
+        return found
+    if isinstance(value, (list, tuple)):
+        return [key for item in value for key in _every_key_in(item)]
+    return []
+
+
+#: Fields no calibration payload may carry, whatever its mode. The first three
+#: are the frozen analysis's own vocabulary (:data:`PRIMARY_OUTCOME`,
+#: :data:`DECISION_RULE`, :class:`PairedResult`), and a calibration that carried
+#: any of them would be an evaluation wearing a calibration's schema.
+CALIBRATION_FORBIDDEN_FIELDS: Final[tuple[str, ...]] = (
+    "paired",
+    "primary_outcome",
+    "supported_correct_ejections",
+    PRIMARY_OUTCOME,
+    "decision",
+    "decision_rule",
+    "p_exact",
+)
+
+
+def assert_calibration_reports_no_outcome(payload: Mapping[str, object]) -> None:
+    """Refuse a calibration payload carrying a paired statistic or an outcome.
+
+    ``extra="forbid"`` on :class:`CalibrationReport` already refuses a field
+    that arrived unnoticed at CONSTRUCTION. This is the same rule over the
+    PAYLOAD, which is what a reader — or the refresh path, or a later card
+    re-reading a committed archive — actually holds, and it is the rule the
+    2026-09-18 mode's clause states in words: this sitting computes no paired
+    statistic, evaluates no decision rule and reports no primary outcome.
+
+    Run on every mode rather than on the third alone. A guard applied on one
+    path only is a guard that has already started to drift, and no calibration
+    has ever been allowed to publish an outcome.
+    """
+
+    present = sorted(
+        {key for key in _every_key_in(payload) if key in CALIBRATION_FORBIDDEN_FIELDS}
+    )
+    if present:
+        raise CalibrationReportsAnOutcome(
+            "a calibration reports no outcome and computes no paired "
+            "statistic, and this payload carries " + ", ".join(present)
         )
 
 
@@ -6775,6 +7208,49 @@ CALIBRATION_CAVEAT: Final[str] = (
     "are untouched, and no unit of this calibration counts towards them."
 )
 
+#: The 2026-09-18 mode's own caveat, beside the one above rather than an edit of
+#: it: that string is what the two spent sittings were published under and it
+#: stays byte-identical. This mode needs its own because it reports MORE than a
+#: spend measurement — the authored-ballot diagnostics — and a reader meeting
+#: those counts under a caveat that says "no meeting outcome is reported" would
+#: be told something the payload contradicts. What has not changed is the half
+#: that matters: no grader, no paired statistic, no decision rule and no primary
+#: outcome.
+CALIBRATION_3_CAVEAT: Final[str] = (
+    "A spend and diagnostics measurement on development inputs, not an "
+    "evaluation. What is reported: the token profile per arm, call type and "
+    "hidden role; truncations as measurements carrying their finish reason; the "
+    "role-leak column; and the aggregate authored-ballot and ejection "
+    "diagnostics, as counts over the sitting and never per seed. What is NOT: "
+    "no grader ran, no paired statistic was computed, no decision rule was "
+    "evaluated and no primary outcome is reported. The primary outcome, the "
+    "decision rule, the minimum actionable effect, the acceptable-tradeoff "
+    "bound and the stop rule are untouched, and no unit of this calibration "
+    "counts towards them. The diagnostics are read against predictions the "
+    "manifest fixed BEFORE this sitting; none of them is a gate, and a missed "
+    "prediction is neither a stop nor a verdict."
+)
+
+#: Which caveat each authorized mode publishes. A closed table beside the modes
+#: for the same reason :data:`CALIBRATION_MODES` is one: a caveat chosen by an
+#: ``if`` is a caveat a fourth mode can silently inherit.
+CALIBRATION_CAVEATS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "2026-09-14": CALIBRATION_CAVEAT,
+        "2026-09-15": CALIBRATION_CAVEAT,
+        "2026-09-18": CALIBRATION_3_CAVEAT,
+    }
+)
+
+if set(CALIBRATION_CAVEATS) != {
+    mode.name for mode in CALIBRATION_MODES
+}:  # pragma: no cover
+    raise InstrumentError(
+        "every authorized calibration mode needs its caveat here: a mode "
+        "without one would publish somebody else's statement of what it "
+        "measured"
+    )
+
 
 def _percentile(values: Sequence[int], fraction: float) -> int:
     """The nearest-rank percentile of ``values``. See :data:`PERCENTILE_RULE`."""
@@ -7344,6 +7820,23 @@ class CalibrationArmUsage(BaseModel):
     #: and the units carrying any.
     leaking_turns: int = 0
     units_with_a_leaking_turn: int = 0
+    #: The substrate levers this arm RESOLVED, as
+    #: :func:`arm_lever_profile` reads them. Published because the 2026-09-18
+    #: mode exists to measure a revision that lives behind a default-OFF lever,
+    #: and a token profile whose reader cannot tell which surface produced it is
+    #: a number without a subject. Empty on the two spent modes, whose committed
+    #: outputs predate the field.
+    resolved_levers: Mapping[str, str] = {}
+    #: The authored-ballot DIAGNOSTICS block (:data:`AUTHORED_DIAGNOSTICS_NOTE`)
+    #: summed over this arm's units. Counts only, never per seed.
+    #:
+    #: ``None`` — not an empty block — on a mode that reports none, which is
+    #: both spent modes. An empty :class:`AuthoredBallotDiagnostics` is not
+    #: empty in the payload: it carries the note, which is a paragraph about
+    #: authored ejections and the primary outcome, and publishing that beside
+    #: the 2026-09-14 output's zeros would have the first calibration explaining
+    #: a block it never measured. Absent means absent.
+    authored_diagnostics: AuthoredBallotDiagnostics | None = None
 
 
 class CeilingProposal(BaseModel):
@@ -7503,13 +7996,17 @@ def _summarize_calibration_arm(
     attempts: TransportAttempts,
     sampling: SamplingConfig,
     by_role: bool = False,
+    with_diagnostics: bool = False,
+    levers: Mapping[str, str] | None = None,
 ) -> CalibrationArmUsage:
     """One arm's totals and its two call schedules, over the units it ran.
 
     ``by_role`` adds the second calibration's role split and its two
-    diagnostics. Off by default, because the first calibration's committed
-    output was written without them and re-deriving it has to keep producing
-    the same bytes.
+    diagnostics; ``with_diagnostics`` adds the third calibration's
+    authored-ballot block, and ``levers`` the surface it was measured on. All
+    three are off by default, because the earlier calibrations' committed
+    outputs were written without them and re-deriving those has to keep
+    producing the same bytes.
     """
 
     own = [record for record in records if record.arm == arm]
@@ -7611,7 +8108,34 @@ def _summarize_calibration_arm(
             if by_role
             else 0
         ),
+        resolved_levers=dict(levers) if levers is not None else {},
+        authored_diagnostics=(
+            authored_ballot_block(_authored_counts_over(own))
+            if with_diagnostics
+            else None
+        ),
     )
+
+
+def _authored_counts_over(records: Sequence[UnitRecord]) -> AuthoredBallotCounts:
+    """One arm's authored-ballot counts, summed over the units it ran.
+
+    The calibration path has the :class:`UnitRecord` objects in hand and never
+    builds the evaluation's :class:`UnitTelemetry`, so it sums the same
+    per-unit function (:func:`authored_ballot_diagnostics`) the evaluation's
+    telemetry projection sums. One counter, two callers.
+    """
+
+    counts = AuthoredBallotCounts()
+    for record in records:
+        counts = counts.plus(
+            authored_ballot_diagnostics(
+                ballots=record.ballots,
+                roles=record.roles,
+                ejected_player_id=record.ejected_player_id,
+            )
+        )
+    return counts
 
 
 def ceiling_proposal(
@@ -7763,11 +8287,13 @@ def run_calibration(
     calibration is re-run, which spends development data the evaluation is not
     holding in reserve.
 
-    Which of the two authorized modes this is comes from the three values that
-    size the spend, through :func:`calibration_mode_for`, and the mode decides
-    two things nothing else does: whether a per-call truncation is a
-    measurement, and whether the report carries the role split and the leak
-    diagnostic. ``record`` names one converted record and ``records`` the
+    Which of the three authorized modes this is comes from the three values
+    that size the spend, through :func:`calibration_mode_for`, and the mode
+    decides what nothing else does: whether a per-call truncation is a
+    measurement, whether the report carries the role split and the leak
+    diagnostic, whether it carries the authored-ballot diagnostics and the
+    resolved levers, and which caveat it is published under. ``record`` names
+    one converted record and ``records`` the
     draw's records in order; neither names the default, which is every
     converted band in :data:`CONVERTED_BANDS`' own order, and both are held to
     a PREFIX of that order by :func:`_draw_in_converted_order`.
@@ -7844,7 +8370,11 @@ def run_calibration(
             usage=state.usage_by_arm.get(arm.name, ArmUsage()),
             attempts=state.attempts_by_arm.get(arm.name, TransportAttempts()),
             sampling=sampling,
-            by_role=mode.truncation_is_a_measurement,
+            by_role=mode.reports_the_role_split,
+            with_diagnostics=mode.reports_authored_diagnostics,
+            levers=(
+                arm_lever_profile(arm) if mode.reports_authored_diagnostics else None
+            ),
         )
         for arm in arms
     )
@@ -7872,7 +8402,7 @@ def run_calibration(
         unit_usage=_unit_rows(unit_records),
         proposal=ceiling_proposal(summaries, sampling=sampling),
         percentile_rule=PERCENTILE_RULE,
-        role_leak_rule=ROLE_LEAK_RULE if mode.truncation_is_a_measurement else "",
+        role_leak_rule=ROLE_LEAK_RULE if mode.reports_the_role_split else "",
         elapsed_seconds=time.monotonic() - started,
         model_work_seconds=harness.work_clock.seconds,
         seconds_per_attempt=(
@@ -7880,13 +8410,16 @@ def run_calibration(
         ),
         total_cost_usd=sum(summary.cost_usd for summary in summaries),
         dry_run=provider == "fake",
-        caveat=CALIBRATION_CAVEAT,
+        caveat=CALIBRATION_CAVEATS[mode.name],
     )
     # The same guard the evaluation's report passes. A calibration's inputs are
     # development data and leaking them would convert nothing, but the rule
     # this instrument is built on is that a REPORT carries counts, and one rule
     # applied on one path only is a rule that has already started to drift.
     assert_report_holds_no_prefix_bytes(report, draw.prefixes)
+    # And the rule the 2026-09-18 clause states in words, over the payload a
+    # reader holds rather than over the object this function built.
+    assert_calibration_reports_no_outcome(report.model_dump(mode="json"))
     return report
 
 
@@ -8188,8 +8721,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"(default: {DEFAULT_CALIBRATION_RECORD}). A draw is a PREFIX of "
             "the converted bands in the order they were converted, so that "
             "record is also the only one a draw may start at. The "
-            f"{CALIBRATION_MODES[1].name} mode draws across the converted "
-            "bands in order and refuses this flag"
+            + " and ".join(mode.name for mode in CALIBRATION_MODES[1:])
+            + " modes draw across the converted bands in order and refuse "
+            "this flag"
         ),
     )
     parser.add_argument(
