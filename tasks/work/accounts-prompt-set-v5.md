@@ -77,6 +77,19 @@ clause each at `:1` and `:21`.
 
 ## Acceptance
 
+- [x] Review correction: the BRACKETS. `vote_ballot_accounts.j2:21` says the id
+  `primary_reason_id` takes is the one printed INSIDE the brackets that open a
+  turn's transcript line, copied without the brackets themselves — not "the
+  turn id in the bracket", which a voter satisfies by copying `[<id>]`, a form
+  `_normalize_ballot_reason_id` (`meetings/manager.py:3195-3210`) nulls because
+  it strips nothing and `_REASON_ID_TURN_SUFFIX` (`:628`) is end-anchored. The
+  form is given as the placeholder `<meeting id>:turn-<n>`, the one shape
+  `meetings.manager._turn_id` (`:2895-2903`) mints, and no real turn id of the
+  rendered meeting reaches the instructions or the skeleton.
+- [x] Review correction: the ROWS. The same sentence describes the evidence
+  rows as the column-0 bullets `_account_transcript.j2:19,22` actually renders
+  (`- [turn:...] ...` at the start of its own line), not as "indented rows",
+  and no rendered ballot prompt of any arm calls them indented.
 - [x] F4, the shape and the warning, on `vote_ballot_accounts.j2:21`. It names
   the bracket at the head of each transcript turn line as the one id a ballot
   may cite in `primary_reason_id`, names the `[turn:...:claim:N]` rows as
@@ -240,8 +253,10 @@ and the new manifest section
 ### Decisions
 
 1. **The shape is named, never shown filled.** `vote_ballot_accounts.j2:21`
-   names the bracket at the HEAD of a transcript turn line as the one id
-   `primary_reason_id` may carry and writes the sub-row tags as
+   names the id printed INSIDE the brackets that open a transcript turn line —
+   copied without those brackets, as the review correction below repaired it —
+   as the one id `primary_reason_id` may carry, gives its form as the
+   placeholder `<meeting id>:turn-<n>`, and writes the sub-row tags as
    `[turn:<that turn's id>:claim:N]` and its two siblings — placeholders, so no
    turn id of the rendered meeting reaches the instructions or the skeleton.
    The skeleton at `:23` still reads `"primary_reason_id":null`. This follows
@@ -282,31 +297,155 @@ and the new manifest section
    bytes, so the fake provider's `len // 4` input heuristic moves on the
    candidate arm, and `tests/experiments/test_fresh_deduction_instrument.py`'s
    `test_the_mechanics_check_paragraph_quotes_the_run_it_describes` pins that
-   paragraph to a live `run_dry`. Re-measured on this tree: `combined_accounts`
-   678,772 against 641,246 under the v4 bodies (+5.9%), `repaired_clock`
-   892,718 unmoved, sum 1,571,490, about 2.01 M at the memo's 1.28x ratio
-   against the 3,844,000 bound (52%). Every graded count in that paragraph —
+   paragraph to a live `run_dry`. Re-measured on this tree, and re-measured
+   again by the review correction below, which moved the same figure once more:
+   `combined_accounts` 685,904 against 641,246 under the v4 bodies (+7.0%;
+   678,772 before the correction, superseded), `repaired_clock`
+   892,718 unmoved, sum 1,578,622, about 2.02 M at the memo's 1.28x ratio
+   against the 3,844,000 bound (53%). Every graded count in that paragraph —
    50 ejections, 16 role-correct, 34 wrongful, 16 supported-correct, 100 naming
    ballots, 150 supported ballots and 1 guard-rewritten, an arm — is byte-for-
    byte what it was. Editing that paragraph is inside the Expected scope's
    manifest file and is the change's own follow-through, not a second change.
 
+### Review corrections (2026-09-18)
+
+Two wording defects in F4's own new sentence, found by review after the three
+verifier lenses passed and repaired before merge. Both are in
+`vote_ballot_accounts.j2:21` and nowhere else; no other file's bytes move for
+them, nothing is recorded, and the third calibration is what first renders the
+corrected body.
+
+**Finding 1 — the sentence told the voter to copy the brackets.** It read
+"`primary_reason_id` takes the turn id in the bracket that OPENS that turn's
+transcript line … copied VERBATIM from that line and nothing else". A voter who
+does exactly that sends `[<meeting>:turn-0]`, and
+`_normalize_ballot_reason_id` (`meetings/manager.py:3195-3210`) strips nothing:
+it accepts an id already in the meeting's turn-id set, else re-anchors one whose
+trailing ordinal matches `_REASON_ID_TURN_SUFFIX` (`:628`, `r":turn-(\d+)$"`,
+END-anchored), else nulls. A bracketed token ends `]`, so it matches neither
+branch, is nulled at `:3203` and the now-uncited ejection is coerced to SKIP —
+F4's repair reproducing F4's defect, on the one channel F4 exists to open. The
+observation half of the same paragraph already said "copy the id WITHOUT the tag
+word"; the turn half said no equivalent.
+
+**Finding 2 — the evidence rows are not indented.** The sentence called them
+"The indented rows underneath a turn". `_account_transcript.j2:19,22` renders
+each as `- [turn:<id>:claim:N] <speaker> stated …` beginning at column 0, flush
+with the turn line above it. A voter told to look for indentation is told to
+look for something the template never prints.
+
+**The repair.** The two clauses now read, verbatim — fenced rather than quoted
+so the placeholders' angle brackets survive as the bytes the template carries:
+
+```text
+When a public turn carries the case, "primary_reason_id" takes the turn id
+printed INSIDE the brackets that open that turn's transcript line — the id
+before "said:", of the form <meeting id>:turn-<n> — copied VERBATIM from
+between those brackets, WITHOUT the square brackets themselves, and nothing
+else.
+```
+
+```text
+The rows that follow a turn's line are bullets, each beginning with "- " at
+the start of its own line, and are tagged [turn:<that turn's id>:claim:N],
+[turn:<that turn's id>:obs:N] and [turn:<that turn's id>:whereabouts:N]: each
+points at ONE piece of evidence INSIDE that turn and is not a ballot id, so
+cite the turn id from the brackets at the head of the turn's own line and
+never append a row suffix (":claim:N", ":obs:N", ":whereabouts:N") to it.
+```
+
+(Both are one unwrapped line in the template; the line breaks above are this
+card's.)
+
+Everything else the acceptance items name is unmoved: the skeleton at `:23`
+still reads `"primary_reason_id":null`, the never-append-a-row-suffix clause is
+the same bytes, `vote_ballot.j2`'s ported never-invent-or-abbreviate warning and
+the nulled-then-coerced consequence are the same bytes, and no literal turn id
+of the rendered meeting appears outside the transcript block
+(`test_the_ballot_shows_the_turn_id_shape_without_prefilling_a_real_one`, still
+green over the two hand-written ids `m-77:turn-0` / `m-77:turn-1`).
+
+**The form is given, and it is true of every turn id this codebase mints.**
+`meetings.manager._turn_id` (`:2895-2903`) is the only site that produces one —
+`f"{meeting_id}:turn-{turn_index}"` — and `_collect_turn` overwrites the
+identity fields a model sends (`:1866`), so no other shape can reach a
+transcript; `meeting_id` is itself `f"{self._game_id()}:meeting-{index}"`
+(`orchestrator/game.py:2642`), which is why the placeholder is written
+`<meeting id>:turn-<n>` rather than naming a game. `meetings/schemas.py:559` and
+the instrument's own `_TRANSCRIPT_TURN_ID` comment
+(`experiments/fresh_deduction_instrument.py:2824-2828`) state the same single
+form. The placeholder carries angle brackets no real id has and sits in the same
+sentence as "copied VERBATIM from between those brackets", so it describes
+rather than supplies.
+
+**Gates.** `_TURN_ID_SHAPE` in `tests/agents/test_public_account_prompts.py` is
+re-pinned to the corrected span, and the test that owns it,
+`test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation`, gains
+three assertions that are three separate failures: `_TURN_ID_NO_BRACKETS`
+("WITHOUT the square brackets themselves"), `_ROW_BULLET_SHAPE` (the bullet
+description) and `_ROWS_MISDESCRIBED` — the word "indented" asserted ABSENT from
+the ballot every arm renders, over `(1, None)`, `(None, 1)` and `(1, 1)`, since a
+misdescription is a property of the body rather than of one lever setting.
+
+**Planted failures.** Each perturbed in the tree, run, and restored. Command
+each time, on the bytes this correction delivers:
+
+```sh
+uv run pytest tests/agents/test_public_account_prompts.py -q
+```
+
+| Perturbation | Red | Failure |
+| --- | --- | --- |
+| Drop `, WITHOUT the square brackets themselves,` from `:21` | `1 failed, 92 passed` | `test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation`: `assert 'WITHOUT the square brackets themselves' in '...'` |
+| Restore "The indented rows underneath a turn are tagged" | `1 failed, 92 passed` | the same case, on `assert 'are bullets, each beginning with "- " at the start of its own line' in '...'` |
+| Keep the bullet clause and re-insert the word "indented" alone | `1 failed, 92 passed` | the same case, on the `_ROWS_MISDESCRIBED` assertion — so the two gates fire independently rather than one masking the other |
+
+The five planted proofs the card already carried were re-run against the
+corrected bytes and are red exactly as recorded above — plants 1 and 2
+`2 failed, 91 passed`, plants 3, 4 and 5 `1 failed, 92 passed`, naming the same
+cases — and the module is `93 passed` restored.
+
+**The dry-run paragraph moved again.** The corrected sentence is 190 characters
+longer, so the fake provider's `len // 4` input heuristic moves on the candidate
+arm alone: `test_the_mechanics_check_paragraph_quotes_the_run_it_describes` went
+red on `assert '685,904' in ...`. Re-measured by the same procedure the card
+used once already, and the manifest paragraph marks the superseded figure the
+way it already marks the fourth band's: `combined_accounts` 678,772 → 685,904
+(+7.0% over the v4 bodies' 641,246, where the uncorrected v5 read +5.9%),
+`repaired_clock` 892,718 unmoved, sum 1,571,490 → 1,578,622, about 2.02 M at the
+1.28x ratio against the 3,844,000 bound (53%, from 52%), and the larger arm's
+17,854 per unit and its ~22,900 are unmoved because the reference arm is still
+the larger. Every graded count in that paragraph is byte-for-byte what it was.
+`tests/experiments/test_fresh_deduction_instrument.py` was NOT edited: the pin
+test was run only, the sibling card being that module's one writer in this wave.
+
+**The manifest's v5 section is corrected too.** Its F4 bullet described the
+change in the imprecise words the prompt used, so it now names the id INSIDE the
+brackets and the rows as bullets, and records the correction with its date and
+its reason.
+
 ### Verification
 
-Run whole, in this clean worktree, at the head this card delivers.
+Run whole, in this clean worktree, at the head this card delivers — and run
+whole again after the review correction above, which is the run these cells
+record. Every gate reports what it reported before the correction; only the wall
+times differ, the machine having carried a concurrent run in another worktree.
 
 | Command | Result |
 | --- | --- |
-| `uv run pytest tests/agents tests/meetings tests/experiments -q` | `3132 passed in 218.08s` |
+| `uv run pytest tests/agents tests/meetings tests/experiments -q` | `3132 passed in 240.26s` |
 | `uv run python scripts/validate_task_docs.py` | `Task docs validation passed: 390 historical phase tasks and 390 prompts; 66 work cards.` |
 | `uv run python scripts/check_doc_facts.py` | `Doc facts verified` / `Front door verified` / `Budgets verified`, exit 0 |
 | `uv run python scripts/verify_ml_evidence.py` | `checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5`, `every check passed` |
-| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | `80 passed in 86.97s` |
-| `bash scripts/check.sh` | exit 0: ruff, `lint-imports`, `validate_task_docs`, `generate_prompts --check`, `mypy` (`Success: no issues found in 480 source files`), `7827 passed, 20 skipped, 3 xfailed` in 242.81s, frontend `19` files / `515` tests and a green build |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | `80 passed in 91.95s` |
+| `uv run pytest tests/agents/test_public_account_prompts.py -q` | `93 passed` |
+| `bash scripts/check.sh` | exit 0, the code read directly and never through a pipe: ruff `All checks passed!`, `lint-imports` `Contracts: 4 kept, 0 broken.`, `validate_task_docs`, `generate_prompts --check`, `mypy` (`Success: no issues found in 480 source files`), `7827 passed, 20 skipped, 3 xfailed` in 727.15s, frontend `19` files / `515` tests and a green build |
 | `bash scripts/verify_samples.sh` (not listed by this card; run anyway, the account bodies being reachable from no committed replay) | exit 0, `All 50 samples verified clean.` for `4p1i` and for `9p2i` |
 
 The `audits/` byte change recomputes `docs/artifacts.md:109`: 25,974,591 →
-25,980,491 tracked bytes over the same 324 files
+25,980,491 tracked bytes over the same 324 files, and the review correction's
+own manifest edits carry it on to 25,981,839
 (`git ls-files audits` with the change staged), and
 `scripts/verify_ml_evidence.py` compares that row against disk offline.
 `tasks/README.md:43`'s derived sentence moves 6 ready / 60 done → 5 ready /

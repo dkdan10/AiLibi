@@ -1107,13 +1107,38 @@ _REFERENCE_BALLOT_PATH: Final[str] = (
 #:   ids the run nulled ended `:claim:N` and 6 `:obs:N`.
 #: * the CONSEQUENCE -- `meetings/manager.py:3203` nulls the id and
 #:   `guard_ballot_citation` then coerces the now-uncited EJECT to SKIP.
+#:
+#: The shape names the FORM a turn id takes as well as where it is printed.
+#: `meetings.manager._turn_id` (`:2895-2903`) is the only site that mints one
+#: and the manager overwrites the identity fields a model sends (`:1866`), so
+#: every turn id that can reach a transcript is `{meeting_id}:turn-{index}`
+#: with `meeting_id` itself `{game_id}:meeting-{k}` (`orchestrator/game.py:2642`)
+#: -- one form, and the prose describes it as a placeholder rather than as a
+#: filled example.
 _TURN_ID_SHAPE: Final[str] = (
-    "the turn id in the bracket that OPENS that turn's transcript line — the "
-    'one printed before "said:" — copied VERBATIM'
+    "the turn id printed INSIDE the brackets that open that turn's transcript "
+    'line — the id before "said:", of the form <meeting id>:turn-<n> — copied '
+    "VERBATIM"
 )
+#: The BRACKETS, split out from the shape because it is its own failure.
+#: `_normalize_ballot_reason_id` (`meetings/manager.py:3195-3210`) strips
+#: nothing: it accepts an exact canonical id, or recovers one whose trailing
+#: `:turn-{k}` ordinal matches (`_REASON_ID_TURN_SUFFIX`, `:628`, END-ANCHORED),
+#: and nulls everything else. A voter who copies the bracketed token verbatim
+#: sends `[<id>]`, which ends `]`, matches neither branch and is nulled -- the
+#: exact failure F4 exists to remove, re-entering through F4's own wording.
+_TURN_ID_NO_BRACKETS: Final[str] = "WITHOUT the square brackets themselves"
 _ROW_SUFFIX_CLAUSE: Final[str] = (
     'never append a row suffix (":claim:N", ":obs:N", ":whereabouts:N") to it'
 )
+#: How the rows actually render. `_account_transcript.j2:19,22` writes each one
+#: as `- [turn:...] ...` at column 0 -- a bullet flush with the turn line above
+#: it, not an indented continuation of it. A prompt that tells the voter to look
+#: for indentation describes a page the template never prints.
+_ROW_BULLET_SHAPE: Final[str] = (
+    'are bullets, each beginning with "- " at the start of its own line'
+)
+_ROWS_MISDESCRIBED: Final[str] = "indented"
 _PORTED_ID_WARNING: Final[str] = "Never invent or abbreviate an id"
 _NULLED_CONSEQUENCE: Final[str] = (
     "is nulled, and a nulled id leaves your ejection uncited, which coerces it to SKIP"
@@ -1295,10 +1320,32 @@ def test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation() -> No
     assert _NULLED_CONSEQUENCE in vote
     # Ported, not re-invented: the warning is the reference's own sentence.
     assert _PORTED_ID_WARNING in _reference_ballot_source()
+    # Review correction 1, and its own assertion because it is its own
+    # failure: the id is what is INSIDE the brackets. Naming the bracket
+    # without excluding it invites the bracketed token, and
+    # `_normalize_ballot_reason_id` nulls `[<id>]` exactly as it nulls a row
+    # suffix -- F4's repair carrying F4's defect.
+    assert _TURN_ID_NO_BRACKETS in vote
     # The sub-row tags are named as pointers INSIDE a turn rather than as
     # ballot ids, in the shape the transcript actually renders them.
     for suffix in (":claim:N", ":obs:N", ":whereabouts:N"):
         assert f"[turn:<that turn's id>{suffix}]" in vote
+    # Review correction 2. `_account_transcript.j2:19,22` renders the rows as
+    # column-0 bullets, so the page a voter is told to read must be the page
+    # the template prints -- on EVERY arm that renders a ballot, since a
+    # misdescription is a property of the body rather than of one lever
+    # setting.
+    assert _ROW_BULLET_SHAPE in vote
+    arms: tuple[tuple[Literal[1] | None, Literal[1] | None], ...] = (
+        (1, None),
+        (None, 1),
+        (1, 1),
+    )
+    for common, attributed in arms:
+        rendered = _every_account_prompt(
+            common=common, attributed=attributed, is_impostor=False
+        )["vote_ballot"]
+        assert _ROWS_MISDESCRIBED not in rendered, (common, attributed)
 
 
 def test_the_ballot_shows_the_turn_id_shape_without_prefilling_a_real_one() -> None:

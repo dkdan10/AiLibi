@@ -1191,10 +1191,12 @@ bytes, as do `_account_transcript.j2` and the other three account bodies, whose
 stamps advance with the unit so that no two generations of one body can share a
 `MeetingReplayEntry.prompt_versions` marker.
 
-- **The turn channel (F4).** The ballot now names the bracket at the HEAD of a
-  transcript turn line as the one id `primary_reason_id` may carry, names the
-  `[turn:<id>:claim|obs|whereabouts:N]` rows `_account_transcript.j2` renders
-  beneath it as pointers INSIDE a turn rather than ballot ids, and carries
+- **The turn channel (F4).** The ballot now names the id INSIDE the brackets
+  that open a transcript turn line — copied without the brackets themselves,
+  which is what the meeting layer accepts — as the one id `primary_reason_id`
+  may carry, names the `[turn:<id>:claim|obs|whereabouts:N]` bullet rows
+  `_account_transcript.j2` renders after it as pointers INSIDE a turn rather
+  than ballot ids, and carries
   `vote_ballot.j2`'s own copy-VERBATIM / never-invent-or-abbreviate warning
   with a never-append-a-row-suffix clause and the consequence: a
   non-canonical id is nulled by the meeting layer and the now-uncited ejection
@@ -1206,7 +1208,18 @@ stamps advance with the unit so that no two generations of one body can share a
   run were exactly that id, support without relevance. The transcript is not
   given a second bare id per row: it already prints the canonical `turn_id` at
   the head of every turn line, and a per-row bare id would mint a third
-  vocabulary.
+  vocabulary. **Corrected in review on 2026-09-18, before merge and before any
+  unit was run:** the sentence as first written said the field "takes the turn
+  id in the bracket that OPENS that turn's transcript line", which a voter
+  satisfies by copying the bracketed token — and `[<id>]` matches neither the
+  exact-id branch nor the END-ANCHORED `:turn-{k}` recovery of
+  `meetings.manager._normalize_ballot_reason_id`, so it is nulled and the
+  ejection coerced: F4's repair carrying F4's defect. It now says the id is what
+  is printed INSIDE those brackets, copied without them, and gives the form
+  `<meeting id>:turn-<n>` as a placeholder — the one form
+  `meetings.manager._turn_id` mints. The same sentence called the evidence rows
+  "indented"; `_account_transcript.j2:19,22` renders them at column 0, so they
+  are now described as the bullets they are.
 - **The SKIP register (F7).** `vote_ballot.j2:114`'s "SKIP if the evidence is
   too thin" and `:259`'s two clauses — that a thin strongest suspect makes SKIP
   the sound call, and that ejecting anyway must rest on evidence you can cite
@@ -1249,9 +1262,11 @@ analysis is unmoved by either edit.
 matches the tree and a resume begun before this entry is refused, by design.
 Its 100 units are not poolable with anything measured after this entry. The
 offline mechanics check in the verification section below was re-made on this
-tree: the candidate arm's input heuristic reads 678,772 against 641,246 under
+tree: the candidate arm's input heuristic reads 685,904 against 641,246 under
 the v4 bodies, the reference arm's 892,718 is unmoved, and every graded count
-of that paragraph is unchanged.
+of that paragraph is unchanged. The candidate figure read 678,772 until the
+review correction recorded in the F4 bullet above moved it again; that reading
+is superseded.
 
 ## The instrument
 
@@ -1925,10 +1940,10 @@ configuration it drew at (`turn_temperature` 0.4, `vote_temperature` 0.2, caps
 and the limits it ran under (3,844,000 / 422,000 run-level, 116,000 / 16,000 per
 unit — the fifth authorization's, since 2026-09-15; the paragraph read
 3,710,000 / 459,000 and 106,000 with the fourth's). Input tokens by the fake provider's
-`len // 4` heuristic were 892,718 (`repaired_clock`) and 678,772
+`len // 4` heuristic were 892,718 (`repaired_clock`) and 685,904
 (`combined_accounts`); applying the decision memo's calibrated 1.28x real-input
-ratio to their sum (1,571,490) gives about 2.01 M against the 3,844,000 this
-manifest binds (52%), and the larger arm's 17,854 per unit gives about 22,900
+ratio to their sum (1,578,622) gives about 2.02 M against the 3,844,000 this
+manifest binds (53%), and the larger arm's 17,854 per unit gives about 22,900
 against the 116,000 per-unit ceiling (20%) — headroom checks, not predictions,
 because a real model writes a different transcript. The figures this paragraph
 carried before this re-binding were the fourth band's, measured under these same
@@ -1941,8 +1956,11 @@ produce. The v4 account bodies and the round-3 ballot-skeleton revision of
 2026-09-15 moved the candidate arm's figure alone (608,664 to 643,779, +5.8%, on
 the fourth band), because only its templates gained bytes; on this band the same
 one-arm gap read 641,246 against the reference arm's 892,718 until the v5 ballot
-of 2026-09-18 moved the candidate's figure alone again, to 678,772 (+5.9%). The
-reference arm's 892,718 is the byte-for-byte figure it was through both
+of 2026-09-18 moved the candidate's figure alone again, to 678,772 (+5.9%); the
+review correction of the same date, which repaired two wordings of that ballot's
+own new sentence, moved it once more to 685,904 (+7.0% over the v4 bodies), and
+678,772 is superseded by the figure you are reading exactly as 643,779 was. The
+reference arm's 892,718 is the byte-for-byte figure it was through all three
 revisions, which is what "one-arm" means here: the candidate's ballot is the
 only body that has gained bytes since the fourth band was drawn.
 
