@@ -190,6 +190,61 @@ def test_mcnemar_rejects_negative_counts(b: int, c: int) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# one_sided_binomial_p                                                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_one_sided_no_trials_is_one() -> None:
+    assert paired_stats.one_sided_binomial_p(0, 0) == 1.0
+
+
+def test_one_sided_hand_computable_cases() -> None:
+    # Every trial a success under a fair coin: P(X >= 5) = 1/32.
+    assert paired_stats.one_sided_binomial_p(5, 5) == pytest.approx(0.03125)
+    # P(X >= 0) is the whole distribution.
+    assert paired_stats.one_sided_binomial_p(0, 7) == pytest.approx(1.0)
+    # P(X >= 1) = 1 - (2/3)**3 under the 1/3 null.
+    assert paired_stats.one_sided_binomial_p(1, 3, 1.0 / 3.0) == pytest.approx(
+        1.0 - (2.0 / 3.0) ** 3
+    )
+    # P(X >= 3) = (1/3)**3 under the same null.
+    assert paired_stats.one_sided_binomial_p(3, 3, 1.0 / 3.0) == pytest.approx(
+        (1.0 / 3.0) ** 3
+    )
+
+
+def test_one_sided_is_the_upper_tail_and_never_two_sided() -> None:
+    """Below the null the tail is large; above it, small. A two-sided p is neither."""
+
+    assert paired_stats.one_sided_binomial_p(2, 20) > 0.99
+    assert paired_stats.one_sided_binomial_p(18, 20) < 0.001
+    # At exactly the null the tail includes the centre, so it exceeds a half.
+    assert paired_stats.one_sided_binomial_p(10, 20) > 0.5
+
+
+def test_one_sided_matches_the_fifth_runs_quoted_tail() -> None:
+    """The figure the diagnosis of 2026-09-18 quotes: 51 of 81 at the 0.5 null."""
+
+    assert round(paired_stats.one_sided_binomial_p(51, 81), 3) == 0.013
+
+
+def test_one_sided_is_monotone_in_the_count() -> None:
+    values = [paired_stats.one_sided_binomial_p(k, 30) for k in range(31)]
+    assert values == sorted(values, reverse=True)
+
+
+@pytest.mark.parametrize(
+    ("successes", "total", "rate"),
+    [(-1, 10, 0.5), (11, 10, 0.5), (1, -1, 0.5), (1, 10, 0.0), (1, 10, 1.0)],
+)
+def test_one_sided_rejects_invalid_input(
+    successes: int, total: int, rate: float
+) -> None:
+    with pytest.raises(ValueError):
+        paired_stats.one_sided_binomial_p(successes, total, rate)
+
+
+# --------------------------------------------------------------------------- #
 # wilson_interval                                                              #
 # --------------------------------------------------------------------------- #
 

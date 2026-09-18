@@ -112,6 +112,42 @@ def exact_mcnemar_p(b: int, c: int) -> float:
     return min(1.0, 2.0 * tail / 2.0**n)
 
 
+def one_sided_binomial_p(successes: int, total: int, null_rate: float = 0.5) -> float:
+    """Upper-tail EXACT binomial p: ``P(X >= successes)`` at ``Binomial(total, null_rate)``.
+
+    The one-sided companion to :func:`exact_mcnemar_p`, for a count read against
+    a chance rate a design fixes rather than against a paired partner: a crew
+    ballot choosing between two legal targets is 0.5, and an ejection landing on
+    one of three living players is 1/3. One-sided because the question asked of
+    such a count is always "more often than chance", and a two-sided p would
+    answer a question nobody posed.
+
+    Exact rather than normal: the counts it is used on run from ten to a hundred
+    trials, which is exactly where the approximation manufactures a marginal
+    result. Pure stdlib (``math.comb``), so the figure a report quotes is
+    reproducible on a fresh clone.
+
+    With no trials at all there is no evidence either way and p is 1.0.
+
+    Raises ``ValueError`` on a negative total, ``successes`` outside
+    ``[0, total]``, or a ``null_rate`` outside ``(0, 1)``.
+    """
+
+    if total < 0:
+        raise ValueError(f"total must be non-negative, got {total}")
+    if successes < 0 or successes > total:
+        raise ValueError(f"successes must be in [0, {total}], got {successes}")
+    if not 0.0 < null_rate < 1.0:
+        raise ValueError(f"null_rate must be in (0, 1), got {null_rate}")
+    if total == 0:
+        return 1.0
+    tail = sum(
+        math.comb(total, k) * null_rate**k * (1.0 - null_rate) ** (total - k)
+        for k in range(successes, total + 1)
+    )
+    return min(1.0, tail)
+
+
 def wilson_interval(successes: int, total: int, z: float = Z_95) -> tuple[float, float]:
     """Wilson score interval for a binomial rate (default two-sided 95%).
 

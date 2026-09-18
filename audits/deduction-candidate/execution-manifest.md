@@ -1006,6 +1006,30 @@ does not mention it, and it changes no primary outcome. The fifth run reports
 the same column, so the leak is visible beside the result rather than argued
 about after it.
 
+**2026-09-18 — the guard's word list is repaired, and the fifth run's record
+keeps BOTH readings.** The rule above counts out "a conditional, a hypothetical
+or a question governing the words", and the guard implementing that clause
+(`_NOT_AN_ASSERTION`) carried only the modal interrogatives — `why would`, `how
+would`, `what would` — so a question in the present or the past asserted nothing
+and was counted anyway. The fifth run's reference arm leaked once by exactly
+that shape, and its `RESULTS.md` published the consequence as two numbers: the
+frozen implementation returned 1 of 50 on each arm, and the rule AS WRITTEN
+gives 1 of 50 on `combined_accounts` and 0 of 50 on `repaired_clock`. From this
+date the guard carries the three question words crossed with four auxiliaries
+(`would`, `do`, `does`, `did`), so the family is complete by construction rather
+than by enumeration. `ROLE_LEAK_RULE`'s own text does not change — the repair
+makes the code do what the rule already said — and neither does the leak
+column's status as a reported diagnostic rather than a gate. The fifth run's
+record is NOT restated: both readings stay published there, because the run
+reported what the implementation of that day returned and rewriting it would
+describe a measurement nobody made. Recomputed offline over
+`audits/deduction-candidate/run-2026-09-16/`, the repair moves one reading and
+one only: `repaired_clock`'s leaking turns and units-carrying-one both fall from
+1 to 0, while `combined_accounts` keeps its single leaking turn and both arms'
+self-telling ballot openings hold at 29 and 3
+(`tasks/work/fresh-deduction-instrument-diagnostics.md`;
+`tasks/diagnosis-2026-09-18-fifth-run.md` §8 decision 9, §11).
+
 **What it writes.** One aggregate JSON committed under
 `audits/deduction-candidate/calibration-2-<date>/`, in the shape the first
 calibration committed with the role split, the leak count and the per-record
@@ -1437,6 +1461,28 @@ asserts this document quotes each of them.
   re-read against it, because the field was never recorded there
   (`tasks/work/featherless-finish-reason.md`;
   `tasks/diagnosis-2026-09-15-truncation-stop.md` §5 fix D, §6 decision 3).
+
+  **2026-09-18 — the reading is reported per call, not only as one aggregate.**
+  From this date every arm's summary also carries `finish_reasons`, the
+  distribution of the provider's own word over that arm's ledger rows, with an
+  absent reading keyed `"null"` exactly as the calibration's role split already
+  keys it; the distribution sums to that arm's `calls`. `cap_signal_disagreements`
+  above is unchanged and stays beside it — it is one integer derived from the
+  same rows, and until now it was the only thing a RUN reported about a reading
+  the client had recorded per call since 2026-09-15 (the calibration mode
+  reported the per-call field because it builds its output from the in-memory
+  records, which a resumed run does not have). The distribution is therefore
+  projected at unit close onto the telemetry the report and the checkpoint are
+  both built from, and a stop's abandoned rows carry their readings into the
+  next sitting with the rest of that pair's spend. This changes no limit, no
+  sampling value and no word of `STOP_RULE`: a truncation is still a stop, so a
+  completed run cannot carry a `"length"` reading at all, and the field is what
+  a STOPPED run's partial accounting then names. Records written before this
+  date carry no reading and read an EMPTY distribution — "nothing was recorded",
+  never a fabricated `"stop"`; the checkpoint payload version and the replay
+  row are untouched, so no committed byte of the first five runs moves
+  (`tasks/work/fresh-deduction-instrument-diagnostics.md`;
+  `tasks/diagnosis-2026-09-18-fifth-run.md` §8 decision 10, §11).
 - **Sampling.** The two temperatures and the two caps are served through an
   explicit `MeetingConfig` built from `AUTHORIZED_SAMPLING`, and a live run whose
   sampling configuration is not that one is refused before any client is built.
@@ -1748,6 +1794,67 @@ Per unit, with counts beside every rate:
 | Retried provider attempts | Per attempt, per arm: `retried_calls` counts the calls this run had to send more than once and `unaccounted_attempts` the attempts that bought no completion and carried no usage this side can see, split by trigger into `attempts_by_trigger`. `units_with_retries` counts the units carrying at least one. Every unaccounted attempt is also a row in the per-arm `calls` total, carrying the `no-completion-returned` marker and zero tokens — what is known about it, not what it was billed — so the completions are `calls` minus `unaccounted_attempts` |
 | Terminal vs partial units | A unit whose meeting ended the game is terminal; one that stopped at the tick after the report is deliberately partial. Neither is a game-win trial |
 | Provider cost | Calls, input and output tokens, `cost_usd` and model-work seconds, per arm and per run, against the limits above |
+
+**2026-09-18 — the authored-ballot diagnostics, added as a labelled block and
+never as a gate.** Every measure above is read off the ballot the TALLY saw. The
+meeting layer also records, on any ballot a target-rewriting guard touched, the
+target the voter AUTHORED (`guard_redirected_from`) and why it was replaced
+(`guard_rewrite_reason`), so the layer beneath the tally is recoverable from the
+ballots alone. From this date each arm's summary carries an `authored_diagnostics`
+block over that layer. A ballot's authored target is `guard_redirected_from`
+where a guard fired and `target` where none did, and is absent under
+`parse_default`, where nothing parsed and so nothing was authored; an authored
+EJECT is an authored target that is not SKIP; a ballot CLEARED the citation gate
+when its recorded target is still a player, and CONVERTED when its recorded
+target is the one its voter authored — two different counts, which an under-gate
+redirect separates. The block carries, per arm: crew authored EJECTs naming the
+impostor over crew authored EJECTs, with a one-sided exact binomial p against
+the 0.5 null of the crew pair's two legal targets, reported ONLY beside its harm
+counter — crew-on-crew authored EJECTs and the units carrying at least one;
+authored, cleared and coerced by the voter's hidden role; the coalition funnel,
+a coalition being two or more ballots authored at one target in one unit,
+CORRECT when that target is the impostor and WRONGFUL otherwise, with its
+cleared and converted columns; and the ejections with their role-correct and
+crew-authored role-correct counts against the 1/3 chance rate of a three-player
+table, each with the same one-sided tail. The guard-rewrite tally keys over
+every member of the recorded reason alias, so a reason a later card adds appears
+here with a zero count rather than silently disappearing.
+
+One authored ejection is counted in a column of its own and in NO other: the one
+whose authored target the meeting layer refused as an `invalid_target`, that
+being its own typed verdict that the id the voter wrote named no living
+candidate other than the voter — a hallucinated id, a player already dead, or
+the voter itself. Such a ballot named neither the impostor nor a crewmate, so it
+raises no crew-on-crew harm counter, flags no unit as carrying one, forms no
+coalition, and is in neither precision denominator: the null the crew row is
+read against is the null of the crew pair's TWO LEGAL TARGETS, and a trial that
+had none is not a trial of it. The rewrite tally still counts the reason, and
+the `illegal_targets` column beside each voter role is where the ballot is
+reported, so nothing recorded is dropped and nothing is scored as harm that
+harmed nobody. The fifth run's archive carries none of these, so no figure of
+that run's recomputation moves for this rule
+(`tasks/work/fresh-deduction-instrument-diagnostics.md`, review corrections of
+2026-09-18).
+
+These are AUTHORING-CONDITIONED diagnostics and the block says so in the report
+(`AUTHORED_DIAGNOSTICS_NOTE`): every count is conditioned on a ballot having
+been authored as an ejection, so they flatter whichever arm authors more and say
+nothing on their own about how often an arm decides correctly — which is why the
+precision figure is never reported without the harm counter beside it, and why a
+payload carrying one without the other is refused rather than published
+half-told. They were NOT preregistered: they were approved on 2026-09-18 as a
+labelled diagnostic only. They are never a decision input — no stop condition
+reads one, the decision rule does not mention one, none of them is a field of
+the paired result, and the primary outcome, the minimum actionable effect, the
+acceptable-tradeoff bound and the stop rule are unchanged by them. A cross-arm
+reading of them is additionally confounded until the v5 prompt set equalises the
+ballot register, the arms differing there as well as in the accounts surface.
+Counts only, so the report's own prefix-secrecy check passes over the block
+unchanged, and each unit's row is projected at unit close onto the telemetry the
+report and the checkpoint are both built from, so a resumed run reports the same
+totals an uninterrupted one does
+(`tasks/work/fresh-deduction-instrument-diagnostics.md`;
+`tasks/diagnosis-2026-09-18-fifth-run.md` §8 decisions 2 and 3, §11).
 
 The unit of analysis is the paired seed, not the ballot: three voters in one
 meeting are correlated, so the paired difference is taken per seed.
