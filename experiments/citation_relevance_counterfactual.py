@@ -7,8 +7,16 @@ be run against a band that is now development data without publishing a byte of
 it. It makes no provider call, opens no held-out prefix, writes nothing into the
 directory it reads, and imports the rule it prices rather than restating it.
 
-    .venv/bin/python scripts/counterfactual_citation_relevance.py \
+    .venv/bin/python experiments/citation_relevance_counterfactual.py \
       audits/deduction-candidate/run-2026-09-16
+
+Under ``experiments/`` rather than ``scripts/`` because it imports the
+instrument: ``scripts/`` is a production root and ``tests/experiments/
+test_torch_probe_excluded.py`` forbids a production root importing
+``experiments``, which is the rule that keeps the mypy-excluded torch probe out
+of the shipping tier. This is a harness output beside the harness it reads
+(``docs/architecture.md``: ``experiments/`` outputs are artifacts, not
+behaviour), and nothing in the run path imports it.
 
 Three tables, in the shape ``audits/deduction-candidate/run-2026-09-16/
 reconcile.py`` established:
@@ -339,7 +347,7 @@ def main(directory: Path) -> int:
             for name, arm in sorted(arms.items())
         },
     }
-    invented = sum(arm["ejections_invented"] for arm in arms.values())
+    invented = sum(int(arm["invented_ejections"]) for arm in arms.values())
     if invented:
         raise CounterfactualError(
             f"{invented} unit(s) gained an ejection the archive did not have; "

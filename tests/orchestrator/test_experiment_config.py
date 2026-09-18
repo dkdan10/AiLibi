@@ -115,3 +115,41 @@ def test_version_two_profiles_preserve_version_one_encoding_and_typed_schema() -
     assert (
         normalize_experiment_config(RecordedExperimentConfig(format_version=2)) is None
     )
+
+
+def test_the_citation_relevance_key_is_absent_until_the_lever_is_on() -> None:
+    """The lever is additive to a format every committed recording already has.
+
+    PLANTED, and the plant is the obvious implementation: serialize the key
+    unconditionally and every format-1 and format-2 recording gains
+    ``"citation_relevance_version": null``. The committed replay sets are
+    written with the default config, which normalizes to an absent field
+    entirely, so ``scripts/verify_samples.sh`` would stay green while the two
+    instrument arms' own format-2 rows moved. The assertion is therefore made
+    HERE, on the serializer, at the two formats that are frozen.
+    """
+
+    for version in (1, 2):
+        off = RecordedExperimentConfig(
+            format_version=version,  # type: ignore[arg-type]
+            evidence_reasoning_version=2 if version == 2 else 1,
+        )
+        assert "citation_relevance_version" not in off.model_dump()
+        assert "citation_relevance_version" not in off.model_dump_json()
+    on = RecordedExperimentConfig(
+        format_version=2, evidence_reasoning_version=2, citation_relevance_version=1
+    )
+    assert on.model_dump()["citation_relevance_version"] == 1
+    assert RecordedExperimentConfig.model_validate_json(on.model_dump_json()) == on
+    # The typed field survives into the serialization schema despite the
+    # conditional omission, the rule the version-one keys already follow.
+    assert (
+        "citation_relevance_version"
+        in RecordedExperimentConfig.model_json_schema(mode="serialization")[
+            "properties"
+        ]
+    )
+    # An all-OFF format-2 config still normalizes away entirely: the lever does
+    # not make a baseline recording non-default.
+    assert RecordedExperimentConfig(format_version=2).is_default
+    assert not on.is_default

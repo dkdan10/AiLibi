@@ -1341,7 +1341,7 @@ other.
 offline over `run-2026-09-16/` with no provider call:
 
 ```sh
-.venv/bin/python scripts/counterfactual_citation_relevance.py \
+.venv/bin/python experiments/citation_relevance_counterfactual.py \
   audits/deduction-candidate/run-2026-09-16
 ```
 
