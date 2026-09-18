@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import get_args
@@ -1197,6 +1198,89 @@ def test_the_current_freeze_is_the_fifth_band_and_records_its_restamps() -> None
         assert {row["sha256"] for row in accepted}.isdisjoint(
             row["sha256"] for row in old_accepted
         )
+
+
+#: Spelled counts a restamp note may use, so the gate below can read the number
+#: an author wrote in prose. Digits are accepted too.
+_COUNT_WORDS: Mapping[str, int] = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+
+#: ``<count> [accepted] digests`` / ``<count> skips`` inside a restamp note.
+_RESTAMP_COUNT_CLAIM = re.compile(
+    r"\b(\w+)\s+(?:accepted\s+)?(digests|skips)\b", re.IGNORECASE
+)
+
+
+def _spoken_count(word: str) -> int | None:
+    """The integer a prose count word names, or ``None`` if it names no number."""
+
+    if word.isdigit():
+        return int(word)
+    return _COUNT_WORDS.get(word.lower())
+
+
+def test_every_restamp_note_counts_the_band_the_manifest_actually_holds() -> None:
+    """A restamp note may not misstate the artifact its justification rests on.
+
+    The restamp rule turns on exactly two facts -- that all accepted digests and
+    the whole skip list survived the source edit -- so each entry's note states
+    both counts, and this pins each stated count against the committed
+    manifest's own lists. It is a prose gate on purpose: the note is the durable
+    record a later freeze card reads, and nothing else in the manifest would
+    notice a note that said "the two skips" of a band holding eight. Round 1 of
+    this card's review found exactly that, which is why the gate exists.
+    """
+
+    manifest = _committed_manifest()
+    accepted = manifest["accepted"]
+    skipped = manifest["skipped"]
+    assert isinstance(accepted, list) and isinstance(skipped, list)
+    truth = {"digests": len(accepted), "skips": len(skipped)}
+
+    for entry in DEPENDENCY_RESTAMPS:
+        claimed: dict[str, set[int]] = {"digests": set(), "skips": set()}
+        for word, noun in _RESTAMP_COUNT_CLAIM.findall(entry["note"]):
+            spoken = _spoken_count(word)
+            if spoken is not None:
+                claimed[noun.lower()].add(spoken)
+        for noun, expected in truth.items():
+            assert claimed[noun], (
+                f"the restamp note for {entry['commit']} states no {noun} count; "
+                "the restamp rule rests on that number, so it is written down"
+            )
+            assert claimed[noun] == {expected}, (
+                f"the restamp note for {entry['commit']} claims "
+                f"{sorted(claimed[noun])} {noun}; the committed manifest holds "
+                f"{expected}"
+            )
 
 
 def test_a_converted_record_flips_the_status_and_changes_nothing_else() -> None:

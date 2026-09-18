@@ -23,8 +23,11 @@ reconcile.py`` established:
 
 * **grading** — every archived ballot re-graded by the committed
   ``grade_citation_relevance``, and the naming ballots (those naming the player
-  the meeting ejected) split by verdict. This is the sizing figure: how much of
-  the primary outcome relevance rather than presence was deciding.
+  the meeting ejected) split by verdict and by the voter's role. Both role
+  splits are printed, so the off-target cells carry their own denominators and
+  a published "N of M" is read off this command rather than recomputed by
+  hand. This is the sizing figure: how much of the primary outcome relevance
+  rather than presence was deciding.
 * **reach** — which recorded EJECT ballots ``guard_ballot_citation`` would
   coerce with ``citation_relevance_version=1``, split by the voter's role. The
   class is counted off the MARKER STACK (``ballot_rewrites_that_fired``), never
@@ -178,6 +181,7 @@ def _empty_arm() -> dict[str, Any]:
         "recorded_ejects": 0,
         "naming_ballots": 0,
         "naming_verdicts": Counter(),
+        "naming_by_role": Counter(),
         "naming_off_target_by_role": Counter(),
         "reached": 0,
         "reached_by_role": Counter(),
@@ -265,10 +269,11 @@ def main(directory: Path) -> int:
                 turns=turns,
                 prompts_by_agent=frozen_prompts,
             ):
+                role = "IMPOSTOR" if grade.voter == impostor else "CREWMATE"
                 arm["naming_ballots"] += 1
                 arm["naming_verdicts"][grade.verdict] += 1
+                arm["naming_by_role"][role] += 1
                 if grade.verdict == "off_target":
-                    role = "IMPOSTOR" if grade.voter == impostor else "CREWMATE"
                     arm["naming_off_target_by_role"][role] += 1
 
         # The rule, applied to the recorded ballots.
@@ -332,6 +337,9 @@ def main(directory: Path) -> int:
                 "recorded_ejects": arm["recorded_ejects"],
                 "naming_ballots": arm["naming_ballots"],
                 "naming_verdicts": dict(sorted(arm["naming_verdicts"].items())),
+                "naming_ballots_by_voter_role": dict(
+                    sorted(arm["naming_by_role"].items())
+                ),
                 "naming_off_target_by_voter_role": dict(
                     sorted(arm["naming_off_target_by_role"].items())
                 ),

@@ -1350,7 +1350,7 @@ offline over `run-2026-09-16/` with no provider call:
 | Recorded EJECT ballots the rule reaches | 1 | 20 |
 | — by voter role (crew / impostor) | 1 / 0 | 6 / 14 |
 | Naming ballots, off target of them | 0 of 2 | 7 of 24 |
-| — the impostor's, the crew's | 0 of 0, 0 of 2 | 4 of 8, 3 of 16 |
+| — the impostor's, the crew's | 0 of 1, 0 of 1 | 4 of 8, 3 of 16 |
 | Ejections, before → after | 1 → 1 | 12 → 5 |
 | Role-correct, before → after | 0 → 0 | 4 → 3 |
 | Wrongful, before → after | 1 → 1 | 8 → 2 |
@@ -1364,6 +1364,27 @@ of RECORDED ballots, not a re-run: nothing downstream of a coerced vote is
 predicted, and coercion only ever removes an EJECT vote and adds a SKIP one, so
 the re-tally can lose an ejection and never invent one (the command asserts
 that, unit by unit, and reports zero inventions here).
+
+The reference arm's role split read `0 of 0, 0 of 2` until round 1 of this
+card's review; that reading is superseded. The archive's two reference naming
+ballots are one crew ballot and one the seed's own impostor cast, both on
+target, so the row reads `0 of 1, 0 of 1`. The command now prints
+`naming_ballots_by_voter_role` beside the off-target split, so both
+denominators are read off the documented run rather than counted by hand.
+
+**The arm-surface digest MOVES, and no committed constant pins it.**
+`ARM_SURFACE_SOURCES` names seven files and this entry moves four of them —
+`experiments/fresh_deduction_instrument.py`, `meetings/manager.py`,
+`meetings/schemas.py` and `orchestrator/game.py` — so `arm_surface_digests()`
+no longer matches the tree that produced `run-2026-09-16/`'s
+`checkpoint-final.json`. The v5 accounts entry above already moved that mapping
+through the prompt directory; this entry moves it again through the code side.
+The digest is recomputed from the tree rather than pinned by a literal, so no
+recorded byte needs editing — but `assert_checkpoint_matches` compares a
+resuming run against the checkpoint's recorded digests, so any sitting begun
+before this entry is refused, by design. No `agents/strategic/prompts/` byte
+changed and the lever renders no prompt text: what moves is the code both arms
+run, not the surface they render.
 
 **What this entry costs the fifth run's units.** Nothing under
 `run-2026-09-16/` is edited and no figure of that record is withdrawn; its 100

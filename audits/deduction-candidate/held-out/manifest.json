@@ -219,7 +219,7 @@
         "card": "tasks/work/relevance-aware-citation-guard.md",
         "commit": "6a144038",
         "date": "2026-09-18",
-        "note": "The relevance-aware ballot citation guard. It adds citation_relevance_version to the recorded experiment config and to the served meeting profile, and orchestrator/game.py gains that key in the runner-agreement tuple so the two cannot differ. Prefix generation runs with no meeting runner at all -- it halts at MEETING_PHASE_REACHED -- so a meeting-layer lever cannot reach it, and all fifty accepted digests and the two skips were unchanged. held_out_prefixes.py moved in the restamp commit that follows the one named here, because this record was added to it there; that edit generates no prefix and changes none.",
+        "note": "The relevance-aware ballot citation guard. It adds citation_relevance_version to the recorded experiment config and to the served meeting profile, and orchestrator/game.py gains that key in the runner-agreement tuple so the two cannot differ. Prefix generation runs with no meeting runner at all -- it halts at MEETING_PHASE_REACHED -- so a meeting-layer lever cannot reach it, and all fifty accepted digests and all EIGHT skips -- every skip this band has, all witnessed_kill -- were unchanged. held_out_prefixes.py moved in the restamp commit that follows the one named here, because this record was added to it there, and again in this card's round-1 review correction, which rewrote this note's skip count from a wrong 'two' to the eight the manifest below records; neither edit generates a prefix and neither changes one.",
         "sources": "orchestrator/game.py, experiments/held_out_prefixes.py (this record itself)"
       }
     ],
@@ -301,7 +301,7 @@
     "engine/tick.py": "655d29d07724c984b32681b00756ee6b759b34469dfc4483addf5b61f3b49459",
     "engine/visibility.py": "90773592a071c60767ba18933315f0aed96c21716996e74649a6fbc4fd7833f3",
     "engine/world.py": "8367cd422ffb9503e91c3a90931efc21803f47307f6f6b61f7a62fe6ae8bd4bb",
-    "experiments/held_out_prefixes.py": "9ace90d7f9526ad7d8c80f54794a1f43d557a58479bc7dfec477d2c1313a6ff6",
+    "experiments/held_out_prefixes.py": "08fd60515e47291b7a9752b145ba4411386161e44ae34a0314ff5c6dcbef010a",
     "observation/action_intent.py": "4b0b9893a52597b96054c982acf9b17d16f3f631bc06058efdf0d62e09b564f3",
     "observation/body_ids.py": "6287e915e7538080f21ae053b92ca78089235dab2642aa14a3288aa948504ab3",
     "observation/service.py": "58e0a2b816287a7de154ea735fc4fe974b7976e8fb9291de883cc8fc10dac326",

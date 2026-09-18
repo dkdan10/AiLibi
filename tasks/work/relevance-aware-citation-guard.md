@@ -78,6 +78,46 @@ redirect-keeps-citation ballot passing, the fixture the lever flips.
 
 ## Acceptance
 
+- [x] Review correction: the reference arm's naming-ballot role split reads
+  `0 of 1 / 0 of 1`, not `0 of 0 / 0 of 2`, in this card's Results table and in
+  the execution manifest's dated section. The archive's two reference naming
+  ballots are one crew ballot and one the seed's own impostor cast, both on
+  target. Proved by the documented command, which now prints
+  `naming_ballots_by_voter_role`: `.venv/bin/python
+  experiments/citation_relevance_counterfactual.py
+  audits/deduction-candidate/run-2026-09-16` reports `repaired_clock`
+  `{"CREWMATE": 1, "IMPOSTOR": 1}`. The audits row is recomputed for the
+  manifest byte change.
+- [x] Review correction: the denominators come from the documented command
+  rather than a hand count. `experiments/citation_relevance_counterfactual.py`
+  emits `naming_ballots_by_voter_role` beside
+  `naming_off_target_by_voter_role`, so every published "N of M" is readable off
+  one run. Same defect as the item above, raised by a second lens and closed by
+  the same change; proved by the same command.
+- [x] Review correction: Results no longer claims the arm-surface digest is
+  unmoved. It MOVES: four of `ARM_SURFACE_SOURCES`'s seven files change on this
+  branch — `experiments/fresh_deduction_instrument.py`, `meetings/manager.py`,
+  `meetings/schemas.py`, `orchestrator/game.py`. The declaration the house rule
+  requires is in this card's Results and in the manifest's dated section, in the
+  v5 entry's shape. Proved by `git diff --name-only 17d49885 HEAD --
+  <the seven ARM_SURFACE_SOURCES paths>`, which names those four and none of the
+  other three, and by the same command over `agents/strategic/prompts/qwen3_6_27b`,
+  which names nothing.
+- [x] Review correction: the held-out restamp note states EIGHT skips, the
+  number the band actually holds, in
+  `experiments/held_out_prefixes.py::DEPENDENCY_RESTAMPS`, in the regenerated
+  `audits/deduction-candidate/held-out/manifest.json` and in this card's
+  Results. The manifest is regenerated so `source_sha256` restamps again and
+  `test_the_committed_manifest_regenerates_from_its_own_band` stays green; the
+  audits row is recomputed.
+- [x] Review correction: the false count is now pinned rather than left to
+  prose. `tests/experiments/test_held_out_prefixes.py::
+  test_every_restamp_note_counts_the_band_the_manifest_actually_holds` reads
+  every counted claim out of each restamp note and compares it with the
+  committed manifest's own `accepted[]` and `skipped[]`. Planted: restoring
+  "the two skips" fails it with `assert {2} == {8}`. Same defect as the item
+  above, raised by a second lens; the gate is the answer to its "nothing pins
+  the count".
 - [x] The aboutness rule has ONE definition, in the meeting layer. A new
   `meetings/citation_relevance.py` holds the whole-token player match, the turn
   rule (a turn is about a player when its speaker is that player or the player
@@ -375,7 +415,8 @@ Offline, from the fifth run's archive, no provider call and no band opened:
 | — by voter role, crew / impostor | 1 / 0 | 6 / 14 |
 | Naming ballots | 2 | 24 |
 | — verdicts | 2 relevant | 15 relevant, 7 off target, 2 uncited |
-| — off target, impostor / crew | 0 of 0 / 0 of 2 | 4 of 8 / 3 of 16 |
+| — naming ballots, impostor / crew | 1 / 1 | 8 / 16 |
+| — off target, impostor / crew | 0 of 1 / 0 of 1 | 4 of 8 / 3 of 16 |
 | Ejections, before → after | 1 → 1 | 12 → 5 |
 | Role-correct, before → after | 0 → 0 | 4 → 3 |
 | Wrongful, before → after | 1 → 1 | 8 → 2 |
@@ -483,15 +524,23 @@ landed, from 25,989,538 to 25,996,198 tracked bytes over the same 324 files.
 so this card's edit to its runner-agreement tuple turned
 `test_the_committed_manifest_regenerates_from_its_own_band` red. The documented
 rule (`tasks/post-merge-plan.md`, "Sequencing") applies: regenerating band
-8000-8999 leaves all fifty accepted digests and both skips byte-identical, only
-`source_sha256` moves, so the dependency digests are restamped with a dated
+8000-8999 leaves all fifty accepted digests and all eight skips byte-identical,
+only `source_sha256` moves, so the dependency digests are restamped with a dated
 entry naming commit `6a144038`. `status` still reads `held_out`, nothing was
 printed and no prefix bytes were committed. Prefix generation runs with no
 meeting runner at all — it halts at `MEETING_PHASE_REACHED` — so a meeting-layer
 lever cannot reach a prefix, which is why this is a restamp and not a re-freeze.
-The arm-surface digest is NOT moved by this card:
-`experiments/fresh_deduction_instrument.py` is not in `ARM_SURFACE_SOURCES`'s
-prompt tree and no `agents/strategic/prompts/` byte changed.
+
+**The arm-surface digest MOVES.** `ARM_SURFACE_SOURCES` names seven files and
+this card moves four of them — `experiments/fresh_deduction_instrument.py`,
+`meetings/manager.py`, `meetings/schemas.py` and `orchestrator/game.py` — so
+`arm_surface_digests()` no longer matches the tree that produced
+`run-2026-09-16/`'s `checkpoint-final.json` and no sitting begun before this
+merge is resumable. Nothing pins the mapping by a constant, so no recorded byte
+is edited; the manifest's dated section carries the declaration the house rule
+requires. No `agents/strategic/prompts/` byte changed and the lever renders no
+prompt text, so the rendered surface is unmoved — what moves is the code both
+arms run.
 
 ### Deviations
 
@@ -557,3 +606,107 @@ prompt tree and no `agents/strategic/prompts/` byte changed.
 - **No run, calibration or adopting record is authorized by this merge.** The
   lever defaults to `None`; the arms carry it for the NEXT evaluation, which the
   third calibration and the sixth authorization dispatch on their own cards.
+
+### Review corrections, round 1 (2026-09-18)
+
+Five findings from the independent verifiers, three distinct defects — each in a
+claim rather than in behaviour. No shipped code path moved, no lever semantics
+changed and no gate that was green went red; one gate was added. Delivered in
+one further commit on this branch, and the commands below are pinned to it.
+
+**1. The reference arm's naming-ballot role split was wrong (findings 1 and 5).**
+The row read `0 of 0 / 0 of 2`, asserting the reference impostor cast no naming
+ballot. It cast one, on target. The archive's two reference naming ballots are
+seed 8005's `p-1` (that seed's impostor, the actor of its scripted kill) and
+`p-2` (crew); the true split is `0 of 1 / 0 of 1`. Corrected in this card's
+Results table — which also gains the denominators as their own row — and in
+`audits/deduction-candidate/execution-manifest.md`'s dated section, where the
+superseded reading is named rather than silently replaced, in the shape the v5
+entry's F4 correction set.
+
+The root cause was that the documented command printed the numerators and not
+the denominators, so the split was a hand count. It is not any more:
+`experiments/citation_relevance_counterfactual.py` now emits
+`naming_ballots_by_voter_role` beside `naming_off_target_by_voter_role`, from
+the same loop over the same grades, so both cells of every published "N of M"
+come out of one documented run.
+
+```sh
+.venv/bin/python experiments/citation_relevance_counterfactual.py \
+  audits/deduction-candidate/run-2026-09-16
+```
+
+| `run-2026-09-16/` naming ballots | reference | candidate |
+| --- | --- | --- |
+| Naming ballots, crew / impostor | 1 / 1 | 16 / 8 |
+| Off target, crew / impostor | 0 / 0 | 3 / 4 |
+
+Every other cell of the table above is unmoved, including the "0 of 2"
+reference total, the candidate's `4 of 8 / 3 of 16`, and the reach, ejection,
+role-correct, wrongful and `supported_correct_ejection` columns. The figures the
+card's Evidence and the owner's specification fix are untouched by this
+correction: they are the candidate arm's.
+
+**2. Results denied a digest move that happened (finding 2).** The sentence
+"The arm-surface digest is NOT moved by this card" was false twice over: it
+named `experiments/fresh_deduction_instrument.py` as absent from
+`ARM_SURFACE_SOURCES` when it is the third entry of that tuple, and it reasoned
+only about the prompt tree. Four of the seven named sources move on this
+branch — `experiments/fresh_deduction_instrument.py`, `meetings/manager.py`,
+`meetings/schemas.py`, `orchestrator/game.py` — and three do not
+(`agents/memory/store.py`, `agents/strategic/prompts/loader.py`,
+`meetings/public_accounts.py`). Reproduced by `git diff --name-only 17d49885
+HEAD --` over exactly those seven paths, which prints the four, and over
+`agents/strategic/prompts/qwen3_6_27b`, which prints nothing — the hashed
+prompt tree is unmoved. The claim is replaced by the declaration the
+house rule requires, in Record impact above and in the manifest's dated section.
+The consequence is the ordinary one: the mapping is pinned by no constant, so no
+recorded byte is edited, but `assert_checkpoint_matches` refuses a resume of a
+sitting begun before this entry. The v5 accounts entry had already moved the
+same mapping through the prompt directory the day before, so nothing becomes
+unresumable here that was resumable at `17d49885`.
+
+**3. The held-out restamp note misstated the skip list it attests to (findings
+3 and 4).** The note read "the two skips" for a band holding eight, all
+`witnessed_kill`. That number is load-bearing: the restamp rule permits a
+restamp instead of a re-freeze exactly when all fifty accepted digests AND the
+skip list survive the source edit, so the durable justification misdescribed its
+own evidence. Corrected in `experiments/held_out_prefixes.py`'s
+`DEPENDENCY_RESTAMPS`, which is regenerated into
+`audits/deduction-candidate/held-out/manifest.json` — the entry's own file is a
+`GENERATOR_SOURCES` member, so `source_sha256` restamps a second time for
+`experiments/held_out_prefixes.py` and for nothing else. The set itself is
+untouched: `accepted[]` and `skipped[]` are byte-identical and
+`test_the_committed_manifest_regenerates_from_its_own_band` passes, which is the
+restamp rule's own condition, checked again rather than assumed. `status` still
+reads `held_out`; no prefix was generated, printed or committed beyond that
+committed regeneration test.
+
+The finding's real point was that nothing pinned the count, so a new gate does:
+`tests/experiments/test_held_out_prefixes.py::
+test_every_restamp_note_counts_the_band_the_manifest_actually_holds` reads every
+`<count> digests` and `<count> skips` claim out of every restamp note, in words
+or digits, and compares it with the committed manifest's own lists — and fails a
+note that states neither, because the restamp rule rests on both. Planted:
+restoring "the two skips" gives `assert {2} == {8}` on that test, with the rest
+of the module green, so the gate fails on exactly the defect it was written for
+and on nothing else.
+
+**Record impact of this round.** Two `audits/` files moved again — the execution
+manifest's dated section and the regenerated held-out manifest — so
+`docs/artifacts.md`'s audits row was recomputed once more, from 25,996,198 to
+25,997,781 tracked bytes over the same 324 files. No recording, report, DTO,
+metric, weight or sample byte moved; `verify_samples.sh` and the four `--check`
+runs pass untouched. `tasks/README.md`'s inventory sentence is unchanged: this
+round flips no Status and adds no card. No provider call of any kind was made.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 (ruff, format, lint-imports 4 kept / 0 broken, validate_task_docs 66 work cards, generate_prompts --check, mypy 483 files, 7,915 passed / 20 skipped / 3 xfailed, frontend 515 vitest + build) |
+| `.venv/bin/python -m pytest tests/meetings tests/experiments tests/training tests/api tests/test_firewall.py tests/orchestrator tests/scripts/test_verify_ml_evidence.py -q` | 3520 passed, 2 skipped, 335 deselected, 3 xfailed, exit 0 |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed; 390 phase tasks, 66 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | passed; the 5-switch experiment registry |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | 60 checks, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `bash scripts/verify_samples.sh` | exit 0; "All 50 samples verified clean" on each of the two sets |
+| `build_sample_report.py --sample-dir <set> --check`, four sets | exit 0 each |
+| `experiments/citation_relevance_counterfactual.py audits/deduction-candidate/run-2026-09-16` | exit 0; the split above |
