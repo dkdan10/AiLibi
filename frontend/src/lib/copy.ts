@@ -419,12 +419,21 @@ export const SPECTATOR_COPY = Object.freeze({
 
   /** One ballot card's private-reasoning block. */
   ballot: Object.freeze({
-    // The recorded weighing artefact: the other players this voter had in hand
-    // when it chose. "Also weighed" rather than "alternatives considered"
-    // because the list is people, not options, and a viewer should not have to
-    // guess whether an entry is a rejected target or a second accusation.
-    alternativesLabel: "Also weighed",
+    // The recorded weighing artefact: who this voter wrote down while choosing.
+    // The heading deliberately claims NOTHING about who those are — an earlier
+    // "Also weighed" said the OTHER players, and the bytes falsify that. Over
+    // `replays/samples/9p2i`, 27 of 869 ballots list the voter ITSELF and 22
+    // list the target the vote applied to (measured by
+    // `scripts/measure_featured_criterion.py --alternatives`), and the
+    // recordings also admit an id no longer in the game and the literal `SKIP`.
+    // Those entries are annotated by the two notes below rather than dropped,
+    // so the block stays the record.
+    alternativesLabel: "Weighed on this ballot",
     alternativesEmpty: "no alternatives recorded",
+    // An entry the card's header already shows, named so a viewer reads one
+    // player twice rather than two players.
+    alternativesSelfNote: "this voter",
+    alternativesTargetNote: "the vote cast",
   }),
 
   /** The Replays browser and the Highlights reel. */

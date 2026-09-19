@@ -30,9 +30,18 @@ than importing it from here: the two are deliberately independent readings of
 the same bytes, in the idiom the evidence taxonomy already uses for its
 API-side and eval-side twins.
 
+``--alternatives`` adds a fourth block, which orders nothing: the shape of the
+recorded ``considered_alternatives`` on those games' ballots. The spectator's
+ballot card annotates an entry that duplicates its own header — the voter
+itself, or the target the vote applied to — and this is where the rate behind
+that claim is counted instead of asserted.
+
 Usage::
 
     uv run python scripts/measure_featured_criterion.py
+    uv run python scripts/measure_featured_criterion.py --alternatives
+    uv run python scripts/measure_featured_criterion.py --alternatives \\
+        --games 9p2i:23 9p2i:13 9p2i:46 9p2i:2 4p1i:2 4p1i:11 4p1i:29
 """
 
 from __future__ import annotations
@@ -97,16 +106,50 @@ def establishes_nothing(replay: ReplayView) -> bool:
     )
 
 
-def _measure_set(parent: Path, set_name: str) -> str:
+def alternatives_shape(replay: ReplayView) -> tuple[int, int, int, int]:
+    """``(ballots, recorded entries, ballots naming the voter, naming the target)``.
+
+    ``considered_alternatives`` is NOT a list of the other players at the table:
+    a ballot can list the voter itself, and it can list the target the vote was
+    applied to. Both render a second copy of a pill the ballot card's header
+    already shows, so the spectator's render annotates them
+    (``frontend/src/components/BallotCard.tsx``) — and the rates that claim
+    rests on are counted here rather than asserted.
+    """
+
+    ballots = entries = own = applied = 0
+    for meeting in replay.meetings:
+        for ballot in meeting.ballots:
+            ballots += 1
+            entries += len(ballot.considered_alternatives)
+            if ballot.voter in ballot.considered_alternatives:
+                own += 1
+            if ballot.target in ballot.considered_alternatives:
+                applied += 1
+    return ballots, entries, own, applied
+
+
+def _measure_set(
+    parent: Path,
+    set_name: str,
+    *,
+    seeds: frozenset[int] | None = None,
+    alternatives: bool = False,
+) -> str:
     loader = SetLoaderRegistry(parent).get(set_name)
-    metas = sorted(loader.list_replays(), key=lambda meta: meta.seed)
+    every = sorted(loader.list_replays(), key=lambda meta: meta.seed)
+    metas = [meta for meta in every if seeds is None or meta.seed in seeds]
     ejections: dict[Band, int] = {band: 0 for band, _ in _BAND_LABELS}
     role_correct: dict[Band, int] = {band: 0 for band, _ in _BAND_LABELS}
     eligible = 0
     silent: list[int] = []
+    shape = [0, 0, 0, 0]
 
     for meta in metas:
         replay = loader.load_replay(meta.game_id)
+        shape = [
+            carried + new for carried, new in zip(shape, alternatives_shape(replay))
+        ]
         roles = {player.agent_id: player.role for player in replay.players}
         for meeting in replay.meetings:
             band = ejection_band(meeting)
@@ -126,7 +169,8 @@ def _measure_set(parent: Path, set_name: str) -> str:
         shown = parent.resolve().relative_to(_REPO_ROOT)
     except ValueError:
         shown = parent
-    lines = [f"{shown}/{set_name} — {len(metas)} games"]
+    selected = "" if seeds is None else f" of {len(every)} (selected)"
+    lines = [f"{shown}/{set_name} — {len(metas)} games{selected}"]
     lines.append("  ejections, by the band of the ejected player in that meeting")
     for band, label in _BAND_LABELS:
         lines.append(
@@ -137,7 +181,30 @@ def _measure_set(parent: Path, set_name: str) -> str:
         f"  first meeting ejects on a role_proof flag: {eligible} of {len(metas)} games"
     )
     lines.append(f"  no flag and no ejection anywhere: seeds {silent}")
+    if alternatives:
+        ballots, entries, own, applied = shape
+        lines.append("  considered_alternatives, over every ballot in those games")
+        lines.append(f"    {ballots:>4} ballots  {entries:>4} recorded entries")
+        lines.append(f"    ballots listing the voter itself:     {own:>4}")
+        lines.append(f"    ballots listing the applied target:   {applied:>4}")
     return "\n".join(lines)
+
+
+def _parse_games(tokens: list[str]) -> dict[str, frozenset[int]]:
+    """``["9p2i:23", "4p1i:2"]`` to ``{"9p2i": {23}, "4p1i": {2}}``.
+
+    A malformed token raises rather than being skipped: a typo that silently
+    measured fewer games than asked for would print a number nobody could
+    reproduce.
+    """
+
+    selected: dict[str, set[int]] = {}
+    for token in tokens:
+        set_name, _, seed = token.partition(":")
+        if not set_name or not seed.isdigit():
+            raise ValueError(f"--games takes SET:SEED tokens, got {token!r}")
+        selected.setdefault(set_name, set()).add(int(seed))
+    return {name: frozenset(seeds) for name, seeds in selected.items()}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,11 +221,39 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         help="a set to measure (repeatable; default: every set under --parent)",
     )
+    parser.add_argument(
+        "--games",
+        nargs="+",
+        metavar="SET:SEED",
+        help="measure only these games (e.g. the featured strip's seven)",
+    )
+    parser.add_argument(
+        "--alternatives",
+        action="store_true",
+        help="also count the shape of considered_alternatives on their ballots",
+    )
     args = parser.parse_args(argv)
     parent: Path = args.parent
+    if args.games and args.sets:
+        parser.error("--games already names its sets; do not pass --set as well")
+    if args.games:
+        try:
+            chosen = _parse_games(args.games)
+        except ValueError as exc:
+            parser.error(str(exc))
+        for name in sorted(chosen):
+            print(
+                _measure_set(
+                    parent,
+                    name,
+                    seeds=chosen[name],
+                    alternatives=args.alternatives,
+                )
+            )
+        return 0
     names: list[str] = args.sets or SetLoaderRegistry(parent).available_sets()
     for name in names:
-        print(_measure_set(parent, name))
+        print(_measure_set(parent, name, alternatives=args.alternatives))
     return 0
 
 

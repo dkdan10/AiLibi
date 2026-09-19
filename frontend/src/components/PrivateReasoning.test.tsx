@@ -33,6 +33,12 @@ const ballot: BallotView = { voter: "p-1", target: "p-2", confidence: 0.73, prim
 function alternativesBlock(html: string): string {
   return /<div [^>]*data-ballot-alternatives[^>]*>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? "";
 }
+
+/** One string per rendered `li`, so a claim about WHICH entry carries a note
+ *  cannot be satisfied by that note appearing anywhere in the block. */
+function alternativeItems(html: string): string[] {
+  return [...alternativesBlock(html).matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1] ?? "");
+}
 const meeting: MeetingDTO = {
   meeting_id: "meeting-0", tick: 10, triggered_by: "p-1", trigger_kind: "body",
   outcome: "EJECTED", ejected_player_id: "p-2", turns: [], contradictions: [], llm_calls: [], prompt_versions: {}, total_cost_usd: 0,
@@ -98,8 +104,8 @@ describe("private reasoning perspective", () => {
     for (const secret of ["I killed them", "0.73", "private-statement-choice", "private-observation-choice", "private-alternative-choice"]) expect(html).not.toContain(secret);
     expect(html).not.toContain("no rationale recorded");
     // The whole weighing block, heading included — not just its entries. An
-    // empty "Also weighed" through a foreign lens would still disclose that the
-    // voter weighed nothing, which is itself private reasoning.
+    // empty heading through a foreign lens would still disclose that the voter
+    // weighed nothing, which is itself private reasoning.
     expect(html).not.toContain(BALLOT_COPY.alternativesLabel);
     expect(alternativesBlock(html)).toBe("");
   });
@@ -128,9 +134,49 @@ describe("private reasoning perspective", () => {
     expect(block).toContain("border-dashed");
     expect(html).not.toContain(BALLOT_COPY.alternativesEmpty);
     // The list is NAMED by the label a viewer can see, not by an invisible one.
-    const labelId = /<span id="([^"]+)"[^>]*>Also weighed<\/span>/.exec(block)?.[1];
+    const labelId = new RegExp(`<span id="([^"]+)"[^>]*>${BALLOT_COPY.alternativesLabel}</span>`).exec(block)?.[1];
     expect(labelId).toBeDefined();
     expect(block).toContain(`aria-labelledby="${labelId ?? ""}"`);
+  });
+  it("names an entry the header already shows rather than passing it off as another player", () => {
+    // The recorded list is NOT a list of other players: measured over
+    // `replays/samples/9p2i` with `scripts/measure_featured_criterion.py
+    // --alternatives`, 27 of 869 ballots list the VOTER itself and 22 list the
+    // target the vote APPLIED to. Either renders a pill identical to one in the
+    // card's header, so it is annotated — and kept, because the block is the
+    // record and dropping an entry would make the render disagree with the
+    // bytes. This is the enforcing mechanism for that claim.
+    state.perspective = { mode: "omniscient" };
+    const alternatives = ["p-2", "p-1", "private-alternative-choice"]; // target, voter, neither
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, considered_alternatives: alternatives }} players={players} omniscient revealOutcome={false} />);
+    const items = alternativeItems(html);
+    expect(items).toHaveLength(3);
+    // Each note sits inside the `li` of the entry it qualifies, and nowhere else.
+    expect(items[0]).toContain("p-2");
+    expect(items[0]).toContain(BALLOT_COPY.alternativesTargetNote);
+    expect(items[0]).not.toContain(BALLOT_COPY.alternativesSelfNote);
+    expect(items[1]).toContain("p-1");
+    expect(items[1]).toContain(BALLOT_COPY.alternativesSelfNote);
+    expect(items[1]).not.toContain(BALLOT_COPY.alternativesTargetNote);
+    // An entry that is neither carries NO note: the annotation is a statement
+    // about the header, not decoration on every row.
+    expect(items[2]).toContain("private-alternative-choice");
+    expect(items[2]).not.toContain(BALLOT_COPY.alternativesSelfNote);
+    expect(items[2]).not.toContain(BALLOT_COPY.alternativesTargetNote);
+  });
+  it("names a recorded SKIP as the vote cast when the ballot skipped", () => {
+    // The note follows the header, not the player list: a SKIP ballot whose
+    // recorded list holds the literal `SKIP` (the shape tests/api/
+    // test_schemas.py admits) duplicates the header's skip chip, so it is named
+    // the same way — and still refused the identity pill.
+    state.perspective = { mode: "omniscient" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, target: "SKIP", considered_alternatives: ["SKIP"] }} players={players} omniscient revealOutcome={false} />);
+    const items = alternativeItems(html);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toContain("SKIP");
+    expect(items[0]).toContain(BALLOT_COPY.alternativesTargetNote);
+    expect(items[0]).toContain("border-dashed");
+    expect(items[0]).not.toContain("background-color");
   });
   it.each([["SKIP"], ["p-404"]])("does not dress %s as a player at the table", (entry) => {
     state.perspective = { mode: "omniscient" };

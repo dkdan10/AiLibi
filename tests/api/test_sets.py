@@ -561,32 +561,76 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
 
 
 @pytest.mark.parametrize(
-    "seed,why",
+    "seed,why,message",
     [
-        (2, "no ejection anywhere in the game"),
-        (13, "the first meeting skips"),
-        (46, "the first meeting skips"),
-        (44, "the first meeting ejects an impostor, but on NO flag"),
-        (12, "the first meeting ejects on a flag that is not role proof"),
+        (2, "no ejection anywhere in the game", "SKIPPED"),
+        (13, "the first meeting skips", "SKIPPED"),
+        (46, "the first meeting skips", "SKIPPED"),
+        (
+            44,
+            "the first meeting ejects an impostor, but on NO flag naming them",
+            "weak_signal",
+        ),
+        (
+            12,
+            "the first meeting ejects a crewmate on a flag that is not role proof",
+            "weak_signal",
+        ),
+        (
+            10,
+            "the first meeting ejects an IMPOSTOR that a flag names — but the flag is not role proof",
+            "weak_signal",
+        ),
     ],
 )
 def test_featured_head_criterion_rejects_a_head_that_establishes_nothing(
-    seed: int, why: str
+    seed: int, why: str, message: str
 ) -> None:
     # THE PLANTED CASES for the pin above. A criterion nobody can fail is a
     # sentence, not a gate, so each of these is a real committed 9p2i game that
-    # the criterion must reject, named with the reason it fails.
+    # the criterion must reject, named with the reason it fails and with the
+    # assertion message it must fail through — ``match=`` so a case that started
+    # failing for a DIFFERENT reason (a skipping meeting, say) stops counting as
+    # proof of the clause it was chosen for.
     #
-    # Seeds 44 and 12 are the ones that give the rule its teeth: both eject in
-    # their FIRST meeting, and 44 even ejects an impostor — so a pin that checked
-    # only "the head ejects" or "the head ejects correctly" would wave them
-    # through. Only the role-proof clause bites. (The card named seed 46 as the
-    # "ejects on no flag" case; measured, 46's first meeting SKIPS, so it is kept
-    # here for the reason it actually fails and 44 and 12 were added for the one
-    # it was reaching for.)
+    # SEED 10 IS THE ISOLATING CASE, and the one the clause rests on: its first
+    # meeting ejects p-6, p-6 IS an impostor, and a flag in that same meeting
+    # DOES name p-6 — only the flag's category is `weak_signal` rather than
+    # `role_proof`. Weaken that one clause and seed 10 is the case that goes
+    # green, which is what `test_seed_10_isolates_the_role_proof_clause` below
+    # reads out of the bytes rather than asserting in prose.
+    #
+    # Seeds 44 and 12 bracket it: 44 ejects an impostor in its first meeting on
+    # a flag naming somebody ELSE, so a pin checking only "the head ejects" or
+    # "the head ejects correctly" would wave it through; 12 ejects a crewmate
+    # named by a flag, so it fails the category clause here AND the role clause
+    # under a weakened one — which is exactly why it cannot serve as the
+    # category clause's proof on its own. (The card named seed 46 as the "ejects
+    # on no flag" case; measured, 46's first meeting SKIPS, so it is kept here
+    # for the reason it actually fails.)
     registry = SetLoaderRegistry(_PARENT)
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=message):
         _assert_opens_on_role_proof(registry, "9p2i", seed)
+
+
+def test_seed_10_isolates_the_role_proof_clause() -> None:
+    # The parametrized rejection above is only a proof of the ROLE_PROOF clause
+    # if seed 10 clears every other clause of the criterion, so read that out of
+    # the served bytes here instead of claiming it in a comment. Each assertion
+    # below is one clause of `_assert_opens_on_role_proof` satisfied; the last
+    # two are the defect — the ejected player IS named by a flag, and no flag in
+    # the meeting is role proof — so the category comparison is the only thing
+    # left that can reject this game.
+    registry = SetLoaderRegistry(_PARENT)
+    replay = registry.get("9p2i").load_replay("headless-seed-10")
+    first = replay.meetings[0]
+    assert first.outcome == "EJECTED"
+    ejected = first.ejected_player_id
+    assert ejected is not None
+    roles = {player.agent_id: player.role for player in replay.players}
+    assert roles[ejected] == "IMPOSTOR"
+    assert any(ejected in flag.subjects for flag in first.contradictions)
+    assert not any(flag.category == "role_proof" for flag in first.contradictions)
 
 
 def test_featured_seed_13_card_states_the_served_turn_shape() -> None:

@@ -102,6 +102,31 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
 
 ## Acceptance
 
+- [x] Review correction: the `role_proof` CLAUSE of the head criterion now has a
+  planted case that isolates it. 9p2i seed 10 joins the parametrize in
+  `test_featured_head_criterion_rejects_a_head_that_establishes_nothing`
+  (`tests/api/test_sets.py`) — its first meeting ejects p-6, p-6 IS an impostor,
+  and a flag in that meeting DOES name p-6, so only the category comparison can
+  reject it — and `test_seed_10_isolates_the_role_proof_clause` reads each of
+  those facts out of the served bytes. Every case also carries a
+  `pytest.raises(match=...)`. Weakening the clause to `ejected in flag.subjects`
+  turns both red; the before/after runs are quoted in Results.
+- [x] Review correction: the alternatives copy no longer claims the entries are
+  OTHER players, because the bytes falsify it — 27 of 869 `samples/9p2i` ballots
+  list the voter itself and 22 list the applied target
+  (`scripts/measure_featured_criterion.py --alternatives`). The heading is
+  neutral, and an entry the card's header already shows is ANNOTATED rather than
+  dropped, so the block stays the record. Proved by
+  `names an entry the header already shows rather than passing it off as another
+  player` and `names a recorded SKIP as the vote cast when the ballot skipped`
+  in `frontend/src/components/PrivateReasoning.test.tsx` (per-`li`, so a note on
+  the wrong entry fails), and by
+  `test_alternatives_shape_reads_the_committed_duplicates` in
+  `tests/scripts/test_measure_featured_criterion.py`, which names the committed
+  games carrying each shape.
+- [x] Review correction: the Results record-impact paragraph counted four
+  changed files under `frontend/src/` where its own quoted command prints five.
+  The dated subsection restates the count from the command's output.
 - [x] The criterion is written into the comment above `FEATURED_GAMES`
   (`ReplayPicker.tsx:90-93`): the strip is still hand-picked, and the ORDER now
   leads with a game whose first meeting ejects on a `role_proof` flag naming
@@ -148,7 +173,7 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
   shape `tests/api/test_schemas.py:297` already admits) cannot masquerade as a
   player. Recorded order is kept, the length is not assumed, and an empty list
   renders an explicit "no alternatives recorded" line in the idiom of
-  `:164-166`. Both strings live in `SPECTATOR_COPY` beside the meeting group
+  `:164-166`. Every string lives in `SPECTATOR_COPY` beside the meeting group
   (`frontend/src/lib/copy.ts:415-418`) and carry no dialect, so `copy.test.ts`
   covers them through its value leg and its disk leg over `BallotCard.tsx`
   (`frontend/src/lib/copy.test.ts:55`). Colours come from `tokens.ts` only.
@@ -354,9 +379,10 @@ Every figure the card asserts reproduces to the digit: the three 9p2i bands
 5. **An empty list is a record, not an absence.** It renders
    "no alternatives recorded" in the idiom of the existing "no rationale
    recorded" line, so a viewer reads "this voter weighed nobody else" rather
-   than "not shown here". Both strings live in `SPECTATOR_COPY.ballot` beside
+   than "not shown here". Every string lives in `SPECTATOR_COPY.ballot` beside
    the meeting group, so `copy.test.ts` covers them through its value leg, and
-   `BallotCard.tsx` stays clean for its disk leg.
+   `BallotCard.tsx` stays clean for its disk leg. (Round 1 of review added two
+   more strings to that group, the notes below; the same two legs cover them.)
 6. **The journey keeps both evidence directions.** `openFeaturedReplay` now
    takes an optional seed matched on the pill's EXACT text — exact because
    `seed 2` is a prefix of `seed 23` — and the planted-failure test opens seed 2
@@ -372,9 +398,12 @@ Every figure the card asserts reproduces to the digit: the three 9p2i bands
   the same reason seed 13 does. It is kept as a planted case for the reason it
   actually fails, and seeds 44 and 12 were added for the one the card was
   reaching for: 44's first meeting ejects an impostor on NO flag, 12's ejects a
-  crewmate on a flag that is not role proof. Those two are what give the
-  role-proof clause its teeth — a pin checking only "the head ejects", or even
-  "the head ejects correctly", would wave seed 44 through.
+  crewmate on a flag that is not role proof. A pin checking only "the head
+  ejects", or even "the head ejects correctly", would wave seed 44 through.
+  (Round 1 of review showed that neither ISOLATES the `role_proof` clause —
+  seed 44 fails the subjects clause and seed 12 the role clause under a weakened
+  category comparison. Seed 10 is the isolating case and was added; see the
+  dated subsection below.)
 * The card cites `docs/reading-guide.md:66` as already naming seed 23's meeting
   0. It does, and the sentence rewritten in place is the one at `:62-63`
   (`:63` in the card's numbering) about the curated list, as the acceptance item
@@ -490,9 +519,151 @@ production build. The first run of the gate failed on one `ruff format` hunk in
 the rerun above is the green one.
 
 **Record impact, confirmed rather than asserted.** No recorded bytes moved:
-`git diff --stat origin/main...HEAD` touches only `docs/reading-guide.md`, four
+`git diff --stat origin/main...HEAD` touches only `docs/reading-guide.md`, five
 files under `frontend/src/`, two under `frontend/e2e/`,
 `scripts/measure_featured_criterion.py`, `tasks/README.md`,
 `tests/api/test_sets.py` and this card. No `audits/` or `tests/fixtures/` byte
 changed, so no `docs/artifacts.md` inventory row is recomputed; the frozen
 held-out manifest is untouched and band 2100-2999 stays unseen.
+
+### Review corrections, round 1 (2026-09-19)
+
+Three blocking findings from the independent verifiers at `bc01c8f1`, each
+repaired rather than argued with. Commands in this subsection are pinned to the
+tip of this branch, not to `bc01c8f1`.
+
+**1. The `role_proof` clause had no planted case that isolated it.** The
+correctness lens weakened `_assert_opens_on_role_proof` from
+`flag.category == "role_proof" and ejected in flag.subjects` to
+`ejected in flag.subjects` and the suite stayed green: of the five committed
+planted seeds, 2/13/46 trip the EJECTED clause, 44 the subjects clause and 12
+the role clause, so nothing proved the one comparison that separates this
+criterion from "any flag". The verifier's diagnosis reproduced here exactly, and
+the Results claim that "only the role-proof clause bites" was wrong as written.
+
+9p2i seed 10 is the isolating case and is now a sixth parametrized rejection.
+Read off the served replay, its first meeting EJECTS, the ejected player is
+`p-6`, `p-6` is an IMPOSTOR, and both flags in that meeting name `p-6` — only
+their category is `weak_signal`. So every other clause is satisfied and the
+category comparison is the only thing left that can reject it.
+`test_seed_10_isolates_the_role_proof_clause` asserts those five facts against
+the bytes, so the isolation is read rather than claimed. Every parametrized case
+also gained a `pytest.raises(match=...)` naming the message it must fail
+through, so a case that starts failing for a different reason stops counting as
+proof of its clause.
+
+```
+$ uv run pytest tests/api/test_sets.py -q              # clause weakened as above
+FAILED ...rejects_a_head_that_establishes_nothing[12-...-weak_signal]
+FAILED ...rejects_a_head_that_establishes_nothing[10-...-weak_signal]
+2 failed, 45 passed
+#   seed 10: Failed: DID NOT RAISE <class 'AssertionError'>
+#   seed 12: Regex pattern did not match  (it raised ('9p2i', 12, 'p-5', 'CREWMATE'))
+$ uv run pytest tests/api/test_sets.py -q              # clause restored
+47 passed
+```
+
+Seed 12's red is the second half of the proof: with the category comparison
+weakened it reaches the ROLE clause, which is exactly why it could not serve as
+the category clause's own planted case. Seeds 44 and 12 are kept for the clauses
+they do prove, and the Decisions text above is corrected rather than deleted.
+
+**2. The "Also weighed" copy was falsified by the bytes it renders.** The
+docs lens reproduced Codex C2: over the seven featured games 4 of 80 ballots
+list the VOTER itself and 3 list the applied TARGET, and over `samples/9p2i` 27
+of 869 and 22 of 869 — each rendering a second pill identical to one in the
+card's header, under a heading that called the list "the other players".
+Measured here with the same instrument, now carrying the counts:
+
+```
+$ uv run python scripts/measure_featured_criterion.py --alternatives
+replays/samples/4p1i — 50 games
+  ...
+  considered_alternatives, over every ballot in those games
+     117 ballots   179 recorded entries
+    ballots listing the voter itself:        0
+    ballots listing the applied target:      1
+replays/samples/9p2i — 50 games
+  ...
+  considered_alternatives, over every ballot in those games
+     869 ballots  1376 recorded entries
+    ballots listing the voter itself:       27
+    ballots listing the applied target:     22
+$ uv run python scripts/measure_featured_criterion.py --alternatives \
+    --games 9p2i:23 9p2i:13 9p2i:46 9p2i:2 4p1i:2 4p1i:11 4p1i:29
+#   9p2i, 4 of 50 (selected):  71 ballots, 123 entries, 4 self, 3 target
+#   4p1i, 3 of 50 (selected):   9 ballots,  12 entries, 0 self, 0 target
+```
+
+Both of the fix's options were on the table; the entry is ANNOTATED, not
+filtered, because the block is the record and a render that drops a recorded
+entry disagrees with the bytes it claims to show. So: the heading becomes
+`Weighed on this ballot`, which asserts nothing about who the entries are, and
+`alternativeNote` adds `(this voter)` or `(the vote cast)` to an entry the
+header already shows — plain text inside the same `li`, so a screen reader reads
+it with the entry it qualifies. The voter wins a tie. Two vitest cases prove it
+per-`li` (so a note on the wrong entry fails, not just a missing one), and one
+of them is the SKIP shape, where the note lands on a dashed token rather than a
+pill. `test_alternatives_shape_reads_the_committed_duplicates` names the
+committed games that carry each shape, so the render change stays tied to real
+bytes: 9p2i seed 2 (7 ballots, 2 listing the voter) and seed 13 (18 ballots, 1
+self and 2 target) against seed 23, the landing game, which carries neither.
+
+```
+$ cd frontend && npx vitest run src/components/PrivateReasoning.test.tsx
+# alternativeNote stubbed to return null        → 2 failed | 25 passed (27)
+# alternativeNote stubbed to note EVERY entry   → 2 failed | 25 passed (27)
+# restored                                      → 27 passed (27)
+```
+
+The seed-23 caption's "who else its voter weighed" was checked against the same
+measurement and left alone: that game records neither shape (0 of 26 ballots),
+so the sentence is true of the game it describes.
+
+**3. The record-impact paragraph miscounted its own diff.** It said four files
+under `frontend/src/` where `git diff --name-only origin/main...HEAD | grep -c
+'^frontend/src/'` printed five. Corrected in place above. At this tip the same
+command prints 5 and the full diff is 13 files: `docs/reading-guide.md`, five
+under `frontend/src/` (`BallotCard.tsx`, `PrivateReasoning.test.tsx`,
+`ReplayPicker.tsx`, `lib/copy.ts`, `stories/MeetingView.stories.tsx`), two under
+`frontend/e2e/`, `scripts/measure_featured_criterion.py`,
+`tests/api/test_sets.py`, `tests/scripts/test_measure_featured_criterion.py`,
+`tasks/README.md` and this card. Still no recorded byte: no `audits/` or
+`tests/fixtures/` file is touched, so no `docs/artifacts.md` inventory row is
+recomputed, no provider is called, and band 2100-2999 stays unseen.
+
+**What the round added beyond the three repairs.** One new file,
+`tests/scripts/test_measure_featured_criterion.py`, because the instrument grew
+two flags: `--alternatives` (the counts above) and `--games SET:SEED` (the
+featured strip's seven in one run). A malformed selector raises rather than
+measuring fewer games than asked for, which is what the test's second case pins.
+The default invocation prints exactly what it printed before, so the output
+quoted earlier in these Results is unchanged.
+
+**Gates, rerun at this tip.**
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 (captured directly) — 515 files formatted clean, import-linter 4 contracts kept, task docs validated (390 historical phase tasks and 390 prompts, 73 work cards), prompts in sync, `mypy` clean over 486 source files, **7,998 Python tests passed** (20 skipped, 3 xfailed, 210s), then lint, three typecheck projects, **526 frontend tests** across 19 files, and the production build |
+| `cd frontend && npm run e2e` | exit 0, 13 passed and 3 skipped of 16 (the skips are the `media.spec.ts` README captures, which need `AILIBI_CAPTURE_MEDIA=1`) |
+| `uv run python scripts/measure_featured_criterion.py` | exit 0, output identical to the block quoted above |
+| `bash scripts/verify_samples.sh` | exit 0 — 50 + 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | exit 0 over `replays/samples/{9p2i,4p1i}` and `replays/ml_corpus/{9p2i,4p1i}` |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` | exit 0 (offline; never `--complete`) |
+| `wc -w docs/reading-guide.md` | 1,329 against the 1,350 ceiling, unchanged this round |
+
+The Python suite grew by six: the sixth parametrized rejection, the seed-10
+isolation test, and the four cases of the new script test. The frontend suite
+grew by four: the two annotation cases, plus two more that the copy gate's value
+leg generates for the two new `SPECTATOR_COPY.ballot` strings.
+
+One honest note on how these were run. A first pass launched `check.sh` and the
+Playwright suite CONCURRENTLY, and two Python tests and two e2e cases failed on
+that pass — `test_wall_deadline_cancels_meeting_and_retains_success` (a wall
+clock deadline), `test_generated_logs_agree_event_for_event` (a Hypothesis
+`FailedHealthCheck: Input generation is slow`), and two 90s Playwright timeouts.
+All four are load-sensitive rather than diff-sensitive, and none touches a file
+this card changes. The runs recorded above are the serial ones: `check.sh` alone
+to exit 0, then `npm run e2e` alone to exit 0.
