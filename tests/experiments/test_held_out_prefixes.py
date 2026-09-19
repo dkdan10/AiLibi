@@ -56,6 +56,7 @@ from experiments.held_out_prefixes import (
     skip_witness_roles,
     skip_witness_roles_over_range,
     tally_reasons,
+    write_manifest,
 )
 from observation.action_intent import ActionIntent
 from orchestrator.game import _build_meeting_trigger
@@ -793,27 +794,73 @@ def _committed_manifest() -> dict[str, object]:
     return manifest
 
 
-def test_the_committed_manifest_regenerates_from_its_own_band() -> None:
-    """The freeze's fail-loud: any source edit that moves the set turns this red."""
+#: The ``accepted`` and ``skipped`` blocks of the 8000-8999 record as the owner's
+#: merge of the fifth freeze froze them at ``88d42f82``, hashed by
+#: :func:`_block_digest`. The record has moved twice since — a dependency
+#: restamp at ``68dfe979`` and its correction at ``72998c7b`` — and neither
+#: touched these two blocks, which is what a restamp means.
+_BAND_8000_BLOCKS_AT_88D42F82: Mapping[str, str] = {
+    "accepted": "c0e7b0b048c110667bb121fc80dc692cf707664f9d0a06f858f60f77ba630ef5",
+    "skipped": "86eba6d132a95a19e13c49d55f71b3196fcd566f1fd04718a96229235f631a0d",
+}
+
+#: The same record's ``source_sha256`` block as ``72998c7b`` wrote it: the
+#: restamp correction that is the LAST commit to have moved it. Pinned under
+#: its own commit because that is the commit a regeneration of this band
+#: reproduces from, and it is not the one that froze the digests above.
+_BAND_8000_SOURCES_AT_72998C7B: Mapping[str, str] = {
+    "source_sha256": (
+        "9e9ff7b512cd55111b59336c6b7c992e60a52de1f3f5f442a05acd9dbe12f6d8"
+    ),
+}
+
+
+def test_the_archived_band_keeps_the_blocks_it_was_frozen_with() -> None:
+    """The fifth band's record is an ARCHIVE, checked against its own bytes.
+
+    Until the closing of 2026-09-19 this was a REGENERATION test: it rebuilt
+    the set from today's sources and asserted ``rebuilt == manifest``,
+    ``source_sha256`` included. That is what made every edit to a
+    ``GENERATOR_SOURCES`` file owe this band a restamp — twice already, at
+    ``68dfe979`` and ``72998c7b``, for one lever's edit to
+    ``orchestrator/game.py``. The owner retired the band as the arena that day
+    and no run will ever draw it, so the treadmill is retired with it.
+
+    STILL CHECKED, and it is the whole of the record's identity: the
+    ``accepted``, ``skipped`` and ``source_sha256`` blocks are byte-identical
+    to the bytes this band was frozen with, fifty unique digests over seeds
+    8000 to 8057, eight ``witnessed_kill`` skips, the development definitions
+    absent and no prefix bytes. NO LONGER CHECKED: that today's generator
+    reproduces those fifty digests. What carries that weight instead is the
+    record's own ``source_sha256`` — 22 files by name and digest — so the
+    regeneration stays reproducible from a checkout of ``72998c7b``, and the
+    generator keeps its coverage on the debug seeds, which touch no band.
+    """
 
     manifest = _committed_manifest()
-    band = manifest["band"]
-    assert isinstance(band, dict)
-    roster = manifest["roster"]
-    assert isinstance(roster, dict)
-    generated = generate(
-        SeedBand(
-            first_seed=int(band["first_seed"]),
-            last_seed=int(band["last_seed"]),
-            size=int(band["size"]),
-        ),
-        PrefixRoster.model_validate(roster),
-    )
-    rebuilt = build_manifest(generated, repo_root=REPO_ROOT, card=str(manifest["card"]))
-    assert rebuilt["accepted"] == manifest["accepted"]
-    assert rebuilt["skipped"] == manifest["skipped"]
-    assert rebuilt["source_sha256"] == manifest["source_sha256"]
-    assert rebuilt == manifest
+    for block, digest in _BAND_8000_BLOCKS_AT_88D42F82.items():
+        assert _block_digest(manifest[block]) == digest
+    for block, digest in _BAND_8000_SOURCES_AT_72998C7B.items():
+        assert _block_digest(manifest[block]) == digest
+
+    accepted = manifest["accepted"]
+    assert isinstance(accepted, list)
+    assert len(accepted) == 50
+    assert [row["seed"] for row in accepted] == sorted(row["seed"] for row in accepted)
+    assert accepted[0]["seed"] == 8000
+    assert accepted[-1]["seed"] == 8057
+    assert manifest["last_accepted_seed"] == 8057
+    assert len({row["sha256"] for row in accepted}) == 50
+
+    skipped = manifest["skipped"]
+    assert isinstance(skipped, list)
+    assert len(skipped) == 8
+    assert {row["reason"] for row in skipped} == {"witnessed_kill"}
+    assert manifest["skipped_reason_counts"] == {"witnessed_kill": 8}
+
+    sources = manifest["source_sha256"]
+    assert isinstance(sources, dict)
+    assert sorted(sources) == sorted(held_out_prefixes.GENERATOR_SOURCES)
 
 
 def test_the_manifest_records_the_development_definitions_as_absent() -> None:
@@ -841,8 +888,27 @@ def test_the_manifest_commits_no_prefix_bytes() -> None:
 
 def test_the_manifest_records_the_flip_rather_than_a_deletion() -> None:
     manifest = _committed_manifest()
-    assert manifest["status"] == "held_out"
+    assert manifest["status"] == "development"
     assert "never by deleting this file" in str(manifest["status_note"])
+
+
+def test_no_committed_record_is_held_out_any_more() -> None:
+    """The closed state, asserted directly rather than inferred from one file.
+
+    The owner closed this evaluation on 2026-09-19, so there is no held-out
+    set anywhere under the freeze directory: five bands were frozen, five were
+    spent, and no sixth was frozen. A record that reappeared as ``held_out``
+    would be a set a run could draw with no card behind it, which is the one
+    thing the closing has to keep out.
+    """
+
+    directory = (REPO_ROOT / MANIFEST_PATH).parent
+    records = sorted(directory.glob("*.json"))
+    assert len(records) == 5, [path.name for path in records]
+    for path in records:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        assert record["status"] == "development", path.name
+        assert "converted" in record, path.name
 
 
 def _converted_manifest(path: str = _CONVERTED_MANIFEST_PATH) -> dict[str, object]:
@@ -1151,20 +1217,24 @@ def test_the_converted_fourth_band_keeps_the_blocks_it_was_frozen_with() -> None
     assert "tasks/diagnosis-2026-09-15-truncation-stop.md" in record.note
 
 
-def test_the_current_freeze_is_the_fifth_band_and_records_its_restamps() -> None:
-    """The live record is the new band; the old ones sit beside it, not under it.
+def test_the_archived_record_is_the_fifth_band_and_records_its_restamps() -> None:
+    """The archived record is the fifth band; the four before it sit beside it.
 
-    The band started with an EMPTY restamp list and gains one entry per commit
-    that edits a ``GENERATOR_SOURCES`` file without moving the set. Each is
+    The band started with an EMPTY restamp list and gained one entry per commit
+    that edited a ``GENERATOR_SOURCES`` file without moving the set. Each is
     asserted to name its date, its commit, the files it moved and the card that
     authorised it, and the committed manifest's copy is asserted to be the
-    module's -- an undocumented restamp cannot pass quietly, which is the whole
-    point of the list being part of the generated manifest.
+    module's -- an undocumented restamp could not pass quietly, which was the
+    whole point of the list being part of the generated manifest.
+
+    That list is now closed rather than growing: the archive is compared
+    against the bytes it was frozen with, so a later source edit owes this band
+    no restamp and adds no entry. Its one entry stays because it is history.
     """
 
     manifest = _committed_manifest()
-    assert manifest["status"] == "held_out"
-    assert "converted" not in manifest
+    assert manifest["status"] == "development"
+    assert ConvertedRecord.model_validate(manifest["converted"]).superseded_by is None
     assert manifest["card"] == "tasks/work/held-out-prefix-freeze-5.md"
     assert manifest["band"] == {
         "draw_order": "ascending",
@@ -1198,6 +1268,108 @@ def test_the_current_freeze_is_the_fifth_band_and_records_its_restamps() -> None
         assert {row["sha256"] for row in accepted}.isdisjoint(
             row["sha256"] for row in old_accepted
         )
+
+
+def test_the_archived_record_names_the_run_that_spent_it() -> None:
+    """The fifth band's ``converted`` block, read through the module's own model.
+
+    It differs from the four beside it in the one field the closing added:
+    ``superseded_by`` is ``null``, because nothing replaced this band. The
+    fifty rendered seeds are the accepted block's own, in order -- a conversion
+    naming a seed the set never held would be describing some other run -- and
+    the note has to say the result was complete and inconclusive rather than a
+    rejection, which is the reading the whole closure turns on.
+    """
+
+    manifest = _committed_manifest()
+    accepted = manifest["accepted"]
+    assert isinstance(accepted, list)
+
+    record = ConvertedRecord.model_validate(manifest["converted"])
+    assert record.date == "2026-09-16"
+    assert record.pull_request == "#465"
+    assert record.branch == "work/fresh-deduction-run-5"
+    assert record.superseded_by is None
+    assert record.informed == "tasks/work/close-deduction-candidate-evaluation.md"
+    assert (REPO_ROOT / record.informed).is_file()
+    assert list(record.rendered_seeds) == [row["seed"] for row in accepted]
+    assert len(record.rendered_seeds) == 50
+    for stated in ("INCONCLUSIVE", "not a rejection", "2026-09-19"):
+        assert stated in record.note, stated
+
+
+def test_a_converted_record_may_name_no_successor() -> None:
+    """``superseded_by`` is optional, and ``None`` is a statement, not a blank.
+
+    Every conversion before the closing was made BY the next freeze, so each
+    had a successor to name; the fifth was made by the card that ended the
+    evaluation. A record that named a path still validates, so a later freeze
+    that did replace a band records it the way the first four did.
+    """
+
+    def _record(successor: str | None) -> ConvertedRecord:
+        return ConvertedRecord(
+            date="2026-09-16",
+            pull_request="#465",
+            branch="work/fresh-deduction-run-5",
+            rendered_seeds=(8000,),
+            informed="tasks/work/close-deduction-candidate-evaluation.md",
+            superseded_by=successor,
+            note="A planted record over one seed.",
+        )
+
+    assert _record(None).superseded_by is None
+    assert _record(MANIFEST_PATH).superseded_by == MANIFEST_PATH
+    # Optional, never defaulted: a conversion that simply forgot the field
+    # would otherwise read as the deliberate `null` the closure writes.
+    payload = _record(None).model_dump(mode="json")
+    del payload["superseded_by"]
+    with pytest.raises(ValidationError):
+        ConvertedRecord.model_validate(payload)
+
+
+def _root_with_the_generator_sources(tmp_path: Path) -> Path:
+    """A root carrying the 22 files ``build_manifest`` hashes, and nothing else."""
+
+    for name in held_out_prefixes.GENERATOR_SOURCES:
+        destination = tmp_path / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes((REPO_ROOT / name).read_bytes())
+    return tmp_path
+
+
+def test_write_manifest_refuses_to_regenerate_over_an_archive(tmp_path: Path) -> None:
+    """PLANTED both ways: the freeze command writes a freeze and refuses an archive.
+
+    ``__main__`` with no arguments regenerates the band and rewrites
+    ``MANIFEST_PATH``. Run on this tree that would destroy the digests the
+    fifth run consumed while leaving the archive's prose describing them, so an
+    already-archived record is refused and the bytes are left untouched. A
+    record that is still a freeze is rewritten exactly as before, so what is
+    protected is the archive rather than the path.
+    """
+
+    root = _root_with_the_generator_sources(tmp_path)
+    archived = (REPO_ROOT / MANIFEST_PATH).read_bytes()
+    destination = root / MANIFEST_PATH
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(archived)
+
+    with pytest.raises(HeldOutPrefixError, match="ARCHIVED record"):
+        write_manifest(root, card="tasks/work/held-out-prefix-freeze-5.md")
+    assert destination.read_bytes() == archived
+
+    reopened = json.loads(archived.decode("utf-8"))
+    reopened["status"] = "held_out"
+    del reopened["converted"]
+    destination.write_text(
+        json.dumps(reopened, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    written = write_manifest(root, card="tasks/work/held-out-prefix-freeze-5.md")
+    assert written == destination
+    rewritten = json.loads(destination.read_text(encoding="utf-8"))
+    assert rewritten["status"] == "held_out"
+    assert "converted" not in rewritten
 
 
 #: Spelled counts a restamp note may use, so the gate below can read the number

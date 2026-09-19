@@ -33,6 +33,7 @@ import subprocess
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Final, cast, get_args
 
@@ -73,6 +74,7 @@ from experiments.fresh_deduction_instrument import (
     paired_result,
     run_dry,
     run_instrument,
+    verify_archived_set,
     verify_frozen_set,
 )
 from engine.world import load_canonical_map
@@ -390,6 +392,30 @@ def _committed_manifest() -> dict[str, Any]:
     return loaded
 
 
+def _held_out_payload() -> dict[str, Any]:
+    """The archived record as it read while it was still the held-out set.
+
+    Since the closing card of 2026-09-19 the committed record is an ARCHIVE:
+    `status` `development` and a `converted` block naming the run of
+    2026-09-16 that spent every one of its fifty prefixes. `verify_frozen_set`
+    refuses it, which is the point — so a case whose subject is one of that
+    reader's OTHER checks plants on this payload instead, where the status is
+    the state it was written in and the planted defect is the only thing wrong
+    with the file.
+
+    Exactly two keys move, which is exactly what the conversion moved. Both are
+    asserted rather than set blindly: a record that had stopped being the
+    archive would make every plant below a test of nothing.
+    """
+
+    payload = _committed_manifest()
+    assert payload["status"] == "development"
+    assert "converted" in payload
+    payload["status"] = "held_out"
+    del payload["converted"]
+    return payload
+
+
 def _converted_manifest_paths() -> tuple[Path, ...]:
     """Every freeze record that has been converted to development data.
 
@@ -472,59 +498,74 @@ def _manifest_text_bound_to(band: tuple[int, int]) -> str:
     )
 
 
-def _root_binding_the_live_band(tmp_path: Path) -> Path:
-    """A repository root whose Inputs row binds the band the runner would draw.
+def _manifest_text_before_the_closing() -> str:
+    """The committed manifest bound to the live band and NOT yet closed.
 
-    Usually the repository itself: a document bound to the live freeze is the
-    settled state. Between a freeze and the re-binding that follows it the
-    committed row still names the band that freeze just converted, and
-    ``assert_manifest_binds_the_live_band`` refuses there -- deliberately, and
-    with its own cases in ``TestTheManifestBindsTheBandTheRunWouldDraw`` below.
-    The cases that use this helper are about what the gate does once that check
-    passes, so in that window they run against a copy of the committed document
-    whose Seed band row is moved to the live band and in which nothing else
-    changes.
+    Two edits to the committed bytes, both of them the closing card's own: the
+    Seed band row is moved to the band the runner would draw (a no-op while the
+    row is settled), and the owner's closing clause of 2026-09-19 is removed.
+    That is the document in which an otherwise well-formed live run or
+    calibration was authorized, and the only state in which the cases below can
+    reach anything past the closing refusal.
+    """
 
-    The COPY is the point, so being handed the repository is refused rather than
-    obeyed. Outside a freeze window the early return below makes such a call
-    look harmless; inside one it would rewrite the committed execution manifest
-    -- silently re-binding the document a live run is authorized against -- as a
-    side effect of running the test suite.
+    text = _manifest_text_bound_to(_live_band())
+    assert instrument.CLOSURE_CLAUSE in text, (
+        "the committed execution manifest carries no closing clause; the gate "
+        "these helpers work around is not there to work around"
+    )
+    return text.replace(instrument.CLOSURE_CLAUSE, "[closing clause removed]")
+
+
+def _root_before_the_closing(tmp_path: Path) -> Path:
+    """A repository root as it stood before the closing card of 2026-09-19.
+
+    Modelled on the `_root_binding_the_live_band` this replaces, and it does
+    that helper's job too: the Inputs row binds the band the runner would draw,
+    so a case about what the gate does AFTER
+    ``assert_manifest_binds_the_live_band`` reaches it. Two further bytes of
+    record move, because since the closing card the committed tree refuses a
+    live spend twice over — the manifest carries the closing clause, and the
+    held-out record at ``MANIFEST_PATH`` is the ARCHIVE of the band the fifth
+    run spent. Here the clause is gone and the record reads ``held_out`` again.
+
+    Nothing else changes, and the COPY is the point, so being handed the
+    repository is refused rather than obeyed: it would rewrite the committed
+    execution manifest — silently reopening the evaluation the owner closed —
+    as a side effect of running the test suite.
     """
 
     assert tmp_path.resolve() != _REPO_ROOT.resolve(), (
-        "_root_binding_the_live_band writes a rebound copy of the execution "
+        "_root_before_the_closing writes a reopened copy of the execution "
         "manifest into tmp_path; handed the repository it would rewrite the "
         "committed document"
     )
-    live = _live_band()
-    if instrument.manifest_bound_band(_MANIFEST.read_text(encoding="utf-8")) == live:
-        return _REPO_ROOT
     manifest = tmp_path / EXECUTION_MANIFEST_PATH
     manifest.parent.mkdir(parents=True, exist_ok=True)
-    manifest.write_text(_manifest_text_bound_to(live), encoding="utf-8")
-    _write_frozen_manifest(tmp_path, _committed_manifest())
+    manifest.write_text(_manifest_text_before_the_closing(), encoding="utf-8")
+    _write_frozen_manifest(tmp_path, _held_out_payload())
     return tmp_path
 
 
 def _root_without_the_clause_binding_the_live_band(tmp_path: Path, clause: str) -> Path:
-    """A root whose manifest binds the live band and carries no ``clause``.
+    """A root before the closing whose manifest carries no ``clause`` either.
 
     The plant for a gate on the DOCUMENT, now that the committed document
     authorizes both a resume and a calibration: everything else about the tree
-    is the committed one, and the owner's sentence is the only thing missing.
+    is :func:`_root_before_the_closing`'s, and the owner's sentence this case
+    names is the only further thing missing.
     """
 
     assert tmp_path.resolve() != _REPO_ROOT.resolve(), (
         "this helper writes a planted copy of the execution manifest into "
         "tmp_path; handed the repository it would rewrite the committed document"
     )
-    text = _manifest_text_bound_to(_live_band())
+    text = _manifest_text_before_the_closing()
     assert clause in text, "the committed manifest does not carry the clause"
     manifest = tmp_path / EXECUTION_MANIFEST_PATH
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(text.replace(clause, "[clause removed]"), encoding="utf-8")
-    _write_frozen_manifest(tmp_path, _committed_manifest())
+    _write_frozen_manifest(tmp_path, _held_out_payload())
     return tmp_path
 
 
@@ -922,20 +963,20 @@ class _FailingProvider(DryRunProvider):
 
 
 class TestFrozenSet:
-    def test_the_regenerated_set_matches_the_committed_freeze(self) -> None:
-        """The set the run would use is the one the committed manifest records.
+    def test_the_regenerated_set_matches_the_archived_record(self) -> None:
+        """The set the rehearsal uses is the one the committed record holds.
 
-        The seeds are read from that manifest rather than written down here: a
-        literal would pin this test to one band, and the band moves when a
-        result converts a set to development data.
+        The seeds are read from that record rather than written down here: a
+        literal would pin this test to one band, and the band moved four times
+        before the fifth was archived.
         """
 
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         accepted = manifest["accepted"]
         skipped = manifest["skipped"]
         assert isinstance(accepted, list)
         assert isinstance(skipped, list)
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         assert frozen.accepted_seeds == tuple(int(row["seed"]) for row in accepted)
         assert frozen.skipped_seeds == tuple(int(row["seed"]) for row in skipped)
         assert len(frozen.accepted_seeds) == 50
@@ -946,7 +987,7 @@ class TestFrozenSet:
     def test_a_moved_digest_stops_the_run(self, tmp_path: Path) -> None:
         # PLANTED: one accepted digest is flipped. The regenerated prefix
         # re-hashes to the committed value, so the comparison must refuse it.
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["accepted"][7]["sha256"] = "0" * 64
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="differ at row 7"):
@@ -955,21 +996,65 @@ class TestFrozenSet:
     def test_a_changed_skip_list_stops_the_run(self, tmp_path: Path) -> None:
         # PERTURBED: the skip list loses its last row. The filter still refuses
         # that seed, so the regenerated skips are longer than the frozen ones.
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["skipped"] = manifest["skipped"][:-1]
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="skipped seeds"):
             verify_frozen_set(tmp_path)
 
     def test_a_set_marked_development_is_refused(self, tmp_path: Path) -> None:
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["status"] = "development"
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="not 'held_out'"):
             verify_frozen_set(tmp_path)
 
+    def test_the_committed_record_is_the_archive_and_the_live_reader_refuses_it(
+        self,
+    ) -> None:
+        """The closed state, read by both readers, on the committed tree.
+
+        PLANTED by the tree: `verify_frozen_set` is the live path's reader and
+        refuses the archive, which is the second refusal a live run meets after
+        the closing clause; `verify_archived_set` is the offline path's and
+        accepts exactly it.
+        """
+
+        with pytest.raises(FrozenSetMismatch, match="not 'held_out'"):
+            verify_frozen_set(_REPO_ROOT)
+        assert len(verify_archived_set(_REPO_ROOT).accepted_seeds) == 50
+
+    def test_the_archive_reader_refuses_a_set_still_to_be_spent(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED the other way: neither reader stands in for the other.
+
+        A `held_out` record is a set nobody has drawn, and a rehearsal that
+        drew one would render it — which is what converted five bands. So the
+        offline reader refuses it by name rather than accepting the stricter
+        case as harmless.
+        """
+
+        _write_frozen_manifest(tmp_path, _held_out_payload())
+        with pytest.raises(FrozenSetMismatch, match="ARCHIVED record"):
+            verify_archived_set(tmp_path)
+
+    def test_the_archive_reader_refuses_a_development_record_with_no_block(
+        self, tmp_path: Path
+    ) -> None:
+        """PERTURBED: the status flipped without the `converted` block that says
+        which run spent it. A record marked development and explaining nothing
+        is not an archive, and reading one would leave the rehearsal drawing a
+        set whose history is unrecorded."""
+
+        payload = _held_out_payload()
+        payload["status"] = "development"
+        _write_frozen_manifest(tmp_path, payload)
+        with pytest.raises(FrozenSetMismatch, match="no 'converted' block"):
+            verify_archived_set(tmp_path)
+
     def test_a_foreign_observation_clock_is_refused(self, tmp_path: Path) -> None:
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["temporal_observation_version"] = 1
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="observation clock"):
@@ -978,7 +1063,7 @@ class TestFrozenSet:
     def test_a_roster_the_budget_is_not_sized_on_is_refused(
         self, tmp_path: Path
     ) -> None:
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["roster"]["num_players"] = 9
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="change of roster"):
@@ -990,7 +1075,7 @@ class TestFrozenSet:
         generator's defaults either way, and the manifest could have described a
         different set from the one regenerated."""
 
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["band"]["first_seed"] = 9000
         manifest["band"]["last_seed"] = 9999
         _write_frozen_manifest(tmp_path, manifest)
@@ -999,7 +1084,7 @@ class TestFrozenSet:
 
     def test_a_moved_tick_budget_is_refused(self, tmp_path: Path) -> None:
         # PLANTED: a tick budget no prefix in this set was screened under.
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["max_ticks"] = 999
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="tick budget"):
@@ -1007,14 +1092,14 @@ class TestFrozenSet:
 
     def test_a_moved_task_count_is_refused(self, tmp_path: Path) -> None:
         # PLANTED: the roster field the 4p1i check does not look at.
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["roster"]["tasks_per_crewmate"] = 7
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="change of roster"):
             verify_frozen_set(tmp_path)
 
     def test_a_descending_draw_is_refused(self, tmp_path: Path) -> None:
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         manifest["band"]["draw_order"] = "descending"
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match="draws ascending"):
@@ -1032,7 +1117,7 @@ class TestFrozenSet:
         unnamed crash where the stop rule promises a refusal that says what
         differed."""
 
-        manifest = _committed_manifest()
+        manifest = _held_out_payload()
         del manifest[block]
         _write_frozen_manifest(tmp_path, manifest)
         with pytest.raises(FrozenSetMismatch, match=f"no {block!r} block"):
@@ -1373,7 +1458,7 @@ class TestAuthorizedClient:
 
         with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
             instrument.build_authorized_client(
-                verify_frozen_set(_REPO_ROOT), env={"AILIBI_LLM_PROVIDER": "fake"}
+                verify_archived_set(_REPO_ROOT), env={"AILIBI_LLM_PROVIDER": "fake"}
             )
 
     def test_the_default_environment_is_the_process_one_and_still_pinned(
@@ -1382,7 +1467,7 @@ class TestAuthorizedClient:
         monkeypatch.setenv("AILIBI_LLM_PROVIDER", "fake")
         monkeypatch.delenv("FEATHERLESS_API_KEY", raising=False)
         with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
-            instrument.build_authorized_client(verify_frozen_set(_REPO_ROOT))
+            instrument.build_authorized_client(verify_archived_set(_REPO_ROOT))
 
     def test_a_client_cannot_be_built_before_the_frozen_set_is_verified(self) -> None:
         """PLANTED: the round-3 defect — the CLI evaluated the client factory in
@@ -1401,19 +1486,20 @@ class TestAuthorizedClient:
     def test_the_pre_client_gate_stops_on_a_moved_frozen_set(
         self, tmp_path: Path
     ) -> None:
-        """PLANTED: a repository root whose execution manifest is the committed
-        one and whose held-out manifest carries a moved digest. The readiness
-        gate refuses there, which is BEFORE the client the CLI builds from its
-        return value exists — the gate itself constructs none."""
+        """PLANTED: a repository root before the closing whose held-out
+        manifest carries a moved digest. The readiness gate refuses there,
+        which is BEFORE the client the CLI builds from its return value exists
+        — the gate itself constructs none."""
 
-        manifest = tmp_path / EXECUTION_MANIFEST_PATH
-        manifest.parent.mkdir(parents=True)
-        # Bound to the live band, so the refusal under test is the moved digest
-        # rather than a stale Inputs row, which is checked one gate earlier.
-        manifest.write_text(_manifest_text_bound_to(_live_band()), encoding="utf-8")
-        moved = _committed_manifest()
+        # Before the closing and bound to the live band, so the refusal under
+        # test is the moved digest rather than the closing clause or a stale
+        # Inputs row, both of which are checked one gate earlier.
+        root = _root_before_the_closing(tmp_path)
+        assert root == tmp_path
+        moved = _held_out_payload()
         moved["accepted"][0]["sha256"] = "0" * 64
         _write_frozen_manifest(tmp_path, moved)
+        manifest = tmp_path / EXECUTION_MANIFEST_PATH
         invocation = LiveRunInvocation.naming(
             manifest,
             provider=AUTHORIZED_PROVIDER,
@@ -1433,7 +1519,7 @@ class TestAuthorizedClient:
         whenever the Inputs row binds the live band, and a copy of it with that
         one row moved while a re-binding is outstanding."""
 
-        root = _root_binding_the_live_band(tmp_path)
+        root = _root_before_the_closing(tmp_path)
         invocation = LiveRunInvocation.naming(
             root / EXECUTION_MANIFEST_PATH,
             provider=AUTHORIZED_PROVIDER,
@@ -1483,7 +1569,7 @@ class TestAuthorizedClient:
             raise _Stop("stopped before any unit ran")
 
         monkeypatch.setattr(instrument, "_InstrumentClient", spy)
-        root = _root_binding_the_live_band(tmp_path / "root")
+        root = _root_before_the_closing(tmp_path / "root")
         invocation = LiveRunInvocation.naming(
             root / EXECUTION_MANIFEST_PATH,
             provider=AUTHORIZED_PROVIDER,
@@ -3666,7 +3752,7 @@ class TestGraders:
 
         for name in graders:
             monkeypatch.setattr(instrument, name, landmine)
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         arm = instrument_arms()[0]
         work_clock = instrument._ModelWorkClock(max_seconds=3600.0)
         client = instrument._InstrumentClient(DryRunProvider(), work_clock=work_clock)
@@ -3687,7 +3773,7 @@ class TestGraders:
         assert record.ballots
 
     def test_no_prompt_carries_a_grader_verdict(self, tmp_path: Path) -> None:
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         arm = instrument_arms()[0]
         work_clock = instrument._ModelWorkClock(max_seconds=3600.0)
         client = instrument._InstrumentClient(DryRunProvider(), work_clock=work_clock)
@@ -3855,14 +3941,14 @@ class TestPairedStatistics:
 class TestPrefixSecrecy:
     def test_the_report_carries_no_prefix_bytes(self, tmp_path: Path) -> None:
         report = run_instrument(output_dir=tmp_path, units=_SMOKE_UNITS)
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         assert_report_holds_no_prefix_bytes(report, frozen.prefixes)
 
     def test_a_report_carrying_a_scripted_step_is_refused(self, tmp_path: Path) -> None:
         # PLANTED: one prefix step's canonical JSON smuggled into a free-text
         # field. Without this guard a summary line could publish a held-out
         # input and convert the set to development data silently.
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         prefix = frozen.prefixes[0]
         report = run_instrument(output_dir=tmp_path, units=1)
         step = json.dumps(
@@ -3875,7 +3961,7 @@ class TestPrefixSecrecy:
             assert_report_holds_no_prefix_bytes(leaked, [prefix])
 
     def test_a_report_carrying_a_whole_prefix_is_refused(self, tmp_path: Path) -> None:
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         prefix = frozen.prefixes[0]
         report = run_instrument(output_dir=tmp_path, units=1)
         leaked = report.model_copy(update={"caveat": canonical_prefix_json(prefix)})
@@ -3916,7 +4002,7 @@ class TestPrefixSecrecy:
 
 class TestBodyHandle:
     def test_no_frozen_prefix_matches_the_legacy_body_handle(self) -> None:
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         assert_no_legacy_body_handles(
             [canonical_prefix_json(prefix) for prefix in frozen.prefixes]
         )
@@ -3924,7 +4010,7 @@ class TestBodyHandle:
     def test_no_rendered_prompt_matches_the_legacy_body_handle(
         self, tmp_path: Path
     ) -> None:
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         work_clock = instrument._ModelWorkClock(max_seconds=3600.0)
         client = instrument._InstrumentClient(DryRunProvider(), work_clock=work_clock)
         from llm.budget import GameBudget
@@ -4827,14 +4913,43 @@ class TestExecutionManifest:
         permanent. Such a record has to name the record that replaced it; that
         record has to be the live held-out freeze of another band; and the card
         the conversion named has to be still open and still name the record it
-        owes the row. A held-out binding is the settled state -- the state this
-        document is in since the re-binding of 2026-09-10 -- and then it has to
-        be the live freeze itself.
+        owes the row. A held-out binding was the settled state until
+        2026-09-19; then it had to be the live freeze itself.
+
+        Since the closing of 2026-09-19 there is a THIRD state, and it is the
+        one this tree is in: the record AT ``MANIFEST_PATH`` is development
+        data, the archive of the band the fifth run spent, and its
+        ``superseded_by`` is ``null`` because the evaluation closed rather than
+        re-froze. There is no obligation to keep open there — nothing is owed a
+        re-binding — and what has to hold instead is that no live run can start.
+        The other two branches keep every assertion they had, so a future freeze
+        restores the obligation without an edit here.
         """
 
         path, record = self._bound_held_out_record()
         if record["status"] == "held_out":
             assert path == _REPO_ROOT / MANIFEST_PATH
+            return
+        if path == _REPO_ROOT / MANIFEST_PATH:
+            # The closed state. A development record at the live path is the
+            # archive: it names no successor, the execution manifest carries
+            # the owner's closing sentence, and an otherwise well-formed live
+            # invocation is refused rather than merely unlikely.
+            assert record["status"] == "development"
+            assert record["converted"]["superseded_by"] is None, (
+                f"{path.name} is the archive at the live path and names "
+                f"{record['converted']['superseded_by']!r} as its replacement; "
+                "a record that HAS a successor is not the closed state"
+            )
+            text = self._text()
+            assert instrument.CLOSURE_CLAUSE in text
+            invocation = LiveRunInvocation.naming(
+                _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+            )
+            with pytest.raises(LiveRunNotAuthorized, match="closing clause"):
+                instrument.assert_live_run_is_authorized(
+                    provider=AUTHORIZED_PROVIDER, invocation=invocation
+                )
             return
         assert record["status"] == "development", (
             f"the execution manifest binds {path.name}, whose status is "
@@ -4863,6 +4978,146 @@ class TestExecutionManifest:
             f"{rebinding.name} owes the Inputs row a binding to {MANIFEST_PATH} "
             "and no longer names it"
         )
+
+
+class TestTheClosingClause:
+    """The gate the owner's closing of 2026-09-19 put on both live paths.
+
+    Every other gate in this file refuses a run that is wrong about something.
+    This one refuses a run that is right about everything, because the owner
+    ended the evaluation it would spend on — so each case below is built on a
+    correct invocation, and the plant is the document rather than the call.
+    """
+
+    def _invocation(self, root: Path) -> LiveRunInvocation:
+        return LiveRunInvocation.naming(
+            root / EXECUTION_MANIFEST_PATH,
+            provider=AUTHORIZED_PROVIDER,
+            model=AUTHORIZED_MODEL,
+            repo_root=root,
+        )
+
+    def test_the_manifest_quotes_the_clause_verbatim_under_a_dated_heading(
+        self,
+    ) -> None:
+        """The module holds one copy and the document the other, byte for byte.
+
+        The gates look for these bytes, so a paraphrase in the manifest would
+        reopen the evaluation silently: the document would still read as closed
+        and both gates would let a spend through.
+        """
+
+        text = _MANIFEST.read_text(encoding="utf-8")
+        assert instrument.CLOSURE_CLAUSE in text
+        assert "## Closure (2026-09-19)" in text
+        assert "assert_live_run_is_authorized" in text
+        assert "assert_calibration_is_authorized" in text
+        section = " ".join(text.split("## Closure (2026-09-19)", 1)[1].split())
+        for stated in (
+            "stay the record of what was measured",
+            "no longer the project's gate",
+            "context, not adoption evidence",
+            "SHELVED, not deleted",
+        ):
+            assert stated in section, stated
+
+    def test_the_committed_manifest_refuses_an_otherwise_authorized_run(self) -> None:
+        """PLANTED by the tree itself: the authorized provider, model, limits,
+        sampling and band, against the committed document. Nothing about this
+        invocation is wrong; the evaluation is closed."""
+
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        with pytest.raises(LiveRunNotAuthorized, match="closing clause"):
+            instrument.assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=invocation
+            )
+
+    def test_the_same_run_is_authorized_against_a_manifest_without_the_section(
+        self, tmp_path: Path
+    ) -> None:
+        """The other half of the plant: the closure is the ONLY thing refusing.
+
+        The same invocation against a copy of the committed document whose
+        closing clause is gone passes the whole gate, so the refusal above is
+        the clause rather than anything else this card moved.
+        """
+
+        root = _root_before_the_closing(tmp_path)
+        instrument.assert_live_run_is_authorized(
+            provider=AUTHORIZED_PROVIDER,
+            invocation=self._invocation(root),
+            repo_root=root,
+        )
+
+    def test_the_committed_manifest_refuses_every_authorized_calibration_mode(
+        self,
+    ) -> None:
+        """The second gate, over all three modes the manifest still describes.
+
+        Their clauses are untouched and still match; the closing clause is what
+        refuses, after each mode has been recognised.
+        """
+
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        for mode in instrument.CALIBRATION_MODES:
+            with pytest.raises(LiveRunNotAuthorized, match="closing clause"):
+                instrument.assert_calibration_is_authorized(
+                    provider=AUTHORIZED_PROVIDER,
+                    invocation=invocation,
+                    limits=mode.limits,
+                    sampling=mode.sampling,
+                    paired_seeds=mode.paired_seeds,
+                )
+
+    def test_a_misconfigured_run_is_told_what_is_wrong_with_it(self) -> None:
+        """The closing check is LAST among the document checks, and it shows.
+
+        A run naming the wrong model is told about the model. "This evaluation
+        is closed" is the answer for a run that would otherwise have been
+        allowed, and telling it to every caller would hide every other defect
+        behind the newest gate.
+        """
+
+        invocation = LiveRunInvocation.naming(
+            _MANIFEST, provider=AUTHORIZED_PROVIDER, model=AUTHORIZED_MODEL
+        )
+        wrong_model = replace(invocation, model="some/other-checkpoint")
+        with pytest.raises(LiveRunNotAuthorized, match="not the authorized"):
+            instrument.assert_live_run_is_authorized(
+                provider=AUTHORIZED_PROVIDER, invocation=wrong_model
+            )
+
+    def test_the_fake_provider_is_untouched_by_the_closure(
+        self, tmp_path: Path
+    ) -> None:
+        """`fake` returns before every document check, so the rehearsal stands.
+
+        A closed evaluation spends nothing; it does not stop the arithmetic
+        that documents what it spent. The dry run reaches no provider, renders
+        to no model and draws the ARCHIVED record, and it still runs.
+        """
+
+        instrument.assert_live_run_is_authorized(provider="fake", invocation=None)
+        report = run_dry(output_dir=tmp_path, units=1)
+        assert report.total_cost_usd == 0.0
+
+    def test_the_clause_is_not_a_paraphrase_of_any_other_clause(self) -> None:
+        """Four sentences authorize a spend in this document and one refuses it;
+        a fifth that merely resembled one of them would be read by two gates."""
+
+        others = (
+            instrument.RESUMPTION_CLAUSE,
+            instrument.CALIBRATION_CLAUSE,
+            instrument.CALIBRATION_2_CLAUSE,
+            instrument.CALIBRATION_3_CLAUSE,
+        )
+        for clause in others:
+            assert instrument.CLOSURE_CLAUSE not in clause
+            assert clause not in instrument.CLOSURE_CLAUSE
 
 
 class TestFeasibility:
@@ -5180,7 +5435,7 @@ class TestFeasibility:
         # arithmetic refuses.
         planted = _limits_merged_on_2026_09_07()
         monkeypatch.setattr(instrument, "AUTHORIZED_LIMITS", planted)
-        root = _root_binding_the_live_band(tmp_path)
+        root = _root_before_the_closing(tmp_path)
         invocation = LiveRunInvocation.naming(
             root / EXECUTION_MANIFEST_PATH,
             provider=AUTHORIZED_PROVIDER,
@@ -5208,7 +5463,7 @@ class TestFeasibility:
 
         planted = _limits_merged_on_2026_09_07()
         monkeypatch.setattr(instrument, "AUTHORIZED_LIMITS", planted)
-        root = _root_binding_the_live_band(tmp_path)
+        root = _root_before_the_closing(tmp_path)
         invocation = LiveRunInvocation.naming(
             root / EXECUTION_MANIFEST_PATH,
             provider=AUTHORIZED_PROVIDER,
@@ -5799,7 +6054,7 @@ class TestCheckpointAndResume:
         """Both arms of a prefix, or nothing: a resume never begins mid-pair."""
 
         checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         assert checkpoint.completed_seeds == tuple(frozen.accepted_seeds[:2])
         assert len(checkpoint.units) == 4
         assert {unit.arm for unit in checkpoint.units} == {
@@ -5816,7 +6071,7 @@ class TestCheckpointAndResume:
 
         path = self._checkpoint(tmp_path, units=2)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         strings = instrument._every_string_in(payload)
         for prefix in frozen.prefixes[:2]:
             assert not any(canonical_prefix_json(prefix) in text for text in strings)
@@ -6136,7 +6391,7 @@ class TestCheckpointAndResume:
         """
 
         checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         with pytest.raises(
             instrument.ResumeNotAuthorized, match="would not draw"
         ) as refused:
@@ -6204,7 +6459,7 @@ class TestCheckpointAndResume:
         """The tail of the ascending list, and a hole in it refused."""
 
         checkpoint = instrument.read_checkpoint(self._checkpoint(tmp_path, units=2))
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         remaining = instrument.next_seeds_after(checkpoint, frozen.prefixes[:4])
         assert [prefix.seed for prefix in remaining] == list(frozen.accepted_seeds[2:4])
         holed = checkpoint.model_copy(
@@ -6234,7 +6489,7 @@ class TestCheckpointAndResume:
                 provider="fake",
                 limits=feasible_limits(),
                 sampling=AUTHORIZED_SAMPLING,
-                frozen=verify_frozen_set(_REPO_ROOT),
+                frozen=verify_archived_set(_REPO_ROOT),
             )
 
     def test_the_named_arm_surface_carries_the_code_that_renders(self) -> None:
@@ -6294,7 +6549,7 @@ class TestCheckpointAndResume:
                 provider="fake",
                 limits=feasible_limits(),
                 sampling=AUTHORIZED_SAMPLING,
-                frozen=verify_frozen_set(_REPO_ROOT),
+                frozen=verify_archived_set(_REPO_ROOT),
             )
         assert template in str(refused.value)
 
@@ -6308,7 +6563,7 @@ class TestCheckpointAndResume:
                 provider="fake",
                 limits=AUTHORIZED_LIMITS,
                 sampling=AUTHORIZED_SAMPLING,
-                frozen=verify_frozen_set(_REPO_ROOT),
+                frozen=verify_archived_set(_REPO_ROOT),
             )
 
     def test_the_carried_budget_is_charged_before_the_second_sitting_spends(
@@ -6628,12 +6883,24 @@ class TestCalibrationGate:
             repo_root=root,
         )
 
-    def test_the_committed_manifest_authorizes_the_calibration(self) -> None:
-        """The settled state: the clause is in the document the gate reads."""
+    def test_the_manifest_authorized_the_calibration_before_the_closing(
+        self, tmp_path: Path
+    ) -> None:
+        """The state this clause was written for: it is in the document the gate
+        reads, and the closing clause of 2026-09-19 is not yet beside it.
 
+        The committed document is no longer that state — the owner closed the
+        evaluation, and `TestTheClosingClause` below holds the refusal it now
+        produces — so the positive half of the mode check moved onto a root
+        before the closing, where the mode's own clause is still the thing
+        under test rather than the last gate it never reaches.
+        """
+
+        root = _root_before_the_closing(tmp_path)
         instrument.assert_calibration_is_authorized(
             provider=AUTHORIZED_PROVIDER,
-            invocation=self._invocation(_REPO_ROOT),
+            invocation=self._invocation(root),
+            repo_root=root,
         )
 
     def test_a_manifest_without_the_clause_refuses_it(self, tmp_path: Path) -> None:
@@ -6674,7 +6941,7 @@ class TestCalibrationGate:
                 invocation=self._invocation(_REPO_ROOT),
                 limits=AUTHORIZED_LIMITS,
             )
-        root = _root_binding_the_live_band(tmp_path)
+        root = _root_before_the_closing(tmp_path)
         with pytest.raises(LiveRunNotAuthorized, match="authorized limits exactly"):
             assert_live_run_is_authorized(
                 provider=AUTHORIZED_PROVIDER,
@@ -7965,16 +8232,25 @@ class TestTheTwoSpentCalibrationModes:
         assert instrument.CALIBRATION_LIMITS.unit_max_output_tokens == 12_000
         assert instrument.CALIBRATION_LIMITS != instrument.CALIBRATION_2_LIMITS
 
-    def test_each_mode_is_accepted_whole(self) -> None:
-        """Both authorized sets pass, live, against the committed manifest."""
+    def test_each_mode_is_accepted_whole(self, tmp_path: Path) -> None:
+        """Both authorized sets pass, live, against the manifest before the closing.
 
+        Against the COMMITTED manifest none of them passes any more, and that
+        is the settled state since 2026-09-19: the closing clause refuses every
+        mode after its own clause matched. What this case is about is the mode
+        lookup, so it reads the document in the state that lookup was written
+        for.
+        """
+
+        root = _root_before_the_closing(tmp_path)
         for mode in instrument.CALIBRATION_MODES:
             matched = instrument.assert_calibration_is_authorized(
                 provider=AUTHORIZED_PROVIDER,
-                invocation=self._invocation(_REPO_ROOT),
+                invocation=self._invocation(root),
                 limits=mode.limits,
                 sampling=mode.sampling,
                 paired_seeds=mode.paired_seeds,
+                repo_root=root,
             )
             assert matched is mode
 
@@ -10253,7 +10529,7 @@ class TestTheDiagnosticsBlockIsLabelledAndNeverGates:
             limits=feasible_limits(),
             client=UsageReplayProvider(),
         )
-        frozen = verify_frozen_set(_REPO_ROOT)
+        frozen = verify_archived_set(_REPO_ROOT)
         instrument.assert_report_holds_no_prefix_bytes(
             report, frozen.prefixes[:_SMOKE_UNITS]
         )
@@ -10726,21 +11002,29 @@ class TestTheThirdAuthorizedCalibrationMode:
         limits = {mode.limits for mode in instrument.CALIBRATION_MODES}
         assert len(limits) == len(instrument.CALIBRATION_MODES)
 
-    def test_each_of_the_three_modes_is_accepted_whole(self) -> None:
-        """All three authorized sets pass, live, against the committed manifest."""
+    def test_each_of_the_three_modes_is_accepted_whole(self, tmp_path: Path) -> None:
+        """All three authorized sets pass, live, before the closing of 2026-09-19.
+
+        Their clauses are still in the committed document and still authorize
+        the spends they authorized; what the committed document also carries
+        now is the closing clause, which refuses all three afterwards. The root
+        here is that document without it.
+        """
 
         assert [mode.name for mode in instrument.CALIBRATION_MODES] == [
             "2026-09-14",
             "2026-09-15",
             "2026-09-18",
         ]
+        root = _root_before_the_closing(tmp_path)
         for mode in instrument.CALIBRATION_MODES:
             matched = instrument.assert_calibration_is_authorized(
                 provider=AUTHORIZED_PROVIDER,
-                invocation=self._invocation(_REPO_ROOT),
+                invocation=self._invocation(root),
                 limits=mode.limits,
                 sampling=mode.sampling,
                 paired_seeds=mode.paired_seeds,
+                repo_root=root,
             )
             assert matched is mode
 

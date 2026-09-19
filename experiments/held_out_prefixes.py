@@ -5,10 +5,18 @@ The fresh-model deduction evaluation needs meeting-open inputs nobody has read.
 cases only for development/operational checks") requires a separate reviewer to
 prepare and freeze those inputs, and treats an inspected schedule as development
 data. This module is that preparation: a deterministic generator plus a
-proof-free filter, whose output is committed as HASHES ONLY
-(:data:`MANIFEST_PATH`). No prefix bytes are committed anywhere; the runner
-regenerates the set from this module and the band and refuses to proceed if a
-hash differs.
+proof-free filter, whose output is committed as HASHES ONLY. No prefix bytes are
+committed anywhere; the runner regenerates the set from this module and the band
+and refuses to proceed if a hash differs.
+
+Since 2026-09-19 no such record exists. The owner closed the evaluation that
+day (decision D2 of ``tasks/direction-2026-09-19-process-over-outcome.md``), and
+the record at :data:`MANIFEST_PATH` is the ARCHIVE of the fifth band, 8000-8999,
+every one of whose fifty prefixes the run of 2026-09-16 rendered: development
+data like the four beside it, kept at that path because no band replaced it.
+Every gate below therefore refuses rather than proceeds -- ``verify_frozen_set``
+on the status, :func:`write_manifest` on the archive -- and freezing a band
+again needs its own card.
 
 Three properties make the set reviewable without opening it:
 
@@ -344,9 +352,17 @@ class HeldOutPrefix(BaseModel):
 
 #: The band preregistered by ``tasks/work/held-out-prefix-freeze-5.md``. Seeds
 #: 8000 to 8999 drawn ascending; the first fifty that pass the filter are the
-#: set. The preparer may not widen it: a band that cannot fill fifty is a stop,
-#: not a bigger band. The four bands this constant named before, 3000-3999,
-#: 5000-5999, 6000-6999 and 7000-7999, are :data:`CONVERTED_BANDS`.
+#: set. The four bands this constant named before, 3000-3999, 5000-5999,
+#: 6000-6999 and 7000-7999, are :data:`CONVERTED_BANDS`.
+#:
+#: It names the band the ARCHIVED record at :data:`MANIFEST_PATH` holds, and
+#: nothing draws it: the run of 2026-09-16 rendered all fifty of its prefixes
+#: and the owner closed the evaluation on 2026-09-19, so this constant is the
+#: archive's identity rather than a set waiting to be spent. It stays 8000-8999
+#: for that reason -- moving it would leave the archive describing a band this
+#: module no longer names -- and it is NOT the place a seventh band is
+#: preregistered: that needs its own card, which also writes the record
+#: :func:`write_manifest` now refuses to overwrite.
 PREREGISTERED_BAND: Final[SeedBand] = SeedBand(first_seed=8000, last_seed=8999, size=50)
 
 
@@ -354,11 +370,17 @@ PREREGISTERED_BAND: Final[SeedBand] = SeedBand(first_seed=8000, last_seed=8999, 
 class ConvertedBand:
     """A band this generator once froze and that is now development data.
 
-    ``manifest_path`` is where that band's freeze record lives after the flip.
-    It is NOT :data:`MANIFEST_PATH`: the current held-out record keeps that path
-    so the runner's ``verify_frozen_set`` and the regeneration test read the
-    live band without an instrument change, and a converted band's record moves
-    beside it under its own name.
+    ``manifest_path`` is where that band's freeze record lives after the flip:
+    beside :data:`MANIFEST_PATH` under its own name, because a band is moved
+    aside by the NEXT freeze taking that path.
+
+    The fifth band, 8000-8999, is development data too since 2026-09-16 and is
+    deliberately absent from :data:`CONVERTED_BANDS`. Nothing replaced it -- the
+    owner closed the evaluation on 2026-09-19 -- so its record was archived in
+    place at :data:`MANIFEST_PATH` rather than moved, and the path that once
+    held the live held-out set now holds that archive. What this list is read
+    for is unchanged by that: the range guard and the execution manifest's
+    Seed band row both want the bands a FREEZE replaced.
     """
 
     band: SeedBand
@@ -1468,8 +1490,14 @@ class ConvertedRecord(BaseModel):
     rendered_seeds: tuple[int, ...]
     #: The card the result informed, as a repository path.
     informed: str
-    #: Where the band that replaced this one is recorded.
-    superseded_by: str
+    #: Where the band that replaced this one is recorded, or ``None`` when the
+    #: evaluation closed and no band replaced this one. Optional since
+    #: 2026-09-19: every earlier conversion was made BY the next freeze, which
+    #: is what gave it a successor to name, and the fifth band was converted by
+    #: the closing card instead. ``None`` is that state and says so; it is not
+    #: "unknown" and not "not yet", and a later freeze that did replace a band
+    #: still names its record here.
+    superseded_by: str | None
     #: What happened, in the converting session's own words.
     note: str
 
@@ -1567,10 +1595,31 @@ def build_manifest(
 
 
 def write_manifest(repo_root: Path, *, card: str) -> Path:
-    """Regenerate the set and rewrite :data:`MANIFEST_PATH`. Used by ``__main__``."""
+    """Regenerate the set and rewrite :data:`MANIFEST_PATH`. Used by ``__main__``.
 
-    manifest = build_manifest(generate(), repo_root=repo_root, card=card)
+    Refuses an ARCHIVED record: a file already at that path carrying a
+    ``converted`` block is the input identity of a run that has been spent, and
+    regenerating over it would destroy the digests that run consumed while
+    leaving the archive's prose describing them. Since 2026-09-19 that is the
+    committed state, so the bare ``__main__`` freeze command refuses on this
+    tree rather than silently re-freezing the band the fifth run rendered.
+
+    A missing file, or a ``held_out`` record with no ``converted`` block, is
+    written as before: what is protected is the archive, not the path.
+    """
+
     path = repo_root / MANIFEST_PATH
+    if path.is_file():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(existing, Mapping) and "converted" in existing:
+            raise HeldOutPrefixError(
+                f"{MANIFEST_PATH} is an ARCHIVED record: it carries a "
+                "'converted' block, so its digests are the input identity of a "
+                "run that already spent them. Regenerating over it would "
+                "destroy that identity; freezing a band again writes its own "
+                "record under its own card."
+            )
+    manifest = build_manifest(generate(), repo_root=repo_root, card=card)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", "utf-8")
     return path
