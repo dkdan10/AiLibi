@@ -1,6 +1,6 @@
 # Close the accuracy-gated deduction evaluation and shelve its candidate
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -103,7 +103,7 @@ inventory sentence at `tasks/README.md:43`.
 
 ## Acceptance
 
-- [ ] A dated closing record, 2026-09-19, attributed to the owner's acceptance
+- [x] A dated closing record, 2026-09-19, attributed to the owner's acceptance
   of D1, D2 and D8, is written into `audits/deduction-candidate/README.md`,
   `preregistration.md`, `checkpoint.md` and a final dated section of
   `execution-manifest.md`. It states that the preregistered primary outcome,
@@ -114,7 +114,7 @@ inventory sentence at `tasks/README.md:43`.
   this manifest`, so existing line citations stay valid, and carries no row
   beginning `| Seed band |`, which `manifest_bound_band`
   (`experiments/fresh_deduction_instrument.py:1194-1211`) requires to be unique.
-- [ ] A `CLOSURE_CLAUSE` constant, shaped like `RESUMPTION_CLAUSE`
+- [x] A `CLOSURE_CLAUSE` constant, shaped like `RESUMPTION_CLAUSE`
   (`experiments/fresh_deduction_instrument.py:1607`), is the sentence that
   section carries, and both live gates refuse while the committed manifest
   holds it: `assert_live_run_is_authorized` (`:1323`) and
@@ -131,7 +131,7 @@ inventory sentence at `tasks/README.md:43`.
   `_root_binding_the_live_band` (`:475`). Results confirms `tasks/work/` holds
   no `ready` or `active` `fresh-deduction-authorization-*` or
   `fresh-deduction-limits-*` card, and that this card opens none.
-- [ ] `audits/deduction-candidate/held-out/manifest.json` is edited IN PLACE,
+- [x] `audits/deduction-candidate/held-out/manifest.json` is edited IN PLACE,
   keeping its path, with `status` set to `development` and a `converted` block:
   `date` 2026-09-16, `pull_request` `#465`, `branch`
   `work/fresh-deduction-run-5`, `rendered_seeds` all fifty accepted seeds in
@@ -148,7 +148,7 @@ inventory sentence at `tasks/README.md:43`.
   `test_the_inputs_row_names_every_converted_band`
   (`tests/experiments/test_fresh_deduction_instrument.py:4777-4814`) demand a
   Seed band row naming the band it also binds. Results states the alternative.
-- [ ] The regeneration test (`tests/experiments/test_held_out_prefixes.py:796`)
+- [x] The regeneration test (`tests/experiments/test_held_out_prefixes.py:796`)
   becomes an archive check that regenerates nothing. STILL CHECKED: the
   `accepted`, `skipped` and `source_sha256` blocks are byte-identical to the
   bytes this band was frozen with, pinned as three `_block_digest` constants in
@@ -162,7 +162,7 @@ inventory sentence at `tasks/README.md:43`.
   of `72998c7b`, and the generator keeps its coverage on the debug seeds, which
   touch no band. PLANTED both ways: mutating one accepted digest in a copy
   turns the check red, and editing a `GENERATOR_SOURCES` file leaves it green.
-- [ ] `write_manifest` (`experiments/held_out_prefixes.py:1569`) refuses to
+- [x] `write_manifest` (`experiments/held_out_prefixes.py:1569`) refuses to
   overwrite an archived record, so the `__main__` path cannot regenerate over
   the bytes the fifth run consumed; freezing again needs its own card. PLANTED:
   a root whose record is `held_out` is written, one carrying a `converted`
@@ -176,7 +176,7 @@ inventory sentence at `tasks/README.md:43`.
   (`:1233`) are unchanged, and band 2100-2999 is named in no source file,
   constant, test or tally range: its reservation lives in the documents, and
   Results says plainly that nothing in code stops a future tally over it.
-- [ ] `test_a_binding_to_a_converted_record_stays_an_open_obligation`
+- [x] `test_a_binding_to_a_converted_record_stays_an_open_obligation`
   (`tests/experiments/test_fresh_deduction_instrument.py:4816`) gains a third
   branch for the closed state, a `development` record AT `MANIFEST_PATH`:
   `superseded_by` is `null`, the execution manifest carries the closing clause,
@@ -184,7 +184,7 @@ inventory sentence at `tasks/README.md:43`.
   branches keep their assertions unchanged, so a future freeze restores the
   obligation without an edit. PLANTED: a copy whose `converted.superseded_by`
   names a path while the record sits at `MANIFEST_PATH` fails it.
-- [ ] `combined_accounts` is SHELVED, not deleted, and said so in the closing
+- [x] `combined_accounts` is SHELVED, not deleted, and said so in the closing
   record: the arm definition
   (`experiments/fresh_deduction_instrument.py:1160-1169`) stays, its levers
   stay default-OFF (`orchestrator/experiment_config.py:42-50`), its templates
@@ -200,7 +200,7 @@ inventory sentence at `tasks/README.md:43`.
   `agents/strategic/prompts/qwen3_6_27b/vote_ballot_accounts.j2:21`, against the
   default's "a SKIP needs neither" at `qwen3_6_27b/vote_ballot.j2:268`. No
   template byte moves here.
-- [ ] The two open cards are disposed of.
+- [x] The two open cards are disposed of.
   [The sixth freeze](held-out-prefix-freeze-6.md) is retired unexecuted and
   honestly under the validator: the title becomes the retirement, Status
   becomes `done`, Acceptance becomes one checked item stating that no sixth
@@ -214,7 +214,7 @@ inventory sentence at `tasks/README.md:43`.
   accepted direction produces being
   [the wave's single re-record](process-rerecord.md), whose adoption scope is
   that card's decision.
-- [ ] `audits/deduction-candidate/README.md` indexes the archived record as
+- [x] `audits/deduction-candidate/README.md` indexes the archived record as
   archived; the `audits/` row (`docs/artifacts.md:109`, today 26,522,872
   tracked bytes over 328 files, from `git ls-files audits | wc -l` and `git
   ls-files -z audits | xargs -0 cat | wc -c`) is recomputed with the change
@@ -309,3 +309,198 @@ scripts/build_sample_report.py --sample-dir <set> --check` over each of
 `replays/samples/4p1i`, `replays/samples/9p2i`, `replays/ml_corpus/4p1i` and
 `replays/ml_corpus/9p2i`. Never the live evaluation, never a live calibration,
 never the held-out generator on a band.
+
+## Results
+
+Delivered on `work/close-deduction-candidate-evaluation`. The contract is
+[the direction memo of 2026-09-19](../direction-2026-09-19-process-over-outcome.md),
+whose decisions D1, D2 and D8 the owner accepted that date (rulings in its
+section 12). The architecture this sits inside is
+[explicit cleanup experiments](../../docs/architecture.md#explicit-cleanup-experiments):
+`combined_accounts`'s three profile versions stay OFF and unadopted, and this
+card moves no lever, no default and no recorded byte. The delivery rule is
+[AGENTS.md](../../AGENTS.md) "Delivery" and
+[the workflow](../../docs/workflow.md#one-card-per-change).
+
+### What was decided, and why it reads this way
+
+**The closure is a clause in the document, not a flag.** `CLOSURE_CLAUSE`
+(`experiments/fresh_deduction_instrument.py`) is one sentence, held byte for
+byte in the module and in the execution manifest's appended
+"Closure (2026-09-19)" section, exactly as `RESUMPTION_CLAUSE` and the three
+calibration clauses are. The four of them authorize a spend; this one refuses
+it. `assert_the_evaluation_is_not_closed` reads the committed document, so
+reopening the evaluation means deleting the owner's sentence from the record
+that carries it — a visible act that needs its own card — rather than passing
+an argument.
+
+**Both gates, last among the document checks.** In
+`assert_live_run_is_authorized` the call sits after
+`assert_manifest_binds_the_live_band` and before `assert_limits_are_feasible`;
+in `assert_calibration_is_authorized` it follows the mode-clause check. A run
+naming the wrong model is told about the model — "this evaluation is closed" is
+the answer for a run that would otherwise have been allowed, and putting it
+first would hide every other defect behind the newest gate.
+`test_a_misconfigured_run_is_told_what_is_wrong_with_it` holds that ordering.
+
+**The section was APPENDED, after `## Verification of this manifest`,** so every
+line citation the sections above carry stays valid, and it carries no row
+beginning `| Seed band |`: `manifest_bound_band` requires exactly one, and the
+Inputs table still holds it, bound to 8000-8999.
+
+**Why the archived record was not moved and not listed.** It keeps the path
+`audits/deduction-candidate/held-out/manifest.json`. The alternative was the
+four earlier conversions' shape — `git mv` to `manifest-band-8000-8999.json`
+plus a `CONVERTED_BANDS` entry — and it was rejected on both halves. A band
+moves aside because the NEXT freeze takes the live path, and no band replaced
+this one; and listing 8000-8999 as converted would make
+`test_the_inputs_row_names_every_converted_band` demand a Seed band row naming
+the band that row also binds, which is a document contradicting itself.
+`superseded_by` is therefore `null`, typed `str | None` and commented to say
+that `None` means the evaluation closed and no band replaced this one, not
+"unknown" and not "not yet".
+
+**`combined_accounts` is SHELVED, not deleted.** The arm definition stays, its
+levers stay default-OFF in `orchestrator/experiment_config.py`, its templates
+stay in the tree and keep rendering in the suite, and no card develops it. The
+closing record names the one later edit that is expected:
+[the grounded-SKIP card](grounded-skip-and-guard-labels.md) retires
+`citation_relevance_version`, and `RecordedExperimentConfig` is
+`extra="forbid"`, so that card drops `citation_relevance_version=1` from the arm
+and the arm keeps importing. The record also points that card at the wording it
+harvests — the SKIP register at
+`agents/strategic/prompts/qwen3_6_27b/vote_ballot_accounts.j2:21` against the
+default's "a SKIP needs neither". No template byte moved here.
+
+**No card reopens the gates.** `tasks/work/` holds seven
+`fresh-deduction-authorization-*` and `fresh-deduction-limits-*` cards
+(`authorization`, `-2`, `-3`, `-4`, `-5`, `limits-4`, `limits-5`) and every one
+of them is `**Status:** done`; none is `ready` or `active`
+(`grep -l '^\*\*Status:\*\* \(ready\|active\)' tasks/work/fresh-deduction-authorization-*.md tasks/work/fresh-deduction-limits-*.md` exits 1 with no output). This card
+opens none, and no sixth authorization or limits card exists.
+
+### What the archive check still checks, and what it no longer does
+
+`test_the_archived_band_keeps_the_blocks_it_was_frozen_with`
+(`tests/experiments/test_held_out_prefixes.py`) replaces
+`test_the_committed_manifest_regenerates_from_its_own_band`. NO LONGER CHECKED:
+that today's generator reproduces those fifty digests — which is what made every
+edit to a `GENERATOR_SOURCES` file owe this band a restamp, twice already
+(`68dfe979` and its correction `72998c7b`, both for one lever's edit to
+`orchestrator/game.py`). What carries that weight instead is the record's own
+`source_sha256`: 22 files by name and digest, so the regeneration stays
+reproducible from a checkout of `72998c7b`, and the generator keeps its coverage
+on the debug seeds 9001-9002, which touch no band. STILL CHECKED: the
+`accepted`, `skipped` and `source_sha256` blocks byte-identical to the bytes
+this band was frozen with, pinned as `_BAND_8000_BLOCKS_AT_88D42F82` (accepted
+`c0e7b0b0…`, skipped `86eba6d1…`) and `_BAND_8000_SOURCES_AT_72998C7B`
+(`9e9ff7b5…`); fifty unique digests over seeds 8000 to 8057 in ascending order
+with `last_accepted_seed` 8057; eight `witnessed_kill` skips and no other
+reason; the source block naming exactly `GENERATOR_SOURCES`; the development
+definitions absent (`test_the_manifest_records_the_development_definitions_as_absent`);
+and no prefix bytes (`test_the_manifest_commits_no_prefix_bytes`).
+
+This card is its own first demonstration: it edits
+`experiments/held_out_prefixes.py`, which is one of the 22 sources, so the
+retired test would have demanded a restamp of a retired band from this very
+branch. It does not, and the archive check is green.
+
+### 2100-2999: a document, not code
+
+Nothing in code stops a future tally, freeze or recording over 2100-2999. That
+band is named in no source file, no constant, no test and no tally range; the
+range guard (`_refuse_a_seed_range_that_touches_a_frozen_band`) refuses only
+`PREREGISTERED_BAND` and the four `CONVERTED_BANDS`, all of which were actually
+frozen. The reservation lives in
+[the retired sixth freeze card](held-out-prefix-freeze-6.md)'s Evidence and in
+the closing records, and a seventh freeze would have to re-run that card's
+census rather than trust it. `PREREGISTERED_BAND` stays 8000-8999, commented to
+say it names the band the archive holds, that no run draws it, and that a
+seventh band needs its own card.
+
+### The two cards disposed of
+
+[The sixth freeze](held-out-prefix-freeze-6.md) is retired unexecuted: title,
+`**Status:** done`, one checked acceptance item stating that no sixth band was
+frozen, and a `## Results` recording the closure, its date and the ruling. Its
+band search stays in Evidence as the document reserving 2100-2999, with the
+paragraph saying that reservation is a document and not code.
+[The v1 retirement](retire-temporal-evidence-v1.md) is re-assessed and NOT
+executed: `**Status:** ready`, every box unchecked, no deletion performed, and
+one dated paragraph in its Evidence recording that the adopting record it waits
+for will not come from this evaluation — the only record the accepted direction
+produces being [the wave's single re-record](process-rerecord.md), whose
+adoption scope is that card's decision.
+
+### Verification
+
+Run in this worktree with `uv sync --frozen` and `npm ci` done first.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 624 passed |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed; 73 work cards, 7 ready / 66 done |
+| `.venv/bin/python scripts/check_doc_facts.py` | passed (doc facts, front door, ml-program, budgets) |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 — every check passed |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh`, whole, exit code captured directly | exit 0 — 8,001 Python tests passed, 20 skipped, 3 xfailed; 515 frontend tests over 19 files; strict mypy clean over 484 sources; ruff, import contracts (4 kept, 0 broken), doc facts, prompt sync and the production build all green |
+| `bash scripts/verify_samples.sh` | exit 0 — all 50 `4p1i` and all 50 `9p2i` canonical samples verified clean |
+| `scripts/build_sample_report.py --sample-dir <set> --check` over `replays/samples/4p1i`, `replays/samples/9p2i`, `replays/ml_corpus/4p1i`, `replays/ml_corpus/9p2i` | 4 of 4 exit 0: each report "is consistent with its replays" |
+
+No live provider call, no calibration, no `--complete`, and the held-out
+generator was run on no band by hand: the `.env` file was never opened.
+
+### Planted failures, applied, run and reverted
+
+| Gate | Plant | Assertion it produced |
+| --- | --- | --- |
+| The closing clause on both live gates | The committed manifest's `## Closure (2026-09-19)` section deleted | `Failed: DID NOT RAISE <class 'experiments.fresh_deduction_instrument.LiveRunNotAuthorized'>` on the run gate and on all three calibration modes; 4 of `TestTheClosingClause`'s 7 cases red, then green again on restore |
+| The same, the other way, committed | `test_the_same_run_is_authorized_against_a_manifest_without_the_section` | The identical invocation passes the whole gate against a copy without the clause, so the refusal is the clause and nothing else |
+| The archive check | `accepted[0].sha256` zeroed in the committed record | `AssertionError: assert 'd101e3d97508…' == 'c0e7b0b048c1…'` |
+| The archive check, the other way | `orchestrator/game.py` (a `GENERATOR_SOURCES` file) appended to | `source digests now stale: ['experiments/held_out_prefixes.py', 'orchestrator/game.py']` and the archive check still green — the restamp obligation is gone |
+| The closed branch of the obligation test | `converted.superseded_by` set to `MANIFEST_PATH` while the record sits there | `AssertionError: manifest.json is the archive at the live path and names 'audits/…/manifest.json' as its replacement; a record that HAS a successor is not the closed state` |
+| `write_manifest` on an archive | `test_write_manifest_refuses_to_regenerate_over_an_archive` (committed, both ways) | `HeldOutPrefixError` matching `ARCHIVED record` over a root holding the archive, bytes unchanged; the same command over a `held_out` record writes it |
+| The two prefix readers | `test_the_archive_reader_refuses_a_set_still_to_be_spent` and `test_the_committed_record_is_the_archive_and_the_live_reader_refuses_it` (committed, both ways) | `FrozenSetMismatch` matching `ARCHIVED record` on a held-out record, and matching `not 'held_out'` on the archive |
+
+Each tree-level plant was applied to the committed file, run, and reverted; the
+suite is green on the restored tree and `git status` shows no stray edit.
+
+### Decision that departs from the card's Expected scope
+
+The card scopes `experiments/fresh_deduction_instrument.py` to "the closure
+clause and its two refusals". One further change was directly necessary and is
+reported rather than hidden. Marking the record `development` makes
+`verify_frozen_set` refuse it, and `run_instrument` called that reader on the
+FAKE path too — so the conversion alone turned 90 offline cases red and broke
+the mechanics check this manifest publishes as reproducible
+(`python -m experiments.fresh_deduction_instrument --dry-run`). The live gate is
+not the thing that needed relaxing, so nothing about it moved: the body of
+`verify_frozen_set` is now shared with a second, separately named reader,
+`verify_archived_set`, which accepts EXACTLY the archived record (status
+`development` plus a `converted` block) and refuses a `held_out` one by name.
+`run_instrument` picks the reader from the provider, so every live path still
+reaches `verify_frozen_set` and is refused twice over — by the closing clause
+and by the status — while the rehearsal, which reaches no provider and renders
+to no model, draws the archive. Neither reader can stand in for the other, and
+both directions are planted. Closing an evaluation stops the spending, not the
+arithmetic that documents what it spent.
+
+### Limitations
+
+- The rehearsal still REGENERATES the archived band's fifty prefixes each time
+  it runs, because no prefix bytes are committed and it needs inputs. That is
+  unchanged from before this card and is not the restamp treadmill: neither
+  reader compares `source_sha256`, so a generator-source edit that leaves the
+  prefixes alone — which is what the substrate wave's `orchestrator/game.py`
+  edits are, per the restamp entry at `6a144038` — keeps every gate green.
+- Nothing in code reserves 2100-2999, as stated above.
+- The closure is enforced on the two authorization gates. A future session that
+  deletes the clause and re-freezes a band reopens the evaluation; that is
+  intended, and it is why the refusal lives in the committed document rather
+  than in a constant nobody reads.
+- No result is re-scored, so every figure this directory publishes keeps the
+  meaning it had, including the fifth run's inconclusive one. Closing an
+  evaluation is not a rejection of its candidate.
+- Delivery states: Implemented and Verified here. Independently reviewed, owner
+  reviewed, merged and adopted are not claimed; adoption is not applicable, as
+  no experiment becomes ON and no adopting record is created.
