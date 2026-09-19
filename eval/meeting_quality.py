@@ -404,6 +404,62 @@ def _parse_suspicion_graph(prompt: str) -> dict[PlayerId, float]:
     }
 
 
+# The voter's own list of the players a ballot may legally name, rendered by
+# every committed vote template under one header and one row shape: backticked
+# ``p-{n}`` ids on the line after it (``vote_ballot.j2``'s
+# ``candidate_targets`` loop, identical in all seven prompt sets). It lands
+# beside :func:`_parse_suspicion_graph` because it is the SAME surface read the
+# same way, and it inherits that block's FROZEN tier note above: an evidence
+# reader over rendered prose, bug fixes only, no new search. The list is what
+# makes the rendered suspicion graph comparable to a recorded ballot —
+# :func:`eval.process_scorecard.compute_process_scorecard`'s argmax row must
+# rank only the targets the voter was actually allowed to name, because a
+# higher row about an already-ejected player is not a choice the voter declined.
+_VALID_TARGET_HEADER: Final[str] = "## Valid ejection targets"
+_VALID_TARGET_ROW_RE: Final[re.Pattern[str]] = re.compile(r"`(?P<pid>p-\d+)`")
+
+
+def _parse_valid_targets(prompt: str) -> frozenset[PlayerId]:
+    """Return the ``p-{n}`` ids a vote prompt lists as legal ballot targets.
+
+    Empty when the prompt carries no valid-target section (a non-vote prompt,
+    or a recording whose template rendered none). The block ends at the next
+    ``## `` header, exactly as the suspicion-graph parse above ends its own.
+    """
+
+    if _VALID_TARGET_HEADER not in prompt:
+        return frozenset()
+    after = prompt.split(_VALID_TARGET_HEADER, 1)[1]
+    block = after.split("## ", 1)[0]
+    return frozenset(
+        match.group("pid") for match in _VALID_TARGET_ROW_RE.finditer(block)
+    )
+
+
+def rendered_valid_targets_by_voter(
+    meeting: MeetingReport,
+) -> dict[PlayerId, frozenset[PlayerId]]:
+    """Each voter's rendered valid-target list, keyed by voter.
+
+    The valid-target twin of :func:`_rendered_suspicion_by_target_per_voter`,
+    and public for the same reason that one is read by name: a second module
+    (:mod:`eval.process_scorecard`) asks the same question of the same recorded
+    prompts, and two parses of one rendered block would be free to disagree.
+    A voter with several recorded calls contributes the UNION of the lists they
+    carried; non-vote prompts contribute nothing, and a voter whose prompts
+    carry no such block is simply absent from the mapping.
+    """
+
+    rendered: dict[PlayerId, frozenset[PlayerId]] = {}
+    for call in meeting.llm_calls:
+        if call.agent_id is None:
+            continue
+        listed = _parse_valid_targets(call.prompt)
+        if listed:
+            rendered[call.agent_id] = rendered.get(call.agent_id, frozenset()) | listed
+    return rendered
+
+
 class MeetingRateReport(BaseModel):
     """Aggregated meeting-rate result (DESIGN.md §11.3; Phase 7 W0.3).
 
@@ -3135,4 +3191,5 @@ __all__ = [
     "decompose_ejection_channels",
     "recorded_contradiction_flags",
     "recount_threshold_inversions",
+    "rendered_valid_targets_by_voter",
 ]
