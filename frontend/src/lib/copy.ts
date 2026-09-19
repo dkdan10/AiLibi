@@ -417,6 +417,16 @@ export const SPECTATOR_COPY = Object.freeze({
     resolutionGateLead: "How the vote resolved",
   }),
 
+  /** One ballot card's private-reasoning block. */
+  ballot: Object.freeze({
+    // The recorded weighing artefact: the other players this voter had in hand
+    // when it chose. "Also weighed" rather than "alternatives considered"
+    // because the list is people, not options, and a viewer should not have to
+    // guess whether an entry is a rejected target or a second accusation.
+    alternativesLabel: "Also weighed",
+    alternativesEmpty: "no alternatives recorded",
+  }),
+
   /** The Replays browser and the Highlights reel. */
   picker: Object.freeze({
     highlightsIntro: "Ordered by the interestingness rubric.",
@@ -445,6 +455,7 @@ export const SPECTATOR_COPY = Object.freeze({
   rubricSpokes: RUBRIC_SPOKES,
 } as const);
 
+export const BALLOT_COPY = SPECTATOR_COPY.ballot;
 export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;

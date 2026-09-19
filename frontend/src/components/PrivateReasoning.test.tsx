@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BallotCard } from "./BallotCard";
 import { MeetingView } from "./MeetingView";
 import { MindInspectorPanel, type MindInspectorPanelProps } from "./MindInspector";
+import { BALLOT_COPY } from "../lib/copy";
 import type { BallotView, MeetingView as MeetingDTO, PlayerView, ReplayView } from "../types/api";
 import type { Perspective } from "../lib/playback";
 
@@ -20,7 +21,18 @@ const players: PlayerView[] = [
   { agent_id: "p-1", display_name: "p-1", role: "IMPOSTOR", color: "#ff0000" },
   { agent_id: "p-2", display_name: "p-2", role: "CREWMATE", color: "#0000ff" },
 ];
-const ballot: BallotView = { voter: "p-1", target: "p-2", confidence: 0.73, primary_reason_id: "private-statement-choice", primary_reason_observation_id: "private-observation-choice", considered_alternatives: [], rationale_text: "I killed them", rationale_text_clean: "I killed them", rewrite_reasons: [] };
+// `considered_alternatives` carries BOTH shapes the recordings and the schema
+// admit: a served player (which renders as a pill) and a value that is not one
+// (which must not). `private-alternative-choice` is also the secret the
+// perspective legs below look for — it appears nowhere else in the fixture, so
+// finding it in the HTML can only mean the alternatives block rendered.
+const ballot: BallotView = { voter: "p-1", target: "p-2", confidence: 0.73, primary_reason_id: "private-statement-choice", primary_reason_observation_id: "private-observation-choice", considered_alternatives: ["p-2", "private-alternative-choice"], rationale_text: "I killed them", rationale_text_clean: "I killed them", rewrite_reasons: [] };
+
+/** The alternatives block's inner markup, so a claim about it cannot be
+ *  satisfied by the pill the card's HEADER already renders for the target. */
+function alternativesBlock(html: string): string {
+  return /<div [^>]*data-ballot-alternatives[^>]*>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? "";
+}
 const meeting: MeetingDTO = {
   meeting_id: "meeting-0", tick: 10, triggered_by: "p-1", trigger_kind: "body",
   outcome: "EJECTED", ejected_player_id: "p-2", turns: [], contradictions: [], llm_calls: [], prompt_versions: {}, total_cost_usd: 0,
@@ -83,15 +95,60 @@ describe("private reasoning perspective", () => {
     expect(html).toContain("p-1");
     expect(html).toContain("p-2");
     expect(html).toContain("Private ballot reasoning");
-    for (const secret of ["I killed them", "0.73", "private-statement-choice", "private-observation-choice"]) expect(html).not.toContain(secret);
+    for (const secret of ["I killed them", "0.73", "private-statement-choice", "private-observation-choice", "private-alternative-choice"]) expect(html).not.toContain(secret);
     expect(html).not.toContain("no rationale recorded");
+    // The whole weighing block, heading included — not just its entries. An
+    // empty "Also weighed" through a foreign lens would still disclose that the
+    // voter weighed nothing, which is itself private reasoning.
+    expect(html).not.toContain(BALLOT_COPY.alternativesLabel);
+    expect(alternativesBlock(html)).toBe("");
   });
   it.each([false, true])("shows reasoning from the voter’s lens or omniscient mode: %s", (omniscient) => {
     state.perspective = { mode: "agent", agentId: omniscient ? "p-2" : "p-1" };
     const html = renderToStaticMarkup(<BallotCard ballot={ballot} players={players} omniscient={omniscient} revealOutcome={false} />);
     expect(html).toContain("I killed them");
     expect(html).toContain("private-observation-choice");
+    expect(html).toContain("private-alternative-choice");
     expect(html).not.toContain("incorrect");
+  });
+  it.each([false, true])("renders every considered alternative in its recorded order, omniscient=%s", (omniscient) => {
+    state.perspective = { mode: "agent", agentId: omniscient ? "p-2" : "p-1" };
+    const html = renderToStaticMarkup(<BallotCard ballot={ballot} players={players} omniscient={omniscient} revealOutcome={false} />);
+    const block = alternativesBlock(html);
+    // One `li` per recorded entry, however many there are, in the recorded
+    // order — the render must not assume today's two-wide lists.
+    expect(block.match(/<li/g)).toHaveLength(2);
+    expect(block.indexOf("p-2")).toBeLessThan(block.indexOf("private-alternative-choice"));
+    // A served player wears the identity pill (its swatch carries the player's
+    // own colour); a value that is not a served player gets a plain token, so an
+    // unknown id — or the literal SKIP the ballot schema also admits — cannot
+    // masquerade as somebody at the table.
+    expect(block).toContain("#0000ff");
+    expect(block.match(/background-color/g)).toHaveLength(1);
+    expect(block).toContain("border-dashed");
+    expect(html).not.toContain(BALLOT_COPY.alternativesEmpty);
+    // The list is NAMED by the label a viewer can see, not by an invisible one.
+    const labelId = /<span id="([^"]+)"[^>]*>Also weighed<\/span>/.exec(block)?.[1];
+    expect(labelId).toBeDefined();
+    expect(block).toContain(`aria-labelledby="${labelId ?? ""}"`);
+  });
+  it.each([["SKIP"], ["p-404"]])("does not dress %s as a player at the table", (entry) => {
+    state.perspective = { mode: "omniscient" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, considered_alternatives: [entry] }} players={players} omniscient revealOutcome={false} />);
+    const block = alternativesBlock(html);
+    expect(block).toContain(entry);
+    expect(block).toContain("border-dashed");
+    expect(block).not.toContain("background-color");
+  });
+  it("says so explicitly when the voter recorded no alternative", () => {
+    state.perspective = { mode: "omniscient" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, considered_alternatives: [] }} players={players} omniscient revealOutcome={false} />);
+    // An empty list is a RECORD — the voter weighed nobody else — so the block
+    // still renders and says that, rather than vanishing and leaving a viewer to
+    // read the absence as "not shown here".
+    expect(html).toContain(BALLOT_COPY.alternativesLabel);
+    expect(html).toContain(BALLOT_COPY.alternativesEmpty);
+    expect(alternativesBlock(html)).not.toContain("<li");
   });
   it("explains redirected votes without presenting the original rationale as the applied choice", () => {
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["under_gate_redirect"] }} players={players} omniscient revealOutcome={false} />);

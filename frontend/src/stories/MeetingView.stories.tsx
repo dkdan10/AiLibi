@@ -83,6 +83,11 @@ function ballot(
   rewrite_reasons: string[] = [],
   // Task 16.7.1: the voter's own-episodic-observation citation, display-only.
   primary_reason_observation_id: string | null = null,
+  // The recorded weighing artefact: who else this voter had in hand. Defaults to
+  // the empty list, which is itself a rendered state ("no alternatives
+  // recorded") rather than an absence — so the stories cover BOTH by passing it
+  // on some ballots and leaving it off on the rest.
+  considered_alternatives: string[] = [],
 ): BallotView {
   return {
     voter,
@@ -90,7 +95,7 @@ function ballot(
     confidence,
     primary_reason_id: null,
     primary_reason_observation_id,
-    considered_alternatives: [],
+    considered_alternatives,
     rationale_text: rationale,
     rewrite_reasons,
     rationale_text_clean: rationale,
@@ -226,7 +231,19 @@ const CHAIN_CONTRADICTIONS: ContradictionView[] = [
 ];
 
 const CHAIN_BALLOTS: BallotView[] = [
-  ballot("p-0", "p-5", 0.72, "The Reactor sighting plus the body location point at p-5."),
+  // The two halves of the weighing block, side by side in one meeting: p-0
+  // weighed two other players before settling on p-5, and every ballot below it
+  // recorded nobody, which renders as the explicit empty line rather than as a
+  // missing row. The shipped recordings carry both shapes.
+  ballot(
+    "p-0",
+    "p-5",
+    0.72,
+    "The Reactor sighting plus the body location point at p-5.",
+    [],
+    null,
+    ["p-8", "p-2"],
+  ),
   ballot("p-1", "SKIP", 0.3, "Not confident enough to eject anyone yet.", [
     "no new evidence",
   ]),
