@@ -1,15 +1,19 @@
-# Freeze a sixth held-out band after the fifth run rendered all of the fifth
+# Retired unexecuted: no sixth held-out band was frozen
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
-A sixth held-out set of fifty proof-free scripted prefixes is frozen and hashed
-from a band preregistered in this card, by a preparer session that will never
-run the evaluation, so a sixth run has inputs nobody has rendered. The fifth
-band's record is marked development in place, the way the first four were, and
-the open-ended debugging range is closed, because one unspent thousand of seeds
-is left. The owner's merge is the freeze.
+RETIRED UNEXECUTED on 2026-09-19. No sixth held-out band was frozen and none
+will be under this card. The evaluation it would have supplied inputs to was
+closed that day by the owner's acceptance of decision D2 of
+[the direction memo](../direction-2026-09-19-process-over-outcome.md), which
+retires the proof-free held-out band as the arena and keeps 2100-2999 unseen.
+The one thing this card was also going to do — mark the fifth band's record
+development in place — was done instead by
+[the closing card](close-deduction-candidate-evaluation.md), which archived it.
+What the card would have delivered is stated below unchanged, so the band
+search that reserved 2100-2999 stays readable.
 
 ## Evidence
 
@@ -78,86 +82,36 @@ accepted 864 / witnessed_kill 136`, reproduced here) and the 53 to 59 draws each
 earlier band took to fill fifty. That leaves 10000-10999 the only unspent
 thousand, which is why the debug range has to close at 9999.
 
-One coupling is load-bearing, the fifth freeze's unchanged: the Inputs row
+**The reservation of 2100-2999 is a document, not code (2026-09-19).** The band
+search above is why this card stays in the tree rather than being deleted: it is
+the record that reserves 2100-2999, and the closing card preserved it on that
+footing. Nothing in code holds the reservation — no constant, no test and no
+tally range names those seeds, and the range guard
+(`experiments/held_out_prefixes.py`) refuses only the five bands that were
+actually frozen. A future tally or freeze over 2100-2999 is therefore stopped by
+nobody but a reader of this paragraph.
+
+One coupling was load-bearing, the fifth freeze's unchanged: the Inputs row
 (`execution-manifest.md:1210`) still binds 8000-8999 after this card, so
-`tests/experiments/test_fresh_deduction_instrument.py:4788` takes its converted
-branch, reads the moved record's `converted.informed` and requires that card to
-be open and to name the live `manifest.json`. A missing file there is a red
-suite, so the limits card has to exist in this tree.
+`test_a_binding_to_a_converted_record_stays_an_open_obligation` would take its
+converted branch, read the moved record's `converted.informed` and require that
+card to be open and to name the live `manifest.json`. That is no longer what
+happens: the closing card archived the 8000-8999 record AT `MANIFEST_PATH` with
+`superseded_by` `null`, and the same test gained a third branch for the closed
+state, which asserts that no live run can start instead of that a re-binding is
+owed. The sixth authorization's limits card was never created and is not needed.
 
 ## Acceptance
 
-- [ ] The preregistered band is seeds 2100 to 2999 drawn ascending; the first
-  fifty prefixes passing the unchanged proof-free filter form the set, every
-  skipped seed carries its reason code, and seed 1, the seven development
-  definitions and the five converted bands' seeds are excluded by construction.
-  Only the band constant, its comment and the converted-band list move, and
-  `size` stays 50, so `planned_units`
-  (`experiments/fresh_deduction_instrument.py:582-585`) is unchanged.
-- [ ] The 8000-8999 record moves to
-  `audits/deduction-candidate/held-out/manifest-band-8000-8999.json` with
-  `git mv`, bytes preserved except `status: development` and a `converted`
-  record whose `date` is 2026-09-16, `pull_request` `#465`, `branch`
-  `work/fresh-deduction-run-5`, `rendered_seeds` all fifty accepted seeds in
-  order, `superseded_by` `MANIFEST_PATH`, and whose `note` names the complete
-  but INCONCLUSIVE result and `tasks/diagnosis-2026-09-18-fifth-run.md`. A test
-  asserts its `accepted` and `skipped` blocks equal the ones frozen at
-  `405d7a8a`: fifty seeds running 8000 to 8057, eight `witnessed_kill` skips, an
-  empty `dependency_restamps.entries`. `rendered_seeds` is derived from that
-  `accepted` block, so a conversion describing a run that rendered seeds this
-  set never held is red: the fifth card's check at full width.
-- [ ] `converted.informed` names the sixth authorization's limits card, expected
-  at `tasks/work/fresh-deduction-limits-6.md`, present and open in the tree this
-  branch merges into, so
-  `test_a_binding_to_a_converted_record_stays_an_open_obligation`
-  (`tests/experiments/test_fresh_deduction_instrument.py:4788`) passes rather
-  than erroring on an unresolvable path. Under a different slug it names the
-  slug that exists; the diagnosis goes in `note`, which the gate reads as a card
-  path.
-- [ ] The 8000-8999 entry is appended to `CONVERTED_BANDS`, not prepended: the
-  3000-3999 entry stays first because `DEFAULT_CALIBRATION_RECORD` is
-  `CONVERTED_BANDS[0].manifest_path`
-  (`experiments/fresh_deduction_instrument.py:7474`). `PREREGISTERED_BAND` moves
-  to 2100-2999 and the range guard
-  (`experiments/held_out_prefixes.py:1187-1230`) then refuses five converted
-  bands and the live one; it reads intervals, not order, so 4000-4999 still
-  tallies with the live band below it.
-- [ ] The new record is written to `MANIFEST_PATH` by the unchanged
-  `build_manifest` (status `held_out`, `dependency_restamps` empty, the seven
-  development definitions and all five converted bands' digests asserted
-  absent), so `verify_frozen_set`
-  (`experiments/fresh_deduction_instrument.py:3091`, status check `:3116`, band
-  check `:3146`) and the regeneration test cover the new band unchanged.
-- [ ] `assert_manifest_binds_the_live_band`'s docstring
-  (`experiments/fresh_deduction_instrument.py:1094-1110`) names 8000-8999 and
-  2026-09-16 alongside the four earlier conversions, which is what
-  `test_the_gate_says_which_bands_actually_moved`
-  (`tests/experiments/test_fresh_deduction_instrument.py:1513`) reads out of
-  `CONVERTED_BANDS` and each record's `converted.date`. No constant, no
-  behaviour and no `GENERATOR_SOURCES` file moves with it.
-- [ ] The debugging range is closed to seeds 1-50 and 9001-9999, in the
-  `PREREGISTERED_BAND` comment and the module docstring of
-  `tests/experiments/test_held_out_prefixes.py`, because 10000-10999 is the only
-  unspent thousand a seventh freeze can draw. A test asserts `_DEBUG_SEEDS`
-  (`:68`) and the widest debug walk (`:1196`, 9001-9100) lie inside it and that
-  9001-9999 intersects no band.
-- [ ] The band's skip split is re-read off the published skips, not carried
-  forward: `_reporter_witnessed_seed_one_prefix`'s docstring
-  (`tests/experiments/test_held_out_prefixes.py:154-162`) states this band's
-  reporter and bystander counts from `--skip-roles manifest`, and says a band's
-  split is a small sample.
-- [ ] No prefix bytes are committed; the preparer inspects no generated prefix
-  beyond the automated filter and hash computation, runs no arm and makes no
-  provider call, and debugs on seeds 1-50 and 9001-9999 only.
-- [ ] `audits/deduction-candidate/README.md` indexes all six records, and the
-  `audits/` row (`docs/artifacts.md:109`, today 25,974,591 tracked bytes / 324
-  files) is recomputed with them staged; `scripts/verify_ml_evidence.py` passes
-  offline.
-- [ ] Every acceptance item that adds a gate has a planted failure showing it
-  detects the defect it claims to, applied to the tree, run, and reverted.
-- [ ] Results states the accepted and skipped counts, the reason histogram, the
-  last accepted seed, the record's sha256 and byte size, and the two commands
-  (`--tally FIRST LAST` out of band, `--skip-roles manifest`).
+- [x] No sixth held-out band was frozen under this card, and none will be: the
+  evaluation it prepared inputs for was closed on 2026-09-19 by the owner's
+  acceptance of decisions D1, D2 and D8 of
+  [the direction memo](../direction-2026-09-19-process-over-outcome.md), so the
+  card is retired unexecuted. No prefix was generated, no seed of 2100-2999 was
+  walked, no record under `audits/deduction-candidate/held-out/` was written by
+  it, and no provider was reached. The items this card carried before are in the
+  repository history; the band search in Evidence stays as the document
+  reserving 2100-2999.
 
 ## Constraints
 
@@ -240,3 +194,44 @@ scripts/validate_task_docs.py`, `uv run python scripts/check_doc_facts.py`,
 `bash scripts/check.sh` run whole, in a clean worktree, so no gate after the
 first failure is masked. Never the live evaluation, and never the generator on
 a band.
+
+## Results
+
+**Retired unexecuted, 2026-09-19.** Nothing in this card ran. The owner
+accepted decisions D1 to D8 of
+[the direction memo of 2026-09-19](../direction-2026-09-19-process-over-outcome.md)
+as a set that date, with the rulings in its section 12. D2 retires the
+proof-free held-out band as the arena and keeps 2100-2999 unseen, which leaves
+this card with nothing to prepare: a sixth band would be inputs for a sixth run
+that the same ruling forbids. The retirement was carried out by
+[the closing card](close-deduction-candidate-evaluation.md) in the same wave,
+which is also where the verification evidence for it lives.
+
+**What was and was not done.** No prefix was generated. No seed of 2100-2999
+was walked, by the tally command or by anything else, so the band is as unseen
+as it was when this card reserved it. `PREREGISTERED_BAND` still names
+8000-8999 — the band the archived record holds — and 2100-2999 appears in no
+constant, no test and no tally range; the reservation is this document and
+nothing more, which the paragraph in Evidence says out loud. `CONVERTED_BANDS`
+gained no entry, because the fifth band's record was archived in place at
+`MANIFEST_PATH` rather than moved beside the four that a freeze displaced.
+
+**The one item that was delivered elsewhere.** This card would also have marked
+the 8000-8999 record development. The closing card did that instead, in place
+and with the same facts the acceptance item above described — date 2026-09-16,
+pull request `#465`, branch `work/fresh-deduction-run-5`, all fifty rendered
+seeds — with two differences that follow from the closure: the record keeps the
+path `audits/deduction-candidate/held-out/manifest.json` because nothing
+replaced it, and its `superseded_by` is `null` rather than a successor's path.
+`converted.informed` names the closing card, which exists and is in the tree.
+
+**Delivery states.** Implemented: not applicable — no implementation exists.
+Verified: not applicable. Merged: this retirement merges with the closing card's
+pull request. Adopted: not applicable; no experiment and no adopting record is
+involved, and no lever moved.
+
+**Limitation.** Nothing in code stops a future tally, freeze or recording over
+2100-2999. The range guard refuses only the five bands that were actually
+frozen, and a seventh freeze would have to re-run the census in Evidence rather
+than trusting it: this document is nearly a year of commits away from whatever
+tree reads it next.
