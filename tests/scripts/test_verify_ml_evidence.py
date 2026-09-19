@@ -159,6 +159,11 @@ def _availability_tree(root: Path) -> None:
         vme.COMPOSED_DIR,
         "audits",
         "docs/media",
+        # The process scorecard's row probes the PAIR, so both files are linked:
+        # a tree holding one of them would make the row read MISSING for a
+        # reason this scratch tree is not about.
+        "docs/process-scorecard.md",
+        "docs/process-scorecard.json",
         "design/phase-12",
         "experiments/lab",
         "experiments/model_probe",

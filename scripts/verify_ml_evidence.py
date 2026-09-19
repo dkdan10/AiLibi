@@ -2786,6 +2786,12 @@ _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
     "training/reports/_finalist_eval_raw/MANIFEST.md": (SLATE_MANIFEST,),
     "audits/": ("audits",),
     "docs/media/": ("docs/media",),
+    # Two files, both named: the pair is the row, and a probe on one of them
+    # would leave the other's deletion to the inventory leg alone.
+    "docs/process-scorecard.md": (
+        "docs/process-scorecard.md",
+        "docs/process-scorecard.json",
+    ),
     "design/phase-12/": ("design/phase-12",),
     "experiments/lab/": ("experiments/lab", "experiments/model_probe"),
     "replays/*.jsonl": (),
@@ -2843,6 +2849,10 @@ _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = 
     "training/reports/_finalist_eval_raw/MANIFEST.md": ((SLATE_MANIFEST,), ()),
     "audits/": (("audits",), ()),
     "docs/media/": (("docs/media",), ()),
+    "docs/process-scorecard.md": (
+        ("docs/process-scorecard.md", "docs/process-scorecard.json"),
+        (),
+    ),
     "design/phase-12/": (("design/phase-12",), ()),
     "experiments/lab/": (("experiments/lab", "experiments/model_probe"), ()),
 }
