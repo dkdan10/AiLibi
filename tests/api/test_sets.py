@@ -490,19 +490,58 @@ def test_set_fingerprints_compare_by_exact_equality() -> None:
     assert _rubric_is_stale("1e48c40", real) is True
 
 
+def _assert_opens_on_role_proof(
+    registry: SetLoaderRegistry, set_name: str, seed: int
+) -> None:
+    """The featured-head criterion, asserted against the SERVED replay.
+
+    A tour opener has to show a table that established something, so the head's
+    FIRST meeting — the one the viewer's auto-follow opens — must eject a player
+    who carries a ``role_proof`` flag naming them in that same meeting.
+    ``role_proof`` is the derived category for a grounded vent sighting; the
+    other categories are two accounts that cannot both be true, which the alibi
+    envelope manufactures against honest movers, so "any flag" is the wrong band
+    to open a demo on.
+
+    Deliberately re-implemented rather than imported from
+    ``scripts/measure_featured_criterion.py``: the script MEASURES the bands over
+    every committed game and this PINS the one game the strip leads with, and two
+    independent readings of the same bytes is the point — the same discipline the
+    evidence taxonomy's API-side and eval-side twins follow.
+    """
+
+    replay = registry.get(set_name).load_replay(f"headless-seed-{seed}")
+    first = replay.meetings[0]
+    assert first.outcome == "EJECTED", (set_name, seed, first.outcome)
+    ejected = first.ejected_player_id
+    assert ejected is not None, (set_name, seed)
+    assert any(
+        flag.category == "role_proof" and ejected in flag.subjects
+        for flag in first.contradictions
+    ), (set_name, seed, [(f.kind, f.category, f.subjects) for f in first.contradictions])
+    roles = {player.agent_id: player.role for player in replay.players}
+    assert roles[ejected] == "IMPOSTOR", (set_name, seed, ejected, roles[ejected])
+
+
 def test_featured_seeds_exist_in_their_committed_sets() -> None:
     # The curated featured list is committed DATA (frontend/src/components/
     # ReplayPicker.tsx: FEATURED_GAMES) — the audits' named good tail, each with a
     # hand-written why-watch line. Its one drift risk is a seed the served set does
-    # not carry, which would render as a dead entry; pin that here. The ORDER is
-    # editorial and deliberately unpinned — the rubric does not validate it.
+    # not carry, which would render as a dead entry; pin that here.
+    #
+    # WHICH games are featured stays editorial. The ORDER's head no longer is: it
+    # is a measured property of the recordings, so this pins the CRITERION and not
+    # merely a seed — when the next re-record replaces the bytes, a head that
+    # stopped satisfying it fails here instead of shipping a tour that opens on a
+    # table which established nothing. Reproduce the bands the criterion selects
+    # from with `uv run python scripts/measure_featured_criterion.py`.
     featured = _parse_featured_games()
     assert {game[0] for game in featured} == {"4p1i", "9p2i"}
     # Re-curated against the baseline-7 bytes: every earlier blurb described a
     # game the record changed (audits/audit-phase-20-baseline-7.md §4), so the
     # list was re-read rather than re-scored. Baseline 6 featured 9p2i {2, 8, 17,
     # 23} and 4p1i {2, 29, 41}.
-    assert featured[0] == ("9p2i", 2)  # the tour's landing game (the curated head)
+    assert featured[0] == ("9p2i", 23)  # the tour's landing game (the curated head)
     assert {seed for set_name, seed in featured if set_name == "9p2i"} == {
         2,
         13,
@@ -514,6 +553,36 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     for set_name, seed in featured:
         loader = registry.get(set_name)
         assert any(meta.seed == seed for meta in loader.list_replays())
+    _assert_opens_on_role_proof(registry, *featured[0])
+
+
+@pytest.mark.parametrize(
+    "seed,why",
+    [
+        (2, "no ejection anywhere in the game"),
+        (13, "the first meeting skips"),
+        (46, "the first meeting skips"),
+        (44, "the first meeting ejects an impostor, but on NO flag"),
+        (12, "the first meeting ejects on a flag that is not role proof"),
+    ],
+)
+def test_featured_head_criterion_rejects_a_head_that_establishes_nothing(
+    seed: int, why: str
+) -> None:
+    # THE PLANTED CASES for the pin above. A criterion nobody can fail is a
+    # sentence, not a gate, so each of these is a real committed 9p2i game that
+    # the criterion must reject, named with the reason it fails.
+    #
+    # Seeds 44 and 12 are the ones that give the rule its teeth: both eject in
+    # their FIRST meeting, and 44 even ejects an impostor — so a pin that checked
+    # only "the head ejects" or "the head ejects correctly" would wave them
+    # through. Only the role-proof clause bites. (The card named seed 46 as the
+    # "ejects on no flag" case; measured, 46's first meeting SKIPS, so it is kept
+    # here for the reason it actually fails and 44 and 12 were added for the one
+    # it was reaching for.)
+    registry = SetLoaderRegistry(_PARENT)
+    with pytest.raises(AssertionError):
+        _assert_opens_on_role_proof(registry, "9p2i", seed)
 
 
 def test_featured_seed_13_card_states_the_served_turn_shape() -> None:

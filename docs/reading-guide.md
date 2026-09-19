@@ -59,8 +59,10 @@ bash scripts/run_spectator.sh  # API + UI, opens http://localhost:5173
 ```
 
 The served default is the 9-player, 2-impostor set, the one with meetings and
-suspicion arcs; the 4-player set is a fast fixture of short games. The curated
-list the guided tour opens is hand-picked, not scored, and spoiler-free.
+suspicion arcs; the 4-player set is a fast fixture of short games. Which games
+the guided tour can open is hand-picked, not scored, and spoiler-free; the
+order is measured, and leads with the evidence the tour opens on — a first
+meeting that ejects a player a reported vent sighting names.
 
 Open **Results & cases** for three source-bound examples, with analysis hidden
 until requested. **9p2i seed 23**, meeting 0: p-5's cited vent observation is

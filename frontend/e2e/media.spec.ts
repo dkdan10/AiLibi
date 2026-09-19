@@ -68,7 +68,10 @@ const BUILD_TIMEOUT_MS = 300_000;
  * The moment the hero pictures, chosen from the recorded corpus this repository
  * ships and re-checked against those bytes below.
  *
- * 9p2i seed 2 is the head of the featured strip. At tick 5 the omniscient map
+ * 9p2i seed 2 is a featured game — the strip's last 9p2i entry since the order
+ * became a measured property of the recordings (ReplayPicker.tsx above
+ * FEATURED_GAMES); this capture names its game id directly and does not read the
+ * strip. At tick 5 the omniscient map
  * carries two bodies and both impostors: one standing over the player it has
  * just killed, the other already a room away from the body that will trigger the
  * meeting. The fog subject saw none of it, and then spent the meeting accusing a
