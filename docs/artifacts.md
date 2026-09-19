@@ -108,6 +108,7 @@ than its output preserved.
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
 | `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,522,872 tracked bytes / 328 files |
 | `docs/media/` — the README captures, their provenance, and the as-built architecture picture | (a) | in git | 1.4 MB / 7 files |
+| `docs/process-scorecard.md` + `docs/process-scorecard.json` — the nine-row process scorecard, folded from the committed recordings with no model call: the flattened measurement rows a spectator surface's cells will be read from, and the markdown that publishes them. `scripts/publish_process_scorecard.py --check` pins both against a recomputation, so the size states files and not bytes — a re-record rewrites the numbers without touching this row | (b) | in git | 2 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
