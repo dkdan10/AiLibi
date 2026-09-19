@@ -1,6 +1,6 @@
 # Open the spectator tour on a grounded game and show considered alternatives
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -102,21 +102,21 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
 
 ## Acceptance
 
-- [ ] The criterion is written into the comment above `FEATURED_GAMES`
+- [x] The criterion is written into the comment above `FEATURED_GAMES`
   (`ReplayPicker.tsx:90-93`): the strip is still hand-picked, and the ORDER now
   leads with a game whose first meeting ejects on a `role_proof` flag naming
   the ejected player. One offline command, counts only and no provider call,
   reproduces both bands, the eligible-opener counts (32 of 50 and 19 of 50) and
   the one 9p2i game with neither a flag nor an ejection (seed 2); its output is
   quoted in Results.
-- [ ] `FEATURED_GAMES` is reordered to `9p2i` 23, 13, 46, 2 and `4p1i` 2, 11,
+- [x] `FEATURED_GAMES` is reordered to `9p2i` 23, 13, 46, 2 and `4p1i` 2, 11,
   29. The seven `(set, seed)` pairs are unchanged, so every featured game stays
   a committed recording and `scripts/check_doc_facts.py:4739` keeps resolving.
   Each entry keeps its two-line `set:` then `seed:` shape, one `{` per entry,
   and one double-quoted `label:` literal: `test_sets.py:64-65` and
   `build_demo_bundle.py:213-228` parse those shapes literally, and a
   reformatted entry desynchronises the label zip silently.
-- [ ] The two lead captions name the evidence, not the outcome. `9p2i` 23:
+- [x] The two lead captions name the evidence, not the outcome. `9p2i` 23:
   "Four meetings, twenty-six spoken turns. A player reports seeing someone use
   a vent, and the meeting files that apart from one account merely
   contradicting another. Read which each ballot cites, and who else its voter
@@ -125,14 +125,14 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
   Both keep a countable claim in `_assert_featured_counts`'s vocabulary
   (`test_sets.py:563-575`), name no player and no ending, and carry none of the
   banned tokens at `:432-444` or `:598-604`. The other five are unchanged.
-- [ ] The head pin becomes a criterion pin.
+- [x] The head pin becomes a criterion pin.
   `test_featured_seeds_exist_in_their_committed_sets` (`test_sets.py:493`)
   asserts the 9p2i head is `("9p2i", 23)` AND, through the set loader, that the
   head's first meeting is `EJECTED` with a `role_proof` flag naming the ejected
   player whose role is `IMPOSTOR`. Planted, each red before and green after:
   the head at seed 2 (no ejection), at 46 (ejects on no flag), at 13 (first
   meeting SKIPs).
-- [ ] The journey keeps both evidence directions.
+- [x] The journey keeps both evidence directions.
   `frontend/e2e/journey.spec.ts:549-594` stops hardcoding seed 2 as the head
   and opens the featured card whose pill reads exactly `seed 2` (an exact-text
   match, because `seed 2` is a prefix of `seed 23`), asserting the zero-flag
@@ -140,7 +140,7 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
   flagged head; both planted mismatches stay constructed against a real
   rendered meeting. Running the suite before and after the picker change is the
   evidence that the branch moved.
-- [ ] `BallotCard` renders the alternatives behind `privateVisible`, between
+- [x] `BallotCard` renders the alternatives behind `privateVisible`, between
   the citation row (`BallotCard.tsx:149-152`) and the redirect disclosure
   (`:154-156`): a `ul` named by its visible label, one `li` per entry, reusing
   `PlayerPill` (`:49-66`) for an entry matching a served player and a plain
@@ -152,7 +152,7 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
   (`frontend/src/lib/copy.ts:415-418`) and carry no dialect, so `copy.test.ts`
   covers them through its value leg and its disk leg over `BallotCard.tsx`
   (`frontend/src/lib/copy.test.ts:55`). Colours come from `tokens.ts` only.
-- [ ] Vitest covers the gate and the shapes in
+- [x] Vitest covers the gate and the shapes in
   `frontend/src/components/PrivateReasoning.test.tsx`, beside the existing
   ballot cases. Planted, red before and green after: an alternative id is
   absent through another agent's lens (extending the secret list at `:86`),
@@ -163,7 +163,7 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
   `considered_alternatives: []` (`:93`), so it gains an optional parameter
   defaulting to the empty list, and the meeting story gains one ballot with two
   alternatives beside one with none.
-- [ ] `docs/reading-guide.md:63` is rewritten IN PLACE to say the curated list
+- [x] `docs/reading-guide.md:63` is rewritten IN PLACE to say the curated list
   is hand-picked and that its order leads with the evidence the tour opens on.
   The page has 47 words of headroom under its 1,350-word ceiling
   (`check_doc_facts.py:889-894`; `wc -w docs/reading-guide.md` reads 1,303 at
@@ -268,3 +268,231 @@ recordings still load and verify. `wc -w docs/reading-guide.md` against the
 `bash scripts/check.sh` to the end rather than to the first gate, because
 `set -e` masks later gates. Do not run a live evaluation, a calibration, the
 held-out generator, or any provider call as a check.
+
+## Results
+
+Delivered on `work/spectator-tour-and-alternatives`. Both halves are
+viewer-only: no file under `engine/`, `agents/`, `meetings/`, `orchestrator/`,
+`llm/`, `experiments/`, `training/` or `eval/` is touched, no DTO field, schema
+or loader mapping moves, no prompt family is touched (so the version-bump
+cascade does not apply), and no recording, report, `audits/` or
+`tests/fixtures/` byte changes — which is why no `docs/artifacts.md` inventory
+row is recomputed. No live provider call, no recording, no re-record, no
+held-out generation; band 2100-2999 stays unseen.
+
+### The criterion, and the command that reproduces it
+
+The criterion is now a committed instrument rather than a sentence:
+`scripts/measure_featured_criterion.py` reads the committed recordings through
+the same `SetLoaderRegistry` the spectator API serves them with and prints
+counts only. It names the same `role_proof` category
+`api.schemas.classify_evidence` derives (the rule table at `api/schemas.py`
+:844-852), for the reason the card's Evidence section gives: the other
+categories are two accounts that cannot both be true, and the direction memo's
+section 5 shows the alibi envelope manufactures those against honest movers.
+
+```
+$ uv run python scripts/measure_featured_criterion.py
+replays/samples/4p1i — 50 games
+  ejections, by the band of the ejected player in that meeting
+    role_proof flag   19 ejections  19 role-correct
+    other flag         0 ejections   0 role-correct
+    no flag            5 ejections   1 role-correct
+  first meeting ejects on a role_proof flag: 19 of 50 games
+  no flag and no ejection anywhere: seeds [0, 3, 5, 7, 8, 9, 10, 12, 15, 17, 21, 22, 23, 24, 25, 28, 30, 31, 34, 35, 36, 37, 38, 43, 44, 45]
+replays/samples/9p2i — 50 games
+  ejections, by the band of the ejected player in that meeting
+    role_proof flag   68 ejections  68 role-correct
+    other flag         7 ejections   1 role-correct
+    no flag           20 ejections  13 role-correct
+  first meeting ejects on a role_proof flag: 32 of 50 games
+  no flag and no ejection anywhere: seeds [2]
+```
+
+Every figure the card asserts reproduces to the digit: the three 9p2i bands
+(68/68, 7/1, 20/13), the 4p1i proof band (19/19) and its flagless band (1 of
+5), both eligible-opener counts (32 of 50 and 19 of 50), and seed 2 as the one
+9p2i game that records neither a flag nor an ejection anywhere.
+
+### Decisions
+
+1. **The order is measured; the membership stays editorial.** The comment above
+   `FEATURED_GAMES` now says both in as many words and cites the command. The
+   seven `(set, seed)` pairs are unchanged, so every featured game is still a
+   committed recording, `scripts/check_doc_facts.py:4739` keeps resolving, and
+   each entry keeps its two-line `set:` then `seed:` shape with one `{` and one
+   double-quoted `label:` — the shapes `tests/api/test_sets.py:64-65` and
+   `scripts/build_demo_bundle.py:213-228` parse literally.
+2. **The pin asserts the criterion, not a seed.**
+   `_assert_opens_on_role_proof` in `tests/api/test_sets.py` loads the head
+   through the set loader and requires its FIRST meeting to be `EJECTED`, the
+   ejected player to carry a `role_proof` flag naming them in that same
+   meeting, and that player's role to be `IMPOSTOR`. It deliberately
+   re-implements the predicate rather than importing the script's, in the same
+   idiom the evidence taxonomy uses for its API-side and eval-side twins
+   (`api/schemas.py` :840-852 against `eval/deduction_metrics.classify_flag`):
+   two independent readings of the same bytes are the evidence, and an import
+   would make them one. `Record impact` calls for exactly this, so the
+   re-record re-chooses the head instead of silently keeping it.
+3. **The alternatives block is private-class and stacked, not inline.** It sits
+   between the citation row and the redirect disclosure, behind the same
+   `privateVisible` gate as the confidence bar, the citations and the rationale
+   — `design/phase-12/stage-0-understand.md:91` records `considered_alternatives`
+   as post-hoc and never shown to agents, and an impostor's list can expose
+   whether it weighed its teammate. It is a labelled block with a `ul` rather
+   than a chip row precisely so the substrate wave can stack on it: the
+   grounded-SKIP card's meeting-written grounding label goes beside the heading,
+   and the weighing card's counter-evidence link beside the two citation links
+   above. A `data-ballot-alternatives` hook marks the block so a test can make a
+   claim about it that the header's own target pill cannot satisfy.
+4. **A served player wears the identity pill; nothing else may.**
+   `AlternativeEntry` reuses `PlayerPill` only when the entry matches a served
+   `agent_id`, and renders a dashed mono token otherwise, so an id no longer in
+   the game or the literal `SKIP` the ballot schema also admits
+   (`tests/api/test_schemas.py:297`) cannot read as somebody at the table.
+   Recorded order is preserved and the length is not assumed: the list wraps.
+5. **An empty list is a record, not an absence.** It renders
+   "no alternatives recorded" in the idiom of the existing "no rationale
+   recorded" line, so a viewer reads "this voter weighed nobody else" rather
+   than "not shown here". Both strings live in `SPECTATOR_COPY.ballot` beside
+   the meeting group, so `copy.test.ts` covers them through its value leg, and
+   `BallotCard.tsx` stays clean for its disk leg.
+6. **The journey keeps both evidence directions.** `openFeaturedReplay` now
+   takes an optional seed matched on the pill's EXACT text — exact because
+   `seed 2` is a prefix of `seed 23` — and the planted-failure test opens seed 2
+   by name instead of assuming it is the head. The main leg now takes the `else`
+   branch on the flagged head; the planted case still walks the `if` branch and
+   constructs both mismatches against a real rendered meeting. The bundle
+   journey reads the seed off the card and needed no change.
+
+### Corrections to the card, recorded rather than silently absorbed
+
+* The card's third planted head, seed 46, is described as "ejects on no flag".
+  Measured, 9p2i seed 46's FIRST meeting SKIPS, so it fails the criterion for
+  the same reason seed 13 does. It is kept as a planted case for the reason it
+  actually fails, and seeds 44 and 12 were added for the one the card was
+  reaching for: 44's first meeting ejects an impostor on NO flag, 12's ejects a
+  crewmate on a flag that is not role proof. Those two are what give the
+  role-proof clause its teeth — a pin checking only "the head ejects", or even
+  "the head ejects correctly", would wave seed 44 through.
+* The card cites `docs/reading-guide.md:66` as already naming seed 23's meeting
+  0. It does, and the sentence rewritten in place is the one at `:62-63`
+  (`:63` in the card's numbering) about the curated list, as the acceptance item
+  specifies. No other sentence on that page moved.
+
+### Verification
+
+Run at the tip of this branch with the fake provider and no network.
+
+| command | result |
+| --- | --- |
+| `uv run python scripts/measure_featured_criterion.py` | exit 0, output quoted above |
+| `bash scripts/verify_samples.sh` | exit 0 — 50 + 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | exit 0 for `replays/samples/{9p2i,4p1i}` and `replays/ml_corpus/{9p2i,4p1i}`: each report consistent with its replays |
+| `uv run python scripts/check_doc_facts.py` | exit 0 — doc facts, front door, `docs/ml-program.md` and the 4 word budgets all verified |
+| `uv run python scripts/verify_ml_evidence.py` | exit 0 — 60 checks, 48 OK, 0 FAIL, 7 expected EVIDENCE-BRANCH-ABSENT, 5 INFO. Never run with `--complete`. |
+| `wc -w docs/reading-guide.md` | 1,329 against the 1,350 ceiling (1,303 at HEAD; the swap spends 26 of the 47 words of headroom) |
+
+The rest is recorded in the dated subsection below, which carries the full-gate
+and end-to-end counts.
+
+### Limitations
+
+* The criterion ranks games by the one evidence channel that demonstrably
+  works. It is not a claim that the other bands are worthless — the flagless
+  band is 13 of 20 role-correct on 9p2i, above chance — only that a tour should
+  not OPEN on a table that established nothing.
+* The strip's membership is still hand-picked and unmeasured. Only the head of
+  each set carries the criterion; the remaining five entries are editorial, and
+  the pin says so.
+* The alternatives render shows WHO a voter weighed, not WHY or how much. The
+  recorded field carries no weight, no order semantics and no reason, and this
+  card adds none: the weighing channel proper is
+  [the weighing card](ballot-weighing-channel.md).
+* The demo bundle already bakes every ballot field (accepted limitation G5-5 in
+  `audits/review-2026-09-06/REVIEW_APPENDIX_FOLLOWUP.md`); rendering the field
+  neither widens that nor narrows it.
+* A merge to `main` republishes the public bundle
+  (`.github/workflows/pages.yml`, AGENTS.md:21-26). The consequence is bounded —
+  the same seven games baked in a different order, two rewritten captions, and
+  a block visible only to a privileged lens — but it is a publication, and the
+  pull request states the copy that goes live. Task completion authorizes no
+  deployment beyond that standing publication.
+
+### 2026-09-19 — planted failures and the full gate
+
+**Planted failure 1: the ballot render.** The committed vitest cases are only
+worth something if the component can fail them, so the alternatives block was
+deleted from `BallotCard.tsx`, the suite run, and the block restored:
+
+```
+$ cd frontend && npx vitest run src/components/PrivateReasoning.test.tsx   # block removed
+ × shows reasoning from the voter's lens or omniscient mode: false
+ × shows reasoning from the voter's lens or omniscient mode: true
+ × renders every considered alternative in its recorded order, omniscient=false
+ × renders every considered alternative in its recorded order, omniscient=true
+ × does not dress SKIP as a player at the table
+ × does not dress p-404 as a player at the table
+ × says so explicitly when the voter recorded no alternative
+      Tests  7 failed | 18 passed (25)
+$ cd frontend && npx vitest run src/components/PrivateReasoning.test.tsx   # restored
+      Tests  25 passed (25)
+```
+
+**Planted failure 2: the head criterion, committed.**
+`test_featured_head_criterion_rejects_a_head_that_establishes_nothing` applies
+`_assert_opens_on_role_proof` to five real committed 9p2i games and requires
+each to raise: seed 2 (no ejection anywhere), 13 and 46 (the first meeting
+skips), 44 (the first meeting ejects an IMPOSTOR, but on no flag) and 12 (the
+first meeting ejects on a flag that is not role proof). It runs on every gate.
+
+**Planted failure 3: the head criterion, live.** The committed test proves the
+predicate bites; this proves the PIN does. The picker's `FEATURED_GAMES` order
+was re-pointed at each of the card's three named seeds — with the seed literal
+moved alongside it, so the criterion clause rather than the equality above it is
+what fails — the test run, and both files restored:
+
+```
+$ uv run pytest tests/api/test_sets.py::test_featured_seeds_exist_in_their_committed_sets -q
+# head planted at 9p2i seed 2
+E       AssertionError: ('9p2i', 2, 'SKIPPED')
+E       assert 'SKIPPED' == 'EJECTED'
+# head planted at 9p2i seed 46
+E       AssertionError: ('9p2i', 46, 'SKIPPED')
+E       assert 'SKIPPED' == 'EJECTED'
+# head planted at 9p2i seed 13
+E       AssertionError: ('9p2i', 13, 'SKIPPED')
+E       assert 'SKIPPED' == 'EJECTED'
+$ uv run pytest tests/api/test_sets.py -q   # both files restored
+45 passed
+```
+
+Each of the three is red before and green after. Seed 46 fails as a
+first-meeting SKIP rather than as the card's "ejects on no flag"; seeds 44 and
+12 in planted failure 2 cover that case, as the correction above records.
+
+**The end-to-end suite.** `cd frontend && npm run e2e` — exit 0, 13 passed and
+3 skipped of 16 (the three skips are the `media.spec.ts` README captures, which
+need `AILIBI_CAPTURE_MEDIA=1` and write into the repository). Both evidence
+directions ran: the main leg's requests now load `headless-seed-23` and take the
+"has evidence" branch, while the evidence-guard case opens `seed 2` by exact
+pill text and walks the "no evidence" branch. The bundle and evidence specs
+passed unchanged.
+
+**The full gate.** `bash scripts/check.sh` — exit 0, captured directly rather
+than through a pipe. 514 files formatted clean, import-linter clean, task docs
+validated (390 historical phase tasks and 390 prompts, 73 work cards), prompts
+in sync, `mypy` clean over 485 source files, **7,992 Python tests passed** with
+20 skipped and 3 xfailed in 214.93s, then the four frontend legs: lint, three
+typecheck projects, **522 frontend tests passed** across 19 files, and the
+production build. The first run of the gate failed on one `ruff format` hunk in
+`tests/api/test_sets.py` and nothing else; the reformat is its own commit and
+the rerun above is the green one.
+
+**Record impact, confirmed rather than asserted.** No recorded bytes moved:
+`git diff --stat origin/main...HEAD` touches only `docs/reading-guide.md`, four
+files under `frontend/src/`, two under `frontend/e2e/`,
+`scripts/measure_featured_criterion.py`, `tasks/README.md`,
+`tests/api/test_sets.py` and this card. No `audits/` or `tests/fixtures/` byte
+changed, so no `docs/artifacts.md` inventory row is recomputed; the frozen
+held-out manifest is untouched and band 2100-2999 stays unseen.
