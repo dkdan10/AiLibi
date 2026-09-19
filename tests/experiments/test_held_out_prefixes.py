@@ -1372,6 +1372,68 @@ def test_write_manifest_refuses_to_regenerate_over_an_archive(tmp_path: Path) ->
     assert "converted" not in rewritten
 
 
+def _planted_shapes() -> tuple[tuple[str, str, str], ...]:
+    """Shapes at ``MANIFEST_PATH`` that are not a live freeze, and their stops.
+
+    Each is a file the freeze command would have silently replaced while the
+    guard read the ``converted`` key alone: the first is development data whose
+    block was dropped — one edit away from the committed archive, and the
+    digests it destroys are the ones the fifth run spent; the second is a JSON
+    document that is not an object; the third is not JSON at all, and used to
+    come back as a bare ``JSONDecodeError`` where the stop rule promises a
+    refusal that says what is in the file.
+    """
+
+    archived = json.loads((REPO_ROOT / MANIFEST_PATH).read_text(encoding="utf-8"))
+    assert archived["status"] == "development" and "converted" in archived
+    development = dict(archived)
+    del development["converted"]
+    return (
+        (
+            "development data with no block",
+            json.dumps(development, indent=2, sort_keys=True) + "\n",
+            "marked 'development', not 'held_out'",
+        ),
+        ("a JSON list", json.dumps([1, 2, 3]), "holds a JSON list, not an object"),
+        ("not JSON at all", "{not json", "is not readable JSON"),
+    )
+
+
+#: Read once, at import: the committed archive is on disk and the three shapes
+#: below are derived from it rather than copied out of it by hand.
+_PLANTED_SHAPES: tuple[tuple[str, str, str], ...] = _planted_shapes()
+
+
+@pytest.mark.parametrize(
+    ("shape", "text", "expected"),
+    _PLANTED_SHAPES,
+    ids=[shape for shape, _, _ in _PLANTED_SHAPES],
+)
+def test_write_manifest_refuses_every_shape_that_is_not_a_freeze(
+    tmp_path: Path, shape: str, text: str, expected: str
+) -> None:
+    """PLANTED: the three files the archive guard let through.
+
+    ``write_manifest`` replaces whatever is at ``MANIFEST_PATH`` with fifty
+    fresh digests. The only file it may destroy is a live freeze — a JSON
+    object marked ``held_out`` with no ``converted`` block — because that is
+    the only one whose digests no run has consumed. Each shape below is refused
+    by name and the bytes are left exactly as they were found, which is the
+    half that matters: a refusal that had already overwritten the file would
+    protect nothing.
+    """
+
+    root = _root_with_the_generator_sources(tmp_path)
+    destination = root / MANIFEST_PATH
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(text, encoding="utf-8")
+
+    with pytest.raises(HeldOutPrefixError, match=re.escape(expected)) as refusal:
+        write_manifest(root, card="tasks/work/held-out-prefix-freeze-5.md")
+    assert MANIFEST_PATH in str(refusal.value), shape
+    assert destination.read_text(encoding="utf-8") == text, shape
+
+
 #: Spelled counts a restamp note may use, so the gate below can read the number
 #: an author wrote in prose. Digits are accepted too.
 _COUNT_WORDS: Mapping[str, int] = {

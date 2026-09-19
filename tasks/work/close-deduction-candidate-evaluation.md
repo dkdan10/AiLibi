@@ -103,6 +103,34 @@ inventory sentence at `tasks/README.md:43`.
 
 ## Acceptance
 
+- [x] Review correction: the archive cannot reach the live client factory.
+  `verify_archived_set` returns an `ArchivedSet` — a sibling of `FrozenSet`
+  under a shared `VerifiedPrefixRecord`, not a subclass — and
+  `build_authorized_client` refuses anything but its three proof types before
+  it reads the credential. Proved both ways by
+  `tests/experiments/test_fresh_deduction_instrument.py::TestAuthorizedClient::test_the_archive_is_not_evidence_a_live_client_may_be_built_from`
+  and, statically, by `.venv/bin/mypy` on a probe holding
+  `build_authorized_client(verify_archived_set())`.
+- [x] Review correction (Codex 3, the same defect read from the documentation
+  lens): the two docstrings that asserted the old invariant now state the one
+  the code enforces — `build_authorized_client`'s "only producer" paragraph
+  (`experiments/fresh_deduction_instrument.py`) and
+  `TestAuthorizedClient::test_a_client_cannot_be_built_before_the_frozen_set_is_verified`'s
+  — and the dated Results subsection names `verify_frozen_set` as the reader
+  whose return value is the client-ordering proof.
+- [x] Review correction (Codex 1): the live reader refuses any record carrying
+  a `converted` block, whatever its `status`, with a message of its own naming
+  that block and its date. Proved by
+  `TestFrozenSet::test_a_record_that_says_it_was_already_spent_is_refused_as_held_out`,
+  whose plant is the committed archive with `status` flipped back to
+  `held_out`, and by `TestFrozenSet::test_a_set_marked_development_is_refused`,
+  which keeps the status refusal on a record carrying no block.
+- [x] Review correction (Codex 2): `write_manifest` writes over exactly one
+  shape — a JSON object marked `held_out` with no `converted` block — and every
+  other shape raises `HeldOutPrefixError` naming the file and what was found
+  there, the bytes left untouched. Proved by
+  `tests/experiments/test_held_out_prefixes.py::test_write_manifest_refuses_every_shape_that_is_not_a_freeze`
+  over development-data-with-no-block, a JSON list and a file that is not JSON.
 - [x] A dated closing record, 2026-09-19, attributed to the owner's acceptance
   of D1, D2 and D8, is written into `audits/deduction-candidate/README.md`,
   `preregistration.md`, `checkpoint.md` and a final dated section of
@@ -460,7 +488,7 @@ generator was run on no band by hand: the `.env` file was never opened.
 | The archive check, the other way | `orchestrator/game.py` (a `GENERATOR_SOURCES` file) appended to | `source digests now stale: ['experiments/held_out_prefixes.py', 'orchestrator/game.py']` and the archive check still green — the restamp obligation is gone |
 | The closed branch of the obligation test | `converted.superseded_by` set to `MANIFEST_PATH` while the record sits there | `AssertionError: manifest.json is the archive at the live path and names 'audits/…/manifest.json' as its replacement; a record that HAS a successor is not the closed state` |
 | `write_manifest` on an archive | `test_write_manifest_refuses_to_regenerate_over_an_archive` (committed, both ways) | `HeldOutPrefixError` matching `ARCHIVED record` over a root holding the archive, bytes unchanged; the same command over a `held_out` record writes it |
-| The two prefix readers | `test_the_archive_reader_refuses_a_set_still_to_be_spent` and `test_the_committed_record_is_the_archive_and_the_live_reader_refuses_it` (committed, both ways) | `FrozenSetMismatch` matching `ARCHIVED record` on a held-out record, and matching `not 'held_out'` on the archive |
+| The two prefix readers | `test_the_archive_reader_refuses_a_set_still_to_be_spent` and `test_the_committed_record_is_the_archive_and_the_live_reader_refuses_it` (committed, both ways) | `FrozenSetMismatch` matching `ARCHIVED record` on a held-out record, and matching `'converted' block` on the archive (`not 'held_out'` until the round-1 correction below moved the live reader's first refusal onto the block) |
 
 Each tree-level plant was applied to the committed file, run, and reverted; the
 suite is green on the restored tree and `git status` shows no stray edit.
@@ -504,3 +532,82 @@ arithmetic that documents what it spent.
 - Delivery states: Implemented and Verified here. Independently reviewed, owner
   reviewed, merged and adopted are not claimed; adoption is not applicable, as
   no experiment becomes ON and no adopting record is created.
+
+### Review corrections, round 1 (2026-09-19)
+
+Independent review returned four blocking findings, all of them about the new
+refusals rather than the closure itself. Each is repaired below; none moves an
+agent behaviour, a prompt byte, a recording byte or a published figure, and the
+archived record's bytes are untouched, so the `audits/` inventory row does not
+move again.
+
+**Finding 1 and finding 2 are one defect, reported by two lenses: the archive
+satisfied the live client factory.** `verify_archived_set` returned a
+`FrozenSet`, which `build_authorized_client` accepts as proof that the inputs
+were verified before a provider existed — so a caller holding the archive could
+build a live client with no invocation and no closure check, and the docstring
+claiming `verify_frozen_set` was that token's only producer had become false.
+The two readers now return two types. `VerifiedPrefixRecord` holds what both
+verify; `FrozenSet` and `ArchivedSet` are SIBLINGS under it, neither an instance
+of the other, so the archive is not a `FrozenSet` narrowed by a flag but a
+different record with a different name. `build_authorized_client` keeps its
+annotation and gains the run-time half of it, refused before the credential is
+read: mypy alone is enforced only where the checker runs.
+
+Which reader is the client-ordering proof: `verify_frozen_set`, and it alone for
+the evaluation path — with `verify_calibration_set` and `verify_calibration_draw`
+for the two calibration paths, exactly as before. `verify_archived_set` is not a
+fourth producer and proves nothing to that factory. The two docstrings that
+stated the old invariant now state this one, in the module
+(`build_authorized_client`) and in the test
+(`TestAuthorizedClient::test_a_client_cannot_be_built_before_the_frozen_set_is_verified`).
+The two cases that used to hand the archive to the factory to reach its
+credential refusal now take a real `FrozenSet` from its only producer, through
+`_verified_held_out_set`, which writes the pre-closing record into a `tmp_path`
+copy and reads it back with `verify_frozen_set`: on this tree there is no
+held-out set to verify, and a hand-built token would have asserted nothing about
+who may produce one.
+
+**Finding 3 (Codex 1): the live reader trusted `status` alone.** A copy of the
+committed archive with one field flipped back to `held_out`, its `converted`
+block left in place, was accepted and would have regenerated and re-spent all
+fifty prefixes. The block is a FACT about the bytes — it names the run that
+rendered them — and the status is a label, so the block is now checked first and
+independently, with its own message naming the block and its date. The status
+refusal stays for a record that carries no block
+(`TestFrozenSet::test_a_set_marked_development_is_refused`). One consequence is
+recorded rather than hidden: the committed archive is doubly disqualified, and
+the live reader now names the block rather than the status when refusing it, so
+the round-0 plant table above is annotated with the wording that reproduces at
+this head.
+
+**Finding 4 (Codex 2): `write_manifest` silently overwrote malformed records.**
+The guard read the `converted` key alone, so development data whose block had
+been dropped, and any file that was not a JSON object, fell through to a fresh
+`held_out` manifest over the accepted hashes the guard exists to preserve — and
+a file that was not JSON at all raised a bare `JSONDecodeError` where AGENTS.md
+requires a named refusal. `_assert_the_file_in_the_way_is_a_freeze` now allows
+exactly one shape, a JSON object marked `held_out` with no `converted` block,
+and names the file and what was found there in every other case.
+
+| Command, at this head | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/experiments -q` | 629 passed (624 before these corrections; the five new cases are the four planted above and the `FrozenSet` half of the client gate) |
+| `.venv/bin/python scripts/validate_task_docs.py` | passed; 73 work cards, 7 ready / 66 done |
+| `.venv/bin/python scripts/check_doc_facts.py` | passed (doc facts, front door, ml-program, budgets) |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/python -m pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh`, whole, exit code captured directly | exit 0 |
+| `bash scripts/verify_samples.sh` | exit 0 |
+| `scripts/build_sample_report.py --sample-dir <set> --check` over the four sets | 4 of 4 exit 0 |
+
+| Gate added in round 1 | Plant | Assertion it produced |
+| --- | --- | --- |
+| The client factory's type gate | `if not isinstance(frozen, FrozenSet \| CalibrationSet \| CalibrationDraw):` → `if False:` | `AssertionError: Regex pattern did not match. Expected regex: 'ArchivedSet is'. Actual message: "FEATHERLESS_API_KEY is not set…"` — the archive built past the gate |
+| The same, statically | `build_authorized_client(verify_archived_set())` in a scratch module | `error: Argument 1 to "build_authorized_client" has incompatible type "ArchivedSet"; expected "FrozenSet \| CalibrationSet \| CalibrationDraw"`, with the `verify_frozen_set()` call on the next line accepted |
+| The live reader's `converted` refusal | `elif "converted" in manifest:` → `elif "converted" in manifest and False:` | `Failed: DID NOT RAISE <class 'experiments.fresh_deduction_instrument.FrozenSetMismatch'>` on the flipped archive, and the committed archive accepted as a live set |
+| `write_manifest`'s shape gate | the pre-review guard restored (`isinstance(existing, Mapping) and "converted" in existing`) | two `Failed: DID NOT RAISE <class 'experiments.held_out_prefixes.HeldOutPrefixError'>` — the file regenerated over — and one bare `json.decoder.JSONDecodeError` |
+
+Each plant was applied to the committed file, run, and reverted; the two
+modules were diffed against their pre-plant copies afterwards and are
+byte-identical, and the suite is green on the restored tree.

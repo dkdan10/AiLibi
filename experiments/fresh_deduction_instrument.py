@@ -79,7 +79,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import MappingProxyType
-from typing import Any, Final, Literal, Self, get_args
+from typing import Any, Final, Literal, Self, TypeVar, get_args
 
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
@@ -2256,8 +2256,26 @@ def build_authorized_client(
     instead of an ordering a later edit to :func:`main` could quietly reverse.
     All three types are accepted and none can stand in for another anywhere
     else: which one a caller holds is what decides which records it verified.
+
+    :func:`verify_archived_set` is not a fourth producer. It returns an
+    :class:`ArchivedSet` — a sibling of :class:`FrozenSet`, not a subclass — so
+    the archive of a band that has already been rendered to a model is not
+    evidence here, and a caller holding one has verified nothing a live run may
+    spend. The annotation refuses it under mypy and the check below refuses it
+    at run time, because a type alone would be enforced only where the type
+    checker runs.
     """
 
+    if not isinstance(frozen, FrozenSet | CalibrationSet | CalibrationDraw):
+        raise LiveRunNotAuthorized(
+            "a live client is built only from inputs a live reader verified, "
+            f"and {type(frozen).__name__} is not one of those records: the "
+            "FrozenSet verify_frozen_set returns, the CalibrationSet "
+            "verify_calibration_set returns and the CalibrationDraw "
+            "verify_calibration_draw returns are the three. An ArchivedSet is "
+            "the record of a band a run has already spent: the offline "
+            "rehearsal draws it, and nothing that reaches a provider may."
+        )
     del frozen  # see the docstring: proof of ordering, not an input
 
     from llm.provider import build_default_client
@@ -3441,12 +3459,18 @@ class DryRunProvider(FakeProvider):
 
 
 @dataclass(frozen=True)
-class FrozenSet:
-    """The regenerated set, verified against the committed freeze manifest.
+class VerifiedPrefixRecord:
+    """Prefixes regenerated and checked against a committed freeze record.
 
-    Holds the prefixes because the run needs them; holds no rendered text and is
-    never serialized. :func:`assert_report_holds_no_prefix_bytes` is the guard
-    on the other side.
+    Holds the prefixes because the caller needs them; holds no rendered text and
+    is never serialized. :func:`assert_report_holds_no_prefix_bytes` is the
+    guard on the other side.
+
+    The two subclasses below are what the readers return, and WHICH record was
+    verified is the whole of the difference between them. They are siblings on
+    purpose — neither is an instance of the other, so a reader's return value
+    cannot be passed where the other reader's is required, in mypy or at run
+    time. :func:`build_authorized_client` is the caller that rests on that.
     """
 
     generated: GeneratedSet
@@ -3457,6 +3481,33 @@ class FrozenSet:
     @property
     def prefixes(self) -> tuple[HeldOutPrefix, ...]:
         return self.generated.prefixes
+
+
+@dataclass(frozen=True)
+class FrozenSet(VerifiedPrefixRecord):
+    """A HELD-OUT set, verified by :func:`verify_frozen_set` and unspent.
+
+    The only thing a live run may draw, and the only prefix record
+    :func:`build_authorized_client` accepts as proof that the inputs were
+    checked before a provider existed.
+    """
+
+
+@dataclass(frozen=True)
+class ArchivedSet(VerifiedPrefixRecord):
+    """An ARCHIVED set, verified by :func:`verify_archived_set` and spent.
+
+    The record of a band a run already rendered to a model. The offline
+    mechanics rehearsal draws it; nothing that reaches a provider may, which is
+    why this is a type of its own rather than a :class:`FrozenSet` read from a
+    different file.
+    """
+
+
+#: Which of the two records a reader verified. Bound to the shared base so the
+#: one body below constructs the class its caller asked for and returns that
+#: class, rather than a common type both callers would have to narrow.
+_Verified = TypeVar("_Verified", bound=VerifiedPrefixRecord)
 
 
 def _as_int(raw: Mapping[str, object], key: str) -> int:
@@ -3552,6 +3603,13 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
     it; duplicating the check here would make an un-restamped source edit stop
     the run for a reason the archive check states better.
 
+    Two things are refused here, and the second is not the first said twice: a
+    record that does not say ``held_out``, and a record carrying a ``converted``
+    block — whatever its ``status`` says. The block names the run that rendered
+    those prefixes to a model, so it is a FACT about the bytes, while the status
+    is a label one field-edit can flip back; a record that carries both reads as
+    a set already spent and is refused as one.
+
     On this tree it refuses, and that is the settled state: the record at
     :data:`MANIFEST_PATH` is the ARCHIVE of the band the run of 2026-09-16
     spent, marked ``development`` on 2026-09-19, so there is no held-out set to
@@ -3560,10 +3618,10 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
     instead, which cannot stand in for this one.
     """
 
-    return _verified_prefix_record(repo_root, archived=False)
+    return _verified_prefix_record(repo_root, into=FrozenSet)
 
 
-def verify_archived_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
+def verify_archived_set(repo_root: Path = _REPO_ROOT) -> ArchivedSet:
     """The ARCHIVED record's inputs, for the offline mechanics path only.
 
     Identical to :func:`verify_frozen_set` in everything it compares, and the
@@ -3577,6 +3635,13 @@ def verify_archived_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
     :func:`run_instrument` on any provider but ``fake`` — call
     :func:`verify_frozen_set` and reach this function never.
 
+    What it returns says so as well. An :class:`ArchivedSet` is not a
+    :class:`FrozenSet` and is not a subclass of one, so it cannot be handed to
+    :func:`build_authorized_client` by an edit that merely reaches for the
+    nearer reader: that call does not type-check, and it is refused at run time
+    too. Before 2026-09-19 both readers returned the same class, which made
+    "the inputs were verified" indistinguishable from "an archive was read".
+
     It exists because the fake-provider run is the instrument's published
     mechanics check (the execution manifest's "Verification of this manifest"
     quotes its command) and it spends nothing, reaches no provider and renders
@@ -3584,12 +3649,18 @@ def verify_archived_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
     that documents it.
     """
 
-    return _verified_prefix_record(repo_root, archived=True)
+    return _verified_prefix_record(repo_root, into=ArchivedSet)
 
 
-def _verified_prefix_record(repo_root: Path, *, archived: bool) -> FrozenSet:
-    """The body of both readers above. ``archived`` picks which record is legal."""
+def _verified_prefix_record(repo_root: Path, *, into: type[_Verified]) -> _Verified:
+    """The body of both readers above. ``into`` picks which record is legal.
 
+    The type asked for and the record accepted are one choice rather than two
+    that could drift apart: ``into`` is both the class returned and the answer
+    to "is this the archive path?".
+    """
+
+    archived = into is ArchivedSet
     manifest_file = repo_root / MANIFEST_PATH
     if not manifest_file.is_file():
         raise FrozenSetMismatch(f"the freeze manifest is missing: {MANIFEST_PATH}")
@@ -3605,6 +3676,19 @@ def _verified_prefix_record(repo_root: Path, *, archived: bool) -> FrozenSet:
                 "the offline mechanics path draws the ARCHIVED record and never "
                 "a set that is still to be spent"
             )
+    elif "converted" in manifest:
+        # Before the status, and independent of it: the block is the record of
+        # a run that rendered these prefixes to a model, so the inputs are
+        # development data whatever the file calls itself. Trusting the status
+        # alone left one field-edit between a spent archive and a live spend.
+        block = manifest["converted"]
+        spent_on = block.get("date") if isinstance(block, Mapping) else None
+        raise FrozenSetMismatch(
+            f"the record at {MANIFEST_PATH} carries a 'converted' block, dated "
+            f"{spent_on!r}, naming the run that already rendered these "
+            "prefixes to a model; a spent set is development data whatever its "
+            "'status' says, and this run may not draw it"
+        )
     elif manifest.get("status") != "held_out":
         raise FrozenSetMismatch(
             f"the frozen set is marked {manifest.get('status')!r}, not "
@@ -3689,7 +3773,7 @@ def _verified_prefix_record(repo_root: Path, *, archived: bool) -> FrozenSet:
         assert_no_legacy_body_handles([canonical_prefix_json(prefix)])
         if prefix_sha256(prefix) != dict(expected_accepted)[prefix.seed]:
             raise FrozenSetMismatch(f"seed {prefix.seed} re-hashes differently")
-    return FrozenSet(
+    return into(
         generated=generated,
         manifest_sha256=hashlib.sha256(manifest_file.read_bytes()).hexdigest(),
         accepted_seeds=tuple(seed for seed, _ in expected_accepted),
@@ -6664,7 +6748,12 @@ def assert_checkpoint_matches(
     provider: str,
     limits: RunLimits,
     sampling: SamplingConfig,
-    frozen: FrozenSet,
+    # Either verified record, because the fake-provider rehearsal is what proves
+    # the resume works and it draws the ARCHIVE. What is compared is the record
+    # this sitting verified against the one the first sitting did, and that
+    # question is the same for both readers; which record a run is allowed to
+    # draw at all is settled one level up, by the reader it calls.
+    frozen: VerifiedPrefixRecord,
     repo_root: Path = _REPO_ROOT,
 ) -> None:
     """Refuse to continue a run that would not be the same run.

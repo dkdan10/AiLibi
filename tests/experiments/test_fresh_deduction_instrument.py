@@ -416,6 +416,22 @@ def _held_out_payload() -> dict[str, Any]:
     return payload
 
 
+def _verified_held_out_set(tmp_path: Path) -> instrument.FrozenSet:
+    """A `FrozenSet` from its only producer, over a root that still holds one.
+
+    Since the closing the committed record is the archive, so `verify_frozen_set`
+    refuses the repository and there is no held-out set in the tree to verify.
+    A case whose subject is what happens AFTER the inputs are verified — the
+    client factory below — needs the real token rather than one assembled by
+    hand, because a hand-built one would assert nothing about who may produce
+    it. This writes the pre-closing record into a copy and reads it back
+    through the live reader.
+    """
+
+    _write_frozen_manifest(tmp_path, _held_out_payload())
+    return verify_frozen_set(tmp_path)
+
+
 def _converted_manifest_paths() -> tuple[Path, ...]:
     """Every freeze record that has been converted to development data.
 
@@ -1018,11 +1034,48 @@ class TestFrozenSet:
         refuses the archive, which is the second refusal a live run meets after
         the closing clause; `verify_archived_set` is the offline path's and
         accepts exactly it.
+
+        The refusal names the `converted` block rather than the status. Both
+        are true of this file, and the block is the one that cannot be talked
+        away: it records the run that rendered these fifty prefixes.
         """
 
-        with pytest.raises(FrozenSetMismatch, match="not 'held_out'"):
+        with pytest.raises(FrozenSetMismatch, match="'converted' block"):
             verify_frozen_set(_REPO_ROOT)
-        assert len(verify_archived_set(_REPO_ROOT).accepted_seeds) == 50
+        archive = verify_archived_set(_REPO_ROOT)
+        assert len(archive.accepted_seeds) == 50
+        # The two readers return two types, and this is the assertion that says
+        # so: what `verify_archived_set` hands back is not the token a live
+        # client is built from. `TestAuthorizedClient` holds the other half.
+        assert isinstance(archive, instrument.ArchivedSet)
+        assert not isinstance(archive, instrument.FrozenSet)
+
+    def test_a_record_that_says_it_was_already_spent_is_refused_as_held_out(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the one-field edit, and the whole reason this check exists.
+
+        A record marked `held_out` while still carrying the `converted` block
+        of the run that rendered it is what a status-only reader accepted: flip
+        one field of the committed archive back, drop the closing clause from
+        the manifest, and a live run would have regenerated all fifty prefixes
+        and spent them a second time. The block is a fact about the bytes and
+        the status is a label, so the fact is what decides.
+        """
+
+        payload = _committed_manifest()
+        assert payload["status"] == "development"
+        assert "converted" in payload
+        payload["status"] = "held_out"
+        _write_frozen_manifest(tmp_path, payload)
+        with pytest.raises(FrozenSetMismatch, match="'converted' block"):
+            verify_frozen_set(tmp_path)
+        # The same file with the block gone is the pre-closing record again,
+        # and the live reader takes it: what is refused above is the block and
+        # nothing else about the plant.
+        del payload["converted"]
+        _write_frozen_manifest(tmp_path, payload)
+        assert len(verify_frozen_set(tmp_path).accepted_seeds) == 50
 
     def test_the_archive_reader_refuses_a_set_still_to_be_spent(
         self, tmp_path: Path
@@ -1450,7 +1503,7 @@ class TestAuthorizedClient:
         assert pinned["FEATHERLESS_API_KEY"] == "fk-ambient"
 
     def test_an_ambient_fake_provider_cannot_stand_in_for_the_authorized_one(
-        self,
+        self, tmp_path: Path
     ) -> None:
         """PLANTED: exactly the reproduction that recorded a fake run as live —
         `AILIBI_LLM_PROVIDER=fake` and no Featherless key. It must refuse, not
@@ -1458,30 +1511,62 @@ class TestAuthorizedClient:
 
         with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
             instrument.build_authorized_client(
-                verify_archived_set(_REPO_ROOT), env={"AILIBI_LLM_PROVIDER": "fake"}
+                _verified_held_out_set(tmp_path),
+                env={"AILIBI_LLM_PROVIDER": "fake"},
             )
 
     def test_the_default_environment_is_the_process_one_and_still_pinned(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setenv("AILIBI_LLM_PROVIDER", "fake")
         monkeypatch.delenv("FEATHERLESS_API_KEY", raising=False)
         with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
-            instrument.build_authorized_client(verify_archived_set(_REPO_ROOT))
+            instrument.build_authorized_client(_verified_held_out_set(tmp_path))
 
     def test_a_client_cannot_be_built_before_the_frozen_set_is_verified(self) -> None:
         """PLANTED: the round-3 defect — the CLI evaluated the client factory in
         an argument list, so a run whose held-out set had moved constructed a
         provider before anything checked the set.
 
-        The verified `FrozenSet` is now a required argument and `verify_frozen_set`
-        is its only producer, so the ordering is a property of the signature: the
-        call below does not type-check and does not run, and no client is built.
+        A verified record is now a required argument, and each of the three
+        types this factory accepts has exactly one producer — `verify_frozen_set`
+        for the `FrozenSet`, `verify_calibration_set` for the `CalibrationSet`,
+        `verify_calibration_draw` for the `CalibrationDraw` — so the ordering is
+        a property of the signature: the call below does not type-check and does
+        not run, and no client is built. The case beneath this one is the other
+        half: a record some OTHER reader produced is refused even though it is
+        a verified record.
         """
 
         build = cast(Callable[..., object], instrument.build_authorized_client)
         with pytest.raises(TypeError, match="frozen"):
             build(env={"FEATHERLESS_API_KEY": "unused"})
+
+    def test_the_archive_is_not_evidence_a_live_client_may_be_built_from(
+        self, tmp_path: Path
+    ) -> None:
+        """PLANTED: the review's reproduction — the archive handed to the factory.
+
+        Both readers returned a `FrozenSet` when the closing card first landed,
+        so `build_authorized_client(verify_archived_set(root))` built a live
+        client from a band that had already been rendered to a model, with no
+        invocation and no closure check anywhere on that path. The offline
+        reader now returns an `ArchivedSet`, which is not a `FrozenSet` and not
+        a subclass of one: mypy refuses the call, and this asserts the run-time
+        half, because a type alone is enforced only where the checker runs.
+
+        Which refusal it is, is the assertion. Both calls below run against an
+        empty environment, so the credential gate would refuse them too; the
+        archive is turned away by name and before it, and the `FrozenSet` gets
+        that far and no further. No client is constructed in either case, as
+        nowhere in this class is.
+        """
+
+        archived = verify_archived_set(_REPO_ROOT)
+        with pytest.raises(LiveRunNotAuthorized, match="ArchivedSet is"):
+            instrument.build_authorized_client(cast(Any, archived), env={})
+        with pytest.raises(LiveRunNotAuthorized, match="FEATHERLESS_API_KEY"):
+            instrument.build_authorized_client(_verified_held_out_set(tmp_path), env={})
 
     def test_the_pre_client_gate_stops_on_a_moved_frozen_set(
         self, tmp_path: Path

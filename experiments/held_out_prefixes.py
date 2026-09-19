@@ -1594,31 +1594,74 @@ def build_manifest(
     return manifest
 
 
+def _assert_the_file_in_the_way_is_a_freeze(path: Path) -> None:
+    """Refuse every shape at :data:`MANIFEST_PATH` but a live freeze record.
+
+    :func:`write_manifest` replaces whatever sits at that path with fifty fresh
+    digests, so the only file it may destroy is one whose digests nothing has
+    spent: a JSON object marked ``held_out`` and carrying no ``converted``
+    block. An ARCHIVE is refused because its digests are the input identity of
+    a run that already consumed them. So is a record marked anything else, and
+    so is a file that is not a JSON object at all — reading only the
+    ``converted`` key left both of those falling through to a silent overwrite,
+    where the stop rule requires a named refusal.
+
+    The shape is named in each message, because the caller is a person at a
+    shell who has just been told their freeze command did nothing.
+    """
+
+    text = path.read_text(encoding="utf-8")
+    try:
+        existing = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise HeldOutPrefixError(
+            f"{MANIFEST_PATH} is not readable JSON ({exc}); a freeze command "
+            "overwrites a freeze record and nothing else, so a file it cannot "
+            "read is a stop rather than something to replace"
+        ) from exc
+    if not isinstance(existing, Mapping):
+        raise HeldOutPrefixError(
+            f"{MANIFEST_PATH} holds a JSON {type(existing).__name__}, not an "
+            "object: only a freeze record may be regenerated over, and a file "
+            "of another shape is not one"
+        )
+    if "converted" in existing:
+        raise HeldOutPrefixError(
+            f"{MANIFEST_PATH} is an ARCHIVED record: it carries a "
+            "'converted' block, so its digests are the input identity of a "
+            "run that already spent them. Regenerating over it would "
+            "destroy that identity; freezing a band again writes its own "
+            "record under its own card."
+        )
+    status = existing.get("status")
+    if status != "held_out":
+        raise HeldOutPrefixError(
+            f"{MANIFEST_PATH} is marked {status!r}, not 'held_out': a record "
+            "that is not a live freeze is not something a freeze command may "
+            "replace, whether it is development data whose 'converted' block "
+            "was dropped or a record of some other kind"
+        )
+
+
 def write_manifest(repo_root: Path, *, card: str) -> Path:
     """Regenerate the set and rewrite :data:`MANIFEST_PATH`. Used by ``__main__``.
 
-    Refuses an ARCHIVED record: a file already at that path carrying a
+    Writes over exactly one thing: a live freeze record, meaning a JSON object
+    marked ``held_out`` with no ``converted`` block, or no file at all. Every
+    other shape raises, naming the file and what was found there —
+    :func:`_assert_the_file_in_the_way_is_a_freeze` is the whole of that rule.
+
+    An ARCHIVED record is the case that matters on this tree: a file carrying a
     ``converted`` block is the input identity of a run that has been spent, and
     regenerating over it would destroy the digests that run consumed while
     leaving the archive's prose describing them. Since 2026-09-19 that is the
-    committed state, so the bare ``__main__`` freeze command refuses on this
-    tree rather than silently re-freezing the band the fifth run rendered.
-
-    A missing file, or a ``held_out`` record with no ``converted`` block, is
-    written as before: what is protected is the archive, not the path.
+    committed state, so the bare ``__main__`` freeze command refuses here
+    rather than silently re-freezing the band the fifth run rendered.
     """
 
     path = repo_root / MANIFEST_PATH
     if path.is_file():
-        existing = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(existing, Mapping) and "converted" in existing:
-            raise HeldOutPrefixError(
-                f"{MANIFEST_PATH} is an ARCHIVED record: it carries a "
-                "'converted' block, so its digests are the input identity of a "
-                "run that already spent them. Regenerating over it would "
-                "destroy that identity; freezing a band again writes its own "
-                "record under its own card."
-            )
+        _assert_the_file_in_the_way_is_a_freeze(path)
     manifest = build_manifest(generate(), repo_root=repo_root, card=card)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", "utf-8")
