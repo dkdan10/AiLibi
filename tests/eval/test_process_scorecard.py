@@ -13,6 +13,7 @@ recomputes the published artifact from the recordings themselves.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from fractions import Fraction
 
 import pytest
 from pydantic import ValidationError
@@ -34,6 +35,9 @@ from eval.report_schema import GameCostSummary, GameReport, MeetingReport
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_REASON_ID_MARKER,
+    TEAMMATE_COERCED_VOTE_RATIONALE,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -410,6 +414,83 @@ def test_an_impostor_voter_is_outside_the_crew_argmax_denominator() -> None:
     assert row.unambiguous_ballots == 0
 
 
+def test_chance_is_measured_over_the_unambiguous_ballots_and_no_others() -> None:
+    """The baseline's population is the row's own denominator, as published.
+
+    Three crew EJECTs with DIFFERENT impostor shares, one per outcome: p-1 is
+    unambiguous on a two-name list (share 1/2), p-2 ties on a three-name list
+    (share 1/3) and p-0's rendered rows fall entirely outside its valid list
+    (share 1/1). Only the first is in the denominator, so chance is 0.5. An
+    accumulator that ran before the tie and no-row returns would publish
+    (1/2 + 1/3 + 1) / 3 = 0.6111 over a denominator of 1 - a baseline no cell on
+    the row accounts for, which is the defect this pins.
+    """
+
+    meeting = _meeting(
+        ballots=(
+            _ballot(voter="p-1", target="p-3"),
+            _ballot(voter="p-2", target="p-3"),
+            _ballot(voter="p-0", target="p-3"),
+        ),
+        calls=(
+            _call(
+                agent_id="p-1",
+                prompt=_prompt(
+                    suspicion={"p-3": 0.80, "p-0": 0.20}, valid=("p-0", "p-3")
+                ),
+            ),
+            _call(
+                agent_id="p-2",
+                prompt=_prompt(
+                    suspicion={"p-0": 0.60, "p-1": 0.60, "p-3": 0.10},
+                    valid=("p-0", "p-1", "p-3"),
+                ),
+            ),
+            _call(
+                agent_id="p-0",
+                prompt=_prompt(suspicion={"p-1": 0.90}, valid=("p-3",)),
+            ),
+        ),
+    )
+    row = _card(_inputs(meetings=(meeting,))).argmax_independence
+    assert (row.unambiguous_ballots, row.ties_excluded, row.no_rendered_row) == (
+        1,
+        1,
+        1,
+    )
+    assert row.chance_baseline == 0.5
+    assert "SAME unambiguous ballots that form the denominator" in row.definition
+
+
+def test_a_chance_population_wider_than_the_denominator_is_refused() -> None:
+    """The perturbed half: one extra chance ballot and the build fails loud.
+
+    ``scorecard_from_tally`` will not publish a baseline measured over a
+    population no cell on the row accounts for, which is the shape the shipped
+    accumulator had. Perturbing the tally by the single ballot a tie would have
+    added is enough to turn it red.
+    """
+
+    tally = ProcessTally(
+        followers=3,
+        deviators=1,
+        chance_share_sum=Fraction(2),
+        chance_ballots=4,
+    )
+    assert (
+        scorecard_from_tally(
+            tally, label="planted", sources=("planted",)
+        ).argmax_independence.chance_baseline
+        == 0.5
+    )
+
+    tally.argmax_ties += 1
+    tally.chance_share_sum += Fraction(1, 3)
+    tally.chance_ballots += 1
+    with pytest.raises(ValueError, match="must be the row's denominator"):
+        scorecard_from_tally(tally, label="planted", sources=("planted",))
+
+
 # ---------------------------------------------------------------------------
 # Row 3 — manufactured contradictions
 # ---------------------------------------------------------------------------
@@ -556,6 +637,91 @@ def test_an_eject_whose_citation_does_not_resolve_is_unexplained() -> None:
     assert (row.decisions.numerator, row.uncited_ejects) == (1, 1)
 
 
+def test_a_coerced_skip_whose_only_player_token_is_the_guard_marker() -> None:
+    """The machinery may not answer the authorship question for the voter.
+
+    The shipped shape: the teammate firewall coerces an impostor's EJECT to
+    SKIP, its marker preserves the coerced target's id, and
+    ``TEAMMATE_COERCED_VOTE_RATIONALE`` replaces the model's body - so the whole
+    recorded rationale is guard prose carrying ``p-3``. Reading the raw text
+    scores this SKIP as one that named what it weighed; reading the
+    model-authored remainder, which is what row 4's definition names, leaves
+    nothing and the SKIP is unexplained.
+    """
+
+    coerced = _ballot(
+        voter="p-2",
+        target="SKIP",
+        rationale=(
+            TEAMMATE_VOTE_TARGET_MARKER.format(target="p-3")
+            + TEAMMATE_COERCED_VOTE_RATIONALE
+        ),
+        rewrite_reason="teammate_coerced",
+        redirected_from="p-3",
+    )
+    meeting = _meeting(
+        ballots=(coerced,),
+        calls=(_call(agent_id="p-2", prompt=_prompt(valid=("p-3",))),),
+    )
+    row = _card(_inputs(meetings=(meeting,))).unexplained_decision
+    assert (row.decisions.numerator, row.skips_naming_no_player) == (1, 1)
+    assert row.skips_naming_a_player_in_prose == 0
+    assert "p-3" in coerced.rationale_text  # the raw bytes DO carry the id
+
+
+def test_the_same_coerced_skip_with_a_model_body_naming_a_player_is_not() -> None:
+    """The half that differs in exactly one thing: a body the model wrote.
+
+    Same marker, same coerced SKIP; the voter's own sentence survives behind it
+    and names a player, so the decision is explained and the marker's own id is
+    irrelevant either way.
+    """
+
+    meeting = _meeting(
+        ballots=(
+            _ballot(
+                voter="p-2",
+                target="SKIP",
+                rationale=(
+                    TEAMMATE_VOTE_TARGET_MARKER.format(target="p-3")
+                    + "I weighed p-0 and could not get there."
+                ),
+                rewrite_reason="teammate_coerced",
+                redirected_from="p-3",
+            ),
+        ),
+        calls=(_call(agent_id="p-2", prompt=_prompt(valid=("p-3",))),),
+    )
+    row = _card(_inputs(meetings=(meeting,))).unexplained_decision
+    assert (row.decisions.numerator, row.skips_naming_no_player) == (0, 0)
+    assert row.skips_naming_a_player_in_prose == 1
+
+
+def test_a_parse_defaulted_skip_is_unexplained_however_its_head_reads() -> None:
+    """A rationale that is ENTIRELY machinery leaves nothing to have named.
+
+    ``VOTE_PARSE_DEFAULT_MARKER`` is the whole ``rationale_text`` and carries a
+    bounded head of the response that would not parse. Nothing was parsed, so
+    the ballot is a machine default with no basis - even when the head's bytes
+    happen to contain a player id.
+    """
+
+    meeting = _meeting(
+        ballots=(
+            _ballot(
+                voter="p-1",
+                target="SKIP",
+                rationale=VOTE_PARSE_DEFAULT_MARKER.format(
+                    head='{"target": "p-3", "rationale_te'
+                ),
+            ),
+        ),
+        calls=(_call(agent_id="p-1", prompt=_prompt(valid=("p-3",))),),
+    )
+    row = _card(_inputs(meetings=(meeting,))).unexplained_decision
+    assert (row.decisions.numerator, row.skips_naming_no_player) == (1, 1)
+
+
 # ---------------------------------------------------------------------------
 # Row 5 — the evidence-quality mix
 # ---------------------------------------------------------------------------
@@ -602,6 +768,82 @@ def test_an_unflagged_ejection_on_a_cited_observation_is_first_hand() -> None:
     )
     row = _card(_inputs(meetings=(meeting,))).evidence_quality_mix
     assert row.band_counts == {"first_hand": 1}
+
+
+def test_a_cited_turn_observing_the_ejected_player_is_first_hand() -> None:
+    """Half one of the pair: the turn's observation NAMES the ejected player."""
+
+    turn = _turn(
+        speaker="p-2",
+        observations=(
+            SawPlayerObservation(
+                type="saw_player", tick=3, subject="p-3", room="ENGINEERING"
+            ),
+        ),
+        free_text="p-3 was not where they said",
+    )
+    meeting = _ejection(
+        turns=(turn,),
+        ballot=_ballot(voter="p-1", target="p-3", reason_id=turn.turn_id),
+        prompt=_prompt(valid=("p-3",)),
+    )
+    row = _card(_inputs(meetings=(meeting,))).evidence_quality_mix
+    assert row.band_counts == {"first_hand": 1}
+
+
+def test_a_cited_turn_observing_somebody_else_is_not_first_hand() -> None:
+    """Half two: the same turn, one field moved - the observation is about p-0.
+
+    ``turn.observations`` is non-empty either way and the turn still bears on
+    p-3 through its own sentence, so a band that asked only whether the turn
+    carried SOME structured observation would read this as first-hand evidence
+    about a player no observation mentions. The published definition asks for an
+    observation NAMING them, and under it this ejection rests on the speaker's
+    prose alone: unevidenced.
+    """
+
+    turn = _turn(
+        speaker="p-2",
+        observations=(
+            SawPlayerObservation(
+                type="saw_player", tick=3, subject="p-0", room="ENGINEERING"
+            ),
+        ),
+        free_text="p-3 was not where they said",
+    )
+    meeting = _ejection(
+        turns=(turn,),
+        ballot=_ballot(voter="p-1", target="p-3", reason_id=turn.turn_id),
+        prompt=_prompt(valid=("p-3",)),
+    )
+    row = _card(_inputs(meetings=(meeting,))).evidence_quality_mix
+    assert row.band_counts == {"unevidenced": 1}
+
+
+def test_the_ejected_players_own_turn_is_not_a_first_hand_route() -> None:
+    """Being the SPEAKER is not an observation about oneself.
+
+    A turn spoken by the ejected player carrying an observation about somebody
+    else is that player's own account, not a witness's account of them; it
+    carries an accusation here, so the ejection is hearsay.
+    """
+
+    turn = _turn(
+        speaker="p-3",
+        observations=(
+            SawPlayerObservation(
+                type="saw_player", tick=3, subject="p-0", room="ENGINEERING"
+            ),
+        ),
+        claims=(_accusation_against("p-0"),),
+    )
+    meeting = _ejection(
+        turns=(turn,),
+        ballot=_ballot(voter="p-1", target="p-3", reason_id=turn.turn_id),
+        prompt=_prompt(valid=("p-3",)),
+    )
+    row = _card(_inputs(meetings=(meeting,))).evidence_quality_mix
+    assert row.band_counts == {"hearsay": 1}
 
 
 def test_an_unflagged_ejection_on_an_accusation_turn_is_hearsay() -> None:
@@ -864,12 +1106,16 @@ def test_pooling_adds_counts_and_recomputes_every_rate() -> None:
 
 
 def test_pooling_the_chance_baseline_is_exact_and_order_free() -> None:
-    """Carried as an exact sum of per-ballot shares, so pooling cannot drift."""
+    """Carried as an exact sum of per-ballot shares, so pooling cannot drift.
 
-    from fractions import Fraction
+    Each side carries the follower its chance ballot came from: the baseline's
+    population IS the row's denominator, and ``scorecard_from_tally`` refuses a
+    tally where the two disagree
+    (``test_a_chance_population_wider_than_the_denominator_is_refused``).
+    """
 
-    left = ProcessTally(chance_share_sum=Fraction(1, 3), chance_ballots=1)
-    right = ProcessTally(chance_share_sum=Fraction(1, 2), chance_ballots=1)
+    left = ProcessTally(chance_share_sum=Fraction(1, 3), chance_ballots=1, followers=1)
+    right = ProcessTally(chance_share_sum=Fraction(1, 2), chance_ballots=1, followers=1)
     forwards = pool([left, right], label="x", sources=()).argmax_independence
     backwards = pool([right, left], label="x", sources=()).argmax_independence
     assert forwards.chance_baseline == backwards.chance_baseline

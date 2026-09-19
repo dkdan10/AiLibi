@@ -126,6 +126,7 @@ from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.citation_relevance import (
     carries_citation,
     citations_bear_on,
+    every_string_in,
     names_player,
 )
 from meetings.schemas import (
@@ -223,8 +224,10 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "voter's prompts carry no row inside the valid list is not-evaluable "
         "and counted. Roles come from the seeder, are used only to report the "
         "role-correctness of followers and deviators BESIDE the split, and gate "
-        "nothing. Chance is the mean, over the same ballots, of the living-"
-        "impostor share of each voter's own valid-target list. It does NOT "
+        "nothing. Chance is the mean, over the SAME unambiguous ballots that "
+        "form the denominator - never over the excluded ties or the "
+        "not-evaluable ballots - of the living-impostor share of each voter's "
+        "own rendered valid-target list. It does NOT "
         "measure whether the voter read the graph, only whether the recorded "
         "call equals the arithmetic the engine handed it."
     ),
@@ -244,11 +247,17 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
     "unexplained_decision_rate": (
         "Numerator: an EJECT whose citations do not resolve in the voter's own "
         "inputs, or a SKIP that names no player at all - empty "
-        "considered_alternatives AND a rationale carrying no whole-token player "
-        "id. Denominator: all ballots. Not-evaluable: ballots whose voter has no "
-        "recorded prompt. The two halves are reported separately because they "
-        "are different defects: an EJECT with no basis, and an abstention that "
-        "names nothing it weighed."
+        "considered_alternatives AND a MODEL-AUTHORED rationale carrying no "
+        "whole-token player id. Model-authored means the remainder once the "
+        "meeting layer's own audit markers are cut off by provenance, the same "
+        "anchored chain eval.deduction_metrics._scan_marker_chain walks and "
+        "api.replay_loader cuts for rationale_text_clean: a guard marker "
+        "preserves the coerced target's id and the teammate firewall then "
+        "redacts the body, so reading the raw text would let the machinery's "
+        "prose answer for a voter who named nothing. Denominator: all ballots. "
+        "Not-evaluable: ballots whose voter has no recorded prompt. The two "
+        "halves are reported separately because they are different defects: an "
+        "EJECT with no basis, and an abstention that names nothing it weighed."
     ),
     "evidence_quality_mix": (
         "A mix, not a rate: one numerator per band, summing to the denominator. "
@@ -256,8 +265,12 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "ROLE-BLIND into the highest band the ejected player carried: vent_flag "
         "(a recorded vent_sighting flag names them), contradiction_flag (a "
         "recorded non-vent flag names them), first_hand (no flag, but an EJECT "
-        "ballot against them cites a resolving observation of their own memory "
-        "or a transcript turn carrying a structured observation about them), "
+        "ballot against them cites a resolving observation of the voter's own "
+        "memory, or a transcript turn carrying a structured observation that "
+        "NAMES them - whole-token, by meetings.citation_relevance.names_player "
+        "over the observation's dumped structure, so a turn whose only "
+        "observation places somebody else, and a turn merely SPOKEN by the "
+        "ejected player, are not first-hand accounts of them), "
         "hearsay (no flag, and the cited turn carries only an accusation), "
         "unevidenced (no flag and no resolving, on-target citation). "
         "Denominator: all ejections. Role-correctness is reported beside each "
@@ -273,7 +286,12 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "against this meeting's transcript and that voter's own recorded "
         "prompts. Denominator: ballots carrying at least one such token. "
         "Not-evaluable: ballots with no extractable token, and ballots whose "
-        "voter has no recorded prompt. LIMITS, stated: this tests TOKENS, not "
+        "voter has no recorded prompt. It reads rationale_text WHOLE, guard "
+        "audit markers included, and deliberately differs from row 4 there: "
+        "this row asks whether every token in the RECORDED text is one the "
+        "voter held, and a marker's preserved id always is, while row 4 asks "
+        "the authorship question and must cut the machinery's prose off first. "
+        "LIMITS, stated: this tests TOKENS, not "
         "propositions - an assertion and its negation score alike, and a true "
         "sentence assembled from present tokens scores the same as a false one. "
         "The direction memo's section 3 result on invented facts is two-method "
@@ -1011,11 +1029,41 @@ def _ejection_band(
         turn = turns_by_id.get(ballot.primary_reason_id or "")
         if turn is None:
             continue
-        if turn.observations or turn.speaker == ejected:
+        if _observes_player(turn, ejected):
             return "first_hand"
         if any(isinstance(claim, AccusationClaim) for claim in turn.claims):
             hearsay = True
     return "hearsay" if hearsay else "unevidenced"
+
+
+def _observes_player(turn: MeetingTurn, player: PlayerId) -> bool:
+    """Whether a turn carries a structured observation NAMING ``player``.
+
+    Row 5's ``first_hand`` band asks for an observation ABOUT the ejected
+    player, so a non-empty ``observations`` tuple is not enough: a turn whose
+    only observation places somebody else, or whose speaker happens to be the
+    ejected player, carries no first-hand account of THEM and falls through to
+    the hearsay / unevidenced test the way the published definition says it
+    should.
+
+    The observation is walked as the DUMPED STRUCTURE
+    (:func:`meetings.citation_relevance.every_string_in`) for the reason
+    :func:`meetings.citation_relevance.turn_bears_on` gives: the eight
+    observation shapes name players under ``subject``, ``co_present`` and
+    ``body_of``, and a rule enumerating those keys would silently stop covering
+    the ones a later schema adds. The name half is the
+    whole-token :func:`~meetings.citation_relevance.names_player` boundary, so
+    ``p-1`` never answers for ``p-10``. Deliberately NOT ``turn_bears_on``
+    itself, which is true for the speaker's own turn and for a name appearing
+    anywhere in a CLAIM or in free text - that is the aboutness rule row 1
+    asks, not the evidence-shape rule this band asks.
+    """
+
+    return any(
+        names_player(text, player)
+        for observation in turn.observations
+        for text in every_string_in(observation.model_dump(mode="json"))
+    )
 
 
 def _rationale_tokens(
@@ -1086,6 +1134,32 @@ def _authored_by_the_agent(ballot: VoteBallot) -> tuple[bool, bool]:
     _target, unwound = _authored_target(ballot, chain)
     typed = ballot.guard_rewrite_reason is not None
     return (not typed and not unwound), (unwound and not typed)
+
+
+def _model_authored_rationale(rationale: str) -> str:
+    """What is left of a rationale once the GUARD's own audit prose is gone.
+
+    The meeting layer prepends audit markers to ``rationale_text`` and those
+    markers preserve ids: the teammate firewall writes
+    ``[teammate target 'p-3' coerced to SKIP]`` and then REDACTS the model's
+    body (:data:`~meetings.manager.TEAMMATE_COERCED_VOTE_RATIONALE`), so a
+    coerced SKIP can carry a player id no agent put there. Row 4 asks whether
+    the AGENT named anything it weighed, so it must read the model-authored
+    remainder; asking the raw text lets the machinery answer for the voter and
+    silently rescues a ballot with no basis at all.
+
+    The cut is by PROVENANCE, not by pattern: it is the same anchored,
+    repr-aware chain :func:`eval.deduction_metrics._scan_marker_chain` walks for
+    every other guard-origin cell in this package, and ``consumed`` is how far
+    that chain reached. ``api.replay_loader._parse_rewrite_reasons`` makes the
+    identical cut for the spectator surface's ``rationale_text_clean``. A
+    rationale that is ENTIRELY markers - the vote-parse default, whose bounded
+    response head is machinery-written even though the head's bytes came from an
+    unparseable completion - leaves the empty string, which is the honest
+    reading: nothing parsed, so the agent named nothing.
+    """
+
+    return rationale[_scan_marker_chain(rationale).consumed :]
 
 
 def fold_set(inputs: SetInputs) -> ProcessTally:
@@ -1192,7 +1266,9 @@ def _fold_meeting(
         grounded = _is_grounded(
             ballot, turns_by_id=turns_by_id, turn_ids=turn_ids, lines=lines
         )
-        names_a_player = bool(_PLAYER_TOKEN_RE.search(ballot.rationale_text))
+        names_a_player = bool(
+            _PLAYER_TOKEN_RE.search(_model_authored_rationale(ballot.rationale_text))
+        )
         if is_skip:
             if grounded:
                 tally.grounded_skip += 1
@@ -1292,12 +1368,18 @@ def _fold_argmax(
     no_flag_meeting: bool,
     tally: ProcessTally,
 ) -> None:
-    """Row 2's contribution from one crew EJECT ballot."""
+    """Row 2's contribution from one crew EJECT ballot.
 
-    if allowed:
-        impostors = sum(1 for target in allowed if roles[target] == "IMPOSTOR")
-        tally.chance_share_sum += Fraction(impostors, len(allowed))
-        tally.chance_ballots += 1
+    The chance baseline accumulates AFTER the two non-coverage returns, so its
+    population is the row's own denominator - the unambiguous ballots - exactly
+    as the published definition says ("the mean, over the SAME unambiguous
+    ballots that form the denominator"). A ballot that lands in
+    ``argmax_no_row`` or ``argmax_ties`` is excluded from the split and is
+    excluded from chance with it; folding it into chance alone would publish a
+    baseline no denominator on the row accounts for, which
+    :func:`scorecard_from_tally` now refuses outright.
+    """
+
     rows = {target: value for target, value in rendered.items() if target in allowed}
     if not rows:
         tally.argmax_no_row += 1
@@ -1307,6 +1389,11 @@ def _fold_argmax(
     if len(winners) != 1:
         tally.argmax_ties += 1
         return
+    # Past both returns ``allowed`` is non-empty by construction: every key of
+    # ``rows`` is one of its members.
+    impostors = sum(1 for target in allowed if roles[target] == "IMPOSTOR")
+    tally.chance_share_sum += Fraction(impostors, len(allowed))
+    tally.chance_ballots += 1
     correct = roles[ballot.target] == "IMPOSTOR"
     if winners[0] == ballot.target:
         tally.followers += 1
@@ -1366,6 +1453,18 @@ def scorecard_from_tally(
         else None
     )
     unambiguous = tally.followers + tally.deviators
+    # The published definition says chance is the mean over the SAME ballots the
+    # denominator counts, so the two populations are one population. They were
+    # not once (chance accumulated before the tie and no-row returns), and a
+    # baseline over a population no cell on the row accounts for is exactly the
+    # kind of silent divergence AGENTS.md rule 5 says to raise on rather than
+    # publish.
+    if tally.chance_ballots != unambiguous:
+        raise ValueError(
+            "the chance baseline's population must be the row's denominator: "
+            f"{tally.chance_ballots} chance ballots against {unambiguous} "
+            "unambiguous ones"
+        )
     return SetScorecard(
         label=label,
         sources=tuple(sources),

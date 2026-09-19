@@ -33,10 +33,10 @@ Report format version 2; scorecard schema version 1; decision date 2026-09-19.
 | 1 | grounded-decision rate, SKIP | 0/1485 = 0.0000 |
 | 1 | grounded-decision rate, all ballots | 2078/3631 = 0.5723 |
 | 2 | argmax-independence: deviating EJECTs | 116/1811 = 6.4% |
-| 2 | argmax-independence: role-correct, followers vs deviators | 1602/1695 = 94.5% vs 9/116 = 7.8% (chance 31.5%) |
+| 2 | argmax-independence: role-correct, followers vs deviators | 1602/1695 = 94.5% vs 9/116 = 7.8% (chance 31.6%) |
 | 3 | manufactured-contradiction rate | 159/192 = 0.8281 (not evaluable 32) |
-| 4 | unexplained-decision rate | 15/3631 = 0.0041 |
-| 5 | evidence-quality mix | contradiction_flag 10, first_hand 83, unevidenced 3, vent_flag 333 over 429 ejections |
+| 4 | unexplained-decision rate | 20/3631 = 0.0055 |
+| 5 | evidence-quality mix | contradiction_flag 10, first_hand 75, hearsay 8, unevidenced 3, vent_flag 333 over 429 ejections |
 | 6 | rationale faithfulness (TOKENS) | 2874/2874 = 1.0000 (not evaluable 757) |
 | 7 | agent-authored share | 3531/3631 = 0.9725 |
 | 8 | wrong-but-believable rate | 383/2146 = 0.1785 — reported, never penalised |
@@ -48,9 +48,9 @@ Row 3 detail: manufactured flags contradicting an account the engine route makes
 
 Row 3 claim census: 1003 self-alibi claims (814 spanning more than one tick), 106 false under the envelope test of which 105 are multi-tick, 2 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 13 further alibi claims name another player and are out of the census.
 
-Row 4 detail: EJECT ballots whose citation does not resolve, 2; SKIP ballots naming no player at all, 13 (1461 SKIPs carry considered_alternatives and 759 name a player in prose).
+Row 4 detail: EJECT ballots whose citation does not resolve, 2; SKIP ballots naming no player at all, 18 (1461 SKIPs carry considered_alternatives and 748 name a player in prose).
 
-Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/10, first_hand 46/83, unevidenced 3/3, vent_flag 333/333.
+Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/10, first_hand 42/75, hearsay 4/8, unevidenced 3/3, vent_flag 333/333.
 
 Row 6 detail: 0 of 6796 extracted tokens are absent from what the voter held.
 
@@ -70,8 +70,8 @@ Context: impostor alibis 122/139 survived contradiction detection; reporter slot
 | 2 | argmax-independence: deviating EJECTs | 112/1704 = 6.6% |
 | 2 | argmax-independence: role-correct, followers vs deviators | 1501/1592 = 94.3% vs 9/112 = 8.0% (chance 30.4%) |
 | 3 | manufactured-contradiction rate | 158/191 = 0.8272 (not evaluable 32) |
-| 4 | unexplained-decision rate | 14/3385 = 0.0041 |
-| 5 | evidence-quality mix | contradiction_flag 10, first_hand 76, unevidenced 2, vent_flag 288 over 376 ejections |
+| 4 | unexplained-decision rate | 19/3385 = 0.0056 |
+| 5 | evidence-quality mix | contradiction_flag 10, first_hand 69, hearsay 7, unevidenced 2, vent_flag 288 over 376 ejections |
 | 6 | rationale faithfulness (TOKENS) | 2719/2719 = 1.0000 (not evaluable 666) |
 | 7 | agent-authored share | 3288/3385 = 0.9713 |
 | 8 | wrong-but-believable rate | 364/2026 = 0.1797 — reported, never penalised |
@@ -83,9 +83,9 @@ Row 3 detail: manufactured flags contradicting an account the engine route makes
 
 Row 3 claim census: 955 self-alibi claims (769 spanning more than one tick), 104 false under the envelope test of which 103 are multi-tick, 2 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 13 further alibi claims name another player and are out of the census.
 
-Row 4 detail: EJECT ballots whose citation does not resolve, 2; SKIP ballots naming no player at all, 12 (1336 SKIPs carry considered_alternatives and 721 name a player in prose).
+Row 4 detail: EJECT ballots whose citation does not resolve, 2; SKIP ballots naming no player at all, 17 (1336 SKIPs carry considered_alternatives and 710 name a player in prose).
 
-Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/10, first_hand 43/76, unevidenced 2/2, vent_flag 288/288.
+Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/10, first_hand 39/69, hearsay 4/7, unevidenced 2/2, vent_flag 288/288.
 
 Row 6 detail: 0 of 6473 extracted tokens are absent from what the voter held.
 
@@ -105,10 +105,10 @@ Context: impostor alibis 117/134 survived contradiction detection; reporter slot
 | 1 | grounded-decision rate, SKIP | 0/1017 = 0.0000 |
 | 1 | grounded-decision rate, all ballots | 1455/2516 = 0.5783 |
 | 2 | argmax-independence: deviating EJECTs | 81/1270 = 6.4% |
-| 2 | argmax-independence: role-correct, followers vs deviators | 1143/1189 = 96.1% vs 7/81 = 8.6% (chance 30.3%) |
+| 2 | argmax-independence: role-correct, followers vs deviators | 1143/1189 = 96.1% vs 7/81 = 8.6% (chance 30.4%) |
 | 3 | manufactured-contradiction rate | 105/134 = 0.7836 (not evaluable 28) |
-| 4 | unexplained-decision rate | 12/2516 = 0.0048 |
-| 5 | evidence-quality mix | contradiction_flag 3, first_hand 56, unevidenced 2, vent_flag 220 over 281 ejections |
+| 4 | unexplained-decision rate | 15/2516 = 0.0060 |
+| 5 | evidence-quality mix | contradiction_flag 3, first_hand 52, hearsay 4, unevidenced 2, vent_flag 220 over 281 ejections |
 | 6 | rationale faithfulness (TOKENS) | 2014/2014 = 1.0000 (not evaluable 502) |
 | 7 | agent-authored share | 2446/2516 = 0.9722 |
 | 8 | wrong-but-believable rate | 251/1499 = 0.1674 — reported, never penalised |
@@ -120,9 +120,9 @@ Row 3 detail: manufactured flags contradicting an account the engine route makes
 
 Row 3 claim census: 696 self-alibi claims (559 spanning more than one tick), 68 false under the envelope test of which 68 are multi-tick, 1 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 9 further alibi claims name another player and are out of the census.
 
-Row 4 detail: EJECT ballots whose citation does not resolve, 1; SKIP ballots naming no player at all, 11 (999 SKIPs carry considered_alternatives and 531 name a player in prose).
+Row 4 detail: EJECT ballots whose citation does not resolve, 1; SKIP ballots naming no player at all, 14 (999 SKIPs carry considered_alternatives and 524 name a player in prose).
 
-Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 0/3, first_hand 30/56, unevidenced 2/2, vent_flag 220/220.
+Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 0/3, first_hand 28/52, hearsay 2/4, unevidenced 2/2, vent_flag 220/220.
 
 Row 6 detail: 0 of 4796 extracted tokens are absent from what the voter held.
 
@@ -140,10 +140,10 @@ Context: impostor alibis 86/97 survived contradiction detection; reporter slots 
 | 1 | grounded-decision rate, SKIP | 0/342 = 0.0000 |
 | 1 | grounded-decision rate, all ballots | 507/869 = 0.5834 |
 | 2 | argmax-independence: deviating EJECTs | 31/434 = 7.1% |
-| 2 | argmax-independence: role-correct, followers vs deviators | 358/403 = 88.8% vs 2/31 = 6.5% (chance 30.6%) |
+| 2 | argmax-independence: role-correct, followers vs deviators | 358/403 = 88.8% vs 2/31 = 6.5% (chance 30.5%) |
 | 3 | manufactured-contradiction rate | 53/57 = 0.9298 (not evaluable 4) |
-| 4 | unexplained-decision rate | 2/869 = 0.0023 |
-| 5 | evidence-quality mix | contradiction_flag 7, first_hand 20, vent_flag 68 over 95 ejections |
+| 4 | unexplained-decision rate | 4/869 = 0.0046 |
+| 5 | evidence-quality mix | contradiction_flag 7, first_hand 17, hearsay 3, vent_flag 68 over 95 ejections |
 | 6 | rationale faithfulness (TOKENS) | 705/705 = 1.0000 (not evaluable 164) |
 | 7 | agent-authored share | 842/869 = 0.9689 |
 | 8 | wrong-but-believable rate | 113/527 = 0.2144 — reported, never penalised |
@@ -155,9 +155,9 @@ Row 3 detail: manufactured flags contradicting an account the engine route makes
 
 Row 3 claim census: 259 self-alibi claims (210 spanning more than one tick), 36 false under the envelope test of which 35 are multi-tick, 1 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 4 further alibi claims name another player and are out of the census.
 
-Row 4 detail: EJECT ballots whose citation does not resolve, 1; SKIP ballots naming no player at all, 1 (337 SKIPs carry considered_alternatives and 190 name a player in prose).
+Row 4 detail: EJECT ballots whose citation does not resolve, 1; SKIP ballots naming no player at all, 3 (337 SKIPs carry considered_alternatives and 186 name a player in prose).
 
-Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/7, first_hand 13/20, vent_flag 68/68.
+Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/7, first_hand 11/17, hearsay 2/3, vent_flag 68/68.
 
 Row 6 detail: 0 of 1677 extracted tokens are absent from what the voter held.
 
@@ -213,7 +213,7 @@ Context: impostor alibis 1/1 survived contradiction detection; reporter slots 0/
 | 2 | argmax-independence: role-correct, followers vs deviators | 42/44 = 95.5% vs 0/3 = 0.0% (chance 50.0%) |
 | 3 | manufactured-contradiction rate | 0/0 = n/a |
 | 4 | unexplained-decision rate | 1/117 = 0.0085 |
-| 5 | evidence-quality mix | first_hand 5, vent_flag 19 over 24 ejections |
+| 5 | evidence-quality mix | first_hand 4, hearsay 1, vent_flag 19 over 24 ejections |
 | 6 | rationale faithfulness (TOKENS) | 72/72 = 1.0000 (not evaluable 45) |
 | 7 | agent-authored share | 116/117 = 0.9915 |
 | 8 | wrong-but-believable rate | 9/51 = 0.1765 — reported, never penalised |
@@ -227,7 +227,7 @@ Row 3 claim census: 29 self-alibi claims (26 spanning more than one tick), 2 fal
 
 Row 4 detail: EJECT ballots whose citation does not resolve, 0; SKIP ballots naming no player at all, 1 (65 SKIPs carry considered_alternatives and 21 name a player in prose).
 
-Row 5 detail (role-correct beside each band, gating nothing): first_hand 1/5, vent_flag 19/19.
+Row 5 detail (role-correct beside each band, gating nothing): first_hand 1/4, hearsay 0/1, vent_flag 19/19.
 
 Row 6 detail: 0 of 147 extracted tokens are absent from what the voter held.
 
@@ -239,15 +239,15 @@ Context: impostor alibis 4/4 survived contradiction detection; reporter slots 4/
 
 **grounded_decision_rate.** Numerator: ballots whose citation RESOLVES in the voter's own inputs (primary_reason_id in this meeting's turns, or primary_reason_observation_id carried whole-token on a line of that voter's own recorded prompts) AND bears on the decision's subject by meetings.citation_relevance.citations_bear_on - the subject being the recorded target for an EJECT and any member of considered_alternatives for a SKIP. Denominator: all ballots of that decision kind. Not-evaluable: ballots whose voter has no recorded prompt in the meeting. An UNCITED ballot is not grounded: citations_bear_on is vacuously true with nothing cited, so presence and resolution are required before aboutness is asked. It does NOT measure whether the cited line was factually true.
 
-**argmax_independence.** Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the same ballots, of the living-impostor share of each voter's own valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.
+**argmax_independence.** Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the SAME unambiguous ballots that form the denominator - never over the excluded ties or the not-evaluable ballots - of the living-impostor share of each voter's own rendered valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.
 
 **manufactured_contradiction_rate.** Numerator: recorded contradiction flags whose kind is an alibi class (alibi_conflict, alibi_vs_sighting, alibi_vs_physical) and whose subjects name the speaker of a SELF-alibi claim in that meeting that is TRUE at at least one tick of its own span against that speaker's engine route from a state-hash-verified walk_replay. Denominator: all alibi-class flags. Not-evaluable: an alibi-class flag naming no self-alibi speaker in its meeting, or one whose claim covers a tick the walk does not reach. Ticks are agent-frame and resolve against engine tick T - 1. It does NOT measure intent, and it does NOT clear a flag whose subject lied at every tick - that flag is evidence, not an artifact.
 
-**unexplained_decision_rate.** Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a rationale carrying no whole-token player id. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.
+**unexplained_decision_rate.** Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off by provenance, the same anchored chain eval.deduction_metrics._scan_marker_chain walks and api.replay_loader cuts for rationale_text_clean: a guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.
 
-**evidence_quality_mix.** A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of their own memory or a transcript turn carrying a structured observation about them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.
+**evidence_quality_mix.** A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of the voter's own memory, or a transcript turn carrying a structured observation that NAMES them - whole-token, by meetings.citation_relevance.names_player over the observation's dumped structure, so a turn whose only observation places somebody else, and a turn merely SPOKEN by the ejected player, are not first-hand accounts of them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.
 
-**rationale_faithfulness.** Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.
+**rationale_faithfulness.** Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. It reads rationale_text WHOLE, guard audit markers included, and deliberately differs from row 4 there: this row asks whether every token in the RECORDED text is one the voter held, and a marker's preserved id always is, while row 4 asks the authorship question and must cut the machinery's prose off first. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.
 
 **agent_authored_share.** Numerator: ballots the meeting layer did not re-aim - neither a typed guard_rewrite_reason (any BallotTargetRewriteReason member) nor a target-rewriting marker unwound by eval.deduction_metrics._authored_target, the fallback meetings/schemas.py prescribes for recordings made before the typed fields. Denominator: all ballots. Citation-only rewrites are NOT counted against the share and are reported separately as 'citation nulled, target intact'; a ballot carrying both is counted among the rewrites, because the target moved. The marker-only redirect census rides beside as a sub-count: it keys on the graph-redirect marker alone and is therefore smaller than the typed layer.
 
