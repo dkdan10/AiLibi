@@ -518,7 +518,11 @@ def _assert_opens_on_role_proof(
     assert any(
         flag.category == "role_proof" and ejected in flag.subjects
         for flag in first.contradictions
-    ), (set_name, seed, [(f.kind, f.category, f.subjects) for f in first.contradictions])
+    ), (
+        set_name,
+        seed,
+        [(f.kind, f.category, f.subjects) for f in first.contradictions],
+    )
     roles = {player.agent_id: player.role for player in replay.players}
     assert roles[ejected] == "IMPOSTOR", (set_name, seed, ejected, roles[ejected])
 
