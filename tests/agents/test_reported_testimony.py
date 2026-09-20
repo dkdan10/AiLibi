@@ -12,6 +12,7 @@ below first-hand salience, and the dead ``alibi_map`` is finally populated.
 
 from __future__ import annotations
 
+import functools
 import tempfile
 from collections import Counter
 from collections.abc import Mapping
@@ -20,11 +21,14 @@ from typing import Any, Final, NamedTuple
 
 import pytest
 
+from agents.memory.beliefs import AlibiClaim as BeliefAlibiClaim
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
+    _MAX_RENDERED_ALIBIS,
     _build_observations,
+    _format_alibi_suffix,
     _latest_self_guard_fields,
     absorb_meeting_evidence,
     absorb_reported_testimony,
@@ -43,6 +47,8 @@ from meetings.manager import derive_reported_testimony
 from observation.service import ObservationService
 from meetings.schemas import (
     AccusationClaim,
+    AlibiClaim,
+    AlibiSegment,
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
@@ -1183,3 +1189,330 @@ class TestTestimonyShapesIngest:
             )
         )
         assert "saw p-3 KILL in REACTOR @ tick 13" in render_for_prompt(memory_ok)
+
+
+# --- Round 5: re-cutting a stay must be invisible to the LISTENER ------------
+
+
+def _cuts_of_one_stay(stay: AlibiSegment) -> tuple[tuple[AlibiSegment, ...], ...]:
+    """Every way of narrating ONE continuous stay as contiguous same-room legs.
+
+    The same enumeration ``tests/meetings/test_contradictions.py`` runs against
+    the detectors, restated here because it is what the LISTENER must also be
+    blind to: a stay of ``n`` ticks has ``n - 1`` interior boundaries and each
+    may be cut or not, so all ``2 ** (n - 1)`` shapes are enumerated -- the
+    uncut stay at mask 0 and the all-one-tick legs the operational prompts ask
+    for at the last mask.
+    """
+
+    boundaries = stay.to_tick - stay.from_tick
+    shapes: list[tuple[AlibiSegment, ...]] = []
+    for mask in range(1 << boundaries):
+        legs: list[AlibiSegment] = []
+        start = stay.from_tick
+        for offset in range(boundaries):
+            if mask >> offset & 1:
+                legs.append(
+                    AlibiSegment(
+                        room=stay.room,
+                        from_tick=start,
+                        to_tick=stay.from_tick + offset,
+                    )
+                )
+                start = stay.from_tick + offset + 1
+        legs.append(AlibiSegment(room=stay.room, from_tick=start, to_tick=stay.to_tick))
+        shapes.append(tuple(legs))
+    return tuple(shapes)
+
+
+def _recuts_of(route: tuple[AlibiSegment, ...]) -> tuple[tuple[AlibiSegment, ...], ...]:
+    """Every re-cut of ``route``: the cross product of each stay's own cuts."""
+
+    shapes: tuple[tuple[AlibiSegment, ...], ...] = ((),)
+    for stay in route:
+        shapes = tuple(
+            (*prefix, *legs) for prefix in shapes for legs in _cuts_of_one_stay(stay)
+        )
+    return shapes
+
+
+_LISTENER: Final[str] = "p-9"
+_RECUT_VOTERS: Final[tuple[str, ...]] = ("p-1", "p-2", "p-9")
+
+# The proxy account a rival gives about the speaker: ONE contradicting
+# placement, the row a flood of the speaker's own legs used to evict.
+_RIVAL_PROXY: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="MEDBAY", from_tick=8, to_tick=8),
+)
+
+_ONE_STAY: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="STORAGE", from_tick=2, to_tick=8),
+)
+_TWO_STAYS: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="STORAGE", from_tick=2, to_tick=6),
+    AlibiSegment(room="CAFETERIA", from_tick=7, to_tick=11),
+)
+# Seed 41's honest walk, the exhibit the whole card is written from: four rooms,
+# four stays, and not one of them re-cuttable.
+_FOUR_STAYS: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="ENGINEERING", from_tick=12, to_tick=12),
+    AlibiSegment(room="EAST_HALL", from_tick=13, to_tick=13),
+    AlibiSegment(room="ADMIN", from_tick=14, to_tick=14),
+    AlibiSegment(room="WEST_HALL", from_tick=15, to_tick=15),
+)
+
+
+def _alibi_turn(
+    *, index: int, speaker: str, subject: str, route: tuple[AlibiSegment, ...]
+) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=f"m-recut:turn-{index}",
+        turn_index=index,
+        speaker=speaker,
+        turn_kind="opening" if index == 0 else "reply",
+        reply_to=None,
+        observations=(),
+        claims=(AlibiClaim(type="alibi", subject=subject, route=route),),
+        free_text="",
+    )
+
+
+def _recut_meeting(
+    route: tuple[AlibiSegment, ...],
+    *,
+    rival: tuple[AlibiSegment, ...] = _RIVAL_PROXY,
+) -> MeetingResult:
+    """The rival's proxy account first, then ``p-1``'s own account of itself."""
+
+    return MeetingResult(
+        meeting_id="m-recut",
+        triggered_by=_LISTENER,
+        trigger_tick=20,
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        ballots=tuple(
+            VoteBallot(
+                voter=voter,
+                target="SKIP",
+                confidence=0.0,
+                primary_reason_id=None,
+                rationale_text="skip",
+            )
+            for voter in _RECUT_VOTERS
+        ),
+        transcript=MeetingTranscript(
+            turns=(
+                _alibi_turn(index=0, speaker="p-2", subject="p-1", route=rival),
+                _alibi_turn(index=1, speaker="p-1", subject="p-1", route=route),
+            )
+        ),
+    )
+
+
+def _listener_memory() -> AgentMemory:
+    """``p-9``'s memory, perception run once over the meeting's roster."""
+
+    return _memory_for(agent_id=_LISTENER, roster_sightings=("p-1", "p-2"), self_tick=0)
+
+
+class _ListenerReading(NamedTuple):
+    """Everything an alibi narration may leave in a listener, as bytes."""
+
+    statements: tuple[ReportedStatement, ...]
+    belief_alibis: tuple[tuple[object, ...], ...]
+    meeting_lines: tuple[str, ...]
+    rendered: str
+
+
+def _listener_reading(route: tuple[AlibiSegment, ...]) -> _ListenerReading:
+    """Drive the PRODUCTION path and read back what the listener holds."""
+
+    statements = derive_reported_testimony(_recut_meeting(route))
+    memory = _listener_memory()
+    absorb_reported_testimony(memory, statements=statements)
+    rendered = render_for_prompt(memory)
+    return _ListenerReading(
+        statements=statements,
+        belief_alibis=tuple(
+            (subject, alibi.room, alibi.tick, alibi.source)
+            for subject in sorted(memory.beliefs.known_players())
+            for alibi in memory.beliefs.view(subject).alibis
+        ),
+        meeting_lines=tuple(
+            line for line in rendered.splitlines() if "[meeting" in line
+        ),
+        rendered=rendered,
+    )
+
+
+class TestReCuttingAStayChangesNothingTheListenerHolds:
+    """The class-closing property, carried across the meeting/agent firewall.
+
+    ``tests/meetings/test_contradictions.py`` closes the re-cut class for the
+    DETECTORS. This closes it for the other consumer that decides a vote: what
+    a listener absorbs. The reduction files one ``ReportedStatement`` per
+    maximal STAY, so one continuous stay restated as contiguous same-room legs
+    lands as ONE belief row and ONE ``[meeting]`` line however it was cut, and
+    ``render_for_prompt`` is byte-identical.
+
+    Why it has to be: leg count was a WEIGHT the accused set. The alibi cap
+    meant a speaker who itemised their own stay finely enough pushed a rival's
+    contradicting placement out of the belief block entirely, and the
+    ``[meeting]`` lines are charged against the memory budget, so the flood
+    could also shed unrelated memory. The operational prompts ASK for
+    fine-grained routes, so an honest one-tick-per-leg narrator did it to their
+    own listeners without meaning to.
+
+    Exhaustive, not sampled: every one of the ``2 ** (n - 1)`` narrations of
+    each stay, the uncut stay and the all-one-tick legs included.
+    """
+
+    @pytest.mark.parametrize(
+        ("name", "route"),
+        (
+            ("one_stay", _ONE_STAY),
+            ("two_stays", _TWO_STAYS),
+            ("four_stays", _FOUR_STAYS),
+        ),
+    )
+    def test_every_recut_leaves_the_listener_identical(
+        self, name: str, route: tuple[AlibiSegment, ...]
+    ) -> None:
+        baseline = _listener_reading(route)
+        recuts = _recuts_of(route)
+
+        # The enumeration must contain the adverse shapes, or the property
+        # would be passing on a family of one.
+        assert len(recuts) == functools.reduce(
+            lambda total, stay: total * (1 << (stay.to_tick - stay.from_tick)),
+            route,
+            1,
+        )
+        assert route in recuts
+        assert (
+            tuple(
+                AlibiSegment(room=stay.room, from_tick=tick, to_tick=tick)
+                for stay in route
+                for tick in range(stay.from_tick, stay.to_tick + 1)
+            )
+            in recuts
+        )
+
+        for recut in recuts:
+            assert _listener_reading(recut) == baseline, (
+                name,
+                [(leg.room, leg.from_tick, leg.to_tick) for leg in recut],
+            )
+
+    def test_the_baseline_of_every_shape_carries_the_rival_and_the_speaker(
+        self,
+    ) -> None:
+        # A property comparing two empty renders proves nothing: each shape has
+        # to put BOTH voices in the block for the invariance to be about the
+        # thing the finding was about.
+        for route in (_ONE_STAY, _TWO_STAYS, _FOUR_STAYS):
+            reading = _listener_reading(route)
+            assert "per p-1" in reading.rendered
+            assert "in MEDBAY at tick 8 per p-2" in reading.rendered
+
+    def test_a_genuine_four_room_walk_still_lands_as_four_statements(self) -> None:
+        # The stay rule is not a compression of movement: four rooms are four
+        # stays, and every one of them reaches the listener.
+        statements = [
+            statement
+            for statement in _listener_reading(_FOUR_STAYS).statements
+            if statement.kind == "alibi" and statement.speaker == "p-1"
+        ]
+        assert [(s.room, s.from_tick, s.to_tick) for s in statements] == [
+            ("ENGINEERING", 12, 12),
+            ("EAST_HALL", 13, 13),
+            ("ADMIN", 14, 14),
+            ("WEST_HALL", 15, 15),
+        ]
+
+
+class TestTheRoundFiveListenerExhibits:
+    """The two verified round-5 listener findings, as the verifier stated them."""
+
+    def test_a_thirteen_leg_narration_does_not_evict_the_rivals_placement(
+        self,
+    ) -> None:
+        # The repro: p-2 places p-1 in MEDBAY at tick 8; p-1 self-alibis
+        # STORAGE 2-14. Stated as the envelope the listener held both rows.
+        # Stated as thirteen one-tick legs the belief block read "in STORAGE at
+        # tick 12 ...; tick 13 ...; tick 14 per p-1" and the rival's row was
+        # GONE from the block p-9 reasons and votes from.
+        envelope = (AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),)
+        one_tick_legs = tuple(
+            AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+            for tick in range(2, 15)
+        )
+
+        from_envelope = _listener_reading(envelope)
+        from_legs = _listener_reading(one_tick_legs)
+
+        assert (
+            "alibi: in STORAGE at tick 2 per p-1; in MEDBAY at tick 8 per p-2"
+            in from_envelope.rendered
+        )
+        assert from_legs.rendered == from_envelope.rendered
+        # And the flood of [meeting] lines is gone with it: 2 either way, not 14.
+        assert len(from_legs.meeting_lines) == len(from_envelope.meeting_lines) == 2
+
+    def test_an_honest_four_stay_route_does_not_evict_a_rivals_row(self) -> None:
+        # Stays alone do not close the cap: an HONEST four-room mover really
+        # has four rows, and a per-SUBJECT cap of three would have dropped the
+        # rival's single contradicting placement to make room for the fourth.
+        # Per (subject, source) it cannot: each voice keeps its own most-recent
+        # rows whatever anyone else says.
+        rendered = _listener_reading(_FOUR_STAYS).rendered
+        assert "in MEDBAY at tick 8 per p-2" in rendered
+        for room, tick in (("EAST_HALL", 13), ("ADMIN", 14), ("WEST_HALL", 15)):
+            assert f"in {room} at tick {tick} per p-1" in rendered
+        # The cap is still a cap: the speaker's OWN oldest row is the one their
+        # fourth stay displaces.
+        assert "in ENGINEERING at tick 12 per p-1" not in rendered
+
+
+class TestTheAlibiCapIsPerSource:
+    """``_format_alibi_suffix``'s cap, at the unit the round-5 review moved it to."""
+
+    @staticmethod
+    def _suffix(rows: tuple[tuple[str, int, str], ...]) -> str:
+        return _format_alibi_suffix(
+            tuple(
+                BeliefAlibiClaim(player_id="p-2", room=room, tick=tick, source=source)
+                for room, tick, source in rows
+            )
+        )
+
+    def test_one_sources_volume_never_evicts_another_source(self) -> None:
+        flood = tuple(("STORAGE", tick, "p-2") for tick in range(10, 20))
+        suffix = self._suffix((*flood, ("MEDBAY", 8, "p-3")))
+        assert "in MEDBAY at tick 8 per p-3" in suffix
+        # Bounded per source all the same: three of p-2's ten rows, its newest.
+        assert suffix.count("per p-2") == _MAX_RENDERED_ALIBIS
+        assert "at tick 19 per p-2" in suffix
+        assert "at tick 16 per p-2" not in suffix
+
+    def test_a_single_sources_rows_read_exactly_as_they_did(self) -> None:
+        # The byte-neutrality half: with ONE source the per-source cap and the
+        # old per-subject cap select the same three rows in the same order, and
+        # every memory state on the four committed sets is either under the cap
+        # or single-source.
+        rows = tuple(("STORAGE", tick, "p-3") for tick in range(10, 15))
+        assert self._suffix(rows) == (
+            "alibi: in STORAGE at tick 12 per p-3; "
+            "in STORAGE at tick 13 per p-3; in STORAGE at tick 14 per p-3"
+        )
+
+    def test_rows_render_in_one_deterministic_order_across_sources(self) -> None:
+        # Kept rows are rendered in the whole block's (tick, room, source)
+        # order, not grouped by source, so the line is a chronology.
+        suffix = self._suffix(
+            (("MEDBAY", 8, "p-3"), ("STORAGE", 2, "p-2"), ("LABS", 5, "p-4"))
+        )
+        assert suffix == (
+            "alibi: in STORAGE at tick 2 per p-2; in LABS at tick 5 per p-4; "
+            "in MEDBAY at tick 8 per p-3"
+        )

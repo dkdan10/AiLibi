@@ -22,7 +22,10 @@ import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
-from eval.alibi_fabrication import ALIBI_CONTRADICTION_KINDS
+from eval.alibi_fabrication import (
+    ALIBI_CONTRADICTION_KINDS,
+    compute_alibi_fabrication_rate,
+)
 from eval.process_scorecard import (
     ALIBI_FLAG_KINDS,
     ROLE_CORRECTNESS_NOTE,
@@ -33,13 +36,21 @@ from eval.process_scorecard import (
     RateCell,
     SetInputs,
     SetScorecard,
+    _context_cells,
     _walk_config,
     fold_set,
     pool,
     scorecard_from_tally,
 )
 from eval.replay_walk import WalkViolation
-from eval.report_schema import GameCostSummary, GameReport, MeetingReport
+from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
+    GameCostSummary,
+    GameReport,
+    MeetingReport,
+    TournamentReport,
+)
+from eval.reporter_justice import ReporterJusticeCells
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_REASON_ID_MARKER,
@@ -1422,3 +1433,110 @@ def test_pooling_the_chance_baseline_is_exact_and_order_free() -> None:
     backwards = pool([right, left], label="x", sources=()).argmax_independence
     assert forwards.chance_baseline == backwards.chance_baseline
     assert forwards.chance_baseline == round(float(Fraction(5, 12)), 6)
+
+
+# ---------------------------------------------------------------------------
+# Round 5: the published impostor_alibis* context cells
+# ---------------------------------------------------------------------------
+
+# A zero-filled reporter half. ``_context_cells`` carries these through
+# untouched and they are irrelevant to the alibi cells under test; they are
+# spelled out anyway so a new reporter cell fails this construction loudly
+# rather than being silently defaulted.
+_ZERO_REPORTER = ReporterJusticeCells(
+    set_name="planted",
+    games=0,
+    meetings=0,
+    body_report_meetings=0,
+    emergency_meetings=0,
+    reporter_crewmate_meetings=0,
+    reporter_impostor_meetings=0,
+    ejections=0,
+    innocent_ejections=0,
+    impostor_ejections=0,
+    reporter_slots=0,
+    reporter_ejections=0,
+    reporter_innocent_ejections=0,
+    innocent_non_reporter_slots=0,
+    innocent_non_reporter_ejections=0,
+    impostor_slots=0,
+    impostor_slot_ejections=0,
+    crew_accusations=0,
+    crew_accusations_at_reporter=0,
+    impostor_accusations=0,
+    impostor_accusations_at_reporter=0,
+    crew_ballots=0,
+    crew_ballots_at_reporter=0,
+    impostor_ballots=0,
+    impostor_ballots_at_reporter=0,
+    ballot_rationales=0,
+    ballot_rationales_mentioning_report=0,
+    ballot_rationales_with_hinge=0,
+    speech_turns=0,
+    speech_turns_mentioning_report=0,
+    speech_turns_with_hinge=0,
+    speech_turns_with_hinge_by_reporter=0,
+    meetings_with_co_discoverer=0,
+    co_discoverer_slots_crewmate=0,
+    co_discoverer_slots_impostor=0,
+)
+
+
+def test_recutting_a_restated_alibi_does_not_move_the_impostor_alibi_cells() -> None:
+    """The scorecard's context cells adopt the fabrication metric as computed.
+
+    ``impostor_alibis``, ``impostor_alibis_survived`` and
+    ``impostor_alibi_survival_rate`` are PUBLISHED in
+    ``docs/process-scorecard.{md,json}`` and pinned by
+    ``scripts/publish_process_scorecard.py --check``. They are
+    ``compute_alibi_fabrication_rate``'s counts, so the round-5 dedup repair --
+    keying the ACCOUNT rather than the narration -- is what keeps them out of
+    the accused's hands; this closes the chain from the metric to the cell.
+    """
+
+    account = (AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),)
+    one_tick_legs = tuple(
+        AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+        for tick in range(2, 15)
+    )
+
+    def cells(restatement: tuple[AlibiSegment, ...]) -> ContextCells:
+        turns = tuple(
+            _turn(
+                index=index,
+                speaker="p-3",
+                claims=(AlibiClaim(type="alibi", subject="p-3", route=route),),
+            )
+            for index, route in enumerate((account, restatement))
+        )
+        game = GameReport(
+            game_id="planted",
+            seed=7,
+            winner="CREWMATES",
+            reason="planted",
+            final_tick=9,
+            roles=_ROLES,
+            replay_ref="replay-seed-7.jsonl",
+            meetings=(_meeting(turns=turns),),
+            failed_calls=(),
+            prompt_versions={},
+            cost=GameCostSummary(
+                total_cost_usd=0.0,
+                total_input_tokens=0,
+                total_output_tokens=0,
+                by_model={},
+            ),
+        )
+        report = TournamentReport(
+            format_version=CURRENT_FORMAT_VERSION, games=(game,), seeds_used=(7,)
+        )
+        alibi = compute_alibi_fabrication_rate(report)
+        return _context_cells(
+            alibi.total_impostor_alibis, alibi.survived, _ZERO_REPORTER
+        )
+
+    verbatim = cells(account)
+    # Non-vacuous: the restatement really is deduped to ONE published alibi.
+    assert verbatim.impostor_alibis == 1
+    assert verbatim.impostor_alibi_survival_rate == 1.0
+    assert cells(one_tick_legs) == verbatim

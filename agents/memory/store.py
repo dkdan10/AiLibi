@@ -148,15 +148,18 @@ _SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY: Final[int] = 15
 # would change what those comparisons measured, so this stays where it shipped.
 _SALIENCE_EVIDENCE_V1_CONTEXT: Final[int] = 90
 
-# Per-subject cap on rendered reported alibi LEGS (Task 13.5.2, Codex P2). The
-# §6.6 belief block is the non-elastic carve-out (``_assemble_view`` never budgets
-# it), so an unbounded accumulated alibi list could push ``render_for_prompt``
-# over ``DEFAULT_TOKEN_BUDGET``. An alibi is a ROUTE and reduces to one reported
-# statement per leg, so the unit this bounds is the leg rather than the claim:
-# render only the most-recent few per subject; a newer leg supersedes a stale one
-# and N x subjects x this cap stays bounded. A long walk is therefore rendered as
-# its most recent legs -- the tail of the path, which is the part a listener is
-# weighing -- rather than as an envelope over rooms the speaker never joined.
+# Per-(subject, SOURCE) cap on rendered reported alibi rows (Task 13.5.2, Codex
+# P2; scoped to the source by the round-5 review). The §6.6 belief block is the
+# non-elastic carve-out (``_assemble_view`` never budgets it), so an unbounded
+# accumulated alibi list could push ``render_for_prompt`` over
+# ``DEFAULT_TOKEN_BUDGET``. An alibi is a ROUTE and reduces to one reported
+# statement per maximal STAY, so the unit this bounds is the stay rather than the
+# claim: render only the most-recent few per subject PER SPEAKER; a newer stay
+# supersedes that speaker's stale one, and subjects x sources x this cap stays
+# bounded. A long walk is therefore rendered as its most recent stays -- the tail
+# of the path, which is the part a listener is weighing -- rather than as an
+# envelope over rooms the speaker never joined, and never at the cost of another
+# speaker's row (see :func:`_format_alibi_suffix`).
 _MAX_RENDERED_ALIBIS: Final[int] = 3
 
 _EVENT_SAW_BODY: Final[str] = "saw_body"
@@ -2563,29 +2566,46 @@ def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
     Empty for a subject with no recorded alibi, so that subject's belief line
     carries no suffix. An alibi is a ROUTE, and
     :func:`meetings.manager.derive_reported_testimony` files one statement per
-    leg, so a subject who stated a four-room walk arrives here as four rows and
-    renders as the path: ``in ENGINEERING at tick 12 per p-9; in EAST_HALL at
-    tick 13 per p-9; ...``. Rows are sorted by ``(tick, room, source)`` for
-    replay determinism -- which is route order for one speaker's own walk --
-    and each stays attributed to the player who asserted it. A stationary
-    account is one row and reads exactly as it always did.
+    maximal STAY, so a subject who stated a four-room walk arrives here as four
+    rows and renders as the path: ``in ENGINEERING at tick 12 per p-9; in
+    EAST_HALL at tick 13 per p-9; ...``. Rows are sorted by ``(tick, room,
+    source)`` for replay determinism -- which is route order for one speaker's
+    own walk -- and each stays attributed to the player who asserted it. A
+    stationary account is one row and reads exactly as it always did.
     """
 
     if not alibis:
         return ""
-    # Cap the rendered alibis per subject so the non-elastic §6.6 belief block
-    # cannot grow unbounded across many meetings and push the budgeted render over
+    # Cap the rendered alibis so the non-elastic §6.6 belief block cannot grow
+    # unbounded across many meetings and push the budgeted render over
     # ``DEFAULT_TOKEN_BUDGET`` (Codex P2): keep the most-recent
     # ``_MAX_RENDERED_ALIBIS`` by tick (a newer alibi supersedes a stale one),
-    # then render oldest-first for a stable, replay-deterministic line.
+    # rendered oldest-first for a stable, replay-deterministic line.
+    #
+    # The cap is per (subject, SOURCE), not per subject (round-5 review). Per
+    # subject it let ONE voice evict another: the rows compete on VOLUME, and
+    # the volume is the speaker's own choice -- an accused player narrating a
+    # long route pushes a rival's single contradicting placement out of the
+    # block the listener reasons and votes from, which is the one row that
+    # could have sunk the account. Per source, a speaker can only ever displace
+    # their OWN older rows, so what each voice contributed survives whatever
+    # anyone else says. The bound is now sources x cap rather than cap; sources
+    # are roster-gated by :func:`absorb_reported_testimony`, so the block stays
+    # finite and deterministic, and the widest subject on the four committed
+    # sets holds four rows.
     ordered = sorted(alibis, key=lambda a: (a.tick, a.room, a.source))
-    if len(ordered) > _MAX_RENDERED_ALIBIS:
-        recent = sorted(ordered, key=lambda a: (a.tick, a.room, a.source))[
-            -_MAX_RENDERED_ALIBIS:
-        ]
-        ordered = recent
+    by_source: dict[PlayerId, list[int]] = {}
+    for position, alibi in enumerate(ordered):
+        by_source.setdefault(alibi.source, []).append(position)
+    kept = {
+        position
+        for positions in by_source.values()
+        for position in positions[-_MAX_RENDERED_ALIBIS:]
+    }
     parts = [
-        f"in {alibi.room} at tick {alibi.tick} per {alibi.source}" for alibi in ordered
+        f"in {alibi.room} at tick {alibi.tick} per {alibi.source}"
+        for position, alibi in enumerate(ordered)
+        if position in kept
     ]
     return "alibi: " + "; ".join(parts)
 

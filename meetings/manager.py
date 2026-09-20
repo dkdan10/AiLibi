@@ -182,6 +182,7 @@ from meetings.transcript import (
     grounded_vouch_subjects,
     independent_voices,
     is_relevant_sighting,
+    maximal_stays,
     next_chain_step,
     triggering_body_rooms,
 )
@@ -4476,22 +4477,34 @@ def derive_reported_testimony(
         for index, claim in enumerate(turn.claims):
             before = len(statements)
             if isinstance(claim, AlibiClaim):
-                # ONE statement per route LEG, in route order. The listener's
-                # belief fold keys an alibi on ``from_tick`` + ``room``, so a
-                # four-leg account collapsed into one statement would land in
-                # memory as "ENGINEERING from tick 12" and lose the three rooms
-                # the speaker actually named. ``ReportedStatement`` is
-                # unchanged: a leg IS the shape it already carries.
+                # ONE statement per MAXIMAL STAY (:func:`maximal_stays`), in
+                # route order. A four-room walk still lands as four statements
+                # -- those are four stays -- so the listener keeps every room
+                # the speaker named instead of collapsing to "ENGINEERING from
+                # tick 12"; ``ReportedStatement`` is unchanged, because a stay
+                # IS the shape it already carries. The stays rather than the
+                # legs AS STATED because what a listener HOLDS is a fact about
+                # the account, not about its wording: one continuous stay
+                # restated as several contiguous same-room legs says exactly
+                # the same thing, and the ``[meeting]`` line count, the belief
+                # rows and the capped §6.6 alibi suffix must not move with the
+                # speaker's choice of where to put a full stop (round-5 review;
+                # a 13-leg narration of one stay evicted a rival's
+                # contradicting placement from the listener's belief block).
+                # Nothing that REPORTS the account moves with it: the
+                # transcript, the serializer, the meeting-transcript render of
+                # the speaker's own turn and the served DTO all keep the legs
+                # the speaker gave.
                 statements.extend(
                     ReportedStatement(
                         speaker=speaker,
                         kind="alibi",
                         subject=claim.subject,
-                        from_tick=segment.from_tick,
-                        to_tick=segment.to_tick,
-                        room=segment.room,
+                        from_tick=stay.from_tick,
+                        to_tick=stay.to_tick,
+                        room=stay.room,
                     )
-                    for segment in claim.route
+                    for stay in maximal_stays(claim.route)
                 )
             elif isinstance(claim, AccusationClaim):
                 statements.append(
