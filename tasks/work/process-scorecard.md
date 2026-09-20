@@ -101,6 +101,57 @@ profile and yields `TickAdvanced.state` (`:374`), as
 
 ## Acceptance
 
+- [x] Review correction: rows 4 and 7 cut the rationale by PROVENANCE, which is
+  what they always claimed. `_authored_by_the_agent` and
+  `_model_authored_rationale` scanned the WHOLE `rationale_text`, so a model
+  body that OPENS with marker-shaped prose — at position 0, where a guard marker
+  would sit — was read as a guard rewrite and left the authored share. The scan
+  now runs over the marker region
+  `eval.deduction_metrics._split_rationale` establishes from the voter's own
+  pre-guard vote response, the region `_authored_target` documents its `chain`
+  argument as, and `eval/deduction_metrics.py:2668-2669` reads the same way.
+  Proved by the planted pair
+  `tests/eval/test_process_scorecard.py::test_a_model_body_that_opens_with_marker_shaped_prose_stays_authored`
+  / `::test_the_same_legacy_ballot_whose_marker_the_guard_wrote_leaves_the_share`,
+  whose halves differ in exactly who wrote the marker. 0 such ballots on today's
+  bytes, so no published cell moves; rows 4 and 7 publish the corrected
+  mechanism in their own definition strings.
+- [x] Review correction: the missing-prompt non-coverage count is partitioned by
+  ballot KIND. One `no_prompt_ballots` fed the EJECT cell, the SKIP cell and
+  wrong-but-believable alike, so one promptless EJECT reported a fully recorded
+  SKIP cell as having measured nothing — against `RateCell`'s own rule that
+  `not_evaluable` publishes separately so a reader can tell a cell that measured
+  nothing from one that measured a zero. `no_prompt_eject_ballots` and
+  `no_prompt_skip_ballots` now feed their own cells; `grounded_all` and the
+  unexplained row keep the sum, because their denominator is every ballot.
+  Proved by the pair
+  `::test_the_missing_prompt_count_is_partitioned_by_ballot_kind` /
+  `::test_the_partition_holds_with_the_kinds_swapped`, which assert the sibling
+  cell stays 0. 0 promptless ballots on all four sets, so no published cell
+  moves.
+- [x] Review correction: a game with no reconstructed route RAISES rather than
+  folding against an empty one. `fold_set` took `inputs.routes.get(game.seed,
+  {})`, so an absent seed silently became "this game stood still" — every alibi
+  tick unresolvable and row 3's census 0, which AGENTS.md rule 5 (invalid input
+  raises, no silent fallbacks) is exactly the rule against, and which this
+  card's own Results cites as why a non-reconstructing replay raises
+  `ProcessScorecardReconstructionError`. It is unreachable through
+  `load_set_inputs` (`walk_routes` keys every seed on disk), so it is pinned by
+  a planted case rather than by a figure:
+  `::test_a_game_with_no_reconstructed_route_is_refused_not_folded`, beside the
+  new sibling `::test_a_replay_that_does_not_reconstruct_is_refused` for the
+  walk-violation path.
+- [x] Review correction: `RateCell` refuses a published rate that contradicts
+  its own counts. `_counts_are_coherent` checked only non-negativity, numerator
+  ≤ denominator and the None-iff-zero-denominator rule, so
+  `RateCell(numerator=1, denominator=2, rate=0.9)` was accepted and the same
+  shape round-tripped through `RateCell.model_validate` from JSON — the typed
+  boundary every published rate crosses, and the model a later spectator surface
+  will parse `docs/process-scorecard.json` with. A rate must now equal
+  `round(numerator / denominator, 6)`. Pinned by the perturbed
+  `::test_a_rate_that_contradicts_its_own_counts_is_refused`, which builds the
+  inconsistent cell both in process and from JSON, the way the chance-population
+  invariant is pinned.
 - [x] Review correction: the writer's destination guard refuses by CONTAINMENT
   and not by file identity. `protected_inputs` now carries the recording
   DIRECTORIES — `replays/`, each committed set and the fifth run's archive —
@@ -126,8 +177,11 @@ profile and yields `TickAdvanced.state` (`:374`), as
   `uv run pytest tests/eval/test_process_scorecard.py tests/scripts/test_process_scorecard.py -q`.
 - [x] Review correction: row 4 no longer reads the vote guard's own marker text
   as the agent naming a player. The player-token test runs over the
-  MODEL-AUTHORED remainder — the anchored, repr-aware chain
-  `eval.deduction_metrics._scan_marker_chain` consumes, the same cut
+  MODEL-AUTHORED remainder — the marker region
+  `eval.deduction_metrics._split_rationale` establishes and
+  `_scan_marker_chain` consumes (round 1 cut the anchored chain out of the WHOLE
+  record, which is a pattern and not a provenance; corrected in round 3 below),
+  the same cut
   `api/replay_loader.py` makes for `rationale_text_clean` — so a teammate-coerced
   SKIP whose only `p-N` token sits inside the guard's marker counts as
   unexplained. Proved by
@@ -536,13 +590,18 @@ list itself: every file under the fifth run's archive is on it, and the
 recording roots are on it with the perturbed half showing the files-only list
 accepting the same destination.
 
-**4. Per-row planted pairs** (`tests/eval/test_process_scorecard.py`; 61 tests
-across it and its `tests/scripts/` sibling — 49 and 12 — none of which walks a
+**4. Per-row planted pairs** (`tests/eval/test_process_scorecard.py`; 68 tests
+across it and its `tests/scripts/` sibling — 56 and 12 — none of which walks a
 committed set except the one committed-bytes `--check`):
 
 * Row 1 — a SKIP citing a turn about a named alternative scores grounded; the
   same SKIP with the citation nulled does not. An EJECT citing a turn that
   resolves but names somebody else is NOT grounded (aboutness, not resolution).
+  The missing-prompt count is partitioned by KIND: one promptless EJECT beside a
+  fully recorded SKIP leaves the SKIP cell's not-evaluable at 0, and the pair
+  swaps the kinds to prove it is the kind and not the position
+  (`test_the_missing_prompt_count_is_partitioned_by_ballot_kind` /
+  `test_the_partition_holds_with_the_kinds_swapped`).
 * Row 2 — one follower and one deviator whose role-correctness differs (the
   follower onto the impostor, the deviator onto a crewmate); a tie lands in the
   excluded count and in neither column; a higher rendered row OUTSIDE the valid
@@ -580,14 +639,27 @@ committed set except the one committed-bytes `--check`):
   rationale with no extractable token is not-evaluable with a `None` rate.
 * Row 7 — a ballot carrying `under_gate_redirect` leaves the authored share; one
   carrying only a nulled-citation marker does not; a marker rewrite with no
-  typed reason still leaves the share (the pre-typed-field fallback); and
+  typed reason still leaves the share (the pre-typed-field fallback);
   `uncited_coerced`, which prepends no target repr, is counted by the typed
-  layer although the marker census cannot see it.
+  layer although the marker census cannot see it; and a legacy ballot whose
+  MODEL body opens with the redirect literal STAYS in the share while the same
+  bytes with the guard as the marker's author leave it
+  (`test_a_model_body_that_opens_with_marker_shaped_prose_stays_authored` /
+  `test_the_same_legacy_ballot_whose_marker_the_guard_wrote_leaves_the_share`) —
+  the halves differ in exactly who wrote the marker.
 * Row 8 — a grounded wrong call is wrong-but-believable; the same wrong call
   resting on a manufactured flag is not; a role-correct EJECT never is.
 * Row 9 and pooling — the row is labelled as no gate; pooling two groups adds
   counts and recomputes the rate (1 of 4, not the 0.667 a mean of rates would
   publish); the chance baseline pools identically in either order.
+* The typed boundary and the fold's own contract — a `RateCell` whose published
+  rate is not its own counts is REFUSED, built in process and validated from
+  JSON alike (`test_a_rate_that_contradicts_its_own_counts_is_refused`); a game
+  whose seed the route table does not carry raises rather than folding against
+  an empty route, with the same game keyed as the adverse half
+  (`test_a_game_with_no_reconstructed_route_is_refused_not_folded`); and a
+  profile violation raises through the same error
+  (`test_a_replay_that_does_not_reconstruct_is_refused`).
 
 ### Limitations
 
@@ -647,11 +719,18 @@ correction:` item at the head of `## Acceptance`:
 over the raw `rationale_text`, guard markers included, so a teammate-coerced
 SKIP — whose marker preserves the coerced target's id and whose body the guard
 then replaces with `TEAMMATE_COERCED_VOTE_RATIONALE` — escaped the counter on a
-`p-N` no agent wrote. `_model_authored_rationale` now cuts the anchored,
-repr-aware marker chain off first, by PROVENANCE rather than by pattern: the
-same `eval.deduction_metrics._scan_marker_chain` every other guard-origin cell
-in the package reads, and the same cut `api/replay_loader.py` makes for
-`rationale_text_clean`. The row's published definition says so. Published
+`p-N` no agent wrote. `_model_authored_rationale` now cuts the marker chain off
+first. **The mechanism sentence this paragraph carried is SUPERSEDED by round 3
+below**: round 1 cut the anchored chain out of the WHOLE recorded rationale,
+which is a cut by PATTERN, while the claim written here — and in the row's
+published definition — was a cut by PROVENANCE. Round 3 makes the code match
+the claim, over the marker region
+`eval.deduction_metrics._split_rationale` establishes from the voter's own
+pre-guard body, which is what every other guard-origin cell in the package
+reads and what `api/replay_loader.py` cuts for `rationale_text_clean`. The
+published movement below is round 1's and is unaffected: no committed ballot's
+recorded body opens with marker-shaped prose, so the two cuts agree to the byte
+on these recordings. Published
 movement, per set and pooled:
 
 | set | unexplained, was → now | SKIPs naming no player | SKIPs naming one in prose |
@@ -902,3 +981,160 @@ sibling of the `test_recording_replacement.py` flake round 1 recorded and is
 filed the same way; nothing here depends on it. The record-impact statement is
 unchanged and re-demonstrated. No provider call is a check here, and none was
 made.
+
+### Review corrections, round 3 (2026-09-20)
+
+A live Codex pass over the pushed head `b8a2c622` raised **four findings**. All
+four are VALID and all four are repaired; none needed a refutation. Three are
+rule-5 or typed-boundary holes that no committed byte reaches today, and one is
+a mechanism that did not match the claim its own row publishes:
+
+| defect | raised by | repair |
+| --- | --- | --- |
+| rows 4 and 7 scanned the WHOLE rationale, so marker-shaped MODEL prose at position 0 read as a guard rewrite | documentation/Codex lens | scan the provenance-established marker region |
+| the missing-prompt non-coverage count was not partitioned by ballot kind | documentation/Codex lens | tally and publish it per kind |
+| a game absent from the route table folded against an EMPTY route | documentation/Codex lens | raise, naming the seed |
+| `RateCell` accepted a published rate that contradicts its own counts | documentation/Codex lens | require the rate to be the quotient |
+
+**1. The cut is by provenance now, not only in prose.** `_authored_by_the_agent`
+and `_model_authored_rationale` called `_scan_marker_chain(ballot.rationale_text)`
+— the ANCHORED chain over the whole record. Anchoring is a shape, not an author:
+a model body that OPENS by quoting the redirect literal sits at position 0
+exactly where the guard's marker would, so such a ballot was unwound as a guard
+rewrite and left the authored share, and row 4 then read the voter's own opening
+words as machinery. `eval/deduction_metrics.py`'s `_MarkerChain` says every
+guard-origin cell reads the PROVENANCE-established marker region only, and
+`_authored_target` documents its `chain` argument as the scan of that region;
+`eval/deduction_metrics.py:2668-2669` does exactly that. This card's own round-1
+correction claimed the same mechanism and shipped the other one — that paragraph
+is marked SUPERSEDED above, and the row 4 and row 7 definition strings now name
+`_split_rationale` as the boundary. `_guard_marker_chain` is the one place the
+cut is made, from each voter's PRE-GUARD vote body recovered by
+`_model_authored_bodies`, and `_fold_meeting` passes one chain to every
+guard-origin cell (authored share, marker-unwound fallback, citation-nulled
+sub-count, row 4's player-token test). A record whose boundary cannot be
+established yields an EMPTY marker region, which is the published under-count
+direction `guard_provenance_unverifiable_ballots` already carries rather than a
+new silent one.
+
+The committed sets carry 0 such ballots (`deduction_metrics` reports 0
+unverifiable and 0 model-source-unavailable on all four, where every guard cell
+equals its whole-record reading), so **no published cell moves**. The planted
+pair is the proof instead, and the two halves differ in exactly who wrote the
+marker:
+`test_a_model_body_that_opens_with_marker_shaped_prose_stays_authored` (the
+model's pre-guard body IS the whole record, so the ballot stays authored) and
+`test_the_same_legacy_ballot_whose_marker_the_guard_wrote_leaves_the_share`
+(same bytes, body alone as the pre-guard text, so the rewrite is real). Live
+perturbation — restoring the whole-record scan, running, restoring:
+
+```
+$ uv run pytest tests/eval/test_process_scorecard.py -q
+FAILED ...::test_a_model_body_that_opens_with_marker_shaped_prose_stays_authored
+1 failed, 55 passed in 0.34s
+```
+
+and with the provenance cut back: `56 passed`. The planted meetings now record
+each voter's pre-guard body in its own `LLMCallRecord` (`_call(model_body=...)`),
+which is what a recorded vote call carries; a planted ballot that means to
+exercise a guard marker has to supply the body the guard prepended to.
+
+**2. The missing-prompt count is partitioned by ballot kind.** One
+`no_prompt_ballots` fed `grounded_eject`, `grounded_skip`, `grounded_all` and
+`wrong_but_believable` alike, so a single promptless EJECT reported a fully
+recorded SKIP cell as one that measured NOTHING — the exact distinction
+`RateCell`'s own docstring says `not_evaluable` is published separately to
+preserve. `no_prompt_eject_ballots` and `no_prompt_skip_ballots` now feed their
+own cells (`wrong_but_believable`'s denominator is EJECT ballots, so it takes
+the EJECT count); `grounded_all` and the unexplained row keep the sum, because
+their denominator is every ballot. Row 1's and row 8's published definitions say
+so. `no_prompt_ballots` is **0 on all four committed sets**, so no published
+cell moves. Pinned by `test_the_missing_prompt_count_is_partitioned_by_ballot_kind`,
+which asserts the sibling cell stays 0, and its adverse half
+`test_the_partition_holds_with_the_kinds_swapped`.
+
+**3. A game with no reconstructed route raises.** `fold_set` took
+`inputs.routes.get(game.seed, {})`, so a seed absent from the route table folded
+against an empty route: every alibi tick unresolvable, row 3's census silently
+0, and a published number that reads as a measurement of nothing. That is the
+silent fallback AGENTS.md rule 5 forbids and the rule this card's Results
+already cites as why a non-reconstructing replay raises
+`ProcessScorecardReconstructionError`. It now raises, naming the seed and the
+game. It is unreachable through `load_set_inputs` — `walk_routes` keys every
+seed on disk — so it is pinned by a planted case rather than by a figure:
+`test_a_game_with_no_reconstructed_route_is_refused_not_folded`, whose adverse
+half folds the same game with its own seed keyed, beside the new
+`test_a_replay_that_does_not_reconstruct_is_refused` for the walk-violation
+path.
+
+**4. `RateCell` refuses an incoherent published rate.** `_counts_are_coherent`
+checked non-negativity, `numerator <= denominator` and the
+None-iff-zero-denominator rule, so `RateCell(numerator=1, denominator=2,
+rate=0.9)` was accepted and the identical shape round-tripped through
+`RateCell.model_validate` from JSON. This is the typed boundary every published
+scorecard rate crosses in both directions, and the model a later spectator
+surface will parse `docs/process-scorecard.json` with, so an inconsistent
+serialized cell must be refused rather than preserved and read. A rate must now
+equal `round(numerator / denominator, 6)` — which is what `_cell` has always
+produced, so every committed cell validates unchanged. Pinned by the perturbed
+`test_a_rate_that_contradicts_its_own_counts_is_refused`, in process and from
+JSON, the way the chance-population invariant is pinned.
+
+The three code gates were also perturbed live, together: reverting the SKIP
+cell's count to the shared one, the seed guard to `.get(seed, {})` and the rate
+comparison to a no-op turns exactly their own three tests red
+(`3 failed, 53 passed`), and restoring the file returns `56 passed`.
+
+**What DID move, and what did not.** No agent behaviour, prompt byte, schema
+field, detector or recorded byte; no `audits/` and no `tests/fixtures/` byte, so
+no `docs/artifacts.md` inventory row is recomputed (the scorecard's own row is
+deliberately sized `2 files` with no byte figure) and `tasks/README.md`'s
+inventory sentence is unchanged, since the card's Status stays `done`. Every
+NUMBER in `docs/process-scorecard.md` and `docs/process-scorecard.json` is
+byte-identical: all nine rows, every per-set and pooled cell, the appendix. Four
+DEFINITION strings moved, because a claim has to name the mechanism that
+enforces it — rows 1 and 8 now define their per-kind not-evaluable count, and
+rows 4 and 7 name `_split_rationale` as the provenance boundary in place of the
+anchored-chain sentence the defect made false. The pair was republished with
+`uv run python scripts/publish_process_scorecard.py` and the diff is those four
+strings and nothing else.
+
+**Verification at this head.** Every command was run in this clean worktree with
+its exit code captured directly, never through a pipe:
+
+```
+$ uv run python scripts/publish_process_scorecard.py --check
+--check: docs/process-scorecard.md and docs/process-scorecard.json are consistent with the committed recordings.
+EXIT=0
+
+$ uv run pytest tests/eval/test_process_scorecard.py tests/scripts/test_process_scorecard.py -q
+68 passed in 12.11s
+EXIT=0
+
+$ uv run python scripts/validate_task_docs.py
+Task docs validation passed: 390 historical phase tasks and 390 prompts; 73 work cards.
+EXIT=0
+
+$ uv run python scripts/verify_ml_evidence.py
+checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5
+EXIT=0
+```
+
+`uv run pytest tests/eval -q` (**1158 passed, 1 skipped**) and `uv run pytest
+tests/scripts -q` (**1386 passed**) — 2,544 together, seven more than round 2's
+2,537, which are the seven planted cases above. `uv run python
+scripts/check_doc_facts.py`, `uv run lint-imports` (4 kept, 0 broken), `uv run
+pytest tests/scripts/test_verify_ml_evidence.py -q` (80 passed), `bash
+scripts/verify_samples.sh` (50 + 50 verified clean) and the four `uv run python
+scripts/build_sample_report.py --sample-dir <set> --check` runs over
+`replays/samples/4p1i`, `replays/samples/9p2i`, `replays/ml_corpus/4p1i` and
+`replays/ml_corpus/9p2i` all pass. `bash scripts/check.sh` run whole in this
+worktree returns **EXIT=0**: ruff clean, `lint-imports` 4 kept / 0 broken, 390
+phase tasks + 390 prompts + 73 work cards, mypy over 489 source files, **8055
+passed, 20 skipped, 3 xfailed**, frontend 19 test files / 515 tests passed and
+the build green. Neither flake the earlier rounds recorded
+(`test_recording_replacement.py`, `test_run_limits.py`) reappeared here. The
+record-impact statement is unchanged and
+re-demonstrated: `verify_samples.sh` and the four `--check` runs recompute
+exactly what they did before this card. No provider call is a check here, and
+none was made.

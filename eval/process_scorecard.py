@@ -102,7 +102,13 @@ from engine.entities import Role
 from engine.world import Map, load_canonical_map
 from eval.alibi_fabrication import compute_alibi_fabrication_rate
 from eval.balance_eval import load_tournament_report
-from eval.deduction_metrics import _authored_target, _scan_marker_chain
+from eval.deduction_metrics import (
+    _authored_target,
+    _MarkerChain,
+    _model_authored_bodies,
+    _scan_marker_chain,
+    _split_rationale,
+)
 from eval.meeting_quality import (
     compute_ballot_target_redirects,
     recorded_contradiction_flags,
@@ -209,8 +215,11 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "meetings.citation_relevance.citations_bear_on - the subject being the "
         "recorded target for an EJECT and any member of considered_alternatives "
         "for a SKIP. Denominator: all ballots of that decision kind. "
-        "Not-evaluable: ballots whose voter has no recorded prompt in the "
-        "meeting. An UNCITED ballot is not grounded: citations_bear_on is "
+        "Not-evaluable: ballots OF THAT SAME KIND whose voter has no recorded "
+        "prompt in the meeting - counted per kind, so a promptless EJECT never "
+        "makes the SKIP cell read as one that measured nothing; the all-ballots "
+        "cell carries the sum. An UNCITED ballot is not grounded: "
+        "citations_bear_on is "
         "vacuously true with nothing cited, so presence and resolution are "
         "required before aboutness is asked. It does NOT measure whether the "
         "cited line was factually true."
@@ -249,12 +258,17 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "inputs, or a SKIP that names no player at all - empty "
         "considered_alternatives AND a MODEL-AUTHORED rationale carrying no "
         "whole-token player id. Model-authored means the remainder once the "
-        "meeting layer's own audit markers are cut off by provenance, the same "
-        "anchored chain eval.deduction_metrics._scan_marker_chain walks and "
-        "api.replay_loader cuts for rationale_text_clean: a guard marker "
-        "preserves the coerced target's id and the teammate firewall then "
-        "redacts the body, so reading the raw text would let the machinery's "
-        "prose answer for a voter who named nothing. Denominator: all ballots. "
+        "meeting layer's own audit markers are cut off BY PROVENANCE: the "
+        "marker region eval.deduction_metrics._split_rationale establishes from "
+        "that voter's OWN pre-guard vote response, scanned by _scan_marker_"
+        "chain - the same cut api.replay_loader makes for rationale_text_clean. "
+        "Shape is not provenance, so the whole record is never scanned: a model "
+        "body that OPENS with marker-shaped prose sits at position 0 too, and "
+        "scanning the record would credit the guard with the voter's own words. "
+        "A guard marker preserves the coerced target's id and the teammate "
+        "firewall then redacts the body, so reading the raw text would let the "
+        "machinery's prose answer for a voter who named nothing. "
+        "Denominator: all ballots. "
         "Not-evaluable: ballots whose voter has no recorded prompt. The two "
         "halves are reported separately because they are different defects: an "
         "EJECT with no basis, and an abstention that names nothing it weighed."
@@ -302,7 +316,11 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "guard_rewrite_reason (any BallotTargetRewriteReason member) nor a "
         "target-rewriting marker unwound by eval.deduction_metrics._authored_"
         "target, the fallback meetings/schemas.py prescribes for recordings made "
-        "before the typed fields. Denominator: all ballots. Citation-only "
+        "before the typed fields. The marker channel reads the PROVENANCE-"
+        "established marker region (eval.deduction_metrics._split_rationale) "
+        "and never the whole recorded rationale, so a model body opening with "
+        "marker-shaped prose is not read as a guard rewrite. "
+        "Denominator: all ballots. Citation-only "
         "rewrites are NOT counted against the share and are reported separately "
         "as 'citation nulled, target intact'; a ballot carrying both is counted "
         "among the rewrites, because the target moved. The marker-only redirect "
@@ -314,6 +332,8 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "is a crewmate) AND grounded by row 1 AND not resting on a "
         "manufactured contradiction by row 3 (no manufactured flag in that "
         "meeting names the ballot's target). Denominator: all EJECT ballots. "
+        "Not-evaluable: EJECT ballots whose voter has no recorded prompt, the "
+        "same per-kind count row 1's EJECT cell carries. "
         "REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong "
         "decision on believable data - and the direction of this row is "
         "deliberately unstated."
@@ -378,8 +398,22 @@ class RateCell(_FrozenModel):
         if self.denominator == 0:
             if self.rate is not None:
                 raise ValueError("rate must be None when the denominator is 0")
-        elif self.rate is None:
+            return self
+        if self.rate is None:
             raise ValueError("rate must be set when the denominator is > 0")
+        # The published rate must BE the quotient of the published counts. This
+        # is the typed boundary every scorecard rate crosses, in both
+        # directions: a future spectator surface parses
+        # ``docs/process-scorecard.json`` through this model, so a serialized
+        # cell whose rate disagrees with its own counts must be refused here
+        # rather than preserved and read as a measurement.
+        expected = round(self.numerator / self.denominator, 6)
+        if self.rate != expected:
+            raise ValueError(
+                "rate must equal its own counts rounded to six places: "
+                f"{self.rate} against {self.numerator}/{self.denominator} "
+                f"= {expected}"
+            )
         return self
 
 
@@ -587,6 +621,8 @@ class ProcessTally:
     eject_ballots: int = 0
     skip_ballots: int = 0
     no_prompt_ballots: int = 0
+    no_prompt_eject_ballots: int = 0
+    no_prompt_skip_ballots: int = 0
 
     grounded_eject: int = 0
     grounded_skip: int = 0
@@ -1118,11 +1154,36 @@ def _token_is_held(
     )
 
 
-def _authored_by_the_agent(ballot: VoteBallot) -> tuple[bool, bool]:
+def _guard_marker_chain(ballot: VoteBallot, model_body: str | None) -> _MarkerChain:
+    """The marker chain of the ballot's PROVENANCE-established marker region.
+
+    Anchoring is not provenance. A model body that OPENS with marker-shaped
+    prose sits at position 0 too, so a scan of the WHOLE recorded rationale
+    cannot tell the machinery's text from the model's and would read that
+    opening as a guard rewrite. :func:`eval.deduction_metrics._split_rationale`
+    establishes the boundary from the model's own pre-guard body (or the
+    guard's fixed replacement, or the one marker the writer emits as a whole
+    rationale) and every guard-origin cell in the package scans the region it
+    returns — :func:`eval.deduction_metrics._authored_target` documents ``chain``
+    as exactly that scan. A record whose boundary cannot be established yields
+    an EMPTY marker region, so nothing is credited to the guard on shape alone;
+    that direction is the same published under-count
+    ``guard_provenance_unverifiable_ballots`` carries.
+    """
+
+    return _scan_marker_chain(
+        _split_rationale(ballot.rationale_text, model_body).marker_region
+    )
+
+
+def _authored_by_the_agent(
+    ballot: VoteBallot, chain: _MarkerChain
+) -> tuple[bool, bool]:
     """``(the agent authored the recorded target, a marker unwound one)``.
 
-    Both channels, because they do not agree by construction: the typed
-    ``guard_rewrite_reason`` covers every
+    ``chain`` is :func:`_guard_marker_chain`'s scan of the marker region, never
+    of the whole rationale. Both channels are read, because they do not agree by
+    construction: the typed ``guard_rewrite_reason`` covers every
     :data:`~meetings.schemas.BallotTargetRewriteReason` member while the marker
     chain only carries the ones that prepend a target repr, and a recording made
     before the typed fields existed carries only the marker — which is the
@@ -1130,13 +1191,12 @@ def _authored_by_the_agent(ballot: VoteBallot) -> tuple[bool, bool]:
     :func:`eval.deduction_metrics._authored_target` implements.
     """
 
-    chain = _scan_marker_chain(ballot.rationale_text)
     _target, unwound = _authored_target(ballot, chain)
     typed = ballot.guard_rewrite_reason is not None
     return (not typed and not unwound), (unwound and not typed)
 
 
-def _model_authored_rationale(rationale: str) -> str:
+def _model_authored_rationale(rationale: str, chain: _MarkerChain) -> str:
     """What is left of a rationale once the GUARD's own audit prose is gone.
 
     The meeting layer prepends audit markers to ``rationale_text`` and those
@@ -1148,18 +1208,18 @@ def _model_authored_rationale(rationale: str) -> str:
     remainder; asking the raw text lets the machinery answer for the voter and
     silently rescues a ballot with no basis at all.
 
-    The cut is by PROVENANCE, not by pattern: it is the same anchored,
-    repr-aware chain :func:`eval.deduction_metrics._scan_marker_chain` walks for
-    every other guard-origin cell in this package, and ``consumed`` is how far
-    that chain reached. ``api.replay_loader._parse_rewrite_reasons`` makes the
-    identical cut for the spectator surface's ``rationale_text_clean``. A
-    rationale that is ENTIRELY markers - the vote-parse default, whose bounded
-    response head is machinery-written even though the head's bytes came from an
-    unparseable completion - leaves the empty string, which is the honest
-    reading: nothing parsed, so the agent named nothing.
+    The cut is by PROVENANCE, not by pattern: ``chain`` is
+    :func:`_guard_marker_chain`'s scan of the provenance-established marker
+    region and ``consumed`` is how far that chain reached into it, which is the
+    identical cut ``api.replay_loader._parse_rewrite_reasons`` makes for the
+    spectator surface's ``rationale_text_clean``. A rationale that is ENTIRELY
+    markers - the vote-parse default, whose bounded response head is
+    machinery-written even though the head's bytes came from an unparseable
+    completion - leaves the empty string, which is the honest reading: nothing
+    parsed, so the agent named nothing.
     """
 
-    return rationale[_scan_marker_chain(rationale).consumed :]
+    return rationale[chain.consumed :]
 
 
 def fold_set(inputs: SetInputs) -> ProcessTally:
@@ -1182,7 +1242,18 @@ def fold_set(inputs: SetInputs) -> ProcessTally:
     tally.redirect_marker_coerced_skip_ballots = redirects.redirect_coerced_skip_ballots
 
     for game in inputs.games:
-        route = inputs.routes.get(game.seed, {})
+        # Fail loud rather than fold a game against an EMPTY route (AGENTS.md
+        # rule 5). A missing seed is not "this game stood still": every alibi
+        # tick would read as unresolvable, row 3's census would silently shrink
+        # to nothing, and the published number would look like a measurement.
+        if game.seed not in inputs.routes:
+            raise ProcessScorecardReconstructionError(
+                f"process scorecard: no reconstructed route for seed {game.seed} "
+                f"({game.game_id}) — the engine route is the ground truth row 3 "
+                "rests on, so a game without one is refused rather than folded "
+                "against an empty route"
+            )
+        route = inputs.routes[game.seed]
         for meeting in game.meetings:
             _fold_meeting(
                 meeting, game=game, route=route, spellings=spellings, tally=tally
@@ -1213,6 +1284,10 @@ def _fold_meeting(
     rendered = _rendered_suspicion_by_target_per_voter(meeting)
     valid_targets = rendered_valid_targets_by_voter(meeting)
     no_flag_meeting = not meeting.contradictions
+    # Each voter's PRE-GUARD rationale body, recovered from its own vote call.
+    # It is the boundary every guard-origin cell below is cut along, so the
+    # machinery is never recognised by SHAPE alone.
+    model_bodies = _model_authored_bodies(meeting)
 
     truths = _self_alibi_truths(meeting, route)
     _fold_alibi_census(meeting, route=route, tally=tally)
@@ -1240,7 +1315,8 @@ def _fold_meeting(
         else:
             tally.eject_ballots += 1
 
-        authored, unwound_only = _authored_by_the_agent(ballot)
+        chain = _guard_marker_chain(ballot, model_bodies.get(ballot.voter))
+        authored, unwound_only = _authored_by_the_agent(ballot, chain)
         if authored:
             tally.authored_ballots += 1
         if unwound_only:
@@ -1248,18 +1324,21 @@ def _fold_meeting(
         reason = ballot.guard_rewrite_reason
         if reason is not None:
             tally.rewrite_reasons[reason] = tally.rewrite_reasons.get(reason, 0) + 1
-        else:
-            chain = _scan_marker_chain(ballot.rationale_text)
-            if (
-                chain.any_marker
-                and not chain.rewrote_target
-                and not chain.parse_default
-            ):
-                tally.citation_nulled_target_intact += 1
+        elif chain.any_marker and not chain.rewrote_target and not chain.parse_default:
+            tally.citation_nulled_target_intact += 1
 
         lines = lines_by_voter.get(ballot.voter)
         if lines is None:
+            # Partitioned by KIND, because each cell publishes its own
+            # not-evaluable count: a promptless EJECT says nothing about whether
+            # the SKIP cell measured anything, and folding one number into both
+            # would report a cell that measured a zero as one that measured
+            # nothing.
             tally.no_prompt_ballots += 1
+            if is_skip:
+                tally.no_prompt_skip_ballots += 1
+            else:
+                tally.no_prompt_eject_ballots += 1
             continue
 
         resolves = _citation_resolves(ballot, turn_ids=turn_ids, lines=lines)
@@ -1267,7 +1346,9 @@ def _fold_meeting(
             ballot, turns_by_id=turns_by_id, turn_ids=turn_ids, lines=lines
         )
         names_a_player = bool(
-            _PLAYER_TOKEN_RE.search(_model_authored_rationale(ballot.rationale_text))
+            _PLAYER_TOKEN_RE.search(
+                _model_authored_rationale(ballot.rationale_text, chain)
+            )
         )
         if is_skip:
             if grounded:
@@ -1475,10 +1556,10 @@ def scorecard_from_tally(
         skip_ballots=tally.skip_ballots,
         grounded_definition=ROW_DEFINITIONS["grounded_decision_rate"],
         grounded_eject=_cell(
-            tally.grounded_eject, tally.eject_ballots, tally.no_prompt_ballots
+            tally.grounded_eject, tally.eject_ballots, tally.no_prompt_eject_ballots
         ),
         grounded_skip=_cell(
-            tally.grounded_skip, tally.skip_ballots, tally.no_prompt_ballots
+            tally.grounded_skip, tally.skip_ballots, tally.no_prompt_skip_ballots
         ),
         grounded_all=_cell(
             tally.grounded_eject + tally.grounded_skip,
@@ -1568,7 +1649,9 @@ def scorecard_from_tally(
             ),
         ),
         wrong_but_believable=_cell(
-            tally.wrong_but_believable, tally.eject_ballots, tally.no_prompt_ballots
+            tally.wrong_but_believable,
+            tally.eject_ballots,
+            tally.no_prompt_eject_ballots,
         ),
         wrong_but_believable_definition=ROW_DEFINITIONS["wrong_but_believable_rate"],
         wrong_but_believable_label="reported, never penalised",

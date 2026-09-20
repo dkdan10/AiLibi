@@ -12,6 +12,8 @@ recomputes the published artifact from the recordings themselves.
 
 from __future__ import annotations
 
+import dataclasses
+import json
 from collections.abc import Mapping, Sequence
 from fractions import Fraction
 
@@ -23,14 +25,17 @@ from eval.process_scorecard import (
     ROLE_CORRECTNESS_NOTE,
     ROW_DEFINITIONS,
     ContextCells,
+    ProcessScorecardReconstructionError,
     ProcessTally,
     RateCell,
     SetInputs,
     SetScorecard,
+    _walk_config,
     fold_set,
     pool,
     scorecard_from_tally,
 )
+from eval.replay_walk import WalkViolation
 from eval.report_schema import GameCostSummary, GameReport, MeetingReport
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
@@ -169,12 +174,31 @@ def _prompt(
     )
 
 
-def _call(*, agent_id: PlayerId, prompt: str) -> LLMCallRecord:
+def _call(
+    *, agent_id: PlayerId, prompt: str, model_body: str | None = None
+) -> LLMCallRecord:
+    """One recorded vote call.
+
+    ``model_body`` is the voter's PRE-GUARD ``rationale_text``, recorded in the
+    structured response the way a live vote call records it. It is the
+    boundary the guard-origin cells cut along
+    (``eval.deduction_metrics._split_rationale``): without it a record carrying
+    a marker cannot be ATTRIBUTED to the machinery — anchoring is a shape, not a
+    provenance — and the ballot lands in the published unverifiable direction
+    with an empty marker region. A planted ballot that means to exercise a
+    guard marker therefore has to supply the body the guard prepended to.
+    """
+
+    response = (
+        json.dumps({"target": "p-3", "confidence": 0.6, "rationale_text": model_body})
+        if model_body is not None
+        else "{}"
+    )
     return LLMCallRecord(
         call_kind="meeting",
         model="fixture-model",
         prompt=prompt,
-        response_text="{}",
+        response_text=response,
         input_tokens=1,
         output_tokens=1,
         cost_usd=0.0,
@@ -261,12 +285,72 @@ def test_the_demotion_is_dated_and_names_the_decision() -> None:
     assert "NOT a gate" in ROLE_CORRECTNESS_NOTE
 
 
+def test_a_game_with_no_reconstructed_route_is_refused_not_folded() -> None:
+    """AGENTS.md rule 5 at the fold's own boundary: invalid input raises.
+
+    ``fold_set`` used to take the route with ``.get(seed, {})``, so a game whose
+    seed the route table does not carry folded against an EMPTY route: every
+    alibi tick unresolvable, row 3's census silently 0, and a published number
+    that looks like a measurement of nothing. It is unreachable through
+    ``load_set_inputs`` — ``walk_routes`` keys every seed on disk — which is
+    exactly why it has to be pinned here rather than by a figure moving.
+    """
+
+    inputs = _inputs(meetings=(_meeting(),), seed=7)
+    orphaned = dataclasses.replace(inputs, routes={999: {}})
+    with pytest.raises(ProcessScorecardReconstructionError) as caught:
+        fold_set(orphaned)
+    assert "seed 7" in str(caught.value)
+    # The adverse half: the same game with its own seed keyed folds normally.
+    assert fold_set(inputs).games == 1
+
+
+def test_a_replay_that_does_not_reconstruct_is_refused() -> None:
+    """The sibling raise: a profile violation, not a missing key."""
+
+    violation = WalkViolation(kind="tick_hash_mismatch", game_id="planted", tick=3)
+    with pytest.raises(ProcessScorecardReconstructionError) as caught:
+        _walk_config().on_violation(violation)
+    assert "tick_hash_mismatch" in str(caught.value)
+
+
 def test_a_rate_is_none_when_its_denominator_is_zero() -> None:
     assert RateCell(numerator=0, denominator=0, not_evaluable=0, rate=None).rate is None
     with pytest.raises(ValidationError):
         RateCell(numerator=0, denominator=0, not_evaluable=0, rate=0.0)
     with pytest.raises(ValidationError):
         RateCell(numerator=3, denominator=2, not_evaluable=0, rate=1.5)
+
+
+def test_a_rate_that_contradicts_its_own_counts_is_refused() -> None:
+    """The perturbed case: a cell whose published rate is not its own quotient.
+
+    ``1/2`` with a rate of ``0.9`` is internally inconsistent, and this is the
+    typed boundary every published rate crosses in both directions — the model a
+    later spectator surface parses ``docs/process-scorecard.json`` with. An
+    inconsistent cell must be REFUSED rather than preserved and read as a
+    measurement, whether it is constructed in process or validated from JSON.
+    """
+
+    with pytest.raises(ValidationError):
+        RateCell(numerator=1, denominator=2, not_evaluable=0, rate=0.9)
+    with pytest.raises(ValidationError):
+        RateCell.model_validate(
+            json.loads(
+                '{"numerator": 1, "denominator": 2, "not_evaluable": 0, "rate": 0.9}'
+            )
+        )
+    # The honest half, to six places, in process and through JSON alike.
+    assert RateCell(numerator=1, denominator=3, not_evaluable=0, rate=0.333333).rate
+    assert (
+        RateCell.model_validate(
+            json.loads(
+                '{"numerator": 1, "denominator": 3, "not_evaluable": 0, '
+                '"rate": 0.333333}'
+            )
+        ).numerator
+        == 1
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +417,55 @@ def test_a_ballot_with_no_recorded_prompt_is_not_evaluable_not_ungrounded() -> N
     )
     card = _card(_inputs(meetings=(meeting,)))
     assert card.grounded_eject.not_evaluable == 1
+
+
+def test_the_missing_prompt_count_is_partitioned_by_ballot_kind() -> None:
+    """A promptless EJECT says nothing about whether the SKIP cell measured.
+
+    ``RateCell`` publishes ``not_evaluable`` separately so a reader can tell a
+    cell that measured NOTHING from one that measured a zero. One promptless
+    EJECT beside a fully recorded SKIP must therefore leave the SKIP cell's
+    not-evaluable count at 0: the SKIP's prompt WAS recorded, the SKIP was
+    measured, and its 0/1 is a reading. ``grounded_all`` and the unexplained row
+    keep the sum, because their denominator is every ballot.
+    """
+
+    turn = _turn(speaker="p-2", claims=(_accusation_against("p-3"),))
+    meeting = _meeting(
+        turns=(turn,),
+        ballots=(
+            _ballot(voter="p-1", target="p-3"),
+            _ballot(voter="p-2", target="SKIP", alternatives=("p-3",)),
+        ),
+        calls=(_call(agent_id="p-2", prompt=_prompt(valid=("p-3",))),),
+    )
+    card = _card(_inputs(meetings=(meeting,)))
+    assert (card.grounded_eject.denominator, card.grounded_eject.not_evaluable) == (
+        1,
+        1,
+    )
+    assert (card.grounded_skip.denominator, card.grounded_skip.not_evaluable) == (1, 0)
+    assert card.wrong_but_believable.not_evaluable == 1
+    assert card.grounded_all.not_evaluable == 1
+    assert card.unexplained_decision.decisions.not_evaluable == 1
+
+
+def test_the_partition_holds_with_the_kinds_swapped() -> None:
+    """The adverse half: the promptless ballot is the SKIP, so the EJECT cell measures."""
+
+    turn = _turn(speaker="p-2", claims=(_accusation_against("p-3"),))
+    meeting = _meeting(
+        turns=(turn,),
+        ballots=(
+            _ballot(voter="p-1", target="p-3", reason_id=turn.turn_id),
+            _ballot(voter="p-2", target="SKIP", alternatives=("p-3",)),
+        ),
+        calls=(_call(agent_id="p-1", prompt=_prompt(valid=("p-3",))),),
+    )
+    card = _card(_inputs(meetings=(meeting,)))
+    assert (card.grounded_eject.numerator, card.grounded_eject.not_evaluable) == (1, 0)
+    assert (card.grounded_skip.denominator, card.grounded_skip.not_evaluable) == (1, 1)
+    assert card.wrong_but_believable.not_evaluable == 0
 
 
 # ---------------------------------------------------------------------------
@@ -690,7 +823,13 @@ def test_the_same_coerced_skip_with_a_model_body_naming_a_player_is_not() -> Non
                 redirected_from="p-3",
             ),
         ),
-        calls=(_call(agent_id="p-2", prompt=_prompt(valid=("p-3",))),),
+        calls=(
+            _call(
+                agent_id="p-2",
+                prompt=_prompt(valid=("p-3",)),
+                model_body="I weighed p-0 and could not get there.",
+            ),
+        ),
     )
     row = _card(_inputs(meetings=(meeting,))).unexplained_decision
     assert (row.decisions.numerator, row.skips_naming_no_player) == (0, 0)
@@ -953,10 +1092,18 @@ def test_a_rationale_with_no_extractable_token_is_not_evaluable() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _authored_meeting(ballot: VoteBallot) -> MeetingReport:
+def _authored_meeting(
+    ballot: VoteBallot, *, model_body: str | None = None
+) -> MeetingReport:
     return _meeting(
         ballots=(ballot,),
-        calls=(_call(agent_id=ballot.voter, prompt=_prompt(valid=("p-3",))),),
+        calls=(
+            _call(
+                agent_id=ballot.voter,
+                prompt=_prompt(valid=("p-3",)),
+                model_body=model_body,
+            ),
+        ),
     )
 
 
@@ -980,7 +1127,9 @@ def test_a_ballot_carrying_only_a_nulled_citation_marker_stays_authored() -> Non
 
     marker = INVALID_REASON_ID_MARKER.format(reason_id="m-0:turn-99")
     ballot = _ballot(voter="p-1", target="p-3", rationale=f"{marker}they looked wrong")
-    row = _card(_inputs(meetings=(_authored_meeting(ballot),))).agent_authored_share
+    row = _card(
+        _inputs(meetings=(_authored_meeting(ballot, model_body="they looked wrong"),))
+    ).agent_authored_share
     assert (row.ballots.numerator, row.ballots.denominator) == (1, 1)
     assert row.citation_nulled_target_intact == 1
     assert row.redirect_marker_ballots == 0
@@ -991,10 +1140,51 @@ def test_a_marker_rewrite_with_no_typed_reason_still_leaves_the_share() -> None:
 
     marker = BALLOT_TARGET_REDIRECT_MARKER.format(target="p-0")
     ballot = _ballot(voter="p-1", target="p-3", rationale=f"{marker}they looked wrong")
-    row = _card(_inputs(meetings=(_authored_meeting(ballot),))).agent_authored_share
+    row = _card(
+        _inputs(meetings=(_authored_meeting(ballot, model_body="they looked wrong"),))
+    ).agent_authored_share
     assert row.ballots.numerator == 0
     assert row.marker_unwound_without_typed_reason == 1
     assert row.rewrite_reasons == {}
+
+
+def test_a_model_body_that_opens_with_marker_shaped_prose_stays_authored() -> None:
+    """The planted legacy ballot: marker SHAPE at position 0 is not provenance.
+
+    A pre-typed-field recording carries no ``guard_rewrite_reason``, so the
+    marker chain is the only channel left — and a model that OPENS its own
+    rationale by quoting the redirect literal sits at position 0 exactly where
+    the guard's marker would. Scanning the WHOLE rationale reads that opening as
+    a guard rewrite and takes an authored ballot out of the share. Cut along the
+    provenance boundary, the model's body IS the record, the marker region is
+    empty, and the ballot stays where it belongs.
+    """
+
+    quoted = BALLOT_TARGET_REDIRECT_MARKER.format(target="p-0") + "is what I would say"
+    ballot = _ballot(voter="p-1", target="p-3", rationale=quoted)
+    row = _card(
+        _inputs(meetings=(_authored_meeting(ballot, model_body=quoted),))
+    ).agent_authored_share
+    assert (row.ballots.numerator, row.ballots.denominator) == (1, 1)
+    assert row.marker_unwound_without_typed_reason == 0
+
+
+def test_the_same_legacy_ballot_whose_marker_the_guard_wrote_leaves_the_share() -> None:
+    """The half that differs in exactly one thing: who wrote the marker.
+
+    Same bytes ahead of the body; here the model's pre-guard body is the body
+    ALONE, so the marker is the machinery's and the rewrite is real.
+    """
+
+    marker = BALLOT_TARGET_REDIRECT_MARKER.format(target="p-0")
+    ballot = _ballot(
+        voter="p-1", target="p-3", rationale=f"{marker}is what I would say"
+    )
+    row = _card(
+        _inputs(meetings=(_authored_meeting(ballot, model_body="is what I would say"),))
+    ).agent_authored_share
+    assert row.ballots.numerator == 0
+    assert row.marker_unwound_without_typed_reason == 1
 
 
 def test_the_typed_layer_counts_a_rewrite_the_marker_census_cannot_see() -> None:
