@@ -102,7 +102,7 @@ payload matters. And the format-preserving serializer precedent exists at
   stated row, while `_placements` now emits one stated row per LEG all carrying
   the claim's event id, so a two-leg route disagreeing with a single sighting
   returned two flags under one id with two different descriptions -- the exact
-  collision the `identity` docstring (`meetings/public_accounts.py:130-138`)
+  collision the `identity` docstring (`meetings/public_accounts.py:136-150`)
   exists to prevent. `_Placement` gains a `leg` index that enters `identity` for
   a route of MORE than one leg and stays `None` for a one-leg claim, so every id
   a committed recording carries is byte-identical.
@@ -692,7 +692,9 @@ than discovered at the re-record.
 Five blocking findings from the independent verifiers, all VALID, all repaired
 on this branch; none is refuted, and no Codex comment is skipped. Three are
 defects in the route work itself, two are Results figures that did not
-reproduce. Commands below were re-run from a clean worktree at this head.
+reproduce. Commands below were re-run from a clean worktree at this head; the
+Codex anchors are quoted as the reviewer gave them, at the PREVIOUS head
+`d362792b`, so they name the defect's location and not the repair's.
 
 **1. A truthful EARLIER leg downgraded a later leg's conflict** (Codex P2,
 `meetings/transcript.py:3005`). One flag is minted per pair of CLAIMS, and
