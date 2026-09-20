@@ -4,6 +4,29 @@ This directory records the unadopted follow-through to the owner's independent
 [cleanup review](../review-2026-09-06/README.md). The work follows the
 [six ordered outcomes](../../tasks/post-review-plan.md).
 
+**Closed on 2026-09-19.** The owner accepted decisions D1 to D8 of
+[the direction memo of that date](../../tasks/direction-2026-09-19-process-over-outcome.md)
+as a set, with the rulings in its section 12. D1 demotes role-correctness to a
+reported cell, D2 retires the proof-free held-out band as the arena and D8
+shelves `combined_accounts`. What that closes is the GATE, not the record: the
+preregistered primary outcome, decision rule and wrongful-ejection bound below
+stay the record of what was measured and stop being the project's bar; the five
+runs and three calibrations stay context rather than adoption evidence; and no
+result, figure or verdict in this directory is restated, re-scored, re-graded or
+withdrawn. The fifth run stays complete and INCONCLUSIVE, which is neither an
+advance nor a rejection. Both live gates now refuse by construction — the
+execution manifest's "Closure (2026-09-19)" section carries the sentence
+`assert_live_run_is_authorized` and `assert_calibration_is_authorized` look for
+— and the held-out records are an ARCHIVE: checked against the bytes they were
+frozen with rather than regenerated, so an edit to a generator source file owes
+them no restamp. No sixth band was frozen; the band 2100-2999 that
+[the retired sixth freeze card](../../tasks/work/held-out-prefix-freeze-6.md)
+reserved stays unseen, and that reservation is a document rather than anything
+in code. `combined_accounts` is SHELVED, not deleted: its arm definition, its
+default-OFF levers and its templates stay in the tree, and
+[the grounded-SKIP card](../../tasks/work/grounded-skip-and-guard-labels.md)
+harvests its SKIP register wording.
+
 - [Code review](code-review.md) freezes independently checked implementation
   findings before synthesis. Its planted failures matter as much as passing runs.
 - [Gameplay verification](gameplay-review.md) records the actual development
@@ -12,10 +35,21 @@ This directory records the unadopted follow-through to the owner's independent
 - [Prospective evaluation](preregistration.md) separates controlled fresh
   meeting decisions from complete normal-policy games. It requires a frozen
   candidate and budget before live execution.
-- [Held-out freeze](held-out/manifest.json) records fifty proof-free scripted
-  prefixes as HASHES ONLY, drawn from a preregistered seed band by a session
-  that runs no arm. No prefix bytes are committed anywhere. It holds the fifth
-  band, 8000–8999, frozen on 2026-09-15.
+- [The fifth band's record](held-out/manifest.json) records fifty proof-free
+  scripted prefixes as HASHES ONLY, drawn from a preregistered seed band by a
+  session that runs no arm. No prefix bytes are committed anywhere. It holds the
+  fifth band, 8000–8999, frozen on 2026-09-15, and it is ARCHIVED: development
+  data since 2026-09-16, when the run of that date rendered ALL FIFTY of its
+  prefixes, and marked so in place on 2026-09-19 by the closing card. Its
+  `converted` block names that run, its pull request and every rendered seed;
+  its `superseded_by` is `null`, because the evaluation closed and no band
+  replaced this one. It keeps the live path's name rather than moving beside the
+  four below, for the same reason — nothing took the slot. It is checked against
+  the blocks it was frozen with (`accepted` and `skipped` at `88d42f82`,
+  `source_sha256` at `72998c7b`) rather than regenerated, so a later edit to a
+  generator source owes it no restamp; the regeneration it retires stays
+  reproducible from a checkout of `72998c7b`, whose 22 source digests the record
+  itself publishes.
 - [The first held-out band](held-out/manifest-band-3000-3999.json), 3000–3999,
   is development data since 2026-09-10: the run of that date rendered seed 3000
   to the model before stopping on an instrument defect, and the preregistration

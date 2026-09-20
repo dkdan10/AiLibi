@@ -1,9 +1,11 @@
 // Public ballot targets remain visible. Private rationale, confidence and citations
 // require the voter’s perspective or omniscient mode. Outcome reveal is separate.
 
+import { useId } from "react";
+
 import { EvidenceLink } from "./EvidencePanel";
 import { useReplayStore } from "../store/replayStore";
-import { showsBallotCorrectness } from "../lib/copy";
+import { BALLOT_COPY, showsBallotCorrectness } from "../lib/copy";
 import { tokens } from "../tokens";
 import type { BallotView, PlayerView } from "../types/api";
 
@@ -65,12 +67,69 @@ function PlayerPill({
   );
 }
 
+/**
+ * The note an entry earns when the card's HEADER already shows it, or `null`.
+ *
+ * The recorded list is not a list of OTHER players, and the bytes say so: over
+ * `replays/samples/9p2i`, 27 of 869 ballots list the voter itself and 22 list
+ * the target the vote applied to (`scripts/measure_featured_criterion.py
+ * --alternatives`). Such an entry renders a second pill identical to one in the
+ * header, which without a note reads as a different player at the table. The
+ * entry is kept — the block is the record — and named instead.
+ *
+ * The voter wins a tie, so an entry that is somehow both is the voter: a vote is
+ * cast BY that ballot and the header's left pill is the one it duplicates.
+ */
+function alternativeNote(entry: string, voter: string, target: string): string | null {
+  if (entry === voter) return BALLOT_COPY.alternativesSelfNote;
+  if (entry === target) return BALLOT_COPY.alternativesTargetNote;
+  return null;
+}
+
+/**
+ * One entry of `considered_alternatives`, which is a recorded list of STRINGS.
+ *
+ * A served player renders as the same pill the target does; anything else — an
+ * id no longer in the game, or the literal `SKIP` the ballot schema also admits
+ * (tests/api/test_schemas.py) — renders as a plain mono token instead. The
+ * distinction is the point: a pill carries an identity colour and reads as "a
+ * player at this table", so a value that is not one must not be able to wear it.
+ *
+ * `note` is plain text inside the same `li`, so a screen reader reads it with
+ * the entry it qualifies rather than as a separate item.
+ */
+function AlternativeEntry({
+  entry,
+  players,
+  note,
+}: {
+  entry: string;
+  players: PlayerView[];
+  note: string | null;
+}) {
+  const token = players.some((player) => player.agent_id === entry) ? (
+    <PlayerPill agentId={entry} players={players} />
+  ) : (
+    <span className="inline-flex items-center rounded-md border border-dashed border-ink-200 bg-paper-2 px-2 py-0.5 font-mono text-xs text-ink-500">
+      {entry}
+    </span>
+  );
+  if (note === null) return token;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {token}
+      <span className="font-mono text-[10px] text-ink-400">({note})</span>
+    </span>
+  );
+}
+
 export function BallotCard({
   ballot,
   players,
   omniscient,
   revealOutcome,
 }: BallotCardProps) {
+  const alternativesLabelId = useId();
   const meetingId = useReplayStore((s) => s.selectedMeetingId);
   const perspective = useReplayStore((s) => s.perspective);
   const observerId = perspective.mode === "agent" ? perspective.agentId : null;
@@ -150,6 +209,51 @@ export function BallotCard({
         {ballot.primary_reason_id !== null && meetingId !== null && <EvidenceLink target={{ kind: "statement", id: ballot.primary_reason_id, meetingId, observerId: ballot.voter }}>Cited statement · {ballot.primary_reason_id}</EvidenceLink>}
         {ballot.primary_reason_observation_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: "observation", id: ballot.primary_reason_observation_id, meetingId, observerId: ballot.voter }}>Cited observation · {ballot.primary_reason_observation_id}</EvidenceLink> : <span className="text-xs">{ballot.primary_reason_observation_id}</span>)}
       </div>}
+
+      {/* The one weighing artefact already on disk: who this voter wrote down
+          while choosing. Same private class as the citations above it — the
+          model wrote it, the table never heard it, and an impostor's list can
+          expose whether it weighed its teammate — so it lives behind the same
+          gate rather than beside the public target. An entry the header already
+          shows is annotated by `alternativeNote`, never dropped.
+
+          A block rather than an inline row on purpose: the substrate wave stacks
+          on this component, adding a meeting-written grounding label next to
+          this heading and a counter-evidence link beside the two citation links
+          above, so the heading and its list are already separable. */}
+      {privateVisible && (
+        <div className="mb-2" data-ballot-alternatives>
+          <span
+            id={alternativesLabelId}
+            className="font-mono text-[10px] uppercase tracking-wide text-ink-400"
+          >
+            {BALLOT_COPY.alternativesLabel}
+          </span>
+          {ballot.considered_alternatives.length > 0 ? (
+            // Recorded order, whatever the length: the list is two ids wide in
+            // every committed recording today and the render must not bake that
+            // in, so it wraps instead of truncating.
+            <ul
+              aria-labelledby={alternativesLabelId}
+              className="mt-1 flex flex-wrap items-center gap-1.5"
+            >
+              {ballot.considered_alternatives.map((entry, index) => (
+                <li key={`alt-${index}-${entry}`}>
+                  <AlternativeEntry
+                    entry={entry}
+                    players={players}
+                    note={alternativeNote(entry, ballot.voter, ballot.target)}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 font-mono text-xs italic text-ink-400">
+              {BALLOT_COPY.alternativesEmpty}
+            </p>
+          )}
+        </div>
+      )}
 
       {privateVisible && ballot.rewrite_reasons.includes("under_gate_redirect") && (
         <p className="mb-1 text-xs text-ink-500">The recorded explanation describes the original choice, before the vote was redirected.</p>
