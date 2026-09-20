@@ -3241,20 +3241,26 @@ def _adjacent_within_one_tick(
     True when the two canonical room sets sit within
     :data:`~meetings.constants.MAP_ARBITRATION_MAX_HOPS` doorway hops of each
     other AND the sighting tick sits within
-    :data:`~meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of the nearest edge
-    of the contradicted SEGMENT. The gap is measured to that leg's ENDPOINTS,
-    not to the window as a whole: the caller only reaches here for a sighting
-    already INSIDE the leg, and a sighting buried deeper than that names an
-    interior tick of a claim of continuous presence in ONE room, which no
-    single hop reconciles.
+    :data:`~meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of the nearest
+    OUTER endpoint of the whole ROUTE. The caller has already decided which LEG
+    the sighting can refute -- that is what picks the room compared here -- but
+    the fuzz band is a property of the account's EDGES, and an interior leg
+    boundary is a transition the speaker DECLARED ("I left REACTOR at 7 and was
+    in REACTOR again from 8"), not movement fuzz. Measuring the gap to the leg
+    would let a speaker soften a flag by splitting one continuous stay into
+    legs, because every split manufactures new edges inside a window the
+    account never stopped claiming; a sighting buried in the route's interior
+    names a tick of a claim of continuous presence, which no single hop
+    reconciles. A one-segment route's outer endpoints ARE its leg's, so no
+    recorded band moves.
     """
 
     hops = room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
     if hops is None or hops == 0:
         return False
     gap = min(
-        sighting.observation.tick - alibi.segment.from_tick,
-        alibi.segment.to_tick - sighting.observation.tick,
+        sighting.observation.tick - alibi.route_from_tick,
+        alibi.route_to_tick - sighting.observation.tick,
     )
     return gap <= MAP_ARBITRATION_MAX_TICK_GAP
 
@@ -3315,8 +3321,9 @@ def _detect_alibi_vs_physical(
     inclusive window) the reconstructed stated path
     (:func:`reconstruct_stated_paths`) is scanned for CO-PRESENCE placements
     that physically contradict it: an independent speaker who, sighting a THIRD
-    player, named the subject as ``co_present`` in a room DISJOINT from A at a
-    STRICTLY INTERIOR tick of the window.
+    player, named the subject as ``co_present`` in a room DISJOINT from A, at a
+    tick the LEG covers and the whole ROUTE holds STRICTLY INSIDE its outer
+    endpoints.
 
     Why co-presence ONLY (not a direct ``saw_player(subject)``): a self-stated
     alibi contradicted by a direct sighting of the subject is the audited seed-3
@@ -3326,9 +3333,9 @@ def _detect_alibi_vs_physical(
     NET-NEW inferential signal the alibi-vs-sighting path (which only reads a
     sighting's OWN ``subject``) structurally cannot reach: a witness placing the
     subject alongside someone else, somewhere the subject's claim says they were
-    not. Endpoints are excluded (transit fuzz) and spawn-window / kill-scene
-    placements are already dropped by the reconstruction's relevance gate, so
-    every placement here is evidence-grade and traces to one public
+    not. The ROUTE's outer endpoints are excluded (transit fuzz) and spawn-window
+    / kill-scene placements are already dropped by the reconstruction's relevance
+    gate, so every placement here is evidence-grade and traces to one public
     ``saw_player`` (its ``event_id``) -- the 13.4 firewall assertion.
 
     Banding (the crux's role-gate). A CORROBORATED alibi -- some independent
@@ -3349,9 +3356,10 @@ def _detect_alibi_vs_physical(
     OWN subject is in the roster, so a co-presence anchored on a hallucinated
     player never backs a flag), and direct ``saw_player(subject)`` placements
     (``direct_sighting_events`` -- the 9.7 weak ``alibi_vs_sighting`` band) are
-    excluded so only genuine co-presence feeds the detector. Endpoints are
-    excluded (transit fuzz); spawn-window / kill-scene placements are already
-    dropped by the reconstruction's relevance gate.
+    excluded so only genuine co-presence feeds the detector. The ROUTE's outer
+    endpoints are excluded (transit fuzz), on both the regular and the kill-scene
+    arm; spawn-window / kill-scene placements are already dropped by the
+    reconstruction's relevance gate.
 
     One flag is emitted per qualifying contradicting placement (each is its own
     public ``saw_player``, so belief Rule 2 folds them on the shared alibi-claim
@@ -3367,10 +3375,24 @@ def _detect_alibi_vs_physical(
         # non-spatial alibi (locating nobody) is skipped here.
         if not alibi.rooms:
             continue
-        # The LEG's window: a co-presence contradicts the room the subject
-        # claimed for the tick it names, not every room on their route.
+        # The LEG's window decides MEMBERSHIP and the room: a co-presence
+        # contradicts the room the subject claimed for the tick it names, not
+        # every room on their route.
         from_tick = alibi.segment.from_tick
         to_tick = alibi.segment.to_tick
+        # The transit-fuzz exclusion below reads the whole ROUTE's OUTER
+        # endpoints instead. An interior leg boundary is a transition the
+        # speaker DECLARED, not the fuzz of an edge the account never drew, so
+        # a placement there disputes a stated fact. Measured against the leg,
+        # a speaker deleted this evidence for free by splitting one continuous
+        # stay: "STORAGE 2-14" contradicted at tick 8 mints two strong flags,
+        # while "STORAGE 2-7" plus "STORAGE 8-14" minted none (tick 8 is no
+        # leg's strict interior), and as one-tick legs -- the shape the
+        # operational prompts ask for -- a leg has no strict interior at all.
+        # A one-segment route's outer endpoints ARE its leg's, so no recorded
+        # flag moves.
+        interior_from = alibi.route_from_tick
+        interior_to = alibi.route_to_tick
         direct_events = direct_sighting_events.get(subject, frozenset())
         # Independent (non-self) placements of the subject inside the alibi
         # window, from the RELEVANCE-GATED ``paths`` (kill-scene placements
@@ -3391,15 +3413,16 @@ def _detect_alibi_vs_physical(
             continue
         # Contradicting placements: a roster-valid CO-PRESENCE (event id is a
         # roster sighting but NOT a direct sighting of the subject) in a DISJOINT
-        # room at a strictly INTERIOR tick, stated by an independent voice NOT
-        # across the accusation chain from the subject (the 13.3 adversarial
-        # guard -- an accuser's counter-placement must not manufacture a flag).
+        # room at a tick strictly INTERIOR to the ROUTE, stated by an independent
+        # voice NOT across the accusation chain from the subject (the 13.3
+        # adversarial guard -- an accuser's counter-placement must not
+        # manufacture a flag).
         contradicting = tuple(
             placement
             for placement in independent
             if placement.event_id in roster_sighting_events
             and placement.event_id not in direct_events
-            and from_tick < placement.tick < to_tick
+            and interior_from < placement.tick < interior_to
             and not (placement.rooms & alibi.rooms)
             and (placement.speaker, subject) not in accusation_pairs
             and (subject, placement.speaker) not in accusation_pairs
@@ -3408,9 +3431,13 @@ def _detect_alibi_vs_physical(
         # body's room (``body_rooms``) the relevance gate normally DROPS, recovered
         # via ``kill_scene_paths`` (the kill-scene-inclusive reconstruction; the
         # 13.5.3 lever is unconditional since Task 14.9, so a kill-scene meeting
-        # always supplies it). Same soundness filters as the regular set, plus
-        # ``placement.rooms & body_rooms`` (it IS the scene) and disjoint-from-alibi
-        # (the accused claimed elsewhere). The body-room filter makes this set
+        # always supplies it). Same soundness filters as the regular set --
+        # including the same split of labour between the LEG (membership) and the
+        # ROUTE's outer endpoints (the transit-fuzz exclusion), which the regular
+        # arm inherits from ``independent`` and this one spells out because it
+        # reads ``kill_scene_paths`` directly -- plus ``placement.rooms &
+        # body_rooms`` (it IS the scene) and disjoint-from-alibi (the accused
+        # claimed elsewhere). The body-room filter makes this set
         # DISJOINT from ``contradicting`` above (which excludes scene placements by
         # the relevance gate), so the union never double-counts a placement. Empty
         # when the meeting has no kill scene -> byte-identical to the 13.4 path.
@@ -3420,7 +3447,8 @@ def _detect_alibi_vs_physical(
                 placement
                 for placement in kill_scene_paths.get(subject, ())
                 if placement.speaker != subject
-                and from_tick < placement.tick < to_tick
+                and from_tick <= placement.tick <= to_tick
+                and interior_from < placement.tick < interior_to
                 and bool(placement.rooms & body_rooms)
                 and not (placement.rooms & alibi.rooms)
                 and placement.event_id in roster_sighting_events

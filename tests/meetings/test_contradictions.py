@@ -4922,6 +4922,237 @@ class TestARouteDoesNotSoftenItsOwnConflict:
         assert len({flag.contradiction_id for flag in flags}) == 1
 
 
+class TestSplittingARouteDoesNotSoftenItsEvidence:
+    """Stating one continuous stay as several legs must buy the speaker nothing.
+
+    The card's rule: the LEG decides ROOM and WINDOW MEMBERSHIP, but the
+    movement-fuzz bands read the whole ROUTE's OUTER endpoints, because an
+    interior boundary is a transition the speaker DECLARED, not movement fuzz.
+    Two fuzz sites were pointed at the leg, and a leg boundary is something the
+    speaker chooses, so both were free evidence deletion:
+
+    * ``alibi_vs_physical`` required a contradicting placement at a STRICTLY
+      INTERIOR leg tick. "STORAGE 2-14" co-placed elsewhere at tick 8 by two
+      voices mints two strong flags; the SAME account as "STORAGE 2-7" plus
+      "STORAGE 8-14" minted none, and as the one-tick legs the operational
+      prompts ask for, no leg has a strict interior at all.
+    * ``_adjacent_within_one_tick`` measured the map-arbitration gap to the
+      leg's endpoints, so splitting a window put a manufactured "edge" next to
+      any interior sighting and weak-banded a flag that could otherwise eject.
+
+    Every case below is stated twice, as the envelope and as the split, and
+    asserted EQUAL -- the property the fix is for. The bands themselves still
+    have to work, so the last two tests hold the genuine outer-endpoint fuzz
+    weak and the honest seed-41 route silent.
+    """
+
+    _ROSTER: Final = frozenset({"p-1", "p-2", "p-3", "p-4", "p-5"})
+
+    # --- alibi_vs_physical -------------------------------------------------
+
+    def _physical(
+        self, route: tuple[AlibiSegment, ...]
+    ) -> tuple[ContradictionRef, ...]:
+        # p-1's own STORAGE account against two independent CO-PRESENCE
+        # placements in MEDBAY at tick 8 -- the two-source conjunction, and far
+        # enough from STORAGE that no map arbitration is in play.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(AlibiClaim(type="alibi", subject="p-1", route=route),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(tick=8, subject="p-3", room="MEDBAY", co_present=("p-1",)),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-5",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(tick=8, subject="p-4", room="MEDBAY", co_present=("p-1",)),
+                    ),
+                ),
+            )
+        )
+        return tuple(
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=self._ROSTER, evidence_reasoning_version=1
+            )
+            if flag.kind == "alibi_vs_physical"
+        )
+
+    @staticmethod
+    def _shape(flags: tuple[ContradictionRef, ...]) -> list[tuple[object, ...]]:
+        """What "the same flags" means here: count, identity, subjects, band."""
+
+        return [
+            (
+                flag.contradiction_id,
+                flag.subjects,
+                flag.evidence_band,
+                is_weak_contradiction(flag),
+            )
+            for flag in flags
+        ]
+
+    def test_splitting_at_the_contradicted_tick_keeps_both_strong_flags(self) -> None:
+        envelope = self._physical(
+            (AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),)
+        )
+        split = self._physical(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),
+            )
+        )
+
+        # The baseline the split has to match: one flag per contradicting
+        # voice, both strong (nothing weak-bands a two-source conjunction).
+        assert len(envelope) == 2
+        assert {flag.evidence_band for flag in envelope} == {"strong"}
+        assert self._shape(split) == self._shape(envelope)
+
+    def test_one_tick_legs_keep_both_strong_flags(self) -> None:
+        # The shape the new prompts ask for, and the worst case for a leg-local
+        # interior test: a one-tick leg has no strict interior whatsoever, so
+        # before the fix this route deleted every flag the envelope minted.
+        envelope = self._physical(
+            (AlibiSegment(room="STORAGE", from_tick=6, to_tick=9),)
+        )
+        legs = self._physical(
+            (
+                AlibiSegment(room="STORAGE", from_tick=6, to_tick=6),
+                AlibiSegment(room="STORAGE", from_tick=7, to_tick=7),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=8),
+                AlibiSegment(room="STORAGE", from_tick=9, to_tick=9),
+            )
+        )
+
+        assert len(envelope) == 2
+        assert self._shape(legs) == self._shape(envelope)
+
+    def test_the_route_s_own_outer_endpoint_is_still_transit_fuzz(self) -> None:
+        # The exclusion still excludes: contradicted on the first tick the
+        # account covers, the route mints nothing in either shape. Splitting
+        # cannot manufacture a flag any more than it can delete one.
+        envelope = self._physical(
+            (AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),)
+        )
+        split = self._physical(
+            (
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=10),
+                AlibiSegment(room="STORAGE", from_tick=11, to_tick=14),
+            )
+        )
+
+        assert envelope == ()
+        assert split == ()
+
+    # --- alibi_vs_sighting map arbitration ---------------------------------
+
+    def _sighting(
+        self, route: tuple[AlibiSegment, ...], *, seen_tick: int
+    ) -> tuple[ContradictionRef, ...]:
+        # p-1's REACTOR account against one sighting in ENGINEERING, a single
+        # doorway away -- the pair the map-arbitration band exists to arbitrate.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(AlibiClaim(type="alibi", subject="p-1", route=route),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(tick=seen_tick, subject="p-1", room="ENGINEERING"),
+                    ),
+                ),
+            )
+        )
+        return tuple(
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=self._ROSTER, evidence_reasoning_version=1
+            )
+            if flag.kind == "alibi_vs_sighting"
+        )
+
+    def test_splitting_does_not_soften_an_interior_adjacent_room_sighting(
+        self,
+    ) -> None:
+        # Tick 8 is six ticks inside REACTOR 2-14 -- far too deep for one hop
+        # of walking to reconcile. Splitting the stay at exactly that tick used
+        # to put a leg edge beside the sighting and weak-band the flag, which
+        # is the difference between evidence that can eject and evidence that
+        # cannot.
+        (envelope,) = self._sighting(
+            (AlibiSegment(room="REACTOR", from_tick=2, to_tick=14),), seen_tick=8
+        )
+        (split,) = self._sighting(
+            (
+                AlibiSegment(room="REACTOR", from_tick=2, to_tick=7),
+                AlibiSegment(room="REACTOR", from_tick=8, to_tick=14),
+            ),
+            seen_tick=8,
+        )
+
+        assert envelope.evidence_band == "strong"
+        assert is_weak_contradiction(envelope) is False
+        assert split.evidence_band == envelope.evidence_band
+        assert is_weak_contradiction(split) is False
+        assert WEAK_REASON_ADJACENT_ONE_TICK not in split.description
+
+    def test_the_band_still_fires_one_tick_from_the_route_s_outer_endpoint(
+        self,
+    ) -> None:
+        # The other direction, or the fix would just be "never arbitrate": tick
+        # 13 sits one tick inside the route's own last tick, which one hop of
+        # walking genuinely covers, so the flag is weak in BOTH shapes and
+        # carries the same marker.
+        (envelope,) = self._sighting(
+            (AlibiSegment(room="REACTOR", from_tick=2, to_tick=14),), seen_tick=13
+        )
+        (split,) = self._sighting(
+            (
+                AlibiSegment(room="REACTOR", from_tick=2, to_tick=7),
+                AlibiSegment(room="REACTOR", from_tick=8, to_tick=14),
+            ),
+            seen_tick=13,
+        )
+
+        assert envelope.evidence_band == "weak"
+        assert WEAK_REASON_ADJACENT_ONE_TICK in envelope.description
+        assert split.evidence_band == envelope.evidence_band
+        assert WEAK_REASON_ADJACENT_ONE_TICK in split.description
+
+    def test_the_honest_seed_41_route_still_mints_nothing(self) -> None:
+        # The control the whole card rests on, re-asserted at this head: moving
+        # two fuzz bands from the leg to the route's outer endpoints must not
+        # start prosecuting the honest mover it was written to acquit.
+        entry = _seed_41_entry()
+        routed = _with_p9_route(entry, _SEED_41_ROUTE)
+
+        flags = detect_contradictions(
+            routed,
+            roster=_living_roster(entry),
+            vent_witness_records=_vent_records_from_recorded_flags(entry),
+            sighting_records=sighting_records_from_recorded_flags(entry),
+        )
+
+        assert flags == ()
+
+
 class TestOneSegmentRoutesReadLikeTheEnvelope:
     """The property: on a ONE-SEGMENT route the pairing rule is unchanged.
 
