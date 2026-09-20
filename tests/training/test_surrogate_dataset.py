@@ -44,6 +44,7 @@ from meetings.manager import (
     VOTE_PARSE_DEFAULT_MARKER,
 )
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
+from meetings.schemas import AlibiSegment
 from meetings.schemas import (
     BallotTargetRewriteReason,
     CompletedTaskObservation,
@@ -499,7 +500,9 @@ def test_self_refuted_alibi_flag_renders_the_weak_delta() -> None:
         ),
         claims=(
             SchemaAlibiClaim(
-                type="alibi", subject="p-1", from_tick=5, to_tick=14, room="CAFETERIA"
+                type="alibi",
+                subject="p-1",
+                route=(AlibiSegment(room="CAFETERIA", from_tick=5, to_tick=14),),
             ),
         ),
         free_text="I was in the cafeteria the whole time.",

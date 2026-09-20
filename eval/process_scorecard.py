@@ -977,14 +977,19 @@ def _claim_truth(
 
     every = True
     some = False
-    for spoken_tick in range(claim.from_tick, claim.to_tick + 1):
-        rooms = route.get(spoken_tick - AGENT_CLOCK_OFFSET)
-        if rooms is None:
-            return None
-        if rooms.get(speaker) == claim.room:
-            some = True
-        else:
-            every = False
+    # Per SEGMENT: the claim is true at a tick when the speaker was in the room
+    # that leg names for it. On a one-segment claim -- which is every claim on
+    # the committed recordings -- this is the identical walk, so the census the
+    # module reproduces (955 / 104 / 103 / 2) does not move.
+    for segment in claim.route:
+        for spoken_tick in range(segment.from_tick, segment.to_tick + 1):
+            rooms = route.get(spoken_tick - AGENT_CLOCK_OFFSET)
+            if rooms is None:
+                return None
+            if rooms.get(speaker) == segment.room:
+                some = True
+            else:
+                every = False
     return every, some
 
 
@@ -1433,7 +1438,10 @@ def _fold_alibi_census(
                 tally.other_subject_alibi_claims += 1
                 continue
             tally.self_alibi_claims += 1
-            multi_tick = claim.to_tick > claim.from_tick
+            # The whole ROUTE's span: the census row asks how many ticks the
+            # account covers, which a one-segment claim answers the same way it
+            # always did.
+            multi_tick = claim.route[-1].to_tick > claim.route[0].from_tick
             if multi_tick:
                 tally.self_alibi_multi_tick += 1
             truth = _claim_truth(claim, turn.speaker, route)

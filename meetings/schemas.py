@@ -374,32 +374,190 @@ class MoveWitnessRecord(_FrozenModel):
 # ---------------------------------------------------------------------------
 
 
-class AlibiClaim(_FrozenModel):
-    """Self- or other-player alibi for a tick range.
+class AlibiSegment(_FrozenModel):
+    """One leg of an alibi route: ONE room over an inclusive tick window.
 
     Tick ranges are inclusive and must be chronological
     (``from_tick <= to_tick``). DESIGN.md §5.4 contradiction detection
-    indexes alibis by ``(agent, tick_range, location)``; a reversed
-    range would be silently interpreted as an empty/no-overlap window
-    and produce wrong contradiction flags rather than fail loud
-    (AGENTS.md "no silent fallbacks").
+    compares a SEGMENT to a sighting, so a reversed range would be silently
+    interpreted as an empty/no-overlap window and produce wrong contradiction
+    flags rather than fail loud (AGENTS.md "no silent fallbacks").
+
+    A stationary player's whole account is ONE segment; that is exactly the
+    shape every committed recording carries, which is why the legacy flat
+    envelope is a legal format-1 :class:`AlibiClaim` and not a second schema.
+    """
+
+    room: RoomId
+    from_tick: int
+    to_tick: int
+
+    @model_validator(mode="after")
+    def _validate_chronological_range(self) -> AlibiSegment:
+        if self.from_tick > self.to_tick:
+            raise ValueError(
+                "AlibiSegment tick range must be chronological: "
+                f"from_tick={self.from_tick} > to_tick={self.to_tick}"
+            )
+        return self
+
+
+_LEGACY_ALIBI_ENVELOPE_KEYS: Final[frozenset[str]] = frozenset(
+    {"room", "from_tick", "to_tick"}
+)
+"""The three keys a pre-route :class:`AlibiClaim` payload carries.
+
+Named once so the lifting validator, the format-preserving serializer and the
+parse-tolerance normalizer (``llm/report_normalize.py``, which keys on field
+NAMES rather than importing this module) all speak of the same envelope.
+"""
+
+
+class AlibiClaim(_FrozenModel):
+    """Self- or other-player alibi: a ROUTE of (room, tick-span) segments.
+
+    The claim is an ORDERED list of :class:`AlibiSegment` legs, exactly one
+    when the player truly did not move. Before this shape an account of
+    movement compressed into a single room over the whole window, and DESIGN.md
+    §5.4 contradiction detection then read the speaker's own true path as a
+    refutation of it: seed 41's ``{ENGINEERING, ticks 12-15}`` carried
+    ``moved to EAST_HALL @ 13 / ADMIN @ 14 / WEST_HALL @ 15`` in its own
+    ``evidence`` and minted five flags against a crewmate who had told the
+    truth and itemised it. As the four one-tick segments every one of those
+    flags disappears, because each sighting's room intersects the segment
+    covering its tick.
+
+    ONE claim type, with an internal ``claim_format``, rather than a second
+    ``type: "alibi_route"`` variant of :data:`Claim`. A second variant would
+    double the branch in every consumer below -- the detectors, the testimony
+    reduction, the belief fold, the served DTO, the spectator, the eval
+    census -- and would leave two live shapes on the wire with no retirement
+    date, because a model may emit either one forever. One type with a format
+    marker keeps a single code path and lets the re-record close the window:
+    once no recorded claim arrives at format 1, the lifting validator is the
+    only thing that has to go.
+
+    ``claim_format`` records which SURFACE a claim arrived on, never a
+    reading of the route:
+
+    * **1** -- a legacy flat payload (``room`` + ``from_tick`` + ``to_tick``),
+      lifted into a one-segment route by :meth:`_lift_envelope_to_route`. The
+      wrap serializer writes those keys back and no ``route``, so a committed
+      recording round-trips byte-identically and a model that still emits the
+      old shape is ACCEPTED as the one-segment route it is -- never silently
+      widened into an envelope over rooms it never named.
+    * **2** -- a ``route`` payload, written back as a ``route``.
+
+    A payload carrying BOTH surfaces, or NEITHER, raises; so do an empty route
+    and segments that are not chronological and strictly non-overlapping
+    (AGENTS.md rule 5, "invalid input raises, no silent fallbacks"). No
+    envelope accessor is offered: a consumer reads ``route`` and decides for
+    itself whether it means a segment or the whole path, which is the
+    distinction the old single ``room``/``from_tick``/``to_tick`` triple could
+    not express.
     """
 
     type: Literal["alibi"]
     subject: PlayerId
-    from_tick: int
-    to_tick: int
-    room: RoomId
+    route: tuple[AlibiSegment, ...]
+    claim_format: Literal[1, 2] = 2
     evidence: tuple[str, ...] = ()
 
-    @model_validator(mode="after")
-    def _validate_chronological_range(self) -> AlibiClaim:
-        if self.from_tick > self.to_tick:
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_envelope_to_route(cls, data: Any) -> Any:
+        """Lift a legacy flat payload into a one-segment route at format 1."""
+
+        if not isinstance(data, dict):
+            return data
+        payload: dict[Any, Any] = dict(data)
+        envelope = _LEGACY_ALIBI_ENVELOPE_KEYS & set(payload)
+        has_route = "route" in payload
+        if has_route and envelope:
             raise ValueError(
-                "AlibiClaim tick range must be chronological: "
-                f"from_tick={self.from_tick} > to_tick={self.to_tick}"
+                "AlibiClaim carries both a route and the legacy envelope keys "
+                f"{sorted(envelope)}; state the account once, as one or the other"
             )
+        if not has_route and not envelope:
+            raise ValueError(
+                "AlibiClaim carries neither a route nor the legacy envelope "
+                "keys room/from_tick/to_tick; an alibi must place its subject"
+            )
+        declared = payload.get("claim_format")
+        if envelope:
+            missing = sorted(_LEGACY_ALIBI_ENVELOPE_KEYS - set(payload))
+            if missing:
+                raise ValueError(
+                    "legacy AlibiClaim envelope is incomplete: missing "
+                    f"{missing}; it is never widened to cover the gap"
+                )
+            if declared not in (None, 1):
+                raise ValueError(
+                    f"a legacy AlibiClaim envelope is claim_format 1, not {declared!r}"
+                )
+            segment: dict[str, Any] = {
+                "room": payload.pop("room"),
+                "from_tick": payload.pop("from_tick"),
+                "to_tick": payload.pop("to_tick"),
+            }
+            payload["route"] = (segment,)
+            payload["claim_format"] = 1
+        elif declared is None:
+            payload["claim_format"] = 2
+        return payload
+
+    @model_validator(mode="after")
+    def _validate_route(self) -> AlibiClaim:
+        if not self.route:
+            raise ValueError("AlibiClaim route must carry at least one segment")
+        if self.claim_format == 1 and len(self.route) != 1:
+            raise ValueError(
+                "a claim_format-1 AlibiClaim is the legacy one-room envelope, "
+                f"so its route is one segment, not {len(self.route)}"
+            )
+        for earlier, later in zip(self.route, self.route[1:], strict=False):
+            if later.from_tick <= earlier.to_tick:
+                raise ValueError(
+                    "AlibiClaim route segments must be chronological and "
+                    "strictly non-overlapping: segment starting at "
+                    f"from_tick={later.from_tick} overlaps the previous "
+                    f"segment ending at to_tick={earlier.to_tick}"
+                )
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Write back the format the claim arrived in (Task: alibi as a route).
+
+        A format-1 claim emits the flat envelope keys and NO ``route``, so a
+        committed recording re-serializes byte-identically and the spectator,
+        the report checks and the replay loader keep reading what they always
+        read. ``claim_format`` never reaches the wire: it is derivable from
+        which surface is present, and emitting it would change the bytes of
+        every recorded claim.
+        """
+
+        data: dict[str, Any] = handler(self)
+        data.pop("claim_format", None)
+        if self.claim_format != 1:
+            return data
+        segment = self.route[0]
+        return {
+            "type": data["type"],
+            "subject": data["subject"],
+            "from_tick": segment.from_tick,
+            "to_tick": segment.to_tick,
+            "room": segment.room,
+            "evidence": data["evidence"],
+        }
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Keep typed fields discoverable despite conditional serialization."""
+
+        return handler(_core_schema_without_serializer(core_schema))
 
 
 class AccusationClaim(_FrozenModel):
@@ -1015,6 +1173,7 @@ class MeetingResult(_FrozenModel):
 __all__ = [
     "AccusationClaim",
     "AlibiClaim",
+    "AlibiSegment",
     "BallotTargetRewriteReason",
     "BodyId",
     "Claim",

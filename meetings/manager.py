@@ -4476,15 +4476,22 @@ def derive_reported_testimony(
         for index, claim in enumerate(turn.claims):
             before = len(statements)
             if isinstance(claim, AlibiClaim):
-                statements.append(
+                # ONE statement per route LEG, in route order. The listener's
+                # belief fold keys an alibi on ``from_tick`` + ``room``, so a
+                # four-leg account collapsed into one statement would land in
+                # memory as "ENGINEERING from tick 12" and lose the three rooms
+                # the speaker actually named. ``ReportedStatement`` is
+                # unchanged: a leg IS the shape it already carries.
+                statements.extend(
                     ReportedStatement(
                         speaker=speaker,
                         kind="alibi",
                         subject=claim.subject,
-                        from_tick=claim.from_tick,
-                        to_tick=claim.to_tick,
-                        room=claim.room,
+                        from_tick=segment.from_tick,
+                        to_tick=segment.to_tick,
+                        room=segment.room,
                     )
+                    for segment in claim.route
                 )
             elif isinstance(claim, AccusationClaim):
                 statements.append(
@@ -4505,11 +4512,15 @@ def derive_reported_testimony(
                     )
                 )
             if provenance_on and len(statements) > before:
-                statements[-1] = statements[-1].model_copy(
-                    update={
-                        "source_event_id": f"turn:{turn.turn_id}:claim:{index}",
-                    }
-                )
+                # EVERY statement this claim produced, not just the last: a
+                # route emits one per leg and each of them traces to the same
+                # public claim id.
+                for position in range(before, len(statements)):
+                    statements[position] = statements[position].model_copy(
+                        update={
+                            "source_event_id": f"turn:{turn.turn_id}:claim:{index}",
+                        }
+                    )
     return tuple(sorted(statements, key=_reported_statement_sort_key))
 
 

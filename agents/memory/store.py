@@ -148,11 +148,15 @@ _SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY: Final[int] = 15
 # would change what those comparisons measured, so this stays where it shipped.
 _SALIENCE_EVIDENCE_V1_CONTEXT: Final[int] = 90
 
-# Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
-# belief block is the non-elastic carve-out (``_assemble_view`` never budgets it),
-# so an unbounded accumulated alibi list could push ``render_for_prompt`` over
-# ``DEFAULT_TOKEN_BUDGET``. Render only the most-recent few per subject; a newer
-# alibi supersedes a stale one and N x subjects x this cap stays bounded.
+# Per-subject cap on rendered reported alibi LEGS (Task 13.5.2, Codex P2). The
+# §6.6 belief block is the non-elastic carve-out (``_assemble_view`` never budgets
+# it), so an unbounded accumulated alibi list could push ``render_for_prompt``
+# over ``DEFAULT_TOKEN_BUDGET``. An alibi is a ROUTE and reduces to one reported
+# statement per leg, so the unit this bounds is the leg rather than the claim:
+# render only the most-recent few per subject; a newer leg supersedes a stale one
+# and N x subjects x this cap stays bounded. A long walk is therefore rendered as
+# its most recent legs -- the tail of the path, which is the part a listener is
+# weighing -- rather than as an envelope over rooms the speaker never joined.
 _MAX_RENDERED_ALIBIS: Final[int] = 3
 
 _EVENT_SAW_BODY: Final[str] = "saw_body"
@@ -2554,12 +2558,17 @@ def _build_belief_lines(
 
 
 def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
-    """Render a subject's recorded alibi claims for the §6.6 belief view (Task 13.5.2).
+    """Render a subject's recorded alibi legs for the §6.6 belief view (Task 13.5.2).
 
     Empty for a subject with no recorded alibi, so that subject's belief line
-    carries no suffix. Claims are sorted by ``(tick, room, source)`` for replay
-    determinism; each renders as ``in ROOM at tick T per SPEAKER`` so the alibi
-    stays attributed to the player who asserted it.
+    carries no suffix. An alibi is a ROUTE, and
+    :func:`meetings.manager.derive_reported_testimony` files one statement per
+    leg, so a subject who stated a four-room walk arrives here as four rows and
+    renders as the path: ``in ENGINEERING at tick 12 per p-9; in EAST_HALL at
+    tick 13 per p-9; ...``. Rows are sorted by ``(tick, room, source)`` for
+    replay determinism -- which is route order for one speaker's own walk --
+    and each stays attributed to the player who asserted it. A stationary
+    account is one row and reads exactly as it always did.
     """
 
     if not alibis:

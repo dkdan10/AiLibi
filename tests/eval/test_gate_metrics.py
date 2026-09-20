@@ -59,6 +59,7 @@ from eval.vote_correctness import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingOutcome,
     MeetingTranscript,
@@ -111,7 +112,9 @@ def _alibi(
     *, subject: PlayerId, room: str = "CAFETERIA", from_tick: int = 2, to_tick: int = 8
 ) -> AlibiClaim:
     return AlibiClaim(
-        type="alibi", subject=subject, from_tick=from_tick, to_tick=to_tick, room=room
+        type="alibi",
+        subject=subject,
+        route=(AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick),),
     )
 
 

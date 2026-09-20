@@ -203,15 +203,18 @@ def _placements(transcript: MeetingTranscript) -> tuple[_Placement, ...]:
                 )
         for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
-                rows.append(
+                # One placement per route LEG: the account places its subject
+                # in each room it names, over that leg's own window.
+                rows.extend(
                     _Placement(
                         f"turn:{turn.turn_id}:claim:{index}",
                         turn.speaker,
                         claim.subject,
-                        claim.room,
-                        claim.from_tick,
-                        claim.to_tick,
+                        segment.room,
+                        segment.from_tick,
+                        segment.to_tick,
                     )
+                    for segment in claim.route
                 )
     return tuple(rows)
 

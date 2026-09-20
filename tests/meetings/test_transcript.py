@@ -20,6 +20,7 @@ import pytest
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     FoundBodyObservation,
     MeetingTranscript,
@@ -336,9 +337,7 @@ def _alibi_turn(
             AlibiClaim(
                 type="alibi",
                 subject=subject,
-                from_tick=from_tick,
-                to_tick=to_tick,
-                room=room,
+                route=(AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick),),
             ),
         ),
         free_text=f"turn {turn_index}",
@@ -1587,7 +1586,9 @@ def _alibi_rooms_by_event_id(entry: MeetingReplayEntry) -> dict[str, frozenset[s
     """Canonical room set per alibi-claim event id, detector-id format."""
 
     return {
-        f"turn:{turn.turn_id}:claim:{index}": canonical_rooms(claim.room)
+        f"turn:{turn.turn_id}:claim:{index}": frozenset(
+            room for segment in claim.route for room in canonical_rooms(segment.room)
+        )
         for turn in entry.transcript.turns
         for index, claim in enumerate(turn.claims)
         if isinstance(claim, AlibiClaim)
@@ -2385,9 +2386,7 @@ class TestProxyIntraTurnGuard:
                 AlibiClaim(
                     type="alibi",
                     subject=subject,
-                    from_tick=2,
-                    to_tick=8,
-                    room=alibi_room,
+                    route=(AlibiSegment(room=alibi_room, from_tick=2, to_tick=8),),
                 ),
             ),
             observations=(
@@ -2440,16 +2439,12 @@ class TestProxyIntraTurnGuard:
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="EAST_HALL",
+                    route=(AlibiSegment(room="EAST_HALL", from_tick=1, to_tick=6),),
                 ),
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="ENGINEERING",
+                    route=(AlibiSegment(room="ENGINEERING", from_tick=1, to_tick=6),),
                 ),
             ),
             free_text="turn 1",
@@ -2531,16 +2526,12 @@ class TestProxyIntraTurnGuard:
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="EAST_HALL",
+                    route=(AlibiSegment(room="EAST_HALL", from_tick=1, to_tick=6),),
                 ),
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="ENGINEERING",
+                    route=(AlibiSegment(room="ENGINEERING", from_tick=1, to_tick=6),),
                 ),
             ),
             free_text="turn 0",
@@ -2593,16 +2584,18 @@ class TestProxyIntraTurnGuard:
                         AlibiClaim(
                             type="alibi",
                             subject="p-4",
-                            from_tick=1,
-                            to_tick=6,
-                            room="EAST_HALL",
+                            route=(
+                                AlibiSegment(room="EAST_HALL", from_tick=1, to_tick=6),
+                            ),
                         ),
                         AlibiClaim(
                             type="alibi",
                             subject="p-4",
-                            from_tick=1,
-                            to_tick=6,
-                            room="ENGINEERING",
+                            route=(
+                                AlibiSegment(
+                                    room="ENGINEERING", from_tick=1, to_tick=6
+                                ),
+                            ),
                         ),
                     ),
                     observations=(

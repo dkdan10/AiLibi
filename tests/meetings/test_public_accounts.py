@@ -40,6 +40,7 @@ from meetings.schemas import (
     MeetingResult,
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
@@ -615,7 +616,9 @@ def _claim_turn(speaker: str, claims: tuple[AlibiClaim, ...]) -> MeetingTurn:
 
 def _alibi(subject: str, room: str, tick: int) -> AlibiClaim:
     return AlibiClaim(
-        type="alibi", subject=subject, room=room, from_tick=tick, to_tick=tick
+        type="alibi",
+        subject=subject,
+        route=(AlibiSegment(room=room, from_tick=tick, to_tick=tick),),
     )
 
 

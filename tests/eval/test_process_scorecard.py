@@ -50,6 +50,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     BallotTargetRewriteReason,
     ContradictionRef,
     MeetingOutcome,
@@ -109,7 +110,9 @@ def _alibi(
     *, subject: PlayerId, room: RoomId, from_tick: int, to_tick: int
 ) -> AlibiClaim:
     return AlibiClaim(
-        type="alibi", subject=subject, from_tick=from_tick, to_tick=to_tick, room=room
+        type="alibi",
+        subject=subject,
+        route=(AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick),),
     )
 
 

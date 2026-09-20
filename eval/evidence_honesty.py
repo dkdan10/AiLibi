@@ -2311,7 +2311,21 @@ def _resolve_flag(
     speaker, sighting, movement_origin = sightings[0]
     alibi = alibis[0]
     if isinstance(alibi, AlibiClaim):
-        alibi_room, from_tick, to_tick = alibi.room, alibi.from_tick, alibi.to_tick
+        # The I-6 geometry fold measures the distance between ONE claimed room
+        # and one sighting, so it is defined on a one-segment route -- the shape
+        # every committed recording carries. A multi-leg route names several
+        # rooms and the flag's event ids do not say which leg it rests on, so
+        # the pair is NOT EVALUABLE here rather than resolved against a leg
+        # picked by this module; the resolver's other ``None`` branches are the
+        # same statement.
+        if len(alibi.route) != 1:
+            return None
+        segment = alibi.route[0]
+        alibi_room, from_tick, to_tick = (
+            segment.room,
+            segment.from_tick,
+            segment.to_tick,
+        )
     elif isinstance(alibi, WhereaboutsClaim):
         alibi_room, from_tick, to_tick = alibi.room, alibi.tick, alibi.tick
     else:

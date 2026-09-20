@@ -23,8 +23,11 @@ import functools
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from meetings.constants import (
     GROUNDED_PROSECUTION_MIN_SOURCES,
@@ -34,6 +37,7 @@ from meetings.constants import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     Claim,
     CompletedTaskObservation,
     ContradictionRef,
@@ -82,9 +86,7 @@ def _alibi(*, subject: str, from_tick: int, to_tick: int, room: str) -> AlibiCla
     return AlibiClaim(
         type="alibi",
         subject=subject,
-        from_tick=from_tick,
-        to_tick=to_tick,
-        room=room,
+        route=(AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick),),
     )
 
 
@@ -3671,7 +3673,8 @@ def _degenerate_self_alibi_ids(
         for index, claim in enumerate(turn.claims):
             if (
                 isinstance(claim, AlibiClaim)
-                and claim.from_tick == claim.to_tick
+                and len(claim.route) == 1
+                and claim.route[0].from_tick == claim.route[0].to_tick
                 and claim.subject == turn.speaker
                 and claim.subject in roster
             ):
@@ -4617,3 +4620,303 @@ class TestMapAwareArbitrationCommittedCensus:
             and WEAK_REASON_ADJACENT_ONE_TICK in flag.description
         ]
         assert survivors == []
+
+
+# --------------------------------------------------------------------------- #
+# The alibi is a ROUTE: the seed-41 adverse pair + the one-segment property     #
+# --------------------------------------------------------------------------- #
+
+_SEED_41_MEETING: Final[str] = "headless-seed-41:meeting-2"
+
+#: p-9's true path through that meeting, as p-9's own ``evidence`` rows state
+#: it: ENGINEERING at 12, then EAST_HALL, ADMIN and WEST_HALL one tick each.
+_SEED_41_ROUTE: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="ENGINEERING", from_tick=12, to_tick=12),
+    AlibiSegment(room="EAST_HALL", from_tick=13, to_tick=13),
+    AlibiSegment(room="ADMIN", from_tick=14, to_tick=14),
+    AlibiSegment(room="WEST_HALL", from_tick=15, to_tick=15),
+)
+
+
+def _seed_41_entry() -> MeetingReplayEntry:
+    """The committed seed-41 meeting the direction memo makes its exhibit."""
+
+    for set_name, seed, entry in _committed_meeting_entries():
+        if seed == 41 and entry.meeting_id == _SEED_41_MEETING:
+            assert set_name == "samples/9p2i"
+            return entry
+    raise AssertionError(f"{_SEED_41_MEETING} is not in the committed corpus")
+
+
+def _with_p9_route(
+    entry: MeetingReplayEntry, route: tuple[AlibiSegment, ...]
+) -> MeetingTranscript:
+    """The same meeting with p-9's own account stated as ``route``."""
+
+    replaced = 0
+    turns: list[MeetingTurn] = []
+    for turn in entry.transcript.turns:
+        claims: list[Claim] = []
+        for claim in turn.claims:
+            if isinstance(claim, AlibiClaim) and claim.subject == "p-9":
+                claim = claim.model_copy(
+                    update={"route": route, "claim_format": 2 if len(route) > 1 else 1}
+                )
+                replaced += 1
+            claims.append(claim)
+        turns.append(turn.model_copy(update={"claims": tuple(claims)}))
+    assert replaced == 1, f"expected exactly one p-9 self-alibi, found {replaced}"
+    return entry.transcript.model_copy(update={"turns": tuple(turns)})
+
+
+class TestTheAlibiIsARoute:
+    """Seed 41: the honest mover, the envelope that convicted them, and a liar.
+
+    The direction memo of 2026-09-19 §5 makes this meeting the exhibit: p-9
+    (crew) states ENGINEERING ticks 12-15 whose OWN evidence rows read "moved to
+    EAST_HALL @ 13 / ADMIN @ 14 / WEST_HALL @ 15", every one of them true, and
+    the detectors mint flags against p-9 for the walk p-9 itemised. The pair
+    below is the adverse case in both directions: the truthful route mints
+    nothing, and the same turn stating the one-room envelope still mints exactly
+    what the recording holds.
+    """
+
+    def test_the_record_holds_five_flags_against_an_honest_mover(self) -> None:
+        entry = _seed_41_entry()
+
+        assert len(entry.contradictions) == 5
+        assert {flag.subjects for flag in entry.contradictions} == {("p-9",)}
+        claim_id = f"turn:{_SEED_41_MEETING}:turn-4:claim:0"
+        assert all(
+            claim_id in (flag.event_a_id, flag.event_b_id)
+            for flag in entry.contradictions
+        )
+
+    def test_the_envelope_still_mints_its_flags(self) -> None:
+        # Four of the five, not all five: this meeting is one of the
+        # ``_MOVEMENT_CHANNEL_DIVERGING_MEETINGS`` above, whose fifth flag rests
+        # on the private movement channel a replay cannot rebuild. What matters
+        # here is the direction -- the envelope prosecutes p-9 -- and the
+        # corpus-wide byte identity is pinned by the walk above, not here.
+        entry = _seed_41_entry()
+        rederived = _rederive(entry)
+
+        assert len(rederived) == 4
+        assert {flag.subjects for flag in rederived} == {("p-9",)}
+        assert {flag.kind for flag in rederived} == {
+            "alibi_conflict",
+            "alibi_vs_sighting",
+        }
+
+    def test_the_truthful_route_mints_nothing(self) -> None:
+        entry = _seed_41_entry()
+        routed = _with_p9_route(entry, _SEED_41_ROUTE)
+
+        flags = detect_contradictions(
+            routed,
+            roster=_living_roster(entry),
+            vent_witness_records=_vent_records_from_recorded_flags(entry),
+            sighting_records=sighting_records_from_recorded_flags(entry),
+        )
+
+        assert flags == ()
+
+    def test_the_same_turn_stating_a_flat_lie_is_still_prosecuted(self) -> None:
+        # The other half of the adverse pair, on the SAME meeting: a one-segment
+        # route naming a room p-9 held at no covered tick. Every flag the
+        # envelope minted comes back, so the route buys a liar nothing.
+        entry = _seed_41_entry()
+        lying = _with_p9_route(
+            entry, (AlibiSegment(room="STORAGE", from_tick=12, to_tick=15),)
+        )
+
+        flags = detect_contradictions(
+            lying,
+            roster=_living_roster(entry),
+            vent_witness_records=_vent_records_from_recorded_flags(entry),
+            sighting_records=sighting_records_from_recorded_flags(entry),
+        )
+
+        sighting_flags = [flag for flag in flags if flag.kind == "alibi_vs_sighting"]
+        assert len(sighting_flags) == 4
+        assert {flag.subjects for flag in flags} == {("p-9",)}
+
+    def test_a_flat_lie_reaches_the_strong_band(self) -> None:
+        # The band, on a shape the seed-41 meeting cannot show: its four
+        # sightings all sit on or one tick from the window's edges, so today's
+        # endpoint and corridor guards weak-band every one of them. A lie over a
+        # WIDE window, contradicted at a deeply interior tick by a room two or
+        # more doorways away, is the clean case -- and it still convicts.
+        transcript = MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m:turn-0",
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    reply_to=None,
+                    free_text="I never left.",
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-1",
+                            route=(
+                                AlibiSegment(room="REACTOR", from_tick=2, to_tick=14),
+                            ),
+                        ),
+                    ),
+                ),
+                MeetingTurn(
+                    turn_id="m:turn-1",
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    reply_to=None,
+                    free_text="Not true.",
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player", tick=8, subject="p-1", room="MEDBAY"
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        flags = detect_contradictions(transcript, roster=frozenset({"p-1", "p-2"}))
+
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_vs_sighting"
+        assert flags[0].subjects == ("p-1",)
+        assert is_weak_contradiction(flags[0]) is False
+
+    def test_dropping_the_segment_comparison_turns_the_honest_route_red(
+        self,
+    ) -> None:
+        # The planted failure for the route rule, expressed as the rule itself:
+        # a detector that compared the ROUTE's outer endpoints (12-15) and its
+        # FIRST room instead of the leg covering each sighting's tick is exactly
+        # the pre-card envelope, and it flags the honest mover. Asserted here so
+        # the green case above cannot be green for a reason other than the
+        # segment comparison.
+        entry = _seed_41_entry()
+        routed = _with_p9_route(entry, _SEED_41_ROUTE)
+        p9_route = next(
+            claim.route
+            for turn in routed.turns
+            for claim in turn.claims
+            if isinstance(claim, AlibiClaim) and claim.subject == "p-9"
+        )
+        envelope_rooms = canonical_rooms(p9_route[0].room)
+        window = (p9_route[0].from_tick, p9_route[-1].to_tick)
+
+        would_flag = [
+            (observation.room, observation.tick)
+            for turn in routed.turns
+            for observation in turn.observations
+            if isinstance(observation, SawPlayerObservation)
+            and observation.subject == "p-9"
+            and window[0] <= observation.tick <= window[1]
+            and not (canonical_rooms(observation.room) & envelope_rooms)
+        ]
+
+        assert would_flag, "the envelope rule must still indict the honest route"
+
+
+class TestOneSegmentRoutesReadLikeTheEnvelope:
+    """The property: on a ONE-SEGMENT route the pairing rule is unchanged.
+
+    An independent oracle, not a re-run of the detector: for a self-stated
+    one-room account and one third-party sighting of the same subject, an
+    ``alibi_vs_sighting`` flag is minted exactly when the sighting's room
+    differs from the claimed room and its tick falls inside the claimed window.
+    That is the pre-route rule stated in four lines, so a segment-level edit
+    (comparing the route's outer endpoints instead of the leg covering the
+    tick, say) turns this red rather than agreeing with itself.
+
+    The corpus-wide half of the same property is
+    :meth:`TestLiveDetectorCommittedBytesByteIdentity.
+    test_re_derivation_equals_recorded_on_every_committed_meeting`, which holds
+    672 committed meetings of one-segment claims to their recorded flags.
+    """
+
+    @staticmethod
+    def _transcript(
+        *, room: str, from_tick: int, to_tick: int, seen_room: str, seen_tick: int
+    ) -> MeetingTranscript:
+        return MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m:turn-0",
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    reply_to=None,
+                    free_text="my account",
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-1",
+                            route=(
+                                AlibiSegment(
+                                    room=room, from_tick=from_tick, to_tick=to_tick
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                MeetingTurn(
+                    turn_id="m:turn-1",
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    reply_to=None,
+                    free_text="what I saw",
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player",
+                            tick=seen_tick,
+                            subject="p-1",
+                            room=seen_room,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+    @given(
+        from_tick=st.integers(min_value=0, max_value=18),
+        span=st.integers(min_value=0, max_value=6),
+        seen_tick=st.integers(min_value=0, max_value=24),
+        rooms=st.tuples(
+            st.sampled_from(sorted(CANONICAL_ROOMS)),
+            st.sampled_from(sorted(CANONICAL_ROOMS)),
+        ),
+    )
+    @settings(max_examples=200, deadline=None)
+    def test_the_envelope_rule_decides_every_one_segment_pair(
+        self,
+        from_tick: int,
+        span: int,
+        seen_tick: int,
+        rooms: tuple[str, str],
+    ) -> None:
+        room, seen_room = rooms
+        to_tick = from_tick + span
+        transcript = self._transcript(
+            room=room,
+            from_tick=from_tick,
+            to_tick=to_tick,
+            seen_room=seen_room,
+            seen_tick=seen_tick,
+        )
+
+        flags = [
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=frozenset({"p-1", "p-2"})
+            )
+            if flag.kind == "alibi_vs_sighting"
+        ]
+
+        expected = room != seen_room and from_tick <= seen_tick <= to_tick
+        assert bool(flags) is expected, (room, from_tick, to_tick, seen_room, seen_tick)

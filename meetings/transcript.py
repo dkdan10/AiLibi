@@ -312,7 +312,7 @@ import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final, Literal
+from typing import Final, Literal, TypeAlias
 
 from meetings.constants import (
     GROUNDED_PROSECUTION_MIN_SOURCES,
@@ -322,6 +322,7 @@ from meetings.constants import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     CompletedTaskObservation,
     ContradictionRef,
     CorroborationClaim,
@@ -1032,7 +1033,7 @@ def self_refuted_alibi_claim_ids(transcript: MeetingTranscript) -> frozenset[str
     the same bug class the detector's own echo handling guards against.
     """
 
-    refuted_accounts: set[tuple[PlayerId, frozenset[str], int, int]] = set()
+    refuted_accounts: set[_RouteEchoKey] = set()
     for turn in transcript.turns:
         own_task_observations = [
             observation
@@ -1044,38 +1045,40 @@ def self_refuted_alibi_claim_ids(transcript: MeetingTranscript) -> frozenset[str
         for claim in turn.claims:
             if not isinstance(claim, AlibiClaim) or claim.subject != turn.speaker:
                 continue
-            alibi_rooms = canonical_rooms(claim.room)
-            if not alibi_rooms:
-                continue
-            for observation in own_task_observations:
-                if not claim.from_tick <= observation.tick <= claim.to_tick:
-                    continue
-                observed_rooms = canonical_rooms(observation.room)
-                if observed_rooms and not (observed_rooms & alibi_rooms):
-                    refuted_accounts.add(
-                        (
-                            claim.subject,
-                            alibi_rooms,
-                            claim.from_tick,
-                            claim.to_tick,
-                        )
-                    )
-                    break
+            if _route_self_refuted(claim, own_task_observations):
+                refuted_accounts.add(_claim_route_key(claim))
     if not refuted_accounts:
         return frozenset()
     return frozenset(
         _turn_claim_id(turn=turn, index=index)
         for turn in transcript.turns
         for index, claim in enumerate(turn.claims)
-        if isinstance(claim, AlibiClaim)
-        and (
-            claim.subject,
-            canonical_rooms(claim.room),
-            claim.from_tick,
-            claim.to_tick,
-        )
-        in refuted_accounts
+        if isinstance(claim, AlibiClaim) and _claim_route_key(claim) in refuted_accounts
     )
+
+
+def _route_self_refuted(
+    claim: AlibiClaim, own_task_observations: Sequence[CompletedTaskObservation]
+) -> bool:
+    """Whether one of the speaker's own task rows refutes the LEG covering it.
+
+    Per SEGMENT: the row disproves the room the speaker claimed for its tick,
+    not the whole route. A speaker who said ENGINEERING 12-12 then EAST_HALL
+    13-13 and finished a task in EAST_HALL at 13 refuted nothing; under the
+    single-room envelope that pair was the audited greedy-span defect.
+    """
+
+    for segment in claim.route:
+        segment_rooms = canonical_rooms(segment.room)
+        if not segment_rooms:
+            continue
+        for observation in own_task_observations:
+            if not segment.from_tick <= observation.tick <= segment.to_tick:
+                continue
+            observed_rooms = canonical_rooms(observation.room)
+            if observed_rooms and not (observed_rooms & segment_rooms):
+                return True
+    return False
 
 
 def is_relevant_sighting(
@@ -1914,8 +1917,16 @@ def _escape_untrusted_band_markers(transcript: MeetingTranscript) -> MeetingTran
             if isinstance(claim, AlibiClaim):
                 claim = claim.model_copy(
                     update={
-                        "room": claim.room.replace(
-                            WEAK_CONTRADICTION_MARKER_PREFIX, "[quoted weak signal:"
+                        "route": tuple(
+                            segment.model_copy(
+                                update={
+                                    "room": segment.room.replace(
+                                        WEAK_CONTRADICTION_MARKER_PREFIX,
+                                        "[quoted weak signal:",
+                                    )
+                                }
+                            )
+                            for segment in claim.route
                         )
                     }
                 )
@@ -2030,9 +2041,9 @@ def detect_corroborations(
             if not sighting.rooms or not (sighting.rooms & alibi.rooms):
                 continue
             if not (
-                alibi.claim.from_tick
+                alibi.segment.from_tick
                 <= sighting.observation.tick
-                <= alibi.claim.to_tick
+                <= alibi.segment.to_tick
             ):
                 continue
             if not is_relevant_sighting(
@@ -2355,12 +2366,28 @@ def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
 
 @dataclass(frozen=True)
 class _IndexedAlibi:
-    """An :class:`AlibiClaim` paired with its event id, speaker, and rooms.
+    """ONE SEGMENT of an :class:`AlibiClaim` route, with its claim and ids.
+
+    An alibi is a route (``AlibiClaim.route``), so the index carries one entry
+    per leg rather than one per claim: ``segment`` is the leg every detector
+    compares against -- its own inclusive window and its own room -- while
+    ``claim`` stays available for the bands that read the WHOLE account (the
+    narrow-window band, the route's outer endpoints). ``segment_index`` is the
+    leg's position in that route, so a one-segment account is recognisable as
+    ``len(claim.route) == 1`` and a leg's place in a path is never inferred
+    from its ticks.
+
+    ``event_id`` names the CLAIM, not the leg: a flag references the public
+    artifact a listener can cite, and every consumer keyed on claim ids
+    (:func:`contradiction_lift_key`, :func:`self_refuted_alibi_claim_ids`, the
+    ballot citation guard) keeps reading the same ids it always did. Segments
+    are strictly non-overlapping by schema, so a given sighting tick lands in
+    at most one leg and the split mints no duplicate flag.
 
     ``speaker`` is the player who *stated* the claim (``turn.speaker``),
     which the Task 9.7 weak-signal classification compares against the
     claim's ``subject`` to recognise a self-stated alibi. ``rooms`` is
-    the claim's canonical room set (:func:`canonical_rooms`), computed
+    the SEGMENT's canonical room set (:func:`canonical_rooms`), computed
     once at indexing so every comparison site -- conflicts, sightings,
     corroborations -- reads the same canonical parse (Task 10.1).
     """
@@ -2368,7 +2395,27 @@ class _IndexedAlibi:
     event_id: str
     speaker: PlayerId
     claim: AlibiClaim
+    segment: AlibiSegment
+    segment_index: int
     rooms: frozenset[str]
+
+    @property
+    def route_from_tick(self) -> int:
+        """The first tick the whole ROUTE accounts for."""
+
+        return self.claim.route[0].from_tick
+
+    @property
+    def route_to_tick(self) -> int:
+        """The last tick the whole ROUTE accounts for."""
+
+        return self.claim.route[-1].to_tick
+
+    @property
+    def one_segment_route(self) -> bool:
+        """Whether the speaker's whole account is this single leg."""
+
+        return len(self.claim.route) == 1
 
 
 @dataclass(frozen=True)
@@ -2399,6 +2446,12 @@ def _iter_alibis(
     transcript: MeetingTranscript, *, include_whereabouts: bool = True
 ) -> Iterator[_IndexedAlibi]:
     """Yield every location account: alibi claims + whereabouts self-placements.
+
+    One :class:`_IndexedAlibi` per ROUTE SEGMENT, in route order, all sharing
+    the claim's one event id: a four-leg account yields four entries, a
+    stationary account one. That is what lets a detector compare a sighting to
+    the leg covering its tick instead of to an envelope the speaker never
+    stated.
 
     A spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
     in ``room`` at ``tick``") is indexed as a DEGENERATE SINGLE-TICK
@@ -2432,26 +2485,39 @@ def _iter_alibis(
     for turn in transcript.turns:
         for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
-                yield _IndexedAlibi(
-                    event_id=_turn_claim_id(turn=turn, index=index),
-                    speaker=turn.speaker,
-                    claim=claim,
-                    rooms=canonical_rooms(claim.room),
-                )
+                event_id = _turn_claim_id(turn=turn, index=index)
+                for position, segment in enumerate(claim.route):
+                    yield _IndexedAlibi(
+                        event_id=event_id,
+                        speaker=turn.speaker,
+                        claim=claim,
+                        segment=segment,
+                        segment_index=position,
+                        rooms=canonical_rooms(segment.room),
+                    )
         if not include_whereabouts:
             continue
         for index, observation in enumerate(turn.observations):
             if isinstance(observation, WhereaboutsClaim):
+                # A roll-call answer is one tick in one room, so it lifts to
+                # the same one-segment route the legacy envelope does.
+                synthesized = AlibiClaim(
+                    type="alibi",
+                    subject=turn.speaker,
+                    route=(
+                        AlibiSegment(
+                            room=observation.room,
+                            from_tick=observation.tick,
+                            to_tick=observation.tick,
+                        ),
+                    ),
+                )
                 yield _IndexedAlibi(
                     event_id=_turn_whereabouts_id(turn=turn, index=index),
                     speaker=turn.speaker,
-                    claim=AlibiClaim(
-                        type="alibi",
-                        subject=turn.speaker,
-                        from_tick=observation.tick,
-                        to_tick=observation.tick,
-                        room=observation.room,
-                    ),
+                    claim=synthesized,
+                    segment=synthesized.route[0],
+                    segment_index=0,
                     rooms=canonical_rooms(observation.room),
                 )
 
@@ -2745,20 +2811,43 @@ def _dedupe_echo_alibis(
     witness-vouches-first shape the dedup would otherwise silently drop.
     """
 
-    seen: set[tuple[PlayerId, frozenset[str], int, int]] = set()
+    owner: dict[_RouteEchoKey, str] = {}
     deduped: list[_IndexedAlibi] = []
     for alibi in alibis:
-        key = (
-            alibi.claim.subject,
-            alibi.rooms,
-            alibi.claim.from_tick,
-            alibi.claim.to_tick,
-        )
-        if key in seen:
+        key = _route_echo_key(alibi)
+        first = owner.setdefault(key, alibi.event_id)
+        # The key is a property of the ACCOUNT, so every segment of the claim
+        # that stated it first shares one key; keeping the entries whose event
+        # id owns that key keeps a whole route and drops a whole echo, never
+        # half of either.
+        if first != alibi.event_id:
             continue
-        seen.add(key)
         deduped.append(alibi)
     return tuple(deduped)
+
+
+_RouteEchoKey: TypeAlias = tuple[PlayerId, tuple[tuple[frozenset[str], int, int], ...]]
+"""One stated location ACCOUNT: its subject and its whole canonical route.
+
+The echo key and the self-refutation key are the same statement about a claim
+-- who it places and along which legs -- so they are derived in one place.
+"""
+
+
+def _route_echo_key(alibi: _IndexedAlibi) -> _RouteEchoKey:
+    """The whole claim's account key, identical for every one of its segments."""
+
+    return _claim_route_key(alibi.claim)
+
+
+def _claim_route_key(claim: AlibiClaim) -> _RouteEchoKey:
+    return (
+        claim.subject,
+        tuple(
+            (canonical_rooms(segment.room), segment.from_tick, segment.to_tick)
+            for segment in claim.route
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -2798,11 +2887,15 @@ def _subject_account_index(
     index: dict[PlayerId, list[_SubjectAccount]] = {}
     for alibi in alibis:
         if alibi.speaker == alibi.claim.subject and alibi.rooms:
+            # One account per LEG: a subject who walked through four rooms
+            # agrees with a sighting in the third of them, which an envelope
+            # over the whole window could only express by claiming all four
+            # at once.
             index.setdefault(alibi.claim.subject, []).append(
                 _SubjectAccount(
                     rooms=alibi.rooms,
-                    from_tick=alibi.claim.from_tick,
-                    to_tick=alibi.claim.to_tick,
+                    from_tick=alibi.segment.from_tick,
+                    to_tick=alibi.segment.to_tick,
                 )
             )
     for sighting in sightings:
@@ -2876,8 +2969,18 @@ def _detect_alibi_conflicts(
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
     evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
+    # One flag per pair of CLAIMS, whichever legs disagreed: the pair of event
+    # ids IS the flag's identity, so two legs of one route conflicting with two
+    # legs of another would otherwise mint the same contradiction id twice.
+    paired: set[tuple[str, str]] = set()
     for i, left in enumerate(alibis):
         for right in alibis[i + 1 :]:
+            # Two legs of ONE route are a path the speaker declared, not two
+            # accounts: the segments that put p-9 in ENGINEERING at 12 and in
+            # ADMIN at 14 are the same statement, and reading them as rivals is
+            # how a route's last leg used to indict its first.
+            if left.event_id == right.event_id:
+                continue
             if left.claim.subject != right.claim.subject:
                 continue
             # Canonical room comparison (Task 10.1): a no-room side
@@ -2890,12 +2993,16 @@ def _detect_alibi_conflicts(
             if left.rooms & right.rooms:
                 continue
             if not _ranges_overlap(
-                left.claim.from_tick,
-                left.claim.to_tick,
-                right.claim.from_tick,
-                right.claim.to_tick,
+                left.segment.from_tick,
+                left.segment.to_tick,
+                right.segment.from_tick,
+                right.segment.to_tick,
             ):
                 continue
+            pair = tuple(sorted((left.event_id, right.event_id)))
+            if pair in paired:
+                continue
+            paired.add((pair[0], pair[1]))
             # Task 13.3 (B2): the genuinely-INDEPENDENT cross-speaker conflict
             # -- two distinct non-subject speakers, none of the four
             # :func:`_conflict_weak_reasons` guards firing -- yields empty
@@ -2911,8 +3018,8 @@ def _detect_alibi_conflicts(
                 event_b_id=right.event_id,
                 subjects=(left.claim.subject,),
                 description=_describe_alibi_conflict(
-                    left.claim,
-                    right.claim,
+                    left,
+                    right,
                     weak_reasons=_conflict_weak_reasons(
                         left,
                         right,
@@ -2969,8 +3076,14 @@ def _detect_alibi_vs_sightings(
         # single-tick self-placement takes the narrow-window / endpoint band
         # instead of being adjudicated as its own interior. A record-free caller
         # keeps the exemption, so both branches are live.
+        #
+        # The class keys on a ONE-SEGMENT route: a roll-call answer is the
+        # speaker's whole account of themselves at one tick. A one-tick LEG of
+        # a longer route is a declared transition inside a path, not an
+        # adjudicated whole account, so it does not inherit the exemption.
         interior_exempt = not grounded_prosecution and (
-            alibi.claim.from_tick == alibi.claim.to_tick
+            alibi.one_segment_route
+            and alibi.segment.from_tick == alibi.segment.to_tick
             and alibi.speaker == alibi.claim.subject
         )
         # Task 13.14: the sighting path no longer down-weights a self-stated
@@ -2992,10 +3105,14 @@ def _detect_alibi_vs_sightings(
             # :func:`detect_corroborations`, never a flag).
             if not sighting.rooms or (sighting.rooms & alibi.rooms):
                 continue
+            # The SEGMENT covering the sighting's tick is what the sighting
+            # can refute. A truthful mover who named the room they were in at
+            # that tick therefore mints nothing; a flat lie -- one segment
+            # over a room the speaker held at no covered tick -- still does.
             if not (
-                alibi.claim.from_tick
+                alibi.segment.from_tick
                 <= sighting.observation.tick
-                <= alibi.claim.to_tick
+                <= alibi.segment.to_tick
             ):
                 continue
             # Proxy subject-account consistency (Task 10.6; audit gp-1
@@ -3015,8 +3132,8 @@ def _detect_alibi_vs_sightings(
             if alibi.speaker != alibi.claim.subject and _subject_account_agrees(
                 subject_accounts.get(alibi.claim.subject, ()),
                 sighting_rooms=sighting.rooms,
-                window_from=alibi.claim.from_tick,
-                window_to=alibi.claim.to_tick,
+                window_from=alibi.segment.from_tick,
+                window_to=alibi.segment.to_tick,
             ):
                 yield _build_contradiction(
                     kind="alibi_vs_sighting",
@@ -3025,7 +3142,7 @@ def _detect_alibi_vs_sightings(
                     subjects=(alibi.speaker,),
                     description=_describe_retargeted_proxy(
                         speaker=alibi.speaker,
-                        alibi=alibi.claim,
+                        alibi=alibi,
                         sighting=sighting.observation,
                     ),
                     evidence_band=("weak") if evidence_reasoning_version == 1 else None,
@@ -3038,9 +3155,15 @@ def _detect_alibi_vs_sightings(
             # mismatch can still be a real signal once corroborated. Task
             # 18.9: skipped for the interior-exempt single-tick self-alibi
             # class -- its one tick IS the claim's interior, not an edge.
+            #
+            # The edge is the whole ROUTE's outer endpoint, not the leg's: an
+            # interior boundary is a transition the speaker DECLARED ("I left
+            # ENGINEERING at 12 and reached EAST_HALL at 13"), so a sighting
+            # there disputes a stated fact rather than blurring an edge the
+            # account never drew.
             if not interior_exempt and sighting.observation.tick in (
-                alibi.claim.from_tick,
-                alibi.claim.to_tick,
+                alibi.route_from_tick,
+                alibi.route_to_tick,
             ):
                 weak_reasons = (*base_reasons, WEAK_REASON_ENDPOINT_TICK)
             # Map-aware arbitration: two rooms that share a doorway, and a
@@ -3057,7 +3180,7 @@ def _detect_alibi_vs_sightings(
                 event_b_id=sighting.event_id,
                 subjects=(alibi.claim.subject,),
                 description=_describe_alibi_vs_sighting(
-                    alibi=alibi.claim,
+                    alibi=alibi,
                     sighting=sighting.observation,
                     weak_reasons=weak_reasons,
                 ),
@@ -3108,18 +3231,19 @@ def _adjacent_within_one_tick(
     :data:`~meetings.constants.MAP_ARBITRATION_MAX_HOPS` doorway hops of each
     other AND the sighting tick sits within
     :data:`~meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of the nearest edge
-    of the alibi window. The gap is measured to the window's ENDPOINTS, not to
-    the window as a whole: the caller only reaches here for a sighting already
-    INSIDE the window, and a sighting buried deeper than that names an interior
-    tick of a claim of continuous presence, which no single hop reconciles.
+    of the contradicted SEGMENT. The gap is measured to that leg's ENDPOINTS,
+    not to the window as a whole: the caller only reaches here for a sighting
+    already INSIDE the leg, and a sighting buried deeper than that names an
+    interior tick of a claim of continuous presence in ONE room, which no
+    single hop reconciles.
     """
 
     hops = room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
     if hops is None or hops == 0:
         return False
     gap = min(
-        sighting.observation.tick - alibi.claim.from_tick,
-        alibi.claim.to_tick - sighting.observation.tick,
+        sighting.observation.tick - alibi.segment.from_tick,
+        alibi.segment.to_tick - sighting.observation.tick,
     )
     return gap <= MAP_ARBITRATION_MAX_TICK_GAP
 
@@ -3232,8 +3356,10 @@ def _detect_alibi_vs_physical(
         # non-spatial alibi (locating nobody) is skipped here.
         if not alibi.rooms:
             continue
-        from_tick = alibi.claim.from_tick
-        to_tick = alibi.claim.to_tick
+        # The LEG's window: a co-presence contradicts the room the subject
+        # claimed for the tick it names, not every room on their route.
+        from_tick = alibi.segment.from_tick
+        to_tick = alibi.segment.to_tick
         direct_events = direct_sighting_events.get(subject, frozenset())
         # Independent (non-self) placements of the subject inside the alibi
         # window, from the RELEVANCE-GATED ``paths`` (kill-scene placements
@@ -3317,7 +3443,7 @@ def _detect_alibi_vs_physical(
                 event_b_id=placement.event_id,
                 subjects=(subject,),
                 description=_describe_alibi_vs_physical(
-                    alibi=alibi.claim,
+                    alibi=alibi,
                     placement=placement,
                     weak_reasons=weak_reasons,
                     kill_scene=is_kill_scene,
@@ -3618,8 +3744,14 @@ def _detect_vent_placement_contradictions(
             if not _subject_in_roster(observation.subject, roster):
                 continue
             observation_id = turn_observation_id(turn=turn, index=index)
+            # One flag per (grounded observation, contradicted CLAIM): the leg
+            # split must not mint the same contradiction id twice when a route
+            # places its subject away from the vent on more than one leg.
+            flagged_claims: set[str] = set()
             for alibi in self_alibis:
                 if not alibi.rooms:
+                    continue
+                if alibi.event_id in flagged_claims:
                     continue
                 if alibi.claim.subject != observation.subject:
                     continue
@@ -3628,7 +3760,9 @@ def _detect_vent_placement_contradictions(
                         record
                         for record in records
                         if _vent_observation_matches_record(observation, record)
-                        and alibi.claim.from_tick <= record.tick <= alibi.claim.to_tick
+                        and alibi.segment.from_tick
+                        <= record.tick
+                        <= alibi.segment.to_tick
                         and canonical_rooms(record.room)
                         and not (canonical_rooms(record.room) & alibi.rooms)
                     ),
@@ -3636,13 +3770,14 @@ def _detect_vent_placement_contradictions(
                 )
                 if matched is None:
                     continue
+                flagged_claims.add(alibi.event_id)
                 yield _build_contradiction(
                     kind="alibi_vs_physical",
                     event_a_id=alibi.event_id,
                     event_b_id=observation_id,
                     subjects=(observation.subject,),
                     description=_describe_vent_placement(
-                        speaker=turn.speaker, record=matched, alibi=alibi.claim
+                        speaker=turn.speaker, record=matched, alibi=alibi
                     ),
                     evidence_band=("strong")
                     if evidence_reasoning_version == 1
@@ -3727,7 +3862,10 @@ def _weak_signal_reasons(
     reasons: list[str] = []
     if include_self_stated and alibi.speaker == alibi.claim.subject:
         reasons.append(WEAK_REASON_SELF_STATED)
-    if alibi.claim.to_tick - alibi.claim.from_tick < NARROW_ALIBI_WINDOW_TICKS:
+    # The whole ROUTE, not the leg: the band prices how coarse the speaker's
+    # recollection is, and a four-leg account of four ticks is one recollection
+    # of a walk, not four one-tick transit observations.
+    if alibi.route_to_tick - alibi.route_from_tick < NARROW_ALIBI_WINDOW_TICKS:
         reasons.append(WEAK_REASON_NARROW_WINDOW)
     return tuple(reasons)
 
@@ -3789,11 +3927,11 @@ def _conflict_weak_reasons(
         reasons.append(WEAK_REASON_ADVERSARIAL)
     if not (
         evidence_reasoning_version == 1
-        and left.claim.from_tick == left.claim.to_tick
-        and right.claim.from_tick == right.claim.to_tick
+        and left.segment.from_tick == left.segment.to_tick
+        and right.segment.from_tick == right.segment.to_tick
     ) and (
-        left.claim.to_tick == right.claim.from_tick
-        or right.claim.to_tick == left.claim.from_tick
+        left.segment.to_tick == right.segment.from_tick
+        or right.segment.to_tick == left.segment.from_tick
     ):
         reasons.append(WEAK_REASON_BOUNDARY_OVERLAP)
     return tuple(reasons)
@@ -3830,20 +3968,23 @@ def _build_contradiction(
 
 
 def _describe_alibi_conflict(
-    left: AlibiClaim,
-    right: AlibiClaim,
+    left: _IndexedAlibi,
+    right: _IndexedAlibi,
     *,
     weak_reasons: tuple[str, ...] = (),
 ) -> str:
-    # Order the two alibis lexically by room so the description is
-    # stable regardless of iteration order. The contradiction_id is
-    # already canonicalised; doing the same for free text keeps the
-    # rendered memory view byte-stable across replays.
-    first, second = sorted((left, right), key=lambda claim: claim.room)
+    # The two contradicted SEGMENTS are what disagree, so they are what the
+    # description quotes: naming the whole route here would put rooms in the
+    # sentence that the flag does not rest on. Order the two lexically by room
+    # so the description is stable regardless of iteration order. The
+    # contradiction_id is already canonicalised; doing the same for free text
+    # keeps the rendered memory view byte-stable across replays.
+    first, second = sorted((left, right), key=lambda indexed: indexed.segment.room)
     base = (
-        f"Alibis place {first.subject} in {first.room} "
-        f"(ticks {first.from_tick}-{first.to_tick}) and in {second.room} "
-        f"(ticks {second.from_tick}-{second.to_tick}); intervals overlap."
+        f"Alibis place {first.claim.subject} in {first.segment.room} "
+        f"(ticks {first.segment.from_tick}-{first.segment.to_tick}) and in "
+        f"{second.segment.room} (ticks {second.segment.from_tick}-"
+        f"{second.segment.to_tick}); intervals overlap."
     )
     if not weak_reasons:
         return base
@@ -3852,14 +3993,17 @@ def _describe_alibi_conflict(
 
 def _describe_alibi_vs_sighting(
     *,
-    alibi: AlibiClaim,
+    alibi: _IndexedAlibi,
     sighting: SawPlayerObservation,
     weak_reasons: tuple[str, ...] = (),
 ) -> str:
+    # The contradicted LEG, not the route: the sighting disputes the room the
+    # speaker claimed for its tick, and quoting any other leg would describe a
+    # disagreement that is not there.
     base = (
-        f"Alibi places {alibi.subject} in {alibi.room} "
-        f"(ticks {alibi.from_tick}-{alibi.to_tick}); sighting reports "
-        f"{sighting.subject} in {sighting.room} at tick {sighting.tick}."
+        f"Alibi places {alibi.claim.subject} in {alibi.segment.room} "
+        f"(ticks {alibi.segment.from_tick}-{alibi.segment.to_tick}); sighting "
+        f"reports {sighting.subject} in {sighting.room} at tick {sighting.tick}."
     )
     if not weak_reasons:
         return base
@@ -3868,7 +4012,7 @@ def _describe_alibi_vs_sighting(
 
 def _describe_alibi_vs_physical(
     *,
-    alibi: AlibiClaim,
+    alibi: _IndexedAlibi,
     placement: StatedPlacement,
     weak_reasons: tuple[str, ...] = (),
     kill_scene: bool = False,
@@ -3881,11 +4025,12 @@ def _describe_alibi_vs_physical(
     # weak marker (:data:`WEAK_REASON_LONE_PHYSICAL`); the two-source conjunction
     # carries none and is STRONG (:func:`_detect_alibi_vs_physical`).
     placed_in = "/".join(sorted(placement.rooms))
+    subject = alibi.claim.subject
     base = (
-        f"{alibi.subject}'s own alibi places them in {alibi.room} "
-        f"(ticks {alibi.from_tick}-{alibi.to_tick}), but {placement.speaker} "
-        f"placed {alibi.subject} in {placed_in} at tick {placement.tick} -- "
-        f"physically incompatible with the stated alibi."
+        f"{subject}'s own alibi places them in {alibi.segment.room} "
+        f"(ticks {alibi.segment.from_tick}-{alibi.segment.to_tick}), but "
+        f"{placement.speaker} placed {subject} in {placed_in} at tick "
+        f"{placement.tick} -- physically incompatible with the stated alibi."
     )
     # Task 13.5.3: name the kill scene in the rendered flag (legibility only --
     # ``kill_scene`` is False on every non-kill-scene path, so this is
@@ -3911,7 +4056,7 @@ def _describe_vent_sighting(*, speaker: PlayerId, record: VentWitnessRecord) -> 
 
 
 def _describe_vent_placement(
-    *, speaker: PlayerId, record: VentWitnessRecord, alibi: AlibiClaim
+    *, speaker: PlayerId, record: VentWitnessRecord, alibi: _IndexedAlibi
 ) -> str:
     # Task 18.9 lever 2: quote the RECORD (the witness's deterministic memory),
     # never the spoken observation's values -- the grounded fact is exactly what
@@ -3924,15 +4069,16 @@ def _describe_vent_placement(
     return (
         f"{speaker} witnessed {record.subject} vent in {record.room} at tick "
         f"{record.tick}, but {record.subject}'s own account places them in "
-        f"{alibi.room} (ticks {alibi.from_tick}-{alibi.to_tick}) -- venting is "
-        f"impostor-only, physically incompatible with the stated account."
+        f"{alibi.segment.room} (ticks {alibi.segment.from_tick}-"
+        f"{alibi.segment.to_tick}) -- venting is impostor-only, physically "
+        f"incompatible with the stated account."
     )
 
 
 def _describe_retargeted_proxy(
     *,
     speaker: PlayerId,
-    alibi: AlibiClaim,
+    alibi: _IndexedAlibi,
     sighting: SawPlayerObservation,
 ) -> str:
     # The re-targeted flag names the PROXY speaker, so the description
@@ -3942,12 +4088,13 @@ def _describe_retargeted_proxy(
     # the WEAK_REASON_RETARGETED_PROXY marker is what caps belief Rule
     # 2's delta at the graduated band, so a re-target can never eject
     # alone (the gp-1 over-suppression tripwire).
+    subject = alibi.claim.subject
     base = (
-        f"Alibi by {speaker} places {alibi.subject} in {alibi.room} "
-        f"(ticks {alibi.from_tick}-{alibi.to_tick}); sighting reports "
-        f"{sighting.subject} in {sighting.room} at tick {sighting.tick}, and "
-        f"{alibi.subject}'s own account agrees with the sighting -- the "
-        f"conflict re-targets the alibi's speaker."
+        f"Alibi by {speaker} places {subject} in {alibi.segment.room} "
+        f"(ticks {alibi.segment.from_tick}-{alibi.segment.to_tick}); sighting "
+        f"reports {sighting.subject} in {sighting.room} at tick "
+        f"{sighting.tick}, and {subject}'s own account agrees with the "
+        f"sighting -- the conflict re-targets the alibi's speaker."
     )
     return f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{WEAK_REASON_RETARGETED_PROXY}]"
 

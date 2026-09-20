@@ -39,6 +39,7 @@ from agents.memory.beliefs import (
 )
 from meetings.corroboration import MeetingTestimonyLedger
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
+from meetings.schemas import AlibiSegment
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
 from meetings.schemas import (
     CompletedTaskObservation,
@@ -741,9 +742,11 @@ class TestContradictionRuleGraduatedWeight:
                         SchemaAlibiClaim(
                             type="alibi",
                             subject="p-5",
-                            from_tick=100,
-                            to_tick=200,
-                            room="CAFETERIA",
+                            route=(
+                                AlibiSegment(
+                                    room="CAFETERIA", from_tick=100, to_tick=200
+                                ),
+                            ),
                         ),
                     ),
                     free_text="reporter self-alibi",
@@ -941,9 +944,9 @@ class TestContradictionLiftDedupAndCap:
                     SchemaAlibiClaim(
                         type="alibi",
                         subject="p-5",
-                        from_tick=100,
-                        to_tick=200,
-                        room="CAFETERIA",
+                        route=(
+                            AlibiSegment(room="CAFETERIA", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
                 free_text="reporter self-alibi",
@@ -1036,9 +1039,7 @@ def _self_alibi_turn(subject: str) -> MeetingTurn:
             SchemaAlibiClaim(
                 type="alibi",
                 subject=subject,
-                from_tick=10,
-                to_tick=20,
-                room="CAFETERIA",
+                route=(AlibiSegment(room="CAFETERIA", from_tick=10, to_tick=20),),
             ),
         ),
         free_text=f"{subject} self-alibi: CAFETERIA 10-20",
@@ -1239,9 +1240,11 @@ class TestNewStrongInferentialClassRouting:
                         SchemaAlibiClaim(
                             type="alibi",
                             subject="p-5",
-                            from_tick=10,
-                            to_tick=20,
-                            room="CAFETERIA",
+                            route=(
+                                AlibiSegment(
+                                    room="CAFETERIA", from_tick=10, to_tick=20
+                                ),
+                            ),
                         ),
                     ),
                     free_text="p-2 places p-5 in CAFETERIA",
@@ -1256,9 +1259,9 @@ class TestNewStrongInferentialClassRouting:
                         SchemaAlibiClaim(
                             type="alibi",
                             subject="p-5",
-                            from_tick=12,
-                            to_tick=22,
-                            room="STORAGE",
+                            route=(
+                                AlibiSegment(room="STORAGE", from_tick=12, to_tick=22),
+                            ),
                         ),
                     ),
                     free_text="p-3 places p-5 in STORAGE",
@@ -2898,9 +2901,7 @@ def _alibi_with_own_task_turn(
             SchemaAlibiClaim(
                 type="alibi",
                 subject=alibi_subject,
-                from_tick=5,
-                to_tick=14,
-                room=alibi_room,
+                route=(AlibiSegment(room=alibi_room, from_tick=5, to_tick=14),),
             ),
         ),
         free_text="I was in the cafeteria the whole time.",
@@ -3077,9 +3078,7 @@ class TestSelfRefutedAlibiDowngrade:
                 SchemaAlibiClaim(
                     type="alibi",
                     subject="p-1",
-                    from_tick=5,
-                    to_tick=14,
-                    room="CAFETERIA",
+                    route=(AlibiSegment(room="CAFETERIA", from_tick=5, to_tick=14),),
                 ),
             ),
             free_text="I was in the cafeteria the whole time.",
@@ -3113,9 +3112,7 @@ class TestSelfRefutedAlibiDowngrade:
                 SchemaAlibiClaim(
                     type="alibi",
                     subject="p-1",
-                    from_tick=5,
-                    to_tick=14,
-                    room="CAFETERIA",
+                    route=(AlibiSegment(room="CAFETERIA", from_tick=5, to_tick=14),),
                 ),
             ),
             free_text="No — cafeteria, like I said.",
@@ -3164,9 +3161,7 @@ class TestSelfRefutedAlibiDowngrade:
                 SchemaAlibiClaim(
                     type="alibi",
                     subject="p-1",
-                    from_tick=5,
-                    to_tick=14,
-                    room="CAFETERIA",
+                    route=(AlibiSegment(room="CAFETERIA", from_tick=5, to_tick=14),),
                 ),
             ),
             free_text="p-1 was in the cafeteria.",
@@ -3200,9 +3195,7 @@ class TestSelfRefutedAlibiDowngrade:
                 SchemaAlibiClaim(
                     type="alibi",
                     subject="p-1",
-                    from_tick=5,
-                    to_tick=14,
-                    room="CAFETERIA",
+                    route=(AlibiSegment(room="CAFETERIA", from_tick=5, to_tick=14),),
                 ),
             ),
             free_text="Right, I was in the cafeteria.",
@@ -3249,9 +3242,7 @@ class TestSelfRefutedAlibiDowngrade:
                 SchemaAlibiClaim(
                     type="alibi",
                     subject="p-1",
-                    from_tick=20,
-                    to_tick=25,
-                    room="REACTOR",
+                    route=(AlibiSegment(room="REACTOR", from_tick=20, to_tick=25),),
                 ),
             ),
             free_text="Later I was in reactor.",

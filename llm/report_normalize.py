@@ -17,15 +17,29 @@ two complementary repairs at every discriminated-union point:
 1. **Misplaced-key stripping** (the ``co_present`` case above): drop keys not
    declared on the matched variant so ``extra="forbid"`` no longer rejects them.
 2. **Chronological-alibi repair** (Task 7.10, audit
-   ``audits/audit-2026-06-01-1425-gameplay-data.md`` gp-2): when the matched
-   variant declares both ``from_tick`` and ``to_tick`` (the
-   ``meetings.schemas.AlibiClaim`` shape) and the payload has them reversed
-   (``from_tick > to_tick``), swap them so the strict chronological
+   ``audits/audit-2026-06-01-1425-gameplay-data.md`` gp-2): when a model
+   declares both ``from_tick`` and ``to_tick`` and the payload has them
+   reversed (``from_tick > to_tick``), swap them so the strict chronological
    ``model_validator`` accepts the claim. ``qwen2.5:7b-instruct`` emits this
    reversed range in ~6% of the committed 7p/2i set; left unrepaired the
    ``MeetingTurn`` validator raises and the whole game aborts with no
    ``game_over``. The schema's validator stays strict — the *input* is fixed
-   here, never the schema (the ``AlibiClaim`` validator is unchanged).
+   here, never the schema.
+
+   An alibi is now a ROUTE, so the repair runs PER SEGMENT: each element of a
+   ``route`` list is a model declaring the pair and is repaired where it sits,
+   and a payload still carrying the LEGACY flat envelope is repaired against
+   the segment model's declared names (:func:`_route_segment_model`). Both
+   halves stay keyed on field NAMES, not on importing ``AlibiClaim``.
+
+3. **Legacy-envelope preservation**: a discriminated-union variant whose
+   ``route`` field holds segments declaring ``room`` / ``from_tick`` /
+   ``to_tick`` ALSO accepts those three keys at its top level — the pre-route
+   alibi surface, which the model's own validator lifts into a one-segment
+   route. Pruning them as "misplaced" would turn a legal legacy payload into
+   one that places nobody, so the normalizer keeps them
+   (:func:`_legacy_segment_keys`) and lets the schema decide whether to accept
+   or raise. It never widens: three keys survive, and nothing is invented.
 
 It is deliberately:
 
@@ -73,6 +87,13 @@ _UNION_ORIGINS: tuple[Any, ...] = (Union, types.UnionType)
 _CHRONOLOGICAL_LOWER_FIELD: Final[str] = "from_tick"
 _CHRONOLOGICAL_UPPER_FIELD: Final[str] = "to_tick"
 
+# The field a route-shaped claim carries its segments in, and the third key a
+# legacy one-room envelope adds to the chronological pair. Keyed on names for
+# the same reason as the pair above: the normalizer never imports
+# ``meetings.schemas``.
+_ROUTE_FIELD: Final[str] = "route"
+_SEGMENT_ROOM_FIELD: Final[str] = "room"
+
 
 def normalize_report_payload(payload: Any, schema: type[BaseModel]) -> Any:
     """Return ``payload`` with misplaced discriminated-union keys stripped.
@@ -119,16 +140,28 @@ def _normalize(value: Any, annotation: Any) -> Any:
             # so leave the payload untouched (residual risk — see module
             # docstring). ``model_validate`` will raise the appropriate error.
             return value
+        keep = _legacy_segment_keys(variant)
         pruned = {
-            key: _normalize(item, variant.model_fields[key].annotation)
+            key: (
+                _normalize(item, variant.model_fields[key].annotation)
+                if key in variant.model_fields
+                else item
+            )
             for key, item in value.items()
-            if key in variant.model_fields
+            if key in variant.model_fields or key in keep
         }
         # After stripping misplaced keys, repair a reversed chronological tick
-        # range on the matched variant (the AlibiClaim case; Task 7.10). This
-        # is the only production path that reaches AlibiClaim, since meeting
-        # claims are always nested inside the ``Claim`` discriminated union.
-        return _repair_chronological_range(pruned, variant)
+        # range on the matched variant (Task 7.10). This is the only production
+        # path that reaches a claim variant, since meeting claims are always
+        # nested inside the ``Claim`` discriminated union. The second call
+        # repairs a LEGACY one-room envelope sitting at the variant's top level:
+        # the variant itself no longer declares the pair, its SEGMENT model
+        # does, so the segment model is what gates the repair.
+        pruned = _repair_chronological_range(pruned, variant)
+        segment = _route_segment_model(variant)
+        if segment is not None:
+            pruned = _repair_chronological_range(pruned, segment)
+        return pruned
 
     core, _metadata = _unwrap_annotated(annotation)
 
@@ -142,14 +175,21 @@ def _normalize(value: Any, annotation: Any) -> Any:
         # extras here — only discriminated-union variants are pruned — so a stray
         # top-level key still fails loud (conservative; the diagnosed failure is
         # a misplaced *variant* key, not a top-level one).
-        return {
-            key: (
-                _normalize(item, core.model_fields[key].annotation)
-                if key in core.model_fields
-                else item
-            )
-            for key, item in value.items()
-        }
+        # A reversed range is repaired here too, so a route SEGMENT -- a plain
+        # nested model, not a union variant -- is fixed where it sits. The
+        # repair is gated on the model declaring both bounds, so it is a no-op
+        # for every model that carries no tick range.
+        return _repair_chronological_range(
+            {
+                key: (
+                    _normalize(item, core.model_fields[key].annotation)
+                    if key in core.model_fields
+                    else item
+                )
+                for key, item in value.items()
+            },
+            core,
+        )
 
     origin = get_origin(core)
     if origin in (list, tuple, set, frozenset) and isinstance(value, list):
@@ -166,15 +206,63 @@ def _normalize(value: Any, annotation: Any) -> Any:
     return value
 
 
+def _route_segment_model(model: type[BaseModel]) -> type[BaseModel] | None:
+    """The segment model behind ``model``'s ``route`` field, if it has one.
+
+    Keyed on the field NAME and on what the annotation holds, never on
+    importing ``meetings.schemas.AlibiClaim``: a variant that declares a
+    ``route`` of models is route-shaped, and that segment model is what
+    declares the ``room`` / ``from_tick`` / ``to_tick`` names a legacy
+    one-room envelope uses at the top level. Returns ``None`` for every other
+    model, which is what keeps the two helpers below no-ops elsewhere.
+    """
+
+    field = model.model_fields.get(_ROUTE_FIELD)
+    if field is None:
+        return None
+    core, _metadata = _unwrap_annotated(field.annotation)
+    if get_origin(core) not in (list, tuple, set, frozenset):
+        return None
+    args = get_args(core)
+    if not args:
+        return None
+    element, _element_metadata = _unwrap_annotated(args[0])
+    if isinstance(element, type) and issubclass(element, BaseModel):
+        return element
+    return None
+
+
+def _legacy_segment_keys(model: type[BaseModel]) -> frozenset[str]:
+    """The legacy one-room envelope keys ``model`` accepts beside its ``route``.
+
+    Empty for every model that is not route-shaped, so pruning is unchanged
+    everywhere else. For a route-shaped variant it is the segment model's own
+    field names, so the three keys a pre-route alibi payload carries survive
+    the prune and reach the validator that lifts them into a one-segment route.
+    A model that emits the old shape is therefore still ACCEPTED, and one that
+    emits half of it still fails loud at validation rather than here.
+    """
+
+    segment = _route_segment_model(model)
+    if segment is None:
+        return frozenset()
+    return frozenset(segment.model_fields) & {
+        _SEGMENT_ROOM_FIELD,
+        _CHRONOLOGICAL_LOWER_FIELD,
+        _CHRONOLOGICAL_UPPER_FIELD,
+    }
+
+
 def _repair_chronological_range(value: dict[Any, Any], model: type[BaseModel]) -> Any:
     """Swap a reversed ``from_tick``/``to_tick`` pair (Task 7.10, gp-2).
 
     Returns ``value`` unchanged unless ``model`` declares BOTH
     :data:`_CHRONOLOGICAL_LOWER_FIELD` and :data:`_CHRONOLOGICAL_UPPER_FIELD`
-    (the ``meetings.schemas.AlibiClaim`` shape) AND the payload carries them in
-    the wrong order (``from_tick > to_tick``). In that case it returns a shallow
-    copy with the two original values swapped, turning a reversed range into the
-    chronological one the strict ``AlibiClaim`` ``model_validator`` accepts.
+    (the ``meetings.schemas.AlibiSegment`` shape, and the legacy alibi envelope
+    that lifts into one) AND the payload carries them in the wrong order
+    (``from_tick > to_tick``). In that case it returns a shallow copy with the
+    two original values swapped, turning a reversed range into the
+    chronological one the strict segment ``model_validator`` accepts.
 
     Swapping (rather than coercing to a one-tick window at ``to_tick``) keeps
     both tick values the model emitted, so DESIGN.md §5.4 contradiction

@@ -111,6 +111,7 @@ from meetings.schemas import (
     MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     Claim,
     CompletedTaskObservation,
     ContradictionRef,
@@ -1026,18 +1027,18 @@ class TestContradictionsWiring:
                     AlibiClaim(
                         type="alibi",
                         subject="p-2",
-                        from_tick=100,
-                        to_tick=200,
-                        room="STORAGE",
+                        route=(
+                            AlibiSegment(room="STORAGE", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
                 "p-3": (
                     AlibiClaim(
                         type="alibi",
                         subject="p-2",
-                        from_tick=150,
-                        to_tick=180,
-                        room="CAFETERIA",
+                        route=(
+                            AlibiSegment(room="CAFETERIA", from_tick=150, to_tick=180),
+                        ),
                     ),
                 ),
             },
@@ -1143,9 +1144,9 @@ class TestDetectorPrecisionGraduatedSuspicion:
                     AlibiClaim(
                         type="alibi",
                         subject="p-1",
-                        from_tick=100,
-                        to_tick=200,
-                        room="CAFETERIA",
+                        route=(
+                            AlibiSegment(room="CAFETERIA", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
             },
@@ -1185,9 +1186,7 @@ class TestDetectorPrecisionGraduatedSuspicion:
                     AlibiClaim(
                         type="alibi",
                         subject="p-3",
-                        from_tick=3,
-                        to_tick=4,
-                        room="STORAGE",
+                        route=(AlibiSegment(room="STORAGE", from_tick=3, to_tick=4),),
                     ),
                 ),
             },
@@ -1221,9 +1220,9 @@ class TestDetectorPrecisionGraduatedSuspicion:
                     AlibiClaim(
                         type="alibi",
                         subject="p-1",
-                        from_tick=100,
-                        to_tick=200,
-                        room="CAFETERIA",
+                        route=(
+                            AlibiSegment(room="CAFETERIA", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
             },
@@ -1264,16 +1263,16 @@ class TestDetectorPrecisionGraduatedSuspicion:
                     AlibiClaim(
                         type="alibi",
                         subject="p-1",
-                        from_tick=100,
-                        to_tick=200,
-                        room="CAFETERIA",
+                        route=(
+                            AlibiSegment(room="CAFETERIA", from_tick=100, to_tick=200),
+                        ),
                     ),
                     AlibiClaim(
                         type="alibi",
                         subject="p-1",
-                        from_tick=300,
-                        to_tick=400,
-                        room="STORAGE",
+                        route=(
+                            AlibiSegment(room="STORAGE", from_tick=300, to_tick=400),
+                        ),
                     ),
                 ),
             },
@@ -1327,9 +1326,9 @@ class TestDetectorPrecisionGraduatedSuspicion:
                     AlibiClaim(
                         type="alibi",
                         subject="p-1",
-                        from_tick=100,
-                        to_tick=200,
-                        room="CAFETERIA",
+                        route=(
+                            AlibiSegment(room="CAFETERIA", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
             },
@@ -1366,9 +1365,9 @@ class TestDetectorPrecisionGraduatedSuspicion:
                     AlibiClaim(
                         type="alibi",
                         subject="p-3",
-                        from_tick=100,
-                        to_tick=200,
-                        room="STORAGE",
+                        route=(
+                            AlibiSegment(room="STORAGE", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
             },
@@ -1507,10 +1506,14 @@ class TestSelfAlibiNormalization:
     def test_helper_rewrites_placeholder_variants_to_speaker_id(self) -> None:
         claims: tuple[Claim, ...] = (
             AlibiClaim(
-                type="alibi", subject="self", from_tick=1, to_tick=2, room="ADMIN"
+                type="alibi",
+                subject="self",
+                route=(AlibiSegment(room="ADMIN", from_tick=1, to_tick=2),),
             ),
             AlibiClaim(
-                type="alibi", subject="p-self", from_tick=1, to_tick=2, room="ADMIN"
+                type="alibi",
+                subject="p-self",
+                route=(AlibiSegment(room="ADMIN", from_tick=1, to_tick=2),),
             ),
         )
         result = _normalize_self_alibi_subjects(claims, speaker_id="p-7")
@@ -1520,7 +1523,9 @@ class TestSelfAlibiNormalization:
     def test_helper_passes_non_self_subjects_through(self) -> None:
         claims: tuple[Claim, ...] = (
             AlibiClaim(
-                type="alibi", subject="p-3", from_tick=1, to_tick=2, room="ADMIN"
+                type="alibi",
+                subject="p-3",
+                route=(AlibiSegment(room="ADMIN", from_tick=1, to_tick=2),),
             ),
         )
         result = _normalize_self_alibi_subjects(claims, speaker_id="p-7")
@@ -1536,9 +1541,7 @@ class TestSelfAlibiNormalization:
                         AlibiClaim(
                             type="alibi",
                             subject="p-self",
-                            from_tick=1,
-                            to_tick=2,
-                            room="ADMIN",
+                            route=(AlibiSegment(room="ADMIN", from_tick=1, to_tick=2),),
                         ),
                     )
                 },
@@ -1849,9 +1852,9 @@ class TestTeammateFirewallInputSide:
                     AlibiClaim(
                         type="alibi",
                         subject="p-5",
-                        from_tick=100,
-                        to_tick=200,
-                        room="STORAGE",
+                        route=(
+                            AlibiSegment(room="STORAGE", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
             },
@@ -1960,9 +1963,11 @@ class TestTeammateFirewallInputSide:
                                 AlibiClaim(
                                     type="alibi",
                                     subject="p-5",
-                                    from_tick=5,
-                                    to_tick=9,
-                                    room="CAFETERIA",
+                                    route=(
+                                        AlibiSegment(
+                                            room="CAFETERIA", from_tick=5, to_tick=9
+                                        ),
+                                    ),
                                 ),
                             ),
                         )
@@ -3811,9 +3816,9 @@ class TestDetectorCorroborationFold:
                     AlibiClaim(
                         type="alibi",
                         subject="p-1",
-                        from_tick=100,
-                        to_tick=200,
-                        room="MEDBAY",
+                        route=(
+                            AlibiSegment(room="MEDBAY", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
                 free_text="self alibi",
@@ -3858,9 +3863,9 @@ class TestDetectorCorroborationFold:
                     AlibiClaim(
                         type="alibi",
                         subject="p-99",
-                        from_tick=100,
-                        to_tick=200,
-                        room="MEDBAY",
+                        route=(
+                            AlibiSegment(room="MEDBAY", from_tick=100, to_tick=200),
+                        ),
                     ),
                 ),
                 free_text="alibi for a hallucinated id",
@@ -3915,9 +3920,9 @@ class TestDetectorCorroborationFold:
                         AlibiClaim(
                             type="alibi",
                             subject="p-1",
-                            from_tick=100,
-                            to_tick=200,
-                            room="MEDBAY",
+                            route=(
+                                AlibiSegment(room="MEDBAY", from_tick=100, to_tick=200),
+                            ),
                         ),
                     ),
                 },
@@ -4170,12 +4175,12 @@ class TestNonRosterClaimSubjectsDropped:
             AlibiClaim(
                 type="alibi",
                 subject="headless-seed-9",
-                from_tick=2,
-                to_tick=7,
-                room="MEDBAY",
+                route=(AlibiSegment(room="MEDBAY", from_tick=2, to_tick=7),),
             ),
             AlibiClaim(
-                type="alibi", subject="p-1", from_tick=2, to_tick=7, room="MEDBAY"
+                type="alibi",
+                subject="p-1",
+                route=(AlibiSegment(room="MEDBAY", from_tick=2, to_tick=7),),
             ),
             AccusationClaim(
                 type="accusation", against="imp-2", confidence=0.9, reason="r"
@@ -4221,9 +4226,9 @@ class TestNonRosterClaimSubjectsDropped:
                         AlibiClaim(
                             type="alibi",
                             subject="headless-seed-9",
-                            from_tick=2,
-                            to_tick=7,
-                            room="MEDBAY",
+                            route=(
+                                AlibiSegment(room="MEDBAY", from_tick=2, to_tick=7),
+                            ),
                         ),
                         CorroborationClaim(
                             type="corroboration",
@@ -4299,9 +4304,9 @@ class TestNonRosterClaimSubjectsDropped:
                         AlibiClaim(
                             type="alibi",
                             subject="p-1",
-                            from_tick=2,
-                            to_tick=7,
-                            room="MEDBAY",
+                            route=(
+                                AlibiSegment(room="MEDBAY", from_tick=2, to_tick=7),
+                            ),
                         ),
                         CorroborationClaim(
                             type="corroboration",
@@ -4337,9 +4342,9 @@ class TestNonRosterClaimSubjectsDropped:
                         AlibiClaim(
                             type="alibi",
                             subject="headless-seed-9",
-                            from_tick=2,
-                            to_tick=7,
-                            room="MEDBAY",
+                            route=(
+                                AlibiSegment(room="MEDBAY", from_tick=2, to_tick=7),
+                            ),
                         ),
                     ),
                 },
@@ -4603,7 +4608,9 @@ class TestBoundedDropMarkers:
         assert len(blob) > 3000  # the audited ~3.5k-char scale
         claims: tuple[Claim, ...] = (
             AlibiClaim(
-                type="alibi", subject=blob, from_tick=400, to_tick=410, room="ADMIN"
+                type="alibi",
+                subject=blob,
+                route=(AlibiSegment(room="ADMIN", from_tick=400, to_tick=410),),
             ),
         )
         surviving, annotations = _drop_non_roster_claims(
@@ -4716,9 +4723,7 @@ class TestRule3RelevanceGateAtTheEvidenceSeam:
                 AlibiClaim(
                     type="alibi",
                     subject="p-6",
-                    from_tick=405,
-                    to_tick=410,
-                    room="ADMIN",
+                    route=(AlibiSegment(room="ADMIN", from_tick=405, to_tick=410),),
                 ),
             ),
             free_text="I was in ADMIN doing the swipe task.",
@@ -7330,9 +7335,7 @@ def _grounded_prosecution_responder() -> Callable[[str, type[BaseModel] | None],
                 AlibiClaim(
                     type="alibi",
                     subject="p-1",
-                    from_tick=100,
-                    to_tick=200,
-                    room="CAFETERIA",
+                    route=(AlibiSegment(room="CAFETERIA", from_tick=100, to_tick=200),),
                 ),
             ),
         },
@@ -7640,9 +7643,7 @@ def _planted_responder(
                     AlibiClaim(
                         type="alibi",
                         subject=_PLANTED_SUBJECT,
-                        from_tick=400,
-                        to_tick=405,
-                        room="ADMIN",
+                        route=(AlibiSegment(room="ADMIN", from_tick=400, to_tick=405),),
                     ),
                     CorroborationClaim(
                         type="corroboration",
@@ -7658,9 +7659,7 @@ def _planted_responder(
                 AlibiClaim(
                     type="alibi",
                     subject=later_subject,
-                    from_tick=400,
-                    to_tick=405,
-                    room="ADMIN",
+                    route=(AlibiSegment(room="ADMIN", from_tick=400, to_tick=405),),
                 ),
             ),
         )

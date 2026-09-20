@@ -11,10 +11,21 @@ derivation contract: a pure, replay-deterministic function of the recorded
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Final
+
+from api.replay_loader import _statement_claim_view
 from meetings.manager import derive_reported_testimony
+from orchestrator.replay import (
+    MeetingReplayEntry,
+    _stable_json,
+    read_all_entries,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     Claim,
     CompletedTaskObservation,
     CorroborationClaim,
@@ -32,6 +43,12 @@ from meetings.schemas import (
 )
 
 _ROSTER = ("p-1", "p-2", "p-3", "p-4", "p-5")
+
+_REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+_SAMPLE_SETS: Final[tuple[Path, ...]] = (
+    _REPO_ROOT / "replays" / "samples" / "9p2i",
+    _REPO_ROOT / "replays" / "samples" / "4p1i",
+)
 
 
 def _result_with(
@@ -96,9 +113,9 @@ class TestDeriveReportedTestimony:
                         AlibiClaim(
                             type="alibi",
                             subject="p-2",
-                            from_tick=10,
-                            to_tick=14,
-                            room="MEDBAY",
+                            route=(
+                                AlibiSegment(room="MEDBAY", from_tick=10, to_tick=14),
+                            ),
                         ),
                     ),
                 ),
@@ -487,3 +504,198 @@ class TestTestimonyShapesLever:
         )
 
         assert derive_reported_testimony(result, testimony_shapes=True) == ()
+
+
+# --------------------------------------------------------------------------- #
+# The route crosses the firewall intact, and the committed bytes do not move.  #
+# --------------------------------------------------------------------------- #
+
+
+def _committed_meetings() -> tuple[MeetingReplayEntry, ...]:
+    """Every recorded meeting of both committed sample sets."""
+
+    collected: list[MeetingReplayEntry] = []
+    for set_dir in _SAMPLE_SETS:
+        for replay in sorted(set_dir.glob("replay-seed-*.jsonl")):
+            collected.extend(
+                entry
+                for entry in read_all_entries(replay)
+                if isinstance(entry, MeetingReplayEntry)
+            )
+    return tuple(collected)
+
+
+def _recorded_alibi_payloads() -> tuple[tuple[str, int, dict[str, object]], ...]:
+    """Every alibi claim payload as it sits in the committed JSONL bytes."""
+
+    collected: list[tuple[str, int, dict[str, object]]] = []
+    for set_dir in _SAMPLE_SETS:
+        for replay in sorted(set_dir.glob("replay-seed-*.jsonl")):
+            for line in replay.read_text(encoding="utf-8").splitlines():
+                record = json.loads(line)
+                if record.get("kind") != "meeting":
+                    continue
+                for turn in record["transcript"]["turns"]:
+                    for index, claim in enumerate(turn["claims"]):
+                        if claim.get("type") == "alibi":
+                            collected.append((turn["turn_id"], index, claim))
+    return tuple(collected)
+
+
+class TestRoutesOverTheCommittedRecord:
+    """The card's byte-identity planted set, over both committed sample sets.
+
+    Every committed alibi is a one-room envelope -- a legal one-segment route --
+    so the three surfaces that read it must be unchanged: the recorded payload
+    round-trips through the schema, the testimony reduction emits the same one
+    statement per claim it always did, and the served spectator view is the
+    recorded payload byte for byte.
+    """
+
+    def test_every_recorded_alibi_round_trips_byte_identically(self) -> None:
+        payloads = _recorded_alibi_payloads()
+        assert len(payloads) > 100, "a thinned checkout, not a passing gate"
+        for turn_id, index, payload in payloads:
+            claim = AlibiClaim.model_validate(payload)
+            assert claim.claim_format == 1, (turn_id, index)
+            assert len(claim.route) == 1, (turn_id, index)
+            assert claim.model_dump(mode="json") == payload, (turn_id, index)
+
+    def test_every_recorded_meeting_line_round_trips_byte_identically(self) -> None:
+        """A committed meeting line, parsed and re-serialized, is the same bytes.
+
+        The strongest form of the backward-compatibility claim: not just the
+        claim payload but the whole recorded row, through the schema the replay
+        loader validates with and the writer the recording used. A serializer
+        that emitted a ``route`` for a legacy claim, or reordered a key, fails
+        here on the first line rather than at the next re-record.
+        """
+
+        lines = 0
+        for set_dir in _SAMPLE_SETS:
+            for replay in sorted(set_dir.glob("replay-seed-*.jsonl")):
+                for raw in replay.read_text(encoding="utf-8").splitlines():
+                    if json.loads(raw).get("kind") != "meeting":
+                        continue
+                    entry = MeetingReplayEntry.model_validate_json(raw)
+                    assert _stable_json(entry.model_dump(mode="json")) == raw, (
+                        replay.name,
+                        entry.meeting_id,
+                    )
+                    lines += 1
+        assert lines > 100, "a thinned checkout, not a passing gate"
+
+    def test_the_served_view_is_the_recorded_payload(self) -> None:
+        for turn_id, index, payload in _recorded_alibi_payloads():
+            claim = AlibiClaim.model_validate(payload)
+            view = _statement_claim_view(claim)
+            assert view.model_dump(mode="json") == payload, (turn_id, index)
+
+    def test_the_reduction_emits_one_statement_per_recorded_alibi(self) -> None:
+        meetings = _committed_meetings()
+        assert len(meetings) > 100, "a thinned checkout, not a passing gate"
+        alibis = 0
+        for entry in meetings:
+            expected = [
+                (claim.subject, segment.from_tick, segment.to_tick, segment.room)
+                for turn in entry.transcript.turns
+                for claim in turn.claims
+                if isinstance(claim, AlibiClaim)
+                for segment in claim.route
+            ]
+            derived = [
+                (
+                    statement.subject,
+                    statement.from_tick,
+                    statement.to_tick,
+                    statement.room,
+                )
+                for statement in derive_reported_testimony(
+                    MeetingResult(
+                        meeting_id=entry.meeting_id,
+                        triggered_by=entry.triggered_by,
+                        trigger_tick=entry.tick,
+                        outcome=entry.outcome,
+                        ejected_player_id=entry.ejected_player_id,
+                        ballots=entry.ballots,
+                        transcript=entry.transcript,
+                        contradictions=entry.contradictions,
+                    )
+                )
+                if statement.kind == "alibi"
+            ]
+            assert sorted(derived) == sorted(expected), entry.meeting_id
+            alibis += len(expected)
+        assert alibis > 100
+
+
+class TestARouteLandsOneBeliefPerLeg:
+    """A four-leg route reduces to four statements, one per room it names."""
+
+    def test_each_leg_becomes_its_own_reported_statement(self) -> None:
+        route = (
+            AlibiSegment(room="ENGINEERING", from_tick=12, to_tick=12),
+            AlibiSegment(room="EAST_HALL", from_tick=13, to_tick=13),
+            AlibiSegment(room="ADMIN", from_tick=14, to_tick=14),
+            AlibiSegment(room="WEST_HALL", from_tick=15, to_tick=15),
+        )
+        result = _result_with(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(AlibiClaim(type="alibi", subject="p-1", route=route),),
+                ),
+            )
+        )
+
+        statements = [
+            statement
+            for statement in derive_reported_testimony(result)
+            if statement.kind == "alibi"
+        ]
+
+        assert [
+            (statement.room, statement.from_tick, statement.to_tick)
+            for statement in statements
+        ] == [(leg.room, leg.from_tick, leg.to_tick) for leg in route]
+        assert {statement.subject for statement in statements} == {"p-1"}
+
+    def test_every_leg_carries_the_claims_own_provenance_id(self) -> None:
+        # Provenance is applied to EVERY statement a claim produced, not only
+        # the last: a route's four legs all trace to the one public claim.
+        result = _result_with(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-1",
+                            route=(
+                                AlibiSegment(
+                                    room="ENGINEERING", from_tick=12, to_tick=12
+                                ),
+                                AlibiSegment(
+                                    room="EAST_HALL", from_tick=13, to_tick=13
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        statements = [
+            statement
+            for statement in derive_reported_testimony(
+                result, attributed_testimony_version=1
+            )
+            if statement.kind == "alibi"
+        ]
+
+        assert len(statements) == 2
+        assert {statement.source_event_id for statement in statements} == {
+            "turn:m-1:turn-0:claim:0"
+        }

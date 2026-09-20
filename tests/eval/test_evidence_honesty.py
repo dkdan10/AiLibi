@@ -96,6 +96,7 @@ from meetings.constants import MAP_ARBITRATION_MAX_TICK_GAP
 from meetings.manager import INVALID_ACCUSATION_TARGET_MARKER
 from meetings.schemas import (
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingResult,
     MeetingTranscript,
@@ -653,7 +654,11 @@ def test_flag_resolution_reads_the_two_ids_by_type_not_by_position() -> None:
     sighting = SawPlayerObservation(
         type="saw_player", tick=6, subject="p-3", room="MEDBAY"
     )
-    alibi = AlibiClaim(type="alibi", subject="p-3", from_tick=6, to_tick=6, room="LABS")
+    alibi = AlibiClaim(
+        type="alibi",
+        subject="p-3",
+        route=(AlibiSegment(room="LABS", from_tick=6, to_tick=6),),
+    )
     transcript = MeetingTranscript(
         turns=(
             _turn(index=0, speaker="p-9", observations=(sighting,)),
@@ -707,7 +712,9 @@ def test_flag_resolution_returns_none_for_an_unresolvable_pair() -> None:
 # under the v4 prompt set, and no committed replay carries one.
 
 _FLAG_ALIBI = AlibiClaim(
-    type="alibi", subject="p-3", from_tick=6, to_tick=8, room="LABS"
+    type="alibi",
+    subject="p-3",
+    route=(AlibiSegment(room="LABS", from_tick=6, to_tick=8),),
 )
 _FLAG_ROLES: Mapping[PlayerId, Role] = MappingProxyType(
     {"p-3": "IMPOSTOR", "p-6": "CREWMATE", "p-9": "CREWMATE"}
@@ -1170,7 +1177,9 @@ def test_a_flag_the_dedup_cannot_key_still_raises_through_the_fold() -> None:
             speaker="p-9",
             claims=(
                 AlibiClaim(
-                    type="alibi", subject="p-9", from_tick=6, to_tick=8, room="MEDBAY"
+                    type="alibi",
+                    subject="p-9",
+                    route=(AlibiSegment(room="MEDBAY", from_tick=6, to_tick=8),),
                 ),
             ),
         ),

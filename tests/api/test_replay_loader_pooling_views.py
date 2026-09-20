@@ -35,6 +35,7 @@ from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from meetings.schemas import (
     AlibiClaim,
+    AlibiSegment,
     FoundBodyObservation,
     MeetingResult,
     MeetingTranscript,
@@ -254,9 +255,7 @@ def test_unknown_observation_claim_raises() -> None:
     stray = AlibiClaim(
         type="alibi",
         subject="p-0",
-        from_tick=1,
-        to_tick=2,
-        room="CAFETERIA",
+        route=(AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=2),),
     )
     with pytest.raises(TypeError, match="unsupported observation claim"):
         _observation_claim_view(cast(ObservationClaim, stray))

@@ -35,6 +35,7 @@ from meetings.manager import PromptRenderInputs, SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     CompletedTaskObservation,
     CorroborationClaim,
     FoundBodyObservation,
@@ -86,7 +87,9 @@ _RICH_TURN = MeetingTurn(
     ),
     claims=(
         AlibiClaim(
-            type="alibi", subject="p-2", from_tick=400, to_tick=409, room="CAFETERIA"
+            type="alibi",
+            subject="p-2",
+            route=(AlibiSegment(room="CAFETERIA", from_tick=400, to_tick=409),),
         ),
         AccusationClaim(
             type="accusation",
@@ -222,12 +225,13 @@ def _turn_fields(turn: MeetingTurn) -> list[str]:
             fields.append(obs.room)
     for claim in turn.claims:
         if claim.type == "alibi":
-            fields += [
-                claim.subject,
-                claim.room,
-                str(claim.from_tick),
-                str(claim.to_tick),
-            ]
+            fields.append(claim.subject)
+            for segment in claim.route:
+                fields += [
+                    segment.room,
+                    str(segment.from_tick),
+                    str(segment.to_tick),
+                ]
         elif claim.type == "accusation":
             fields += [claim.against, claim.reason]
         else:

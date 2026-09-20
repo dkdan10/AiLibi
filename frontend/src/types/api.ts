@@ -354,10 +354,17 @@ export interface TaskActivityAccountView {
 export interface AlibiClaimView {
   type: "alibi";
   subject: string;
+  from_tick?: number | null;
+  to_tick?: number | null;
+  room?: string | null;
+  route?: AlibiSegmentView[] | null;
+  evidence: string[];
+}
+
+export interface AlibiSegmentView {
+  room: string;
   from_tick: number;
   to_tick: number;
-  room: string;
-  evidence: string[];
 }
 
 export interface AccusationClaimView {

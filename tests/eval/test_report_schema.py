@@ -32,6 +32,7 @@ from eval.report_schema import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingOutcome,
     MeetingTranscript,
@@ -97,9 +98,11 @@ def _meeting_report(
                     AlibiClaim(
                         type="alibi",
                         subject="p-0",
-                        from_tick=tick - 4,
-                        to_tick=tick,
-                        room="MEDBAY",
+                        route=(
+                            AlibiSegment(
+                                room="MEDBAY", from_tick=tick - 4, to_tick=tick
+                            ),
+                        ),
                         evidence=("scan_task",),
                     ),
                 ),

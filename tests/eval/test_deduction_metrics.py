@@ -91,6 +91,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
@@ -2653,9 +2654,7 @@ def test_the_net_does_not_read_an_alibi_claims_evidence() -> None:
             AlibiClaim(
                 type="alibi",
                 subject="p-1",
-                from_tick=1,
-                to_tick=2,
-                room="CAFETERIA",
+                route=(AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=2),),
                 evidence=("I am the impostor and I was alone",),
             ),
         ),

@@ -134,10 +134,15 @@ ALIBI_CONTRADICTION_KINDS: Final[frozenset[str]] = frozenset(
     {"alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"}
 )
 
-# Per-meeting dedup key for an alibi value: (author, subject, from_tick,
-# to_tick, room). ``evidence`` is deliberately excluded -- it is supporting
-# detail, not part of the spatiotemporal claim the detector reasons over.
-_AlibiKey = tuple[PlayerId, PlayerId, int, int, RoomId]
+# Per-meeting dedup key for an alibi value: (author, subject, route), where the
+# route is the ordered ``(room, from_tick, to_tick)`` legs the claim states.
+# ``evidence`` is deliberately excluded -- it is supporting detail, not part of
+# the spatiotemporal claim the detector reasons over. On a ONE-SEGMENT claim
+# this is a bijection with the old ``(author, subject, from_tick, to_tick,
+# room)`` tuple, so the counts over the committed recordings do not move; a
+# multi-leg route now dedups on the whole path rather than on an envelope it
+# never stated.
+_AlibiKey = tuple[PlayerId, PlayerId, tuple[tuple[RoomId, int, int], ...]]
 
 
 class _FrozenModel(BaseModel):
@@ -212,9 +217,7 @@ def compute_alibi_fabrication_rate(report: TournamentReport) -> AlibiFabrication
         roles = game.roles
         for meeting in game.meetings:
             caught_subjects = _subjects_named_in_alibi_contradictions(meeting)
-            for _author, subject, _from_tick, _to_tick, _room in _impostor_alibi_keys(
-                meeting, roles
-            ):
+            for _author, subject, _route in _impostor_alibi_keys(meeting, roles):
                 total += 1
                 if subject not in caught_subjects:
                     survived += 1
@@ -238,7 +241,14 @@ def _impostor_alibi_keys(
     """
 
     return {
-        (author, alibi.subject, alibi.from_tick, alibi.to_tick, alibi.room)
+        (
+            author,
+            alibi.subject,
+            tuple(
+                (segment.room, segment.from_tick, segment.to_tick)
+                for segment in alibi.route
+            ),
+        )
         for author, alibi in _iter_impostor_alibis(meeting, roles)
     }
 

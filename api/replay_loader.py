@@ -61,6 +61,7 @@ from api.schemas import (
     AgentTickStateView,
     AgentVisibilityView,
     AlibiClaimView,
+    AlibiSegmentView,
     AudibleEventView,
     BallotView,
     BeliefEntryView,
@@ -3219,12 +3220,30 @@ def _statement_claim_view(
     claim: Claim,
 ) -> AlibiClaimView | AccusationClaimView | CorroborationClaimView:
     if isinstance(claim, AlibiClaim):
+        # Serve the surface the claim arrived on: a recorded one-room envelope
+        # keeps its flat keys byte-for-byte, a route is served as a route. The
+        # spectator, not the loader, decides how to draw each.
+        if claim.claim_format == 1:
+            envelope = claim.route[0]
+            return AlibiClaimView(
+                type="alibi",
+                subject=claim.subject,
+                from_tick=envelope.from_tick,
+                to_tick=envelope.to_tick,
+                room=envelope.room,
+                evidence=tuple(claim.evidence),
+            )
         return AlibiClaimView(
             type="alibi",
             subject=claim.subject,
-            from_tick=claim.from_tick,
-            to_tick=claim.to_tick,
-            room=claim.room,
+            route=tuple(
+                AlibiSegmentView(
+                    room=segment.room,
+                    from_tick=segment.from_tick,
+                    to_tick=segment.to_tick,
+                )
+                for segment in claim.route
+            ),
             evidence=tuple(claim.evidence),
         )
     if isinstance(claim, AccusationClaim):

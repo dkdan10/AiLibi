@@ -35,9 +35,20 @@ it is a derived classification OVER a DTO field, not a DTO.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Final, Literal, TypeAlias
+from typing import Annotated, Any, Final, Literal, TypeAlias, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    GetJsonSchemaHandler,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 # Versioned view-model contract (Phase 12, Task 12.2; DESIGN.md §7). The served
 # payload carries this so the frontend can fail loud on an incompatible
@@ -60,6 +71,33 @@ class _FrozenView(BaseModel):
     """Base for every spectator DTO: frozen, extra fields rejected."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+def _view_core_schema_without_serializer(core_schema: CoreSchema) -> CoreSchema:
+    """The same core schema with the view's custom serializer removed.
+
+    The spectator mirror of ``meetings.schemas._core_schema_without_serializer``
+    and duplicated for the reason the module docstring gives: a DTO does not
+    import a meetings symbol. A ``model_serializer`` returning a bare mapping
+    collapses the SERIALIZATION-mode JSON schema to ``{"type": "object"}``,
+    which is what the TypeScript generator and any published client would read,
+    so a view that installs one hands the generator this stripped copy instead.
+    The ``serialization`` key is not always at the top -- a
+    ``model_validator(mode="after")`` wraps the model schema in a
+    ``function-after`` node -- so the walk follows ``schema`` until it finds the
+    node that carries it.
+    """
+
+    node = dict(core_schema)
+    if node.pop("serialization", None) is not None:
+        return cast(CoreSchema, node)
+    inner = node.get("schema")
+    if isinstance(inner, dict):
+        stripped = _view_core_schema_without_serializer(cast(CoreSchema, inner))
+        if stripped is not inner:
+            node["schema"] = stripped
+            return cast(CoreSchema, node)
+    return core_schema
 
 
 def _integer_clock_version(value: object) -> object:
@@ -662,15 +700,73 @@ ObservationClaimView: TypeAlias = Annotated[
 ]
 
 
+class AlibiSegmentView(_FrozenView):
+    """Shadows one leg of ``meetings.schemas.AlibiClaim.route``."""
+
+    room: str
+    from_tick: int
+    to_tick: int
+
+
 class AlibiClaimView(_FrozenView):
-    """Shadows the ``alibi`` variant of ``meetings.schemas.Claim``."""
+    """Shadows the ``alibi`` variant of ``meetings.schemas.Claim``.
+
+    An alibi is a ROUTE, and this view mirrors the claim's two wire surfaces
+    exactly rather than inventing a third. A claim recorded at ``claim_format``
+    1 -- the legacy one-room envelope, which is what every committed recording
+    carries -- serves ``from_tick`` / ``to_tick`` / ``room`` and no ``route``,
+    byte-identically to what the spectator has always been served; a route
+    claim serves ``route`` and none of the three. Summarising a route into the
+    flat triple would re-manufacture the single-room envelope this schema
+    change exists to delete, so the view does not do it, and the spectator
+    renders whichever surface arrived.
+    """
 
     type: Literal["alibi"]
     subject: str
-    from_tick: int
-    to_tick: int
-    room: str
+    from_tick: int | None = None
+    to_tick: int | None = None
+    room: str | None = None
+    route: tuple[AlibiSegmentView, ...] | None = None
     evidence: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def _exactly_one_surface(self) -> AlibiClaimView:
+        envelope = (self.from_tick, self.to_tick, self.room)
+        if self.route is not None:
+            if any(value is not None for value in envelope):
+                raise ValueError(
+                    "AlibiClaimView carries both a route and the legacy envelope"
+                )
+            if not self.route:
+                raise ValueError("AlibiClaimView route must carry a segment")
+            return self
+        if any(value is None for value in envelope):
+            raise ValueError(
+                "AlibiClaimView carries neither a route nor a complete legacy "
+                "envelope (from_tick, to_tick, room)"
+            )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Serve only the surface this claim arrived on."""
+
+        data: dict[str, Any] = handler(self)
+        if self.route is None:
+            data.pop("route", None)
+        else:
+            for key in ("from_tick", "to_tick", "room"):
+                data.pop(key, None)
+        return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Keep typed fields discoverable despite conditional serialization."""
+
+        return handler(_view_core_schema_without_serializer(core_schema))
 
 
 class AccusationClaimView(_FrozenView):
@@ -1619,6 +1715,7 @@ __all__ = [
     "AgentTickStateView",
     "AgentVisibilityView",
     "AlibiClaimView",
+    "AlibiSegmentView",
     "AudibleEventView",
     "BallotView",
     "BeliefEntryView",

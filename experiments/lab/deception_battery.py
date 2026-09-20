@@ -69,6 +69,7 @@ from llm.featherless_client import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
@@ -177,9 +178,20 @@ def _envelope(
     )
 
 
-def _self_alibis(turn: MeetingTurn, speaker: str) -> list[AlibiClaim]:
+def _self_alibis(turn: MeetingTurn, speaker: str) -> list[AlibiSegment]:
+    """Every LEG of the speaker's own alibi routes, in route order.
+
+    An alibi is a route, so the probe grades the legs: each carries one room
+    and one window, which is what every caller below compares. A stationary
+    account is one leg, so a probe reading over the committed shapes counts
+    exactly what it counted before.
+    """
+
     return [
-        c for c in turn.claims if isinstance(c, AlibiClaim) and c.subject == speaker
+        segment
+        for c in turn.claims
+        if isinstance(c, AlibiClaim) and c.subject == speaker
+        for segment in c.route
     ]
 
 
