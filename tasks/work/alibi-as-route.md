@@ -82,6 +82,44 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
+- [x] Review correction: a multi-leg route no longer DELETES an
+  `alibi_vs_physical` flag at every leg boundary. `_detect_alibi_vs_physical`
+  required a contradicting co-presence at a tick strictly interior to the LEG,
+  so a speaker split their way out of the evidence: `STORAGE 2-14` co-placed in
+  `MEDBAY` at tick 8 by two independent voices mints two STRONG flags, the same
+  account as `STORAGE 2-7` plus `STORAGE 8-14` minted NONE, and as the one-tick
+  legs the new prompts ask for no leg has a strict interior at all. The leg
+  still decides the room and window MEMBERSHIP; the strict-interior exclusion
+  now reads `alibi.route_from_tick` / `alibi.route_to_tick`, because an
+  interior boundary is a transition the speaker DECLARED, not movement fuzz.
+  The Task 13.5.3 kill-scene arm carried the same leg-interior test and is
+  repaired identically (leg membership plus route interior, spelled out because
+  it reads `kill_scene_paths` directly). A one-segment route's outer endpoints
+  ARE its leg's, so no recorded flag moves.
+  `tests/meetings/test_contradictions.py::TestSplittingARouteDoesNotSoftenItsEvidence`
+  carries the split-at-the-contradicted-tick case, the one-tick-legs case and
+  the outer-endpoint control that must still mint nothing.
+- [x] Review correction: splitting a route no longer SOFTENS an
+  `alibi_vs_sighting` flag through the map-arbitration band.
+  `_adjacent_within_one_tick` measured the gap to `alibi.segment`'s endpoints,
+  so every split manufactured a new "edge" beside any interior sighting:
+  `REACTOR 2-14` against a sighting of `ENGINEERING` (one doorway away) at tick
+  8 is STRONG, and the same account as `REACTOR 2-7` plus `REACTOR 8-14` came
+  out WEAK (marker `adjacent room one tick away`) and could no longer eject
+  alone. The gap now reads the route's outer endpoints and the docstring states
+  the rule and its reason rather than "measured to that leg's ENDPOINTS". The
+  band still works: a sighting one tick inside the ROUTE's own last tick stays
+  weak in both shapes, and a one-segment route is unchanged by construction.
+- [x] Review correction: every remaining `alibi.segment` read in
+  `meetings/transcript.py` and `meetings/public_accounts.py` is classified
+  MEMBERSHIP/ROOM or FUZZ/EDGE, and the classification is published in the
+  round-3 Results below. The two sites above were the only FUZZ/EDGE sites
+  still pointed at the leg; the endpoint-tick band (`:3175-3178`) and the
+  narrow-window band (`:3907`) already read the route, and every other read --
+  corroboration, the subject-account index, the conflict overlap and its
+  boundary guard, the vent-grounding window, the public-account placements and
+  all five description builders -- is MEMBERSHIP or RENDERING, where the leg is
+  the correct unit and was left alone.
 - [x] Review correction: a truthful EARLIER leg no longer downgrades a later
   leg's conflict. One flag is minted per pair of CLAIMS, and
   `_detect_alibi_conflicts` built it from the FIRST candidate pair of legs --
@@ -474,22 +512,25 @@ prune and repairs a reversed range per segment, both keyed on field names.
 
 ### Verification
 
-Run from a clean worktree at the head of this branch, every cell re-measured at
-the round-2 head (the dated round-1 table below keeps its own figures).
+Run from a clean worktree at the head of this branch, re-measured at the
+ROUND-3 head (the dated round-1 and round-2 subsections below keep their own
+figures). Two cells moved, both by the six tests round 3 adds; the two frontend
+cells marked below are the round-2 measurement, because round 3 changes detector
+geometry only and moves no served byte.
 
 | command | result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — 8,139 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
-| `uv run pytest tests/meetings tests/agents -q` | 2,717 passed |
+| `bash scripts/check.sh` | exit 0 — 8,145 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
+| `uv run pytest tests/meetings tests/agents -q` | 2,723 passed |
 | `uv run pytest tests/api tests/llm -q` | 765 passed, 19 skipped |
 | `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
 | `uv run pytest tests/scripts/test_counterfactual_phase21.py -q` | 112 passed |
 | `uv run mypy .` | Success: no issues found in 491 source files |
 | `uv run ruff check .` / `uv run ruff format --check .` | clean |
-| `uv run python scripts/gen_frontend_types.py` | regenerated; `api.ts` and `api.fidelity.ts` (the stamp) |
+| `uv run python scripts/gen_frontend_types.py` (round 2) | regenerated; `api.ts` and `api.fidelity.ts` (the stamp) |
 | `npm --prefix frontend run tsc:check` | exit 0 |
 | `npm --prefix frontend test` | 20 files, 532 tests passed |
-| `cd frontend && npm run e2e` (a served DTO moved) | 13 passed, 3 skipped |
+| `cd frontend && npm run e2e` (round 2, a served DTO moved) | 13 passed, 3 skipped |
 | `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
 | `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on all four sets |
 | `uv run python scripts/publish_process_scorecard.py --check` | consistent |
@@ -797,3 +838,146 @@ the SERVED view stamp `"4"` to `"5"`, which is computed at serve time. The
 conflict-band and placement-identity repairs are unreachable on committed bytes,
 because every recorded claim is a one-segment route: one candidate leg pair, and
 the bare event id.
+
+### Review corrections, round 3 (2026-09-20)
+
+Two blocking findings, both VALID, both repaired on this branch. They are the
+same defect twice: a movement-fuzz band pointed at the LEG rather than at the
+ROUTE's outer endpoints, which makes the band's geometry something the SPEAKER
+chooses. Because a leg boundary is free to state, either one let a liar weaken
+or delete the evidence against themself by narrating one continuous stay as
+several legs. The card's own Acceptance rule ("The detectors read SEGMENTS")
+already says where the line falls -- the leg decides ROOM and WINDOW
+MEMBERSHIP, the fuzz bands read the route's OUTER endpoints, "because an
+interior boundary is a transition the speaker declared, not movement fuzz" --
+and the endpoint-tick band (`meetings/transcript.py:3175-3178`) already
+followed it. These two sites did not.
+
+**1. A multi-leg route deleted `alibi_vs_physical` evidence at every leg
+boundary** (`meetings/transcript.py`, `_detect_alibi_vs_physical`). The
+detector took `from_tick`/`to_tick` from `alibi.segment` and required
+`from_tick < placement.tick < to_tick` for a contradicting placement, so the
+strict-interior exclusion measured a window the speaker could re-cut at will.
+Repro at the previous head `6dcac993`, `evidence_reasoning_version=1`: `p-1`
+self-alibis `STORAGE 2-14` while `p-2` and `p-5` independently co-place `p-1`
+in `MEDBAY` at tick 8.
+
+```
+                                   BEFORE                   AFTER
+envelope STORAGE 2-14              2 flags, both strong     2 flags, both strong
+split STORAGE 2-7 + 8-14           0 flags                  2 flags, both strong
+one-tick legs 6-6/7-7/8-8/9-9      0 flags                  2 flags, both strong
+```
+
+The one-tick shape is the one the operational prompts now ask for, and a
+one-tick leg has NO strict interior at all, so under the old geometry the
+recommended way to state an account was also the way to become unprosecutable.
+The leg still decides the room and the window MEMBERSHIP (`from_tick <=
+placement.tick <= to_tick`, and the corroboration check, both unchanged); the
+strict-interior exclusion now reads `alibi.route_from_tick` /
+`alibi.route_to_tick`. The Task 13.5.3 kill-scene arm just below carried the
+same leg-interior test and is repaired identically -- it reads
+`kill_scene_paths` directly rather than the already-membership-filtered
+`independent`, so it now spells out both halves (`from_tick <= tick <= to_tick`
+for membership, `route_from_tick < tick < route_to_tick` for the fuzz
+exclusion). On a one-segment route the two tests collapse to the single
+original comparison, so the repair is a no-op by construction on every
+committed claim.
+
+**2. Splitting a route softened an `alibi_vs_sighting` flag through the
+map-arbitration band** (`meetings/transcript.py`,
+`_adjacent_within_one_tick`). The gap was measured to `alibi.segment`'s
+endpoints, so every split manufactured a fresh "edge" next to whatever interior
+tick the speaker chose. Repro at `6dcac993`: `p-1` alibis `REACTOR 2-14` and
+`p-2` saw `p-1` in `ENGINEERING`, one doorway away, at tick 8.
+
+```
+                                   BEFORE                   AFTER
+envelope REACTOR 2-14              1 flag, strong           1 flag, strong
+split REACTOR 2-7 + 8-14           1 flag, WEAK             1 flag, strong
+                                   [adjacent room one tick away]
+```
+
+A weak flag cannot eject alone, so the split was the difference between
+evidence that decides a meeting and evidence that only informs it. The gap now
+reads the route's outer endpoints, and the docstring states the rule and its
+reason instead of the old "The gap is measured to that leg's ENDPOINTS". The
+band itself is untouched and still fires where it should: a sighting one tick
+inside the route's own last tick (tick 13 of `REACTOR 2-14`) is weak in BOTH
+shapes, and the one-tick-legs route `6-6/7-7/8-8/9-9` keeps the marker for a
+sighting at tick 8, correctly -- tick 8 really is one tick from that route's
+outer endpoint 9.
+
+**The classification sweep.** Every `alibi.segment` read in
+`meetings/transcript.py` and `meetings/public_accounts.py`, classified
+MEMBERSHIP/ROOM (the leg is the right unit) or FUZZ/EDGE (must read the outer
+endpoints). Line numbers are at the round-3 head.
+
+| site | reads | class |
+| --- | --- | --- |
+| `:2044` `detect_corroborations` window | leg | MEMBERSHIP — a sighting corroborates the room claimed for ITS tick |
+| `:2897` `_subject_account_index` | leg | MEMBERSHIP — one account per leg, by the card's own comment |
+| `:3008-3011` `_detect_alibi_conflicts` overlap | leg | MEMBERSHIP — the overlap geometry of the two windows actually compared |
+| `:3097` interior-exempt single-tick class | leg, guarded by `one_segment_route` | MEMBERSHIP — already route-aware |
+| `:3124-3126` sighting window | leg | MEMBERSHIP — the leg is what the sighting can refute |
+| `:3146-3147` proxy subject-account agreement | leg | MEMBERSHIP — the card names this check explicitly |
+| `:3175-3178` endpoint-tick band | **route** | FUZZ/EDGE — already correct |
+| `:3262-3263` `_adjacent_within_one_tick` | leg → **route** | FUZZ/EDGE — **defect 2, fixed** |
+| `:3381-3382` + `:3394-3395` + `:3425` + `:3450-3451` `_detect_alibi_vs_physical` | leg (membership) + **route** (interior) | FUZZ/EDGE — **defect 1, fixed, both arms** |
+| `:3802-3804` vent-grounding window | leg | MEMBERSHIP — no band; the record either lands in a claimed window or does not |
+| `:3907` narrow-window band | **route** | FUZZ/EDGE — already correct |
+| `:3969-3973` `_conflict_weak_reasons` boundary overlap | leg | MEMBERSHIP — a junction test between TWO claims; route endpoints would wrongly harden a genuine transit pair, and round 2's fewest-weak-reasons selection already closes the split-softening vector here |
+| `:4021-4026`, `:4043-4044`, `:4069-4070`, `:4111-4112`, `:4132-4133` descriptions | leg | RENDERING — quote the leg the flag rests on |
+| `public_accounts.py:249-251` one placement row per leg | leg | MEMBERSHIP — and two legs of one route share an event id, so `_placements` never pairs a route against itself |
+
+One residual property, recorded rather than changed: a route may leave GAPS
+(the schema requires legs to be chronological and strictly non-overlapping, not
+contiguous), and a tick no leg covers is a tick the account makes no claim
+about, so nothing contradicts it. That is the card's membership rule working as
+designed -- narrowing an account narrows what it asserts -- not a fuzz band, so
+it is left alone.
+
+**Round-3 planted failures.** `TestSplittingARouteDoesNotSoftenItsEvidence` in
+`tests/meetings/test_contradictions.py`: six tests, `6 passed` at this head.
+Each production line was reverted in place, run, and restored.
+
+* Pointing the `alibi_vs_physical` interior exclusion back at
+  `alibi.segment` turns
+  `::test_splitting_at_the_contradicted_tick_keeps_both_strong_flags` and
+  `::test_one_tick_legs_keep_both_strong_flags` red (`2 failed, 4 passed`;
+  "Right contains 2 more items"); restored, `6 passed`.
+* Pointing the `_adjacent_within_one_tick` gap back at `alibi.segment` turns
+  `::test_splitting_does_not_soften_an_interior_adjacent_room_sighting` red
+  (`1 failed, 5 passed`; `- strong` / `+ weak`); restored, `6 passed`.
+
+The controls stay green in both probes, which is what makes them controls: the
+outer-endpoint exclusion (`::test_the_route_s_own_outer_endpoint_is_still_
+transit_fuzz`), the band that must still fire
+(`::test_the_band_still_fires_one_tick_from_the_route_s_outer_endpoint`), and
+the honest seed-41 route (`::test_the_honest_seed_41_route_still_mints_
+nothing`, beside the existing
+`TestTheAlibiIsARoute::test_the_truthful_route_mints_nothing` and the
+`TestOneSegmentRoutesReadLikeTheEnvelope` property, both green). `uv run pytest
+tests/meetings -q` reads 1,399 before the new tests and 1,405 after.
+
+**Round-3 gate.** `bash scripts/check.sh` exits 0: ruff clean (520 files
+already formatted), `lint-imports` 4 contracts kept / 0 broken,
+`validate_task_docs.py` 390 historical phase tasks and 390 prompts plus 73 work
+cards, `mypy` Success on 491 source files, `8,145 passed, 20 skipped, 3
+xfailed` in 5:00, frontend 20 test files / 532 tests, build green.
+`scripts/verify_samples.sh` 50/50 + 50/50 = 100/100 clean;
+`build_sample_report.py --check` consistent on all four committed sets
+(`replays/samples/{4p1i,9p2i}`, `replays/ml_corpus/{4p1i,9p2i}`);
+`publish_process_scorecard.py --check` consistent; `check_doc_facts.py`
+verified; `verify_ml_evidence.py` (offline, never `--complete`) 61 checks, OK
+49, FAIL 0, ABSENT 7, INFO 5.
+
+**Round-3 record impact.** None. The diff is two files --
+`meetings/transcript.py` and `tests/meetings/test_contradictions.py` -- so
+nothing under `replays/`, `audits/` or `tests/fixtures/` moves, no
+`docs/artifacts.md` row is touched, no prompt stamp and no served contract
+stamp moves. Neither repair is reachable on committed bytes: every recorded
+claim is a ONE-segment route, whose outer endpoints are its single leg's, so
+both comparisons are identical to the ones that minted the recorded flags. The
+672-meeting byte-identity walk and all 1,405 `tests/meetings` tests are green,
+which is the mechanical statement of that.
