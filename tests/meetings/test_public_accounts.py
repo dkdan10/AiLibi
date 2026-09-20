@@ -393,6 +393,82 @@ def test_public_reference_gate_rejects_invalid_context(change: dict[str, Any]) -
         )
 
 
+def _validate_alibi(claim: AlibiClaim) -> None:
+    """Put one alibi through the public-reference gate of a ten-tick game."""
+
+    validate_public_accounts(
+        MeetingTurn(
+            turn_id="p-1",
+            turn_index=0,
+            speaker="p-1",
+            turn_kind="opening",
+            reply_to=None,
+            claims=(claim,),
+            free_text="unsure",
+        ),
+        roster=frozenset({"p-1"}),
+        current_tick=10,
+        room_ids=frozenset(_map().room_ids),
+        task_ids=frozenset(_map().task_locations),
+    )
+
+
+def test_the_context_gate_reads_every_leg_of_an_alibi_route() -> None:
+    """A route states its rooms and ticks in its SEGMENTS, so the gate walks them.
+
+    The gate read only the top level, where a format-2 claim carries neither a
+    room nor a tick — so the very account it REFUSES as a flat envelope was
+    accepted once it arrived as a route. That is the silent widening AGENTS.md
+    rule 5 forbids, and it is the shape the new prompts ask models for.
+    """
+
+    legal = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="STORAGE", from_tick=3, to_tick=4),
+            AlibiSegment(room="ENGINEERING", from_tick=5, to_tick=6),
+        ),
+    )
+    _validate_alibi(legal)
+
+    with pytest.raises(PublicAccountValidationError, match="unknown public room"):
+        _validate_alibi(
+            AlibiClaim(
+                type="alibi",
+                subject="p-1",
+                route=(
+                    AlibiSegment(room="STORAGE", from_tick=3, to_tick=4),
+                    AlibiSegment(room="NOT_A_ROOM", from_tick=5, to_tick=6),
+                ),
+            )
+        )
+    with pytest.raises(PublicAccountValidationError, match="outside game history"):
+        _validate_alibi(
+            AlibiClaim(
+                type="alibi",
+                subject="p-1",
+                route=(
+                    AlibiSegment(room="STORAGE", from_tick=3, to_tick=4),
+                    AlibiSegment(room="ENGINEERING", from_tick=900, to_tick=901),
+                ),
+            )
+        )
+    # The asymmetry this closes: the same room, stated flat, was always refused.
+    with pytest.raises(PublicAccountValidationError, match="unknown public room"):
+        _validate_alibi(
+            AlibiClaim.model_validate(
+                {
+                    "type": "alibi",
+                    "subject": "p-1",
+                    "room": "NOT_A_ROOM",
+                    "from_tick": 3,
+                    "to_tick": 4,
+                }
+            )
+        )
+
+
 def test_task_account_retains_attribution_without_completion_evidence() -> None:
     result, _ = asyncio.run(_meeting(grounded=False))
     activity = TaskActivityAccount(

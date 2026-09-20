@@ -199,6 +199,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingTranscript,
     SawMoveObservation,
@@ -2273,6 +2274,34 @@ def _sighting_placement(artifact: object) -> SawPlayerObservation | None:
     return sighting_placement(artifact)
 
 
+def _leg_under_sighting(alibi: AlibiClaim, tick: int) -> AlibiSegment | None:
+    """The route leg a sighting at ``tick`` bears on, or ``None``.
+
+    ``meetings.transcript._detect_alibi_vs_sightings`` compares a SEGMENT to a
+    sighting and mints the flag only when the sighting's tick falls inside that
+    leg's window, and :class:`~meetings.schemas.AlibiClaim` keeps its legs
+    chronological and strictly non-overlapping. At most one leg can therefore
+    cover a tick: the leg is FORCED by the recorded pair, not picked by this
+    module, which is what lets a multi-leg route resolve at all.
+
+    A ONE-segment route answers with its single leg whatever the tick. That is
+    the shape every committed recording carries, and reading it unconditionally
+    keeps every recorded cell byte-identical to the pre-route module -- including
+    a recorded flag whose sighting sits outside the stated window, which earlier
+    detector revisions could mint. A multi-leg route whose legs all miss the
+    sighting's tick is a pair this module cannot reconstruct, and it returns
+    ``None`` exactly like the resolver's other unresolvable shapes, which the
+    caller raises on rather than silently dropping from the census.
+    """
+
+    if len(alibi.route) == 1:
+        return alibi.route[0]
+    for leg in alibi.route:
+        if leg.from_tick <= tick <= leg.to_tick:
+            return leg
+    return None
+
+
 def _resolve_flag(
     flag: ContradictionRef, *, index: Mapping[str, tuple[PlayerId, object]]
 ) -> _ResolvedFlag | None:
@@ -2312,15 +2341,14 @@ def _resolve_flag(
     alibi = alibis[0]
     if isinstance(alibi, AlibiClaim):
         # The I-6 geometry fold measures the distance between ONE claimed room
-        # and one sighting, so it is defined on a one-segment route -- the shape
-        # every committed recording carries. A multi-leg route names several
-        # rooms and the flag's event ids do not say which leg it rests on, so
-        # the pair is NOT EVALUABLE here rather than resolved against a leg
-        # picked by this module; the resolver's other ``None`` branches are the
-        # same statement.
-        if len(alibi.route) != 1:
+        # and one sighting, so a route has to say WHICH leg the sighting bears
+        # on. :func:`_leg_under_sighting` does not choose: the detector minted
+        # the flag from the leg whose window covers the sighting's tick, and the
+        # schema keeps the legs strictly non-overlapping, so at most one leg can
+        # answer.
+        segment = _leg_under_sighting(alibi, sighting.tick)
+        if segment is None:
             return None
-        segment = alibi.route[0]
         alibi_room, from_tick, to_tick = (
             segment.room,
             segment.from_tick,

@@ -105,7 +105,7 @@ Out of the game (never accuse): {% for pid in dead_ids %}`{{ pid }}`{% if not lo
   - claims:
     {%- for claim in turn.claims %}
     {%- if claim.type == "alibi" %}
-    - alibi: {{ claim.subject }} in {{ claim.room }}, ticks {{ claim.from_tick }}–{{ claim.to_tick }}.
+    - alibi: {{ claim.subject }}{% for leg in claim.route %} in {{ leg.room }}, ticks {{ leg.from_tick }}–{{ leg.to_tick }}{{ "." if loop.last else ";" }}{% endfor %}
     {%- elif claim.type == "accusation" %}
     - accuses {{ claim.against }} ({{ "%.2f" | format(claim.confidence) }}): {{ claim.reason }}
     {%- elif claim.type == "corroboration" %}

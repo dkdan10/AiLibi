@@ -69,7 +69,7 @@ case against a crewmate instead.
   - Claims:
     {%- for claim in turn.claims %}
     {%- if claim.type == "alibi" %}
-    - alibi: {{ claim.subject }} in {{ claim.room }} from tick {{ claim.from_tick }} to {{ claim.to_tick }}.
+    - alibi: {{ claim.subject }}{% for leg in claim.route %} in {{ leg.room }} from tick {{ leg.from_tick }} to {{ leg.to_tick }}{{ "." if loop.last else ";" }}{% endfor %}
     {%- elif claim.type == "accusation" %}
     - accusation: against {{ claim.against }} (confidence {{ "%.2f" | format(claim.confidence) }}) -- {{ claim.reason }}
     {%- elif claim.type == "corroboration" %}

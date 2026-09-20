@@ -256,8 +256,11 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "TRUE at at least one tick of its own span against that speaker's "
         "engine route from a state-hash-verified walk_replay. Denominator: all "
         "alibi-class flags. Not-evaluable: an alibi-class flag naming no "
-        "self-alibi speaker in its meeting, or one whose claim covers a tick the "
-        "walk does not reach. Ticks are agent-frame and resolve against engine "
+        "self-alibi speaker in its meeting, one whose claim covers a tick the "
+        "walk does not reach, or one resting on a multi-leg route, which a "
+        "recorded flag does not attribute to a leg - scoring it across the whole "
+        "route would file a flag that caught a fabricated leg as manufactured. "
+        "Ticks are agent-frame and resolve against engine "
         "tick T - 1. It does NOT measure intent, and it does NOT clear a flag "
         "whose subject lied at every tick - that flag is evidence, not an "
         "artifact."
@@ -973,6 +976,12 @@ def _claim_truth(
 
     ``None`` when the claim's span reaches a tick the walk does not hold — the
     not-evaluable branch, published rather than counted as a lie.
+
+    The fold is over the WHOLE account, every leg of it, which is what the claim
+    census beside row 3 asks: how much of what this player said about themselves
+    was true. It is NOT how a FLAG is scored — see
+    :func:`_flag_scored_claim_truth`, which refuses a route the flag cannot be
+    attributed to a leg of.
     """
 
     every = True
@@ -993,17 +1002,44 @@ def _claim_truth(
     return every, some
 
 
+def _flag_scored_claim_truth(
+    claim: AlibiClaim,
+    speaker: PlayerId,
+    route: Mapping[int, Mapping[PlayerId, RoomId]],
+) -> tuple[bool, bool] | None:
+    """:func:`_claim_truth` for row 3, refusing a claim the flag cannot be tied to.
+
+    Row 3 asks whether the SCHEMA invented a flag, and on a multi-leg route that
+    question is per LEG: an account of ENGINEERING 12-12 then STORAGE 14-14 can
+    be true in its first leg and fabricated in its second, and a flag that
+    caught the fabricated leg is evidence, not an artifact. A recorded flag
+    names the CLAIM's event id and not the leg, so this module cannot say which
+    leg it rests on, and it publishes the flag as NOT EVALUABLE rather than
+    scoring it on a fold across the whole route (which would read "true at some
+    tick" off a leg the flag never touched and file a caught lie as
+    manufactured).
+
+    Every committed claim is a one-segment route, so no committed cell moves;
+    the shape arrives with the re-record, and when a flag carries segment
+    attribution this refusal is what has to go.
+    """
+
+    if len(claim.route) != 1:
+        return None
+    return _claim_truth(claim, speaker, route)
+
+
 def _self_alibi_truths(
     meeting: MeetingReport, route: Mapping[int, Mapping[PlayerId, RoomId]]
 ) -> dict[PlayerId, list[tuple[bool, bool] | None]]:
-    """Each speaker's own alibi claims in this meeting, resolved against the route."""
+    """Each speaker's own alibi claims in this meeting, as ROW 3 scores them."""
 
     truths: dict[PlayerId, list[tuple[bool, bool] | None]] = {}
     for turn in meeting.transcript.turns:
         for claim in turn.claims:
             if isinstance(claim, AlibiClaim) and claim.subject == turn.speaker:
                 truths.setdefault(turn.speaker, []).append(
-                    _claim_truth(claim, turn.speaker, route)
+                    _flag_scored_claim_truth(claim, turn.speaker, route)
                 )
     return truths
 
@@ -1014,9 +1050,11 @@ def _flag_is_manufactured(
 ) -> tuple[bool, bool] | None:
     """``(manufactured, rests on a wholly true claim)``; ``None`` when unanswerable.
 
-    ``None`` on two shapes, both published as not-evaluable rather than scored:
+    ``None`` on three shapes, all published as not-evaluable rather than scored:
     a flag naming no speaker who filed a self-alibi in this meeting (there is no
-    claim to test), and one whose claim reaches a tick the walk does not hold.
+    claim to test), one whose claim reaches a tick the walk does not hold, and
+    one resting on a multi-leg ROUTE, which the flag does not attribute to a leg
+    (:func:`_flag_scored_claim_truth`).
     Otherwise the flag is MANUFACTURED iff some named speaker's own alibi was
     true at some tick of its span — a claim false at every tick is a lie the
     detector caught, not an artifact the schema minted. The second element says

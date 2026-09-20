@@ -1399,3 +1399,141 @@ class TestTheListenerIsShownTheRoute:
             # enforced it, are both gone from the shipped bodies.
             assert _ALIBI_DISCIPLINE_MARKER not in flat, label
             assert "gets you ejected" not in flat, label
+
+
+# --------------------------------------------------------------------------- #
+# EVERY registered family must still be able to render a spoken alibi          #
+# --------------------------------------------------------------------------- #
+
+# The transcript sentence each registered set prints for ONE spoken alibi:
+# ``(a one-segment route, a four-segment route)``. The one-segment string is the
+# BYTE the set printed BEFORE the route landed — the pre-route body interpolated
+# ``claim.room`` / ``claim.from_tick`` / ``claim.to_tick`` into exactly these
+# characters — so the pin says both things at once: the family renders at all,
+# and what it prints for the shape every committed recording carries did not
+# move. Two spellings, kept verbatim rather than generated: five bespoke sets
+# write the range with an EN DASH and the locked set with a hyphen, and a
+# generated expectation would paper over a set whose wording drifted.
+_ALIBI_TRANSCRIPT_SENTENCES: dict[str, tuple[str, str]] = {
+    "qwen3_5_9b": (
+        "- alibi: p-9 in ENGINEERING from tick 12 to 15.",
+        "- alibi: p-9 in ENGINEERING from tick 12 to 12; in EAST_HALL from tick "
+        "13 to 13; in ADMIN from tick 14 to 14; in WEST_HALL from tick 15 to 15.",
+    ),
+    "qwen3_32b": (
+        "- alibi: p-9 in ENGINEERING, ticks 12–15.",
+        "- alibi: p-9 in ENGINEERING, ticks 12–12; in EAST_HALL, ticks 13–13; "
+        "in ADMIN, ticks 14–14; in WEST_HALL, ticks 15–15.",
+    ),
+    "qwen3_32b_thinking": (
+        "- alibi: p-9 in ENGINEERING, ticks 12–15.",
+        "- alibi: p-9 in ENGINEERING, ticks 12–12; in EAST_HALL, ticks 13–13; "
+        "in ADMIN, ticks 14–14; in WEST_HALL, ticks 15–15.",
+    ),
+    "qwen3_30b_a3b": (
+        "- alibi: p-9 in ENGINEERING, ticks 12–15.",
+        "- alibi: p-9 in ENGINEERING, ticks 12–12; in EAST_HALL, ticks 13–13; "
+        "in ADMIN, ticks 14–14; in WEST_HALL, ticks 15–15.",
+    ),
+    "glm_4_32b": (
+        "- alibi: p-9 in ENGINEERING, ticks 12–15.",
+        "- alibi: p-9 in ENGINEERING, ticks 12–12; in EAST_HALL, ticks 13–13; "
+        "in ADMIN, ticks 14–14; in WEST_HALL, ticks 15–15.",
+    ),
+    "cydonia_24b": (
+        "- alibi: p-9 in ENGINEERING, ticks 12–15.",
+        "- alibi: p-9 in ENGINEERING, ticks 12–12; in EAST_HALL, ticks 13–13; "
+        "in ADMIN, ticks 14–14; in WEST_HALL, ticks 15–15.",
+    ),
+    "qwen3_6_27b": (
+        "- alibi: p-9 in ENGINEERING, ticks 12-15.",
+        "- alibi: p-9 in ENGINEERING, ticks 12-12; in EAST_HALL, ticks 13-13; "
+        "in ADMIN, ticks 14-14; in WEST_HALL, ticks 15-15.",
+    ),
+}
+
+# The shape a pre-route model still emits, and the shape the new bodies ask for.
+# The legacy payload is validated from its WIRE keys, so the lifting validator is
+# on the path this render exercises.
+_CROSS_SET_ENVELOPE: AlibiClaim = AlibiClaim.model_validate(
+    {
+        "type": "alibi",
+        "subject": "p-9",
+        "room": "ENGINEERING",
+        "from_tick": 12,
+        "to_tick": 15,
+    }
+)
+_CROSS_SET_ROUTE: AlibiClaim = AlibiClaim(
+    type="alibi",
+    subject="p-9",
+    route=(
+        AlibiSegment(room="ENGINEERING", from_tick=12, to_tick=12),
+        AlibiSegment(room="EAST_HALL", from_tick=13, to_tick=13),
+        AlibiSegment(room="ADMIN", from_tick=14, to_tick=14),
+        AlibiSegment(room="WEST_HALL", from_tick=15, to_tick=15),
+    ),
+)
+
+
+def _statement_over_one_alibi(set_name: str, claim: AlibiClaim) -> str:
+    """One set's reply prompt over a transcript carrying exactly one alibi."""
+
+    spoken = MeetingTurn(
+        turn_id="m-1:turn-2",
+        turn_index=2,
+        speaker="p-9",
+        turn_kind="opt_in",
+        reply_to=None,
+        claims=(claim,),
+        free_text="Here is where I was.",
+    )
+    return build_prompt_renderers(set_name).statement(
+        agent_id="p-3",
+        rendered_memory=_MEMORY,
+        transcript=MeetingTranscript(turns=(spoken,)),
+        contradictions=(),
+        prior_turn=spoken,
+        turn_kind="reply",
+        fellow_impostor_ids=(),
+        living_ids=("p-3", "p-9"),
+        dead_ids=("p-7",),
+        is_impostor=False,
+        is_body_report=True,
+    )
+
+
+@pytest.mark.parametrize("set_name", sorted(PROMPT_VERSION_SETS))
+class TestEveryRegisteredSetRendersAnAlibi:
+    """A registered family that cannot print an alibi is a crash, not a style.
+
+    The loader binds :class:`jinja2.StrictUndefined`, so a body still reading
+    ``claim.room`` raises ``UndefinedError`` the moment ONE alibi reaches the
+    transcript — and every meeting carries alibis. The reconstructed context the
+    render smoke test above walks holds no alibi claim, which is exactly why the
+    six non-locked families could go dark while the suite stayed green; this
+    class closes that hole for every name in the registry, the default set
+    included, and pins what each one prints.
+    """
+
+    def test_a_one_segment_route_renders_the_pre_route_sentence(
+        self, set_name: str
+    ) -> None:
+        one_segment, _ = _ALIBI_TRANSCRIPT_SENTENCES[set_name]
+        assert one_segment in _flat(
+            _statement_over_one_alibi(set_name, _CROSS_SET_ENVELOPE)
+        ), set_name
+
+    def test_every_leg_of_a_route_reaches_the_transcript(self, set_name: str) -> None:
+        _, route = _ALIBI_TRANSCRIPT_SENTENCES[set_name]
+        flat = _flat(_statement_over_one_alibi(set_name, _CROSS_SET_ROUTE))
+        assert route in flat, set_name
+        # Not one leg of it, and not the envelope over the outer window.
+        for room in ("ENGINEERING", "EAST_HALL", "ADMIN", "WEST_HALL"):
+            assert room in flat, f"{set_name}: {room}"
+
+
+def test_the_alibi_sentence_pin_covers_every_registered_set() -> None:
+    """A new family must arrive with its own pinned alibi sentence."""
+
+    assert set(_ALIBI_TRANSCRIPT_SENTENCES) == set(PROMPT_VERSION_SETS)

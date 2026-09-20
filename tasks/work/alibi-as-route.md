@@ -82,6 +82,61 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
+- [x] Review correction: EVERY registered prompt family renders a spoken alibi
+  again. The six non-locked `accusation_round.j2` bodies still read
+  `claim.room` / `claim.from_tick` / `claim.to_tick` under the loader's
+  `StrictUndefined`, so `qwen3_5_9b` (the `DEFAULT_PROMPT_SET` a bare shell
+  resolves), `qwen3_32b`, `qwen3_32b_thinking`, `qwen3_30b_a3b`, `glm_4_32b`
+  and `cydonia_24b` raised `UndefinedError` on any transcript carrying one, and
+  the two `experiments/model_probe/variants/templates/` bodies with them. Each
+  alibi line now walks `claim.route`, in a form whose ONE-segment render is the
+  byte the pre-route body printed.
+  `tests/agents/test_bespoke_prompt_sets.py::TestEveryRegisteredSetRendersAnAlibi`
+  walks every name in `PROMPT_VERSION_SETS` over a one-segment and a
+  four-segment claim and pins both sentences per set; no stamp moves, because
+  no rendered byte moves for any claim the old bodies could render.
+- [x] Review correction: the Acceptance claim below that `qwen3_5_9b` is
+  unaffected named the wrong surface. Its neutral MENU row does still describe a
+  legal format-1 claim, and that half stands; what broke was the LISTENER
+  render in the same file, which is the correction above.
+- [x] Review correction: `eval/evidence_honesty.py` MEASURES a multi-leg route
+  instead of aborting the run. `_resolve_flag` returned `None` for every route
+  longer than one leg and the scoring caller raises on `None`, so the first
+  re-recorded multi-leg flag would have killed the whole honesty and
+  `measure_baseline` run. `_leg_under_sighting` resolves the leg whose window
+  covers the sighting's tick -- forced, not chosen, because the detector mints
+  the flag from that leg and the schema keeps legs strictly non-overlapping --
+  and a one-segment route still answers with its single leg, unconditionally.
+  `tests/eval/test_evidence_honesty.py::test_a_multi_leg_route_is_measured_against_the_leg_under_the_sighting`
+  and `::test_a_route_that_covers_no_tick_of_the_sighting_still_raises`.
+- [x] Review correction: row 3 of the process scorecard no longer scores a
+  part-true route as manufactured. `_flag_scored_claim_truth` refuses a
+  multi-leg claim, so such a flag is published NOT EVALUABLE rather than folded
+  `any(some)` across legs the flag never touched; the row's published definition
+  names the third not-evaluable shape and both `docs/process-scorecard.{md,json}`
+  are regenerated (definition sentence only -- 159/192 and every other cell are
+  byte-identical, `--check` green).
+  `tests/eval/test_process_scorecard.py::test_a_part_true_route_is_not_evaluable_rather_than_manufactured`
+  and `::test_a_one_segment_route_is_still_scored_by_row_three`.
+- [x] Review correction: `eval/deduction_metrics.py::_player_visible_text` reads
+  `AlibiClaim.evidence`, because the shipped bodies now print it ("They back it
+  with: ..." in the locked set, "(evidence: ...)" in the frozen one). Its
+  docstring and the two module-level cell descriptions said the rows are never
+  rendered; that is false at this head. No published cell moves -- all four
+  `build_sample_report.py --check` runs are consistent.
+  `tests/eval/test_deduction_metrics.py::test_the_net_reads_an_alibi_claims_evidence_because_the_table_shows_it`.
+- [x] Review correction: `validate_public_accounts` walks every SEGMENT of a
+  route. It read only the top level of `model_dump()`, where a format-2 claim
+  carries neither room nor tick, so a route naming `NOT_A_ROOM` -- or a tick
+  before the game began -- was ACCEPTED while the identical flat envelope was
+  refused (AGENTS.md rule 5).
+  `tests/meetings/test_public_accounts.py::test_the_context_gate_reads_every_leg_of_an_alibi_route`
+  carries the legal route, both refusals and the flat control.
+- [x] Review correction: the two Results figures that did not reproduce are
+  corrected below -- `uv run pytest tests/orchestrator tests/experiments -q`
+  reads `1,213 passed, 3 xfailed`, and the segment-comparison planted leg reads
+  `1 failed, 5 passed` perturbed and `6 passed` reverted over the six tests of
+  `TestTheAlibiIsARoute`. Both were re-run at this head.
 - [x] `AlibiClaim` is a route, in ONE claim type: it gains
   `route: tuple[AlibiSegment, ...]` (a new frozen `AlibiSegment` of `room`,
   `from_tick`, `to_tick`) and `claim_format: Literal[1, 2]`. A `mode="before"`
@@ -362,7 +417,7 @@ Run from a clean worktree at the head of this branch.
 | `bash scripts/check.sh` | exit 0 — 8,113 Python passed, 20 skipped, 3 xfailed; 528 frontend tests; 73 work cards validated |
 | `uv run pytest tests/meetings tests/agents -q` | 2,696 passed |
 | `uv run pytest tests/api tests/llm -q` | 764 passed, 19 skipped |
-| `uv run pytest tests/orchestrator tests/experiments -q` | 1,212 passed, 3 xfailed |
+| `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
 | `uv run pytest tests/scripts/test_counterfactual_phase21.py -q` | 112 passed |
 | `uv run mypy .` | Success: no issues found in 491 source files |
 | `uv run ruff check .` / `uv run ruff format --check .` | clean |
@@ -396,7 +451,7 @@ Each was applied to the tree, run, and reverted.
 * **The segment comparison.** Pairing a sighting against the route's OUTER window
   instead of the leg covering its tick -- the pre-card envelope rule -- turns
   `TestTheAlibiIsARoute::test_the_truthful_route_mints_nothing` red
-  (`1 failed, 6 passed`); reverted, `7 passed`. The honest seed-41 route goes
+  (`1 failed, 5 passed`); reverted, `6 passed`. The honest seed-41 route goes
   from zero flags back to the envelope's.
 * **The format-preserving serializer.** Emitting a `route` for a format-1 claim
   turns `test_every_recorded_alibi_round_trips_byte_identically` and
@@ -437,10 +492,128 @@ movement channel a replay cannot rebuild, which the corpus walk already pins.
   property tests only. Row 3 of the process scorecard (159 of 192 alibi flags
   manufactured, 83 percent) is the measure this card is read against AFTER the
   re-record, not here.
-* `eval/evidence_honesty.py`'s I-6 geometry fold reports a multi-leg route as NOT
-  EVALUABLE: the flag's event ids name the claim, not the leg, so the module
-  cannot say which room the geometry should be measured to. Every committed claim
-  is one segment, so no committed cell moves.
+* `eval/evidence_honesty.py`'s I-6 geometry fold measures a multi-leg route
+  against the leg whose window covers the sighting's tick (corrected in round 1;
+  the sentence that stood here claimed a NOT EVALUABLE report the code did not
+  make). Every committed claim is one segment, so no committed cell moves.
 * The bump-in-flight window is OPEN from this merge until the re-record closes
   it. While it is open the byte golden, the validity-gate pin and the Phase-21
   counterfactual all resolve committed recordings through the archived v5 bodies.
+
+### Review corrections, round 1 (2026-09-20)
+
+Six blocking findings from the independent verifiers, all valid, all repaired on
+this branch. None is refuted. Commands below were run from a clean worktree at
+this head.
+
+**1. Every registered prompt family could render an alibi again.** The card moved
+`AlibiClaim`'s fields but only re-aimed the locked set's bodies, and the loader
+binds `jinja2.StrictUndefined`, so the six other registered families raised
+`UndefinedError: 'meetings.schemas.AlibiClaim object' has no attribute 'room'`
+the moment one alibi reached a transcript -- `qwen3_5_9b` (the
+`DEFAULT_PROMPT_SET` a bare shell resolves), `qwen3_32b`, `qwen3_32b_thinking`,
+`qwen3_30b_a3b`, `glm_4_32b`, `cydonia_24b`. The suite stayed green because the
+reconstructed context the cross-set render smoke test walks carries no alibi
+claim. Each family's `accusation_round.j2` alibi line now loops `claim.route`
+in that set's own wording, and so do
+`experiments/model_probe/variants/templates/reply_decisive.j2` and
+`optin_decisive.j2`. Its ONE-segment render is byte-identical to what the
+pre-route body printed (`- alibi: p-9 in ENGINEERING, ticks 12–15.` for the five
+en-dash sets, `- alibi: p-9 in ENGINEERING from tick 12 to 15.` for
+`qwen3_5_9b`), which is why NO stamp moves: no rendered byte moves for any claim
+those bodies could render, the same argument this card already makes for the
+three archived v5 bodies, and `DEFAULT_PROMPT_VERSIONS` -- which the card's
+version cascade forbids moving -- stays put.
+
+**2. The Acceptance claim about `qwen3_5_9b` named the wrong surface.** Its
+neutral menu row does still describe a legal format-1 claim; the listener render
+in the same file is what broke. Corrected in Acceptance.
+
+**3. Evidence honesty measures a multi-leg route rather than aborting.**
+`_resolve_flag` answered `None` for every route longer than one leg and the
+scoring caller raises `EvidenceHonestyReconstructionError` on `None`, so the
+first re-recorded multi-leg flag would have killed the whole honesty and
+`measure_baseline` run -- not reported it NOT EVALUABLE, as the Limitations
+sentence claimed. `_leg_under_sighting` resolves the leg whose window covers the
+sighting's tick; the leg is forced by the recorded pair (the detector mints the
+flag only from the covering leg, and legs cannot overlap), a one-segment route
+answers with its single leg unconditionally so no recorded cell can move, and a
+pair no leg can carry still fails loud. The Limitations sentence is restated.
+
+**4. Row 3 no longer files a caught lie as manufactured.** `_claim_truth` folds
+`(every, some)` across ALL legs and `_flag_is_manufactured` reads
+`manufactured = any(some)`, so a route true in its first leg and fabricated in
+its second scored the flag as schema-manufactured. A recorded flag names the
+CLAIM's event id and not the leg, so `_flag_scored_claim_truth` refuses a
+multi-leg claim and the flag is published NOT EVALUABLE; the row's published
+definition now names that third shape and
+`docs/process-scorecard.{md,json}` are regenerated. The regeneration changes the
+definition sentence ONLY -- row 3 is still `159/192 = 0.8281 (not evaluable 32)`
+and every other cell is byte-identical, `--check` green. The claim census beside
+the row still walks the whole account leg by leg: the refusal is about
+attributing a FLAG, not about reading a route.
+
+**5. The visible-text net reads an alibi's `evidence`.** The shipped bodies now
+print those rows ("They back it with: ..." in `qwen3_6_27b`, "(evidence: ...)"
+in `qwen3_5_9b`), so `_player_visible_text` excluding them would file
+table-visible testimony as hidden and make the cell's own name false. The net,
+its docstring, the two module-level cell descriptions and the enforcing test are
+all corrected. No published cell moves: all four
+`build_sample_report.py --check` runs are consistent.
+
+**6. The public-account context gate walks every segment.** It inspected only
+the top level of `model_dump()`, where a format-2 claim carries neither a room
+nor a tick, so a route naming `NOT_A_ROOM` -- or stating `from_tick` 900 at
+`current_tick` 20 -- was ACCEPTED while the identical flat envelope was refused.
+`_validated_scopes` hands the room and tick checks the row AND each leg.
+
+**7. The two Results figures.** `uv run pytest tests/orchestrator tests/experiments -q`
+reads `1,213 passed, 3 xfailed` (the table said 1,212), and
+`TestTheAlibiIsARoute` holds six tests, so the segment-comparison planted leg
+reads `1 failed, 5 passed` perturbed and `6 passed` reverted (the bullet said 6
+and 7). Both were re-run at this head and corrected in place above.
+
+| command (round 1) | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — 8,133 Python passed, 20 skipped, 3 xfailed; 528 frontend tests; 73 work cards validated |
+| `uv run pytest tests/meetings tests/agents tests/api -q` | 3,148 passed, 2 skipped |
+| `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
+| `uv run mypy .` | Success: no issues found in 491 source files |
+| `uv run ruff check .` / `uv run ruff format --check .` | clean |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on all four sets |
+| `uv run python scripts/publish_process_scorecard.py --check` | consistent |
+| `uv run python scripts/verify_ml_evidence.py` | 61 checks, OK 49, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run python scripts/validate_task_docs.py` / `check_doc_facts.py` | passed / verified |
+
+**Round-1 planted failures.** Each applied to the tree, run, reverted.
+
+* Restoring `claim.room` in `qwen3_5_9b/accusation_round.j2` turns
+  `TestEveryRegisteredSetRendersAnAlibi` red for that set (`2 failed, 13 passed`
+  over the selected ids); reverted, `15 passed`.
+* Restoring `if len(alibi.route) != 1: return None` in `_leg_under_sighting`
+  turns `test_a_multi_leg_route_is_measured_against_the_leg_under_the_sighting`
+  red with `EvidenceHonestyReconstructionError` (`1 failed, 1 passed`);
+  reverted, `2 passed`.
+* Dropping the leg-count refusal from `_flag_scored_claim_truth` turns
+  `test_a_part_true_route_is_not_evaluable_rather_than_manufactured` red
+  (`1 failed, 1 passed`); reverted, `2 passed`.
+* Returning only the top-level scope from `_validated_scopes` turns
+  `test_the_context_gate_reads_every_leg_of_an_alibi_route` red (`1 failed,
+  4 passed`); reverted, `5 passed`.
+* Dropping the `evidence` rows from `_player_visible_text` turns
+  `test_the_net_reads_an_alibi_claims_evidence_because_the_table_shows_it` red
+  (`1 failed, 1 passed`); reverted, `2 passed`.
+* The segment-comparison leg re-run for figure 7 above: perturbed
+  `1 failed, 5 passed`, reverted `6 passed`.
+
+**Round-1 record impact.** No recording byte moves and nothing is re-scored. The
+only published bytes that move are the process scorecard's row-3 DEFINITION
+sentence in `docs/process-scorecard.md` / `.json`, regenerated by the committed
+`--check` command with every number unchanged; that row's artifacts entry states
+files and not bytes, so no `docs/artifacts.md` row moves. No prompt stamp moves,
+because no rendered byte moves for any claim the repaired bodies could already
+render. A multi-leg route is now published as not evaluable by row 3 until a
+flag carries segment attribution -- a limitation of the row, stated here rather
+than discovered at the re-record.

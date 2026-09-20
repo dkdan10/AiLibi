@@ -708,6 +708,54 @@ def test_a_claim_reaching_past_the_walk_is_not_evaluable_rather_than_false() -> 
     assert row.flags.not_evaluable == 1
 
 
+def test_a_part_true_route_is_not_evaluable_rather_than_manufactured() -> None:
+    """A flag that caught a fabricated LEG is evidence, and row 3 must not claim it.
+
+    p-1's route states CAFETERIA at agent tick 1 (true: engine tick 0) and
+    STORAGE at agent tick 2 (false: p-1 is in EAST_HALL at engine tick 1). A
+    fold across the whole route reads "true at some tick" off the FIRST leg and
+    files the flag as schema-manufactured, although the flag may be exactly the
+    one that caught the second leg. The recorded flag names the claim, not the
+    leg, so the cell publishes it as not evaluable.
+    """
+
+    claim = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=1),
+            AlibiSegment(room="STORAGE", from_tick=2, to_tick=2),
+        ),
+    )
+    row = _card(
+        _inputs(meetings=(_alibi_meeting(claim, "p-1"),), route=_ROUTE)
+    ).manufactured_contradiction
+    assert (row.flags.numerator, row.flags.denominator) == (0, 1)
+    assert row.flags.not_evaluable == 1
+    assert "multi-leg route" in row.definition
+    # The CLAIM census beside the row still reads the whole account, leg by leg:
+    # the refusal is about attributing a FLAG, not about walking a route.
+    assert row.self_alibi_claims == 1
+    assert row.self_alibi_claims_multi_tick == 1
+    assert row.self_alibi_claims_envelope_false == 1
+    assert row.self_alibi_claims_strict_false == 0
+
+
+def test_a_one_segment_route_is_still_scored_by_row_three() -> None:
+    """The other side: the refusal is keyed on the LEG COUNT and nothing else.
+
+    Every committed claim is a one-segment route, so this is the case that must
+    not move — the same envelope as the seed-41 shape above, scored.
+    """
+
+    claim = _alibi(subject="p-1", room="CAFETERIA", from_tick=1, to_tick=2)
+    row = _card(
+        _inputs(meetings=(_alibi_meeting(claim, "p-1"),), route=_ROUTE)
+    ).manufactured_contradiction
+    assert (row.flags.numerator, row.flags.denominator) == (1, 1)
+    assert row.flags.not_evaluable == 0
+
+
 def test_a_vent_flag_is_outside_the_alibi_denominator() -> None:
     claim = _alibi(subject="p-1", room="CAFETERIA", from_tick=1, to_tick=3)
     meeting = _meeting(

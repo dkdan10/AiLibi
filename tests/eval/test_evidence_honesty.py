@@ -1196,6 +1196,75 @@ def test_a_flag_the_dedup_cannot_key_still_raises_through_the_fold() -> None:
         )
 
 
+_MULTI_LEG_ALIBI = AlibiClaim(
+    type="alibi",
+    subject="p-3",
+    route=(
+        AlibiSegment(room="ADMIN", from_tick=4, to_tick=5),
+        AlibiSegment(room="LABS", from_tick=6, to_tick=8),
+        AlibiSegment(room="STORAGE", from_tick=9, to_tick=10),
+    ),
+)
+
+
+def test_a_multi_leg_route_is_measured_against_the_leg_under_the_sighting() -> None:
+    # The re-record produces routes, and the resolver used to answer ``None`` for
+    # every one of them — which the scoring caller RAISES on, so the first
+    # multi-leg flag would have aborted the whole honesty run instead of being
+    # priced. The leg is forced by the pair: the detector mints the flag only
+    # from the leg whose window covers the sighting's tick, and the legs cannot
+    # overlap, so tick 8 can only be the LABS leg.
+    turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_player(room="MEDBAY"),)),
+        _turn(index=1, speaker="p-3", claims=(_MULTI_LEG_ALIBI,)),
+    )
+    kept = _fold(
+        _flag_meeting(
+            turns=turns, flags=(_sighting_flag(sighting_id="turn:m:turn-0:obs:0"),)
+        ),
+        memories={"p-9": _witness_memory(saw_player_in="MEDBAY", moved_to=None)},
+    )
+    assert kept.strong_flags == 1
+    assert kept.resolved_sighting_flags == 1
+    # Identical to the one-segment claim that states the covering leg alone:
+    # MEDBAY is one doorway from LABS, and the sighting sits inside the leg.
+    assert (kept.adjacent_flags, kept.distance_three_plus) == (1, 0)
+
+
+def test_a_route_that_covers_no_tick_of_the_sighting_still_raises() -> None:
+    # The other side of the same rule: a multi-leg route is resolvable because
+    # ONE leg answers, not because routes are waved through. A pair no leg can
+    # carry is a flag this module cannot reconstruct, and it fails loud like
+    # every other unresolvable shape rather than vanishing from I-4/I-6/I-7.
+    turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_player(room="MEDBAY"),)),
+        _turn(
+            index=1,
+            speaker="p-3",
+            claims=(
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-3",
+                    route=(
+                        AlibiSegment(room="ADMIN", from_tick=4, to_tick=5),
+                        AlibiSegment(room="STORAGE", from_tick=9, to_tick=10),
+                    ),
+                ),
+            ),
+        ),
+    )
+    with pytest.raises(
+        EvidenceHonestyReconstructionError,
+        match="do not resolve to one spoken sighting and one alibi",
+    ):
+        _fold(
+            _flag_meeting(
+                turns=turns, flags=(_sighting_flag(sighting_id="turn:m:turn-0:obs:0"),)
+            ),
+            memories={"p-9": _witness_memory(saw_player_in="MEDBAY", moved_to=None)},
+        )
+
+
 def test_ghost_top_splits_the_two_sub_populations_and_skips_the_living() -> None:
     tallies = _Tallies()
     _fold_ghost_top(

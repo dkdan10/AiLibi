@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Final, Literal, TypeAlias
+from typing import Any, Final, Literal, TypeAlias
 
 from meetings.schemas import (
     AlibiClaim,
@@ -54,16 +54,33 @@ def validate_public_accounts(
         for player in data.get("co_present", ()):
             if player not in roster:
                 raise PublicAccountValidationError("unknown co-present player")
-        for key in ("room", "from_room", "to_room"):
-            if key in data and data[key] not in room_ids:
-                raise PublicAccountValidationError(f"unknown public room in {key}")
         if "task_id" in data and data["task_id"] not in task_ids:
             raise PublicAccountValidationError("unknown public task")
-        for key in ("tick", "from_tick", "to_tick", "on_tick"):
-            if key in data and not 0 <= data[key] <= current_tick:
-                raise PublicAccountValidationError(
-                    "account tick is outside game history"
-                )
+        # The row AND every segment of an alibi ROUTE. A format-2
+        # :class:`~meetings.schemas.AlibiClaim` states its rooms and ticks
+        # inside ``route`` and carries none of them at the top level, so a
+        # top-level-only read would accept a route naming a room the map does
+        # not have, or a tick before the game began, purely for having been
+        # stated as a route -- exactly what the same account is REFUSED for as a
+        # format-1 envelope (AGENTS.md rule 5, "invalid input raises").
+        for scope in _validated_scopes(data):
+            for key in ("room", "from_room", "to_room"):
+                if key in scope and scope[key] not in room_ids:
+                    raise PublicAccountValidationError(f"unknown public room in {key}")
+            for key in ("tick", "from_tick", "to_tick", "on_tick"):
+                if key in scope and not 0 <= scope[key] <= current_tick:
+                    raise PublicAccountValidationError(
+                        "account tick is outside game history"
+                    )
+
+
+def _validated_scopes(data: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """One dumped row, followed by each segment of its route if it states one."""
+
+    route = data.get("route")
+    if not isinstance(route, (list, tuple)):
+        return (data,)
+    return (data, *(leg for leg in route if isinstance(leg, Mapping)))
 
 
 # How a placement was read out of one spoken account. ``stated`` is a direct
