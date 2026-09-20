@@ -101,6 +101,20 @@ profile and yields `TickAdvanced.state` (`:374`), as
 
 ## Acceptance
 
+- [x] Review correction: row 3's alibi-kind filter IS the census that owns it.
+  `ALIBI_FLAG_KINDS` said it was "read from the owning census in
+  `eval.alibi_fabrication`" and then re-listed the three kinds by hand with
+  nothing tying the two together, so that census could gain or retire a kind and
+  the manufactured-contradiction row would drift in silence. The owning constant
+  is now public (`eval.alibi_fabrication.ALIBI_CONTRADICTION_KINDS`, in its
+  `__all__`) and `eval/process_scorecard.py` imports it: `ALIBI_FLAG_KINDS` is
+  the SAME frozenset object, so there is one source of truth and the comment now
+  states what the code does. Pinned by
+  `tests/eval/test_process_scorecard.py::test_the_alibi_kind_filter_is_the_owning_census_itself`,
+  which asserts identity (`is`, not `==`, since a hand-written copy compares
+  equal today) and that the shared set is exactly the `alibi_*` members of
+  `meetings.schemas.ContradictionRef`'s `kind` Literal. Both halves were planted
+  live. No published figure moves.
 - [x] Review correction: rows 4 and 7 cut the rationale by PROVENANCE, which is
   what they always claimed. `_authored_by_the_agent` and
   `_model_authored_rationale` scanned the WHOLE `rationale_text`, so a model
@@ -1138,3 +1152,121 @@ record-impact statement is unchanged and
 re-demonstrated: `verify_samples.sh` and the four `--check` runs recompute
 exactly what they did before this card. No provider call is a check here, and
 none was made.
+
+### Review corrections, round 4 (2026-09-20)
+
+Three verifier lenses re-read the pushed head `1f4ac6a4`. Integrity and
+documentation passed; correctness left **one** finding, which is VALID and is
+repaired here:
+
+> `ALIBI_FLAG_KINDS` claims it is read from the owning census but re-lists it,
+> with no gate.
+
+**The claim and the code disagreed.** `eval/process_scorecard.py`'s constant
+carried the comment *"Read from the owning census in
+:mod:`eval.alibi_fabrication` rather than re-listed, so a new alibi kind cannot
+start being scored by one module and not the other"*, and the next three lines
+wrote the three kinds out by hand. The census that owns them —
+`eval/alibi_fabrication.py`'s `_ALIBI_CONTRADICTION_KINDS`, the set the
+subject-membership join credits a catch from — was a PRIVATE constant nothing
+outside that module could read, and no test compared the two. The sentence was
+therefore an intention, not a mechanism: a fourth alibi kind added to the census
+(as `alibi_vs_physical` was, by Task 13.4) would credit catches there and be
+skipped by row 3's `if flag.kind not in ALIBI_FLAG_KINDS: continue`, moving the
+manufactured-contradiction denominator away from the census in silence. The two
+sets happen to be equal today, so nothing published is wrong; the defect is that
+nothing held them together.
+
+**Repair 1 of the two the review offered — one source of truth.** Nothing
+forbids the import: both modules are in `eval/`, `.importlinter` states no
+contract over `eval` beyond its membership in `root_packages` (its four
+contracts govern `agents`, `observation` and `meetings.manager`), AGENTS.md's
+only import rule is the observation firewall (rule 4, `agents/` must not import
+`engine/`), and `eval/process_scorecard.py` already imports
+`compute_alibi_fabrication_rate` from this very module. So the owning constant is
+promoted to public — `eval.alibi_fabrication.ALIBI_CONTRADICTION_KINDS`, listed
+in that module's `__all__`, its comment naming itself as the one home — and the
+scorer binds the same object:
+
+```python
+ALIBI_FLAG_KINDS: Final[frozenset[str]] = ALIBI_CONTRADICTION_KINDS
+```
+
+There is now one list. The comment says what the code does, and the module
+docstring's "Reuse, not re-implementation" paragraph names the constant beside
+the analyzers it already reads by name. `ALIBI_FLAG_KINDS` keeps its name and
+its place in the module's `__all__`, because row 3's published definition is
+stated in terms of it.
+
+**The gate.** Identity is the assertion, not equality: a hand-written copy of
+the same three strings compares `==` and is exactly the drift the finding names,
+so `tests/eval/test_process_scorecard.py::test_the_alibi_kind_filter_is_the_owning_census_itself`
+asserts `ALIBI_FLAG_KINDS is ALIBI_CONTRADICTION_KINDS`, and its second half
+pins the shared set inside the schema both modules branch on — the `alibi_*`
+members of `meetings.schemas.ContradictionRef`'s `kind` Literal, exactly, so a
+fifth alibi kind minted in the schema and left out of the census is red too.
+
+**Planted, both directions.** First the defect itself restored — the scorer
+re-listing the three kinds, the census untouched:
+
+```
+$ .venv/bin/python -m pytest tests/eval/test_process_scorecard.py -q
+E       AssertionError: assert frozenset({'alibi_conflict', 'alibi_vs_physical', 'alibi_vs_sighting'}) is frozenset({'alibi_conflict', 'alibi_vs_physical', 'alibi_vs_sighting'})
+FAILED tests/eval/test_process_scorecard.py::test_the_alibi_kind_filter_is_the_owning_census_itself
+1 failed, 56 passed in 0.30s
+```
+
+— equal and not the same object, which is the whole finding in one line. Then
+the drift the finding predicts, planted on the OTHER side: `"vent_sighting"`
+added to the owning census alone, with the scorer untouched.
+
+```
+$ .venv/bin/python -m pytest tests/eval/test_process_scorecard.py -q
+FAILED tests/eval/test_process_scorecard.py::test_a_vent_flag_is_outside_the_alibi_denominator
+FAILED tests/eval/test_process_scorecard.py::test_the_alibi_kind_filter_is_the_owning_census_itself
+2 failed, 55 passed in 0.33s
+```
+
+Row 3's own denominator test goes red, which is the proof the import did its
+job: the scorecard now FOLLOWS the census rather than shadowing it, so the two
+can no longer disagree — under the old hand-list that same plant left row 3
+green and the modules silently split. Both files were restored; `57 passed`.
+
+**Nothing published moved.** `.venv/bin/python
+scripts/publish_process_scorecard.py` rewrote the pair and `git status
+--porcelain docs/` is empty — every number and every definition string in
+`docs/process-scorecard.md` and `docs/process-scorecard.json` is byte-identical,
+as it must be, since the two sets were already equal. No agent behaviour, prompt
+byte, schema field, detector, recorded byte, `audits/` byte or `tests/fixtures/`
+byte moves, so no `docs/artifacts.md` row is recomputed and `tasks/README.md`'s
+inventory sentence is unchanged (Status stays `done`).
+
+**Verification at this head.** Each command run in this clean worktree with its
+exit code captured directly, never through a pipe:
+
+```
+$ .venv/bin/python scripts/publish_process_scorecard.py --check
+--check: docs/process-scorecard.md and docs/process-scorecard.json are consistent with the committed recordings.
+EXIT=0
+
+$ .venv/bin/python -m pytest tests/eval/test_process_scorecard.py tests/scripts/test_process_scorecard.py -q
+69 passed in 8.11s
+EXIT=0
+
+$ .venv/bin/python scripts/validate_task_docs.py
+Task docs validation passed: 390 historical phase tasks and 390 prompts; 73 work cards.
+EXIT=0
+```
+
+`scripts/check_doc_facts.py` passes (EXIT=0), the eval suite reads **1159
+passed, 1 skipped** — one more than round 3's 1158, which is the single new
+case above — the promoted constant's own module
+(`tests/eval/test_alibi_fabrication.py`) reads 21 passed, and `bash
+scripts/check.sh` run whole in this worktree returns **EXIT=0**: ruff clean over
+518 formatted files, `lint-imports` 4 kept / 0 broken over 188 analyzed files,
+390 phase tasks + 390 prompts + 73 work cards, mypy over 489 source files,
+**8056 passed, 20 skipped, 3 xfailed** — one more than round 3's 8055, the same
+single case — and frontend 19 test files / 515 tests passed with the build
+green. Neither flake the earlier rounds recorded reappeared. The
+record-impact statement is unchanged and re-demonstrated. No provider call is a
+check here, and none was made.

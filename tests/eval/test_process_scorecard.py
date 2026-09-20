@@ -16,12 +16,15 @@ import dataclasses
 import json
 from collections.abc import Mapping, Sequence
 from fractions import Fraction
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
+from eval.alibi_fabrication import ALIBI_CONTRADICTION_KINDS
 from eval.process_scorecard import (
+    ALIBI_FLAG_KINDS,
     ROLE_CORRECTNESS_NOTE,
     ROW_DEFINITIONS,
     ContextCells,
@@ -710,6 +713,22 @@ def test_a_vent_flag_is_outside_the_alibi_denominator() -> None:
     )
     row = _card(_inputs(meetings=(meeting,), route=_ROUTE)).manufactured_contradiction
     assert row.flags.denominator == 0
+
+
+def test_the_alibi_kind_filter_is_the_owning_census_itself() -> None:
+    """Row 3's denominator IS :mod:`eval.alibi_fabrication`'s set, not a copy.
+
+    The scorecard's comment says the kinds are read from the census that owns
+    them; identity is what makes that sentence true. A hand-written re-listing
+    would still compare equal today and would drift the moment a kind is added
+    or retired on one side only, so the assertion is ``is``, and the second
+    half pins the shared set inside the schema Literal both modules branch on.
+    """
+
+    assert ALIBI_FLAG_KINDS is ALIBI_CONTRADICTION_KINDS
+    kinds = set(get_args(ContradictionRef.model_fields["kind"].annotation))
+    assert ALIBI_FLAG_KINDS <= kinds
+    assert {kind for kind in kinds if kind.startswith("alibi_")} == ALIBI_FLAG_KINDS
 
 
 def test_an_alibi_about_another_player_is_out_of_the_self_claim_census() -> None:

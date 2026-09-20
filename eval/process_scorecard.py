@@ -52,7 +52,10 @@ third phrasing here would let them disagree);
 :func:`eval.meeting_quality._rendered_suspicion_by_target_per_voter` and its
 valid-target twin :func:`eval.meeting_quality.rendered_valid_targets_by_voter`
 read the recorded prompts; :func:`eval.meeting_quality.recorded_contradiction_flags`
-is the evidence-supply census;
+is the evidence-supply census, and
+:data:`eval.alibi_fabrication.ALIBI_CONTRADICTION_KINDS` is the one list of the
+alibi-based flag kinds, imported here as :data:`ALIBI_FLAG_KINDS` so row 3's
+denominator and that census cannot name different kinds;
 :func:`eval.meeting_quality.compute_ballot_target_redirects` is the redirect
 census; :func:`eval.deduction_metrics._authored_target` unwinds a guard rewrite
 for recordings older than the typed provenance fields, exactly as
@@ -100,7 +103,10 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from engine.entities import Role
 from engine.world import Map, load_canonical_map
-from eval.alibi_fabrication import compute_alibi_fabrication_rate
+from eval.alibi_fabrication import (
+    ALIBI_CONTRADICTION_KINDS,
+    compute_alibi_fabrication_rate,
+)
 from eval.balance_eval import load_tournament_report
 from eval.deduction_metrics import (
     _authored_target,
@@ -183,12 +189,15 @@ NO_CONSUMER_NOTE: Final[str] = (
 #: holds there.
 AGENT_CLOCK_OFFSET: Final[int] = 1
 
-#: The contradiction kinds whose basis is a spoken alibi. Read from the owning
-#: census in :mod:`eval.alibi_fabrication` rather than re-listed, so a new alibi
-#: kind cannot start being scored by one module and not the other.
-ALIBI_FLAG_KINDS: Final[frozenset[str]] = frozenset(
-    {"alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"}
-)
+#: The contradiction kinds whose basis is a spoken alibi: the SAME frozenset
+#: object as :data:`eval.alibi_fabrication.ALIBI_CONTRADICTION_KINDS`, imported
+#: from the census that owns it rather than re-listed here, so a kind added or
+#: retired there moves row 3's denominator with it and the two modules cannot
+#: drift apart. Re-exported under this module's own name because row 3's
+#: published definition is stated in terms of it;
+#: ``tests/eval/test_process_scorecard.py`` asserts the identity, so a future
+#: hand-written copy turns red rather than diverging quietly.
+ALIBI_FLAG_KINDS: Final[frozenset[str]] = ALIBI_CONTRADICTION_KINDS
 
 #: A whole-token player id in free prose, the boundary rule
 #: :data:`meetings.citation_relevance.PLAYER_TOKEN` states: ``p-1`` must not
