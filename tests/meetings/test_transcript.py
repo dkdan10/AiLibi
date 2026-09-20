@@ -54,6 +54,7 @@ from meetings.transcript import (
     is_canonically_ordered,
     is_relevant_sighting,
     is_weak_contradiction,
+    maximal_stays,
     next_chain_step,
     sighting_placement,
     sort_turns_canonically,
@@ -631,6 +632,104 @@ class TestWeakContradictionClassification:
         assert is_weak_contradiction(marked_conflict) is True
         assert is_weak_contradiction(unmarked_sighting) is False
         assert is_weak_contradiction(unmarked_conflict) is False
+
+
+# --- The maximal-stay normalisation (round 4 of the alibi-as-route card) ----
+
+
+def _seg(room: str, from_tick: int, to_tick: int) -> AlibiSegment:
+    return AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick)
+
+
+def _shape(route: tuple[AlibiSegment, ...]) -> list[tuple[str, int, int]]:
+    return [(leg.room, leg.from_tick, leg.to_tick) for leg in route]
+
+
+class TestMaximalStays:
+    """`maximal_stays` is the single normalisation point for how a route is CUT.
+
+    The sibling of :func:`canonical_rooms`: that one makes the ROOM comparison
+    independent of how the model spelled a label, this one makes every
+    detection comparison independent of where the speaker put a full stop
+    inside one continuous stay. A leg boundary is free to state, so any
+    geometry read off the legs is a dial the accused holds.
+    """
+
+    def test_a_one_segment_route_is_unchanged(self) -> None:
+        # The shape every committed recording carries: the normalisation is the
+        # identity on it, which is why no recorded flag, band or id can move.
+        route = (_seg("STORAGE", 2, 14),)
+        assert maximal_stays(route) == route
+
+    def test_contiguous_same_room_legs_merge(self) -> None:
+        assert _shape(
+            maximal_stays((_seg("STORAGE", 2, 7), _seg("STORAGE", 8, 14)))
+        ) == [("STORAGE", 2, 14)]
+
+    def test_one_tick_legs_merge_into_the_whole_stay(self) -> None:
+        # The shape the operational prompts ask for, and the worst case for a
+        # leg-local band: no one-tick leg has a strict interior at all.
+        legs = tuple(_seg("STORAGE", tick, tick) for tick in range(6, 10))
+        assert _shape(maximal_stays(legs)) == [("STORAGE", 6, 9)]
+
+    def test_a_room_change_ends_a_stay(self) -> None:
+        route = (_seg("STORAGE", 2, 7), _seg("CAFETERIA", 8, 14))
+        assert maximal_stays(route) == route
+
+    def test_a_gap_ends_a_stay(self) -> None:
+        # Tick 8 is a tick the account claims nothing about, so the two sides
+        # are two claims and not one stay. Narrowing an account narrows what it
+        # asserts -- that is the membership rule working, not a cut.
+        route = (_seg("STORAGE", 2, 7), _seg("STORAGE", 9, 14))
+        assert maximal_stays(route) == route
+
+    def test_only_the_contiguous_run_merges(self) -> None:
+        assert _shape(
+            maximal_stays(
+                (
+                    _seg("STORAGE", 2, 4),
+                    _seg("STORAGE", 5, 7),
+                    _seg("CAFETERIA", 8, 9),
+                    _seg("STORAGE", 10, 11),
+                )
+            )
+        ) == [("STORAGE", 2, 7), ("CAFETERIA", 8, 9), ("STORAGE", 10, 11)]
+
+    def test_the_merge_compares_canonical_rooms_and_keeps_the_first_spelling(
+        self,
+    ) -> None:
+        # Two spellings of one room are one place, so they merge; the stay
+        # keeps the FIRST leg's text, so the room a description quotes is
+        # deterministic and is a label the speaker actually used.
+        merged = maximal_stays((_seg("CAFEteria", 2, 7), _seg("cafeteria", 8, 14)))
+        assert _shape(merged) == [("CAFEteria", 2, 14)]
+
+    def test_a_non_spatial_label_does_not_merge_with_a_real_room(self) -> None:
+        route = (_seg("SOMEWHERE_ELSE", 2, 7), _seg("STORAGE", 8, 14))
+        assert maximal_stays(route) == route
+
+    def test_the_result_is_idempotent(self) -> None:
+        # Coalescing a coalesced account changes nothing, which is what lets
+        # every consumer call it without coordinating on who called it first.
+        route = (
+            _seg("STORAGE", 2, 4),
+            _seg("STORAGE", 5, 7),
+            _seg("CAFETERIA", 8, 9),
+        )
+        once = maximal_stays(route)
+        assert maximal_stays(once) == once
+
+    def test_the_outer_endpoints_never_move(self) -> None:
+        # The transit-fuzz bands read these, so the merge must leave them
+        # exactly where the account put them.
+        for route in (
+            (_seg("STORAGE", 2, 14),),
+            (_seg("STORAGE", 2, 7), _seg("STORAGE", 8, 14)),
+            tuple(_seg("STORAGE", tick, tick) for tick in range(2, 15)),
+            (_seg("STORAGE", 2, 7), _seg("CAFETERIA", 8, 14)),
+        ):
+            stays = maximal_stays(route)
+            assert (stays[0].from_tick, stays[-1].to_tick) == (2, 14)
 
 
 # --- Task 10.1: room canonicalization (audit gp-2 C-C-1) --------------------

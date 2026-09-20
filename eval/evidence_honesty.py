@@ -209,6 +209,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     canonical_rooms,
     is_weak_contradiction,
+    maximal_stays,
     sighting_placement,
 )
 from observation.action_intent import ActionIntent
@@ -2275,28 +2276,37 @@ def _sighting_placement(artifact: object) -> SawPlayerObservation | None:
 
 
 def _leg_under_sighting(alibi: AlibiClaim, tick: int) -> AlibiSegment | None:
-    """The route leg a sighting at ``tick`` bears on, or ``None``.
+    """The MAXIMAL STAY a sighting at ``tick`` bears on, or ``None``.
 
-    ``meetings.transcript._detect_alibi_vs_sightings`` compares a SEGMENT to a
-    sighting and mints the flag only when the sighting's tick falls inside that
-    leg's window, and :class:`~meetings.schemas.AlibiClaim` keeps its legs
-    chronological and strictly non-overlapping. At most one leg can therefore
-    cover a tick: the leg is FORCED by the recorded pair, not picked by this
-    module, which is what lets a multi-leg route resolve at all.
+    ``meetings.transcript._detect_alibi_vs_sightings`` compares a STAY
+    (:func:`~meetings.transcript.maximal_stays`) to a sighting and mints the
+    flag only when the sighting's tick falls inside that stay's window, and
+    :class:`~meetings.schemas.AlibiClaim` keeps its legs chronological and
+    strictly non-overlapping, so the stays are too. At most one stay can
+    therefore cover a tick: the stay is FORCED by the recorded pair, not picked
+    by this module, which is what lets a multi-leg route resolve at all.
 
-    A ONE-segment route answers with its single leg whatever the tick. That is
-    the shape every committed recording carries, and reading it unconditionally
-    keeps every recorded cell byte-identical to the pre-route module -- including
-    a recorded flag whose sighting sits outside the stated window, which earlier
-    detector revisions could mint. A multi-leg route whose legs all miss the
-    sighting's tick is a pair this module cannot reconstruct, and it returns
-    ``None`` exactly like the resolver's other unresolvable shapes, which the
-    caller raises on rather than silently dropping from the census.
+    It reads the stays and not the legs as stated for the same reason the
+    detector does: the geometry fold prices the distance between the claimed
+    room and the sighting, and re-cutting one continuous stay must not change
+    the window this module reports for a flag the detector minted from the
+    whole stay.
+
+    A ONE-stay account answers with that stay whatever the tick. That is the
+    shape every committed recording carries, and reading it unconditionally
+    keeps every recorded cell byte-identical to the pre-route module --
+    including a recorded flag whose sighting sits outside the stated window,
+    which earlier detector revisions could mint. A multi-stay account whose
+    stays all miss the sighting's tick is a pair this module cannot
+    reconstruct, and it returns ``None`` exactly like the resolver's other
+    unresolvable shapes, which the caller raises on rather than silently
+    dropping from the census.
     """
 
-    if len(alibi.route) == 1:
-        return alibi.route[0]
-    for leg in alibi.route:
+    stays = maximal_stays(alibi.route)
+    if len(stays) == 1:
+        return stays[0]
+    for leg in stays:
         if leg.from_tick <= tick <= leg.to_tick:
             return leg
     return None

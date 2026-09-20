@@ -25,6 +25,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_PROXY_INTRA_TURN,
+    maximal_stays,
 )
 
 
@@ -75,7 +76,14 @@ def validate_public_accounts(
 
 
 def _validated_scopes(data: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
-    """One dumped row, followed by each segment of its route if it states one."""
+    """One dumped row, followed by each segment of its route if it states one.
+
+    The legs exactly AS STATED, never :func:`maximal_stays`. This gate asks
+    whether the words a speaker used refer to the public game context, so it
+    has to read every word of them: coalescing is a DETECTION reading of an
+    account, and applying it here would hide a leg's spelling from the room
+    allowlist behind whichever leg happened to come first.
+    """
 
     route = data.get("route")
     if not isinstance(route, (list, tuple)):
@@ -119,10 +127,13 @@ class _Placement:
     # Which ``co_present`` name a ``co_present`` row reads; 0 for every other
     # derivation. Part of :attr:`identity`, never of the event id.
     slot: int = 0
-    # Which LEG of an alibi route this row reads, for a route carrying more
-    # than one. ``None`` for every other row AND for a one-leg claim, so the
-    # identity of every placement that could exist before the route schema is
-    # the bare event id and no committed ``contradiction_id`` moves. Part of
+    # Which MAXIMAL STAY of an alibi route this row reads, for an account
+    # carrying more than one. ``None`` for every other row AND for a one-stay
+    # account, so the identity of every placement that could exist before the
+    # route schema is the bare event id and no committed ``contradiction_id``
+    # moves. The stays, not the legs as stated: a speaker re-cutting one
+    # continuous stay would otherwise multiply their own flags and shift every
+    # id, which is output they choose rather than evidence. Part of
     # :attr:`identity`, never of the event id.
     leg: int | None = None
     # Hops of room uncertainty this placement carries. A directly stated
@@ -141,12 +152,12 @@ class _Placement:
         ``contradiction_id`` hashes THIS rather than the event id -- otherwise
         two different derived pairs off one pair of artifacts would collide on
         a single id. An alibi route is a fourth way one artifact yields several
-        rows -- one stated placement per LEG -- so a multi-leg route names its
-        leg here for exactly the same reason: two legs of one route
-        disagreeing with one sighting are two different disagreements and must
-        not hash to one id. A one-leg claim keeps the bare event id, so every
-        id a committed recording carries is unmoved. It is never an endpoint:
-        :attr:`event_id` is.
+        rows -- one stated placement per MAXIMAL STAY -- so a multi-stay
+        account names its stay here for exactly the same reason: two stays of
+        one route disagreeing with one sighting are two different
+        disagreements and must not hash to one id. A one-stay account keeps
+        the bare event id, so every id a committed recording carries is
+        unmoved. It is never an endpoint: :attr:`event_id` is.
         """
 
         if self.derivation == "stated":
@@ -234,13 +245,19 @@ def _placements(transcript: MeetingTranscript) -> tuple[_Placement, ...]:
                 )
         for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
-                # One placement per route LEG: the account places its subject
-                # in each room it names, over that leg's own window. A
-                # multi-leg route stamps the leg index into :attr:`identity`
-                # so two legs of one route cannot hash to one
-                # ``contradiction_id``; a one-leg claim stamps nothing, which
-                # is what keeps every recorded id byte-identical.
-                multi_leg = len(claim.route) > 1
+                # One placement per MAXIMAL STAY (:func:`maximal_stays`): the
+                # account places its subject in each room it names, over that
+                # stay's own window. Reading the legs as stated let a speaker
+                # re-cut one continuous stay and multiply the flags against
+                # themself (1 -> 2 -> 7 for "STORAGE 2-14" as the envelope, two
+                # legs, then thirteen one-tick legs) and re-key every id, which
+                # is output the accused chooses rather than evidence. A
+                # multi-stay account stamps the stay index into
+                # :attr:`identity` so two stays of one route cannot hash to one
+                # ``contradiction_id``; a one-stay account stamps nothing,
+                # which is what keeps every recorded id byte-identical.
+                stays = maximal_stays(claim.route)
+                multi_leg = len(stays) > 1
                 rows.extend(
                     _Placement(
                         f"turn:{turn.turn_id}:claim:{index}",
@@ -251,7 +268,7 @@ def _placements(transcript: MeetingTranscript) -> tuple[_Placement, ...]:
                         segment.to_tick,
                         leg=leg_index if multi_leg else None,
                     )
-                    for leg_index, segment in enumerate(claim.route)
+                    for leg_index, segment in enumerate(stays)
                 )
     return tuple(rows)
 

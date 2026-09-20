@@ -150,6 +150,7 @@ from meetings.schemas import (
     RoomId,
     VoteBallot,
 )
+from meetings.transcript import maximal_stays
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 #: Bumped only when the published JSON changes shape in a way an older reader
@@ -977,19 +978,26 @@ def _claim_truth(
     ``None`` when the claim's span reaches a tick the walk does not hold — the
     not-evaluable branch, published rather than counted as a lie.
 
-    The fold is over the WHOLE account, every leg of it, which is what the claim
+    The fold is over the WHOLE account, every stay of it, which is what the claim
     census beside row 3 asks: how much of what this player said about themselves
     was true. It is NOT how a FLAG is scored — see
     :func:`_flag_scored_claim_truth`, which refuses a route the flag cannot be
-    attributed to a leg of.
+    attributed to a stay of.
     """
 
     every = True
     some = False
-    # Per SEGMENT: the claim is true at a tick when the speaker was in the room
-    # that leg names for it. On a one-segment claim -- which is every claim on
-    # the committed recordings -- this is the identical walk, so the census the
-    # module reproduces (955 / 104 / 103 / 2) does not move.
+    # Per LEG AS STATED, deliberately NOT
+    # :func:`~meetings.transcript.maximal_stays`. The fold is already invariant
+    # under a re-cut -- merging contiguous same-room legs changes neither the
+    # ticks walked nor the room claimed for any of them -- and this comparison
+    # is on the RAW room text against the engine's own room id, so coalescing
+    # would substitute the first leg's spelling for a contiguous leg's and
+    # quietly re-score a label the speaker did not use there. The re-cut lever
+    # is closed where it exists, in :func:`_flag_scored_claim_truth`'s count.
+    # On a one-segment claim -- which is every claim on the committed
+    # recordings -- this is the identical walk, so the census the module
+    # reproduces (955 / 104 / 103 / 2) does not move.
     for segment in claim.route:
         for spoken_tick in range(segment.from_tick, segment.to_tick + 1):
             rooms = route.get(spoken_tick - AGENT_CLOCK_OFFSET)
@@ -1009,22 +1017,29 @@ def _flag_scored_claim_truth(
 ) -> tuple[bool, bool] | None:
     """:func:`_claim_truth` for row 3, refusing a claim the flag cannot be tied to.
 
-    Row 3 asks whether the SCHEMA invented a flag, and on a multi-leg route that
-    question is per LEG: an account of ENGINEERING 12-12 then STORAGE 14-14 can
-    be true in its first leg and fabricated in its second, and a flag that
-    caught the fabricated leg is evidence, not an artifact. A recorded flag
-    names the CLAIM's event id and not the leg, so this module cannot say which
-    leg it rests on, and it publishes the flag as NOT EVALUABLE rather than
-    scoring it on a fold across the whole route (which would read "true at some
-    tick" off a leg the flag never touched and file a caught lie as
+    Row 3 asks whether the SCHEMA invented a flag, and on a multi-stay route
+    that question is per STAY: an account of ENGINEERING 12-12 then STORAGE
+    14-14 can be true in its first stay and fabricated in its second, and a flag
+    that caught the fabricated stay is evidence, not an artifact. A recorded
+    flag names the CLAIM's event id and not the stay, so this module cannot say
+    which stay it rests on, and it publishes the flag as NOT EVALUABLE rather
+    than scoring it on a fold across the whole route (which would read "true at
+    some tick" off a stay the flag never touched and file a caught lie as
     manufactured).
+
+    The refusal counts MAXIMAL STAYS, not the legs as stated. Counting legs
+    would let the cut decide whether a flag is scored at all: "STORAGE 2-14" is
+    evaluable and the identical account re-cut as "STORAGE 2-7" plus "STORAGE
+    8-14" would not be, which is a published figure the accused controls. One
+    continuous stay is one stay however it was narrated, and the flag rests on
+    it unambiguously.
 
     Every committed claim is a one-segment route, so no committed cell moves;
     the shape arrives with the re-record, and when a flag carries segment
     attribution this refusal is what has to go.
     """
 
-    if len(claim.route) != 1:
+    if len(maximal_stays(claim.route)) != 1:
         return None
     return _claim_truth(claim, speaker, route)
 

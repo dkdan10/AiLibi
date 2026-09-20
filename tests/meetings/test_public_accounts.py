@@ -526,6 +526,95 @@ def test_two_legs_of_one_route_mint_two_DISTINCT_contradiction_ids() -> None:
     )
 
 
+def test_recutting_one_stay_mints_the_same_public_account_flags() -> None:
+    """Re-cutting one continuous stay must not multiply a speaker's own flags.
+
+    ``_placements`` emits one stated row per unit of an alibi account, and
+    reading the LEGS as stated made that unit something the speaker chooses:
+    "STORAGE 2-14" against one MEDBAY sighting minted ONE flag, the identical
+    account re-cut as "STORAGE 2-7" plus "STORAGE 8-14" minted TWO, and as
+    thirteen one-tick legs SEVEN — each with its own ``contradiction_id``.
+    Every one of them is weak and they fold onto one lift key, so no band
+    moved, but the count, the ids and the descriptions are published output and
+    the accused was choosing them. Reading MAXIMAL STAYS closes it: the flags
+    are byte-identical across every narration of one account.
+
+    The round-2 two-ids gate above is the other half and still holds — two legs
+    in DIFFERENT rooms are two claims and keep two distinct ids.
+    """
+
+    sighting = MeetingTurn(
+        turn_id="p-2",
+        turn_index=1,
+        speaker="p-2",
+        turn_kind="opt_in",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(
+                type="saw_player", tick=8, subject="p-1", room="MEDBAY"
+            ),
+        ),
+        free_text="unsure",
+    )
+    roster = frozenset({"p-1", "p-2", "p-3"})
+
+    def account(
+        route: tuple[AlibiSegment, ...],
+    ) -> list[tuple[str, tuple[str, ...], str]]:
+        flags = _flags(
+            _claim_turn("p-1", (AlibiClaim(type="alibi", subject="p-1", route=route),)),
+            sighting,
+            roster=roster,
+        )
+        return [
+            (flag.contradiction_id, flag.subjects, flag.description) for flag in flags
+        ]
+
+    envelope = account((AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),))
+    assert len(envelope) == 1
+
+    for recut in (
+        (
+            AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+            AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),
+        ),
+        tuple(
+            AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+            for tick in range(2, 15)
+        ),
+    ):
+        assert account(recut) == envelope, len(recut)
+
+    # An ACCUSER re-cutting a proxy account they state about someone else is
+    # the same lever pointed the other way, and it is closed too.
+    def proxy(route: tuple[AlibiSegment, ...]) -> int:
+        return len(
+            _flags(
+                _claim_turn(
+                    "p-3", (AlibiClaim(type="alibi", subject="p-1", route=route),)
+                ),
+                sighting,
+                roster=roster,
+            )
+        )
+
+    assert (
+        proxy((AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),))
+        == proxy(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),
+            )
+        )
+        == proxy(
+            tuple(
+                AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+                for tick in range(2, 15)
+            )
+        )
+    )
+
+
 def test_task_account_retains_attribution_without_completion_evidence() -> None:
     result, _ = asyncio.run(_meeting(grounded=False))
     activity = TaskActivityAccount(

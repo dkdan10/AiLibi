@@ -742,7 +742,7 @@ def test_a_part_true_route_is_not_evaluable_rather_than_manufactured() -> None:
 
 
 def test_a_one_segment_route_is_still_scored_by_row_three() -> None:
-    """The other side: the refusal is keyed on the LEG COUNT and nothing else.
+    """The other side: the refusal is keyed on the STAY COUNT and nothing else.
 
     Every committed claim is a one-segment route, so this is the case that must
     not move — the same envelope as the seed-41 shape above, scored.
@@ -754,6 +754,48 @@ def test_a_one_segment_route_is_still_scored_by_row_three() -> None:
     ).manufactured_contradiction
     assert (row.flags.numerator, row.flags.denominator) == (1, 1)
     assert row.flags.not_evaluable == 0
+
+
+def test_recutting_one_stay_does_not_change_whether_row_three_scores_a_flag() -> None:
+    """Whether a flag is evaluable must not be the speaker's to choose.
+
+    The refusal counts MAXIMAL STAYS, not the legs as stated. Counting legs
+    made a PUBLISHED figure a dial the accused holds: "CAFETERIA 1-2" is
+    scored, and the identical account re-cut as "CAFETERIA 1-1" plus
+    "CAFETERIA 2-2" would drop out of the denominator as not evaluable — a
+    caught flag quietly removed from the row that measures whether flags are
+    manufactured. One continuous stay is one stay however it was narrated.
+    """
+
+    envelope = _alibi(subject="p-1", room="CAFETERIA", from_tick=1, to_tick=2)
+    recut = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=1),
+            AlibiSegment(room="CAFETERIA", from_tick=2, to_tick=2),
+        ),
+    )
+
+    def scored(claim: AlibiClaim) -> tuple[int, int, int]:
+        row = _card(
+            _inputs(meetings=(_alibi_meeting(claim, "p-1"),), route=_ROUTE)
+        ).manufactured_contradiction
+        return (row.flags.numerator, row.flags.denominator, row.flags.not_evaluable)
+
+    assert scored(recut) == scored(envelope) == (1, 1, 0)
+
+    # The control: a GENUINE second stay — a different room — is the shape the
+    # refusal exists for, and it is still refused.
+    part_true = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=1),
+            AlibiSegment(room="STORAGE", from_tick=2, to_tick=2),
+        ),
+    )
+    assert scored(part_true) == (0, 1, 1)
 
 
 def test_a_vent_flag_is_outside_the_alibi_denominator() -> None:

@@ -905,6 +905,66 @@ def canonical_rooms(room: str) -> frozenset[str]:
     return frozenset(members)
 
 
+def maximal_stays(route: Sequence[AlibiSegment]) -> tuple[AlibiSegment, ...]:
+    """One alibi route read as MAXIMAL STAYS, so a re-cut says the same thing.
+
+    The rule. Walking the route in order, a leg is merged into the stay before
+    it when the two name the same place (equal :func:`canonical_rooms` sets)
+    AND the windows are contiguous (``later.from_tick == earlier.to_tick + 1``).
+    A room change or a GAP -- a tick the account covers with no leg -- ends the
+    stay. ``STORAGE 2-7`` plus ``STORAGE 8-14`` is one stay ``STORAGE 2-14``;
+    so are the one-tick legs ``STORAGE 6-6 / 7-7 / 8-8 / 9-9`` (``STORAGE
+    6-9``). ``STORAGE 2-7`` plus ``MEDBAY 8-14`` is two, and so is ``STORAGE
+    2-7`` plus ``STORAGE 9-14`` -- tick 8 is a tick the speaker claims nothing
+    about.
+
+    Why. A leg boundary inside one continuous stay is free: the speaker chooses
+    where to cut and the account says exactly the same thing either way. Every
+    band whose geometry is a function of the legs is therefore a band the
+    ACCUSED tunes, and three rounds of review found the same defect at site
+    after site -- a split deleted ``alibi_vs_physical`` evidence, softened
+    ``alibi_vs_sighting`` through the map-arbitration band, softened
+    ``alibi_conflict`` through the boundary-overlap band, and multiplied the
+    public-account flags. Normalising here closes the CLASS rather than the
+    site: every DETECTION and SCORING consumer indexes the stays, so a re-cut
+    of one account is invisible to all of them, and what a remaining boundary
+    marks is a real room change or a real gap -- a substantive claim a listener
+    can check separately, not a cut.
+
+    Not a schema change and not a rewrite of what was said. The claim keeps the
+    legs the speaker gave it, and so does everything that REPORTS them: the
+    serializer, the listener render, the served view, and the one
+    :class:`~meetings.schemas.ReportedStatement` per leg the testimony
+    reduction emits. The meeting layer LABELS an account; it never re-words it.
+
+    A merged stay keeps the FIRST leg's ``room`` text, so the room a
+    description quotes is deterministic and is a label the speaker actually
+    used. Two contiguous legs with the same canonical set but different spelling
+    ("LABS" then "labs") therefore read as one stay spelled the first way -- the
+    detectors already compare canonical sets, so no comparison moves. Two
+    NON-SPATIAL legs both canonicalise to the empty set and so merge as well;
+    that is inert, because every comparison site skips an account with no
+    canonical room.
+
+    Pure and total: no clock, no RNG, no environment. A one-segment route is
+    returned unchanged -- which is why every committed recording, all of them
+    format-1 one-segment claims, reads exactly as it always did.
+    """
+
+    stays: list[AlibiSegment] = []
+    for segment in route:
+        if stays:
+            earlier = stays[-1]
+            if (
+                canonical_rooms(earlier.room) == canonical_rooms(segment.room)
+                and segment.from_tick == earlier.to_tick + 1
+            ):
+                stays[-1] = earlier.model_copy(update={"to_tick": segment.to_tick})
+                continue
+        stays.append(segment)
+    return tuple(stays)
+
+
 def is_weak_contradiction(flag: ContradictionRef) -> bool:
     """Read candidate strength from typed detector output, with legacy fallback.
 
@@ -1062,10 +1122,17 @@ def _route_self_refuted(
 ) -> bool:
     """Whether one of the speaker's own task rows refutes the LEG covering it.
 
-    Per SEGMENT: the row disproves the room the speaker claimed for its tick,
-    not the whole route. A speaker who said ENGINEERING 12-12 then EAST_HALL
-    13-13 and finished a task in EAST_HALL at 13 refuted nothing; under the
-    single-room envelope that pair was the audited greedy-span defect.
+    Per leg AS STATED, and deliberately not through :func:`maximal_stays`:
+    this predicate is already invariant under a re-cut, because merging
+    contiguous same-room legs changes neither the ticks the account covers nor
+    the canonical room it claims for any of them. The account-level key that
+    carries the classification across copies (:func:`_claim_route_key`) is
+    where the normalisation is load-bearing, and that is where it lives.
+
+    The row disproves the room the speaker claimed for its tick, not the whole
+    route. A speaker who said ENGINEERING 12-12 then EAST_HALL 13-13 and
+    finished a task in EAST_HALL at 13 refuted nothing; under the single-room
+    envelope that pair was the audited greedy-span defect.
     """
 
     for segment in claim.route:
@@ -2366,16 +2433,26 @@ def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
 
 @dataclass(frozen=True)
 class _IndexedAlibi:
-    """ONE SEGMENT of an :class:`AlibiClaim` route, with its claim and ids.
+    """ONE MAXIMAL STAY of an :class:`AlibiClaim` route, with its claim and ids.
 
     An alibi is a route (``AlibiClaim.route``), so the index carries one entry
-    per leg rather than one per claim: ``segment`` is the leg every detector
+    per stay rather than one per claim: ``segment`` is the stay every detector
     compares against -- its own inclusive window and its own room -- while
-    ``claim`` stays available for the bands that read the WHOLE account (the
+    ``stays`` stays available for the bands that read the WHOLE account (the
     narrow-window band, the route's outer endpoints). ``segment_index`` is the
-    leg's position in that route, so a one-segment account is recognisable as
-    ``len(claim.route) == 1`` and a leg's place in a path is never inferred
+    stay's position in that account, so a one-stay account is recognisable as
+    :attr:`one_segment_route` and a stay's place in a path is never inferred
     from its ticks.
+
+    The stays, never the legs as stated. :func:`maximal_stays` merges the
+    route's contiguous same-room legs first, because where a speaker cuts one
+    continuous stay is free and must therefore be invisible to every detector:
+    ``STORAGE 2-7`` + ``STORAGE 8-14`` and the one-tick legs ``STORAGE 6-6 ..
+    9-9`` index exactly like the envelopes they restate. A boundary that
+    SURVIVES the merge is a room change or a gap -- something the speaker
+    asserted and a listener can check -- so the leg-vs-route split of labour
+    below is drawn across real transitions only. The claim keeps its own legs
+    for everything that reports them.
 
     ``event_id`` names the CLAIM, not the leg: a flag references the public
     artifact a listener can cite, and every consumer keyed on claim ids
@@ -2398,24 +2475,39 @@ class _IndexedAlibi:
     segment: AlibiSegment
     segment_index: int
     rooms: frozenset[str]
+    stays: tuple[AlibiSegment, ...]
 
     @property
     def route_from_tick(self) -> int:
-        """The first tick the whole ROUTE accounts for."""
+        """The first tick the whole ROUTE accounts for.
 
-        return self.claim.route[0].from_tick
+        Read off :attr:`stays` so the class has one view of the account, but
+        the value is the same either way: :func:`maximal_stays` only ever
+        merges INTERIOR boundaries, so an account's outer endpoints are
+        invariant under it. That equivalence is what makes the transit-fuzz
+        bands unmovable by a re-cut, and it is pinned by
+        ``TestMaximalStays::test_the_outer_endpoints_never_move``.
+        """
+
+        return self.stays[0].from_tick
 
     @property
     def route_to_tick(self) -> int:
-        """The last tick the whole ROUTE accounts for."""
+        """The last tick the whole ROUTE accounts for (see :attr:`route_from_tick`)."""
 
-        return self.claim.route[-1].to_tick
+        return self.stays[-1].to_tick
 
     @property
     def one_segment_route(self) -> bool:
-        """Whether the speaker's whole account is this single leg."""
+        """Whether the speaker's whole account is this single stay.
 
-        return len(self.claim.route) == 1
+        The COALESCED account: ``STORAGE 6-6 / 7-7 / 8-8 / 9-9`` is one stay
+        and answers ``True``, exactly as ``STORAGE 6-9`` does, so no class
+        keyed on "the speaker's whole account" can be left or entered by
+        re-cutting it.
+        """
+
+        return len(self.stays) == 1
 
 
 @dataclass(frozen=True)
@@ -2447,11 +2539,12 @@ def _iter_alibis(
 ) -> Iterator[_IndexedAlibi]:
     """Yield every location account: alibi claims + whereabouts self-placements.
 
-    One :class:`_IndexedAlibi` per ROUTE SEGMENT, in route order, all sharing
-    the claim's one event id: a four-leg account yields four entries, a
-    stationary account one. That is what lets a detector compare a sighting to
-    the leg covering its tick instead of to an envelope the speaker never
-    stated.
+    One :class:`_IndexedAlibi` per MAXIMAL STAY (:func:`maximal_stays`), in
+    route order, all sharing the claim's one event id: an account of four
+    rooms yields four entries, a stationary account one however many legs it
+    was cut into. That is what lets a detector compare a sighting to the stay
+    covering its tick instead of to an envelope the speaker never stated --
+    and what makes the comparison independent of where the speaker cut.
 
     A spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
     in ``room`` at ``tick``") is indexed as a DEGENERATE SINGLE-TICK
@@ -2486,7 +2579,8 @@ def _iter_alibis(
         for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
                 event_id = _turn_claim_id(turn=turn, index=index)
-                for position, segment in enumerate(claim.route):
+                stays = maximal_stays(claim.route)
+                for position, segment in enumerate(stays):
                     yield _IndexedAlibi(
                         event_id=event_id,
                         speaker=turn.speaker,
@@ -2494,6 +2588,7 @@ def _iter_alibis(
                         segment=segment,
                         segment_index=position,
                         rooms=canonical_rooms(segment.room),
+                        stays=stays,
                     )
         if not include_whereabouts:
             continue
@@ -2519,6 +2614,7 @@ def _iter_alibis(
                     segment=synthesized.route[0],
                     segment_index=0,
                     rooms=canonical_rooms(observation.room),
+                    stays=synthesized.route,
                 )
 
 
@@ -2830,22 +2926,26 @@ _RouteEchoKey: TypeAlias = tuple[PlayerId, tuple[tuple[frozenset[str], int, int]
 """One stated location ACCOUNT: its subject and its whole canonical route.
 
 The echo key and the self-refutation key are the same statement about a claim
--- who it places and along which legs -- so they are derived in one place.
+-- who it places and along which stays -- so they are derived in one place.
 """
 
 
 def _route_echo_key(alibi: _IndexedAlibi) -> _RouteEchoKey:
-    """The whole claim's account key, identical for every one of its segments."""
+    """The whole claim's account key, identical for every one of its stays."""
 
     return _claim_route_key(alibi.claim)
 
 
 def _claim_route_key(claim: AlibiClaim) -> _RouteEchoKey:
+    # The key is the ACCOUNT, so it reads the MAXIMAL STAYS: restating "STORAGE
+    # 2-14" as "STORAGE 2-7" plus "STORAGE 8-14" adds nothing to the record and
+    # is the echo it looks like, and a self-refuted account stays refuted
+    # however its copies are cut.
     return (
         claim.subject,
         tuple(
             (canonical_rooms(segment.room), segment.from_tick, segment.to_tick)
-            for segment in claim.route
+            for segment in maximal_stays(claim.route)
         ),
     )
 
@@ -2887,7 +2987,7 @@ def _subject_account_index(
     index: dict[PlayerId, list[_SubjectAccount]] = {}
     for alibi in alibis:
         if alibi.speaker == alibi.claim.subject and alibi.rooms:
-            # One account per LEG: a subject who walked through four rooms
+            # One account per STAY: a subject who walked through four rooms
             # agrees with a sighting in the third of them, which an envelope
             # over the whole window could only express by claiming all four
             # at once.
@@ -2969,26 +3069,29 @@ def _detect_alibi_conflicts(
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
     evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
-    # One flag per pair of CLAIMS, built from the STRONGEST pair of legs that
-    # disagreed. The pair of event ids IS the flag's identity, so two legs of
-    # one route conflicting with two legs of another would otherwise mint the
-    # same contradiction id twice; but taking the first candidate leg pair --
-    # the shape this detector shipped with when a claim held exactly one leg --
-    # lets a truthful EARLIER leg decide the band for a later leg's genuine
+    # One flag per pair of CLAIMS, built from the STRONGEST pair of STAYS that
+    # disagreed. The pair of event ids IS the flag's identity, so two stays of
+    # one route conflicting with two stays of another would otherwise mint the
+    # same contradiction id twice; but taking the first candidate pair -- the
+    # shape this detector shipped with when a claim held exactly one leg --
+    # lets a truthful EARLIER stay decide the band for a later stay's genuine
     # conflict. "CAFETERIA 1-10 then ADMIN 11-20" against a rival "STORAGE
     # 10-15" reaches the boundary pair (CAFETERIA ends where STORAGE begins,
     # so :data:`WEAK_REASON_BOUNDARY_OVERLAP` fires) before the interior pair
-    # ADMIN/STORAGE, and the flag came out weak where the ADMIN leg alone is
-    # strong. Prepending a leg the speaker really walked must not soften the
+    # ADMIN/STORAGE, and the flag came out weak where the ADMIN stay alone is
+    # strong. Walking a leg the speaker really walked must not soften the
     # contradiction, so every candidate pair is collected and the one carrying
-    # the FEWEST :func:`_conflict_weak_reasons` mints the flag. A one-segment
-    # route has exactly one candidate, so no recorded flag moves; ties keep the
-    # first candidate, so emission order and the description stay deterministic.
+    # the FEWEST :func:`_conflict_weak_reasons` mints the flag. A one-stay
+    # account has exactly one candidate, so no recorded flag moves; ties keep
+    # the first candidate, so emission order and the description stay
+    # deterministic. The selection is a guard on GENUINE extra stays only; it
+    # is :func:`maximal_stays` that keeps a re-cut of ONE stay from reaching
+    # here at all.
     candidates: dict[tuple[str, str], list[tuple[_IndexedAlibi, _IndexedAlibi]]] = {}
     for i, left in enumerate(alibis):
         for right in alibis[i + 1 :]:
-            # Two legs of ONE route are a path the speaker declared, not two
-            # accounts: the segments that put p-9 in ENGINEERING at 12 and in
+            # Two stays of ONE route are a path the speaker declared, not two
+            # accounts: the stays that put p-9 in ENGINEERING at 12 and in
             # ADMIN at 14 are the same statement, and reading them as rivals is
             # how a route's last leg used to indict its first.
             if left.event_id == right.event_id:
@@ -3088,10 +3191,12 @@ def _detect_alibi_vs_sightings(
         # instead of being adjudicated as its own interior. A record-free caller
         # keeps the exemption, so both branches are live.
         #
-        # The class keys on a ONE-SEGMENT route: a roll-call answer is the
-        # speaker's whole account of themselves at one tick. A one-tick LEG of
-        # a longer route is a declared transition inside a path, not an
-        # adjudicated whole account, so it does not inherit the exemption.
+        # The class keys on a ONE-STAY account: a roll-call answer is the
+        # speaker's whole account of themselves at one tick. A one-tick STAY
+        # inside a longer path is a declared transition, not an adjudicated
+        # whole account, so it does not inherit the exemption -- while
+        # "STORAGE 6-6 / 7-7 / 8-8 / 9-9" coalesces to the four-tick stay it
+        # restates and is correctly OUT of the class, as "STORAGE 6-9" is.
         interior_exempt = not grounded_prosecution and (
             alibi.one_segment_route
             and alibi.segment.from_tick == alibi.segment.to_tick
@@ -3116,10 +3221,10 @@ def _detect_alibi_vs_sightings(
             # :func:`detect_corroborations`, never a flag).
             if not sighting.rooms or (sighting.rooms & alibi.rooms):
                 continue
-            # The SEGMENT covering the sighting's tick is what the sighting
-            # can refute. A truthful mover who named the room they were in at
-            # that tick therefore mints nothing; a flat lie -- one segment
-            # over a room the speaker held at no covered tick -- still does.
+            # The STAY covering the sighting's tick is what the sighting can
+            # refute. A truthful mover who named the room they were in at that
+            # tick therefore mints nothing; a flat lie -- one stay over a room
+            # the speaker held at no covered tick -- still does.
             if not (
                 alibi.segment.from_tick
                 <= sighting.observation.tick
@@ -3167,7 +3272,7 @@ def _detect_alibi_vs_sightings(
             # 18.9: skipped for the interior-exempt single-tick self-alibi
             # class -- its one tick IS the claim's interior, not an edge.
             #
-            # The edge is the whole ROUTE's outer endpoint, not the leg's: an
+            # The edge is the whole ROUTE's outer endpoint, not the stay's: an
             # interior boundary is a transition the speaker DECLARED ("I left
             # ENGINEERING at 12 and reached EAST_HALL at 13"), so a sighting
             # there disputes a stated fact rather than blurring an edge the
@@ -3242,17 +3347,17 @@ def _adjacent_within_one_tick(
     :data:`~meetings.constants.MAP_ARBITRATION_MAX_HOPS` doorway hops of each
     other AND the sighting tick sits within
     :data:`~meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of the nearest
-    OUTER endpoint of the whole ROUTE. The caller has already decided which LEG
-    the sighting can refute -- that is what picks the room compared here -- but
-    the fuzz band is a property of the account's EDGES, and an interior leg
-    boundary is a transition the speaker DECLARED ("I left REACTOR at 7 and was
-    in REACTOR again from 8"), not movement fuzz. Measuring the gap to the leg
-    would let a speaker soften a flag by splitting one continuous stay into
-    legs, because every split manufactures new edges inside a window the
-    account never stopped claiming; a sighting buried in the route's interior
-    names a tick of a claim of continuous presence, which no single hop
-    reconciles. A one-segment route's outer endpoints ARE its leg's, so no
-    recorded band moves.
+    OUTER endpoint of the whole ROUTE. The caller has already decided which
+    STAY the sighting can refute -- that is what picks the room compared here
+    -- but the fuzz band is a property of the account's EDGES, and an interior
+    boundary is a transition the speaker DECLARED ("I left REACTOR at 7 and
+    entered LABS at 8"), not movement fuzz. Measuring the gap to the stay would
+    price a declared transition as an edge; measuring it to a LEG would also
+    let a speaker soften a flag for free, which :func:`maximal_stays` now
+    forecloses upstream. A sighting buried in the route's interior names a tick
+    of a claim of continuous presence, which no single hop reconciles. A
+    one-stay account's outer endpoints ARE its stay's, so no recorded band
+    moves.
     """
 
     hops = room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
@@ -3375,22 +3480,19 @@ def _detect_alibi_vs_physical(
         # non-spatial alibi (locating nobody) is skipped here.
         if not alibi.rooms:
             continue
-        # The LEG's window decides MEMBERSHIP and the room: a co-presence
+        # The STAY's window decides MEMBERSHIP and the room: a co-presence
         # contradicts the room the subject claimed for the tick it names, not
         # every room on their route.
         from_tick = alibi.segment.from_tick
         to_tick = alibi.segment.to_tick
         # The transit-fuzz exclusion below reads the whole ROUTE's OUTER
-        # endpoints instead. An interior leg boundary is a transition the
-        # speaker DECLARED, not the fuzz of an edge the account never drew, so
-        # a placement there disputes a stated fact. Measured against the leg,
-        # a speaker deleted this evidence for free by splitting one continuous
-        # stay: "STORAGE 2-14" contradicted at tick 8 mints two strong flags,
-        # while "STORAGE 2-7" plus "STORAGE 8-14" minted none (tick 8 is no
-        # leg's strict interior), and as one-tick legs -- the shape the
-        # operational prompts ask for -- a leg has no strict interior at all.
-        # A one-segment route's outer endpoints ARE its leg's, so no recorded
-        # flag moves.
+        # endpoints instead. An interior boundary is a transition the speaker
+        # DECLARED, not the fuzz of an edge the account never drew, so a
+        # placement there disputes a stated fact: a subject who says "STORAGE
+        # 2-7 then CAFETERIA 8-14" and is co-placed in MEDBAY at tick 8 is
+        # contradicted on the first tick of the CAFETERIA stay, which is a
+        # claim, not an edge. A one-stay account's outer endpoints ARE its
+        # stay's, so no recorded flag moves.
         interior_from = alibi.route_from_tick
         interior_to = alibi.route_to_tick
         direct_events = direct_sighting_events.get(subject, frozenset())
@@ -3432,7 +3534,7 @@ def _detect_alibi_vs_physical(
         # via ``kill_scene_paths`` (the kill-scene-inclusive reconstruction; the
         # 13.5.3 lever is unconditional since Task 14.9, so a kill-scene meeting
         # always supplies it). Same soundness filters as the regular set --
-        # including the same split of labour between the LEG (membership) and the
+        # including the same split of labour between the STAY (membership) and the
         # ROUTE's outer endpoints (the transit-fuzz exclusion), which the regular
         # arm inherits from ``independent`` and this one spells out because it
         # reads ``kill_scene_paths`` directly -- plus ``placement.rooms &
@@ -3783,9 +3885,9 @@ def _detect_vent_placement_contradictions(
             if not _subject_in_roster(observation.subject, roster):
                 continue
             observation_id = turn_observation_id(turn=turn, index=index)
-            # One flag per (grounded observation, contradicted CLAIM): the leg
+            # One flag per (grounded observation, contradicted CLAIM): the stay
             # split must not mint the same contradiction id twice when a route
-            # places its subject away from the vent on more than one leg.
+            # places its subject away from the vent on more than one stay.
             flagged_claims: set[str] = set()
             for alibi in self_alibis:
                 if not alibi.rooms:
@@ -3938,6 +4040,23 @@ def _conflict_weak_reasons(
     * boundary overlap -- the windows overlap ONLY on the junction tick
       where one claim ends and the other begins: a movement pair
       ("CAFETERIA t0-6" + "STORAGE t6-9"), not two incompatible accounts.
+
+    The boundary test reads each side's MAXIMAL STAY, which is what makes it a
+    junction test between two ACCOUNTS rather than a band the accused tunes.
+    Measured against the legs as stated it was the latter: a rival placing the
+    subject in MEDBAY at tick 8 against a self-alibi of "STORAGE 2-14" is
+    STRONG, and re-cutting the identical account as "STORAGE 2-8" plus
+    "STORAGE 9-14" put a manufactured junction at exactly tick 8 and published
+    the flag WEAK. The stays close that: a re-cut has none. A boundary that
+    survives the merge is a real room change or a real gap -- the speaker
+    asserted a transition, and two DIFFERENT claims meeting at a declared
+    transition is precisely the honest movement pair this reason exists for --
+    so the ROUTE's outer endpoints are deliberately NOT used here, unlike the
+    transit-fuzz bands (:func:`_adjacent_within_one_tick`, the endpoint-tick
+    band, :func:`_detect_alibi_vs_physical`'s interior exclusion). Those price
+    the fuzz of an EDGE the account drew; this one asks whether two accounts
+    actually disagree anywhere, and hardening a genuine transit pair by reading
+    the outer endpoints would flag honest movement.
     """
 
     subject = left.claim.subject
