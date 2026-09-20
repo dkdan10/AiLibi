@@ -122,6 +122,13 @@ are counted rather than disappearing from the census.
 
 Spectator contract version 5 serves a spoken alibi as a route, over version 4's
 `task_activity` observation/account union and attributed public statement
-fields. Compatible version-2/3/4 inputs retain their historical audio and event
+fields. The served route keeps the legs the speaker stated, and so do the
+listener render and the reported-testimony reduction: the meeting layer labels
+an account and never rewrites it. The contradiction detectors read the same
+account as MAXIMAL STAYS instead — contiguous legs naming one room merge into
+the stay they restate — because where a speaker cuts one continuous stay is
+free, so no flag, band, identifier or count may depend on it. A boundary that
+survives the merge is a declared room change or a gap, which is a claim a
+listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
 interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled
 as a speaker's claim even if the viewer can independently inspect engine truth.
