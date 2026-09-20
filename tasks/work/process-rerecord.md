@@ -72,6 +72,16 @@ recorded off it at the freeze (`:76-89`), so a corpus left behind can never be
 extended or seed-repaired again. Including it costs about 8h and no dollars;
 the alternative is editing an invariant gate to save flat-rate time.
 
+**The owner's confirmation (2026-09-20).** The direction memo's decision D7
+spoke of about four hours for one sample set; this card measured the project's
+actual recording procedure and specifies every committed set under the ceilings
+in Constraints. The coordinator put that difference to the owner, who confirmed
+the ceilings explicitly on 2026-09-20, in the coordinator's session: 9,500 model
+calls, 43,000,000 input and 2,200,000 output tokens, a 16 h recording wall
+inside a 24 h window, at `$0.00` marginal. The confirmation covers the
+recording spend only. Merging this card's pull request makes the new bytes the
+shown baseline, and that merge stays the owner's.
+
 ## Acceptance
 
 - [ ] The before column is computed and committed **before the first seed

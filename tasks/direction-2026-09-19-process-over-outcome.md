@@ -395,3 +395,12 @@ grounded SKIP, then the weighing channel, because all three move the shipped
 prompt versions and the ballot and claim schemas. The re-record follows the
 wave, once. The body-freshness band, an impostor who reports a body, and the
 documentation front door stay deferred, as section 9 lists them.
+
+Addendum, 2026-09-20. The re-record card sized the recording from the
+project's own procedure and came out larger than D7's estimate: every
+committed set, 9,500 model calls, 43,000,000 input and 2,200,000 output
+tokens, a 16 h recording wall inside a 24 h window, `$0.00` marginal. The
+owner confirmed those ceilings explicitly on 2026-09-20. The merge of the
+re-record's pull request, which makes the new bytes the shown baseline, stays
+the owner's. Version 1 is merged as of `cdefb7a6` (PRs #471, #472, #473), and
+the substrate wave runs serially from there.
