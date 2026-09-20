@@ -102,9 +102,10 @@ export interface FeaturedGame {
 // on a table that established something rather than on one that did not.
 // Reproduce the bands and the eligible openers with
 //   uv run python scripts/measure_featured_criterion.py
-// and see tests/api/test_sets.py, which pins the head against the criterion
-// rather than against a seed, so the next re-record re-chooses the head instead
-// of quietly keeping this one.
+// and see tests/api/test_sets.py, which pins EACH SET'S head against the
+// criterion rather than against a seed — per set because the tour opens the
+// head of the set it targets — so the next re-record re-chooses those heads
+// instead of quietly keeping these ones.
 export const FEATURED_GAMES: readonly FeaturedGame[] = [
   {
     set: "9p2i",

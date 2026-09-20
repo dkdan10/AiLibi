@@ -80,6 +80,23 @@ def _parse_featured_games() -> list[tuple[str, int]]:
     ]
 
 
+def _featured_heads() -> list[tuple[str, int]]:
+    """The FIRST featured pair of every set, in the strip's curated order.
+
+    The picker renders one row per set and the guided tour opens the curated head
+    OF THE SET IT TARGETS (``frontend/src/components/GuidedTour.tsx``), so "the
+    opener" is a per-set thing: pinning only ``featured[0]`` would leave the 4p1i
+    row's opener unchecked behind a grounded 9p2i one. Derived from the committed
+    data rather than typed, so a set added to the strip is covered the day it
+    lands instead of the day somebody remembers to extend this list.
+    """
+
+    heads: dict[str, int] = {}
+    for set_name, seed in _parse_featured_games():
+        heads.setdefault(set_name, seed)
+    return list(heads.items())
+
+
 def _stamp_set(
     parent: Path, name: str, *, seeds: tuple[int, ...] = (_FAST_SEED,)
 ) -> Path:
@@ -557,41 +574,73 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     for set_name, seed in featured:
         loader = registry.get(set_name)
         assert any(meta.seed == seed for meta in loader.list_replays())
-    _assert_opens_on_role_proof(registry, *featured[0])
+    # EVERY set's head carries the criterion, not just the strip's first entry.
+    # The picker shows a row per set and the tour opens the head of the set it
+    # targets, so a 4p1i opener that established nothing would ship unnoticed
+    # behind a grounded 9p2i one — which is exactly what a round-1 verifier
+    # demonstrated by swapping the 4p1i entries while this pin stayed green.
+    heads = _featured_heads()
+    assert {set_name for set_name, _ in heads} == {set_name for set_name, _ in featured}
+    assert heads[0] == featured[0]
+    for set_name, seed in heads:
+        _assert_opens_on_role_proof(registry, set_name, seed)
 
 
 @pytest.mark.parametrize(
-    "seed,why,message",
+    "set_name,seed,why,message",
     [
-        (2, "no ejection anywhere in the game", "SKIPPED"),
-        (13, "the first meeting skips", "SKIPPED"),
-        (46, "the first meeting skips", "SKIPPED"),
+        ("9p2i", 2, "no ejection anywhere in the game", "SKIPPED"),
+        ("9p2i", 13, "the first meeting skips", "SKIPPED"),
+        ("9p2i", 46, "the first meeting skips", "SKIPPED"),
         (
+            "9p2i",
             44,
             "the first meeting ejects an impostor, but on NO flag naming them",
             "weak_signal",
         ),
         (
+            "9p2i",
             12,
             "the first meeting ejects a crewmate on a flag that is not role proof",
             "weak_signal",
         ),
         (
+            "9p2i",
             10,
             "the first meeting ejects an IMPOSTOR that a flag names — but the flag is not role proof",
             "weak_signal",
         ),
+        (
+            "4p1i",
+            29,
+            "the first meeting ejects a CREWMATE on no flag at all",
+            r"'4p1i', 29, \[\]",
+        ),
+        (
+            "4p1i",
+            11,
+            "the first meeting ejects an impostor on no flag at all",
+            r"'4p1i', 11, \[\]",
+        ),
     ],
 )
 def test_featured_head_criterion_rejects_a_head_that_establishes_nothing(
-    seed: int, why: str, message: str
+    set_name: str, seed: int, why: str, message: str
 ) -> None:
     # THE PLANTED CASES for the pin above. A criterion nobody can fail is a
-    # sentence, not a gate, so each of these is a real committed 9p2i game that
-    # the criterion must reject, named with the reason it fails and with the
+    # sentence, not a gate, so each of these is a real committed game that the
+    # criterion must reject, named with the reason it fails and with the
     # assertion message it must fail through — ``match=`` so a case that started
     # failing for a DIFFERENT reason (a skipping meeting, say) stops counting as
     # proof of the clause it was chosen for.
+    #
+    # BOTH SETS are represented, because the pin above now applies the criterion
+    # to each set's head: 4p1i seed 29 (the strip's own third 4p1i entry) ejects
+    # a CREWMATE on no flag and seed 11 ejects an impostor on no flag, so
+    # promoting either to the 4p1i head turns this red. No 4p1i game can isolate
+    # the category clause the way 9p2i seed 10 does — measured, every flagged
+    # FIRST meeting in `replays/samples/4p1i` is role proof — so that clause's
+    # proof stays 9p2i's and this records why rather than leaving a gap.
     #
     # SEED 10 IS THE ISOLATING CASE, and the one the clause rests on: its first
     # meeting ejects p-6, p-6 IS an impostor, and a flag in that same meeting
@@ -610,7 +659,7 @@ def test_featured_head_criterion_rejects_a_head_that_establishes_nothing(
     # for the reason it actually fails.)
     registry = SetLoaderRegistry(_PARENT)
     with pytest.raises(AssertionError, match=message):
-        _assert_opens_on_role_proof(registry, "9p2i", seed)
+        _assert_opens_on_role_proof(registry, set_name, seed)
 
 
 def test_seed_10_isolates_the_role_proof_clause() -> None:

@@ -102,6 +102,20 @@ re-pointed. The viewer ships one theme (`frontend/src/index.css:103`, no
 
 ## Acceptance
 
+- [x] Review correction: the PER-SET opener claim is now enforced per set. The
+  comment above `FEATURED_GAMES` says each set leads with a game whose first
+  meeting ejects on a `role_proof` flag, and the pin applied the criterion to
+  `featured[0]` alone — a verifier swapped the two 4p1i entries so the 4p1i row
+  led with seed 29, which ejects a CREWMATE on no flag, and
+  `tests/api/test_sets.py` stayed green. `_featured_heads()` now derives the
+  first entry of EVERY set out of the committed picker data, and
+  `test_featured_seeds_exist_in_their_committed_sets` runs
+  `_assert_opens_on_role_proof` over each of them; 4p1i seeds 29 and 11 join
+  `test_featured_head_criterion_rejects_a_head_that_establishes_nothing` as
+  planted rejections. The same swap is red at this tip and the old one-head
+  predicate is shown blind to it on the same tree; both runs are quoted in
+  Results. The strip's order does not move: 4p1i seed 2 already satisfies the
+  criterion, so what was missing was the mechanism, not the ordering.
 - [x] Review correction: the `role_proof` CLAUSE of the head criterion now has a
   planted case that isolates it. 9p2i seed 10 joins the parametrize in
   `test_featured_head_criterion_rejects_a_head_that_establishes_nothing`
@@ -432,8 +446,8 @@ and end-to-end counts.
   band is 13 of 20 role-correct on 9p2i, above chance — only that a tour should
   not OPEN on a table that established nothing.
 * The strip's membership is still hand-picked and unmeasured. Only the head of
-  each set carries the criterion; the remaining five entries are editorial, and
-  the pin says so.
+  each set carries the criterion — both heads, since the round-1 repair below;
+  the remaining five entries are editorial, and the pin says so.
 * The alternatives render shows WHO a voter weighed, not WHY or how much. The
   recorded field carries no weight, no order semantics and no reason, and this
   card adds none: the weighing channel proper is
@@ -667,3 +681,112 @@ clock deadline), `test_generated_logs_agree_event_for_event` (a Hypothesis
 All four are load-sensitive rather than diff-sensitive, and none touches a file
 this card changes. The runs recorded above are the serial ones: `check.sh` alone
 to exit 0, then `npm run e2e` alone to exit 0.
+
+### Review corrections, round 1 continued (2026-09-20)
+
+A fourth blocking finding, from the correctness lens, against the same round-1
+verification: the three repaired above landed at `986f9ff1` and are unchanged
+here. Commands in this subsection are pinned to the tip of this branch.
+
+**4. The per-set opener claim was enforced for the 9p2i head only.** The comment
+above `FEATURED_GAMES` says every set leads with a game whose FIRST meeting
+ejects on a `role_proof` flag, and names `tests/api/test_sets.py` as the
+mechanism; the Limitation above says the head OF EACH SET carries the criterion.
+The pin ran `_assert_opens_on_role_proof(registry, *featured[0])` — the strip's
+global head alone. The verifier swapped the complete 4p1i seed-2 and seed-29
+entries, so the 4p1i row led with a game whose one meeting ejects a CREWMATE on
+no flag, and the suite stayed green. The claim and its named mechanism disagreed,
+which is the defect; the committed ORDER was never wrong.
+
+The claim is the one worth keeping, so the mechanism was widened rather than the
+sentence narrowed. `_featured_heads()` reads the first entry of EVERY set out of
+the committed picker data — derived, not typed, so a set added to the strip is
+covered the day it lands — and the pin asserts the criterion over each, after
+checking that the derived heads cover every set the strip names (a helper that
+regressed to returning one head fails there rather than passing silently).
+4p1i seeds 29 and 11 join the parametrized rejections, each with its own
+`match=`, and the rejection cases now carry their set name.
+
+Measured, the 4p1i head already satisfies the criterion, so nothing in the
+shipped strip moves:
+
+```
+$ uv run python scripts/measure_featured_criterion.py --games 4p1i:2 9p2i:23
+replays/samples/4p1i — 1 games of 50 (selected)
+  ejections, by the band of the ejected player in that meeting
+    role_proof flag    1 ejections   1 role-correct
+    other flag         0 ejections   0 role-correct
+    no flag            0 ejections   0 role-correct
+  first meeting ejects on a role_proof flag: 1 of 1 games
+  no flag and no ejection anywhere: seeds []
+replays/samples/9p2i — 1 games of 50 (selected)
+  ...
+  first meeting ejects on a role_proof flag: 1 of 1 games
+```
+
+**The verifier's route-around, now red.** The same swap of the two complete 4p1i
+entries, applied to `ReplayPicker.tsx` at this tip, the suite run, the file
+restored byte-for-byte from a copy taken before the plant:
+
+```
+$ uv run pytest tests/api/test_sets.py -q      # 4p1i entries 2 and 29 swapped
+E       AssertionError: ('4p1i', 29, [])
+FAILED tests/api/test_sets.py::test_featured_seeds_exist_in_their_committed_sets
+1 failed, 48 passed
+$ uv run pytest tests/api/test_sets.py -q      # picker restored
+49 passed
+```
+
+On that same planted tree the OLD one-head predicate is blind, which is the
+other half of the proof rather than a re-statement of the verifier's report:
+loading the test module and calling `_assert_opens_on_role_proof(registry,
+*_parse_featured_games()[0])` while the swap was in place returned cleanly,
+because the strip's first entry is still 9p2i seed 23. `_featured_heads()`
+returned `[('9p2i', 23), ('4p1i', 29)]` on the same tree — the 4p1i head the old
+pin never read.
+
+**The two 4p1i cases pin the flag clause, not just the outcome.** Dropping the
+`role_proof`-flag assertion out of `_assert_opens_on_role_proof` entirely:
+
+```
+$ uv run pytest tests/api/test_sets.py::test_featured_head_criterion_rejects_a_head_that_establishes_nothing -q
+5 failed, 3 passed          # flag clause dropped
+#   4p1i seed 11: Failed: DID NOT RAISE <class 'AssertionError'>
+#   4p1i seed 29: Regex pattern did not match (it reached the ROLE clause)
+#   9p2i 44, 12, 10 red too; only the three SKIPPED cases stay green
+```
+
+Seed 11 goes green-should-be-red on the dropped clause and seed 29 falls through
+to the role clause, so the pair covers the flag clause on both roles. The tree
+was restored from a copy taken before the weakening and the suite is 49 passed
+again.
+
+**What 4p1i cannot prove, recorded rather than left as a gap.** No 4p1i game can
+isolate the CATEGORY comparison the way 9p2i seed 10 does: over all 50 games the
+other-flag band is 0 ejections (the band table quoted at the top of these
+Results), so `replays/samples/4p1i` contains no ejection on a flag that is not
+role proof, in a first meeting or anywhere else. That clause's planted case stays
+9p2i seed 10 and the rejection test's comment says so.
+
+**Gates, rerun at this tip.**
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 (captured directly) — see the counts below |
+| `uv run pytest tests/api/test_sets.py -q` | 49 passed (47 at `986f9ff1`: the two 4p1i rejections) |
+| `uv run python scripts/measure_featured_criterion.py` | exit 0, output identical to the block quoted above |
+| `uv run python scripts/validate_task_docs.py` | exit 0 |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` | exit 0 (offline; never `--complete`) |
+| `bash scripts/verify_samples.sh` | exit 0 — 50 + 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | exit 0 over `replays/samples/{9p2i,4p1i}` and `replays/ml_corpus/{9p2i,4p1i}` |
+| `cd frontend && npm run e2e` | exit 0, 13 passed and 3 skipped of 16 (the skips are the `media.spec.ts` README captures) |
+
+**Record impact, restated at this tip.** Two files move this round:
+`tests/api/test_sets.py` and a five-line comment above `FEATURED_GAMES` in
+`frontend/src/components/ReplayPicker.tsx`. No `FEATURED_GAMES` entry, label,
+component render or copy string changes, so the published bundle is
+byte-identical to `986f9ff1`'s. `git diff --name-only origin/main...HEAD` still
+prints the same 13 paths listed in the previous subsection: no `audits/` or
+`tests/fixtures/` byte moves, no `docs/artifacts.md` inventory row is recomputed,
+no provider is called, and band 2100-2999 stays unseen.
