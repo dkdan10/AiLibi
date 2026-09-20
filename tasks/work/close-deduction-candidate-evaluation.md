@@ -103,6 +103,22 @@ inventory sentence at `tasks/README.md:43`.
 
 ## Acceptance
 
+- [x] Review correction (round 2, the documentation lens): no live file still
+  cites the retired regeneration test or publishes the guarantee it carried.
+  `filter_environment`'s docstring (`experiments/held_out_prefixes.py`), the
+  docstring of
+  `tests/experiments/test_held_out_prefixes.py::test_the_filter_environment_is_built_per_use_and_refuses_mutation`
+  and the execution manifest's "Generator source identity" row now name
+  `test_the_archived_band_keeps_the_blocks_it_was_frozen_with` and state what it
+  holds — the `accepted`, `skipped` and `source_sha256` block digests pinned to
+  `88d42f82` and `72998c7b` — and say plainly that nothing compares the record
+  against today's module bytes. Proved by the two plants re-run at this head:
+  an appended line in `orchestrator/game.py` leaves
+  `uv run pytest tests/experiments/test_held_out_prefixes.py -q` at 43 passed,
+  and one tampered `accepted[0].sha256` turns
+  `test_the_archived_band_keeps_the_blocks_it_was_frozen_with` red. Grepping the
+  retired name over `experiments/`, `tests/` and the execution manifest then
+  returns only the `dependency_restamps` note, which the card keeps as history.
 - [x] Review correction: the archive cannot reach the live client factory.
   `verify_archived_set` returns an `ArchivedSet` — a sibling of `FrozenSet`
   under a shared `VerifiedPrefixRecord`, not a subclass — and
@@ -611,3 +627,77 @@ and names the file and what was found there in every other case.
 Each plant was applied to the committed file, run, and reverted; the two
 modules were diffed against their pre-plant copies afterwards and are
 byte-identical, and the suite is green on the restored tree.
+
+### Review corrections, round 2 (2026-09-19)
+
+A second independent review returned one blocking finding, from the
+documentation lens: three surviving citations still named the regeneration test
+this branch retired, and through it still published a guarantee the tree no
+longer enforces. The repair is text only — no gate, no schema, no guard, no
+lever, no prompt, no recording byte and no published figure moves, and the
+archived record's own bytes are untouched.
+
+**The finding: three live citations of a test that no longer exists.**
+`experiments/held_out_prefixes.py`'s `filter_environment` docstring, the
+docstring of
+`tests/experiments/test_held_out_prefixes.py::test_the_filter_environment_is_built_per_use_and_refuses_mutation`
+and the "Generator source identity" row of
+[the execution manifest](../../audits/deduction-candidate/execution-manifest.md)
+each named `test_the_committed_manifest_regenerates_from_its_own_band` and each
+said, in its own words, that the record's `source_sha256` (and in the two
+docstrings its `filter_environment` block too) is compared against the live
+tree. Nothing does. The finding is CORRECT and its consequence is the sharper
+half: a reader of those three places would have believed a rewritten module or
+a stale source digest is caught somewhere, and it is not.
+
+**What they say now.** All three name
+`test_the_archived_band_keeps_the_blocks_it_was_frozen_with` and state what it
+actually holds — the `accepted`, `skipped` and `source_sha256` BLOCK DIGESTS,
+pinned to the bytes the band was frozen with, `88d42f82` for the first two and
+`72998c7b` for the source block — and each says plainly that nothing is
+compared against today's module bytes, so an edit to a generator source file
+owes this band no restamp. The two docstrings add the consequence in the
+negative: a rewritten module moves no committed digest and turns nothing red,
+and the committed `filter_environment` block is a recorded fact with no test
+comparing it against the function. `test_the_filter_environment_is_built_per_use_and_refuses_mutation`
+is described as what it is — the live guard on reachable state, not on a
+rewritten module. The manifest row was amended IN PLACE, on its single line, so
+every `execution-manifest.md:<line>` citation in this repository still resolves;
+the file's length is 2,612 lines before and after.
+
+**What was deliberately left alone.** The `dependency_restamps` note
+(`_RESTAMP_NOTE`, `experiments/held_out_prefixes.py`, and the identical string
+in five committed freeze records) still names the retired test. It is the
+history of how those restamps were authorised at the time they were made, and
+rewriting it would move the bytes of five archived records to restate the past.
+The historical freeze and guard cards under `tasks/work/` that cite the test in
+their own dated records are left alone for the same reason.
+
+**Record impact.** `audits/deduction-candidate/execution-manifest.md` moves by
+this one row, so the `audits/` inventory row in
+[docs/artifacts.md](../../docs/artifacts.md) is recomputed with the change
+staged: 26,534,947 → 26,535,502 tracked bytes, 328 files unchanged. No other
+`audits/` or `tests/fixtures/` byte moves.
+
+| Command, at this head | Result |
+| --- | --- |
+| `uv run pytest tests/experiments -q` | 629 passed, unchanged from round 1 |
+| `uv run pytest tests/experiments/test_held_out_prefixes.py -q` | 43 passed |
+| `uv run python scripts/validate_task_docs.py` | passed; 390 historical phase tasks and 390 prompts; 73 work cards |
+| `uv run python scripts/check_doc_facts.py` | passed (doc facts, front door, ml-program, budgets) |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh`, whole, exit code captured directly | exit 0 |
+| `bash scripts/verify_samples.sh` | exit 0 |
+| `scripts/build_sample_report.py --sample-dir <set> --check` over the four sets | 4 of 4 exit 0 |
+
+| Claim now published | Plant, at this head | What it produced |
+| --- | --- | --- |
+| An edit to a `GENERATOR_SOURCES` file owes the archive no restamp | one comment line appended to `orchestrator/game.py` | `43 passed` — the archive check green with two source digests stale |
+| The archive check still holds the record's own bytes | `accepted[0].sha256` in the committed record set to sixty-four zeros | `AssertionError: assert 'd101e3d97508…' == 'c0e7b0b048c1…'` from `test_the_archived_band_keeps_the_blocks_it_was_frozen_with`; 1 failed, 42 passed |
+
+This round's own diff is the first claim's second demonstration: it edits
+`experiments/held_out_prefixes.py`, one of the 22 sources, and the archive check
+stays green. Both plants were applied to the committed file, run, and reverted;
+`git status` shows neither file afterwards and the suite is green on the
+restored tree.

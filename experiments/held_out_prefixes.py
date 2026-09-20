@@ -130,11 +130,21 @@ def filter_environment() -> Mapping[str, str]:
     not have moved the next replay's flags in any case.
 
     What this does NOT claim: a caller that rebinds a module attribute is
-    rewriting this module, and no in-module mechanism prevents that. The freeze's
-    guard against a rewritten module is the manifest, which records both this
-    environment (``filter_environment``) and the module's own bytes
-    (``source_sha256``); ``test_the_committed_manifest_regenerates_from_its_own_band``
-    compares both against the committed record.
+    rewriting this module, and no in-module mechanism prevents that. The freeze
+    recorded both this environment (``filter_environment``) and the module's own
+    bytes (``source_sha256``) in the manifest, and until the closing of
+    2026-09-19 a regeneration test compared both against today's tree. It no
+    longer does, because the band is retired as the arena and its record is an
+    ARCHIVE: what holds that record now is
+    ``test_the_archived_band_keeps_the_blocks_it_was_frozen_with``, which pins
+    the ``accepted``, ``skipped`` and ``source_sha256`` block digests to the
+    bytes the band was frozen with -- ``88d42f82`` for the first two,
+    ``72998c7b`` for the source block -- and compares nothing against today's
+    module. So a rewritten module moves no committed digest and turns nothing
+    red here; the record keeps the identity of the sources it was drawn from,
+    which is what makes the regeneration reproducible from a checkout of
+    ``72998c7b``, and the committed ``filter_environment`` block is a recorded
+    fact with no test comparing it against this function.
     """
 
     return MappingProxyType(

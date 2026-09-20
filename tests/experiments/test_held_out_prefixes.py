@@ -421,9 +421,16 @@ def test_the_filter_environment_is_built_per_use_and_refuses_mutation() -> None:
     on every call, so there is no stored mapping to mutate; the returned proxy
     refuses item assignment as well, so a caller holding one cannot move it
     either. A caller that rebinds the module attribute is rewriting the module,
-    which no in-module mechanism prevents -- the manifest's ``filter_environment``
-    and ``source_sha256`` are what catch that, through
-    ``test_the_committed_manifest_regenerates_from_its_own_band``.
+    which no in-module mechanism prevents -- and since the closing of 2026-09-19
+    no test catches it either. The manifest's ``filter_environment`` and
+    ``source_sha256`` blocks were compared against today's tree by the retired
+    regeneration test; what holds the record now is
+    ``test_the_archived_band_keeps_the_blocks_it_was_frozen_with``, which pins
+    the ``accepted``, ``skipped`` and ``source_sha256`` block digests to the
+    bytes the band was frozen with (``88d42f82`` for the first two, ``72998c7b``
+    for the source block) and compares none of them against this module. This
+    test therefore stands alone: it is the live guard on this function, and it
+    guards reachable state, not a rewritten module.
     """
 
     expected = {
