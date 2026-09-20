@@ -421,7 +421,7 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # PROMPT_VERSION_SETS entry; there is no separate archived v4 template set.
     # Lineage: 16.13 port, 16.15 elicitation, 16.16 persona, 20.31 evidence
     # honesty, 21.1 in-world register.
-    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v5"),
+    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v6"),
 }
 
 
@@ -448,9 +448,9 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 # through it byte-identically.
 IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v5"),
+        **_bespoke_versions("qwen3_6_27b", version="v6"),
         "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
-        "accusation_round": "accusation_round_roll_call.qwen3_6_27b.v1",
+        "accusation_round": "accusation_round_roll_call.qwen3_6_27b.v2",
     },
 }
 
@@ -461,7 +461,7 @@ def _lever_arm_versions(set_name: str, lever_key: str) -> Mapping[str, str]:
     The 18.10 arm swaps template FILES, so its stamps name the variant file. An
     arm that renders the SAME files with a guarded block has no other file to
     name, so its stamps are the set's own values with the arm key appended:
-    ``crewmate_report.qwen3_6_27b.v5.reporter_reasoning`` says which body
+    ``crewmate_report.qwen3_6_27b.v6.reporter_reasoning`` says which body
     rendered AND which arm shaped it, so the stamp moves when EITHER moves.
     No arm value contains ``+``; a composite of two arms does, which is what
     keeps the two kinds of stamp disjoint.
@@ -486,7 +486,7 @@ _REPORTER_REASONING_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
 )
 REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v5"),
+        **_bespoke_versions("qwen3_6_27b", version="v6"),
         "crewmate_report": _REPORTER_REASONING_ARM["crewmate_report"],
         "accusation_round": _REPORTER_REASONING_ARM["accusation_round"],
     },
@@ -506,7 +506,7 @@ _CORROBORATION_DISCIPLINE_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
 )
 CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v5"),
+        **_bespoke_versions("qwen3_6_27b", version="v6"),
         "vote_ballot": _CORROBORATION_DISCIPLINE_ARM["vote_ballot"],
     },
 }
@@ -532,7 +532,7 @@ _TESTIMONY_SHAPES_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
 )
 TESTIMONY_SHAPES_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v5"),
+        **_bespoke_versions("qwen3_6_27b", version="v6"),
         "crewmate_report": _TESTIMONY_SHAPES_ARM["crewmate_report"],
         "accusation_round": _TESTIMONY_SHAPES_ARM["accusation_round"],
         "vote_ballot": _TESTIMONY_SHAPES_ARM["vote_ballot"],

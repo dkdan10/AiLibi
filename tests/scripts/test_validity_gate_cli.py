@@ -536,18 +536,23 @@ def test_json_failure_names_failing_checks(
 def _locked_pin() -> str:
     """The committed sets' own recorded versions, as the CLI takes them.
 
-    Sourced from the LIVE registry — was the byte golden's archive of RECORDED
-    stamps, keyed ``qwen3_6_27b_v4``. That indirection existed only for a
-    bump-in-flight window: the committed ``9p2i`` corpus stamped v4 while the
-    registry had moved on to v5, so reading the registry would have made the
-    passing case expect a version the corpus did not carry. The baseline-8
-    re-record adopted v5 across all four committed sets, the archive retired to
-    empty with it, and the registry is once again the corpus's own stamp.
+    Sourced from the byte golden's archive of RECORDED stamps, which is where
+    the corpus's own versions live during a bump-in-flight window: the
+    committed ``9p2i`` corpus stamps ``*.qwen3_6_27b.v5`` while the live
+    registry has moved to v6 (the alibi-as-route prompt bump), so reading the
+    registry would make the passing case expect a version the corpus does not
+    carry. The window closes at the re-record, which retires the archive entry
+    and re-aligns the two; this helper follows whichever holds the recorded
+    stamps rather than being re-pointed by hand each time.
     """
 
     from orchestrator.game import PROMPT_VERSION_SETS
 
-    recorded = PROMPT_VERSION_SETS["qwen3_6_27b"]
+    from tests.meetings.test_prompt_byte_golden import ARCHIVED_PROMPT_VERSION_SETS
+
+    archived = list(ARCHIVED_PROMPT_VERSION_SETS.values())
+    assert len(archived) <= 1, "one archived set at a time, or name the one to read"
+    recorded = archived[0] if archived else PROMPT_VERSION_SETS["qwen3_6_27b"]
     return ",".join(
         f"{template}={version}" for template, version in sorted(recorded.items())
     )
@@ -565,7 +570,7 @@ def test_expected_prompt_versions_fails_a_homogeneous_wrong_pin(
 ) -> None:
     # The case the coherence check alone cannot see: the set is internally
     # consistent, every game agrees, and every game is at the wrong version.
-    wrong = _locked_pin().replace(".v5", ".v4")  # was .v4 -> .v3
+    wrong = _locked_pin().replace(".v5", ".v4")  # the version below the record
     assert wrong != _locked_pin(), "the substitution must actually change the pin"
 
     assert validity_gate.main([str(_NINE), "--expected-prompt-versions", wrong]) == 1

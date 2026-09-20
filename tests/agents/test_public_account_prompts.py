@@ -612,7 +612,11 @@ def test_the_withheld_channel_still_gets_an_answerable_reply_instruction() -> No
 # asserted rather than reviewed.
 
 _TURN_FIELDS: tuple[str, str] = ("observations", "claims")
-_SHAPE = re.compile(r'\{\s*"type"\s*:\s*"(?P<kind>[a-z_]+)".*?\}')
+#: One nesting level is allowed inside a sketch: an alibi's ``route`` is a
+#: list of ``{room, from_tick, to_tick}`` objects, so a shape can legitimately
+#: contain braces of its own. The inner alternative is non-greedy per object,
+#: so two sketches on one line still split at the right place.
+_SHAPE = re.compile(r'\{\s*"type"\s*:\s*"(?P<kind>[a-z_]+)"(?:[^{}]|\{[^{}]*\})*?\}')
 #: A line that declares which turn field the shapes under it belong to: it
 #: names exactly one of the two fields, carries no shape of its own, and ends
 #: in the colon that introduces the list.

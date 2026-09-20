@@ -94,7 +94,7 @@ _OFF: dict[str, str] = {}
 # The two variant stamps (the ``<template>.<set>.<version>`` convention with
 # the template component naming the variant FILE on its own v1 lineage).
 _VARIANT_IMPOSTOR_STAMP = "impostor_report_roll_call.qwen3_6_27b.v1"
-_VARIANT_ACCUSATION_STAMP = "accusation_round_roll_call.qwen3_6_27b.v1"
+_VARIANT_ACCUSATION_STAMP = "accusation_round_roll_call.qwen3_6_27b.v2"
 
 # The BASE the two variant bodies were authored against was the v3 default set,
 # archived at the Task-20.31 bump and RETIRED at the baseline-7 record (no
@@ -677,10 +677,10 @@ class TestVariantVersionStamps:
 
     def test_lever_on_serves_the_variant_registry_entry(self) -> None:
         assert dict(prompt_versions_for_set(_VARIANT_SET, env=_ON)) == {
-            "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+            "crewmate_report": "crewmate_report.qwen3_6_27b.v6",
             "impostor_report": _VARIANT_IMPOSTOR_STAMP,
             "accusation_round": _VARIANT_ACCUSATION_STAMP,
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v5",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v6",
         }
 
     def test_lever_off_serves_the_default_registry_byte_identically(self) -> None:

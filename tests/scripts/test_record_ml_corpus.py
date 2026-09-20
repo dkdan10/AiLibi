@@ -223,9 +223,9 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
     )
     assert (
         "prompt versions: the declared slate resolves to "
-        "[accusation_round.qwen3_6_27b.v5, "
-        "crewmate_report.qwen3_6_27b.v5, impostor_report.qwen3_6_27b.v5, "
-        "vote_ballot.qwen3_6_27b.v5]" in proc.stdout
+        "[accusation_round.qwen3_6_27b.v6, "
+        "crewmate_report.qwen3_6_27b.v6, impostor_report.qwen3_6_27b.v6, "
+        "vote_ballot.qwen3_6_27b.v6]" in proc.stdout
     )
 
 
@@ -676,7 +676,7 @@ def test_declared_slate_resolves_the_prompt_versions_the_dry_run_prints() -> Non
     # so it would also pass if BOTH went on printing the bare literals. The last
     # iteration is the Wave-2 slate: assert its output actually carries a
     # composite, or the comparison above proves nothing about the lever arm.
-    assert "accusation_round.qwen3_6_27b.v5.reporter_reasoning" in proc.stdout
+    assert "accusation_round.qwen3_6_27b.v6.reporter_reasoning" in proc.stdout
 
 
 def test_acceptance_pairs_carry_the_maps_own_keys_not_the_version_prefix() -> None:
@@ -978,17 +978,17 @@ def _run_prompt_version_check(
 
 
 _BARE_VERSION_CELL = (
-    "accusation_round.qwen3_6_27b.v5, crewmate_report.qwen3_6_27b.v5, "
-    "impostor_report.qwen3_6_27b.v5, vote_ballot.qwen3_6_27b.v5"
+    "accusation_round.qwen3_6_27b.v6, crewmate_report.qwen3_6_27b.v6, "
+    "impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v6"
 )
 _WAVE2_VERSION_CELL = (
-    "accusation_round.qwen3_6_27b.v5.reporter_reasoning"
-    "+accusation_round.qwen3_6_27b.v5.testimony_shapes, "
-    "crewmate_report.qwen3_6_27b.v5.reporter_reasoning"
-    "+crewmate_report.qwen3_6_27b.v5.testimony_shapes, "
-    "impostor_report.qwen3_6_27b.v5, "
-    "vote_ballot.qwen3_6_27b.v5.corroboration_discipline"
-    "+vote_ballot.qwen3_6_27b.v5.testimony_shapes"
+    "accusation_round.qwen3_6_27b.v6.reporter_reasoning"
+    "+accusation_round.qwen3_6_27b.v6.testimony_shapes, "
+    "crewmate_report.qwen3_6_27b.v6.reporter_reasoning"
+    "+crewmate_report.qwen3_6_27b.v6.testimony_shapes, "
+    "impostor_report.qwen3_6_27b.v6, "
+    "vote_ballot.qwen3_6_27b.v6.corroboration_discipline"
+    "+vote_ballot.qwen3_6_27b.v6.testimony_shapes"
 )
 _WAVE2_SLATE = "reporter_reasoning,corroboration_discipline,testimony_shapes"
 

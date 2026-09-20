@@ -187,6 +187,9 @@ from orchestrator.replay import (  # noqa: E402
     substrate_stamp_mismatches,
 )
 from tests.meetings.test_prompt_byte_golden import (  # noqa: E402
+    ARCHIVED_MAP_CARDS,
+    ARCHIVED_PROMPT_VERSION_SETS,
+    _ARCHIVE_ROOT,
     ReconstructedMeeting,
     resolve_prompt_set,
     walk_replay_meetings,
@@ -460,15 +463,34 @@ class _RendererCache:
         self._statement_block: dict[tuple[str, str], frozenset[str]] = {}
         self._ballot_block: dict[str, frozenset[str]] = {}
 
+    @staticmethod
+    def _binding(set_name: str) -> dict[str, Any]:
+        """Where a set's template bytes and its map card come from.
+
+        A recording made before a prompt bump resolves to an ARCHIVED set (the
+        byte golden's bump-in-flight seam), whose bodies live under
+        ``tests/fixtures/prompt_archive/`` and which is pinned to the map card
+        those bodies rendered. Reading it from the live template root would
+        render the recording through bytes it never saw, which is the whole
+        failure the archive exists to prevent -- so the binding follows the
+        same two halves the golden's own renderer cache binds.
+        """
+
+        if set_name in ARCHIVED_PROMPT_VERSION_SETS:
+            return {"root": _ARCHIVE_ROOT, "map_card": ARCHIVED_MAP_CARDS[set_name]}
+        return {}
+
     def off(self, set_name: str) -> PromptRenderers:
         if set_name not in self._off:
-            self._off[set_name] = build_prompt_renderers(set_name, env={})
+            self._off[set_name] = build_prompt_renderers(
+                set_name, env={}, **self._binding(set_name)
+            )
         return self._off[set_name]
 
     def shapes_on(self, set_name: str) -> PromptRenderers:
         if set_name not in self._on:
             self._on[set_name] = build_prompt_renderers(
-                set_name, env=_TESTIMONY_SHAPES_ENV
+                set_name, env=_TESTIMONY_SHAPES_ENV, **self._binding(set_name)
             )
         return self._on[set_name]
 
@@ -831,8 +853,9 @@ class _RendererCache:
         """A capturing renderer bundle for every registered prompt set.
 
         The walk resolves each recorded meeting's set from its own stamps, so
-        the mapping must cover all of them; only the set a recording actually
-        used is ever invoked.
+        the mapping must cover all of them -- the live registry AND any archived
+        set a committed recording still stamps during a bump-in-flight window;
+        only the set a recording actually used is ever invoked.
 
         ``slate_set`` names the ONE set whose bundle is built under ``levers`` --
         the set a lever-ON recording stamped. Every other set keeps its OFF
@@ -844,7 +867,7 @@ class _RendererCache:
         """
 
         bundles: dict[str, PromptRenderers] = {}
-        for set_name in PROMPT_VERSION_SETS:
+        for set_name in (*PROMPT_VERSION_SETS, *ARCHIVED_PROMPT_VERSION_SETS):
             inner = self.for_slate(
                 set_name, levers if set_name == slate_set else frozenset()
             )

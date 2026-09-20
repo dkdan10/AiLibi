@@ -1,6 +1,6 @@
 {#- Vote-ballot prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: vote_ballot  --  version vote_ballot.qwen3_6_27b.v6
+   prompt_id: vote_ballot  --  version vote_ballot.qwen3_6_27b.v5
 
    Baseline-4 merge (v1, Task 16.13): the scratch-ladder style base
    (qwen36_prompt_scratch/v5/ — whose v3-v5 rungs each converted a measured
@@ -153,7 +153,7 @@ Let that voice color HOW you speak — the wording of your "rationale_text" only
   claims:
 {% for claim in turn.claims %}
 {% if claim.type == "alibi" %}
-  - alibi: {{ claim.subject }}{% for leg in claim.route %} in {{ leg.room }}, ticks {{ leg.from_tick }}-{{ leg.to_tick }}{{ "." if loop.last else ";" }}{% endfor %}{% if claim.evidence %} They back it with: {{ claim.evidence | join("; ") }}.{% endif %}
+  - alibi: {{ claim.subject }} in {{ claim.route[0].room }}, ticks {{ claim.route[0].from_tick }}-{{ claim.route[0].to_tick }}.
 {% elif claim.type == "accusation" %}
   - accuses {{ claim.against }} ({{ "%.2f" | format(claim.confidence) }}): {{ claim.reason }}
 {% elif claim.type == "corroboration" %}

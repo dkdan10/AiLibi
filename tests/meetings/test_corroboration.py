@@ -2140,7 +2140,7 @@ class TestProvenance:
         default = PROMPT_VERSION_SETS[_SET]
         arm = CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS[_SET]
         assert (
-            arm["vote_ballot"] == "vote_ballot.qwen3_6_27b.v5.corroboration_discipline"
+            arm["vote_ballot"] == "vote_ballot.qwen3_6_27b.v6.corroboration_discipline"
         )
         assert arm["vote_ballot"] != default["vote_ballot"]
         for template in ("crewmate_report", "impostor_report", "accusation_round"):
@@ -2160,14 +2160,14 @@ class TestProvenance:
         assert corroboration_discipline_enabled(on) is True
         assert (
             prompt_versions_for_set(_SET, env=on)["vote_ballot"]
-            == "vote_ballot.qwen3_6_27b.v5.corroboration_discipline"
+            == "vote_ballot.qwen3_6_27b.v6.corroboration_discipline"
         )
         assert "<testimony_sources>" in _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
         )
 
     def test_the_default_registry_entry_is_not_re_bumped(self) -> None:
-        assert PROMPT_VERSION_SETS[_SET]["vote_ballot"] == "vote_ballot.qwen3_6_27b.v5"
+        assert PROMPT_VERSION_SETS[_SET]["vote_ballot"] == "vote_ballot.qwen3_6_27b.v6"
 
     def test_the_render_decision_is_read_off_the_versions_actually_served(
         self,
