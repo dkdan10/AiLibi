@@ -174,16 +174,37 @@ _MAX_RENDERED_ALIBIS: Final[int] = 3
 # their OWN older rows until more distinct SPEAKERS than this have talked about
 # one subject, and only then the speaker whose newest row is stalest.
 #
-# The VALUE is measured, not chosen: the largest for which the worst legal
-# nine-player case (eight subjects, seven speakers each, a three-stay route
-# apiece) renders inside ``DEFAULT_TOKEN_BUDGET`` AND still affords first-hand
-# observations. 18 -> 144 rows, 1,484 estimated tokens, 16 of headroom, the
-# observations block alive; 19 -> 1,475 but the block shed whole; 20 -> 1,533,
-# over. The elastic observations pay for every row before that, about three
-# lines per unit of cap, so the block is down to 3 of its 57 lines at 18 --
-# the card's round-6 sweep publishes the curve for an owner who would rather
-# buy first-hand memory back. Sized against the TOKEN BUDGET and nothing else.
-_MAX_RENDERED_ALIBIS_PER_SUBJECT: Final[int] = 18
+# The VALUE is a JUDGMENT about how much of the render reported testimony may
+# take from the elastic section, not "the largest that fits" (round-7 review;
+# round 6 sized it by the latter rule and landed on 18). Six is twice the
+# per-source cap: a subject's own three most-recent stays PLUS three other
+# voices, or six distinct voices at one row each. The round-robin fill is
+# unchanged, so which rows those are is still decided by recency per source.
+#
+# Measured at the round-7 head on the worst legal nine-player case (eight
+# subjects, seven speakers each, a three-stay route apiece), against
+# ``DEFAULT_TOKEN_BUDGET``: 5 -> 40 rows / 1,466 tokens / 34 headroom / 42
+# elastic lines; 6 -> 48 / 1,468 / 32 / 39; 7 -> 56 / 1,471 / 29 / 36; 18 ->
+# 144 / 1,484 / 16 / 3; 19 -> 152 / 1,475 / 25 and the observations block SHED
+# whole. The elastic section pays about three lines per unit of cap all the way
+# up, which is why the number is worth choosing rather than maximising.
+#
+# What the elastic section holds in that case is REPORTED ``[meeting]`` rows,
+# NOT first-hand observation lines: the case offers 192 reported candidates at
+# ``_SALIENCE_REPORTED_TESTIMONY`` against the agent's own sightings below
+# them, so first-hand retention there is ZERO at every total the roster allows,
+# 6 and 18 alike, and the cap is not the lever that protects it. Round 6's
+# comment read those rows as "3 of its 57" FIRST-HAND lines; they are reported
+# ones. The card's round-7 sweep publishes the corrected curve, and that sweep
+# -- not this constant -- is what an owner would move the number against.
+#
+# At every load the committed record reaches (the widest subject holds four
+# rows, from ONE source) 6 and 18 render identically, so this moves no
+# committed byte; the difference exists only in the pathological corner, where
+# leaving the render to elastic memory is worth more than a nineteenth
+# testimony row. Sized against the TOKEN BUDGET and first-hand retention only,
+# never against role-correctness.
+_MAX_RENDERED_ALIBIS_PER_SUBJECT: Final[int] = 6
 
 _EVENT_SAW_BODY: Final[str] = "saw_body"
 _EVENT_SAW_PLAYER: Final[str] = "saw_player"

@@ -136,7 +136,10 @@ for every narration of one account. Rendered alibi rows are capped per speaker
 so no voice's volume evicts another's placement, and capped per subject as well
 because the belief block is not budgeted; the subject total is filled
 round-robin by recency across speakers, so a voice is dropped only when more
-speakers than the total have named one subject and then only the stalest. A
+speakers than the total have named one subject and then only the stalest. That
+total is twice the per-speaker cap: a judgment about how much of a render
+reported testimony may take from the elastic memory below it, not the largest
+value that still fits the budget. A
 boundary that survives the merge is a declared room change or a gap, which is a
 claim a listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
 interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled

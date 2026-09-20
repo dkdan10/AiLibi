@@ -82,6 +82,33 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
+- [x] Review correction: the per-SUBJECT total is a JUDGMENT, not a maximum,
+  and it is **6**. The item below sized it by the rule "the largest value for
+  which the worst legal nine-player case stays inside `DEFAULT_TOKEN_BUDGET`
+  with the observations block alive" and landed on 18. That sizing rule was the
+  orchestrator's instruction and it was the wrong rule: it spends the whole
+  elastic section on reported rows because nothing in it prices what the
+  elastic section is FOR. Under the owner's governing value
+  (`tasks/direction-2026-09-19-process-over-outcome.md`) an agent's decision
+  rests on data it actually HOLDS, so reported testimony must not take the
+  render from the agent's own memory even in a pathological case. 6 is twice
+  the per-source cap -- a subject's own three most-recent stays plus three
+  other voices, or six distinct voices one row each -- and the round-robin fill
+  is unchanged. Re-measured at the round-7 head on the same worst legal case:
+  48 rows, 1,468 estimated tokens, 32 of headroom, 39 elastic lines against 3
+  at 18. This SUPERSEDES the sizing sentence of the item below ("The VALUE is
+  measured against the token budget and nothing else: 18 is the largest total
+  ...") and its 144-row / 1,484-token figures; the old item is left as written.
+  The round-7 subsection also CORRECTS what those elastic lines are: round 6
+  counted reported `[meeting]` rows as first-hand observation lines. First-hand
+  retention in that case is ZERO at every total the roster allows, 6 and 18
+  alike, so the cap is not the lever that protects it -- the measurement, and
+  the floor it does support, are in the round-7 subsection. Byte-neutral on the
+  record, re-run at 6 against BOTH historical rules: 5,256 subject belief
+  states, 0 renders changed. Gate: the same
+  `::TestTheBeliefBlockCannotOutgrowTheTokenBudget`, now PINNING the shipped
+  total's measured figures so any change to the constant, up or down, turns it
+  red and forces a re-measurement.
 - [x] Review correction: the §6.6 belief block is BOUNDED against
   `DEFAULT_TOKEN_BUDGET` again, without giving the eviction dial back. The
   per-`(subject, source)` cap the item below introduced bounds the block at
@@ -662,6 +689,16 @@ prune and repairs a reversed range per segment, both keyed on field names.
   covers two bodies" -- applies to a variant body as much as to a default one. It
   is an unrecorded default-OFF arm, so no recording resolves through either
   value.
+* **The per-subject alibi total is CHOSEN, not maximised** (round 7; supersedes
+  round 6's "the VALUE is measured, not chosen"). A cap sized as "the largest
+  that still fits" answers only the budget, and the budget is satisfied by every
+  value on the curve up to 18 -- so that rule silently spends the entire elastic
+  section on reported rows. What the number actually prices is how much of a
+  render reported testimony may take from the memory below it, which is a
+  judgment the owner's process-over-outcome direction already decides. 6 is
+  twice the per-source cap, and the round-7 sweep is published so the number can
+  be moved against a curve rather than re-derived. Never sized against
+  role-correctness.
 * **The deduction evaluation's dry-run paragraph is an archive.** Its figures are
   a function of the shipped prompt bytes, which this card moves. The evaluation
   is CLOSED (PR #473), so re-measuring the paragraph would re-score a closed
@@ -671,16 +708,16 @@ prune and repairs a reversed range per segment, both keyed on field names.
 ### Verification
 
 Run from a clean worktree at the head of this branch, re-measured at the
-ROUND-6 head (the dated round-1 to round-5 subsections below keep their own
-figures). Two cells moved, both by the forty-six tests round 6 adds; the two
-frontend cells marked below are the round-2 measurement, because rounds 3 to 6
-change detector geometry, a metric key and a memory render only, and move no
-served byte.
+ROUND-7 head (the dated round-1 to round-6 subsections below keep their own
+figures). Two cells moved against the round-6 measurement, both by the four
+tests round 7 adds; the two frontend cells marked below are the round-2
+measurement, because rounds 3 to 7 change detector geometry, a metric key and a
+memory render only, and move no served byte.
 
 | command | result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — 8,266 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
-| `uv run pytest tests/meetings tests/agents -q` | 2,833 passed |
+| `bash scripts/check.sh` | exit 0 — 8,270 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
+| `uv run pytest tests/meetings tests/agents -q` | 2,837 passed |
 | `uv run pytest tests/api tests/llm -q` | 765 passed, 19 skipped |
 | `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
 | `uv run pytest tests/scripts/test_counterfactual_phase21.py -q` | 112 passed |
@@ -2117,3 +2154,191 @@ binds. `docs/observation-contract.md`'s paragraph gains the label rule and the
 second cap and stays inside its word budget; `check_doc_facts.py` stays
 verified. `docs/architecture.md` is NOT touched, for round 4's reason.
 `docs/glossary.md` defines no term this round moves.
+
+### Review corrections, round 7 (2026-09-21)
+
+One correction, scoped to ONE constant. Round 6 built the per-subject total and
+gated it; what it got wrong was the rule it sized the number by, and what it
+reported about what the number buys.
+
+**The sizing rule was wrong, and it was the orchestrator's.** Round 6 set
+`_MAX_RENDERED_ALIBIS_PER_SUBJECT` to 18 under this instruction, quoted from
+the round-6 brief: *the largest value for which the worst legal nine-player
+case stays inside `DEFAULT_TOKEN_BUDGET` with the observations block alive*.
+The card restated it at the constant ("The VALUE is measured, not chosen: the
+largest for which ...") and in its Acceptance item. A maximum answers only the
+budget, and on this curve the budget is satisfied by every total from 1 to 18 --
+so the rule is indifferent between a render that leaves 54 elastic lines and one
+that leaves 3, and picks the 3. It never prices what the elastic section is FOR.
+The owner's governing value (`tasks/direction-2026-09-19-process-over-outcome.md`)
+does: a decision must rest on data the agent actually HOLDS, so reported
+testimony may not take the render from the agent's own memory, pathological
+case or not.
+
+**As shipped: 6.** Twice the per-source cap -- a subject's own three most-recent
+stays PLUS three other voices, or six distinct voices at one row each. The
+round-robin fill, the per-source cap and every guarantee round 5 and round 6
+established are untouched; only the number moves.
+
+**The worst legal case, re-measured at THIS head.** Same fixture as round 6 and
+the same production path (`derive_reported_testimony` ->
+`absorb_reported_testimony` -> `render_for_prompt`): nine players, every living
+one proxy-alibiing every other with a three-stay route. Rows are
+`8 subjects x total`; "elastic" is the lines the observations block actually
+keeps; "1st-hand" is how many of those are the agent's OWN observations rather
+than reported `[meeting]` rows.
+
+| total | rows | est. tokens | headroom | elastic | 1st-hand | block |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 8 | 1,456 | 44 | 54 | 0 | alive |
+| 2 | 16 | 1,458 | 42 | 51 | 0 | alive |
+| 3 | 24 | 1,461 | 39 | 48 | 0 | alive |
+| 4 | 32 | 1,463 | 37 | 45 | 0 | alive |
+| 5 | 40 | 1,466 | 34 | 42 | 0 | alive |
+| **6** | **48** | **1,468** | **32** | **39** | **0** | **alive — shipped** |
+| 7 | 56 | 1,471 | 29 | 36 | 0 | alive |
+| 8 | 64 | 1,471 | 29 | 33 | 0 | alive |
+| 9 | 72 | 1,472 | 28 | 30 | 0 | alive |
+| 12 | 96 | 1,473 | 27 | 21 | 0 | alive |
+| 15 | 120 | 1,477 | 23 | 12 | 0 | alive |
+| 16 | 128 | 1,479 | 21 | 9 | 0 | alive |
+| 17 | 136 | 1,482 | 18 | 6 | 0 | alive |
+| 18 | 144 | 1,484 | 16 | 3 | 0 | alive — round 6's choice |
+| 19 | 152 | 1,475 | 25 | 0 | 0 | SHED whole |
+| 20 | 160 | 1,533 | -33 | 0 | 0 | over budget |
+| 21 | 168 | 1,605 | -105 | 0 | 0 | the round-5 bound |
+
+Round 6's row for 18 (144 rows, 1,484 tokens, 16 headroom) reproduces exactly,
+and so does every other token figure on its sweep. The elastic section pays
+about three lines per unit of cap all the way up, as round 6 said.
+
+**What round 6 mis-stated, and it is the load-bearing half.** Its sweep column
+read `obs lines` "of 57 available" and its comment read "the block is down to 3
+of its 57 lines at 18", both presented as FIRST-HAND observation lines; the
+round-6 brief and this round's brief inherited the claim. Those rows are
+reported `[meeting]` rows. Measured here three ways:
+
+* What the fixture offers the elastic selector is 192 reported candidates at
+  `_SALIENCE_REPORTED_TESTIMONY` (60) against 8 first-hand `saw_player`
+  candidates at `_SALIENCE_SAW_PLAYER` (50), which coalesce to ONE rendered
+  line. Reported outranks first-hand, so the first-hand line is the FIRST thing
+  shed.
+* First-hand retention in the worst case is therefore **0 at every total the
+  roster allows** -- at 1, at the shipped 6, at round 6's 18 alike. The cap
+  cannot buy it back and never could; the `[meeting]` flood is what evicts it.
+* Non-vacuity, so the count is not an artefact of the parser: re-rendered at a
+  6,000-token budget the same memory shows all 192 reported lines AND the 1
+  first-hand line. The parser sees it when there is room.
+
+Round 6's own test had the same defect in miniature:
+`test_the_worst_legal_case_does_not_shed_the_first_hand_observations` split the
+render on the observations header and kept every `- ` line after it -- but the
+BELIEFS block renders after the observations, so it was counting belief rows as
+observations and could not have gone red while any belief row existed. The
+replacement stops at the next top-level `## ` heading.
+
+**The floor, and the floor the measurement does NOT support.** The brief asked
+for first-hand retention at the shipped total to clear two thirds of an honest
+comparator. On first-hand lines no floor above zero is supportable here, because
+retention is zero across the whole legal range -- so that assertion is pinned as
+the FINDING (`test_first_hand_retention_does_not_move_with_the_total`, measured
+at totals 3, 5, 6, 7 and 18) rather than tuned until it passes. The floor the
+measurement does support is on the ELASTIC BLOCK's size, against the comparator
+the test can compute: the pre-card `32d0cae7` per-subject rule, a flat
+`_MAX_RENDERED_ALIBIS` rows per subject, whose row count on this case the
+round-robin reproduces exactly at a total of 3. That comparator keeps **48**
+elastic lines; the shipped total keeps **39**; 39/48 = 0.81, clear of two
+thirds. The comparator is measured live in the test, so it cannot go stale.
+
+**The pin.** `TestTheBeliefBlockCannotOutgrowTheTokenBudget` keeps both round-6
+assertions (inside `DEFAULT_TOKEN_BUDGET`; the block alive) and adds literal
+pins at the shipped total, so ANY change to the constant -- up or down -- turns
+the class red and forces the sweep to be re-run and re-published rather than
+silently re-chosen. The literals ARE the pin, so they are spelled rather than
+derived from the constant.
+
+**Round-7 planted failures.** Applied to the tree, run, restored. Counts are
+what pytest prints on `tests/agents/test_reported_testimony.py`.
+
+| # | production line neutered | perturbed | restored |
+| --- | --- | --- | --- |
+| r7a | `_MAX_RENDERED_ALIBIS_PER_SUBJECT` 6 -> 7 | `3 failed, 60 passed` | `63 passed` |
+| r7b | `_MAX_RENDERED_ALIBIS_PER_SUBJECT` 6 -> 5 | `3 failed, 60 passed` | `63 passed` |
+
+Both directions turn the same three tests red -- the row/token/elastic pin, the
+reported-not-first-hand pin, and the two-thirds floor -- which is the property
+round 6's probe **r** only had in one direction (it ran 18 -> 19 and relied on
+the block being shed whole; 18 -> 17 would have stayed green).
+
+**BYTE-NEUTRAL on the committed record, re-run at 6.** The round-6 census
+repeated with the PRODUCTION `_format_alibi_suffix` at the shipped total against
+BOTH historical rules, count-only, meetings keyed by `(set, meeting)` because
+`meeting_id` collides across `replays/ml_corpus/4p1i` and `9p2i` at seed 1010.
+
+| set | subject belief states with an alibi | over the per-source cap | renders differing from `32d0cae7` | renders differing from round 5 |
+| --- | --- | --- | --- | --- |
+| `replays/samples/4p1i` | 0 | 0 | 0 | 0 |
+| `replays/samples/9p2i` | 1,446 (1,250 / 176 / 20 rows) | 0 | 0 | 0 |
+| `replays/ml_corpus/4p1i` | 0 | 0 | 0 | 0 |
+| `replays/ml_corpus/9p2i` | 3,810 (3,305 / 466 / 37 / 2 rows) | 2 | 0 | 0 |
+| total | 5,256 | 2 | 0 | 0 |
+
+672 meetings keyed by `(set, meeting)`. Round 6's state count, per-set split,
+row-width histogram and over-the-per-source-cap count all reproduce exactly. The
+mechanical reason nothing moves is unchanged and now covers a smaller number:
+the widest subject anywhere holds FOUR rows, and 4 < 6, so the per-source cap
+alone still decides every committed render.
+
+One census cell does NOT reproduce, and it is not load-bearing. Round 6's table
+carried a `with >= 2 sources` column reading 0 on every set; measured here the
+same quantity is **68** (40 on `replays/samples/9p2i`, 28 on
+`replays/ml_corpus/9p2i`). Nothing follows from it either way -- a subject with
+two sources and at most four rows renders identically under all three rules,
+which is what the 0/0 neutrality columns say -- but round 6's 0 is recorded here
+as wrong rather than left to be re-derived. Round 6's accompanying sentence,
+that the widest subject holds four rows from ONE source, is right about the
+WIDEST subject and wrong as a claim about every subject.
+
+**Every changed test expectation.** No test is weakened, skipped or deleted.
+
+| test | change |
+| --- | --- |
+| `::TestTheBeliefBlockCannotOutgrowTheTokenBudget::test_the_worst_legal_case_does_not_shed_the_first_hand_observations` | RENAMED `..._does_not_shed_the_observations_block` and CORRECTED: it counts the observations block proper (stopping at the next `## ` heading) instead of every `- ` line after the header, which swept in the beliefs block |
+| `...::test_the_shipped_total_pins_its_measured_worst_case` | NEW. Pins the constant at 6, 48 rendered rows, 1,468 tokens, 32 headroom, 39 elastic lines |
+| `...::test_the_elastic_section_holds_reported_rows_not_first_hand_ones` | NEW. The 39 lines are all `[meeting]` rows; none is first-hand |
+| `...::test_first_hand_retention_does_not_move_with_the_total` | NEW. Retention is 0 at totals 3, 5, 6, 7 and 18 -- the finding, pinned |
+| `...::test_the_elastic_block_clears_two_thirds_of_the_pre_card_comparator` | NEW. Comparator 48 measured live, shipped 39, `39 * 3 >= 48 * 2` |
+| `...::_observation_lines` / `...::_rendered_at` | NEW helpers: the corrected block reader, and a monkeypatched render at an arbitrary total |
+| `::TestTheSubjectTotalIsFilledRoundRobin::test_no_voice_is_zeroed_while_the_total_permits` | the speaker count is now read off the constant (`range(10, 10 + total)`) instead of the literal `range(10, 16)`, which at the new total would have been the boundary by coincidence rather than by construction |
+| every other test in both classes | unchanged and green at 6: each already read the constant, and the lone-speaker byte-neutrality case never reaches either bound |
+
+`tests/agents/test_reported_testimony.py` is 63 passed at this head (round 6
+recorded 59).
+
+**Round-7 gate.** Measured at this head, from this worktree.
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — ruff `520 files already formatted` + `All checks passed!`, `lint-imports` 4 contracts kept / 0 broken, `validate_task_docs.py` 390 historical phase tasks and 390 prompts plus 73 work cards, `mypy` Success on 491 source files, `8,270 passed, 20 skipped, 3 xfailed` in 3:18, frontend 20 test files / 532 tests, build green |
+| `uv run pytest tests/meetings tests/eval tests/agents tests/experiments tests/api tests/scripts/test_counterfactual_phase21.py -q` | 5,189 passed, 3 skipped (round 6: 5,185 / 3 — the four new tests) |
+| `uv run pytest tests/meetings tests/agents -q` | 2,837 passed (round 6: 2,833) |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 23 passed |
+| `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on `replays/{samples,ml_corpus}/{4p1i,9p2i}` |
+| `uv run python scripts/publish_process_scorecard.py --check` | consistent |
+| `uv run python scripts/check_doc_facts.py` | verified |
+| `uv run python scripts/validate_task_docs.py` | passed |
+| `uv run python scripts/verify_ml_evidence.py` | 61 checks, OK 49, FAIL 0, ABSENT 7, INFO 5 |
+
+Nothing recorded moved.
+
+**Round-7 record impact.** None. No file under `replays/`, `audits/` or
+`tests/fixtures/` is in the diff; no prompt stamp and no served contract stamp
+moves; `tests/meetings/test_prompt_byte_golden.py` is green. The Constraints
+stamp/lever sentence covers this round exactly as it covered round 6 -- the
+reachable non-committed state it names is now "a subject with more than 6 rows,
+or more than 6 speakers" instead of 18, which is a strictly wider set of states
+and still renders no committed byte differently. `docs/observation-contract.md`
+gains one sentence saying the total is twice the per-speaker cap and a judgment
+rather than the largest that fits; `check_doc_facts.py` stays verified.
+`docs/architecture.md` and `docs/glossary.md` are NOT touched.

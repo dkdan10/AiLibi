@@ -22,6 +22,7 @@ from typing import Any, Final, NamedTuple
 
 import pytest
 
+import agents.memory.store as store
 from agents.memory.beliefs import AlibiClaim as BeliefAlibiClaim
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
@@ -1682,18 +1683,26 @@ class TestMixedSpellingsOfOneStayLeaveTheListenerIdentical:
 class TestTheBeliefBlockCannotOutgrowTheTokenBudget:
     """The round-6 blocking gate: the §6.6 belief block is NOT budgeted.
 
-    ``_assemble_view`` treats the belief block as fixed and lets the first-hand
+    ``_assemble_view`` treats the belief block as fixed and lets the
     observations take whatever is left, so a bound on the alibi rows is the
-    only thing standing between a loud meeting and a render that has shed every
-    observation the agent made itself. Round 5 moved the bound from
-    ``subjects x cap`` to ``subjects x sources x cap``, which on a nine-player
-    roster is 168 rows and 1,605 estimated tokens -- over
-    ``DEFAULT_TOKEN_BUDGET``, with the observations block gone whole.
+    only thing standing between a loud meeting and a render with no elastic
+    memory left at all. Round 5 moved the bound from ``subjects x cap`` to
+    ``subjects x sources x cap``, which on a nine-player roster is 168 rows and
+    1,605 estimated tokens -- over ``DEFAULT_TOKEN_BUDGET``, with the
+    observations block gone whole.
 
     The worst LEGAL case, built through the production path: nine players,
     every living one proxy-alibiing every other with a three-stay route (the
     per-source cap), so every subject has every other voice talking about it at
     full volume.
+
+    Round 7 corrects what the surviving block HOLDS in that case. It is
+    reported ``[meeting]`` rows, not the agent's own observations: the case
+    offers 192 reported candidates at ``_SALIENCE_REPORTED_TESTIMONY`` against
+    8 first-hand sightings below them, so first-hand retention here is zero at
+    every total the roster allows and the per-subject cap is not its lever.
+    What the cap decides is how much render is left for elastic memory at all,
+    and THAT is what the pins below hold.
     """
 
     _ROSTER: Final[tuple[str, ...]] = tuple(f"p-{index}" for index in range(1, 10))
@@ -1750,21 +1759,114 @@ class TestTheBeliefBlockCannotOutgrowTheTokenBudget:
         absorb_reported_testimony(memory, statements=derive_reported_testimony(result))
         return render_for_prompt(memory)
 
+    _OBSERVATIONS_HEADER: Final[str] = "## Recent observations (most salient first):"
+
+    @classmethod
+    def _observation_lines(cls, rendered: str) -> list[str]:
+        """The ELASTIC block's own lines, stopping at the next top-level block.
+
+        The beliefs block renders AFTER the observations, so splitting on the
+        header alone and keeping every ``- `` line counts belief rows as
+        observations -- which is how round 6 came to report reported
+        ``[meeting]`` rows as first-hand observation lines (round-7 review).
+        """
+
+        if cls._OBSERVATIONS_HEADER not in rendered:
+            return []
+        tail = rendered.split(cls._OBSERVATIONS_HEADER, 1)[1]
+        lines: list[str] = []
+        for line in tail.splitlines():
+            if line.startswith("## "):
+                break
+            if line.startswith("- "):
+                lines.append(line)
+        return lines
+
+    @classmethod
+    def _rendered_at(cls, total: int, monkeypatch: pytest.MonkeyPatch) -> str:
+        monkeypatch.setattr(store, "_MAX_RENDERED_ALIBIS_PER_SUBJECT", total)
+        return cls._rendered()
+
     def test_the_worst_legal_nine_player_case_stays_inside_the_budget(self) -> None:
         assert _estimate_tokens(self._rendered()) <= DEFAULT_TOKEN_BUDGET
 
-    def test_the_worst_legal_case_does_not_shed_the_first_hand_observations(
+    def test_the_worst_legal_case_does_not_shed_the_observations_block(self) -> None:
+        # The half that actually bites: over budget the elastic section is what
+        # pays, so an unbounded belief block costs the agent the whole block.
+        rendered = self._rendered()
+        assert self._OBSERVATIONS_HEADER in rendered
+        assert self._observation_lines(rendered)
+
+    def test_the_shipped_total_pins_its_measured_worst_case(self) -> None:
+        # THE pin. Every figure here is measured at the shipped total, so ANY
+        # change to ``_MAX_RENDERED_ALIBIS_PER_SUBJECT`` -- up OR down -- turns
+        # this red and forces the sweep to be re-run and re-published. The
+        # literals ARE the pin, so they are spelled out rather than derived.
+        assert _MAX_RENDERED_ALIBIS_PER_SUBJECT == 6
+        rendered = self._rendered()
+        rows = [line for line in rendered.splitlines() if "alibi:" in line]
+        assert sum(row.count(" per p-") for row in rows) == 48
+        assert _estimate_tokens(rendered) == 1468
+        assert DEFAULT_TOKEN_BUDGET - _estimate_tokens(rendered) == 32
+        assert len(self._observation_lines(rendered)) == 39
+
+    def test_the_elastic_section_holds_reported_rows_not_first_hand_ones(
         self,
     ) -> None:
-        # The half that actually bites: over budget the elastic section is what
-        # pays, so an unbounded belief block costs the agent its own eyes.
-        rendered = self._rendered()
-        assert "Recent observations" in rendered
-        assert [
-            line
-            for line in rendered.split("Recent observations")[1].splitlines()
-            if line.startswith("- ")
-        ]
+        # The round-7 correction, pinned so it cannot be mis-stated again. In
+        # THIS case the elastic section is saturated by reported ``[meeting]``
+        # rows, which sit at ``_SALIENCE_REPORTED_TESTIMONY`` ABOVE the agent's
+        # own sightings, so the first-hand lines are shed first and the
+        # per-subject total is not what decides their fate: retention is zero at
+        # the shipped total AND at round 6's 18. The number that moves with the
+        # cap is the elastic block's SIZE.
+        lines = self._observation_lines(self._rendered())
+        assert len(lines) == 39
+        assert [line for line in lines if "[meeting]" not in line] == []
+
+    def test_first_hand_retention_does_not_move_with_the_total(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The measurement behind the sentence above, run rather than asserted
+        # from memory: across the whole range the roster allows, the worst case
+        # retains the SAME number of first-hand lines -- zero -- so no floor
+        # above zero is supportable on first-hand lines in this case. Stated
+        # here so a future reader does not re-derive a floor the measurement
+        # does not carry.
+        retained = {
+            total: len(
+                [
+                    line
+                    for line in self._observation_lines(
+                        self._rendered_at(total, monkeypatch)
+                    )
+                    if "[meeting]" not in line
+                ]
+            )
+            for total in (_MAX_RENDERED_ALIBIS, 5, 6, 7, 18)
+        }
+        assert retained == {_MAX_RENDERED_ALIBIS: 0, 5: 0, 6: 0, 7: 0, 18: 0}
+
+    def test_the_elastic_block_clears_two_thirds_of_the_pre_card_comparator(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The floor the measurement DOES support, against the honest comparator
+        # this test can compute: the pre-card ``32d0cae7`` per-subject rule,
+        # whose bound is a flat ``_MAX_RENDERED_ALIBIS`` rows per subject and
+        # whose row count on this case the round-robin reproduces exactly at a
+        # total of 3. Measured: 48 elastic lines there against 39 at the shipped
+        # total, a ratio of 0.81. Comparator measured live, so it cannot go
+        # stale; the floor is two thirds.
+        comparator = len(
+            self._observation_lines(
+                self._rendered_at(_MAX_RENDERED_ALIBIS, monkeypatch)
+            )
+        )
+        assert comparator == 48
+        monkeypatch.undo()
+        shipped = len(self._observation_lines(self._rendered()))
+        assert shipped == 39
+        assert shipped * 3 >= comparator * 2
 
     def test_the_case_really_is_the_worst_the_roster_allows(self) -> None:
         # Non-vacuity: if the fixture stopped saturating the cap the budget
@@ -1804,8 +1906,13 @@ class TestTheSubjectTotalIsFilledRoundRobin:
 
     def test_no_voice_is_zeroed_while_the_total_permits(self) -> None:
         # Sources within the total: every one of them keeps a row, however many
-        # rows any of the others brought.
-        sources = tuple(f"p-{index}" for index in range(10, 16))
+        # rows any of the others brought. Exactly the total, which is the
+        # BOUNDARY the property has to hold at, so the count is read off the
+        # constant rather than spelled -- the intent is "as many voices as the
+        # total permits", not a particular number.
+        sources = tuple(
+            f"p-{index}" for index in range(10, 10 + _MAX_RENDERED_ALIBIS_PER_SUBJECT)
+        )
         rows = tuple(
             ("STORAGE", tick, source)
             for position, source in enumerate(sources)
