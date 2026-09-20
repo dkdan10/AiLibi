@@ -1,6 +1,6 @@
 # Make an alibi a route so honest movers stop contradicting themselves
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -82,7 +82,7 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
-- [ ] `AlibiClaim` is a route, in ONE claim type: it gains
+- [x] `AlibiClaim` is a route, in ONE claim type: it gains
   `route: tuple[AlibiSegment, ...]` (a new frozen `AlibiSegment` of `room`,
   `from_tick`, `to_tick`) and `claim_format: Literal[1, 2]`. A `mode="before"`
   validator lifts a legacy flat payload into a one-segment route at format 1,
@@ -96,7 +96,7 @@ payload matters. And the format-preserving serializer precedent exists at
   with no retirement date. Planted, each red before and green after: a recorded
   format-1 line round-trips byte-identically through `model_validate_json` then
   `model_dump_json`; overlapping, out-of-order and empty routes each raise.
-- [ ] The detectors read SEGMENTS, and the one-segment case is bit-identical.
+- [x] The detectors read SEGMENTS, and the one-segment case is bit-identical.
   `_IndexedAlibi` (`meetings/transcript.py:2356-2371`) becomes one entry per
   segment with its own window, rooms, whole claim and index.
   `_detect_alibi_vs_sightings` (`:2938-3067`) and `_detect_alibi_conflicts`
@@ -112,14 +112,14 @@ payload matters. And the format-preserving serializer precedent exists at
   (`:3148`) key on route or segment accordingly. Planted: a property test
   asserts that for EVERY one-segment route the new detector emits the pre-card
   detector's flags, and a segment-level edit breaks it.
-- [ ] The seed-41 shape is the adverse pair. A fixture from that meeting raises
+- [x] The seed-41 shape is the adverse pair. A fixture from that meeting raises
   ZERO flags when `p-9`'s account is the four-segment route and still raises
   the five recorded flags when the same turn states the ENGINEERING 12-15
   envelope; a second fixture plants a flat lie (a one-segment route whose room
   the speaker held at no covered tick) and asserts one `alibi_vs_sighting`
   against it at today's band. Planted: dropping the segment comparison turns
   the honest route red, dropping the envelope case turns the liar green.
-- [ ] The route crosses the firewall intact, with `ReportedStatement`
+- [x] The route crosses the firewall intact, with `ReportedStatement`
   unchanged: `derive_reported_testimony` (`meetings/manager.py:4478-4488`)
   emits one `kind="alibi"` statement per segment, so
   `absorb_reported_testimony` (`agents/memory/store.py:888-900`) lands one
@@ -136,7 +136,7 @@ payload matters. And the format-preserving serializer precedent exists at
   repairing a reversed range per SEGMENT by field name (`:45`, `:71`), and
   `meetings/render_contract.py`. Planted: over every meeting of both committed
   sample sets the reduction and the served view stay byte-identical.
-- [ ] The operational family asks for a route and shows one, every path below
+- [x] The operational family asks for a route and shows one, every path below
   under `agents/strategic/prompts/qwen3_6_27b/`.
   `crewmate_report.j2:156` and `accusation_round.j2:290` offer the route object
   and delete the "ONE room" instruction; `accusation_round.j2:252` drops the
@@ -147,7 +147,7 @@ payload matters. And the format-preserving serializer precedent exists at
   `:209` take the same edit. Planted: a render test asserts a four-segment
   route with its evidence rows in the reply and ballot prompts, and a
   one-segment route renders the single-room sentence.
-- [ ] The version cascade is complete and this card takes the wave's FIRST
+- [x] The version cascade is complete and this card takes the wave's FIRST
   bump. `PROMPT_VERSION_SETS["qwen3_6_27b"]` (`orchestrator/game.py:424`)
   advances v5 to v6 as a unit because this card moves all four bodies, every
   `.j2` header marker moves with it (equality gate:
@@ -176,7 +176,7 @@ payload matters. And the format-preserving serializer precedent exists at
   re-aimed at the ARCHIVED v5 `crewmate_report.j2` and its failing run quoted,
   because perturbing a live v6 body is a no-op for a golden that walks only v5
   recordings.
-- [ ] The committed record is untouched and shown to be.
+- [x] The committed record is untouched and shown to be.
   `bash scripts/verify_samples.sh` reports 100/100, no file under `replays/`
   appears in the diff, all four `--check` runs are consistent, and the PR says
   in one sentence why `--check` cannot move (the census is as-recorded; no
@@ -287,3 +287,160 @@ providers only), `uv run mypy .`, `uv run ruff check .`,
 over both `replays/samples/` and both `replays/ml_corpus/` sets, the census
 command quoted in Evidence, and `bash scripts/check.sh` to the end rather than
 to the first gate. No live evaluation, calibration or provider call is a check.
+
+## Results
+
+Delivered on `work/alibi-as-route`. The contract is
+[the direction of 2026-09-19](../direction-2026-09-19-process-over-outcome.md)
+§5, §7 and ruling D4 of §12; the layering it moves is
+[architecture](../../docs/architecture.md)'s meeting layer (DESIGN.md §5.3 claim
+shapes, §5.4 contradiction detection, §6.6 the rendered belief view) and the
+served view-model contract (DESIGN.md §7).
+
+### What changed
+
+`AlibiClaim` is a route. It carries `route: tuple[AlibiSegment, ...]` and
+`claim_format: Literal[1, 2]`; a `mode="before"` validator lifts the legacy flat
+payload into a one-segment route at format 1 and a wrap serializer writes that
+format back, so a recorded claim is read and re-emitted as the bytes it was
+recorded in. The docstring records why one type with an internal format beats a
+second `alibi_route` variant of `Claim`.
+
+`_IndexedAlibi` (`meetings/transcript.py`) is now one entry per SEGMENT, all
+sharing the claim's event id. The two alibi detectors compare the segment
+covering a sighting's tick; the narrow-window band reads the whole route
+(`route_from_tick` / `route_to_tick`), the endpoint band fires on the route's
+outer endpoints only, and the `interior_exempt` roll-call class keys on a
+one-segment route. The echo dedup and the self-refutation classifier key on the
+whole route (`_claim_route_key`); the subject-account index, the physical
+detector and the grounded vent-placement arm key on the segment. Two new
+one-per-pair guards keep the leg split from minting a duplicate
+`contradiction_id`, and two legs of ONE route never pair with each other.
+
+The reduction emits one `ReportedStatement` per leg and stamps the claim's
+provenance id on every one of them, so `absorb_reported_testimony` lands one
+belief alibi per leg instead of collapsing an account to its first tick.
+`AlibiClaimView` mirrors the claim's two wire surfaces exactly rather than
+inventing a third, so a recorded envelope is served byte-identically and a route
+is served as a route; `ClaimLine.tsx` and `MindInspector.tsx` render whichever
+arrived. `llm/report_normalize.py` keeps the legacy envelope keys through the
+prune and repairs a reversed range per segment, both keyed on field names.
+
+### Decisions
+
+* **The served view mirrors the claim's format** rather than summarising a route
+  into flat fields. A summary would re-manufacture the single-room envelope this
+  card deletes. The cost is four optional keys in the generated TypeScript, which
+  is why `scripts/gen_frontend_types.py` gains four rows in its optional-field
+  list; the spectator narrows on `route`.
+* **The archived v5 bodies are byte copies except one accessor.** The schema
+  renamed the field the render reads, so a pure copy of
+  `accusation_round.j2` / `vote_ballot.j2` / `accusation_round_roll_call.j2`
+  could not render a recorded claim at all. Their alibi line reads
+  `claim.route[0]`, which is the same value a format-1 claim recorded, and the
+  byte golden proves the rendered prompts are unchanged across all 192 recorded
+  meetings. `crewmate_report.j2`, `impostor_report.j2` and
+  `impostor_report_roll_call.j2` are byte-identical copies. Per-file diffs are in
+  the pull request.
+* **`accusation_round_roll_call.j2` takes its own v1 -> v2 bump.** Its bytes move
+  with this card, and the reason the card gives for three bumps -- "no stamp ever
+  covers two bodies" -- applies to a variant body as much as to a default one. It
+  is an unrecorded default-OFF arm, so no recording resolves through either
+  value.
+* **The deduction evaluation's dry-run paragraph is an archive.** Its figures are
+  a function of the shipped prompt bytes, which this card moves. The evaluation
+  is CLOSED (PR #473), so re-measuring the paragraph would re-score a closed
+  record; the case now asserts the closed gate's refusal instead, on the same
+  shape as the existing re-binding window helper. No `audits/` byte moved.
+
+### Verification
+
+Run from a clean worktree at the head of this branch.
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — 8,113 Python passed, 20 skipped, 3 xfailed; 528 frontend tests; 73 work cards validated |
+| `uv run pytest tests/meetings tests/agents -q` | 2,696 passed |
+| `uv run pytest tests/api tests/llm -q` | 764 passed, 19 skipped |
+| `uv run pytest tests/orchestrator tests/experiments -q` | 1,212 passed, 3 xfailed |
+| `uv run pytest tests/scripts/test_counterfactual_phase21.py -q` | 112 passed |
+| `uv run mypy .` | Success: no issues found in 491 source files |
+| `uv run ruff check .` / `uv run ruff format --check .` | clean |
+| `uv run python scripts/gen_frontend_types.py` | regenerated; `api.ts` only |
+| `npm --prefix frontend run tsc:check` | exit 0 |
+| `npm --prefix frontend test` | 20 files, 528 tests passed |
+| `cd frontend && npm run e2e` (a served DTO moved) | 13 passed, 3 skipped |
+| `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on all four sets |
+| `uv run python scripts/publish_process_scorecard.py --check` | consistent |
+| `uv run python scripts/verify_ml_evidence.py` | 61 checks, OK 49, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run python scripts/check_doc_facts.py` | verified |
+
+The Evidence census re-runs unchanged on the committed bytes -- the recorded
+rows did not move:
+
+```
+replays/samples/9p2i   meetings 151  alibi_* 57   on a span 50   self-alibis 259  multi-tick 210
+replays/ml_corpus/9p2i meetings 439  alibi_* 134  on a span 100  self-alibis 696  multi-tick 559
+```
+
+### The planted failures
+
+Each was applied to the tree, run, and reverted.
+
+* **The route invariant.** Disabling the chronological / non-overlapping check in
+  `AlibiClaim._validate_route` turns
+  `TestAlibiClaimIsARoute::test_out_of_order_legs_are_refused` and
+  `::test_overlapping_legs_are_refused` red (`2 failed, 7 passed`); reverted,
+  `9 passed`.
+* **The segment comparison.** Pairing a sighting against the route's OUTER window
+  instead of the leg covering its tick -- the pre-card envelope rule -- turns
+  `TestTheAlibiIsARoute::test_the_truthful_route_mints_nothing` red
+  (`1 failed, 6 passed`); reverted, `7 passed`. The honest seed-41 route goes
+  from zero flags back to the envelope's.
+* **The format-preserving serializer.** Emitting a `route` for a format-1 claim
+  turns `test_every_recorded_alibi_round_trips_byte_identically` and
+  `test_every_recorded_meeting_line_round_trips_byte_identically` red
+  (`2 failed, 2 passed`); reverted, `4 passed`.
+* **The listener render.** Dropping the `evidence` rows from
+  `accusation_round.j2` turns
+  `test_every_leg_and_its_evidence_reach_the_reply_and_ballot_prompts` red
+  (`1 failed, 2 passed`); reverted, `3 passed`.
+* **The re-aimed byte golden.** Pointing
+  `test_one_byte_template_perturbation_breaks_the_golden` back at the LIVE v6
+  `crewmate_report.j2` makes it fail (`assert not True`) -- every recorded
+  meeting now renders through the ARCHIVED v5 bodies, so perturbing a live body
+  is a no-op the leg cannot detect. Aimed at
+  `qwen3_6_27b_v5/crewmate_report.j2` it passes.
+* **The liar.** `TestTheAlibiIsARoute::test_the_same_turn_stating_a_flat_lie_is_
+  still_prosecuted` states the same turn as a one-segment STORAGE route and
+  recovers all four `alibi_vs_sighting` flags the envelope minted, and
+  `::test_a_flat_lie_reaches_the_strong_band` shows a wide lie contradicted at a
+  deeply interior tick still classifies STRONG.
+
+### Measurements
+
+Seed 41 meeting 2, the direction memo's exhibit: the committed record holds five
+flags, every one naming `p-9` and every one referencing `p-9`'s own claim. As the
+four-segment route `ENGINEERING 12-12 / EAST_HALL 13-13 / ADMIN 14-14 /
+WEST_HALL 15-15` the meeting mints ZERO. Re-derivation of the recorded envelope
+yields four of the five -- this meeting is one of the seventeen
+`_MOVEMENT_CHANNEL_DIVERGING_MEETINGS` whose fifth flag rests on the private
+movement channel a replay cannot rebuild, which the corpus walk already pins.
+
+### Limitations
+
+* The route ships ON with no lever, by the owner's D4 ruling, which sets aside
+  AGENTS.md craft rule 7 for this wave. Nothing measures it until the re-record.
+* No route is recorded anywhere yet: every committed claim is a one-segment
+  format-1 envelope, so the multi-leg paths are exercised by fixtures and
+  property tests only. Row 3 of the process scorecard (159 of 192 alibi flags
+  manufactured, 83 percent) is the measure this card is read against AFTER the
+  re-record, not here.
+* `eval/evidence_honesty.py`'s I-6 geometry fold reports a multi-leg route as NOT
+  EVALUABLE: the flag's event ids name the claim, not the leg, so the module
+  cannot say which room the geometry should be measured to. Every committed claim
+  is one segment, so no committed cell moves.
+* The bump-in-flight window is OPEN from this merge until the re-record closes
+  it. While it is open the byte golden, the validity-gate pin and the Phase-21
+  counterfactual all resolve committed recordings through the archived v5 bodies.
