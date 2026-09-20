@@ -2,6 +2,30 @@
 
 **Draft dated 2026-09-06. Status: planning, no live execution authorized.**
 
+**Closed on 2026-09-19.** The owner accepted decisions D1, D2 and D8 of
+[the direction memo of that date](../../tasks/direction-2026-09-19-process-over-outcome.md)
+(rulings in its section 12), and this prospective design stops being the
+project's gate. Everything below it stays exactly as it was written and means
+what it meant: the primary outcome `supported_correct_ejection`, the decision
+rule, the minimum actionable effect and the wrongful-ejection tradeoff stay the
+record of what the evaluation set out to measure and of what the five runs
+measured against them. They are no longer the bar the project is judged by —
+role-correct ejection becomes a reported cell beside the memo's process
+yardstick, never a gate — and nothing pushes an agent toward the correct answer
+in its place. The five runs of 2026-09-10, 2026-09-13 (twice), 2026-09-15 and
+2026-09-16 and the three development calibrations of 2026-09-14, 2026-09-15 and
+2026-09-18 are context, not adoption evidence, and no result, denominator,
+failure or cost in them is restated, re-scored, re-graded or withdrawn by this
+closure. The fifth run's inconclusive result stays inconclusive: closing an
+evaluation does not turn it into a rejection, and the candidate
+`combined_accounts` is SHELVED rather than deleted. The held-out design in
+"Staged evaluation and freeze gates" is retired as the arena: five bands were
+frozen and spent, no sixth was frozen, and the band 2100-2999 that the retired
+sixth freeze card reserved stays unseen. The dated closure, its clause and the
+refusals it puts on both live gates are in
+[the execution manifest](execution-manifest.md)'s "Closure (2026-09-19)"
+section.
+
 This document specifies the evaluation structure before future held-out work.
 It does not declare the candidate, source inventory, held-out inputs or spending
 limits frozen. Those execution fields must be bound after the remaining runtime

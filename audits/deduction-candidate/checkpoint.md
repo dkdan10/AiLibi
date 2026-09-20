@@ -96,3 +96,22 @@ spending, adoption or merging into main.
   carries that disposition and three others. Nothing in it authorizes spending,
   adoption or merging into main either, and no held-out prefix was read, rendered
   or touched.
+
+- 2026-09-19: the owner CLOSED the accuracy-gated fresh-model deduction
+  evaluation, accepting decisions D1, D2 and D8 of
+  [the direction memo of that date](../../tasks/direction-2026-09-19-process-over-outcome.md)
+  with the rest of its set; its section 12 records the rulings. The
+  preregistered primary outcome, decision rule and wrongful-ejection bound stay
+  the record of what was measured and are no longer the project's gate;
+  role-correct ejection is reported beside the process yardstick and never
+  gates it. The five runs and three calibrations above are context, not
+  adoption evidence, and no result, figure or verdict recorded here is
+  restated, re-scored, re-graded or withdrawn — the fifth run stays complete
+  and INCONCLUSIVE, which is neither an advance nor a rejection. Both live
+  gates now refuse by construction while the execution manifest carries the
+  owner's closing clause; the fifth band's freeze record is marked development
+  in place and is an ARCHIVE, checked against the bytes it was frozen with
+  rather than regenerated; no sixth band was frozen and 2100-2999 stays unseen;
+  and `combined_accounts` is SHELVED rather than deleted, its levers still
+  default-OFF. Nothing in this closure authorizes spending, adoption or merging
+  into main either, and no held-out prefix was read, rendered or touched by it.

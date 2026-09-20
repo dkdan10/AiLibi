@@ -35,6 +35,18 @@ implementing.
 - **FU-ALIBI-3.** Evidence v1 keeps only the last changed room pair per subject,
   so a later benign sighting erases an earlier impossible-travel finding.
 
+**Re-assessed on 2026-09-19 and still blocked.** The adopting record for
+evidence reasoning v2 that this card's first acceptance item waits for will not
+come from the fresh-model deduction evaluation: the owner closed that evaluation
+that day, accepting decisions D1, D2 and D8 of
+[the direction memo](../direction-2026-09-19-process-over-outcome.md), and its
+five runs and three calibrations are context rather than adoption evidence. It
+was the only planned source of such a record. The only record the accepted
+direction produces is [the wave's single re-record](process-rerecord.md), and
+what that record adopts is that card's decision to state, not this one's to
+assume. So nothing here executes: Status stays `ready`, every box stays
+unchecked, and no deletion is performed.
+
 The procedure is `docs/agent-procedures.md` "Retiring substrate levers" (`:6`):
 delete the `*_enabled()` resolver, the `ENV_*` constant and its `__all__` entry,
 the `env` parameter wherever no live resolver is reachable, and every guard
