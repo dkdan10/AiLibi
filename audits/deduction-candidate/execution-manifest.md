@@ -1636,7 +1636,7 @@ the construction `experiments/deduction_scenarios.py::run_case` already uses.
 | Prompt set | `qwen3_6_27b` |
 | Prompt/template versions | Recorded per arm from the replay rows the runner writes (`MeetingReplayEntry.prompt_versions`) and carried in the report's per-arm `prompt_versions`. The two arms render different template families by design, so their markers differ; two different marker sets WITHIN one arm is a source change mid-run and a stop |
 | Map and roster | `canonical_1`, 4 players / 1 impostor / 1 task per crewmate, 3 living voters at meeting open |
-| Generator source identity | The 22 `GENERATOR_SOURCES` digests in [the freeze manifest](held-out/manifest.json), asserted by `tests/experiments/test_held_out_prefixes.py::test_the_committed_manifest_regenerates_from_its_own_band` |
+| Generator source identity | The 22 `GENERATOR_SOURCES` digests in [the freeze manifest](held-out/manifest.json). Asserted, until the closure this document's "Closure (2026-09-19)" section records, by a regeneration test that rebuilt the set from today's tree and compared `source_sha256` against the record; that test is retired with the band, and the record is now an ARCHIVE held by `tests/experiments/test_held_out_prefixes.py::test_the_archived_band_keeps_the_blocks_it_was_frozen_with`, which pins the `accepted`, `skipped` and `source_sha256` block digests to the bytes the band was frozen with (`88d42f82` for the first two, `72998c7b` for the source block) and compares none of them against today's module bytes, so an edit to a generator source file owes this band no restamp |
 | Dependency/runtime identity | Python 3.11 and the committed `uv.lock`; the run is made from a single commit, recorded with its results |
 | Recorded configuration | Each unit writes a replay carrying its experiment config and substrate flags; the instrument reads them back and refuses a unit whose recorded identity is not its arm's |
 
@@ -2540,3 +2540,73 @@ that the pipeline carries a non-SKIP decision through to a graded outcome, not
 that any model would produce one. Its choice does not depend on the arm, so the
 dry run's paired result is `b=0, c=0, p=1.0` BY CONSTRUCTION and must not be read
 as a comparison between the arms.
+
+## Closure (2026-09-19)
+
+The owner accepted decisions D1 to D8 of
+[the direction memo of 2026-09-19](../../tasks/direction-2026-09-19-process-over-outcome.md)
+as a set that date, with the rulings in its section 12. Three of them close this
+document: D1 demotes role-correctness to a reported cell and takes the
+preregistered outcome out of the gate, D2 retires the proof-free held-out band
+as the arena, and D8 shelves `combined_accounts`. This section is that closure,
+appended rather than woven in, so every line citation the sections above carry
+stays where it was. It is quoted here verbatim, which is what REFUSES a live
+spend: `assert_live_run_is_authorized` and `assert_calibration_is_authorized`
+both look for these bytes in this file and refuse while they are here, and a
+test holds the sentence below and the module's `CLOSURE_CLAUSE` byte for byte
+identical.
+
+> The accuracy-gated fresh-model deduction evaluation is closed as of 2026-09-19: its preregistered primary outcome, decision rule and wrongful-ejection bound stay the record of what was measured and are no longer the project's gate, no further live run or calibration under this manifest is authorized, and the held-out records this evaluation drew are an archive rather than inputs.
+
+**What stops, and what does not.** `PRIMARY_OUTCOME`
+(`supported_correct_ejection`), `DECISION_RULE`, `MINIMUM_ACTIONABLE_EFFECT`
+and `WRONGFUL_EJECTION_TRADEOFF` are unchanged and undeleted. They stay the
+record of what the five runs and the fifth run's grading actually measured, and
+they stop being the project's gate: the memo's §8 yardstick is the headline
+from here, with role-correct ejection reported beside it and never as a bar.
+Nothing in this document, in the run archives or in the three calibration
+records is restated, re-scored, re-graded or withdrawn by this closure. The
+fifth run's result stays what it was recorded as — complete, and INCONCLUSIVE
+under the frozen rule: `b = 2`, `c = 0`, exact McNemar p 0.5 against a bar of
+0.05, a net paired difference of 2 against 10, and a wrongful-ejection bound
+that fails at +7 against a permitted 2, so the candidate neither advanced nor
+was rejected. Closing an evaluation does not turn an inconclusive result into a
+rejection, and a candidate that was never adopted is not thereby refuted.
+
+**Five runs and three calibrations are context, not adoption evidence.** The
+runs of 2026-09-10, 2026-09-13 (twice), 2026-09-15 and 2026-09-16 and the
+development calibrations of 2026-09-14, 2026-09-15 and 2026-09-18 keep every
+figure they published and every denominator, failure and cost beside it. None
+of them is an adopting record, none of them becomes one, and no lever moves
+from OFF on their account.
+
+**The inputs are an archive.** The held-out record at
+`held-out/manifest.json` is marked `development` in place, with a `converted`
+block naming the run of 2026-09-16, its pull request `#465`, its branch and all
+fifty rendered seeds. Its `superseded_by` is `null` and means what it says: the
+evaluation closed and no band replaced this one. No sixth band was frozen, the
+band 2100-2999 that
+[the sixth freeze card](../../tasks/work/held-out-prefix-freeze-6.md)
+preregistered stays unseen and unnamed in code, and the record's digests are
+compared against the bytes they were frozen with rather than regenerated, so an
+edit to a generator source file no longer owes this band a restamp. The Inputs
+table above still binds seed band 8000-8999; it binds the band this archive
+holds, and nothing draws it.
+
+**`combined_accounts` is SHELVED, not deleted.** Its arm definition stays in
+the instrument, its three levers stay default-OFF in
+`orchestrator/experiment_config.py`, its templates stay in the tree and keep
+rendering in the suite, and no card develops it. One later edit to that arm is
+expected and named here:
+[the grounded-SKIP card](../../tasks/work/grounded-skip-and-guard-labels.md)
+retires `citation_relevance_version`, and `RecordedExperimentConfig` forbids
+extra keys, so that card drops `citation_relevance_version=1` from the arm and
+the arm keeps importing. That card also harvests the wording this candidate was
+built to test: the SKIP register at
+`agents/strategic/prompts/qwen3_6_27b/vote_ballot_accounts.j2:21`, against the
+default ballot's "a SKIP needs neither".
+
+**Reopening.** Removing the sentence above from this file is what reopens the
+gates, and it is a visible act that needs its own card and its own owner
+decision — together with a freshly frozen band, because the archive is not an
+input and `write_manifest` refuses to regenerate over it.

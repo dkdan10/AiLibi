@@ -79,7 +79,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import MappingProxyType
-from typing import Any, Final, Literal, Self, get_args
+from typing import Any, Final, Literal, Self, TypeVar, get_args
 
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
@@ -1344,10 +1344,14 @@ def assert_live_run_is_authorized(
     and the manifest all refuse — and it would spend part of the held-out set
     outside the 50-pair design while leaving the rest held out.
 
-    The last check is on the inputs rather than the run: the band the manifest's
-    Inputs table binds has to be the band the live freeze record holds
-    (:func:`assert_manifest_binds_the_live_band`), so an authorization written
-    for one band cannot spend another.
+    The last two checks are on the document rather than on the run. The band
+    the manifest's Inputs table binds has to be the band the live freeze record
+    holds (:func:`assert_manifest_binds_the_live_band`), so an authorization
+    written for one band cannot spend another; and the manifest may not carry
+    the closing clause of 2026-09-19
+    (:func:`assert_the_evaluation_is_not_closed`), which it does since the
+    owner closed this evaluation — so on this tree an otherwise perfect
+    invocation is refused here, by construction.
     """
 
     if provider == "fake":
@@ -1417,6 +1421,11 @@ def assert_live_run_is_authorized(
     # document authorized THESE inputs. A held-out band that moves under a
     # manifest nobody re-bound passes every check above it.
     assert_manifest_binds_the_live_band(repo_root)
+    # And this says the document still authorizes ANY run. Last of the document
+    # checks on purpose: only a run that is otherwise authorized — right
+    # manifest, right model, right band — reaches the closing refusal, so a
+    # misconfigured run is told what is wrong with it instead.
+    assert_the_evaluation_is_not_closed(manifest.read_text(encoding="utf-8"))
     # Last here, first in :func:`assert_ready_for_a_live_run`. The checks above
     # say WHICH run this is, and a run whose manifest, model or band is wrong
     # should be told that rather than told its arithmetic; on the CLI's own path
@@ -1654,6 +1663,55 @@ CALIBRATION_3_CLAUSE: Final[str] = (
     "and computes no paired statistic, evaluates no decision rule and reports "
     "no primary outcome."
 )
+
+#: The owner's CLOSING clause, accepted on 2026-09-19 with decisions D1, D2 and
+#: D8 of ``tasks/direction-2026-09-19-process-over-outcome.md`` and quoted
+#: verbatim by the execution manifest's dated closing section. The same shape as
+#: the four clauses above, and the same idiom for the opposite reason: those
+#: sentences are what a gate looks for before it lets a spend through, and this
+#: one is what both gates look for before they REFUSE. A closed evaluation whose
+#: closure lived in a variable could be reopened by an edit nobody reads; living
+#: in the committed document, reopening it means deleting the owner's sentence
+#: from the record that carries it, which is a visible act.
+#:
+#: What it does NOT do: withdraw, re-score or restate a result. The five runs
+#: and three calibrations keep every figure they recorded and every meaning
+#: those figures had; what stops is the gating, not the record.
+CLOSURE_CLAUSE: Final[str] = (
+    "The accuracy-gated fresh-model deduction evaluation is closed as of "
+    "2026-09-19: its preregistered primary outcome, decision rule and "
+    "wrongful-ejection bound stay the record of what was measured and are no "
+    "longer the project's gate, no further live run or calibration under this "
+    "manifest is authorized, and the held-out records this evaluation drew are "
+    "an archive rather than inputs."
+)
+
+
+def assert_the_evaluation_is_not_closed(manifest_text: str) -> None:
+    """Refuse any live spend while the execution manifest carries the closure.
+
+    The document is the authorization, so the document is also the closure: a
+    run or a calibration reaching this point has satisfied every other check,
+    and what stops it is the owner's own sentence in the record it is
+    authorized against. Reopening the evaluation therefore means deleting that
+    sentence from the manifest under a card that says why, not passing a flag.
+
+    Placed LAST among the document checks on both paths, so a run whose
+    manifest, model, band or mode is wrong is told that instead: "this
+    evaluation is closed" is the answer for an otherwise authorized run, and a
+    misconfigured one deserves the misconfiguration's message.
+    """
+
+    if CLOSURE_CLAUSE in manifest_text:
+        raise LiveRunNotAuthorized(
+            f"{EXECUTION_MANIFEST_PATH} carries the closing clause of "
+            "2026-09-19: the owner closed this evaluation that day (decisions "
+            "D1, D2 and D8 of "
+            "tasks/direction-2026-09-19-process-over-outcome.md), so no live "
+            "run and no calibration under this manifest is authorized. The "
+            "results it recorded stand; the gate does not. Reopening it means "
+            "removing that clause from the manifest under a card that says why."
+        )
 
 
 @dataclass(frozen=True)
@@ -2004,10 +2062,14 @@ def assert_calibration_is_authorized(
       The mode lookup above still runs for it, so a rehearsal of a crossing is
       refused where a runner would be refused rather than quietly rehearsing a
       shape no live sitting could take;
-    * and the manifest has to carry the matched mode's own clause. That is the
+    * the manifest has to carry the matched mode's own clause. That is the
       authorization itself, the way the resumption clause is: this gate reads
       the committed document rather than a flag, and each mode's clause
-      authorizes only that mode's spend.
+      authorizes only that mode's spend;
+    * and it must NOT carry the closing clause of 2026-09-19
+      (:func:`assert_the_evaluation_is_not_closed`). It does since the owner
+      closed this evaluation, so every mode above is refused here on this tree
+      however well-formed the invocation is.
 
     :func:`assert_manifest_binds_the_live_band` is deliberately NOT applied. It
     binds the Inputs table's band to the held-out record, and a calibration
@@ -2081,6 +2143,11 @@ def assert_calibration_is_authorized(
             "is built and rehearsed offline, and spending on development "
             "inputs is recorded in the manifest or it is not authorized"
         )
+    # A mode's clause authorizes that spend; the closing clause withdraws the
+    # authorization from all of them at once. Checked after the mode's own, so
+    # a sitting asking for a mode this document never carried is told that
+    # rather than told the evaluation is closed.
+    assert_the_evaluation_is_not_closed(text)
     assert_limits_are_feasible(
         limits=limits,
         sampling=sampling,
@@ -2189,8 +2256,26 @@ def build_authorized_client(
     instead of an ordering a later edit to :func:`main` could quietly reverse.
     All three types are accepted and none can stand in for another anywhere
     else: which one a caller holds is what decides which records it verified.
+
+    :func:`verify_archived_set` is not a fourth producer. It returns an
+    :class:`ArchivedSet` — a sibling of :class:`FrozenSet`, not a subclass — so
+    the archive of a band that has already been rendered to a model is not
+    evidence here, and a caller holding one has verified nothing a live run may
+    spend. The annotation refuses it under mypy and the check below refuses it
+    at run time, because a type alone would be enforced only where the type
+    checker runs.
     """
 
+    if not isinstance(frozen, FrozenSet | CalibrationSet | CalibrationDraw):
+        raise LiveRunNotAuthorized(
+            "a live client is built only from inputs a live reader verified, "
+            f"and {type(frozen).__name__} is not one of those records: the "
+            "FrozenSet verify_frozen_set returns, the CalibrationSet "
+            "verify_calibration_set returns and the CalibrationDraw "
+            "verify_calibration_draw returns are the three. An ArchivedSet is "
+            "the record of a band a run has already spent: the offline "
+            "rehearsal draws it, and nothing that reaches a provider may."
+        )
     del frozen  # see the docstring: proof of ordering, not an input
 
     from llm.provider import build_default_client
@@ -3374,12 +3459,18 @@ class DryRunProvider(FakeProvider):
 
 
 @dataclass(frozen=True)
-class FrozenSet:
-    """The regenerated set, verified against the committed freeze manifest.
+class VerifiedPrefixRecord:
+    """Prefixes regenerated and checked against a committed freeze record.
 
-    Holds the prefixes because the run needs them; holds no rendered text and is
-    never serialized. :func:`assert_report_holds_no_prefix_bytes` is the guard
-    on the other side.
+    Holds the prefixes because the caller needs them; holds no rendered text and
+    is never serialized. :func:`assert_report_holds_no_prefix_bytes` is the
+    guard on the other side.
+
+    The two subclasses below are what the readers return, and WHICH record was
+    verified is the whole of the difference between them. They are siblings on
+    purpose — neither is an instance of the other, so a reader's return value
+    cannot be passed where the other reader's is required, in mypy or at run
+    time. :func:`build_authorized_client` is the caller that rests on that.
     """
 
     generated: GeneratedSet
@@ -3390,6 +3481,33 @@ class FrozenSet:
     @property
     def prefixes(self) -> tuple[HeldOutPrefix, ...]:
         return self.generated.prefixes
+
+
+@dataclass(frozen=True)
+class FrozenSet(VerifiedPrefixRecord):
+    """A HELD-OUT set, verified by :func:`verify_frozen_set` and unspent.
+
+    The only thing a live run may draw, and the only prefix record
+    :func:`build_authorized_client` accepts as proof that the inputs were
+    checked before a provider existed.
+    """
+
+
+@dataclass(frozen=True)
+class ArchivedSet(VerifiedPrefixRecord):
+    """An ARCHIVED set, verified by :func:`verify_archived_set` and spent.
+
+    The record of a band a run already rendered to a model. The offline
+    mechanics rehearsal draws it; nothing that reaches a provider may, which is
+    why this is a type of its own rather than a :class:`FrozenSet` read from a
+    different file.
+    """
+
+
+#: Which of the two records a reader verified. Bound to the shared base so the
+#: one body below constructs the class its caller asked for and returns that
+#: class, rather than a common type both callers would have to narrow.
+_Verified = TypeVar("_Verified", bound=VerifiedPrefixRecord)
 
 
 def _as_int(raw: Mapping[str, object], key: str) -> int:
@@ -3481,18 +3599,97 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
 
     Not compared here: ``source_sha256``. That is the freeze's own restamp
     record, and ``tests/experiments/test_held_out_prefixes.py::
-    test_the_committed_manifest_regenerates_from_its_own_band`` is what holds
+    test_the_archived_band_keeps_the_blocks_it_was_frozen_with`` is what holds
     it; duplicating the check here would make an un-restamped source edit stop
-    the run for a reason the freeze test states better.
+    the run for a reason the archive check states better.
+
+    Two things are refused here, and the second is not the first said twice: a
+    record that does not say ``held_out``, and a record carrying a ``converted``
+    block — whatever its ``status`` says. The block names the run that rendered
+    those prefixes to a model, so it is a FACT about the bytes, while the status
+    is a label one field-edit can flip back; a record that carries both reads as
+    a set already spent and is refused as one.
+
+    On this tree it refuses, and that is the settled state: the record at
+    :data:`MANIFEST_PATH` is the ARCHIVE of the band the run of 2026-09-16
+    spent, marked ``development`` on 2026-09-19, so there is no held-out set to
+    verify and no live run can be built from this checkout. The offline
+    mechanics path reads that archive through :func:`verify_archived_set`
+    instead, which cannot stand in for this one.
     """
 
+    return _verified_prefix_record(repo_root, into=FrozenSet)
+
+
+def verify_archived_set(repo_root: Path = _REPO_ROOT) -> ArchivedSet:
+    """The ARCHIVED record's inputs, for the offline mechanics path only.
+
+    Identical to :func:`verify_frozen_set` in everything it compares, and the
+    opposite of it in the one thing it accepts: the record has to be marked
+    ``development`` AND carry a ``converted`` block — the archive the closing
+    card of 2026-09-19 left at :data:`MANIFEST_PATH` — and a ``held_out``
+    record is refused here by name. Neither function can be used in the other's
+    place, which is the point of there being two: a set still to be spent is
+    not something a rehearsal may draw, and an archive is not something a live
+    run may spend. The live paths — :func:`assert_ready_for_a_live_run` and
+    :func:`run_instrument` on any provider but ``fake`` — call
+    :func:`verify_frozen_set` and reach this function never.
+
+    What it returns says so as well. An :class:`ArchivedSet` is not a
+    :class:`FrozenSet` and is not a subclass of one, so it cannot be handed to
+    :func:`build_authorized_client` by an edit that merely reaches for the
+    nearer reader: that call does not type-check, and it is refused at run time
+    too. Before 2026-09-19 both readers returned the same class, which made
+    "the inputs were verified" indistinguishable from "an archive was read".
+
+    It exists because the fake-provider run is the instrument's published
+    mechanics check (the execution manifest's "Verification of this manifest"
+    quotes its command) and it spends nothing, reaches no provider and renders
+    to no model. Closing the evaluation stops the spending, not the arithmetic
+    that documents it.
+    """
+
+    return _verified_prefix_record(repo_root, into=ArchivedSet)
+
+
+def _verified_prefix_record(repo_root: Path, *, into: type[_Verified]) -> _Verified:
+    """The body of both readers above. ``into`` picks which record is legal.
+
+    The type asked for and the record accepted are one choice rather than two
+    that could drift apart: ``into`` is both the class returned and the answer
+    to "is this the archive path?".
+    """
+
+    archived = into is ArchivedSet
     manifest_file = repo_root / MANIFEST_PATH
     if not manifest_file.is_file():
         raise FrozenSetMismatch(f"the freeze manifest is missing: {MANIFEST_PATH}")
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):
         raise FrozenSetMismatch(f"{MANIFEST_PATH} does not hold a JSON object")
-    if manifest.get("status") != "held_out":
+    if archived:
+        if manifest.get("status") != "development" or "converted" not in manifest:
+            raise FrozenSetMismatch(
+                f"the record at {MANIFEST_PATH} is marked "
+                f"{manifest.get('status')!r} and carries "
+                f"{'a' if 'converted' in manifest else 'no'} 'converted' block; "
+                "the offline mechanics path draws the ARCHIVED record and never "
+                "a set that is still to be spent"
+            )
+    elif "converted" in manifest:
+        # Before the status, and independent of it: the block is the record of
+        # a run that rendered these prefixes to a model, so the inputs are
+        # development data whatever the file calls itself. Trusting the status
+        # alone left one field-edit between a spent archive and a live spend.
+        block = manifest["converted"]
+        spent_on = block.get("date") if isinstance(block, Mapping) else None
+        raise FrozenSetMismatch(
+            f"the record at {MANIFEST_PATH} carries a 'converted' block, dated "
+            f"{spent_on!r}, naming the run that already rendered these "
+            "prefixes to a model; a spent set is development data whatever its "
+            "'status' says, and this run may not draw it"
+        )
+    elif manifest.get("status") != "held_out":
         raise FrozenSetMismatch(
             f"the frozen set is marked {manifest.get('status')!r}, not "
             "'held_out'; a set converted to development data is not a held-out "
@@ -3576,7 +3773,7 @@ def verify_frozen_set(repo_root: Path = _REPO_ROOT) -> FrozenSet:
         assert_no_legacy_body_handles([canonical_prefix_json(prefix)])
         if prefix_sha256(prefix) != dict(expected_accepted)[prefix.seed]:
             raise FrozenSetMismatch(f"seed {prefix.seed} re-hashes differently")
-    return FrozenSet(
+    return into(
         generated=generated,
         manifest_sha256=hashlib.sha256(manifest_file.read_bytes()).hexdigest(),
         accepted_seeds=tuple(seed for seed, _ in expected_accepted),
@@ -6551,7 +6748,12 @@ def assert_checkpoint_matches(
     provider: str,
     limits: RunLimits,
     sampling: SamplingConfig,
-    frozen: FrozenSet,
+    # Either verified record, because the fake-provider rehearsal is what proves
+    # the resume works and it draws the ARCHIVE. What is compared is the record
+    # this sitting verified against the one the first sitting did, and that
+    # question is the same for both readers; which record a run is allowed to
+    # draw at all is settled one level up, by the reader it calls.
+    frozen: VerifiedPrefixRecord,
     repo_root: Path = _REPO_ROOT,
 ) -> None:
     """Refuse to continue a run that would not be the same run.
@@ -6856,7 +7058,17 @@ def run_instrument(
     # The label said what this run is; this says what it actually holds. Both
     # directions are refused, and both before anything is spent.
     assert_client_matches_provider(provider=provider, client=client)
-    frozen = verify_frozen_set(repo_root)
+    # The inputs, read by the reader that matches what this run is. A live run
+    # draws a held-out set and refuses an archive; the offline rehearsal draws
+    # the archive and refuses a set still to be spent. Since 2026-09-19 this
+    # tree holds only the archive, so `fake` is the only provider that gets
+    # past this line at all — the closing gate above having already refused
+    # every other one.
+    frozen = (
+        verify_archived_set(repo_root)
+        if provider == "fake"
+        else verify_frozen_set(repo_root)
+    )
     prefixes = frozen.prefixes if units is None else frozen.prefixes[:units]
     arms = instrument_arms()
     planned = len(prefixes) * len(arms)
