@@ -992,8 +992,8 @@ def _claim_truth(
     # under a re-cut -- merging contiguous same-room legs changes neither the
     # ticks walked nor the room claimed for any of them -- and this comparison
     # is on the RAW room text against the engine's own room id, so coalescing
-    # would substitute the first leg's spelling for a contiguous leg's and
-    # quietly re-score a label the speaker did not use there. The re-cut lever
+    # would substitute the merged stay's single label for a contiguous leg's
+    # and quietly re-score a label the speaker did not use there. The re-cut lever
     # is closed where it exists, in :func:`_flag_scored_claim_truth`'s count.
     # On a one-segment claim -- which is every claim on the committed
     # recordings -- this is the identical walk, so the census the module

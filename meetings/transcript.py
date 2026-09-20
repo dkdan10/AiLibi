@@ -933,18 +933,27 @@ def maximal_stays(route: Sequence[AlibiSegment]) -> tuple[AlibiSegment, ...]:
 
     Not a schema change and not a rewrite of what was said. The claim keeps the
     legs the speaker gave it, and so does everything that REPORTS them: the
-    serializer, the listener render, the served view, and the one
-    :class:`~meetings.schemas.ReportedStatement` per leg the testimony
-    reduction emits. The meeting layer LABELS an account; it never re-words it.
+    transcript, the serializer, the meeting-transcript render OF THE SPEAKER'S
+    OWN TURN, and the served DTO. What DETECTS, SCORES or IS HELD BY A LISTENER
+    reads stays instead -- including
+    :func:`meetings.manager.derive_reported_testimony`, which files one
+    :class:`~meetings.schemas.ReportedStatement` per STAY, and the §6.6 belief
+    render built on those rows. The meeting layer LABELS an account; it never
+    re-words it.
 
-    A merged stay keeps the FIRST leg's ``room`` text, so the room a
-    description quotes is deterministic and is a label the speaker actually
-    used. Two contiguous legs with the same canonical set but different spelling
-    ("LABS" then "labs") therefore read as one stay spelled the first way -- the
-    detectors already compare canonical sets, so no comparison moves. Two
-    NON-SPATIAL legs both canonicalise to the empty set and so merge as well;
-    that is inert, because every comparison site skips an account with no
-    canonical room.
+    A merged stay's ``room`` text is the LEXICOGRAPHICALLY SMALLEST of the
+    labels merged into it -- a label the speaker actually used, and a function
+    of the SET of them rather than of their order (round-6 review). Keeping the
+    FIRST leg's text made the CUT choose the spelling: ``cafeteria 2-4`` +
+    ``CAFETERIA 5-8`` and its mirror are one account, but they quoted different
+    labels, which moved every description that quotes the stay and the belief
+    block's row ORDER with them. Two contiguous legs with the same canonical set
+    but different spelling ("LABS" then "labs") therefore read as one stay
+    spelled "LABS" whichever way round they were narrated -- the detectors
+    already compare canonical sets, so no comparison moves. Two NON-SPATIAL legs
+    both canonicalise to the empty set and so merge as well, under the same
+    label rule; that is inert to the detectors, because every comparison site
+    skips an account with no canonical room.
 
     Pure and total: no clock, no RNG, no environment. A one-segment route is
     returned unchanged -- which is why every committed recording, all of them
@@ -959,7 +968,14 @@ def maximal_stays(route: Sequence[AlibiSegment]) -> tuple[AlibiSegment, ...]:
                 canonical_rooms(earlier.room) == canonical_rooms(segment.room)
                 and segment.from_tick == earlier.to_tick + 1
             ):
-                stays[-1] = earlier.model_copy(update={"to_tick": segment.to_tick})
+                stays[-1] = earlier.model_copy(
+                    update={
+                        "to_tick": segment.to_tick,
+                        # The merged stay's label is a function of the SET of
+                        # labels merged, never of their order (round-6 review).
+                        "room": min(earlier.room, segment.room),
+                    }
+                )
                 continue
         stays.append(segment)
     return tuple(stays)

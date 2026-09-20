@@ -82,6 +82,59 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
+- [x] Review correction: the §6.6 belief block is BOUNDED against
+  `DEFAULT_TOKEN_BUDGET` again, without giving the eviction dial back. The
+  per-`(subject, source)` cap the item below introduced bounds the block at
+  `subjects x sources x cap`, which is 168 rows and 1,605 estimated tokens on
+  the worst legal nine-player case -- over the 1,500 budget, and because
+  `_assemble_view` never budgets the belief block what pays for the overflow is
+  the agent's own first-hand OBSERVATIONS, shed whole. Nothing raised:
+  `TestTokenBudgetIsHardCap` carves the belief block out. A new per-SUBJECT
+  total (`_MAX_RENDERED_ALIBIS_PER_SUBJECT`) sits beside the per-source cap and
+  is filled ROUND-ROBIN by recency across sources -- every source's newest row,
+  then every source's second, sources ordered by the recency of their newest --
+  so a speaker still displaces only their OWN older rows, and a voice is dropped
+  only when more distinct SPEAKERS than the total have named one subject, and
+  then the one whose newest row is stalest. The VALUE is measured against the
+  token budget and nothing else: 18 is the largest total for which the worst
+  legal case renders inside the budget with the observations block alive (144
+  rows, 1,484 tokens, 16 of headroom; 19 sheds the block whole, 20 is over).
+  Byte-neutral on the record, re-measured under the new rule against BOTH
+  historical rules: 5,256 subject belief states, 0 renders changed. Gates:
+  `tests/agents/test_reported_testimony.py::TestTheBeliefBlockCannotOutgrowTheTokenBudget`
+  (the worst legal case through the production path -- the measurement the old
+  bound never had) and `::TestTheSubjectTotalIsFilledRoundRobin`.
+- [x] Review correction: a merged stay's LABEL is cut-independent, and the
+  belief-row ORDER is spelling-independent. `maximal_stays` kept the FIRST
+  leg's raw `room`, so the CUT chose which of several canonically-equal
+  spellings survived: `CAFETERIA 2-4` + `cafeteria 5-8` and its mirror are one
+  account and quoted different rooms, which moved every description that quotes
+  the stay (prompt-visible) and, because `_format_alibi_suffix` sorted on raw
+  text, flipped the speaker's belief row across a rival's contradicting
+  placement. Both halves are closed at the ONE normalisation point: the merged
+  stay's label is the LEXICOGRAPHICALLY SMALLEST of the labels merged (a
+  function of the SET, not the order; the same rule for merged non-spatial
+  legs), and the row sort key reads `(tick, sorted canonical rooms, raw room,
+  source)`. The sort-key change was taken only because it is byte-neutral on
+  the committed record, measured with the production function. A one-segment
+  claim merges nothing, so every committed claim still reads byte-identically.
+  Two narrations whose label SETS differ are two WORDINGS of one account, whose
+  quoted label legitimately differs while flags, bands, ids, metrics and row
+  survival and order do not. Gates: the mixed-spelling property families in
+  `tests/meetings/test_contradictions.py::TestMixedSpellingsOfOneStayReadIdentically`,
+  `tests/agents/test_reported_testimony.py::TestMixedSpellingsOfOneStayLeaveTheListenerIdentical`
+  and
+  `tests/eval/test_alibi_fabrication.py::TestReCuttingARestatementDoesNotMoveTheRate::test_every_spelling_of_every_recut_reads_identically`,
+  plus `TestMaximalStays`'s order-independence cases.
+- [x] Review correction: three comments stated the opposite of what shipped and
+  are corrected. `meetings/transcript.py::maximal_stays`'s docstring listed
+  "the listener render" and "the one `ReportedStatement` per leg the testimony
+  reduction emits" among the surfaces that keep the legs; `meetings/manager.py`
+  said "a route emits one per leg"; `agents/memory/store.py::_format_alibi_suffix`
+  said "recorded alibi legs". A tree-wide grep found two more loose sentences,
+  both corrected. The round-6 Results subsection records the full list, the
+  supersession note the round-5 item was short by, and the one round-4 test
+  renamed by declared correction rather than silently.
 - [x] Review correction: the LISTENER holds STAYS. This SUPERSEDES the
   acceptance item below reading "`derive_reported_testimony` emits one
   `kind="alibi"` statement per segment, so `absorb_reported_testimony` lands
@@ -618,16 +671,16 @@ prune and repairs a reversed range per segment, both keyed on field names.
 ### Verification
 
 Run from a clean worktree at the head of this branch, re-measured at the
-ROUND-5 head (the dated round-1 to round-4 subsections below keep their own
-figures). Two cells moved, both by the sixteen tests round 5 adds; the two
-frontend cells marked below are the round-2 measurement, because rounds 3 to 5
+ROUND-6 head (the dated round-1 to round-5 subsections below keep their own
+figures). Two cells moved, both by the forty-six tests round 6 adds; the two
+frontend cells marked below are the round-2 measurement, because rounds 3 to 6
 change detector geometry, a metric key and a memory render only, and move no
 served byte.
 
 | command | result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — 8,220 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
-| `uv run pytest tests/meetings tests/agents -q` | 2,790 passed |
+| `bash scripts/check.sh` | exit 0 — 8,266 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
+| `uv run pytest tests/meetings tests/agents -q` | 2,833 passed |
 | `uv run pytest tests/api tests/llm -q` | 765 passed, 19 skipped |
 | `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
 | `uv run pytest tests/scripts/test_counterfactual_phase21.py -q` | 112 passed |
@@ -1661,3 +1714,406 @@ word budgets still pass. `docs/architecture.md` is NOT touched, for round 4's
 reason: its route sentence is about the spectator contract, which this round
 does not change, and the page sits at 1,295 words against its 1,300-word
 ceiling. `docs/glossary.md` defines no term this round moves.
+
+### Review corrections, round 6 (2026-09-21)
+
+Two blocking findings, both VALID, both repaired, plus the record-integrity
+lens's stale-comment finding. They are the two halves of round 5's own repairs
+that round 5 did not finish: the per-source cap it introduced to protect one
+voice from another had no bound against the TOKEN BUDGET, and the
+normalisation rounds 4 and 5 leaned on erased the CUT but not the SPELLING the
+cut chose.
+
+**1. The per-`(subject, source)` cap let the non-elastic belief block exceed
+`DEFAULT_TOKEN_BUDGET`.** `_MAX_RENDERED_ALIBIS` exists, by its own comment,
+because `_assemble_view` never budgets the §6.6 belief block: the elastic
+section is the first-hand OBSERVATIONS, so anything the belief block spends is
+spent out of the agent's own eyes. Round 5 moved the bound from `subjects x 3`
+to `subjects x sources x 3`. Repro at the round-5 head `b22544ef`, through the
+production path (`derive_reported_testimony` -> `absorb_reported_testimony` ->
+`render_for_prompt`), on the worst LEGAL nine-player case -- every living
+player proxy-alibis every other with a three-stay route:
+
+```
+                              BEFORE (b22544ef)        AFTER (this head)
+rendered alibi rows           168                      144
+estimated tokens              1,605                    1,484
+inside DEFAULT_TOKEN_BUDGET   no  (1,500)              yes
+observations block            SHED WHOLE               alive
+```
+
+Nothing raised: `TestTokenBudgetIsHardCap` carves the belief block out, so the
+suite was green with the render 105 tokens over. The sweep by sources-per-
+subject at `b22544ef` reads 1 -> 24 rows / 926 tokens, 6 -> 144 / 1,486, 7 ->
+168 / 1,605, 8 -> 192 / 1,819.
+
+**As built: a per-SUBJECT total, filled ROUND-ROBIN by recency across sources.**
+`_MAX_RENDERED_ALIBIS_PER_SUBJECT` (`agents/memory/store.py:186`) sits beside
+the per-source cap and bounds the whole subject. The per-source cap applies
+first; then the total is filled by taking each source's most recent surviving
+row, then each source's second, and so on, with sources ordered by the recency
+of their NEWEST row. The row sort key is total (it carries the source), so that
+order is deterministic and needs no further tie-break. The kept rows render in
+the existing whole-block order, so the line is still a chronology.
+
+Under this rule a speaker can only ever displace their OWN older rows. A voice
+is dropped only when more distinct SPEAKERS than the total have named one
+subject, and the voice dropped is the one whose newest row is stalest -- never
+the one some other speaker's volume pushed out. Round 5's guarantee therefore
+stands: an accused player cannot move WHICH other voices survive.
+
+**The value is MEASURED, against the token budget and nothing else.** The
+largest total for which the worst legal nine-player case renders inside
+`DEFAULT_TOKEN_BUDGET` AND still affords first-hand observations. Rows are
+`8 subjects x total`; `obs` is the surviving first-hand observation lines, of
+57 available; the case saturates the cap at 7 sources x 3, so 21 is the most
+any total can reach on a nine-player roster.
+
+| total | rows | est. tokens | headroom | obs lines | within budget, block alive |
+| --- | --- | --- | --- | --- | --- |
+| 3 | 24 | 1,461 | 39 | 48 | yes |
+| 6 | 48 | 1,468 | 32 | 39 | yes |
+| 9 | 72 | 1,472 | 28 | 30 | yes |
+| 12 | 96 | 1,473 | 27 | 21 | yes |
+| 15 | 120 | 1,477 | 23 | 12 | yes |
+| 16 | 128 | 1,479 | 21 | 9 | yes |
+| 17 | 136 | 1,482 | 18 | 6 | yes |
+| **18** | **144** | **1,484** | **16** | **3** | **yes — chosen** |
+| 19 | 152 | 1,475 | 25 | 0 | no — block SHED whole |
+| 20 | 160 | 1,533 | -33 | 0 | no — over budget |
+| 21 | 168 | 1,605 | -105 | 0 | no — the round-5 bound |
+
+**18, with 16 tokens of headroom**, and the trade-off stated rather than
+hidden: at 18 the block SURVIVES but holds 3 of its 57 observation lines,
+because the elastic section pays for roughly three lines per unit of cap all
+the way up the curve. The binding constraint is the block's survival, not the
+budget (19 is inside the budget and sheds the block whole). The curve is
+published here so the owner can buy first-hand memory back by lowering the
+number; nothing in this card is tuned against role-correctness, and the total
+is sized against the token budget alone. The headroom is measured on the
+canonical room inventory (`ENGINEERING` / `UPPER_HALL` are the longest labels a
+three-stay route can carry); an off-map label longer than those is not bounded
+by the roster and is recorded below as a residual.
+
+**BYTE-NEUTRAL on the committed record, re-measured under the new rule.** The
+round-5 census re-run at this head, now comparing the PRODUCTION
+`_format_alibi_suffix` against BOTH historical rules, row by row:
+
+| set | subject belief states with an alibi | over the per-source cap | with >= 2 sources | renders differing from `32d0cae7` | renders differing from round 5 |
+| --- | --- | --- | --- | --- | --- |
+| `replays/samples/4p1i` | 0 | 0 | 0 | 0 | 0 |
+| `replays/samples/9p2i` | 1,446 (1,250 / 176 / 20 rows) | 0 | 0 | 0 | 0 |
+| `replays/ml_corpus/4p1i` | 0 | 0 | 0 | 0 | 0 |
+| `replays/ml_corpus/9p2i` | 3,810 (3,305 / 466 / 37 / 2 rows) | 2 | 0 | 0 | 0 |
+| total | 5,256 | 2 | 0 | 0 | 0 |
+
+Round 5's census reproduces exactly (5,256 / 2 / 0), and so does the claim
+census behind the fabrication key (672 meetings, 1,016 alibi claims, 0 with
+more than one segment, 0 spelling a room non-canonically, 1,016 distinct keys
+raw and canonical). Meetings are counted per record rather than by
+`meeting_id`, because `game_id`/`meeting_id` collide across
+`replays/ml_corpus/4p1i` and `replays/ml_corpus/9p2i` at seed 1010 and a
+keyed count reads 1,015. The mechanical reason nothing moves: the widest
+subject anywhere holds four rows from ONE source, where the per-source cap
+decides everything and a total of 18 never binds.
+
+**2. A re-cut still moved what the listener holds, through the surviving
+SPELLING.** `maximal_stays` kept the FIRST leg's raw `room`, and
+`_format_alibi_suffix` sorted rows on that raw text, so the cut chose both the
+LABEL and the row ORDER. Repro at `b22544ef`, listener `p-9`; `p-2` proxy-
+alibis `p-1` in `MEDBAY 2-2`, `p-1` self-alibis the cafeteria over ticks 2-8.
+All four narrations are one account:
+
+```
+                                        BEFORE                                          AFTER
+CAFETERIA 2-8                 in CAFETERIA at tick 2 per p-1; in MEDBAY at tick 2 per p-2   (identical)
+CAFETERIA 2-4 | cafeteria 5-8 in CAFETERIA at tick 2 per p-1; in MEDBAY at tick 2 per p-2   (identical)
+cafeteria 2-4 | CAFETERIA 5-8 in MEDBAY at tick 2 per p-2; in cafeteria at tick 2 per p-1   (identical)
+CAFETERIA_TRANSITION 2-4 |    in CAFETERIA_TRANSITION at tick 2 per p-1; in MEDBAY ...      (identical)
+  CAFETERIA 5-8
+```
+
+The same root cause reached the detector DESCRIPTION, which is prompt-visible:
+`Alibis place p-1 in CAFETERIA (ticks 2-8) and in MEDBAY (ticks 2-2)` against
+`Alibis place p-1 in MEDBAY (ticks 2-2) and in cafeteria (ticks 2-8)` for two
+cuts of one account. Ids, kinds and bands were unchanged throughout. Rounds 4
+and 5 could not see it because both property families enumerate re-cuts in ONE
+spelling.
+
+**As built, at the ONE normalisation point.** A merged stay's `room` text is
+now the LEXICOGRAPHICALLY SMALLEST of the labels merged into it
+(`meetings/transcript.py:976`) -- still a label the speaker actually used, and
+a function of the SET of them rather than of their order, because `min` over a
+set does not depend on the order it is folded in. A one-segment claim merges
+nothing and so is untouched, which is why every committed claim reads
+byte-identically. The same rule covers merged NON-SPATIAL legs (empty canonical
+set, which is why they merge at all): `UNKNOWN 2-5` + `NOWHERE 6-8` and its
+mirror both coalesce to `NOWHERE 2-8`. That restates round 5's third residual
+rather than adding a second merge rule -- the label kept is now
+order-independent, and the other label still does not reach a belief row.
+
+**The sort key, decided by MEASUREMENT.** `_format_alibi_suffix` sorted on
+`(tick, room, source)`, so two WORDINGS of one account -- a narration all in
+`cafeteria` against one all in `CAFETERIA` -- still ordered the speaker's row on
+opposite sides of a rival's `MEDBAY` row at the same tick. The key is now
+`(tick, sorted canonical rooms, raw room, source)` (`_alibi_row_sort_key`,
+`agents/memory/store.py:2586-2604`). The brief authorised this only if it is
+byte-neutral on the committed record; the census above is run with the
+production function and reads 0 renders changed against both historical rules,
+so it is taken rather than recorded as a residual. The raw label stays in the
+key underneath the canonical set so two genuinely different rooms at one tick
+keep a total order.
+
+**What "the same account" means when the label SETS differ.** Two narrations
+that merge the same legs from the same SET of labels are the same account said
+the same way: every output must be identical, bytes included. Two narrations
+whose label SETS differ -- `cafeteria 2-8` against `CAFETERIA 2-8`, exactly as
+`labs 2-14` against `LABS 2-14` with one leg -- are two WORDINGS of one
+account. The label they quote legitimately differs, and everything else must
+not: measured at this head, the two wordings produce the same flag kinds,
+`contradiction_id`s, endpoints, subjects and bands, the same belief rows from
+the same sources in the same ORDER, and the same fabrication key, total and
+rate. One residual survives there and is recorded below.
+
+**The durable gate.** Three exhaustive property families in the round-4/5
+idiom, plus the two repros as named tests. "Narrations" counts the meetings
+each family actually builds.
+
+| family | what is enumerated | what must be identical |
+| --- | --- | --- |
+| `test_contradictions.py::TestMixedSpellingsOfOneStayReadIdentically` | every (cut, spelling assignment) of each stay of `STORAGE 2-8` (12,288 in 7 label-set groups) and of `STORAGE 2-6` + `CAFETERIA 7-11` (1,536 in 14), across all 24 scenario cases = 165,888 meetings | every flag's kind, `contradiction_id`, both endpoints, subjects, band, weak/strong reading and DESCRIPTION |
+| `test_reported_testimony.py::TestMixedSpellingsOfOneStayLeaveTheListenerIdentical` | the same two families, 13,824 narrations | `derive_reported_testimony` output, every belief alibi row, the `[meeting]` lines and `render_for_prompt` BYTES |
+| `test_alibi_fabrication.py::TestReCuttingARestatementDoesNotMoveTheRate::test_every_spelling_of_every_recut_reads_identically` | the same two families, 13,824 restatements | `total_impostor_alibis`, `survived` and `survival_rate` |
+
+The spellings are a room's own `ROOM`, `room` and `ROOM_TRANSITION`, asserted
+canonically equal by the helper that builds them. Each family enumerates one
+stay at a time (the other stays stated as the route gives them), which is
+linear in the number of stays and exhaustive over each; grouping is by the
+label SET, so the property compares narrations of one account and never two
+wordings. Beside them:
+
+* `TestTheBeliefBlockCannotOutgrowTheTokenBudget` -- the missing gate for
+  blocking 1: the worst legal nine-player belief set, built through the
+  production path, asserted inside `DEFAULT_TOKEN_BUDGET` with the
+  observations block alive, plus a non-vacuity test that every subject really
+  is AT the total.
+* `TestTheSubjectTotalIsFilledRoundRobin` -- no voice zeroed while the total
+  permits; a rival's single row surviving both an accused's thirty stays and a
+  field of proxy speakers up to the total; only the STALEST voice dropped past
+  the total, and not a different one when the newest speaker shouts;
+  deterministic under all 120 permutations of five tied rows; a lone speaker's
+  render byte-identical to round 5's; and the total at least the per-source cap.
+* `TestMixedSpellingsOfOneStayLeaveTheListenerIdentical::test_two_wordings_differ_only_in_the_label_they_quote`
+  -- the label-sets-differ half, with the rival placed at the account's own
+  first tick so the row ORDER turns on the room text rather than the tick.
+* `test_alibi_fabrication.py::test_two_wordings_of_one_account_are_one_alibi`
+  -- what the CANONICAL half of the fabrication key buys now that the label
+  rule closes the mixed-cut case (see probe l2 below).
+* `TestMaximalStays` gains the order-independence of a three-leg run under all
+  six permutations of three spellings, and the non-spatial merge under both
+  orders.
+
+Forty-six tests in all. No existing test is weakened, skipped or deleted; one
+is CORRECTED, declared below.
+
+**Round-6 planted failures.** Each applied to the tree, run, restored. Counts
+are what pytest prints.
+
+| # | production line neutered | selection | perturbed | restored |
+| --- | --- | --- | --- | --- |
+| n | the per-SUBJECT total dropped (back to round 5's sources x cap) | `tests/agents/test_reported_testimony.py` | `5 failed, 53 passed` | `58 passed` |
+| o | the total filled by global recency instead of ROUND-ROBIN | same | `2 failed, 56 passed` | `58 passed` |
+| p | `maximal_stays` merged label -> the FIRST leg's text | `test_contradictions.py test_transcript.py test_alibi_fabrication.py` | `23 failed, 382 passed` | `405 passed` |
+| p (listener) | same neuter | `tests/agents/test_reported_testimony.py` | `2 failed, 56 passed` | `58 passed` |
+| q | `_alibi_row_sort_key` canonical rooms -> raw text only | `tests/agents/test_reported_testimony.py` | `1 failed, 58 passed` | `59 passed` |
+| r | `_MAX_RENDERED_ALIBIS_PER_SUBJECT` 18 -> 19 | same | `1 failed, 58 passed` | `59 passed` |
+
+Probe **q is reported with its first, GREEN run**, as the brief requires. The
+canonical half of the sort key was unenforced when first neutered (`58 passed`,
+nothing red): the test comparing the two wordings placed the rival at tick 8
+while the account's row sits at tick 2, so the TICK decided the order and the
+room text never came into it. The test now places the rival at the account's
+own first tick, which is the shape the finding was about, and the probe then
+reads `1 failed, 58 passed`. Only the `cafeteria` wording turns red, and that
+is correct rather than a weak gate: `CAFETERIA_TRANSITION` sorts after
+`CAFETERIA` but still before `MEDBAY` on raw text, so it never flipped. Probe
+**r** is the evidence that 18 is a measured number and not a taste: one more
+row per subject and the observations block is shed whole. The two baselines
+differ by one test (58 vs 59) because the q/r runs postdate the test q forced.
+
+**Stale comments corrected (the record-integrity lens, blocking for it).**
+Three sentences stated the opposite of what shipped:
+
+* `meetings/transcript.py`'s `maximal_stays` docstring listed "the listener
+  render" (unqualified) and "the one `ReportedStatement` per leg the testimony
+  reduction emits" among the surfaces that keep the legs. It now uses the list
+  `docs/observation-contract.md` uses -- the transcript, the serializer, the
+  meeting-transcript render OF THE SPEAKER'S OWN TURN, the served DTO -- and
+  says the reduction and the §6.6 belief render read stays.
+* `meetings/manager.py`'s "a route emits one per leg" -> per maximal STAY.
+* `agents/memory/store.py::_format_alibi_suffix`'s first line, "recorded alibi
+  legs" -> rows.
+
+A tree-wide grep for "per leg" / "one per leg" / "keeps the legs" / "first leg"
+over `agents api docs eval llm meetings observation orchestrator scripts
+training experiments frontend/src` found two more sentences that were loose
+rather than false and both are corrected: `eval/process_scorecard.py`'s
+"substitute the first leg's spelling" (the merged stay's label is no longer the
+first leg's) and `eval/evidence_honesty.py`'s caller comment saying the
+detector minted the flag "from the leg" (it reads the stay; the function's own
+docstring already said so). Every other hit is about a different subject
+(`training/reports/*` legs of a campaign, a `do_task` wrapper mirror) or is a
+dated card subsection, which is corrected by note and not rewritten.
+
+**Dated corrections to earlier subsections.** The earlier dated subsections
+keep their figures and sentences; these are the notes.
+
+* **Round 5's bound claim.** Round 5 wrote, at `_MAX_RENDERED_ALIBIS` and in
+  its own subsection, that with the per-source cap "the §6.6 block stays finite
+  and deterministic". Finite and deterministic it was; BUDGET-SAFE it was not,
+  which is blocking 1. The comment at the constant now says both bounds and
+  why each exists.
+* **Round 5's supersession list is short by one item.** The first round-5
+  Acceptance item supersedes the acceptance item reading "one belief alibi per
+  leg" and the round-4 table row that classed the reduction with the reporting
+  surfaces. It should also have named the round-4 Acceptance item that reads
+  "the one-`ReportedStatement`-per-leg reduction ... keep the legs as the
+  speaker gave them" (the round-4 re-cut-class item, in its "Nothing that
+  REPORTS an account moves" sentence). That clause is SUPERSEDED: the reduction
+  files one statement per stay. The same item's closing sentence "A merged stay
+  keeps the FIRST leg's room text" is superseded by round 6: the merged stay
+  keeps the smallest of the labels merged. The old items are left as written.
+* **Round 4's and round 5's "FIRST leg's room text" rows.** The round-4
+  class-closing paragraph, its description-builder table row, its
+  `process_scorecard._claim_truth` exemption row, and the round-5
+  canonical-room paragraph and its identically-worded rows all state the
+  first-leg rule. All of them are superseded by the smallest-label rule; none
+  of their CLASSIFICATIONS move, because the detectors compare canonical sets
+  either way and the rule only decides which label a description quotes.
+* **A round-4 test is CORRECTED, not weakened.**
+  `test_transcript.py::TestMaximalStays::test_the_merge_compares_canonical_rooms_and_keeps_the_first_spelling`
+  encoded the rule round 6 replaces. It is renamed
+  `..._and_keeps_the_smallest_label` and STRENGTHENED: it now asserts both
+  orders of the same pair, where before it asserted one. It would have passed
+  unchanged (`CAFEteria` < `cafeteria`), which is exactly why it is corrected
+  explicitly rather than left to pass by accident.
+* **The Constraints stamp/lever sentence covers this round's memory render.**
+  Constraints cites the owner's D4 ruling of 2026-09-19 setting AGENTS.md craft
+  rule 7 aside for this wave, naming prompt-byte and detector changes. That
+  sentence extends to the MEMORY RENDER and the alibi cap: `render_for_prompt`
+  bytes change for a reachable non-committed state (a subject with more than 18
+  rows, or more than 18 speakers), so this ships default-ON with no lever under
+  the same ruling. No repo rule demands a stamp for it: `agents/memory/store.py`
+  declares salience bands, budgets and event names and carries no version
+  identifier, and `coalesced_memory_render` is a retired always-on lever NAME in
+  `orchestrator/replay.py`'s adopted list rather than a version over the
+  rendered bytes. Every committed recording renders byte-identically, so nothing
+  downstream could resolve through a moved stamp in any case.
+
+**The consumer table at THIS head, with ranges derived mechanically.** Six
+round-5 rows cited ranges that over- or under-ran their function. Every range
+below is the `ast` start/end line of the named function or class at this head,
+not a hand-read span. `meetings/transcript.py` is in this round's diff and every
+citation after `maximal_stays` moves by exactly +16; no classification changes.
+
+| site | unit | class |
+| --- | --- | --- |
+| `meetings/transcript.py:908-981` `maximal_stays` | the whole route | NORMALISATION — the one place a re-cut AND its spelling are erased |
+| `meetings/transcript.py:2553-2634` `_iter_alibis` | stays | DETECTS |
+| `meetings/transcript.py:2955-2966` `_claim_route_key` | stays + canonical rooms | DETECTS (IDENTITY) |
+| `meetings/transcript.py:1136-1164` `_route_self_refuted` | legs | DETECTS, already invariant |
+| `meetings/transcript.py:1979-2022` `_escape_untrusted_band_markers` | legs | REPORTS — it must see every word the speaker wrote |
+| `meetings/public_accounts.py:172-273` `_placements` | stays | DETECTS |
+| `meetings/public_accounts.py:78-91` `_validated_scopes` | legs | REPORTS — the allowlist reads each word |
+| `meetings/schemas.py:416-560` `AlibiClaim` validator + wrap serializer | legs | REPORTS — the record is what was SAID |
+| `meetings/manager.py:4334-4537` `derive_reported_testimony` | stays | IS-HELD-BY-A-LISTENER (round 5) |
+| `agents/memory/store.py:781-930` `absorb_reported_testimony` | per statement | IS-HELD-BY-A-LISTENER, invariant by the reduction |
+| `agents/memory/store.py:2355-2361` the `[meeting]` alibi line | per statement | IS-HELD-BY-A-LISTENER — this is what went 2 -> 14 |
+| `agents/memory/store.py:164`, `:186`, `:2586-2604`, `:2607-2680` the two caps, the sort key and `_format_alibi_suffix` | rows, capped per `(subject, source)` AND per subject | IS-HELD-BY-A-LISTENER — **round-6 blocking 1 and the sort half of blocking 2** |
+| `agents/memory/beliefs.py:963-994` `record_alibi` | per statement | IS-HELD-BY-A-LISTENER |
+| `agents/memory/evidence_context.py:390-400` reported placements | per statement | IS-HELD-BY-A-LISTENER, invariant by the reduction |
+| `eval/alibi_fabrication.py:252-276` `_impostor_alibi_keys` | stays + canonical rooms | SCORES (round 5) |
+| `eval/process_scorecard.py:1013-1044` `_flag_scored_claim_truth` | stays | SCORES |
+| `eval/process_scorecard.py:971-1010` `_claim_truth` | legs | SCORES, already invariant — and it compares RAW room text to the engine's room id, so coalescing would substitute the merged stay's single label for a contiguous leg's |
+| `eval/process_scorecard.py:1499`, `:1508` `multi_tick` | route outer endpoints | SCORES, already invariant — merging never moves an outer endpoint |
+| `eval/evidence_honesty.py:2278-2312` `_leg_under_sighting` | stays | SCORES |
+| `scripts/counterfactual_phase21.py:2229-2290` `_accounts_reaching_the_map`, `:2293-2301` `_ingest_rows` | per statement | SCORES — **the row round 5's table missed.** Both derive COUNTS from `derive_reported_testimony` output, so both have counted STAYS since round 5. No committed cell moves, because every committed claim is one segment; `tests/scripts/test_counterfactual_phase21.py` is green at 112 passed |
+| `api/replay_loader.py:3219-3263` `_statement_claim_view` | legs | REPORTS — the served DTO mirrors the wire surface |
+| `api/schemas.py:712-717`, `:720-778` `AlibiSegmentView` / `AlibiClaimView` | legs | REPORTS |
+| `llm/report_normalize.py:94`, `:209-300` route repair | legs | REPORTS — wire repair by field NAME before the claim exists |
+| `experiments/lab/deception_battery.py:181-204` `_self_alibis` | legs | REPORTS — a probe of what a model AUTHORED |
+| `experiments/lab/deception_battery_2.py:452-463` teammate-alibi support/contradict | legs | REPORTS — two `any(...)` over the SET of rooms named |
+
+**Round-6 residuals, recorded and NOT changed.** Round 5's three stand
+unchanged except its third, restated above. Three more:
+
+* **Two WORDINGS can still order the two rooms differently inside a flag's
+  DESCRIPTION.** `Alibis place p-1 in CAFETERIA (ticks 2-8) and in MEDBAY
+  (ticks 2-2)` against `... in MEDBAY (ticks 2-2) and in cafeteria (ticks
+  2-8)`: the builder names the pair in raw-room order. The flag's kind,
+  `contradiction_id`, `event_a_id`, `event_b_id`, subjects and band are
+  identical, and no re-cut can reach it -- only a narration that spells the
+  room differently END TO END, which is a wording the speaker chose and which
+  legitimately quotes its own label. Closing it means re-ordering the detector's
+  own pair vocabulary, which no finding asked for and which would move recorded
+  description bytes.
+* **The total's headroom is measured on canonical room labels.** 16 tokens is
+  64 characters at the render's 4-chars-per-token heuristic. `RoomId` is a free
+  string, so a speaker naming rooms with labels longer than `ENGINEERING` can
+  still push the worst legal case past the budget. That is a bound on LABEL
+  LENGTH rather than on row count and belongs to a different lever; the cap is
+  sized against the case the brief defines.
+* **`_impostor_alibi_keys` collapses two different NON-SPATIAL labels with the
+  same window.** `NOWHERE 2-14` and `SOMEWHERE 2-14` both canonicalise to the
+  empty set, so they are one key and a restatement naming a different non-place
+  counts once. Measured on the committed record: zero occurrences (no committed
+  claim spells a room non-canonically). Recorded, not changed.
+
+**Follow-up, not this card.** Identical at `cdefb7a6`, so it predates this
+branch. `record_alibi` does not dedup a repeated identical row and the number
+of `AlibiClaim`s a turn may carry is uncapped, so one turn can flood the
+listener. Repro through the production path, listener `p-9`, rival `p-2`
+placing `p-1` in `MEDBAY 8-8`, `p-1` self-alibiing `STORAGE 2-14`:
+
+```
+                         statements   belief rows held   [meeting] lines   rival's [meeting] line
+1 claim on the turn          2               2                  2                 present
+120 identical claims       121             121                 64                 GONE
+```
+
+The `[meeting]` lines are elastic, so the flood evicts the rival's line and the
+agent's own first-hand lines with it. The rival's BELIEF row survives, because
+the per-source cap round 5 introduced holds; and the belief line itself reads
+`in STORAGE at tick 2 per p-1` three times, because the rows are identical and
+the per-source cap cannot tell copies apart. The fix belongs at
+`record_alibi`'s dedup and at a per-turn claim bound, neither of which this
+card owns; nothing here is changed for it.
+
+**Round-6 gate.** Measured at this head, from this worktree.
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — ruff `520 files already formatted` + `All checks passed!`, `lint-imports` 4 contracts kept / 0 broken, `validate_task_docs.py` 390 historical phase tasks and 390 prompts plus 73 work cards, `mypy` Success on 491 source files, `8,266 passed, 20 skipped, 3 xfailed` in 3:17, frontend 20 test files / 532 tests, build green |
+| `uv run pytest tests/meetings tests/eval tests/agents tests/experiments tests/api tests/scripts/test_counterfactual_phase21.py -q` | 5,185 passed, 3 skipped (2,833 on `tests/meetings tests/agents`, 2,352 passed / 3 skipped on the rest) |
+| `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on `replays/{samples,ml_corpus}/{4p1i,9p2i}` |
+| `uv run python scripts/publish_process_scorecard.py --check` | consistent |
+| `uv run python scripts/check_doc_facts.py` | verified |
+| `uv run python scripts/validate_task_docs.py` | passed |
+| `uv run python scripts/verify_ml_evidence.py` | 61 checks, OK 49, FAIL 0, ABSENT 7, INFO 5 |
+
+**Round-6 record impact.** None. No file under `replays/`, `audits/` or
+`tests/fixtures/` is in the diff, so no `docs/artifacts.md` row moves and no
+inventory sentence changes; no prompt stamp and no served contract stamp moves.
+`tests/meetings/test_prompt_byte_golden.py` re-renders every recorded prompt of
+both `replays/samples/` sets through the real render path and is green,
+`verify_samples.sh` is 100/100, all four `build_sample_report.py --check` runs
+and `publish_process_scorecard.py --check` are consistent. The mechanical
+reason is measured twice over: coalescing is the identity on a ONE-SEGMENT
+route and every committed claim is one, so the label rule cannot reach a
+committed byte; and every committed belief state holds at most four rows from
+ONE source, where the per-source cap alone decides and a total of 18 never
+binds. `docs/observation-contract.md`'s paragraph gains the label rule and the
+second cap and stays inside its word budget; `check_doc_facts.py` stays
+verified. `docs/architecture.md` is NOT touched, for round 4's reason.
+`docs/glossary.md` defines no term this round moves.

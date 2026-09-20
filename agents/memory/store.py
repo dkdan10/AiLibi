@@ -44,6 +44,7 @@ from agents.perception import (
     PROVENANCE_REPORTED,
 )
 from meetings.schemas import ReportedStatement
+from meetings.transcript import canonical_rooms
 from observation.public_map import PublicMapView
 
 PlayerId: TypeAlias = str
@@ -161,6 +162,28 @@ _SALIENCE_EVIDENCE_V1_CONTEXT: Final[int] = 90
 # envelope over rooms the speaker never joined, and never at the cost of another
 # speaker's row (see :func:`_format_alibi_suffix`).
 _MAX_RENDERED_ALIBIS: Final[int] = 3
+
+# Per-SUBJECT total cap on rendered reported alibi rows (round-6 review). The
+# per-source cap alone bounds the block at subjects x sources x cap, which on a
+# nine-player roster is 168 rows and 1,605 estimated tokens -- OVER
+# ``DEFAULT_TOKEN_BUDGET``, and because the belief block is the non-elastic
+# carve-out it is the first-hand OBSERVATIONS that are shed to pay for it. This
+# restores a per-subject bound without giving one speaker's volume back the
+# power to evict another's row: the total is filled ROUND-ROBIN by recency
+# across sources (see :func:`_format_alibi_suffix`), so a speaker displaces only
+# their OWN older rows until more distinct SPEAKERS than this have talked about
+# one subject, and only then the speaker whose newest row is stalest.
+#
+# The VALUE is measured, not chosen: the largest for which the worst legal
+# nine-player case (eight subjects, seven speakers each, a three-stay route
+# apiece) renders inside ``DEFAULT_TOKEN_BUDGET`` AND still affords first-hand
+# observations. 18 -> 144 rows, 1,484 estimated tokens, 16 of headroom, the
+# observations block alive; 19 -> 1,475 but the block shed whole; 20 -> 1,533,
+# over. The elastic observations pay for every row before that, about three
+# lines per unit of cap, so the block is down to 3 of its 57 lines at 18 --
+# the card's round-6 sweep publishes the curve for an owner who would rather
+# buy first-hand memory back. Sized against the TOKEN BUDGET and nothing else.
+_MAX_RENDERED_ALIBIS_PER_SUBJECT: Final[int] = 18
 
 _EVENT_SAW_BODY: Final[str] = "saw_body"
 _EVENT_SAW_PLAYER: Final[str] = "saw_player"
@@ -2560,48 +2583,95 @@ def _build_belief_lines(
     return lines
 
 
+def _alibi_row_sort_key(alibi: AlibiClaim) -> tuple[int, tuple[str, ...], str, str]:
+    """The render order of one reported alibi row: cut- and spelling-independent.
+
+    ``(tick, canonical rooms, raw room, source)``. The raw label alone would put
+    the order in the SPEAKER's hands: ``maximal_stays`` keeps one label out of
+    the set a stay was narrated in, so ``labs 2-14`` and ``LABS 2-14`` -- two
+    wordings of one account -- sorted on opposite sides of a rival's ``MEDBAY``
+    row (round-6 review). Canonicalising first makes the chronology read the
+    same for either wording; the raw label stays in the key underneath it so two
+    genuinely different rooms at one tick keep a total, deterministic order, and
+    the source closes it so the key is total over any set of rows.
+    """
+
+    return (
+        alibi.tick,
+        tuple(sorted(canonical_rooms(alibi.room))),
+        alibi.room,
+        alibi.source,
+    )
+
+
 def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
-    """Render a subject's recorded alibi legs for the §6.6 belief view (Task 13.5.2).
+    """Render a subject's recorded alibi rows for the §6.6 belief view (Task 13.5.2).
 
     Empty for a subject with no recorded alibi, so that subject's belief line
     carries no suffix. An alibi is a ROUTE, and
     :func:`meetings.manager.derive_reported_testimony` files one statement per
     maximal STAY, so a subject who stated a four-room walk arrives here as four
     rows and renders as the path: ``in ENGINEERING at tick 12 per p-9; in
-    EAST_HALL at tick 13 per p-9; ...``. Rows are sorted by ``(tick, room,
-    source)`` for replay determinism -- which is route order for one speaker's
-    own walk -- and each stays attributed to the player who asserted it. A
-    stationary account is one row and reads exactly as it always did.
+    EAST_HALL at tick 13 per p-9; ...``. Rows are sorted by
+    :func:`_alibi_row_sort_key` for replay determinism -- which is route order
+    for one speaker's own walk -- and each stays attributed to the player who
+    asserted it. A stationary account is one row and reads exactly as it always
+    did.
     """
 
     if not alibis:
         return ""
     # Cap the rendered alibis so the non-elastic §6.6 belief block cannot grow
     # unbounded across many meetings and push the budgeted render over
-    # ``DEFAULT_TOKEN_BUDGET`` (Codex P2): keep the most-recent
-    # ``_MAX_RENDERED_ALIBIS`` by tick (a newer alibi supersedes a stale one),
-    # rendered oldest-first for a stable, replay-deterministic line.
+    # ``DEFAULT_TOKEN_BUDGET`` (Codex P2): keep the most-recent rows (a newer
+    # alibi supersedes a stale one), rendered oldest-first for a stable,
+    # replay-deterministic line.
     #
-    # The cap is per (subject, SOURCE), not per subject (round-5 review). Per
-    # subject it let ONE voice evict another: the rows compete on VOLUME, and
-    # the volume is the speaker's own choice -- an accused player narrating a
-    # long route pushes a rival's single contradicting placement out of the
-    # block the listener reasons and votes from, which is the one row that
-    # could have sunk the account. Per source, a speaker can only ever displace
-    # their OWN older rows, so what each voice contributed survives whatever
-    # anyone else says. The bound is now sources x cap rather than cap; sources
-    # are roster-gated by :func:`absorb_reported_testimony`, so the block stays
-    # finite and deterministic, and the widest subject on the four committed
-    # sets holds four rows.
-    ordered = sorted(alibis, key=lambda a: (a.tick, a.room, a.source))
+    # TWO bounds, and each answers a defect the other one caused.
+    #
+    # Per (subject, SOURCE), not per subject (round-5 review). Per subject alone
+    # it let ONE voice evict another: the rows compete on VOLUME, and the volume
+    # is the speaker's own choice -- an accused player narrating a long route
+    # pushes a rival's single contradicting placement out of the block the
+    # listener reasons and votes from, which is the one row that could have sunk
+    # the account.
+    #
+    # Per SUBJECT as well (round-6 review), because sources x cap is not a
+    # budget-safe bound: on a nine-player roster it is 168 rows, over
+    # ``DEFAULT_TOKEN_BUDGET``, and the block is the non-elastic carve-out, so
+    # what pays for the overflow is the agent's own first-hand observations. The
+    # total is filled ROUND-ROBIN by recency across sources -- every source's
+    # newest row first, then every source's second-newest, and so on -- so it
+    # keeps the round-5 guarantee: a speaker can only ever displace their OWN
+    # older rows, and only when more distinct SPEAKERS than
+    # ``_MAX_RENDERED_ALIBIS_PER_SUBJECT`` have talked about one subject is any
+    # voice dropped, and then it is the one whose newest row is stalest. What an
+    # accused says never decides WHICH other voices survive.
+    #
+    # Neither bound is reached on the committed record: the widest subject there
+    # holds four rows, from one source.
+    ordered = sorted(alibis, key=_alibi_row_sort_key)
     by_source: dict[PlayerId, list[int]] = {}
     for position, alibi in enumerate(ordered):
         by_source.setdefault(alibi.source, []).append(position)
-    kept = {
-        position
-        for positions in by_source.values()
-        for position in positions[-_MAX_RENDERED_ALIBIS:]
+    # Each source's own rows, newest first, already cut to the per-source cap.
+    ranked = {
+        source: positions[-_MAX_RENDERED_ALIBIS:][::-1]
+        for source, positions in by_source.items()
     }
+    # Sources ranked by the recency of their NEWEST row. The row sort key is
+    # total (it carries the source), so this order needs no further tie-break
+    # and is the same for every permutation of the stored rows.
+    sources = sorted(ranked, key=lambda source: ranked[source][0], reverse=True)
+    kept: set[int] = set()
+    for rank in range(_MAX_RENDERED_ALIBIS):
+        for source in sources:
+            if len(kept) >= _MAX_RENDERED_ALIBIS_PER_SUBJECT:
+                break
+            if rank < len(ranked[source]):
+                kept.add(ranked[source][rank])
+        if len(kept) >= _MAX_RENDERED_ALIBIS_PER_SUBJECT:
+            break
     parts = [
         f"in {alibi.room} at tick {alibi.tick} per {alibi.source}"
         for position, alibi in enumerate(ordered)

@@ -13,6 +13,7 @@ classification (DESIGN.md §5.4; audit gp-1 precision) is pinned here.
 
 from __future__ import annotations
 
+import itertools
 from typing import Final
 
 import pytest
@@ -695,14 +696,44 @@ class TestMaximalStays:
             )
         ) == [("STORAGE", 2, 7), ("CAFETERIA", 8, 9), ("STORAGE", 10, 11)]
 
-    def test_the_merge_compares_canonical_rooms_and_keeps_the_first_spelling(
+    def test_the_merge_compares_canonical_rooms_and_keeps_the_smallest_label(
         self,
     ) -> None:
-        # Two spellings of one room are one place, so they merge; the stay
-        # keeps the FIRST leg's text, so the room a description quotes is
-        # deterministic and is a label the speaker actually used.
-        merged = maximal_stays((_seg("CAFEteria", 2, 7), _seg("cafeteria", 8, 14)))
-        assert _shape(merged) == [("CAFEteria", 2, 14)]
+        # Two spellings of one room are one place, so they merge. The stay
+        # keeps the LEXICOGRAPHICALLY SMALLEST of the labels merged -- still a
+        # label the speaker actually used, and now a function of the SET of
+        # them rather than of their order. Keeping the FIRST leg's text made
+        # the CUT choose the spelling, which moved every description that
+        # quotes the stay and the §6.6 row order with it (round-6 review).
+        for route in (
+            (_seg("CAFEteria", 2, 7), _seg("cafeteria", 8, 14)),
+            (_seg("cafeteria", 2, 7), _seg("CAFEteria", 8, 14)),
+        ):
+            assert _shape(maximal_stays(route)) == [("CAFEteria", 2, 14)]
+
+    def test_the_kept_label_does_not_depend_on_the_order_of_a_longer_run(
+        self,
+    ) -> None:
+        # Three legs, every permutation of three canonically-equal spellings
+        # across them: one account, one label.
+        spellings = ("CAFETERIA", "cafeteria", "CAFETERIA_TRANSITION")
+        for assignment in itertools.permutations(spellings):
+            route = tuple(
+                _seg(room, 2 + 2 * index, 3 + 2 * index)
+                for index, room in enumerate(assignment)
+            )
+            assert _shape(maximal_stays(route)) == [("CAFETERIA", 2, 7)]
+
+    def test_two_non_spatial_legs_merge_under_the_same_label_rule(self) -> None:
+        # Both canonicalise to the empty set, so they are one stay; the label
+        # kept is the smallest of the two either way round. The other label
+        # does not reach a belief row -- recorded as a known consequence of
+        # having ONE normalisation point, not a second merge rule.
+        for route in (
+            (_seg("UNKNOWN", 2, 5), _seg("NOWHERE", 6, 8)),
+            (_seg("NOWHERE", 2, 5), _seg("UNKNOWN", 6, 8)),
+        ):
+            assert _shape(maximal_stays(route)) == [("NOWHERE", 2, 8)]
 
     def test_a_non_spatial_label_does_not_merge_with_a_real_room(self) -> None:
         route = (_seg("SOMEWHERE_ELSE", 2, 7), _seg("STORAGE", 8, 14))

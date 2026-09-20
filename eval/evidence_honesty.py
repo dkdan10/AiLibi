@@ -2351,11 +2351,11 @@ def _resolve_flag(
     alibi = alibis[0]
     if isinstance(alibi, AlibiClaim):
         # The I-6 geometry fold measures the distance between ONE claimed room
-        # and one sighting, so a route has to say WHICH leg the sighting bears
+        # and one sighting, so a route has to say WHICH stay the sighting bears
         # on. :func:`_leg_under_sighting` does not choose: the detector minted
-        # the flag from the leg whose window covers the sighting's tick, and the
-        # schema keeps the legs strictly non-overlapping, so at most one leg can
-        # answer.
+        # the flag from the stay whose window covers the sighting's tick, and
+        # the schema keeps the legs strictly non-overlapping, so the stays are
+        # too and at most one can answer.
         segment = _leg_under_sighting(alibi, sighting.tick)
         if segment is None:
             return None

@@ -20,6 +20,7 @@ observation appears on a :class:`MeetingTurn`, regardless of turn-kind):
 from __future__ import annotations
 
 import functools
+import itertools
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -5302,12 +5303,71 @@ def _recuts_of(route: tuple[AlibiSegment, ...]) -> tuple[tuple[AlibiSegment, ...
     return shapes
 
 
+def _spellings_of(room: str) -> tuple[str, ...]:
+    """Canonically-equal ways the model spells one room (round 6).
+
+    Case is free text to a model and ``_TRANSITION`` is the token it appends to
+    a room it names as transit, so all three of these are ONE place to
+    :func:`canonical_rooms` -- and therefore three labels a speaker may hang on
+    the legs of one continuous stay.
+    """
+
+    spellings = (room, room.lower(), f"{room}_TRANSITION")
+    assert len({canonical_rooms(spelling) for spelling in spellings}) == 1, room
+    return spellings
+
+
+def _spelled_cuts_of_one_stay(
+    stay: AlibiSegment,
+) -> dict[frozenset[str], list[tuple[AlibiSegment, ...]]]:
+    """Every (cut, spelling assignment) of ONE stay, grouped by the label SET."""
+
+    groups: dict[frozenset[str], list[tuple[AlibiSegment, ...]]] = {}
+    spellings = _spellings_of(stay.room)
+    for cut in _cuts_of_one_stay(stay):
+        for assignment in itertools.product(spellings, repeat=len(cut)):
+            groups.setdefault(frozenset(assignment), []).append(
+                tuple(
+                    AlibiSegment(
+                        room=room, from_tick=leg.from_tick, to_tick=leg.to_tick
+                    )
+                    for leg, room in zip(cut, assignment, strict=True)
+                )
+            )
+    return groups
+
+
+def _spelled_narrations_of(
+    route: tuple[AlibiSegment, ...],
+) -> dict[tuple[int, frozenset[str]], list[tuple[AlibiSegment, ...]]]:
+    """Every mixed-spelling narration of ``route``, grouped by ACCOUNT.
+
+    One stay at a time: stay ``i`` is restated as every cut of itself under
+    every assignment of its canonically-equal spellings, while the other stays
+    are left exactly as the route states them -- linear in the number of stays
+    rather than the cross product of them, and exhaustive over each. The key is
+    ``(i, the label SET used)``: two narrations in ONE group are the same
+    account said the same way, so every output must match byte for byte; two
+    narrations in different groups are different WORDINGS of it, whose quoted
+    label legitimately differs (``LABS 2-14`` against ``labs 2-14``).
+    """
+
+    groups: dict[tuple[int, frozenset[str]], list[tuple[AlibiSegment, ...]]] = {}
+    for index, stay in enumerate(route):
+        for labels, narrations in _spelled_cuts_of_one_stay(stay).items():
+            groups[(index, labels)] = [
+                (*route[:index], *legs, *route[index + 1 :]) for legs in narrations
+            ]
+    return groups
+
+
 def _flag_shape(flags: tuple[ContradictionRef, ...]) -> list[tuple[object, ...]]:
     """Everything a listener can see about a flag, description included.
 
     The descriptions are compared too, not just the bands: every builder quotes
-    the STAY the flag rests on and a merged stay takes the FIRST leg's room
-    text, so a re-cut has to reproduce the sentence byte for byte.
+    the STAY the flag rests on, and a merged stay's room text is the smallest of
+    the labels merged into it, so a re-cut has to reproduce the sentence byte
+    for byte.
     """
 
     return [
@@ -5795,6 +5855,82 @@ class TestReCuttingAStayChangesNoDetectorOutput:
             "alibi_vs_physical",
             "vent_sighting",
         } <= minted
+
+
+class TestMixedSpellingsOfOneStayReadIdentically:
+    """The round-6 half of the same property: the cut must not pick the LABEL.
+
+    Round 4's family enumerates every re-cut in ONE spelling, so it could not
+    see the half of the defect that survives coalescing: ``maximal_stays`` kept
+    the FIRST leg's room text, so ``STORAGE 2-4`` + ``storage 5-8`` and its
+    mirror -- one account, cut the same way, narrated with the same two
+    canonically-equal labels -- quoted DIFFERENT rooms, and every description
+    that quotes the stay moved with them. The merged label is now the
+    lexicographically smallest of the labels merged, a function of the SET
+    rather than of the order.
+
+    The family here is every (cut, spelling assignment) of one continuous stay,
+    grouped by the label SET the narration uses; within a group every narration
+    must read byte for byte the same. Narrations whose label SETS DIFFER are
+    two WORDINGS of one account rather than two cuts of it -- exactly as
+    ``LABS 2-14`` and ``labs 2-14`` are with one leg -- so their quoted label
+    legitimately differs and they are not compared here.
+    """
+
+    @pytest.mark.parametrize(
+        "scenario", _RECUT_SCENARIOS, ids=[s.name for s in _RECUT_SCENARIOS]
+    )
+    def test_every_spelling_of_every_cut_reads_identically(
+        self, scenario: _ReCutScenario
+    ) -> None:
+        for narrations in _spelled_narrations_of(scenario.route).values():
+            baseline = scenario.read(scenario.build(narrations[0]))
+            for narration in narrations[1:]:
+                assert scenario.read(scenario.build(narration)) == baseline, (
+                    scenario.name,
+                    [(leg.room, leg.from_tick, leg.to_tick) for leg in narration],
+                )
+
+    @pytest.mark.parametrize(
+        ("shape", "route"), (("one_stay", _ONE_STAY), ("two_stays", _TWO_STAYS))
+    )
+    def test_the_family_carries_the_shapes_the_finding_was_about(
+        self, shape: str, route: tuple[AlibiSegment, ...]
+    ) -> None:
+        # A family of singletons would pass vacuously. The groups that matter
+        # are the ones whose label SET has more than one member, because those
+        # are the narrations where the cut used to choose the surviving label.
+        groups = _spelled_narrations_of(route)
+        # One group per non-empty subset of each stay's spellings.
+        assert len(groups) == len(route) * (2 ** len(_spellings_of(route[0].room)) - 1)
+
+        mixed = {key: members for key, members in groups.items() if len(key[1]) > 1}
+        assert mixed
+        for (index, labels), members in mixed.items():
+            assert len(members) > 1
+            for narration in members:
+                # The stay under test really does use every label of its set,
+                # and the other stays are untouched.
+                stay = route[index]
+                under_test = [
+                    leg
+                    for leg in narration
+                    if stay.from_tick <= leg.from_tick <= stay.to_tick
+                ]
+                assert {leg.room for leg in under_test} == set(labels)
+
+        # And the exhibit itself: the two mirror-image narrations of one cut,
+        # which is the pair that used to quote two different rooms.
+        stay = route[0]
+        first, second = _spellings_of(stay.room)[:2]
+        midpoint = (stay.from_tick + stay.to_tick) // 2
+        pair = groups[(0, frozenset({first, second}))]
+        for left, right in ((first, second), (second, first)):
+            assert (
+                AlibiSegment(room=left, from_tick=stay.from_tick, to_tick=midpoint),
+                AlibiSegment(room=right, from_tick=midpoint + 1, to_tick=stay.to_tick),
+                *route[1:],
+            ) in pair
 
 
 class TestTheRoundFourReCutExhibits:

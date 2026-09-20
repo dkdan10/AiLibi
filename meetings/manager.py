@@ -4526,8 +4526,8 @@ def derive_reported_testimony(
                 )
             if provenance_on and len(statements) > before:
                 # EVERY statement this claim produced, not just the last: a
-                # route emits one per leg and each of them traces to the same
-                # public claim id.
+                # route emits one per maximal STAY and each of them traces to
+                # the same public claim id.
                 for position in range(before, len(statements)):
                     statements[position] = statements[position].model_copy(
                         update={

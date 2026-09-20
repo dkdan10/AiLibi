@@ -13,6 +13,7 @@ below first-hand salience, and the dead ``alibi_map`` is finally populated.
 from __future__ import annotations
 
 import functools
+import itertools
 import tempfile
 from collections import Counter
 from collections.abc import Mapping
@@ -27,7 +28,9 @@ from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
     _MAX_RENDERED_ALIBIS,
+    _MAX_RENDERED_ALIBIS_PER_SUBJECT,
     _build_observations,
+    _estimate_tokens,
     _format_alibi_suffix,
     _latest_self_guard_fields,
     absorb_meeting_evidence,
@@ -44,6 +47,7 @@ from eval.evidence_honesty import (
 from eval.replay_walk import MeetingApplied, MeetingOpened, TickOpened, walk_replay
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.manager import derive_reported_testimony
+from meetings.transcript import canonical_rooms
 from observation.service import ObservationService
 from meetings.schemas import (
     AccusationClaim,
@@ -1236,6 +1240,50 @@ def _recuts_of(route: tuple[AlibiSegment, ...]) -> tuple[tuple[AlibiSegment, ...
     return shapes
 
 
+def _spellings_of(room: str) -> tuple[str, ...]:
+    """Canonically-equal ways the model spells one room (round 6).
+
+    The listener twin of ``tests/meetings/test_contradictions.py``'s helper.
+    Case is free text to a model and ``_TRANSITION`` is the token it appends to
+    a room it names as transit, so all three of these are ONE place -- three
+    labels a speaker may hang on the legs of one continuous stay.
+    """
+
+    spellings = (room, room.lower(), f"{room}_TRANSITION")
+    assert len({canonical_rooms(spelling) for spelling in spellings}) == 1, room
+    return spellings
+
+
+def _spelled_narrations_of(
+    route: tuple[AlibiSegment, ...],
+) -> dict[tuple[int, frozenset[str]], list[tuple[AlibiSegment, ...]]]:
+    """Every mixed-spelling narration of ``route``, grouped by ACCOUNT.
+
+    One stay at a time: stay ``i`` is restated as every cut of itself under
+    every assignment of its canonically-equal spellings, the other stays left
+    as the route states them. Narrations in ONE group are the same account said
+    the same way, so the listener must hold exactly the same thing; narrations
+    in different groups are different WORDINGS of it, whose quoted label
+    legitimately differs.
+    """
+
+    groups: dict[tuple[int, frozenset[str]], list[tuple[AlibiSegment, ...]]] = {}
+    for index, stay in enumerate(route):
+        spellings = _spellings_of(stay.room)
+        for cut in _cuts_of_one_stay(stay):
+            for assignment in itertools.product(spellings, repeat=len(cut)):
+                legs = tuple(
+                    AlibiSegment(
+                        room=room, from_tick=leg.from_tick, to_tick=leg.to_tick
+                    )
+                    for leg, room in zip(cut, assignment, strict=True)
+                )
+                groups.setdefault((index, frozenset(assignment)), []).append(
+                    (*route[:index], *legs, *route[index + 1 :])
+                )
+    return groups
+
+
 _LISTENER: Final[str] = "p-9"
 _RECUT_VOTERS: Final[tuple[str, ...]] = ("p-1", "p-2", "p-9")
 
@@ -1324,10 +1372,14 @@ class _ListenerReading(NamedTuple):
     rendered: str
 
 
-def _listener_reading(route: tuple[AlibiSegment, ...]) -> _ListenerReading:
+def _listener_reading(
+    route: tuple[AlibiSegment, ...],
+    *,
+    rival: tuple[AlibiSegment, ...] = _RIVAL_PROXY,
+) -> _ListenerReading:
     """Drive the PRODUCTION path and read back what the listener holds."""
 
-    statements = derive_reported_testimony(_recut_meeting(route))
+    statements = derive_reported_testimony(_recut_meeting(route, rival=rival))
     memory = _listener_memory()
     absorb_reported_testimony(memory, statements=statements)
     rendered = render_for_prompt(memory)
@@ -1516,3 +1568,323 @@ class TestTheAlibiCapIsPerSource:
             "alibi: in STORAGE at tick 2 per p-2; in LABS at tick 5 per p-4; "
             "in MEDBAY at tick 8 per p-3"
         )
+
+
+class TestMixedSpellingsOfOneStayLeaveTheListenerIdentical:
+    """The round-6 half of the listener property: the cut must not pick the LABEL.
+
+    Round 5's family enumerates every re-cut in ONE spelling, so it could not
+    see what survived coalescing. ``maximal_stays`` kept the FIRST leg's room
+    text and the §6.6 suffix sorted rows on that raw text, so ``CAFETERIA 2-4``
+    + ``cafeteria 5-8`` and its mirror -- one account, one cut, the same two
+    canonically-equal labels -- put the speaker's row on opposite sides of a
+    rival's contradicting placement::
+
+        alibi: in CAFETERIA at tick 2 per p-1; in MEDBAY at tick 2 per p-2
+        alibi: in MEDBAY at tick 2 per p-2; in cafeteria at tick 2 per p-1
+
+    The merged label is now the smallest of the labels merged (a function of
+    the SET, not of the order) and the row order reads canonical rooms before
+    the raw text, so both halves of that are closed.
+    """
+
+    @pytest.mark.parametrize(
+        ("name", "route"),
+        (("one_stay", _ONE_STAY), ("two_stays", _TWO_STAYS)),
+    )
+    def test_every_spelling_of_every_cut_leaves_the_listener_identical(
+        self, name: str, route: tuple[AlibiSegment, ...]
+    ) -> None:
+        for narrations in _spelled_narrations_of(route).values():
+            baseline = _listener_reading(narrations[0])
+            for narration in narrations[1:]:
+                assert _listener_reading(narration) == baseline, (
+                    name,
+                    [(leg.room, leg.from_tick, leg.to_tick) for leg in narration],
+                )
+
+    def test_the_family_carries_the_mirror_image_narrations(self) -> None:
+        # The groups that matter are the ones whose label SET has more than one
+        # member: those are the narrations where the cut used to choose the
+        # surviving label, and each has to hold both orders of it.
+        groups = _spelled_narrations_of(_ONE_STAY)
+        mixed = {key: members for key, members in groups.items() if len(key[1]) > 1}
+        assert mixed
+        assert all(len(members) > 1 for members in mixed.values())
+
+        stay = _ONE_STAY[0]
+        first, second = _spellings_of(stay.room)[:2]
+        midpoint = (stay.from_tick + stay.to_tick) // 2
+        pair = groups[(0, frozenset({first, second}))]
+        for left, right in ((first, second), (second, first)):
+            assert (
+                AlibiSegment(room=left, from_tick=stay.from_tick, to_tick=midpoint),
+                AlibiSegment(room=right, from_tick=midpoint + 1, to_tick=stay.to_tick),
+            ) in pair
+
+    def test_the_baseline_of_every_group_carries_the_rival_and_the_speaker(
+        self,
+    ) -> None:
+        # Non-vacuity: an invariance over blocks that never name both voices
+        # would prove nothing.
+        for narrations in _spelled_narrations_of(_ONE_STAY).values():
+            rendered = _listener_reading(narrations[0]).rendered
+            assert "per p-1" in rendered
+            assert "in MEDBAY at tick 8 per p-2" in rendered
+
+    # A rival placement at the account's OWN first tick, so the room text is
+    # what the row order turns on rather than the tick. "CAFETERIA" sorts
+    # before "MEDBAY" and "cafeteria" after it, so on raw text the same account
+    # said two ways put the rival on opposite sides of the speaker.
+    _TIED_RIVAL: Final[tuple[AlibiSegment, ...]] = (
+        AlibiSegment(room="MEDBAY", from_tick=2, to_tick=2),
+    )
+
+    @pytest.mark.parametrize("wording", ("cafeteria", "CAFETERIA_TRANSITION"))
+    def test_two_wordings_differ_only_in_the_label_they_quote(
+        self, wording: str
+    ) -> None:
+        # Where the label SETS differ the narrations are two WORDINGS of one
+        # account, exactly as "LABS 2-14" and "labs 2-14" are with one leg, so
+        # the quoted label legitimately differs. Everything else must not: the
+        # rows that SURVIVE, their ORDER and the sources they are attributed to
+        # are identical, which is what the canonical-first sort key buys.
+        named = _listener_reading(
+            (AlibiSegment(room="CAFETERIA", from_tick=2, to_tick=8),),
+            rival=self._TIED_RIVAL,
+        )
+        spelled = _listener_reading(
+            (AlibiSegment(room=wording, from_tick=2, to_tick=8),),
+            rival=self._TIED_RIVAL,
+        )
+
+        assert named.rendered != spelled.rendered
+        assert [(row[0], row[2], row[3]) for row in named.belief_alibis] == [
+            (row[0], row[2], row[3]) for row in spelled.belief_alibis
+        ]
+        assert [statement.speaker for statement in named.statements] == [
+            statement.speaker for statement in spelled.statements
+        ]
+        # And the row ORDER is the thing the raw-text key used to move: the
+        # speaker's own placement leads either way, so the two belief lines
+        # differ in the quoted label and in nothing else.
+        rows = [
+            next(line for line in reading.rendered.splitlines() if "alibi:" in line)
+            for reading in (named, spelled)
+        ]
+        for row, label in zip(rows, ("CAFETERIA", wording), strict=True):
+            assert row.split("alibi: ")[1] == (
+                f"in {label} at tick 2 per p-1; in MEDBAY at tick 2 per p-2"
+            )
+        assert rows[0].replace("CAFETERIA", wording, 1) != rows[0]
+
+
+class TestTheBeliefBlockCannotOutgrowTheTokenBudget:
+    """The round-6 blocking gate: the §6.6 belief block is NOT budgeted.
+
+    ``_assemble_view`` treats the belief block as fixed and lets the first-hand
+    observations take whatever is left, so a bound on the alibi rows is the
+    only thing standing between a loud meeting and a render that has shed every
+    observation the agent made itself. Round 5 moved the bound from
+    ``subjects x cap`` to ``subjects x sources x cap``, which on a nine-player
+    roster is 168 rows and 1,605 estimated tokens -- over
+    ``DEFAULT_TOKEN_BUDGET``, with the observations block gone whole.
+
+    The worst LEGAL case, built through the production path: nine players,
+    every living one proxy-alibiing every other with a three-stay route (the
+    per-source cap), so every subject has every other voice talking about it at
+    full volume.
+    """
+
+    _ROSTER: Final[tuple[str, ...]] = tuple(f"p-{index}" for index in range(1, 10))
+    _ROUTE: Final[tuple[AlibiSegment, ...]] = tuple(
+        AlibiSegment(room=room, from_tick=100 + offset, to_tick=100 + offset)
+        for offset, room in enumerate(("ENGINEERING", "UPPER_HALL", "ENGINEERING"))
+    )
+
+    @classmethod
+    def _rendered(cls) -> str:
+        turns = tuple(
+            MeetingTurn(
+                turn_id=f"m-budget:turn-{index}",
+                turn_index=index,
+                speaker=speaker,
+                turn_kind="opening" if index == 0 else "reply",
+                reply_to=None,
+                observations=(),
+                claims=(AlibiClaim(type="alibi", subject=subject, route=cls._ROUTE),),
+                free_text="",
+            )
+            for index, (speaker, subject) in enumerate(
+                (speaker, subject)
+                for speaker in cls._ROSTER
+                for subject in cls._ROSTER
+                if speaker != subject
+            )
+        )
+        result = MeetingResult(
+            meeting_id="m-budget",
+            triggered_by=_LISTENER,
+            trigger_tick=200,
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            ballots=tuple(
+                VoteBallot(
+                    voter=voter,
+                    target="SKIP",
+                    confidence=0.0,
+                    primary_reason_id=None,
+                    rationale_text="skip",
+                )
+                for voter in cls._ROSTER
+            ),
+            transcript=MeetingTranscript(turns=turns),
+        )
+        memory = _memory_for(
+            agent_id=_LISTENER,
+            roster_sightings=tuple(
+                player for player in cls._ROSTER if player != _LISTENER
+            ),
+            self_tick=0,
+        )
+        absorb_reported_testimony(memory, statements=derive_reported_testimony(result))
+        return render_for_prompt(memory)
+
+    def test_the_worst_legal_nine_player_case_stays_inside_the_budget(self) -> None:
+        assert _estimate_tokens(self._rendered()) <= DEFAULT_TOKEN_BUDGET
+
+    def test_the_worst_legal_case_does_not_shed_the_first_hand_observations(
+        self,
+    ) -> None:
+        # The half that actually bites: over budget the elastic section is what
+        # pays, so an unbounded belief block costs the agent its own eyes.
+        rendered = self._rendered()
+        assert "Recent observations" in rendered
+        assert [
+            line
+            for line in rendered.split("Recent observations")[1].splitlines()
+            if line.startswith("- ")
+        ]
+
+    def test_the_case_really_is_the_worst_the_roster_allows(self) -> None:
+        # Non-vacuity: if the fixture stopped saturating the cap the budget
+        # assertions above would be measuring nothing. Eight subjects reach the
+        # block (the listener holds no belief row about itself), each with the
+        # seven other voices talking about it, each of those at the per-source
+        # cap -- so every subject sits AT the per-subject total, and the total
+        # is really binding on all of them.
+        rows = [line for line in self._rendered().splitlines() if "alibi:" in line]
+        assert len(rows) == len(self._ROSTER) - 1
+        for row in rows:
+            assert row.count(" per p-") == _MAX_RENDERED_ALIBIS_PER_SUBJECT
+        assert _MAX_RENDERED_ALIBIS_PER_SUBJECT < (
+            (len(self._ROSTER) - 2) * _MAX_RENDERED_ALIBIS
+        )
+
+
+class TestTheSubjectTotalIsFilledRoundRobin:
+    """How the per-subject total chooses between VOICES.
+
+    The total exists for the budget; the round-robin exists so that buying the
+    budget back does not hand the accused the eviction dial round 5 took off
+    them. Every source's newest row is taken first, then every source's
+    second-newest, and so on -- so a speaker displaces their OWN older rows
+    until more distinct SPEAKERS than the total have talked about one subject,
+    and only then the voice whose newest row is stalest.
+    """
+
+    @staticmethod
+    def _suffix(rows: tuple[tuple[str, int, str], ...]) -> str:
+        return _format_alibi_suffix(
+            tuple(
+                BeliefAlibiClaim(player_id="p-2", room=room, tick=tick, source=source)
+                for room, tick, source in rows
+            )
+        )
+
+    def test_no_voice_is_zeroed_while_the_total_permits(self) -> None:
+        # Sources within the total: every one of them keeps a row, however many
+        # rows any of the others brought.
+        sources = tuple(f"p-{index}" for index in range(10, 16))
+        rows = tuple(
+            ("STORAGE", tick, source)
+            for position, source in enumerate(sources)
+            for tick in range(100 + 10 * position, 100 + 10 * position + 3)
+        )
+        suffix = self._suffix(rows)
+        for source in sources:
+            assert f"per {source}" in suffix
+
+    def test_a_rivals_row_survives_a_flood_of_stays_and_of_proxy_speakers(
+        self,
+    ) -> None:
+        # The round-5 finding, re-stated against the round-6 bound. The rival
+        # speaks ONCE and earliest, so its row is the stalest in the block --
+        # the first thing a per-subject cap by recency alone would drop.
+        rival = ("MEDBAY", 8, "p-3")
+        accused = tuple(("STORAGE", tick, "p-2") for tick in range(10, 40))
+        assert "in MEDBAY at tick 8 per p-3" in self._suffix((rival, *accused))
+
+        proxies = tuple(
+            ("STORAGE", 50 + offset, f"p-{10 + offset}")
+            for offset in range(_MAX_RENDERED_ALIBIS_PER_SUBJECT - 2)
+        )
+        suffix = self._suffix((rival, *accused, *proxies))
+        assert "in MEDBAY at tick 8 per p-3" in suffix
+        assert suffix.count(" per ") == _MAX_RENDERED_ALIBIS_PER_SUBJECT
+
+    def test_only_the_stalest_voice_goes_when_speakers_outnumber_the_total(
+        self,
+    ) -> None:
+        # Past the total a voice HAS to go, and which one is decided by its own
+        # recency -- never by how much anybody else said.
+        speakers = tuple(
+            ("STORAGE", 100 + offset, f"p-{10 + offset}")
+            for offset in range(_MAX_RENDERED_ALIBIS_PER_SUBJECT + 1)
+        )
+        quiet = self._suffix(speakers)
+        assert f"per {speakers[0][2]}" not in quiet
+        for _, _, source in speakers[1:]:
+            assert f"per {source}" in quiet
+
+        # The same block with the newest speaker shouting: the dropped voice is
+        # still the stalest one, not one the shouting chose.
+        loud = self._suffix(
+            (
+                *speakers,
+                *(("STORAGE", 200 + tick, speakers[-1][2]) for tick in range(9)),
+            )
+        )
+        assert f"per {speakers[0][2]}" not in loud
+        for _, _, source in speakers[1:]:
+            assert f"per {source}" in loud
+
+    def test_the_selection_is_deterministic_under_every_permutation(self) -> None:
+        # Stored order is an accident of ingest; the render must not be. Ties
+        # on (tick, canonical rooms, raw room) are broken by the source, so the
+        # key is total and every permutation reads the same.
+        rows = (
+            ("STORAGE", 8, "p-2"),
+            ("STORAGE", 8, "p-3"),
+            ("MEDBAY", 8, "p-4"),
+            ("storage", 8, "p-5"),
+            ("LABS", 5, "p-2"),
+        )
+        expected = self._suffix(rows)
+        for permutation in itertools.permutations(rows):
+            assert self._suffix(permutation) == expected
+
+    def test_a_lone_speakers_render_is_exactly_what_round_five_rendered(self) -> None:
+        # The byte-neutrality half: with one source the per-source cap decides
+        # everything and the total never binds, so the line is unchanged -- and
+        # every committed belief state on the four sets is single-source.
+        rows = tuple(("STORAGE", tick, "p-3") for tick in range(10, 15))
+        assert self._suffix(rows) == (
+            "alibi: in STORAGE at tick 12 per p-3; "
+            "in STORAGE at tick 13 per p-3; in STORAGE at tick 14 per p-3"
+        )
+
+    def test_the_total_is_at_least_the_per_source_cap(self) -> None:
+        # Otherwise a lone speaker's render would move, and with it the
+        # committed prompt bytes.
+        assert _MAX_RENDERED_ALIBIS_PER_SUBJECT >= _MAX_RENDERED_ALIBIS

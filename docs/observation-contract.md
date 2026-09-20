@@ -128,11 +128,16 @@ account and never rewrites what was said. The contradiction detectors, the
 scored metrics and the reported-testimony reduction read the same account as
 MAXIMAL STAYS instead — contiguous legs naming one room merge into the stay
 they restate — because where a speaker cuts one continuous stay is free, so no
-flag, band, identifier, count or belief a listener holds may depend on it. The
-reduction files one reported statement per stay, so a listener's rendered
-memory is identical for every narration of one account, and the per-subject cap
-on rendered alibi rows is applied per speaker so no voice's volume evicts
-another's placement. A boundary that survives the merge is a declared room
-change or a gap, which is a claim a listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
+flag, band, identifier, count or belief a listener holds may depend on it. A
+merged stay is labelled with the smallest of the labels merged into it, so the
+cut cannot choose the spelling a description quotes either. The reduction files
+one reported statement per stay, so a listener's rendered memory is identical
+for every narration of one account. Rendered alibi rows are capped per speaker
+so no voice's volume evicts another's placement, and capped per subject as well
+because the belief block is not budgeted; the subject total is filled
+round-robin by recency across speakers, so a voice is dropped only when more
+speakers than the total have named one subject and then only the stalest. A
+boundary that survives the merge is a declared room change or a gap, which is a
+claim a listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
 interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled
 as a speaker's claim even if the viewer can independently inspect engine truth.

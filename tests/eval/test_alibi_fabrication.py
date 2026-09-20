@@ -20,6 +20,7 @@ biconditional fail-loud in both directions.
 from __future__ import annotations
 
 import functools
+import itertools
 from collections.abc import Mapping
 from typing import Final, Literal
 
@@ -48,6 +49,7 @@ from meetings.schemas import (
     MeetingTurn,
     PlayerId,
 )
+from meetings.transcript import canonical_rooms
 
 # A roster with one impostor and three crewmates; the default for fixtures where
 # the specific assignment does not matter. ``imp`` is the impostor.
@@ -687,6 +689,45 @@ def _recuts_of(route: tuple[AlibiSegment, ...]) -> tuple[tuple[AlibiSegment, ...
     return shapes
 
 
+def _spellings_of(room: str) -> tuple[str, ...]:
+    """Canonically-equal ways the model spells one room (round 6).
+
+    Case is free text to a model and ``_TRANSITION`` is the token it appends to
+    a room it names as transit, so all three of these are ONE place -- three
+    labels a speaker may hang on the legs of one continuous stay, and three
+    ways to re-key a published rate if the key reads the raw text.
+    """
+
+    spellings = (room, room.lower(), f"{room}_TRANSITION")
+    assert len({canonical_rooms(spelling) for spelling in spellings}) == 1, room
+    return spellings
+
+
+def _spelled_narrations_of(
+    route: tuple[AlibiSegment, ...],
+) -> tuple[tuple[AlibiSegment, ...], ...]:
+    """Every mixed-spelling narration of ``route``, one stay at a time.
+
+    Stay ``i`` is restated as every cut of itself under every assignment of its
+    canonically-equal spellings, the other stays left as the route states them
+    -- linear in the number of stays and exhaustive over each.
+    """
+
+    narrations: list[tuple[AlibiSegment, ...]] = []
+    for index, stay in enumerate(route):
+        spellings = _spellings_of(stay.room)
+        for cut in _cuts_of_one_stay(stay):
+            for assignment in itertools.product(spellings, repeat=len(cut)):
+                legs = tuple(
+                    AlibiSegment(
+                        room=room, from_tick=leg.from_tick, to_tick=leg.to_tick
+                    )
+                    for leg, room in zip(cut, assignment, strict=True)
+                )
+                narrations.append((*route[:index], *legs, *route[index + 1 :]))
+    return tuple(narrations)
+
+
 def _route_alibi(*, subject: PlayerId, route: tuple[AlibiSegment, ...]) -> AlibiClaim:
     return AlibiClaim(type="alibi", subject=subject, route=route)
 
@@ -770,17 +811,50 @@ class TestReCuttingARestatementDoesNotMoveTheRate:
                 [(leg.room, leg.from_tick, leg.to_tick) for leg in recut],
             )
 
+    @pytest.mark.parametrize(
+        ("name", "account"), (("one_stay", _ONE_STAY), ("two_stays", _TWO_STAYS))
+    )
+    def test_every_spelling_of_every_recut_reads_identically(
+        self, name: str, account: tuple[AlibiSegment, ...]
+    ) -> None:
+        # Round 6. The round-5 family enumerates every cut in ONE spelling, so
+        # it could not see a restatement that re-keys itself through the LABEL:
+        # ``maximal_stays`` used to keep the first leg's room text, which made
+        # the cut choose the surviving spelling. The merged label is now the
+        # smallest of the labels merged, and the key canonicalises on top of
+        # that, so neither the geometry nor the wording can mint a second
+        # alibi out of one account.
+        baseline = _restated(account, account)
+        narrations = _spelled_narrations_of(account)
+        assert account in narrations
+        for narration in narrations:
+            assert _restated(account, narration) == baseline, (
+                name,
+                [(leg.room, leg.from_tick, leg.to_tick) for leg in narration],
+            )
+
+    def test_two_wordings_of_one_account_are_one_alibi(self) -> None:
+        # What the CANONICAL half of the key buys once the label rule is in.
+        # Two narrations whose label SETS differ -- one all upper case, one all
+        # lower -- are two wordings of one account, and coalescing alone cannot
+        # tell them apart because neither merges anything. Only the canonical
+        # key does, and a published denominator depends on it.
+        account = (AlibiSegment(room="CAFETERIA", from_tick=2, to_tick=8),)
+        for wording in ("cafeteria", "CAFETERIA_TRANSITION"):
+            restatement = (AlibiSegment(room=wording, from_tick=2, to_tick=8),)
+            assert _restated(account, restatement) == _restated(account, account)
+
     def test_a_recut_that_moves_the_surviving_spelling_is_still_one_alibi(
         self,
     ) -> None:
-        # Why the key canonicalises the room as well as coalescing the stays.
-        # A merged stay keeps the FIRST leg's room TEXT, so where the speaker
-        # cuts decides which spelling survives: "cafeteria 2-4" + "CAFETERIA
-        # 5-8" coalesces to "cafeteria 2-8" and the mirror cut to "CAFETERIA
-        # 2-8". On the raw text those are two keys and the restatement counts
-        # again -- the same dial, reached through the spelling instead of the
-        # geometry. ``meetings.transcript._claim_route_key`` canonicalises for
-        # exactly this reason and the metric reads the same normalisation.
+        # The round-5 exhibit, kept as a named case. A merged stay used to keep
+        # the FIRST leg's room TEXT, so where the speaker cut decided which
+        # spelling survived: "cafeteria 2-4" + "CAFETERIA 5-8" coalesced to
+        # "cafeteria 2-8" and the mirror cut to "CAFETERIA 2-8". On the raw
+        # text those were two keys and the restatement counted again -- the
+        # same dial, reached through the spelling instead of the geometry.
+        # Round 6 closed it at the label rule as well: both cuts now coalesce
+        # to "CAFETERIA 2-8" before the key canonicalises anything.
         account = (AlibiSegment(room="CAFETERIA", from_tick=2, to_tick=8),)
         lower_first = (
             AlibiSegment(room="cafeteria", from_tick=2, to_tick=4),
