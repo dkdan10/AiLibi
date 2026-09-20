@@ -1693,6 +1693,10 @@ def _relative_to_repo(path: Path) -> str:
 # The published fold
 # ---------------------------------------------------------------------------
 
+#: Where every recording lives, named once so the writer's destination guard
+#: can refuse the DIRECTORY and not merely the files inside it at this moment.
+RECORDINGS_ROOT: Final[str] = "replays"
+
 #: The four committed sets, in publication order, and the two that carry the
 #: 9p2i pins the direction memo's sections 4 and 5 state.
 COMMITTED_SETS: Final[tuple[str, ...]] = (
@@ -1792,6 +1796,7 @@ __all__ = [
     "FIFTH_RUN_ARCHIVE",
     "NINE_PLAYER_SETS",
     "NO_CONSUMER_NOTE",
+    "RECORDINGS_ROOT",
     "ROLE_CORRECTNESS_NOTE",
     "ROW_DEFINITIONS",
     "SCHEMA_VERSION",

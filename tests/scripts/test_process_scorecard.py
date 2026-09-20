@@ -8,8 +8,11 @@ over the NEW artifact, added the same way.
 Three things are pinned here. The published pair recomputes byte-identically
 from the committed recordings; ``--check`` goes RED on a single edited cell,
 demonstrated by planting one rather than asserted in prose; and the writer
-refuses a destination that aliases a recording BEFORE it computes anything, so
-the command cannot be aimed at the bytes it reads.
+refuses a destination inside a recording location BEFORE it computes anything,
+so the command cannot be aimed at the bytes it reads. The third is CONTAINMENT
+and not file identity: a destination that does not exist yet, inside a recording
+set, is refused too, and the perturbed half shows the files-only list accepting
+the same destination.
 
 The committed fold runs ONCE here, in the first test. The planted-drift case
 runs the real ``publish`` / ``check_report`` pair against a planted scorecard in
@@ -25,9 +28,12 @@ from typing import Any
 import pytest
 
 import publish_process_scorecard as command
+from _report_output import _check_destination
 from eval.process_scorecard import (
     DECISION_DATE,
+    FIFTH_RUN_ARCHIVE,
     NO_CONSUMER_NOTE,
+    RECORDINGS_ROOT,
     ROLE_CORRECTNESS_NOTE,
     ROW_DEFINITIONS,
     SCHEMA_VERSION,
@@ -147,19 +153,32 @@ def test_a_missing_published_file_is_red_rather_than_absent(
 @pytest.mark.parametrize(
     "relative",
     (
+        # Existing recordings: file identity refuses these.
         "replays/samples/4p1i/replay-seed-0.jsonl",
         "replays/samples/9p2i/roster.json",
         "replays/ml_corpus/9p2i/tournament-eval-report.json",
         "audits/deduction-candidate/run-2026-09-16/RESULTS.md",
+        # Destinations that do NOT exist yet, inside a recording location.
+        # Nothing on a files-only protected list matches them, so containment —
+        # the recording roots — is the only thing that can refuse them.
+        "replays/new-process-scorecard.md",
+        "replays/samples/9p2i/new-scorecard.md",
+        "audits/deduction-candidate/run-2026-09-16/new-scorecard.md",
     ),
 )
 def test_the_writer_refuses_a_recording_destination_before_computing(
     monkeypatch: pytest.MonkeyPatch, relative: str
 ) -> None:
-    """A destination that aliases an input is refused with nothing computed."""
+    """A destination inside a recording location is refused, nothing computed.
+
+    An existing recording must keep its bytes; a destination that does not exist
+    yet must still not exist after the refusal, because ``preflight_report_output``
+    CREATES its destination as an exclusivity probe once the containment test has
+    passed. That creation is the damage a files-only list allowed.
+    """
 
     source = ROOT / relative
-    before = source.read_bytes()
+    before = source.read_bytes() if source.exists() else None
 
     def forbidden(_root: Path) -> Any:
         raise AssertionError("the fold must not start for an invalid destination")
@@ -168,7 +187,33 @@ def test_the_writer_refuses_a_recording_destination_before_computing(
     monkeypatch.setattr(command, "MARKDOWN_PATH", Path(relative))
     with pytest.raises(ValueError, match="overlaps"):
         command.publish(ROOT)
-    assert source.read_bytes() == before
+    if before is None:
+        assert not source.exists(), "the refusal must leave nothing behind"
+    else:
+        assert source.read_bytes() == before
+
+
+def test_the_recording_roots_are_protected_by_containment() -> None:
+    """The perturbation: strip the roots and the same destination is ACCEPTED.
+
+    ``protected_inputs`` carries the recording DIRECTORIES beside the files. With
+    them, a not-yet-existing destination inside a recording set is refused; with
+    the pre-correction, files-only half of the list, ``_check_destination``
+    matches nothing and lets it through — which is the defect this containment
+    fixes, planted here rather than asserted in prose.
+    """
+
+    protected = command.protected_inputs(ROOT)
+    roots = {path.resolve() for path in protected if path.is_dir()}
+    assert (ROOT / RECORDINGS_ROOT).resolve() in roots
+    assert (ROOT / FIFTH_RUN_ARCHIVE).resolve() in roots
+
+    destination = ROOT / RECORDINGS_ROOT / "samples" / "9p2i" / "new-scorecard.md"
+    assert not destination.exists()
+    files_only = [path for path in protected if path.is_file()]
+    _check_destination(destination, files_only)
+    with pytest.raises(ValueError, match="overlaps"):
+        _check_destination(destination, protected)
 
 
 def test_the_fifth_run_archive_is_protected_from_the_writer() -> None:

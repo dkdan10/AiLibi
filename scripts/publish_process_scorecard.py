@@ -10,9 +10,10 @@ and the exact command that regenerates it.
 
 Destinations are pre-flighted through
 ``scripts/_report_output.py`` before anything is computed, exactly as
-``scripts/measure_reasoning_evidence.py`` does, with every ``replays/**`` path
-AND the fifth run's archive declared as protected inputs — so this writer cannot
-be aimed at a recording, however it is invoked.
+``scripts/measure_reasoning_evidence.py`` does, with every ``replays/**`` path,
+the recording ROOTS themselves AND the fifth run's archive declared as protected
+inputs — so this writer cannot be aimed at a recording directory, however it is
+invoked and whether or not the destination exists yet.
 
 Usage::
 
@@ -32,6 +33,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from _report_output import atomic_write_report, preflight_report_output  # noqa: E402
 from eval.process_scorecard import (  # noqa: E402
+    COMMITTED_SETS,
+    FIFTH_RUN_ARCHIVE,
+    RECORDINGS_ROOT,
     ProcessScorecard,
     RateCell,
     SetScorecard,
@@ -48,17 +52,34 @@ REGENERATE_COMMAND = "uv run python scripts/publish_process_scorecard.py"
 
 
 def protected_inputs(root: Path) -> list[Path]:
-    """Every recording byte this command must never be able to overwrite.
+    """Every recording location this command must never be able to write into.
 
+    Two halves, because neither contains a writer alone. The FILES are
     ``replays/**`` in full (not only ``*.jsonl``: a roster, a manifest and a
-    committed report live beside the recordings and are equally inputs) plus the
-    fifth run's archive, which the appendix reads and the close card binds in
-    place.
+    committed report live beside the recordings and are equally inputs) plus
+    every byte the fold reads: they refuse an alias of an existing recording,
+    including a HARD LINK placed outside the recording tree, which resolves to
+    its own path and is caught only by ``_check_destination``'s ``samefile``
+    probe against the recording itself. The DIRECTORIES are the recording roots
+    themselves — ``replays/``, each committed set and the fifth run's archive —
+    which is what refuses a destination that does not exist YET:
+    ``_report_output._check_destination`` asks whether a protected path is among
+    the destination's parents, so a root on the list refuses everything beneath
+    it, created or not. Without them a destination like
+    ``replays/samples/9p2i/new-scorecard.md`` matched no protected file and this
+    writer would have created a new file inside a recording set.
     """
 
-    return [path for path in root.glob("replays/**/*") if path.is_file()] + list(
-        scorecard_source_paths(root)
-    )
+    directories = {
+        root / name
+        for name in (RECORDINGS_ROOT, *COMMITTED_SETS, FIFTH_RUN_ARCHIVE)
+        if (root / name).is_dir()
+    }
+    return [
+        *sorted(directories),
+        *(path for path in root.glob(f"{RECORDINGS_ROOT}/**/*") if path.is_file()),
+        *scorecard_source_paths(root),
+    ]
 
 
 def _rate(cell: RateCell) -> str:

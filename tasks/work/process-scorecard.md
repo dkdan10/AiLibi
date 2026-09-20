@@ -101,6 +101,29 @@ profile and yields `TickAdvanced.state` (`:374`), as
 
 ## Acceptance
 
+- [x] Review correction: the writer's destination guard refuses by CONTAINMENT
+  and not by file identity. `protected_inputs` now carries the recording
+  DIRECTORIES — `replays/`, each committed set and the fifth run's archive —
+  beside the 741 files, so `_check_destination`'s parent test refuses a
+  destination that does not exist YET. Before this the files-only list accepted
+  `replays/new-process-scorecard.md`,
+  `replays/samples/9p2i/new-scorecard.md` and
+  `audits/deduction-candidate/run-2026-09-16/new-scorecard.md`, and the
+  preflight would have created each one inside a recording location. Proved by
+  the three NEW parameters of
+  `tests/scripts/test_process_scorecard.py::test_the_writer_refuses_a_recording_destination_before_computing`
+  (which also assert the refusal leaves nothing behind) and by the perturbed
+  `::test_the_recording_roots_are_protected_by_containment`, which shows the
+  pre-correction files-only list accepting the same destination.
+- [x] Review correction: every figure names the head it belongs to. The round-1
+  repairs landed at `5303ce5b`, one commit past the `cb2b861b` a round-1 lens
+  was handed, so that lens's four "does not reproduce" reports were readings of
+  a superseded head — all four reproduce at `5303ce5b` and at this one. The pull
+  request body is rewritten against the pushed head with `gh pr edit
+  --body-file`, this `## Results` dates each round, and the test count it
+  publishes is **61** across the two modules (49 + 12) rather than round 1's 57.
+  Reproduced by `uv run python scripts/publish_process_scorecard.py --check` and
+  `uv run pytest tests/eval/test_process_scorecard.py tests/scripts/test_process_scorecard.py -q`.
 - [x] Review correction: row 4 no longer reads the vote guard's own marker text
   as the agent naming a player. The player-token test runs over the
   MODEL-AUTHORED remainder — the anchored, repr-aware chain
@@ -499,19 +522,23 @@ $ uv run python scripts/verify_ml_evidence.py      # EXIT=1
 
 Restoring the entry returns `checks: 61 | OK 49 | FAIL 0` and `EXIT=0`.
 
-**3. The writer cannot target a recording.** Four parametrized destinations — a
-`samples/4p1i` replay, a `samples/9p2i` roster, the `ml_corpus/9p2i` committed
-report and the fifth run's `RESULTS.md` — are each refused by
-`preflight_report_output` with `ValueError: ... overlaps ...` BEFORE
-`compute_process_scorecard` runs, and the test asserts the source bytes are
-unchanged after the refusal
-(`test_the_writer_refuses_a_recording_destination_before_computing`). A
-companion pins that every file under the fifth run's archive is on the protected
-list.
+**3. The writer cannot target a recording.** Seven parametrized destinations are
+each refused by `preflight_report_output` with `ValueError: ... overlaps ...`
+BEFORE `compute_process_scorecard` runs
+(`test_the_writer_refuses_a_recording_destination_before_computing`). Four
+EXIST — a `samples/4p1i` replay, a `samples/9p2i` roster, the `ml_corpus/9p2i`
+committed report and the fifth run's `RESULTS.md` — and the test asserts their
+bytes are unchanged after the refusal. Three do NOT exist yet and are refused by
+containment alone (round-2 correction below); the test asserts each is still
+absent afterwards, because the preflight CREATES its destination as an
+exclusivity probe once the containment test has passed. Two companions pin the
+list itself: every file under the fifth run's archive is on it, and the
+recording roots are on it with the perturbed half showing the files-only list
+accepting the same destination.
 
-**4. Per-row planted pairs** (`tests/eval/test_process_scorecard.py`; 57 tests
-across it and its `tests/scripts/` sibling, none of which walks a committed set
-except the one committed-bytes `--check`):
+**4. Per-row planted pairs** (`tests/eval/test_process_scorecard.py`; 61 tests
+across it and its `tests/scripts/` sibling — 49 and 12 — none of which walks a
+committed set except the one committed-bytes `--check`):
 
 * Row 1 — a SKIP citing a turn about a named alternative scores grounded; the
   same SKIP with the citation nulled does not. An EJECT citing a turn that
@@ -742,3 +769,136 @@ it. The record-impact
 statement is unchanged and re-demonstrated: `verify_samples.sh` and the four
 `--check` runs recompute exactly what they did before this card. No provider
 call is a check here, and none was made.
+
+### Review corrections, round 2 (2026-09-20)
+
+The round-1 lens sweep was re-read against the PUSHED head `5303ce5b` — the
+head the corrections above landed at — and raised **two further findings**.
+Both are VALID; neither needed a refutation. One is a real gap the round-1 pass
+did not close, and one is a head-accounting repair:
+
+| defect | raised by | repair |
+| --- | --- | --- |
+| the destination guard protected FILES, so a destination that does not exist yet inside a recording location was ACCEPTED | correctness lens; documentation/Codex lens | put the recording ROOTS on the protected list |
+| four figures were reported as not reproducing at `cb2b861b` although the round-1 repairs had already moved them at `5303ce5b` | documentation/Codex lens | re-point the pull request body at the pushed head and date each round here |
+
+**1. The writer is CONTAINED, not merely alias-checked.** `protected_inputs`
+enumerated files — `replays/**` plus every byte the fold reads — and
+`_check_destination` (`scripts/_report_output.py:12-32`) refuses a destination
+that equals a protected path or sits under one. A path that did not exist
+matched no file, so the guard left a hole exactly where the Acceptance claimed
+there was none: aimed at `replays/samples/9p2i/new-scorecard.md` the writer
+accepted the destination, and `preflight_report_output` would have CREATED it
+inside a recording set (it creates the file as an exclusivity probe and unlinks
+it again, so the damage is a new byte in a recording directory rather than an
+overwritten one — still a writer reaching into the bytes it reads). The list
+now carries the recording DIRECTORIES as well: `replays/`, each of the four
+committed sets and the fifth run's archive, named once as `RECORDINGS_ROOT` /
+`COMMITTED_SETS` / `FIFTH_RUN_ARCHIVE` in `eval/process_scorecard.py`, so
+CONTAINMENT — a protected path among the destination's parents — is what
+refuses, created or not. 741 protected entries become 747; nothing else about
+the writer moves, and republishing produces byte-identical files. Both halves
+stay, because they catch different things: containment cannot see a HARD LINK
+to a recording placed outside the recording tree — that path resolves to itself
+and is caught only by `_check_destination`'s `samefile` probe against the
+recording file.
+
+The perturbation is the gate turning red on exactly this defect (live: edit,
+run, restore). With the roots taken back off the list:
+
+```
+$ uv run pytest tests/scripts/test_process_scorecard.py -q
+FAILED ...::test_the_writer_refuses_a_recording_destination_before_computing[replays/new-process-scorecard.md]
+FAILED ...::test_the_writer_refuses_a_recording_destination_before_computing[replays/samples/9p2i/new-scorecard.md]
+FAILED ...::test_the_writer_refuses_a_recording_destination_before_computing[audits/deduction-candidate/run-2026-09-16/new-scorecard.md]
+FAILED ...::test_the_recording_roots_are_protected_by_containment
+4 failed, 8 passed in 10.17s
+EXIT=1
+```
+
+and restored:
+
+```
+$ uv run pytest tests/scripts/test_process_scorecard.py -q
+12 passed in 8.26s
+EXIT=0
+```
+
+`test_the_recording_roots_are_protected_by_containment` carries that planted
+defect as a committed case: it feeds `_check_destination` the pre-correction,
+files-only half of the list and asserts the same destination is ACCEPTED, then
+feeds it the whole list and asserts the refusal. The three new parameters of
+the refusal test also assert the destination is still ABSENT afterwards, which
+is what a files-only list could not promise. The sibling writer
+`scripts/measure_reasoning_evidence.py` builds its protected list the same
+files-only way through `eval.reasoning_evidence.scorecard_source_paths`; that is
+another card's file under the one-writer rule and is NOT touched here, but the
+same containment repair applies to it and is stated so it is not lost.
+
+**2. Each figure now names its head.** A round-1 lens was handed `cb2b861b`
+while `5303ce5b` was already the pull request's head, and reported four body
+figures — unexplained 20/3631, `first_hand` 75 with a `hearsay` 8 band, pooled
+chance 0.315503, and the test count — as not reproducing. They do not reproduce
+at `cb2b861b` because they ARE the round-1 corrections above; all four reproduce
+at `5303ce5b` and at this head, from `docs/process-scorecard.json` through
+`uv run python scripts/publish_process_scorecard.py --check`. The one figure
+that genuinely moved is the test count: round 1 published **57** across the two
+modules and round 2 makes it **61** (`tests/eval/test_process_scorecard.py` 49,
+unchanged; `tests/scripts/test_process_scorecard.py` 8 to 12). The pull request
+body is rewritten against the pushed head, and the "Planted and perturbed
+failures" list above now reads seven refused destinations rather than four.
+
+**What did NOT move.** No agent behaviour, prompt byte, schema field, detector
+or recorded byte; no `audits/` and no `tests/fixtures/` byte; and no published
+scorecard byte at all — `docs/process-scorecard.md` and
+`docs/process-scorecard.json` are identical before and after this round, because
+the repair is to the writer's destination guard and not to the fold. All nine
+rows are byte-identical to round 1, and no `docs/artifacts.md` inventory row is
+recomputed because no registry-covered byte moved.
+
+**Verification at this head.** Every command was re-run in this worktree with
+its exit code captured directly, never through a pipe:
+
+```
+$ uv run python scripts/publish_process_scorecard.py --check
+--check: docs/process-scorecard.md and docs/process-scorecard.json are consistent with the committed recordings.
+EXIT=0
+
+$ uv run pytest tests/eval/test_process_scorecard.py tests/scripts/test_process_scorecard.py -q
+61 passed in 8.22s
+EXIT=0
+
+$ uv run python scripts/validate_task_docs.py
+Task docs validation passed: 390 historical phase tasks and 390 prompts; 73 work cards.
+EXIT=0
+
+$ uv run python scripts/verify_ml_evidence.py
+checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5
+EXIT=0
+```
+
+`uv run pytest tests/eval tests/scripts -q` (**2537 passed, 1 skipped**),
+`uv run python scripts/check_doc_facts.py`, `uv run lint-imports` (4 kept, 0
+broken), `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` (80
+passed), `bash scripts/verify_samples.sh` (50 + 50 verified clean) and the four
+`uv run python scripts/build_sample_report.py --sample-dir <set> --check` runs
+all pass. `bash scripts/check.sh` run whole in this worktree returns
+**EXIT=0**: ruff clean, `lint-imports` 4 kept / 0 broken, 390 phase tasks + 390
+prompts + 73 work cards, mypy over 489 source files, **8048 passed, 20 skipped,
+3 xfailed**, frontend 19 test files / 515 tests passed and the build green.
+
+One earlier run of that script at this head returned EXIT=1 on
+`tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`
+(`assert provider.attempts == 2` saw 0). It is unrelated to this card and
+load-dependent, not a regression: the diff touches no `orchestrator/` byte and
+that test imports nothing this card changes; the test asserts that a 0.25-second
+`RunDeadline` still reaches the provider twice, and it failed while the machine
+carried a load average near 100 on 10 cores (that gate run took 44 minutes
+against this one's 6). It reproduces at the PRISTINE head under the same load
+and disappears at both heads when the load drops: three consecutive
+`uv run pytest tests/orchestrator -q -n auto --dist loadfile` runs pass with the
+change applied and three pass with it reverted, as does the file alone. It is a
+sibling of the `test_recording_replacement.py` flake round 1 recorded and is
+filed the same way; nothing here depends on it. The record-impact statement is
+unchanged and re-demonstrated. No provider call is a check here, and none was
+made.
