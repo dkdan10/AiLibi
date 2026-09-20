@@ -30,8 +30,14 @@ import type { Page } from "@playwright/test";
 const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
 
 /**
- * Land in the workspace on the head of the CURATED featured list, and return
- * the seed it opened.
+ * Land in the workspace on a card of the CURATED featured strip — the head by
+ * default — and return the seed it opened.
+ *
+ * `want` names a specific card instead, matched on the pill's EXACT text. Exact
+ * matters: `seed 2` is a prefix of `seed 23`, and a substring match would open
+ * whichever of the two the strip happens to list first. The one caller that
+ * passes it is the evidence guard's planted case, which needs the zero-flag game
+ * specifically and no longer gets it from the head.
  *
  * The tour is marked seen before the first paint. Not because it is untested
  * territory to be avoided, but because on a virgin visit it AUTO-LOADS its own
@@ -45,9 +51,11 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
  * for reasons that have nothing to do with this test. What IS pinned is the
  * join: the card you click opens that seed's workspace.
  */
-//: The featured head's card text, captured by `openFeaturedReplay` before the
-//: strip unmounts. The evidence leg holds the rendered meeting to what this
-//: card PROMISES, in both directions, so a card and its game cannot drift apart.
+//: The featured card's text, captured by `openFeaturedReplay` before the strip
+//: unmounts — the head's for the main leg, and seed 2's for the planted case
+//: that opens it by name. The evidence leg holds the rendered meeting to what
+//: that card PROMISES, in both directions, so a card and its game cannot drift
+//: apart.
 let headCardCopy = "";
 
 // The featured card's claim about detected contradictions, not all available
@@ -55,7 +63,7 @@ let headCardCopy = "";
 // that changed copy or changed flags fail this check.
 const NO_FLAGGED_CONTRADICTIONS_PROMISE = /no flagged contradictions/i;
 
-async function openFeaturedReplay(page: Page): Promise<number> {
+async function openFeaturedReplay(page: Page, want: number | null = null): Promise<number> {
   await page.addInitScript((key) => {
     window.localStorage.setItem(key, "1");
   }, TOUR_SEEN_KEY);
@@ -63,8 +71,16 @@ async function openFeaturedReplay(page: Page): Promise<number> {
 
   const featured = page.getByRole("region", { name: "Featured games" });
   await expect(featured).toBeVisible();
-  const head = featured.getByRole("listitem").first().getByRole("button");
+  const items = featured.getByRole("listitem");
+  const head = (
+    want === null
+      ? items.first()
+      : items.filter({ has: page.getByText(`seed ${want}`, { exact: true }) }).first()
+  ).getByRole("button");
   const seedLabel = await head.locator("span").first().innerText();
+  // Read back off the card even when one was asked for: the pin is the JOIN
+  // between the card's pill and the workspace it opens, so a card that opened
+  // somebody else's game has to be able to fail here.
   const seed = Number(seedLabel.replace(/[^0-9]/g, ""));
   expect(Number.isFinite(seed)).toBe(true);
   // The card's own promise, kept for the evidence check below to hold the
@@ -451,8 +467,11 @@ test.describe("spectator journey", () => {
     // is how the empty meeting is COVERED rather than skipped.
     expect(declared.length === 0).toBe(grouped.length === 0);
 
-    // Bind the card's detector-flag claim to the rendered count. The next test
-    // plants both mismatches; neither claim describes all the agents' evidence.
+    // Bind the card's detector-flag claim to the rendered count. Since the strip
+    // leads with a grounded game this leg now takes the `else` branch, and the
+    // next test opens the zero-flag game by name so the `if` branch is still
+    // walked. That test also plants both mismatches; neither claim describes all
+    // the agents' evidence.
     const promisesNoFlags = NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy);
     if (promisesNoFlags) {
       expect(declaredTotal).toBe(0);
@@ -549,11 +568,17 @@ test.describe("spectator journey", () => {
   test("the evidence guard bites on a card that misdescribes its game", async ({
     page,
   }) => {
-    // THE PLANTED CASE for the check above. That check reads the head card's
+    // THE PLANTED CASE for the check above. That check reads the opened card's
     // promise and holds the render to it, which is only worth anything if a
     // MISMATCH actually goes red — so both mismatches are constructed here
     // against the real rendered meeting, with no bytes and no copy touched.
-    const seed = await openFeaturedReplay(page);
+    //
+    // 9p2i seed 2 is the zero-flag game, and it is no longer the head: the strip
+    // now leads with a game whose first meeting ejects on a role-proof flag
+    // (ReplayPicker.tsx above FEATURED_GAMES), so the main leg above exercises
+    // the "has evidence" branch and this one opens seed 2 by name to keep the
+    // "no evidence" branch covered. Both directions still run on every suite.
+    const seed = await openFeaturedReplay(page, 2);
     expect(seed).toBe(2);
 
     await resetFocus(page);

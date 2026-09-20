@@ -87,22 +87,31 @@ export interface FeaturedGame {
   readonly label: string;
 }
 
-// Editorial selection, independent of the pacing rubric. Labels name a setup
-// or question, never an ending, ejection or vote tally. A lack of detector flags
-// says nothing about how much evidence the agents hold. Countable claims are
-// checked against the recordings by tests/api/test_sets.py and the browser tests.
+// WHICH games are here is editorial, independent of the pacing rubric: seven
+// hand-read recordings. Labels name a setup or question, never an ending,
+// ejection or vote tally. A lack of detector flags says nothing about how much
+// evidence the agents hold. Countable claims are checked against the recordings
+// by tests/api/test_sets.py and the browser tests.
+//
+// The ORDER is measured, not editorial, and only the head of each set carries
+// the measurement. A grounded ejection is one where the ejected player carries a
+// role_proof flag in the same meeting — the derived category for a vent
+// sighting, a spoken observation matched against the speaker's own typed
+// vent-witness record. Each set therefore leads with a game whose FIRST meeting,
+// the one the viewer's auto-follow opens, ejects on such a flag: the tour opens
+// on a table that established something rather than on one that did not.
+// Reproduce the bands and the eligible openers with
+//   uv run python scripts/measure_featured_criterion.py
+// and see tests/api/test_sets.py, which pins EACH SET'S head against the
+// criterion rather than against a seed — per set because the tour opens the
+// head of the set it targets — so the next re-record re-chooses those heads
+// instead of quietly keeping these ones.
 export const FEATURED_GAMES: readonly FeaturedGame[] = [
-  {
-    set: "9p2i",
-    seed: 2,
-    label:
-      "One meeting, no flagged contradictions. What can the players establish from their observations and each other's accounts?",
-  },
   {
     set: "9p2i",
     seed: 23,
     label:
-      "Twenty-six spoken turns across four meetings. Read how a claim changes as it gets repeated back.",
+      "Four meetings, twenty-six spoken turns. A player reports seeing someone use a vent, and the meeting files that apart from one account merely contradicting another. Read which each ballot cites, and who else its voter weighed.",
   },
   {
     set: "9p2i",
@@ -117,22 +126,28 @@ export const FEATURED_GAMES: readonly FeaturedGame[] = [
       "Four meetings to compare. Follow how the table turns sightings and statements into accusations.",
   },
   {
-    set: "4p1i",
-    seed: 29,
+    set: "9p2i",
+    seed: 2,
     label:
-      "One meeting, three turns, and no flagged contradictions. Compare each player's observations with the claims made aloud.",
+      "One meeting, no flagged contradictions. What can the players establish from their observations and each other's accounts?",
   },
   {
     set: "4p1i",
     seed: 2,
     label:
-      "A small table, three spoken turns, then a vote. What can each player infer from the limited conversation?",
+      "A small table, three spoken turns. A player reports seeing someone use a vent. Compare that against what each ballot cites.",
   },
   {
     set: "4p1i",
     seed: 11,
     label:
       "One short meeting with no flagged contradictions. Compare the players' statements before they decide.",
+  },
+  {
+    set: "4p1i",
+    seed: 29,
+    label:
+      "One meeting, three turns, and no flagged contradictions. Compare each player's observations with the claims made aloud.",
   },
 ];
 

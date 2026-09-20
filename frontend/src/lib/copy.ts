@@ -417,6 +417,25 @@ export const SPECTATOR_COPY = Object.freeze({
     resolutionGateLead: "How the vote resolved",
   }),
 
+  /** One ballot card's private-reasoning block. */
+  ballot: Object.freeze({
+    // The recorded weighing artefact: who this voter wrote down while choosing.
+    // The heading deliberately claims NOTHING about who those are — an earlier
+    // "Also weighed" said the OTHER players, and the bytes falsify that. Over
+    // `replays/samples/9p2i`, 27 of 869 ballots list the voter ITSELF and 22
+    // list the target the vote applied to (measured by
+    // `scripts/measure_featured_criterion.py --alternatives`), and the
+    // recordings also admit an id no longer in the game and the literal `SKIP`.
+    // Those entries are annotated by the two notes below rather than dropped,
+    // so the block stays the record.
+    alternativesLabel: "Weighed on this ballot",
+    alternativesEmpty: "no alternatives recorded",
+    // An entry the card's header already shows, named so a viewer reads one
+    // player twice rather than two players.
+    alternativesSelfNote: "this voter",
+    alternativesTargetNote: "the vote cast",
+  }),
+
   /** The Replays browser and the Highlights reel. */
   picker: Object.freeze({
     highlightsIntro: "Ordered by the interestingness rubric.",
@@ -445,6 +464,7 @@ export const SPECTATOR_COPY = Object.freeze({
   rubricSpokes: RUBRIC_SPOKES,
 } as const);
 
+export const BALLOT_COPY = SPECTATOR_COPY.ballot;
 export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;
