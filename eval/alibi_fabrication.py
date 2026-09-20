@@ -120,14 +120,17 @@ from engine.entities import Role
 from eval.report_schema import MeetingReport, TournamentReport
 from meetings.schemas import AlibiClaim, PlayerId, RoomId
 
-# The ``alibi_*`` contradiction kinds the subject-membership join considers.
-# Today this is the whole of :class:`~meetings.schemas.ContradictionRef`'s
-# ``kind`` Literal, so the filter is currently total; it is kept explicit so a
-# future non-alibi contradiction kind cannot silently start crediting catches.
-# ``alibi_vs_physical`` (Task 13.4) IS an alibi contradiction -- an impostor
-# whose fabricated alibi is exposed only by that STRONG kind must count as
-# caught, not survived -- so it joins the set.
-_ALIBI_CONTRADICTION_KINDS: Final[frozenset[str]] = frozenset(
+# The ``alibi_*`` contradiction kinds the subject-membership join considers --
+# the ONE home of that set. :data:`eval.process_scorecard.ALIBI_FLAG_KINDS` is
+# this same object, imported rather than re-listed, so the census and the
+# scorecard's manufactured-contradiction row cannot drift apart when a kind is
+# added or retired here; ``tests/eval/test_process_scorecard.py`` asserts the
+# identity. It is a subset of :class:`~meetings.schemas.ContradictionRef`'s
+# ``kind`` Literal and is kept explicit so a future non-alibi contradiction kind
+# cannot silently start crediting catches. ``alibi_vs_physical`` (Task 13.4) IS
+# an alibi contradiction -- an impostor whose fabricated alibi is exposed only
+# by that STRONG kind must count as caught, not survived -- so it joins the set.
+ALIBI_CONTRADICTION_KINDS: Final[frozenset[str]] = frozenset(
     {"alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"}
 )
 
@@ -268,12 +271,13 @@ def _subjects_named_in_alibi_contradictions(meeting: MeetingReport) -> set[Playe
 
     caught: set[PlayerId] = set()
     for contradiction in meeting.contradictions:
-        if contradiction.kind in _ALIBI_CONTRADICTION_KINDS:
+        if contradiction.kind in ALIBI_CONTRADICTION_KINDS:
             caught.update(contradiction.subjects)
     return caught
 
 
 __all__ = [
+    "ALIBI_CONTRADICTION_KINDS",
     "AlibiFabricationReport",
     "compute_alibi_fabrication_rate",
 ]
