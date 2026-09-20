@@ -17,7 +17,7 @@
 // DESIGN.md §7) the server stamps on every payload that carries one.
 // `src/api/client.ts` rejects unsupported versions and checks the
 // explicitly compatible historical version's audio before use.
-export const VIEW_MODEL_VERSION = "4";
+export const VIEW_MODEL_VERSION = "5";
 
 export type PlayerRole = "CREWMATE" | "IMPOSTOR";
 export type CurrentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE" | "PRETEND_TASK" | "EMERGENCY" | "REPAIR" | "BLOCKED";

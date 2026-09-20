@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
 
@@ -467,6 +468,62 @@ def test_the_context_gate_reads_every_leg_of_an_alibi_route() -> None:
                 }
             )
         )
+
+
+def test_two_legs_of_one_route_mint_two_DISTINCT_contradiction_ids() -> None:
+    """A route's legs are separate rows, so they cannot hash to ONE flag id.
+
+    ``_Placement.identity`` exists precisely so two rows read out of ONE
+    artifact do not collide (its docstring says so), and a route is a fourth
+    way one artifact yields several rows. With the bare event id for every
+    stated row, a two-leg account disagreeing with one sighting returned TWO
+    flags carrying the SAME ``contradiction_id`` and different descriptions —
+    a duplicate key every reader that indexes by id silently drops.
+
+    The control is the reason the leg index is conditional: a ONE-leg claim
+    keeps the bare event id, so every id a committed recording carries is
+    byte-identical to what it was recorded with.
+    """
+
+    route = AlibiClaim(
+        type="alibi",
+        subject="p-3",
+        route=(
+            AlibiSegment(room="REACTOR", from_tick=1, to_tick=2),
+            AlibiSegment(room="ENGINEERING", from_tick=3, to_tick=4),
+        ),
+    )
+    sighting = MeetingTurn(
+        turn_id="p-2",
+        turn_index=1,
+        speaker="p-2",
+        turn_kind="opt_in",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(type="saw_player", tick=3, subject="p-3", room="LABS"),
+        ),
+        free_text="unsure",
+    )
+    roster = frozenset({"p-1", "p-2", "p-3"})
+
+    flags = _flags(_claim_turn("p-1", (route,)), sighting, roster=roster)
+
+    assert len(flags) == 2
+    assert len({flag.contradiction_id for flag in flags}) == 2
+    assert len({flag.description for flag in flags}) == 2
+    # Both endpoints still resolve to the artifact a reader can cite: the leg
+    # index lives in the hashed identity, never in the event id.
+    assert {flag.event_a_id for flag in flags} == {"turn:p-1:claim:0"}
+
+    # The control: a ONE-leg claim hashes the bare event ids, exactly as every
+    # committed recording's public-account flag already does.
+    (single,) = _flags(
+        _claim_turn("p-1", (_alibi("p-3", "REACTOR", 1),)), sighting, roster=roster
+    )
+    source = f"{single.event_a_id}|{single.event_b_id}"
+    assert single.contradiction_id == (
+        "public-account-" + sha256(source.encode()).hexdigest()[:16]
+    )
 
 
 def test_task_account_retains_attribution_without_completion_evidence() -> None:

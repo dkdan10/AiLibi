@@ -63,8 +63,17 @@ from pydantic_core import CoreSchema
 # exhaustively (the map's glyph registry does) has no entry for the four new ones,
 # so a build on the old contract must fail loudly rather than render a hole.
 # "4" adds the public task-activity account to the spoken observation union.
-# Current clients explicitly retain version-2/3 reads with the same audio guard.
-VIEW_MODEL_VERSION: Final[str] = "4"
+# "5" makes an alibi a ROUTE: :class:`AlibiClaimView` serves ``route`` for a
+# route claim and the legacy ``room`` / ``from_tick`` / ``to_tick`` triple only
+# for a claim recorded in the flat envelope, so three fields that were REQUIRED
+# on every served alibi are now absent from one of the two surfaces. Dropping a
+# required field is the breaking direction: a build stamped "4" indexes
+# ``claim.room`` unconditionally, so it must fail loudly on a route payload
+# rather than render an alibi with no room. Current clients explicitly retain
+# version-2/3/4 reads with the same audio guard -- reading an OLDER server is
+# still safe, because every version-4 alibi carries the flat triple this
+# contract still serves.
+VIEW_MODEL_VERSION: Final[str] = "5"
 
 
 class _FrozenView(BaseModel):

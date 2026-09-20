@@ -82,6 +82,60 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
+- [x] Review correction: a truthful EARLIER leg no longer downgrades a later
+  leg's conflict. One flag is minted per pair of CLAIMS, and
+  `_detect_alibi_conflicts` built it from the FIRST candidate pair of legs --
+  the shape it shipped with when a claim held exactly one leg. A route
+  `CAFETERIA 1-10` + `ADMIN 11-20` against a rival `STORAGE 10-15` reaches the
+  boundary pair first (`WEAK_REASON_BOUNDARY_OVERLAP`), so the genuinely
+  interior `ADMIN`/`STORAGE` disagreement -- STRONG when the same leg is stated
+  alone -- was published weak. The detector now collects every candidate pair
+  for a claim pair and mints the flag from the one carrying the FEWEST
+  `_conflict_weak_reasons`; a one-segment route has exactly one candidate, so no
+  recorded flag moves, and ties keep the first candidate so emission order stays
+  deterministic.
+  `tests/meetings/test_contradictions.py::TestARouteDoesNotSoftenItsOwnConflict`
+  carries the band, the lone-leg control, a route that is weak on every leg, and
+  the one-flag-per-claim-pair count.
+- [x] Review correction: two legs of ONE route no longer mint one
+  `contradiction_id`. `_Placement.identity` returned the bare event id for every
+  stated row, while `_placements` now emits one stated row per LEG all carrying
+  the claim's event id, so a two-leg route disagreeing with a single sighting
+  returned two flags under one id with two different descriptions -- the exact
+  collision the `identity` docstring (`meetings/public_accounts.py:130-138`)
+  exists to prevent. `_Placement` gains a `leg` index that enters `identity` for
+  a route of MORE than one leg and stays `None` for a one-leg claim, so every id
+  a committed recording carries is byte-identical.
+  `tests/meetings/test_public_accounts.py::test_two_legs_of_one_route_mint_two_DISTINCT_contradiction_ids`
+  asserts the two distinct ids, that both endpoints still resolve to the turn
+  artifact, and the one-leg control against the bare-id hash.
+- [x] Review correction: `VIEW_MODEL_VERSION` moves `"4"` to `"5"`, because a
+  format-2 `AlibiClaimView` serves `route` and DROPS `room` / `from_tick` /
+  `to_tick`, three fields every served alibi used to carry. `api/schemas.py:55`
+  says the stamp is bumped on a breaking shape change, and dropping required
+  fields is the breaking direction: a build stamped `"4"` would pass the guard
+  and then read an alibi with no room. `frontend/src/api/client.ts` adds `"4"`
+  to its accepted list (the compatible direction -- every version-4 alibi
+  carries the flat triple this build renders), `api.ts` / `api.fidelity.ts` are
+  regenerated and the lockstep pin in `tests/api/test_view_model.py` moves with
+  it. Gate:
+  `tests/api/test_view_model.py::test_an_optional_alibi_surface_forces_the_contract_stamp_past_four`
+  (red at `"4"`), plus `client.test.ts`'s version-4 read.
+- [x] Review correction: the Verification table below is re-measured at THIS
+  head, so each command in it carries one reproducible number. Two cells were
+  the PRE-round-1 measurement under a heading claiming the head of this branch:
+  `bash scripts/check.sh` read 8,113 and `uv run pytest tests/meetings
+  tests/agents -q` read 2,696. Both now read what those commands print at the
+  round-2 head, and the round-1 table keeps its own dated figures.
+- [x] Review correction: the last two Results figures that did not reproduce are
+  corrected in place. `uv run pytest tests/agents/test_bespoke_prompt_sets.py -k
+  TestEveryRegisteredSetRendersAnAlibi` collects FOURTEEN (seven sets x two
+  methods), so the round-1 planted leg reads `2 failed, 12 passed` perturbed and
+  `14 passed` reverted, re-run at this head; and
+  `_MOVEMENT_CHANNEL_DIVERGING_MEETINGS` names SEVENTY-EIGHT meetings
+  (`_MOVEMENT_CHANNEL_DIVERGENCES = 78`, twenty of them in
+  `replays/samples/9p2i`), which this PR does not touch, so Measurements no
+  longer says seventeen.
 - [x] Review correction: EVERY registered prompt family renders a spoken alibi
   again. The six non-locked `accusation_round.j2` bodies still read
   `claim.room` / `claim.from_tick` / `claim.to_tick` under the loader's
@@ -388,6 +442,16 @@ prune and repairs a reversed range per segment, both keyed on field names.
   card deletes. The cost is four optional keys in the generated TypeScript, which
   is why `scripts/gen_frontend_types.py` gains four rows in its optional-field
   list; the spectator narrows on `route`.
+* **`VIEW_MODEL_VERSION` is bumped `"4"` to `"5"`** (added in round 2). Serving
+  an alibi with no `room` / `from_tick` / `to_tick` DROPS three fields that were
+  required on every served alibi, and `api/schemas.py:55` reserves the stamp for
+  exactly that: a build stamped `"4"` indexes those fields unconditionally, so
+  without the bump it would pass the guard and then render an alibi with no
+  room. The compatible direction stays open -- `frontend/src/api/client.ts`
+  adds `"4"` to `"2"`/`"3"` on its accepted list, because every alibi a
+  version-4 server serves carries the flat triple this build still renders. The
+  bump is free of record impact: the stamp is computed at serve time and no
+  recorded byte carries it.
 * **The archived v5 bodies are byte copies except one accessor.** The schema
   renamed the field the render reads, so a pure copy of
   `accusation_round.j2` / `vote_ballot.j2` / `accusation_round_roll_call.j2`
@@ -410,20 +474,21 @@ prune and repairs a reversed range per segment, both keyed on field names.
 
 ### Verification
 
-Run from a clean worktree at the head of this branch.
+Run from a clean worktree at the head of this branch, every cell re-measured at
+the round-2 head (the dated round-1 table below keeps its own figures).
 
 | command | result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — 8,113 Python passed, 20 skipped, 3 xfailed; 528 frontend tests; 73 work cards validated |
-| `uv run pytest tests/meetings tests/agents -q` | 2,696 passed |
-| `uv run pytest tests/api tests/llm -q` | 764 passed, 19 skipped |
+| `bash scripts/check.sh` | exit 0 — 8,139 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
+| `uv run pytest tests/meetings tests/agents -q` | 2,717 passed |
+| `uv run pytest tests/api tests/llm -q` | 765 passed, 19 skipped |
 | `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
 | `uv run pytest tests/scripts/test_counterfactual_phase21.py -q` | 112 passed |
 | `uv run mypy .` | Success: no issues found in 491 source files |
 | `uv run ruff check .` / `uv run ruff format --check .` | clean |
-| `uv run python scripts/gen_frontend_types.py` | regenerated; `api.ts` only |
+| `uv run python scripts/gen_frontend_types.py` | regenerated; `api.ts` and `api.fidelity.ts` (the stamp) |
 | `npm --prefix frontend run tsc:check` | exit 0 |
-| `npm --prefix frontend test` | 20 files, 528 tests passed |
+| `npm --prefix frontend test` | 20 files, 532 tests passed |
 | `cd frontend && npm run e2e` (a served DTO moved) | 13 passed, 3 skipped |
 | `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
 | `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on all four sets |
@@ -479,9 +544,11 @@ Seed 41 meeting 2, the direction memo's exhibit: the committed record holds five
 flags, every one naming `p-9` and every one referencing `p-9`'s own claim. As the
 four-segment route `ENGINEERING 12-12 / EAST_HALL 13-13 / ADMIN 14-14 /
 WEST_HALL 15-15` the meeting mints ZERO. Re-derivation of the recorded envelope
-yields four of the five -- this meeting is one of the seventeen
-`_MOVEMENT_CHANNEL_DIVERGING_MEETINGS` whose fifth flag rests on the private
+yields four of the five -- this meeting is one of the seventy-eight
+`_MOVEMENT_CHANNEL_DIVERGING_MEETINGS` (`_MOVEMENT_CHANNEL_DIVERGENCES = 78`,
+twenty of them in `replays/samples/9p2i`) whose fifth flag rests on the private
 movement channel a replay cannot rebuild, which the corpus walk already pins.
+Neither the count nor the membership moves on this branch.
 
 ### Limitations
 
@@ -590,8 +657,10 @@ and 7). Both were re-run at this head and corrected in place above.
 **Round-1 planted failures.** Each applied to the tree, run, reverted.
 
 * Restoring `claim.room` in `qwen3_5_9b/accusation_round.j2` turns
-  `TestEveryRegisteredSetRendersAnAlibi` red for that set (`2 failed, 13 passed`
-  over the selected ids); reverted, `15 passed`.
+  `TestEveryRegisteredSetRendersAnAlibi` red for that set (`2 failed, 12 passed`
+  over the fourteen selected ids); reverted, `14 passed`. (Figure corrected in
+  round 2 and the leg re-run at that head; the class holds seven sets x two
+  methods, not the 15 this bullet first read.)
 * Restoring `if len(alibi.route) != 1: return None` in `_leg_under_sighting`
   turns `test_a_multi_leg_route_is_measured_against_the_leg_under_the_sighting`
   red with `EvidenceHonestyReconstructionError` (`1 failed, 1 passed`);
@@ -617,3 +686,112 @@ because no rendered byte moves for any claim the repaired bodies could already
 render. A multi-leg route is now published as not evaluable by row 3 until a
 flag carries segment attribution -- a limitation of the row, stated here rather
 than discovered at the re-record.
+
+### Review corrections, round 2 (2026-09-20)
+
+Five blocking findings from the independent verifiers, all VALID, all repaired
+on this branch; none is refuted, and no Codex comment is skipped. Three are
+defects in the route work itself, two are Results figures that did not
+reproduce. Commands below were re-run from a clean worktree at this head.
+
+**1. A truthful EARLIER leg downgraded a later leg's conflict** (Codex P2,
+`meetings/transcript.py:3005`). One flag is minted per pair of CLAIMS, and
+`_detect_alibi_conflicts` built it from the FIRST candidate pair of legs -- the
+shape it shipped with, correct only while a claim held exactly one leg. Repro at
+the previous head, `evidence_reasoning_version=1`: a route `CAFETERIA 1-10` plus
+`ADMIN 11-20` stated by `p-1` about `p-3`, against a rival `STORAGE 10-15` from
+`p-2`, emitted ONE `alibi_conflict` at band **weak**, marker `endpoint-tick
+overlap` -- the boundary pair `CAFETERIA`/`STORAGE` is reached first and the
+old paired-set guard suppressed the genuinely interior `ADMIN`/`STORAGE` pair.
+The control stating the `ADMIN` leg ALONE emitted band **strong**, so prepending
+a leg the speaker really walked bought a softer flag: the opposite of what this
+card is for. The detector now collects every candidate pair for a claim pair and
+mints the flag from the one carrying the FEWEST `_conflict_weak_reasons`; ties
+keep the first candidate, so emission order and the quoted description stay
+deterministic, and a ONE-segment route has exactly one candidate, so no recorded
+flag can move (the 672-meeting byte-identity walk is green). New gate:
+`tests/meetings/test_contradictions.py::TestARouteDoesNotSoftenItsOwnConflict`
+-- the band, the lone-leg control (same band AND same description), a route weak
+on every leg that stays weak, and the one-flag-per-claim-pair count.
+
+**2. Two legs of ONE route minted the same `contradiction_id`** (Codex P2,
+`meetings/public_accounts.py:231`). `_Placement.identity` returned the bare
+event id for a stated row, while `_placements` now emits one stated row per LEG
+all carrying the claim's event id, so the sha256 over
+`first.identity|second.identity` collided. Repro at the previous head: a route
+`ENGINEERING 1-2` plus `REACTOR 3-4` (`p-1` about `p-3`) against a `saw_player`
+of `p-3` in `LABS` at tick 3 returned **2 flags, 1 distinct id**, with two
+different descriptions -- exactly the collision the `identity` docstring exists
+to prevent. `_Placement` gains a `leg` index that enters `identity` for a route
+of MORE than one leg and stays `None` otherwise, so a one-leg claim still hashes
+the bare event ids and no committed id moves. The leg index is never an
+endpoint: both flags still name `turn:<turn>:claim:<i>`. New gate:
+`tests/meetings/test_public_accounts.py::test_two_legs_of_one_route_mint_two_DISTINCT_contradiction_ids`,
+which asserts two ids, two descriptions, the unmoved endpoints, and the one-leg
+control against the bare-id hash.
+
+**3. The view contract stamp moves for a breaking wire shape** (Codex P2,
+`api/schemas.py:730`). A format-2 `AlibiClaimView` serializes to `type`,
+`subject`, `route`, `evidence` with `from_tick`, `to_tick` and `room` ABSENT,
+and the generated `frontend/src/types/api.ts` turns three previously required
+fields optional -- while `VIEW_MODEL_VERSION` stayed `"4"` and the client
+accepted `"2"`, `"3"`, `"4"`. An older build stamped `"4"` would therefore pass
+the guard and then read an alibi with no room. `api/schemas.py:55` reserves the
+stamp for exactly this, so the stamp is now `"5"`: `client.ts` adds `"4"` to its
+accepted list (the compatible direction is safe -- every version-4 alibi carries
+the flat triple this build renders), `api.ts` / `api.fidelity.ts` are
+regenerated, the lockstep pin moves with them, and the card and the PR each
+carry a Decisions bullet recording the bump. Two prose sentences that named
+version 4 as current (`docs/architecture.md`, `docs/observation-contract.md`)
+are restated; the architecture note stays inside its 1,300-word ceiling at
+1,295. New gate:
+`tests/api/test_view_model.py::test_an_optional_alibi_surface_forces_the_contract_stamp_past_four`,
+plus `frontend/src/api/client.test.ts`'s explicit version-4 read. No record
+impact: the stamp is computed at serve time and no recorded byte carries it.
+
+**4. The Verification table is re-measured at this head.** Two cells were the
+PRE-round-1 measurement under a heading claiming the head of this branch --
+`bash scripts/check.sh` read 8,113 where it prints 8,133 at the round-1 head,
+and `uv run pytest tests/meetings tests/agents -q` read 2,696 where it printed
+2,712. Round-1 correction 7 fixed two figures of this class and left these. The
+whole table is now re-measured at the ROUND-2 head (8,139 / 2,717, the six new
+tests above included); the dated round-1 table keeps its own figures, per the
+rule that a command quoted in a dated subsection is pinned to its commit.
+
+**5. The two remaining stale figures.** `uv run pytest
+tests/agents/test_bespoke_prompt_sets.py -k TestEveryRegisteredSetRendersAnAlibi`
+collects FOURTEEN (seven registered sets x two methods), so round 1's cross-set
+planted leg reads `2 failed, 12 passed` perturbed and `14 passed` reverted, not
+13/15; the leg was re-applied and reverted at this head to confirm it. And
+`_MOVEMENT_CHANNEL_DIVERGING_MEETINGS` names SEVENTY-EIGHT meetings
+(`_MOVEMENT_CHANNEL_DIVERGENCES = 78`, twenty of them in `replays/samples/9p2i`)
+and this PR does not touch it, so Measurements no longer says "seventeen". Both
+corrected in place above.
+
+**Round-2 planted failures.** Each applied to the tree, run, reverted.
+
+* Forcing `_detect_alibi_conflicts` back to the first candidate leg pair (the
+  `min` key made constant) turns
+  `TestARouteDoesNotSoftenItsOwnConflict::test_the_interior_leg_carries_the_band_not_the_boundary_leg`
+  and `::test_the_lone_interior_leg_is_the_control` red (`2 failed, 2 passed`,
+  `assert 'strong' == 'weak'`); reverted, `4 passed`.
+* Forcing `multi_leg = False` in `_placements` turns
+  `test_two_legs_of_one_route_mint_two_DISTINCT_contradiction_ids` red
+  (`1 failed, 1 passed`, `assert 1 == 2`); reverted, `2 passed`.
+* Restoring `VIEW_MODEL_VERSION = "4"` turns
+  `test_an_optional_alibi_surface_forces_the_contract_stamp_past_four` red
+  (`1 failed`); reverted, `2 passed` with the lockstep pin.
+* The round-1 cross-set leg, re-run for figure 5: restoring `claim.room` in
+  `qwen3_5_9b/accusation_round.j2` gives `2 failed, 12 passed`
+  (`UndefinedError` at line 172); reverted, `14 passed`.
+
+**Round-2 record impact.** No recording byte moves, nothing is re-scored, and no
+prompt stamp moves: `verify_samples.sh` reports 100/100, all four
+`build_sample_report.py --check` runs and `publish_process_scorecard.py --check`
+are consistent, and no file under `replays/`, `audits/` or `tests/fixtures/`
+appears in the diff, so no `docs/artifacts.md` row moves and the inventory
+sentence is unchanged (no Status flips). The only contract byte that moves is
+the SERVED view stamp `"4"` to `"5"`, which is computed at serve time. The
+conflict-band and placement-identity repairs are unreachable on committed bytes,
+because every recorded claim is a one-segment route: one candidate leg pair, and
+the bare event id.

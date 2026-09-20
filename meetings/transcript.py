@@ -2969,10 +2969,22 @@ def _detect_alibi_conflicts(
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
     evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
-    # One flag per pair of CLAIMS, whichever legs disagreed: the pair of event
-    # ids IS the flag's identity, so two legs of one route conflicting with two
-    # legs of another would otherwise mint the same contradiction id twice.
-    paired: set[tuple[str, str]] = set()
+    # One flag per pair of CLAIMS, built from the STRONGEST pair of legs that
+    # disagreed. The pair of event ids IS the flag's identity, so two legs of
+    # one route conflicting with two legs of another would otherwise mint the
+    # same contradiction id twice; but taking the first candidate leg pair --
+    # the shape this detector shipped with when a claim held exactly one leg --
+    # lets a truthful EARLIER leg decide the band for a later leg's genuine
+    # conflict. "CAFETERIA 1-10 then ADMIN 11-20" against a rival "STORAGE
+    # 10-15" reaches the boundary pair (CAFETERIA ends where STORAGE begins,
+    # so :data:`WEAK_REASON_BOUNDARY_OVERLAP` fires) before the interior pair
+    # ADMIN/STORAGE, and the flag came out weak where the ADMIN leg alone is
+    # strong. Prepending a leg the speaker really walked must not soften the
+    # contradiction, so every candidate pair is collected and the one carrying
+    # the FEWEST :func:`_conflict_weak_reasons` mints the flag. A one-segment
+    # route has exactly one candidate, so no recorded flag moves; ties keep the
+    # first candidate, so emission order and the description stay deterministic.
+    candidates: dict[tuple[str, str], list[tuple[_IndexedAlibi, _IndexedAlibi]]] = {}
     for i, left in enumerate(alibis):
         for right in alibis[i + 1 :]:
             # Two legs of ONE route are a path the speaker declared, not two
@@ -2999,47 +3011,46 @@ def _detect_alibi_conflicts(
                 right.segment.to_tick,
             ):
                 continue
-            pair = tuple(sorted((left.event_id, right.event_id)))
-            if pair in paired:
-                continue
-            paired.add((pair[0], pair[1]))
-            # Task 13.3 (B2): the genuinely-INDEPENDENT cross-speaker conflict
-            # -- two distinct non-subject speakers, none of the four
-            # :func:`_conflict_weak_reasons` guards firing -- yields empty
-            # ``weak_reasons``, so :func:`_describe_alibi_conflict` appends no
-            # weak marker and the flag is STRONG (the one inferential STRONG
-            # class). When a guard fires (self-pair / adversarial / narrow /
-            # boundary) the marker is appended and the flag stays weak; the
-            # guards are byte-identical to keep the impostor from gaming the
-            # adversarial counter-alibi.
-            yield _build_contradiction(
-                kind="alibi_conflict",
-                event_a_id=left.event_id,
-                event_b_id=right.event_id,
-                subjects=(left.claim.subject,),
-                description=_describe_alibi_conflict(
-                    left,
-                    right,
-                    weak_reasons=_conflict_weak_reasons(
-                        left,
-                        right,
+            first_id, second_id = sorted((left.event_id, right.event_id))
+            candidates.setdefault((first_id, second_id), []).append((left, right))
+
+    # Task 13.3 (B2): the genuinely-INDEPENDENT cross-speaker conflict -- two
+    # distinct non-subject speakers, none of the four
+    # :func:`_conflict_weak_reasons` guards firing -- yields empty
+    # ``weak_reasons``, so :func:`_describe_alibi_conflict` appends no weak
+    # marker and the flag is STRONG (the one inferential STRONG class). When a
+    # guard fires (self-pair / adversarial / narrow / boundary) the marker is
+    # appended and the flag stays weak; the guards are byte-identical to keep
+    # the impostor from gaming the adversarial counter-alibi.
+    for leg_pairs in candidates.values():
+        weak_reasons, left, right = min(
+            (
+                (
+                    _conflict_weak_reasons(
+                        candidate_left,
+                        candidate_right,
                         accusation_pairs=accusation_pairs,
                         evidence_reasoning_version=evidence_reasoning_version,
                     ),
-                ),
-                evidence_band=(
-                    "weak"
-                    if _conflict_weak_reasons(
-                        left,
-                        right,
-                        accusation_pairs=accusation_pairs,
-                        evidence_reasoning_version=evidence_reasoning_version,
-                    )
-                    else "strong"
+                    candidate_left,
+                    candidate_right,
                 )
-                if evidence_reasoning_version == 1
-                else None,
-            )
+                for candidate_left, candidate_right in leg_pairs
+            ),
+            key=lambda scored: len(scored[0]),
+        )
+        yield _build_contradiction(
+            kind="alibi_conflict",
+            event_a_id=left.event_id,
+            event_b_id=right.event_id,
+            subjects=(left.claim.subject,),
+            description=_describe_alibi_conflict(
+                left, right, weak_reasons=weak_reasons
+            ),
+            evidence_band=("weak" if weak_reasons else "strong")
+            if evidence_reasoning_version == 1
+            else None,
+        )
 
 
 def _detect_alibi_vs_sightings(

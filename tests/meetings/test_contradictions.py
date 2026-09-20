@@ -4822,6 +4822,106 @@ class TestTheAlibiIsARoute:
         assert would_flag, "the envelope rule must still indict the honest route"
 
 
+class TestARouteDoesNotSoftenItsOwnConflict:
+    """A truthful earlier leg must not downgrade a later leg's conflict.
+
+    One flag is minted per pair of CLAIMS, so a two-leg route disagreeing with
+    a rival account offers the detector two candidate leg pairs and only one
+    can carry the band. Taking the FIRST candidate -- the shape the detector
+    shipped with when a claim held exactly one leg -- let the boundary guard
+    fire on a leg that merely ends where the rival begins, and the genuinely
+    interior disagreement inherited that weak band. Prepending a leg the
+    speaker really walked would then buy a liar a softer flag, which is the
+    opposite of what the route change is for.
+    """
+
+    _RIVAL = AlibiClaim(
+        type="alibi",
+        subject="p-3",
+        route=(AlibiSegment(room="STORAGE", from_tick=10, to_tick=15),),
+    )
+
+    def _flags(self, route: tuple[AlibiSegment, ...]) -> tuple[ContradictionRef, ...]:
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(AlibiClaim(type="alibi", subject="p-3", route=route),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    claims=(self._RIVAL,),
+                ),
+            )
+        )
+        return detect_contradictions(
+            transcript,
+            roster=frozenset({"p-1", "p-2", "p-3"}),
+            evidence_reasoning_version=1,
+        )
+
+    def test_the_interior_leg_carries_the_band_not_the_boundary_leg(self) -> None:
+        # CAFETERIA 1-10 ends on the tick STORAGE 10-15 begins (the boundary
+        # pair, weak by WEAK_REASON_BOUNDARY_OVERLAP); ADMIN 11-20 overlaps
+        # STORAGE across five interior ticks and is the real disagreement.
+        (flag,) = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),
+            )
+        )
+
+        assert flag.kind == "alibi_conflict"
+        assert flag.evidence_band == "strong"
+        assert is_weak_contradiction(flag) is False
+        # The description quotes the legs the flag rests on, so the softened
+        # boundary leg must not be the one the listener is shown.
+        assert "ADMIN" in flag.description
+        assert "CAFETERIA" not in flag.description
+
+    def test_the_lone_interior_leg_is_the_control(self) -> None:
+        # The same ADMIN leg stated alone: identical band, identical sentence.
+        (control,) = self._flags(
+            (AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),)
+        )
+        (routed,) = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),
+            )
+        )
+
+        assert control.evidence_band == routed.evidence_band
+        assert control.description == routed.description
+
+    def test_a_route_whose_every_leg_is_weak_stays_weak(self) -> None:
+        # The guard is "fewest weak reasons", not "never weak": a route that
+        # only ever touches STORAGE at the boundary keeps the boundary marker.
+        (flag,) = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=16, to_tick=20),
+            )
+        )
+
+        assert flag.evidence_band == "weak"
+        assert WEAK_REASON_BOUNDARY_OVERLAP in flag.description
+
+    def test_one_flag_per_claim_pair_however_many_legs_disagree(self) -> None:
+        flags = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),
+            )
+        )
+
+        assert len(flags) == 1
+        assert len({flag.contradiction_id for flag in flags}) == 1
+
+
 class TestOneSegmentRoutesReadLikeTheEnvelope:
     """The property: on a ONE-SEGMENT route the pairing rule is unchanged.
 

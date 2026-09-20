@@ -131,8 +131,9 @@ runs; missing means legacy, conflicts fail and unsupported instruments refuse ON
 Complete model-facing body-ID privacy remains gated: legacy OFF opening prompts
 still expose internal body IDs until adoption. Typed packet handles are repaired
 unconditionally. The current audio wire allows only global sabotage alarms.
-Spectator version 4 adds public task-activity accounts and reads compatible
-version-2/3 bundles explicitly, rejecting unsupported audio cues. The historical
+Spectator version 5 makes an alibi a route over version 4's public
+task-activity accounts, reading compatible version-2/3/4 bundles explicitly and
+rejecting unsupported audio cues. The historical
 learned-vector audio position stays reserved zero.
 
 [The observation contract](observation-contract.md) defines entitlement, clocks,

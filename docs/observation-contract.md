@@ -120,8 +120,8 @@ exercise these gates. Packet census format 2 includes checked event batches,
 source-time kill/vent/movement views and actor task receipts, so temporal channels
 are counted rather than disappearing from the census.
 
-Spectator contract version 4 admits the `task_activity` observation/account union
-and attributed public statement fields. Compatible version-2/3 inputs retain
-their historical audio and event interpretation; unsupported audio and versions
-still fail. Spectator knowledge remains privileged: a public account is labeled
+Spectator contract version 5 serves a spoken alibi as a route, over version 4's
+`task_activity` observation/account union and attributed public statement
+fields. Compatible version-2/3/4 inputs retain their historical audio and event
+interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled
 as a speaker's claim even if the viewer can independently inspect engine truth.

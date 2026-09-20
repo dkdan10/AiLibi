@@ -119,6 +119,12 @@ class _Placement:
     # Which ``co_present`` name a ``co_present`` row reads; 0 for every other
     # derivation. Part of :attr:`identity`, never of the event id.
     slot: int = 0
+    # Which LEG of an alibi route this row reads, for a route carrying more
+    # than one. ``None`` for every other row AND for a one-leg claim, so the
+    # identity of every placement that could exist before the route schema is
+    # the bare event id and no committed ``contradiction_id`` moves. Part of
+    # :attr:`identity`, never of the event id.
+    leg: int | None = None
     # Hops of room uncertainty this placement carries. A directly stated
     # placement names the room outright (0). A ``witness`` placement is
     # inferred from what the speaker claims to have seen, and vision reaches
@@ -134,11 +140,19 @@ class _Placement:
         speaker's implied witness position, one per named bystander), so the
         ``contradiction_id`` hashes THIS rather than the event id -- otherwise
         two different derived pairs off one pair of artifacts would collide on
-        a single id. It is never an endpoint: :attr:`event_id` is.
+        a single id. An alibi route is a fourth way one artifact yields several
+        rows -- one stated placement per LEG -- so a multi-leg route names its
+        leg here for exactly the same reason: two legs of one route
+        disagreeing with one sighting are two different disagreements and must
+        not hash to one id. A one-leg claim keeps the bare event id, so every
+        id a committed recording carries is unmoved. It is never an endpoint:
+        :attr:`event_id` is.
         """
 
         if self.derivation == "stated":
-            return self.event_id
+            if self.leg is None:
+                return self.event_id
+            return f"{self.event_id}:leg:{self.leg}"
         if self.derivation == "co_present":
             return f"{self.event_id}:co_present:{self.slot}"
         return f"{self.event_id}:witness"
@@ -221,7 +235,12 @@ def _placements(transcript: MeetingTranscript) -> tuple[_Placement, ...]:
         for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
                 # One placement per route LEG: the account places its subject
-                # in each room it names, over that leg's own window.
+                # in each room it names, over that leg's own window. A
+                # multi-leg route stamps the leg index into :attr:`identity`
+                # so two legs of one route cannot hash to one
+                # ``contradiction_id``; a one-leg claim stamps nothing, which
+                # is what keeps every recorded id byte-identical.
+                multi_leg = len(claim.route) > 1
                 rows.extend(
                     _Placement(
                         f"turn:{turn.turn_id}:claim:{index}",
@@ -230,8 +249,9 @@ def _placements(transcript: MeetingTranscript) -> tuple[_Placement, ...]:
                         segment.room,
                         segment.from_tick,
                         segment.to_tick,
+                        leg=leg_index if multi_leg else None,
                     )
-                    for segment in claim.route
+                    for leg_index, segment in enumerate(claim.route)
                 )
     return tuple(rows)
 

@@ -102,9 +102,12 @@ export class ViewModelVersionError extends Error {
 }
 
 /**
- * Version 4 adds task-activity accounts to spoken observations. Versions 2/3
- * remain readable; the sabotage-alarm-only audio guard still applies to all.
- * Other or non-string stamps fail; endpoints that never had a stamp still work.
+ * Version 5 makes an alibi a route: a route claim serves `route` and no
+ * `room`/`from_tick`/`to_tick`, so a build expecting version 4 must reject it.
+ * Versions 2/3/4 remain readable HERE — every alibi an older server serves
+ * carries the flat triple, which this build still renders — and the
+ * sabotage-alarm-only audio guard still applies to all. Other or non-string
+ * stamps fail; endpoints that never had a stamp still work.
  */
 function assertViewModelVersion(data: unknown, url: string): void {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
@@ -114,7 +117,12 @@ function assertViewModelVersion(data: unknown, url: string): void {
     return;
   }
   const received = (data as { viewModelVersion: unknown }).viewModelVersion;
-  if (received === VIEW_MODEL_VERSION || received === "2" || received === "3") {
+  if (
+    received === VIEW_MODEL_VERSION ||
+    received === "2" ||
+    received === "3" ||
+    received === "4"
+  ) {
     return;
   }
   throw new ViewModelVersionError(
