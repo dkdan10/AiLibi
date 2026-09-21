@@ -505,11 +505,6 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "bounded_rebuttal_version",
         "public_account_version",
         "attributed_testimony_version",
-        # The relevance half of the ballot citation gate, carried on
-        # RecordedExperimentConfig and so reachable from the report's
-        # provenance. A lever version number, not engine or role state, and
-        # serialized only when it is ON — so no committed report's bytes move.
-        "citation_relevance_version",
         "provenance_groups",
         "game_ids",
         "skip_confidence_threshold",
@@ -581,6 +576,11 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "crewmate_ejections",
         "cross_statement_flags",
         "deduction",
+        # What the VOTER said its own decision rests on: "cited", "none_held" or
+        # null. Model-authored, a closed two-token vocabulary, and about the
+        # ballot rather than about any player — it names nobody and carries no
+        # role, position or engine state.
+        "decision_basis",
         "denominator",
         "description",
         "direct_proof_accuracy",
@@ -633,8 +633,13 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "guard_preserved_omniscient_rate",
         "guard_provenance_unverifiable_ballots",
         "guard_provenance_verified_ballots",
+        # The meeting layer's one-word finding about the basis under a ballot
+        # (BallotGroundingLabel). A closed seven-token vocabulary naming no
+        # player and no room; it describes the ballot's own citations, which
+        # this surface already carries beside it, and it never moved the target.
+        "grounding_label",
         # What a meeting guard changed about a BALLOT (VoteBallot): the target
-        # the voter authored and which of the five rewrite classes replaced it.
+        # the voter authored and which of the six rewrite classes replaced it.
         # The typed twin of the bracketed marker the same rationale already
         # carries on this surface, so it moves no information across any
         # boundary — and it is meeting-layer testimony, never engine state.

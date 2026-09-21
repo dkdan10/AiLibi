@@ -207,6 +207,29 @@ The starting assumption a table brings to a player nobody can place: absence is
 weak evidence, weighted rather than ignored
 ([`audits/audit-phase-17-absence-gate.md`](../audits/audit-phase-17-absence-gate.md)).
 
+### stated basis (what a voter says its vote rests on)
+
+One field the voter fills on its own ballot. It reads `cited` when the voter put
+a transcript turn or one of its own memory lines in the ballot's citation slots,
+and `none_held` when it says outright that it holds nothing that resolves.
+Empty means the voter answered the question with nothing at all, which is a
+different record from saying it holds nothing
+([`meetings/schemas.py`](../meetings/schemas.py)).
+
+### grounding label (what the meeting found under a ballot)
+
+The meeting's own one-word finding about that basis, written after the vote and
+onto the record beside it. It **describes** and never corrects: the recorded
+vote stays the one the voter cast, and the tally never reads the label. The
+seven values are `supported` (a citation survived and is about a player this
+ballot weighed), `off_target` (it survived but is about somebody else),
+`invalid_citation` (the voter cited something that matched nothing on record),
+`none_held` (the voter said so), `flag_only` (an ejection whose target carries a
+contradiction raised at that meeting, and nothing else), `uncited` (nothing
+cited and nothing said), and `not_assessed` (the meeting itself set this vote,
+so there is no voter decision to assess)
+([`meetings/manager.py`](../meetings/manager.py)).
+
 ---
 
 ## The machine-learning program

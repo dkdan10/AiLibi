@@ -434,6 +434,24 @@ export const SPECTATOR_COPY = Object.freeze({
     // player twice rather than two players.
     alternativesSelfNote: "this voter",
     alternativesTargetNote: "the vote cast",
+    // What the meeting FOUND under this ballot, in plain language. It is a
+    // description, never a correction: the vote it sits beside is the one the
+    // voter cast, because the label was never allowed to move a target or to
+    // count in the tally. Wording therefore avoids "rejected", "invalid vote"
+    // and every other word that would read as the meeting overruling the
+    // voter — `invalidCitation` is about the CITATION, not the vote.
+    // Recordings made before the label exists carry none of these and the chip
+    // does not render.
+    groundingLabel: "Basis on the record",
+    groundingLabels: Object.freeze({
+      supported: "Cited evidence about who was weighed",
+      off_target: "Cited evidence about someone else",
+      invalid_citation: "Citation did not match anything on record",
+      none_held: "Voter said it held nothing",
+      flag_only: "Rests on a contradiction raised at this meeting",
+      uncited: "No basis given",
+      not_assessed: "Not assessed — the meeting set this vote",
+    }),
   }),
 
   /** The Replays browser and the Highlights reel. */

@@ -132,6 +132,7 @@ from eval.validity import (
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
+    INVALID_BASIS_MARKER,
     INVALID_REASON_ID_MARKER,
     OFF_TARGET_CITATION_EJECT_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
@@ -188,10 +189,14 @@ _MARKER_REPR_VALUE: str = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 # sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the eighth kind and
 # sits apart: it is the WHOLE rationale, not a prefix.
 #
-# ``off_target_coerced`` is the relevance half of the citation gate and is minted
-# only while ``citation_relevance_version`` is ON, so no committed recording
-# carries it; it is registered here because a label the fit cannot name is a
-# rewritten ballot the fit reads as the voter's own.
+# ``off_target_coerced`` was the relevance half of the citation gate, minted only
+# while the retired ``citation_relevance_version`` lever was ON -- which it never
+# was in a committed recording, so NO recorded byte carries it. It, and
+# ``under_gate_redirect`` and ``uncited_coerced`` beside it, are READ-ONLY
+# HISTORY since ruling D6 of 2026-09-19: the meeting layer labels a ballot's
+# basis and rewrites no target for any of the three reasons. They stay
+# registered because a label the fit cannot name is a rewritten ballot the fit
+# reads as the voter's own, and 89 committed ballots carry the other two.
 BALLOT_AUDIT_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_target", INVALID_VOTE_TARGET_MARKER),
     ("teammate_coerced", TEAMMATE_VOTE_TARGET_MARKER),
@@ -200,6 +205,7 @@ BALLOT_AUDIT_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
     ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
     ("off_target_coerced", OFF_TARGET_CITATION_EJECT_MARKER),
+    ("invalid_basis", INVALID_BASIS_MARKER),
 )
 _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 

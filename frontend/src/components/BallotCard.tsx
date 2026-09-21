@@ -27,9 +27,29 @@ function rewriteLabel(reason: string): string {
     case "invalid_reason_id": return "Unknown statement citation removed";
     case "invalid_observation_id": return "Unknown observation citation removed";
     case "uncited_coerced": return "Unsupported vote changed to skip";
+    case "off_target_coerced": return "Off-target citation changed vote to skip";
+    case "invalid_basis": return "Unreadable stated basis removed";
     case "parse_default": return "Unreadable ballot replaced with skip";
     default: return "Recorded vote adjustment";
   }
+}
+
+/**
+ * The meeting's own one-word finding about this ballot's basis, in plain language.
+ *
+ * A DESCRIPTION, not an adjustment, which is why it renders apart from
+ * `rewriteLabel`'s ↻ chips: the meeting layer writes this label and never moves
+ * a target, and the tally never reads it, so the vote shown above the chip is
+ * the one the voter cast. An unrecognised value renders nothing rather than a
+ * guess — a label this build has not been taught is not a label it may narrate.
+ *
+ * Every committed recording predates the field and carries `null`, so the chip
+ * is absent from the shipped tour until the re-record.
+ */
+function groundingLabelText(label: string | null): string | null {
+  if (label === null) return null;
+  const labels: Record<string, string> = BALLOT_COPY.groundingLabels;
+  return labels[label] ?? null;
 }
 
 interface BallotCardProps {
@@ -139,6 +159,10 @@ export function BallotCard({
   const pct = Math.round(confidence * 100);
   const rationale = visibleRationale(ballot, omniscient, observerId);
   const rewriteReasons = privateVisible ? ballot.rewrite_reasons : [];
+  // Same private class as the citations and the weighed list: the label reports
+  // what the voter cited, and `not_assessed` names a firewall coercion, so it
+  // rides the perspective gate rather than sitting beside the public target.
+  const grounding = groundingLabelText(ballot.grounding_label);
 
   // Correctness: a non-SKIP vote is "correct" iff its target was actually an
   // impostor. SKIP has no correctness. Per ballot the mark names the impostors
@@ -218,9 +242,9 @@ export function BallotCard({
           shows is annotated by `alternativeNote`, never dropped.
 
           A block rather than an inline row on purpose: the substrate wave stacks
-          on this component, adding a meeting-written grounding label next to
-          this heading and a counter-evidence link beside the two citation links
-          above, so the heading and its list are already separable. */}
+          on this component. The meeting-written grounding label now sits next to
+          this heading, and the weighing card adds a counter-evidence link beside
+          the two citation links above. */}
       {privateVisible && (
         <div className="mb-2" data-ballot-alternatives>
           <span
@@ -229,6 +253,15 @@ export function BallotCard({
           >
             {BALLOT_COPY.alternativesLabel}
           </span>
+          {grounding !== null && (
+            <span
+              data-ballot-grounding
+              className="ml-2 inline-flex items-center rounded-md border border-ink-200 bg-paper-2 px-1.5 py-0.5 font-mono text-[10px] text-ink-700"
+              title={BALLOT_COPY.groundingLabel}
+            >
+              {grounding}
+            </span>
+          )}
           {ballot.considered_alternatives.length > 0 ? (
             // Recorded order, whatever the length: the list is two ids wide in
             // every committed recording today and the render must not bake that
