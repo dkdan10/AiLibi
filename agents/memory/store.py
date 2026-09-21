@@ -2813,8 +2813,10 @@ def _format_belief_score(
     # -- so the trust deviation was 0.0 on every production row, the comparison
     # ``suspicion_dev >= trust_dev`` always held, and the trust branch was
     # unreachable. Both the branch and the comparison are gone with
-    # ``adjust_trust``; the render is byte-identical across the deletion, which
-    # ``tests/agents/test_memory_rendering.py`` asserts over the §6.6 view.
+    # ``adjust_trust``. The render is byte-identical across the deletion on
+    # every row PRODUCTION can produce, which is the whole claim: one committed
+    # fixture (``crewmate_basic``) seeds a row directly to ``trust 0.70``, a
+    # value no mechanism produces, and its golden line went with the branch.
     if suspicion_dev < 0.005:
         return None
     return f"suspicion {effective_suspicion:.2f}"

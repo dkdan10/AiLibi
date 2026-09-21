@@ -1,7 +1,7 @@
 """Belief state (DESIGN.md §6.1, §6.3).
 
 Per other-player view tracking ``suspicion``, ``alibi_map`` and
-``inconsistencies``, plus a ``trust`` field NOTHING writes. The store exposes
+``inconsistencies``, plus a ``trust`` field nothing ever MOVES. The store exposes
 write-path primitives that perception (Task 2.4) and contradiction detection
 (Phase 3) drive — the specific update weights from §6.3 are config that lives
 outside this module so they can be tuned against the eval harness.
@@ -10,7 +10,10 @@ outside this module so they can be tuned against the eval harness.
 one writer, ``BeliefState.adjust_trust``, had no caller outside ``tests/`` and
 was deleted rather than wired (see the comment where it stood). The field stays
 because six frozen prompt sets render ``entry.trust`` and their byte pins must
-not move; every row therefore reads :data:`_DEFAULT_TRUST` forever.
+not move. :meth:`BeliefState.seed_player` still ASSIGNS it, because it
+reconstructs a row from an existing snapshot -- but every snapshot it is handed
+carries :data:`_DEFAULT_TRUST`, so it copies the default rather than moving the
+value, and no production row reads anything else.
 
 Read paths beyond the simple ``view`` accessor and prompt rendering ship
 in Phase 3 (Task 3.3).
@@ -975,7 +978,9 @@ class BeliefState:
     # price. :attr:`PlayerBelief.trust` and
     # :attr:`meetings.render_contract.SuspicionEntry.trust` STAY: six frozen
     # prompt sets render ``entry.trust`` and their byte pins must not move, so
-    # the field is now a frozen-set RENDER INPUT only, written by nothing.
+    # the field is now a frozen-set RENDER INPUT only. :meth:`seed_player` still
+    # assigns it while rebuilding a row from a snapshot; it copies the default
+    # every snapshot carries, so nothing MOVES the value any more.
 
     def record_alibi(self, claim: AlibiClaim) -> PlayerBelief:
         """Append an alibi claim to ``claim.player_id``'s belief row.
