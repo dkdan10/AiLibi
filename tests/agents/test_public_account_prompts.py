@@ -1109,8 +1109,11 @@ _REFERENCE_BALLOT_PATH: Final[str] = (
 #:   `[turn:<id>:claim|obs|whereabouts:N]`, a second id vocabulary
 #:   `meetings.manager._REASON_ID_TURN_SUFFIX` has no entry for. 20 of the 27
 #:   ids the run nulled ended `:claim:N` and 6 `:obs:N`.
-#: * the CONSEQUENCE -- `meetings/manager.py:3203` nulls the id and
-#:   `guard_ballot_citation` then coerces the now-uncited EJECT to SKIP.
+#: * the CONSEQUENCE -- `_normalize_ballot_reason_id` nulls the id, and the
+#:   ballot is then recorded with no source of its own. Before ruling D6 of
+#:   2026-09-19 the citation gate also coerced the now-uncited EJECT to
+#:   SKIP; it no longer does, and the vote stands under an
+#:   `invalid_citation` label.
 #:
 #: The shape names the FORM a turn id takes as well as where it is printed.
 #: `meetings.manager._turn_id` (`:2895-2903`) is the only site that mints one
@@ -1144,8 +1147,12 @@ _ROW_BULLET_SHAPE: Final[str] = (
 )
 _ROWS_MISDESCRIBED: Final[str] = "indented"
 _PORTED_ID_WARNING: Final[str] = "Never invent or abbreviate an id"
+#: The consequence, as ruling D6 of 2026-09-19 leaves it: a nulled id
+#: costs the ejection its source on the record. It no longer costs the
+#: voter the ejection -- `label_ballot_grounding` labels the ballot
+#: `invalid_citation` and the target stands.
 _NULLED_CONSEQUENCE: Final[str] = (
-    "is nulled, and a nulled id leaves your ejection uncited, which coerces it to SKIP"
+    "is nulled, and a nulled id leaves your ejection with no source on the record"
 )
 #: F7, the SKIP register, ported from `vote_ballot.j2:114,259` so that the two
 #: families differ in the accounts SURFACE and not in how readily each asks for
@@ -1310,8 +1317,11 @@ def test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation() -> No
     # canonical `turn_id` at the head of a turn line, and `:19,22` print
     # `[turn:<id>:claim|obs|whereabouts:N]` sub-rows beneath it.
     # `meetings.manager._REASON_ID_TURN_SUFFIX` is end-anchored on
-    # `:turn-(\d+)`, so a row suffix blocks recovery, `:3203` nulls the id and
-    # `guard_ballot_citation` coerces the uncited EJECT to SKIP.
+    # `:turn-(\d+)`, so a row suffix blocks recovery and
+    # `_normalize_ballot_reason_id` nulls the id. Since ruling D6 of
+    # 2026-09-19 that leaves the EJECT standing and labelled
+    # `invalid_citation` rather than coerced to SKIP, so the F4 defect is
+    # now a dead citation channel and no longer a lost vote.
     #
     # Three spans, asserted separately because they are three separate
     # failures: naming the shape without the suffix warning leaves the 20

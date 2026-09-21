@@ -163,7 +163,7 @@ REQUIRED_PROMPT_SET="qwen3_6_27b"
 # the registry entry can be bumped by a later task — so the preflight asserts
 # orchestrator.game.PROMPT_VERSION_SETS still resolves $REQUIRED_PROMPT_SET to
 # exactly this map. Sorted, comma+space-joined (the MANIFEST cell rendering).
-REQUIRED_PROMPT_VERSIONS_BASE="accusation_round.qwen3_6_27b.v6, crewmate_report.qwen3_6_27b.v6, impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v6"
+REQUIRED_PROMPT_VERSIONS_BASE="accusation_round.qwen3_6_27b.v6, crewmate_report.qwen3_6_27b.v6, impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v7"
 # What a recording under the DECLARED slate actually stamps: a lever with a
 # prompt-version overlay moves provenance with its rendered bytes, so an ON arm
 # stamps a composite ("<template>.<set>.v5.<lever>+…") rather than the base

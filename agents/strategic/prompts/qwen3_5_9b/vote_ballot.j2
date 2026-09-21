@@ -28,8 +28,9 @@
    sub-threshold target -- this pins the Probe-1 bidirectional-imperative
    cascade vector WITHOUT a code clamp (the deterministic tally
    leader-confidence floor in meetings.voting.tally_ballots is the backstop,
-   UNCHANGED; the manager's guard_ballot_target_graph §4.6 verdict is also
-   UNCHANGED). NO re-record here -- the committed replays stay byte-identical
+   UNCHANGED; the manager's ballot-target graph guard, which recomputed the same
+   §4.6 verdict, was UNCHANGED too and has since been retired outright by ruling
+   D6 of 2026-09-19). NO re-record here -- the committed replays stay byte-identical
    under the OLD version; A-1's effect appears only in NEW recordings (the held
    13.12 re-record). think=False preserved (the in-band reasoning field is the
    gated 13.9).

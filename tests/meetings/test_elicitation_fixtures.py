@@ -300,9 +300,10 @@ class TestCitationRequiredConfidence:
         # (instructions at both ends — the style manual).
         assert "Every EJECT names its evidence" in rendered
         assert "Fill at least one of the two reason ids on every EJECT" in rendered
-        # The 16.5 private-evidence channel is in the 7-key contract, with the
-        # [obs ...] copy instruction 16.5's id-rendering gives teeth to.
-        assert "EXACTLY these 7 keys" in rendered
+        # The 16.5 private-evidence channel is in the key contract, with the
+        # [obs ...] copy instruction 16.5's id-rendering gives teeth to. EIGHT
+        # keys since ruling D6 of 2026-09-19 added `decision_basis`.
+        assert "EXACTLY these 8 keys" in rendered
         assert '"primary_reason_observation_id": null' in rendered
         assert "[obs p-2:12:0]" in rendered  # the voter-consistent worked example
 
@@ -316,13 +317,20 @@ class TestCitationRequiredConfidence:
         assert "a case you can barely source deserves a low number" in rendered
         assert "skip threshold" not in rendered
 
-    def test_memory_based_skip_stays_legitimate_and_uncited(self) -> None:
-        # The hint's boundary: invert the exemplar WITHOUT inverting the SKIP
-        # allowance — skipping needs no citation.
+    def test_a_skip_is_asked_for_its_basis_and_keeps_its_vote(self) -> None:
+        # Ruling D6 of 2026-09-19 inverted the exemplar's SKIP allowance: a
+        # SKIP is no longer exempt from saying what it rests on. What did NOT
+        # invert is the vote -- the register asks for a basis and says in the
+        # same breath that nothing it writes moves the target, because after
+        # this card nothing does.
         rendered = _render_vote()
-        assert "a call you cannot source either way is a call to SKIP" in rendered
-        assert "a SKIP needs no citation" in rendered
-        assert "a SKIP needs neither" in rendered
+        assert "A SKIP states its basis too" in rendered
+        assert 'set "decision_basis" to exactly "none_held"' in rendered
+        assert "your vote is recorded as you cast it" in rendered
+        # The exemptions are gone, in both places they were stated.
+        assert "a SKIP needs no citation" not in rendered
+        assert "a SKIP needs neither" not in rendered
+        assert "a call you cannot source either way is a call to SKIP" not in rendered
 
     def test_skip_discipline_reanchored_without_blessing_overrides(self) -> None:
         # Baseline-4 §6 (missed-skip 11 -> 86): a thin best case is re-anchored

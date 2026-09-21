@@ -343,8 +343,10 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # evidence line (max suspicion + the 0.60 reference threshold as ONE input), and the
 # emitted confidence is pinned IN PROSE (no code clamp) so a sub-threshold target
 # cannot carry a >= threshold confidence. The deterministic tally floor
-# (meetings.voting.tally_ballots) and the manager's guard_ballot_target_graph §4.6
-# verdict are UNCHANGED -- the anti-cascade backstop is the tally, not the prompt. NO
+# (meetings.voting.tally_ballots) and the manager's ballot-target graph guard,
+# which recomputed the same §4.6 verdict, were UNCHANGED at that task -- the
+# anti-cascade backstop is the tally, not the prompt; that guard has since been
+# retired outright (ruling D6 of 2026-09-19), leaving the tally floor alone. NO
 # re-record here: the committed sample bytes still record vote_ballot/v5 (the 13.6 v6
 # bump was never re-recorded either; the manifest pin reads v5 as-recorded) and are
 # re-recorded at the held 13.12 combined re-record (recording-side only). The other
@@ -421,7 +423,17 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # PROMPT_VERSION_SETS entry; there is no separate archived v4 template set.
     # Lineage: 16.13 port, 16.15 elicitation, 16.16 persona, 20.31 evidence
     # honesty, 21.1 in-world register.
-    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v6"),
+    # Ruling D6 of 2026-09-19 (the grounded SKIP): vote_ballot ALONE advances
+    # v6 -> v7, the qwen3_32b form above, for the SKIP register and the
+    # "decision_basis" key. The "four stamps bump as a unit" note is about the
+    # map card every template renders; it does not bind when ONE body moves and
+    # the card is untouched, and a per-template bump is what keeps the pre- and
+    # post-D6 vote bodies from ever sharing the vote_ballot.qwen3_6_27b.v6
+    # stamp. The other three templates stay v6.
+    "qwen3_6_27b": {
+        **_bespoke_versions("qwen3_6_27b", version="v6"),
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v7",
+    },
 }
 
 
@@ -448,7 +460,12 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 # through it byte-identically.
 IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v6"),
+        # Spread from the DEFAULT registry, not re-stated: the two keys this
+        # arm does not override render the default bodies, so a per-template
+        # bump there (vote_ballot v6 -> v7 at ruling D6) must reach this arm's
+        # stamps or it would serve the new body under the old stamp. Restating
+        # a version here is what would let the two drift.
+        **PROMPT_VERSION_SETS["qwen3_6_27b"],
         "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
         "accusation_round": "accusation_round_roll_call.qwen3_6_27b.v2",
     },
@@ -486,7 +503,12 @@ _REPORTER_REASONING_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
 )
 REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v6"),
+        # Spread from the DEFAULT registry rather than a restated version:
+        # the keys this arm does not override render the default bodies, so
+        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6)
+        # must reach them or the arm would serve a new body under an old
+        # stamp.
+        **PROMPT_VERSION_SETS["qwen3_6_27b"],
         "crewmate_report": _REPORTER_REASONING_ARM["crewmate_report"],
         "accusation_round": _REPORTER_REASONING_ARM["accusation_round"],
     },
@@ -506,7 +528,12 @@ _CORROBORATION_DISCIPLINE_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
 )
 CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v6"),
+        # Spread from the DEFAULT registry rather than a restated version:
+        # the keys this arm does not override render the default bodies, so
+        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6)
+        # must reach them or the arm would serve a new body under an old
+        # stamp.
+        **PROMPT_VERSION_SETS["qwen3_6_27b"],
         "vote_ballot": _CORROBORATION_DISCIPLINE_ARM["vote_ballot"],
     },
 }
@@ -532,7 +559,12 @@ _TESTIMONY_SHAPES_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
 )
 TESTIMONY_SHAPES_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v6"),
+        # Spread from the DEFAULT registry rather than a restated version:
+        # the keys this arm does not override render the default bodies, so
+        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6)
+        # must reach them or the arm would serve a new body under an old
+        # stamp.
+        **PROMPT_VERSION_SETS["qwen3_6_27b"],
         "crewmate_report": _TESTIMONY_SHAPES_ARM["crewmate_report"],
         "accusation_round": _TESTIMONY_SHAPES_ARM["accusation_round"],
         "vote_ballot": _TESTIMONY_SHAPES_ARM["vote_ballot"],
@@ -2215,7 +2247,6 @@ class HeadlessGame:
                 "bounded_rebuttal_version",
                 "public_account_version",
                 "attributed_testimony_version",
-                "citation_relevance_version",
             ):
                 recorded_version = getattr(experiment, key)
                 served_version = getattr(profile, key)
