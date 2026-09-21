@@ -133,13 +133,19 @@ merged stay is labelled with the smallest of the labels merged into it, so the
 cut cannot choose the spelling a description quotes either. The reduction files
 one reported statement per stay, so a listener's rendered memory is identical
 for every narration of one account. Rendered alibi rows are capped per speaker
-so no voice's volume evicts another's placement, and capped per subject as well
-because the belief block is not budgeted; the subject total is filled
-round-robin by recency across speakers, so a voice is dropped only when more
-speakers than the total have named one subject and then only the stalest. That
-total is twice the per-speaker cap: a judgment about how much of a render
-reported testimony may take from the elastic memory below it, not the largest
-value that still fits the budget. A
+so no voice's volume evicts another's placement, and the belief block is not
+budgeted, so a second cap bounds it: a subject's OWN rows and the rows other
+players stated about that subject are selected in SEPARATE pools, three and
+four, so the per-subject bound is seven and nothing an accused says — stays,
+ticks, spelling, restatements — can change which of the other voices' rows a
+listener sees, nor anything the others say change which of the accused's own
+rows it sees. Selection never reads a room label above a total tie-break, so a
+wording cannot move it either. The others pool is filled round-robin by recency
+across speakers, so a voice is dropped only when more others than the pool have
+named one subject and then only the stalest; below that, a voice with several
+rows can lose its older rows to other voices' newer ones. Both numbers are
+judgments about how much of a render reported testimony may take from the
+elastic memory below it, not the largest values that still fit the budget. A
 boundary that survives the merge is a declared room change or a gap, which is a
 claim a listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
 interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled
