@@ -3,9 +3,11 @@
 The conversion report's SKIP partition learns
 :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` as a FOURTH by-design
 bucket (``citation_coerced_skip_ballots``, beside correct / missed /
-unclassified). The citation gate
-(:func:`meetings.manager.guard_ballot_citation`) rewrites an uncited zero-flag
-EJECT to SKIP; the gate working is never the
+unclassified). The citation gate -- ``guard_ballot_citation``, retired outright
+by ruling D6 of 2026-09-19 and replaced by
+:func:`meetings.manager.label_ballot_grounding`, which labels and rewrites
+nothing -- rewrote an uncited zero-flag EJECT to SKIP on the 6 committed
+``ml_corpus/9p2i`` ballots this bucket counts; that gate working was never the
 voter's decision, so a marker-anchored SKIP is neither a missed skip nor a §4.6
 ``threshold_inversions`` entry (audits/audit-phase-16-close.md §8 routed
 contract (b); the 17.2 designer ruling tasks/phase-17.md). The divert is role-
@@ -286,10 +288,12 @@ def test_impostor_coerced_skip_diverts_out_of_the_impostor_bucket() -> None:
 def test_stacked_marker_still_diverts() -> None:
     """The seed-48 ballot B shape: the 16.5 null rides INSIDE the coercion prefix.
 
-    The citation gate is the LAST guard in the manager's ballot chain, so the
-    coercion marker is always the OUTERMOST prefix; a stacked
-    :data:`~meetings.manager.INVALID_OBSERVATION_ID_MARKER` null sits inside
-    it. The anchored match reads the outermost marker and diverts.
+    The citation gate ran LAST in the manager's ballot chain, so on the
+    recordings that carry it the coercion marker is the OUTERMOST prefix and a
+    stacked :data:`~meetings.manager.INVALID_OBSERVATION_ID_MARKER` null sits
+    inside it. The anchored match reads the outermost marker and diverts. That
+    stack is history: ruling D6 of 2026-09-19 retired the gate, so no live path
+    mints the outer marker and this shape only ever arrives on recorded bytes.
     """
 
     meeting = _meeting(

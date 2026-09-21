@@ -862,7 +862,10 @@ def test_vote_correctness_rate_is_documented_as_a_diagnostic() -> None:
         assert doc is not None
         assert "diagnostic" in doc
         assert "NOT a KPI" in doc
-        assert "citation gate" in doc
+        # The mechanism by name, so the paragraph cannot outlive it: ruling
+        # D6 of 2026-09-19 replaced the coercing citation gate with a
+        # labeller, which is why an unflagged, uncited EJECT now converts.
+        assert "label_ballot_grounding" in doc
         assert "structurally pinned" not in doc
 
 

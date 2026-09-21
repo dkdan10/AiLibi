@@ -26,7 +26,7 @@ const players: PlayerView[] = [
 // (which must not). `private-alternative-choice` is also the secret the
 // perspective legs below look for — it appears nowhere else in the fixture, so
 // finding it in the HTML can only mean the alternatives block rendered.
-const ballot: BallotView = { voter: "p-1", target: "p-2", confidence: 0.73, primary_reason_id: "private-statement-choice", primary_reason_observation_id: "private-observation-choice", considered_alternatives: ["p-2", "private-alternative-choice"], rationale_text: "I killed them", rationale_text_clean: "I killed them", rewrite_reasons: [] };
+const ballot: BallotView = { voter: "p-1", target: "p-2", confidence: 0.73, primary_reason_id: "private-statement-choice", primary_reason_observation_id: "private-observation-choice", considered_alternatives: ["p-2", "private-alternative-choice"], decision_basis: null, grounding_label: null, rationale_text: "I killed them", rationale_text_clean: "I killed them", rewrite_reasons: [] };
 
 /** The alternatives block's inner markup, so a claim about it cannot be
  *  satisfied by the pill the card's HEADER already renders for the target. */
@@ -195,6 +195,55 @@ describe("private reasoning perspective", () => {
     expect(html).toContain(BALLOT_COPY.alternativesLabel);
     expect(html).toContain(BALLOT_COPY.alternativesEmpty);
     expect(alternativesBlock(html)).not.toContain("<li");
+  });
+  it("shows the meeting's grounding label beside the weighed list", () => {
+    // The chip the substrate wave adds, and the one claim it may make: it
+    // DESCRIBES the basis. The vote itself is the voter's, so the card must not
+    // dress the label as an adjustment — no rewrite chip, no redirect note.
+    state.perspective = { mode: "omniscient" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, grounding_label: "uncited" }} players={players} omniscient revealOutcome={false} />);
+    expect(alternativesBlock(html)).toContain(BALLOT_COPY.groundingLabels.uncited);
+    expect(html).not.toContain("grounding_label");
+    expect(html).not.toContain("uncited\"");
+    expect(html).not.toContain("before the vote was redirected");
+  });
+  it.each(Object.entries(BALLOT_COPY.groundingLabels))("renders %s in plain language", (label, copy) => {
+    state.perspective = { mode: "omniscient" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, grounding_label: label }} players={players} omniscient revealOutcome={false} />);
+    expect(alternativesBlock(html)).toContain(copy);
+    // The raw token is machine vocabulary and never reaches the page.
+    expect(html).not.toContain(`>${label}<`);
+  });
+  it("renders nothing for a recording that predates the label, or a value it has not been taught", () => {
+    // Every committed recording carries `null` here, so the shipped tour must
+    // look exactly as it did; an unrecognised value is not narrated either,
+    // because a label this build cannot name is one it must not describe.
+    state.perspective = { mode: "omniscient" };
+    const before = renderToStaticMarkup(<BallotCard ballot={ballot} players={players} omniscient revealOutcome={false} />);
+    expect(before).not.toContain("data-ballot-grounding");
+    const unknown = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, grounding_label: "something_new" }} players={players} omniscient revealOutcome={false} />);
+    expect(unknown).not.toContain("data-ballot-grounding");
+    expect(unknown).not.toContain("something_new");
+  });
+  it("keeps the grounding label behind the same perspective gate as the citations", () => {
+    state.perspective = { mode: "agent", agentId: "p-2" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, grounding_label: "not_assessed" }} players={players} omniscient={false} revealOutcome={false} />);
+    expect(html).not.toContain(BALLOT_COPY.groundingLabels.not_assessed);
+    expect(html).not.toContain("data-ballot-grounding");
+  });
+  it.each([
+    ["off_target_coerced", "Off-target citation changed vote to skip"],
+    ["invalid_basis", "Unreadable stated basis removed"],
+  ])("names the %s adjustment instead of falling back to the generic chip", (reason, copy) => {
+    // Review round 3: the two `rewriteLabel` cases the substrate wave added.
+    // Neither appears on a committed recording — `off_target_coerced` never
+    // fired at all, and `invalid_basis` first mints at the re-record — so
+    // deleting either case left the suite green while the chip silently
+    // degraded to the default "Recorded vote adjustment".
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: [reason] }} players={players} omniscient revealOutcome={false} />);
+    expect(html).toContain(copy);
+    expect(html).not.toContain("Recorded vote adjustment");
+    expect(html).not.toContain(reason);
   });
   it("explains redirected votes without presenting the original rationale as the applied choice", () => {
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["under_gate_redirect"] }} players={players} omniscient revealOutcome={false} />);

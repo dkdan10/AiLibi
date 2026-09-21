@@ -14,11 +14,14 @@ signals above naming the ejected player. Co-occurrence, not attribution: the
 predicate never reads a ballot, so it cannot say the evidence is what
 convicted -- only that the table had it on the record. A value below 1.0 is a
 legal reading of this substrate, not a bug to chase. A
-zero-flag EJECT is convictable by design: the citation gate
-(:func:`meetings.manager.guard_ballot_citation`, unconditional) coerces an
-eject ballot against an unflagged target to ``SKIP`` only when it cites
-NOTHING, so a target the contradiction detector never flagged still converts on
-a ballot citing a transcript turn or a private observation id. Never gate a
+zero-flag EJECT is convictable by design, and since ruling D6 of 2026-09-19
+that holds whether or not the ballot cites anything: the meeting layer
+(:func:`meetings.manager.label_ballot_grounding`) LABELS the basis it finds --
+``supported``, ``flag_only``, ``uncited`` and the rest -- and rewrites no
+target, so every EJECT is tallied for the player the voter named. The
+predecessor coerced an uncited eject against an unflagged target to ``SKIP``;
+that coercion is gone, which can only raise this rate's denominator on bytes
+recorded after the coming re-record. Never gate a
 prompt A/B on this rate: the published conversion leads live on
 :class:`eval.meeting_quality.ConversionReport` -- ``ejection_accuracy`` (the
 PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
@@ -250,9 +253,12 @@ class VoteCorrectnessReport(BaseModel):
     ejectee -- and is ``None`` (undefined, not ``0.0``) when there were no
     impostor ejections. **It is a diagnostic, NOT a KPI:** the predicate reads
     no ballot, so the rate is co-occurrence, never attribution; and a value
-    below ``1.0`` is legal on this substrate, because the citation gate lets an
-    eject ballot convict a target the detector never flagged whenever the ballot
-    cites a transcript turn or a private observation id. Its denominator also
+    below ``1.0`` is legal on this substrate, because an eject ballot may
+    convict a target the detector never flagged. Since ruling D6 of
+    2026-09-19 that holds whether or not the ballot cites anything:
+    :func:`meetings.manager.label_ballot_grounding` labels the basis and
+    rewrites no target, where the retired citation gate coerced an uncited
+    one to SKIP. Its denominator also
     excludes the wrong crewmate ejections,
     so even a ``1.0`` cannot be read as full ejection accuracy. The recorded
     values per sample set, and the census of the six samples/9p2i ejections the

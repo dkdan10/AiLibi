@@ -157,13 +157,16 @@ DEFAULT_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1"
 # other set would SILENTLY record the wrong substrate.
 REQUIRED_PROMPT_SET="qwen3_6_27b"
 # The BASE per-template prompt versions the set's registry entry must still
-# resolve to with no lever ON (all four at v5 since Task 21.1's in-world register
-# bump; the lineage is v1 bespoke port -> v2 elicitation batch -> v3 persona
-# voice -> v4 evidence honesty -> v5). The set NAME alone is not a version pin —
+# resolve to with no lever ON (three at v6 and `vote_ballot` at v7: the four
+# bumped as a unit to v6 for the alibi-as-route map register, then ruling D6's
+# SKIP-basis clause moved `vote_ballot` ALONE to v7; the lineage is v1 bespoke
+# port -> v2 elicitation batch -> v3 persona voice -> v4 evidence honesty -> v5
+# in-world register -> v6 alibi as a route -> v7 grounded SKIP, `vote_ballot`
+# only). The set NAME alone is not a version pin —
 # the registry entry can be bumped by a later task — so the preflight asserts
 # orchestrator.game.PROMPT_VERSION_SETS still resolves $REQUIRED_PROMPT_SET to
 # exactly this map. Sorted, comma+space-joined (the MANIFEST cell rendering).
-REQUIRED_PROMPT_VERSIONS_BASE="accusation_round.qwen3_6_27b.v6, crewmate_report.qwen3_6_27b.v6, impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v6"
+REQUIRED_PROMPT_VERSIONS_BASE="accusation_round.qwen3_6_27b.v6, crewmate_report.qwen3_6_27b.v6, impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v7"
 # What a recording under the DECLARED slate actually stamps: a lever with a
 # prompt-version overlay moves provenance with its rendered bytes, so an ON arm
 # stamps a composite ("<template>.<set>.v5.<lever>+…") rather than the base

@@ -1055,7 +1055,10 @@ def test_the_default_sets_response_examples_are_copyable_json_too(
 # the fourth live run stopped on a ballot whose `rationale_text` ran past the
 # vote cap, and thirteen of fourteen candidate EJECT citations copied the
 # `[obs ...]` tag word into `primary_reason_observation_id`, which
-# `meetings/manager.py` nulls before coercing the now-uncited ejection to SKIP.
+# `meetings/manager.py` nulled -- and, on the build that run was made on, the
+# Task-16.6 citation gate then coerced the now-uncited ejection to SKIP. Ruling
+# D6 of 2026-09-19 retired that coercion: the id is still nulled, and the
+# ejection now stands with `grounding_label="invalid_citation"` on it.
 # The reference family bounds the same three fields and its ballots did
 # neither. v5 ports the two the fifth live run then measured
 # (`tasks/diagnosis-2026-09-18-fifth-run.md`): the TURN channel, dead on 0 of
@@ -1109,8 +1112,11 @@ _REFERENCE_BALLOT_PATH: Final[str] = (
 #:   `[turn:<id>:claim|obs|whereabouts:N]`, a second id vocabulary
 #:   `meetings.manager._REASON_ID_TURN_SUFFIX` has no entry for. 20 of the 27
 #:   ids the run nulled ended `:claim:N` and 6 `:obs:N`.
-#: * the CONSEQUENCE -- `meetings/manager.py:3203` nulls the id and
-#:   `guard_ballot_citation` then coerces the now-uncited EJECT to SKIP.
+#: * the CONSEQUENCE -- `_normalize_ballot_reason_id` nulls the id, and the
+#:   ballot is then recorded with no source of its own. Before ruling D6 of
+#:   2026-09-19 the citation gate also coerced the now-uncited EJECT to
+#:   SKIP; it no longer does, and the vote stands under an
+#:   `invalid_citation` label.
 #:
 #: The shape names the FORM a turn id takes as well as where it is printed.
 #: `meetings.manager._turn_id` (`:2895-2903`) is the only site that mints one
@@ -1144,8 +1150,12 @@ _ROW_BULLET_SHAPE: Final[str] = (
 )
 _ROWS_MISDESCRIBED: Final[str] = "indented"
 _PORTED_ID_WARNING: Final[str] = "Never invent or abbreviate an id"
+#: The consequence, as ruling D6 of 2026-09-19 leaves it: a nulled id
+#: costs the ejection its source on the record. It no longer costs the
+#: voter the ejection -- `label_ballot_grounding` labels the ballot
+#: `invalid_citation` and the target stands.
 _NULLED_CONSEQUENCE: Final[str] = (
-    "is nulled, and a nulled id leaves your ejection uncited, which coerces it to SKIP"
+    "is nulled, and a nulled id leaves your ejection with no source on the record"
 )
 #: F7, the SKIP register, ported from `vote_ballot.j2:114,259` so that the two
 #: families differ in the accounts SURFACE and not in how readily each asks for
@@ -1163,11 +1173,30 @@ _SKIP_NOT_MOMENTUM: Final[str] = (
 #: EJECT in either arm below the 0.6 cutoff `tally_ballots` applies
 #: (`meetings/voting.py:187`).
 _CONFIDENCE_SENTENCE: Final[str] = '"confidence" to your honest probability'
+#: F8, the v6 SKIP-basis register: ruling D6 of 2026-09-19 reaching this body
+#: beside the served `vote_ballot.j2`. A SKIP states what it rests on, in the
+#: same closed vocabulary (`meetings.schemas.BallotDecisionBasis`), and the
+#: prompt says the vote is recorded as cast either way.
+_SKIP_BASIS_REGISTER: Final[str] = "A SKIP states its basis too"
+_SKIP_BASIS_NONE_HELD: Final[str] = (
+    'set "decision_basis" to exactly "none_held" — that word and nothing else'
+)
+_SKIP_BASIS_STANDS: Final[str] = (
+    "your vote is recorded as you cast it: nothing here moves your target"
+)
+#: Review round 3: the basis slot is SHOWN in prose and left null in the object
+#: the model copies verbatim -- the `v5` discipline this file already holds
+#: `primary_reason_id` to, and the one that matters most here, because ruling
+#: D6 exists to make the VOTER state its basis and a pre-filled token records
+#: one it never chose.
+_SKELETON_BASIS_NULL: Final[str] = '"decision_basis":null'
 #: The revisions that name the bodies BEFORE these bounds. A tree whose
 #: templates carry the bounds may not compose a stamp from any of them: the
 #: revision exists so that two generations of one body never share a
-#: `MeetingReplayEntry.prompt_versions` marker.
-_PRE_V5_REVISIONS: Final[frozenset[str]] = frozenset({"v1", "v2", "v3", "v4"})
+#: `MeetingReplayEntry.prompt_versions` marker. `v5` joined the set when ruling
+#: D6 moved this body again: the v5 generation's consequence clause said a
+#: nulled id coerces the ejection to SKIP, which the v6 body no longer says.
+_PRE_V6_REVISIONS: Final[frozenset[str]] = frozenset({"v1", "v2", "v3", "v4", "v5"})
 
 
 def _candidate_ballot() -> str:
@@ -1181,6 +1210,19 @@ def _reference_ballot_source() -> str:
     """The reference ballot's bytes, the source every ported span is held to."""
 
     return Path(_REFERENCE_BALLOT_PATH).read_text(encoding="utf-8")
+
+
+def _ballot_skeleton_line(rendered: str) -> str:
+    """The one line of a rendered ballot a model copies verbatim.
+
+    Isolated rather than searched for across the whole body, because the prose
+    around it legitimately quotes both basis tokens: an assertion that a token
+    is ABSENT is only about the skeleton if it is made against the skeleton.
+    """
+
+    lines = [line for line in rendered.splitlines() if line.startswith('{"voter"')]
+    assert len(lines) == 1, lines
+    return lines[0]
 
 
 def _ballot_over_named_turns() -> tuple[str, tuple[str, ...]]:
@@ -1284,12 +1326,17 @@ def test_every_citation_the_ballot_shows_is_the_bare_id_the_layer_accepts() -> N
     # The SKELETON, which is the object a model copies verbatim, keeps
     # `primary_reason_observation_id` null, exactly as `vote_ballot.j2`'s own
     # skeleton does. A literal id pre-filled there is copyable into an EJECT,
-    # and a copied literal that is not in the voter's own valid set is nulled
-    # and the ejection then coerced to SKIP -- the defect this fix repairs,
-    # re-entering through its own example. On the one voter whose real ids the
-    # literal happens to match (p-N, tick 12, seq 0) it is worse, not better:
+    # and a copied literal that is not in the voter's own valid set is nulled;
+    # the ejection then stands on the record carrying
+    # `grounding_label="invalid_citation"` (ruling D6 of 2026-09-19 retired the
+    # coercion that used to follow) -- the defect this fix repairs, re-entering
+    # through its own example. On the one voter whose real ids the literal
+    # happens to match (p-N, tick 12, seq 0) it is worse, not better:
     # `grade_supported` cannot tell a copied example from a citation the voter
-    # actually made. The skeleton is a SKIP, and a SKIP needs no citation.
+    # actually made. The skeleton is a SKIP, which since D6 states its basis in
+    # `decision_basis` rather than being exempt from one; the citation slot
+    # stays null because a pre-filled literal is copyable, not because a SKIP
+    # may cite nothing.
     vote = _candidate_ballot()
     skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
     assert len(skeleton) == 1
@@ -1310,8 +1357,11 @@ def test_the_ballot_names_which_bracket_on_the_page_is_a_ballot_citation() -> No
     # canonical `turn_id` at the head of a turn line, and `:19,22` print
     # `[turn:<id>:claim|obs|whereabouts:N]` sub-rows beneath it.
     # `meetings.manager._REASON_ID_TURN_SUFFIX` is end-anchored on
-    # `:turn-(\d+)`, so a row suffix blocks recovery, `:3203` nulls the id and
-    # `guard_ballot_citation` coerces the uncited EJECT to SKIP.
+    # `:turn-(\d+)`, so a row suffix blocks recovery and
+    # `_normalize_ballot_reason_id` nulls the id. Since ruling D6 of
+    # 2026-09-19 that leaves the EJECT standing and labelled
+    # `invalid_citation` rather than coerced to SKIP, so the F4 defect is
+    # now a dead citation channel and no longer a lost vote.
     #
     # Three spans, asserted separately because they are three separate
     # failures: naming the shape without the suffix warning leaves the 20
@@ -1360,15 +1410,32 @@ def test_the_ballot_shows_the_turn_id_shape_without_prefilling_a_real_one() -> N
     # shape travels in prose only and no real turn id of the rendered meeting
     # appears outside the transcript block it belongs to.
     vote, turn_ids = _ballot_over_named_turns()
-    skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
-    assert len(skeleton) == 1
-    assert '"primary_reason_id":null' in skeleton[0]
+    assert '"primary_reason_id":null' in _ballot_skeleton_line(vote)
     opened = vote.index("<transcript>")
     closed = vote.index("</transcript>") + len("</transcript>")
     outside = vote[:opened] + vote[closed:]
     for turn_id in turn_ids:
         assert turn_id in vote[opened:closed], turn_id
         assert turn_id not in outside, turn_id
+
+
+def test_the_skeleton_leaves_the_basis_for_the_voter_to_write() -> None:
+    # Review round 3, the same v4/v5 discipline one slot further on: a slot is
+    # shown in PROSE and never pre-filled into the object a model copies
+    # verbatim. It binds hardest here, because ruling D6 exists to make the
+    # VOTER state what its decision rests on -- a body that ships
+    # `"decision_basis":"none_held"` inside the skeleton would have every
+    # voter that edits `target` and leaves the rest alone record a basis it
+    # never chose. The KEY stays (the ballot still declares one), its VALUE is
+    # null, and neither legal token appears inside that line.
+    skeleton = _ballot_skeleton_line(_candidate_ballot())
+
+    assert _SKELETON_BASIS_NULL in skeleton
+    assert '"cited"' not in skeleton
+    assert '"none_held"' not in skeleton
+    # Non-vacuous: both tokens are still taught, in the prose register the v6
+    # revision names. The skeleton is where they may not be pre-answered.
+    assert _SKIP_BASIS_NONE_HELD in _candidate_ballot()
 
 
 def test_the_ballot_carries_the_references_skip_register_and_nothing_else() -> None:
@@ -1429,13 +1496,13 @@ def test_the_account_turn_asks_for_one_short_phrase_and_then_a_stop(
     assert _UNBOUNDED_TURN_REASON not in opt_in
 
 
-def test_a_body_carrying_the_v5_bounds_cannot_be_stamped_an_older_revision() -> None:
+def test_a_body_carrying_the_v6_bounds_cannot_be_stamped_an_older_revision() -> None:
     # The revision and the bodies are one fact. `ACCOUNT_PROMPT_SET_REVISION`
     # exists so that two generations of one template never share a stamp, so a
-    # tree that RENDERS these bounds and still composes `v1` through `v4` would
+    # tree that RENDERS these bounds and still composes `v1` through `v5` would
     # record the new bodies under an identifier that already names the old
     # ones. Read off the constant rather than against a literal: what is
-    # asserted is that the stamp is not one of the pre-v5 generations and that
+    # asserted is that the stamp is not one of the pre-v6 generations and that
     # every arm's stamp carries whatever the constant says.
     vote = _candidate_ballot()
     statement = _every_account_prompt(common=1, attributed=1, is_impostor=False)[
@@ -1447,7 +1514,19 @@ def test_a_body_carrying_the_v5_bounds_cannot_be_stamped_an_older_revision() -> 
     # The v5 bodies: the turn channel and the SKIP register (F4 and F7).
     assert _TURN_ID_SHAPE in vote and _ROW_SUFFIX_CLAUSE in vote
     assert _SKIP_TOO_THIN in vote and _SKIP_SOUND_CALL in vote
-    assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V5_REVISIONS
+    # The v6 body: the SKIP-basis register (F8) and the corrected consequence.
+    # These are what a `v5` stamp would now misname, and the whole reason the
+    # revision moved -- so they are asserted beside the constant, not apart.
+    assert _SKIP_BASIS_REGISTER in vote and _SKIP_BASIS_NONE_HELD in vote
+    assert _SKIP_BASIS_STANDS in vote
+    assert _NULLED_CONSEQUENCE in vote
+    # Still v6, and the same unreleased one: review round 3 set the skeleton's
+    # basis to null, which is a further edit to a body no recording carries
+    # (`test_no_committed_capture_already_carries_todays_account_stamps`), so
+    # it is absorbed rather than bumped. The v6 spans above are untouched by
+    # it, which is the property that lets one revision name both edits.
+    assert _SKELETON_BASIS_NULL in _ballot_skeleton_line(vote)
+    assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V6_REVISIONS
     stamps = _account_stamps()
     assert stamps
     for stamp in stamps:

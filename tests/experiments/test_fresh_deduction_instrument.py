@@ -97,6 +97,7 @@ from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FAKE_FINISH_REASON
 from meetings.citation_relevance import names_player
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
     INVALID_OBSERVATION_ID_MARKER,
@@ -106,9 +107,6 @@ from meetings.manager import (
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
     DefaultedCall,
-    SuspicionEntry,
-    guard_ballot_citation,
-    guard_ballot_target_graph,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -5840,7 +5838,21 @@ class TestUsageReplay:
         for arm in report.arms:
             assert f"{arm.input_tokens:,}" in manifest, arm.arm
             assert f"{arm.output_tokens:,}" in manifest, arm.arm
-            assert f"{arm.terminal_units} terminal units" in manifest, arm.arm
+        # The terminal/partial SHAPE is no longer read off that paragraph, and
+        # the reason is the paragraph's own: it quotes "49 terminal units with
+        # one `partial` on `repaired_clock`, against 16 terminal units and 34
+        # `partial` on `combined_accounts`" and says in the next breath that the
+        # split "is the relevance rule of 2026-09-18 meeting an ARCHIVED
+        # distribution ... and the shape read 50 and none on both arms with the
+        # rule OFF". Ruling D6 of 2026-09-19 retired the COERCION that rule
+        # drove -- an off-target citation is now labelled `off_target` and the
+        # vote stands -- so the archive's meetings decide again and the shape is
+        # back to 50 and none. That is a dated measurement of a spent sitting,
+        # not a figure this tree can reproduce, and the manifest is an archive
+        # of a closed evaluation that no card may rewrite. The shape is asserted
+        # here instead, where it can carry its own explanation.
+        assert [arm.terminal_units for arm in report.arms] == [50, 50]
+        assert [arm.partial_units for arm in report.arms] == [0, 0]
 
     def test_the_rehearsal_is_green_on_the_refreshed_profile_under_the_new_limits(
         self, tmp_path: Path
@@ -9996,48 +10008,32 @@ class TestTheAuthoredLayerIsRecoverable:
     def test_a_doubly_rewritten_ballot_is_counted_under_both_reasons(self) -> None:
         """PLANTED: the trap the typed field sets, at the count that fell into it.
 
-        The fifth run's seed 8006 class, built by the REAL guards rather than by
-        hand: an under-gate eject of p-2 is redirected onto p-3 and keeps a
-        citation about p-2, and the relevance gate then coerces the redirected
-        ballot. ``ballot_target_rewrite_provenance`` refuses to overwrite a
-        reason, so ``guard_rewrite_reason`` still reads ``under_gate_redirect``
-        while BOTH markers sit on the rationale. Reading the single field --
-        what this block did before this card -- reports zero coercions on a run
-        full of them; reading the stack reports one of each.
+        The fifth run's seed 8006 class. Both guards that built it are retired
+        (ruling D6 of 2026-09-19), so the ballot is assembled from their RECORDED
+        shape instead of by re-running them -- which is what this counter reads
+        anyway, since its whole job is committed bytes. The shape: a redirect
+        prepended its marker and claimed the typed reason, the relevance gate
+        then prepended a second marker, and
+        ``ballot_target_rewrite_provenance`` refused to overwrite the first
+        reason. Reading the single field -- what this block did before its own
+        card -- reports zero coercions on a run full of them; reading the stack
+        reports one of each.
         """
 
-        redirected = guard_ballot_target_graph(
-            ballot=VoteBallot(
-                voter="p-1",
-                target="p-2",
-                confidence=0.7,
-                primary_reason_id="m-1:turn-0",
-                rationale_text="because.",
+        coerced = VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.7,
+            primary_reason_id="m-1:turn-0",
+            rationale_text=(
+                OFF_TARGET_CITATION_EJECT_MARKER.format(target="p-3")
+                + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-2")
+                + "because."
             ),
-            voter_id="p-1",
-            suspicion_graph=(
-                SuspicionEntry(player_id="p-2", suspicion=0.40, trust=0.5),
-                SuspicionEntry(player_id="p-3", suspicion=0.80, trust=0.5),
-            ),
-            candidate_targets=("p-2", "p-3"),
-            skip_confidence_threshold=0.6,
+            guard_redirected_from="p-2",
+            guard_rewrite_reason="under_gate_redirect",
         )
-        coerced = guard_ballot_citation(
-            ballot=redirected,
-            contradictions=(),
-            citation_relevance_version=1,
-            turns=(
-                MeetingTurn(
-                    turn_id="m-1:turn-0",
-                    turn_index=0,
-                    speaker="p-4",
-                    turn_kind="opening",
-                    reply_to=None,
-                    free_text="p-2 was nowhere near ADMIN.",
-                ),
-            ),
-        )
-        assert coerced.target == "SKIP"
+
         assert coerced.guard_rewrite_reason == "under_gate_redirect"
         assert instrument.ballot_rewrites_that_fired(coerced) == (
             "off_target_coerced",
@@ -10154,11 +10150,14 @@ class TestTheAuthoredLayerIsRecoverable:
     def test_a_coalition_can_clear_the_gate_without_converting(self) -> None:
         """PLANTED: the two meanings the memo's single "cleared" column carried.
 
-        Both authored ballots pass ``guard_ballot_citation``, so the coalition
-        CLEARS; one of them is then re-aimed by ``under_gate_redirect``, so it
-        reached the tally naming somebody its voter did not, and the coalition
-        does NOT convert. Counting those two as one figure is what made "10
-        wrongful coalitions cleared" and "8 converted" read as one number.
+        Both authored ballots carry no rewrite of the class the retired
+        ``guard_ballot_citation`` wrote, so the coalition CLEARS; one of them is
+        then re-aimed by ``under_gate_redirect``, so it reached the tally naming
+        somebody its voter did not, and the coalition does NOT convert. Counting
+        those two as one figure is what made "10 wrongful coalitions cleared"
+        and "8 converted" read as one number. Both guards are history since
+        ruling D6 of 2026-09-19 retired them; the instrument reads them off
+        recorded bytes, which is why this case is stated in their vocabulary.
         """
 
         counts = instrument.authored_ballot_diagnostics(
@@ -11032,25 +11031,6 @@ def calibration_3_replayed(
     )
 
 
-def _arms_with_the_relevance_lever(
-    *versions: int | None,
-) -> Callable[[], tuple[Any, ...]]:
-    """A stand-in ``instrument_arms`` whose arms carry these lever versions."""
-
-    def _arms() -> tuple[Any, ...]:
-        return tuple(
-            instrument.InstrumentArm(
-                name=arm.name,
-                experiment_config=arm.experiment_config.model_copy(
-                    update={"citation_relevance_version": version}
-                ),
-            )
-            for arm, version in zip(instrument_arms(), versions)
-        )
-
-    return _arms
-
-
 def _prediction_rows(text: str) -> list[tuple[str, ...]]:
     """Every ``| P<n> | ... |`` row of a markdown table, as four cells."""
 
@@ -11535,83 +11515,53 @@ class TestTheThirdModesDraw:
             )
 
 
-class TestTheRevisedWaveIsRequiredByTheThirdMode:
-    """Acceptance item 4: both arms carry the revision, or nothing runs."""
+class TestEachArmsResolvedLeversArePublished:
+    """What replaced acceptance item 4 once its lever was retired.
 
-    def test_the_committed_arms_resolve_the_lever_on(self) -> None:
-        """The settled state, read through the reader the gate reads through."""
+    The item read "both arms carry the revision of 2026-09-18, or nothing
+    runs", and ruling D6 of 2026-09-19 retired that lever into the default:
+    the relevance rule is unconditional and decides a ``grounding_label``
+    rather than a coercion, so no arm can resolve it OFF and no plant for the
+    old gate can be constructed. The gate went with it (AGENTS craft rule 2 -- a
+    check whose failure cannot be planted is not a check), and what survives is
+    the reader it shared with the calibration report: the arms resolve the
+    substrate they say they do, and the retired key is not among it.
+    """
 
+    def test_the_arms_resolve_the_substrate_they_publish(self) -> None:
         for arm in instrument_arms():
             resolved = instrument.arm_lever_profile(arm)
-            assert resolved["AILIBI_CITATION_RELEVANCE"] == "1"
             assert resolved["AILIBI_PROMPT_SET"] == AUTHORIZED_PROMPT_SET
+            assert resolved["AILIBI_TEMPORAL_OBSERVATIONS"] == "2"
+            # Transport is not substrate and the report names it once, at the
+            # top level.
             assert "AILIBI_LLM_PROVIDER" not in resolved
-        instrument.assert_the_revised_wave_is_enabled(_third_mode())
+            # The retired lever leaves no hole behind it.
+            assert "AILIBI_CITATION_RELEVANCE" not in resolved
 
-    @pytest.mark.parametrize(
-        "versions",
-        [(None, 1), (1, None), (None, None)],
-        ids=["reference-off", "candidate-off", "both-off"],
-    )
-    def test_the_mode_is_refused_with_the_guard_off_on_either_arm(
-        self, monkeypatch: pytest.MonkeyPatch, versions: tuple[int | None, int | None]
-    ) -> None:
-        """PLANTED each way: the lever resolved OFF, before a client exists.
+    def test_the_arms_differ_in_the_account_channels_alone(self) -> None:
+        # The pairing the instrument rests on, re-asserted where the retired
+        # lever used to be checked: with that keyword gone from both arms, the
+        # two configs still differ in exactly the two accounts channels.
+        reference, candidate = instrument_arms()
+        differing = {
+            field
+            for field in type(reference.experiment_config).model_fields
+            if getattr(reference.experiment_config, field)
+            != getattr(candidate.experiment_config, field)
+        }
+        assert differing == {"public_account_version", "attributed_testimony_version"}
 
-        A sitting of this mode with the relevance rule off measures the surface
-        the revision replaced, under a clause that authorized the other one. The
-        refusal is on the helper and on the live-capable pre-flight, the latter
-        with the fake provider, so no credential is reached in either.
-        """
-
-        monkeypatch.setattr(
-            instrument, "instrument_arms", _arms_with_the_relevance_lever(*versions)
-        )
-        mode = _third_mode()
-        with pytest.raises(LiveRunNotAuthorized, match="AILIBI_CITATION_RELEVANCE"):
-            instrument.assert_the_revised_wave_is_enabled(mode)
-        with pytest.raises(LiveRunNotAuthorized, match="revision of 2026-09-18"):
-            instrument.assert_ready_for_a_calibration(
-                provider="fake",
-                invocation=None,
-                limits=mode.limits,
-                sampling=mode.sampling,
-                paired_seeds=mode.paired_seeds,
-            )
-
-    def test_the_run_path_is_refused_too(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """PLANTED on the entry point that would spend: `run_calibration`."""
-
-        monkeypatch.setattr(
-            instrument, "instrument_arms", _arms_with_the_relevance_lever(1, None)
-        )
-        mode = _third_mode()
-        with pytest.raises(LiveRunNotAuthorized, match="AILIBI_CITATION_RELEVANCE"):
-            instrument.run_calibration(
-                output_dir=tmp_path / "units",
-                limits=mode.limits,
-                sampling=mode.sampling,
-                paired_seeds=mode.paired_seeds,
-            )
-
-    def test_the_two_spent_modes_are_not_held_to_a_later_lever(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The spent sittings measured the surface they were run on.
-
-        Holding them to a lever that did not exist on their day would refuse a
-        spend the manifest already records, which is the wrong direction for a
-        gate over history to err in.
-        """
-
-        monkeypatch.setattr(
-            instrument, "instrument_arms", _arms_with_the_relevance_lever(None, None)
-        )
-        for mode in instrument.CALIBRATION_MODES[:2]:
-            assert mode.requires_the_revised_wave is False
-            instrument.assert_the_revised_wave_is_enabled(mode)
+    def test_no_mode_still_asks_for_the_retired_gate(self) -> None:
+        # Structural, so the retirement cannot half-survive: the field, the
+        # constant and the function are gone from the module.
+        for name in (
+            "assert_the_revised_wave_is_enabled",
+            "REVISED_WAVE_LEVERS",
+        ):
+            assert not hasattr(instrument, name), name
+        for mode in instrument.CALIBRATION_MODES:
+            assert not hasattr(mode, "requires_the_revised_wave")
 
 
 class TestTheThirdModesCaveatAndOutcomeGuard:
@@ -11947,7 +11897,10 @@ class TestTheThirdCalibrationEndToEnd:
 
         report = calibration_3_fake
         for arm in report.arms:
-            assert arm.resolved_levers["AILIBI_CITATION_RELEVANCE"] == "1"
+            # The relevance lever was published here until ruling D6 of
+            # 2026-09-19 retired it into the default; the profile says what the
+            # arm resolves, and there is no longer a key for it to resolve.
+            assert "AILIBI_CITATION_RELEVANCE" not in arm.resolved_levers
             assert arm.resolved_levers["AILIBI_PROMPT_SET"] == AUTHORIZED_PROMPT_SET
             assert "AILIBI_LLM_PROVIDER" not in arm.resolved_levers
         candidate = next(arm for arm in report.arms if arm.arm == "combined_accounts")

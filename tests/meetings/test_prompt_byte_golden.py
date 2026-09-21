@@ -101,7 +101,7 @@ from itertools import combinations
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from pydantic import BaseModel
@@ -140,7 +140,7 @@ from meetings.manager import (
     SuspicionEntry,
 )
 from meetings.render_contract import ReporterContext
-from meetings.schemas import MeetingResult, MeetingTranscript
+from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from meetings.transcript import MeetingTriggerKind
 from observation.service import ObservationService
 from orchestrator.game import (
@@ -278,10 +278,28 @@ class ReconstructedMeeting:
     """One committed meeting re-run through the real manager (reuse surface).
 
     Carries everything a byte assertion or a downstream render-lever test needs:
-    the recorded ``entry``, the manager's reconstructed ``result`` (its
-    transcript / ballots / outcome cross-check the recording), every renderer
+    the recorded ``entry``, the reconstructed ``result``, every renderer
     ``render`` in order (for kind attribution + drift diffs), and the set of
     recorded prompts the manager reproduced byte-for-byte (``hit_prompts``).
+
+    ``result`` is the reconstruction's transcript and flags carrying the
+    RECORDED decision: the outcome, the ejected player and the ballots come
+    from ``entry``, read as recorded rather than re-derived. That is what lets
+    this walk keep reconstructing committed bytes across a deliberate change to
+    the ballot chain -- ruling D6 of 2026-09-19 retired two target-rewriting
+    guards, which moves 24 of the 986 committed sample ballots across 15 of the
+    190 meetings this walk covers -- instead of making every recording
+    unwalkable until the re-record. Those four figures are not prose: they are
+    the census :func:`test_every_reconstruction_divergence_is_a_retired_guard`
+    pins per set, ``(151, 869, 23, 14)`` for 9p2i and ``(39, 117, 1, 1)`` for
+    4p1i. Every consumer of this walk therefore reads the decision the recording
+    actually made, which is what each of them was already asserting about.
+
+    ``rebuilt_ballots`` is the other half, kept rather than discarded: the
+    ballots TODAY's chain produced from the same recorded completions. Nothing
+    but :func:`test_every_reconstruction_divergence_is_a_retired_guard` reads
+    it, and that case exists so the re-decision is measured and explained
+    rather than silently dropped.
     """
 
     seed: int
@@ -290,6 +308,7 @@ class ReconstructedMeeting:
     meeting_id: str
     entry: MeetingReplayEntry
     result: MeetingResult
+    rebuilt_ballots: tuple[VoteBallot, ...]
     renders: tuple[_Render, ...]
     complete_calls: tuple[_CompleteCall, ...]
     hit_prompts: frozenset[str]
@@ -629,7 +648,8 @@ def walk_replay_meetings(
     :func:`advance_tick` verifying every ``state_hash``, maintain each agent's
     memory in lockstep, and at each :class:`MeetingReplayEntry` drive the REAL
     :class:`MeetingManager` with a recorded-response stub, yielding a
-    :class:`ReconstructedMeeting`. After each meeting the recorded result is
+    :class:`ReconstructedMeeting` whose ``result`` carries the RECORDED
+    decision. After each meeting that result is
     applied (:func:`apply_meeting_result`, its ``state_hash_after`` verified) and
     folded into living agents' beliefs (:func:`_absorb_meeting_beliefs`) and
     their meeting history (:func:`fold_meeting_outcome_into_memories`) so the
@@ -696,6 +716,19 @@ def walk_replay_meetings(
             )
             yield reconstructed
 
+            # ``result`` already carries the RECORDED decision
+            # (:func:`_run_recorded_meeting` swaps it in), so the world advances
+            # exactly as the recording says it did. What the hash check below
+            # pins is therefore the ENGINE leg, at full strength: applying THIS
+            # decision to the reconstructed state must reproduce the recorded
+            # bytes, so drift in ``apply_meeting_result``, in the tick walk or
+            # in the recording fails it loud. What it no longer pins -- stated
+            # at exactly that strength in review round 3 -- is the BALLOT leg:
+            # because the decision is read as recorded rather than re-derived,
+            # the hash can no longer transitively say that today's ballot chain
+            # still reaches it. ``test_every_reconstruction_divergence_is_a_
+            # retired_guard`` carries that half instead, ballot by ballot
+            # against ``rebuilt_ballots``, and is the only thing that does.
             next_state, post_events = apply_meeting_result(
                 state, result, game_map=game_map, triggering_body_id=body_id
             )
@@ -785,13 +818,28 @@ def _run_recorded_meeting(
         )
     )
     hit_prompts = frozenset(call.prompt for call in stub.calls if call.hit)
+    # The DECISION is read as recorded, and only the decision: the outcome, the
+    # ejected player and the ballots replace the ones the chain just re-derived,
+    # while the transcript and the flags stay the reconstruction's (which
+    # ``test_reconstructed_transcript_matches_the_recording`` pins equal
+    # anyway). The re-derived ballots ride alongside under ``rebuilt_ballots``
+    # for the one case that measures the difference. See
+    # :class:`ReconstructedMeeting` for why.
+    recorded_decision = result.model_copy(
+        update={
+            "outcome": meeting_entry.outcome,
+            "ejected_player_id": meeting_entry.ejected_player_id,
+            "ballots": meeting_entry.ballots,
+        }
+    )
     reconstructed = ReconstructedMeeting(
         seed=seed,
         set_name=set_name,
         meeting_index=meeting_index,
         meeting_id=meeting_entry.meeting_id,
         entry=meeting_entry,
-        result=result,
+        result=recorded_decision,
+        rebuilt_ballots=tuple(result.ballots),
         renders=tuple(renders),
         complete_calls=tuple(stub.calls),
         hit_prompts=hit_prompts,
@@ -799,7 +847,7 @@ def _run_recorded_meeting(
         memories={pid: agent.memory for pid, agent in agents.items()},
         trigger_kind=trigger_kind,
     )
-    return reconstructed, result, body_id, trigger_kind
+    return reconstructed, recorded_decision, body_id, trigger_kind
 
 
 # --------------------------------------------------------------------------- #
@@ -867,8 +915,6 @@ def _kind_from_response(call: Any) -> str:
     perturbed template), so the render sink is useless; the recorded response's
     schema still classifies the call for the diff header.
     """
-
-    from meetings.schemas import VoteBallot
 
     try:
         VoteBallot.model_validate_json(call.response_text)
@@ -1093,10 +1139,12 @@ def test_reconstructed_transcript_matches_the_recording(
 
     Because the byte golden is only honest if the manager reached each prompt in
     the RIGHT context, assert the reconstructed transcript equals the recorded
-    one turn-for-turn (speaker, index, kind, free_text). Ballots' targets and
-    the ejected outcome are already pinned by the ``state_hash_after`` check
-    inside the walk; the transcript pin catches a mid-meeting divergence that a
-    later default would otherwise mask.
+    one turn-for-turn (speaker, index, kind, free_text). The engine state each
+    meeting leaves behind is pinned by the ``state_hash_after`` check inside the
+    walk and the ballot chain's own re-decisions by
+    :func:`test_every_reconstruction_divergence_is_a_retired_guard`; the
+    transcript pin catches a mid-meeting divergence that a later default would
+    otherwise mask.
     """
 
     # One transcript comparison per meeting: re-walk lazily and compare. The
@@ -1120,6 +1168,101 @@ def test_reconstructed_transcript_matches_the_recording(
                 f"{meeting.meeting_id}: reconstructed transcript diverged from "
                 f"the recording ({len(reconstructed)} vs {len(recorded)} turns)"
             )
+
+
+#: What the retired guards left behind on a recorded ballot. A recording made
+#: before ruling D6 of 2026-09-19 is the only place these two reasons occur, and
+#: each preserved the target the voter authored in ``guard_redirected_from`` --
+#: which is precisely what today's chain records instead, since nothing rewrites
+#: for either reason any more.
+_RETIRED_REWRITE_REASONS: Final[frozenset[str]] = frozenset(
+    {"under_gate_redirect", "uncited_coerced"}
+)
+
+
+def test_every_reconstruction_divergence_is_a_retired_guard(
+    set_walk: _SetWalk,
+) -> None:
+    """Today's ballot chain re-decides old bytes, and ONLY where D6 says it may.
+
+    The walk applies the recorded decision rather than this one, so without this
+    case the re-decision would be invisible. The claim is exact and is the
+    card's evidence that the behaviour change is the ruling and nothing else:
+
+    * a recorded ballot whose ``guard_rewrite_reason`` is NOT one of the two
+      retired ones reconstructs to the same target, every time;
+    * a ballot carrying one of the two reconstructs to
+      ``guard_redirected_from`` -- the target that guard preserved -- and to no
+      other value, and its reconstruction carries no rewrite reason at all;
+    * therefore every meeting whose outcome moves is a meeting holding such a
+      ballot.
+
+    Counts only, keyed by ``(set, meeting)``; no rendered prompt and no seed
+    band leaves this function.
+    """
+
+    game_map = load_canonical_map()
+    renderers_for_set = _canonical_renderers()
+    ballots = 0
+    moved_ballots = 0
+    meetings_with_a_moved_ballot = 0
+    meetings = 0
+    for path in _seed_paths(set_walk.set_dir):
+        for meeting in walk_replay_meetings(
+            path, game_map=game_map, renderers_for_set=renderers_for_set
+        ):
+            meetings += 1
+            rebuilt = {ballot.voter: ballot for ballot in meeting.rebuilt_ballots}
+            meeting_moved = False
+            for recorded in meeting.entry.ballots:
+                ballots += 1
+                now = rebuilt[recorded.voter]
+                if now.target == recorded.target:
+                    assert (
+                        recorded.guard_rewrite_reason not in (_RETIRED_REWRITE_REASONS)
+                        or recorded.guard_redirected_from == recorded.target
+                    )
+                    continue
+                moved_ballots += 1
+                meeting_moved = True
+                # The WHOLE explanation, stated per ballot: a retired guard
+                # moved this target at record time, and the reconstruction
+                # restores exactly the target that guard preserved.
+                assert recorded.guard_rewrite_reason in _RETIRED_REWRITE_REASONS, (
+                    f"{meeting.meeting_id}/{recorded.voter}: target moved from "
+                    f"the recording under reason "
+                    f"{recorded.guard_rewrite_reason!r}, which D6 did not retire"
+                )
+                assert now.target == recorded.guard_redirected_from
+                assert now.guard_rewrite_reason is None
+            meetings_with_a_moved_ballot += int(meeting_moved)
+            # And the other half of the same mechanism, asserted on the field
+            # every DOWNSTREAM consumer reads: ``result`` carries the recorded
+            # decision, so ``scripts/counterfactual_phase21.py``'s ledger, the
+            # episodic-id walk and the corroboration walk all read the decision
+            # the recording made rather than the one today's chain would make.
+            assert meeting.result.outcome == meeting.entry.outcome
+            assert meeting.result.ejected_player_id == meeting.entry.ejected_player_id
+            assert meeting.result.ballots == meeting.entry.ballots
+
+    # Pinned at this head, through the production path, as
+    # ``(meetings, ballots, ballots whose target moved, meetings holding one)``.
+    # The third figure is the card's own ``under_gate_redirect`` census for
+    # these two sets -- 23 and 1 -- which is the arithmetic statement that the
+    # reconstruction restores every redirect and moves nothing else. The
+    # ``uncited_coerced`` count is 0 in both sample sets (it is 6 in
+    # ``ml_corpus/9p2i``, which this walk does not cover), so no ballot here
+    # moves for that reason and the assertions above are untested on it.
+    expected = {
+        "9p2i": (151, 869, 23, 14),
+        "4p1i": (39, 117, 1, 1),
+    }[set_walk.set_dir.name]
+    assert (
+        meetings,
+        ballots,
+        moved_ballots,
+        meetings_with_a_moved_ballot,
+    ) == expected
 
 
 # --------------------------------------------------------------------------- #
@@ -1195,9 +1338,12 @@ _ALL_ON_STAMPS: Mapping[str, str] = {
         "+accusation_round.qwen3_6_27b.v6.reporter_reasoning"
         "+accusation_round.qwen3_6_27b.v6.testimony_shapes"
     ),
+    # A version ahead of the other three: ruling D6 of 2026-09-19 bumped
+    # vote_ballot ALONE, v6 -> v7, and the arm stamps are derived from the
+    # default registry so they move with it.
     "vote_ballot": (
-        "vote_ballot.qwen3_6_27b.v6.corroboration_discipline"
-        "+vote_ballot.qwen3_6_27b.v6.testimony_shapes"
+        "vote_ballot.qwen3_6_27b.v7.corroboration_discipline"
+        "+vote_ballot.qwen3_6_27b.v7.testimony_shapes"
     ),
 }
 

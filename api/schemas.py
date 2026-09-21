@@ -1062,6 +1062,15 @@ class BallotView(_FrozenView):
     spectator surface never re-validates. The ``None`` default mirrors the
     source model's additive rationale (recordings predating the field, and
     ballots that cited nothing, surface ``None``).
+
+    ``decision_basis`` and ``grounding_label`` mirror the two fields ruling D6
+    of 2026-09-19 added to ``meetings.schemas.VoteBallot``: what the VOTER said
+    its decision rests on, and the meeting layer's one-word finding about that
+    basis. Both are display-only and both default to ``None``, which is what
+    every committed recording surfaces — they predate the fields. The label
+    never moved a target and is never an input to the tally, so a ballot's
+    ``target`` beside it is the one the voter authored unless
+    ``rewrite_reasons`` says otherwise.
     """
 
     voter: str
@@ -1070,6 +1079,8 @@ class BallotView(_FrozenView):
     primary_reason_id: str | None
     primary_reason_observation_id: str | None = None
     considered_alternatives: tuple[str, ...]
+    decision_basis: str | None = None
+    grounding_label: str | None = None
     rationale_text: str
     rewrite_reasons: tuple[str, ...]
     rationale_text_clean: str

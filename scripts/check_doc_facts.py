@@ -75,9 +75,10 @@ together, so one run names every drifted fact rather than the first.
    keys wide — held to agreement, not copied into prose). Finally, while any
    recorded set reads below 1.0 the module may not call the rate
    structurally pinned: a zero-flag EJECT that cites a transcript turn or a
-   private observation id is legal by design
-   (``meetings.manager.guard_ballot_citation``), so the pin would be prose the
-   committed bytes refute. Frontend copy is deliberately NOT scanned — the
+   private observation id is legal by design -- and since ruling D6 of
+   2026-09-19 an UNCITED one is legal too, because
+   ``meetings.manager.label_ballot_grounding`` labels it and never coerces it.
+   The pin would be prose the committed bytes refute. Frontend copy is deliberately NOT scanned — the
    spectator surface has its own owner.
 5. **Private dialect on the front door.** Nothing in README.md may require
    another document to parse. Every term in :data:`_DIALECT_TERMS` either does
@@ -1986,8 +1987,10 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
 
     While any set reads below 1.0 the module may not call the rate structurally
     pinned. That claim was true of a substrate where the only eject path ran
-    through the contradiction detector; since the citation gate it is not, and
-    the committed reports are what say so.
+    through the contradiction detector; since the citation gate it is not --
+    and less so since ruling D6 of 2026-09-19 retired that gate's coercion, so
+    an uncited EJECT now reaches the tally labelled rather than rewritten. The
+    committed reports are what say so.
     """
 
     module = read_document(repo_root, _VOTE_CORRECTNESS_MODULE, errors)
@@ -2063,7 +2066,8 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
                 f"{_VOTE_CORRECTNESS_MODULE}: still claims {phrase!r}, but "
                 f"{', '.join(sets_below_one)} records a rate below 1.0 — a "
                 "zero-flag eject that cites a turn or an observation id is "
-                "legal (meetings.manager.guard_ballot_citation), so the pin is "
+                "legal (meetings.manager.label_ballot_grounding labels a "
+                "ballot and never coerces it), so the pin is "
                 "prose the committed bytes refute."
             )
 

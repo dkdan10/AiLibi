@@ -15,7 +15,6 @@ EVIDENCE_REASONING_ENV: Final = "AILIBI_EVIDENCE_REASONING"
 BOUNDED_REBUTTAL_ENV: Final = "AILIBI_BOUNDED_REBUTTAL"
 PUBLIC_ACCOUNTS_ENV: Final = "AILIBI_PUBLIC_ACCOUNTS"
 ATTRIBUTED_TESTIMONY_ENV: Final = "AILIBI_ATTRIBUTED_TESTIMONY"
-CITATION_RELEVANCE_ENV: Final = "AILIBI_CITATION_RELEVANCE"
 
 #: The registry of independently versioned meeting experiments: each ambient
 #: env switch and the :class:`MeetingEvidenceProfile` field it resolves. The
@@ -29,7 +28,6 @@ EXPERIMENT_ENV_NAMES: Final[Mapping[str, str]] = MappingProxyType(
         BOUNDED_REBUTTAL_ENV: "bounded_rebuttal_version",
         PUBLIC_ACCOUNTS_ENV: "public_account_version",
         ATTRIBUTED_TESTIMONY_ENV: "attributed_testimony_version",
-        CITATION_RELEVANCE_ENV: "citation_relevance_version",
     }
 )
 
@@ -75,18 +73,12 @@ class MeetingEvidenceProfile(BaseModel):
     bounded_rebuttal_version: Literal[1] | None = None
     public_account_version: Literal[1] | None = None
     attributed_testimony_version: Literal[1] | None = None
-    #: Version 1 makes :func:`meetings.manager.guard_ballot_citation` test
-    #: whether a present citation bears on the ballot's own target, not only
-    #: that it resolves. ``None`` is the recorded behaviour of every committed
-    #: replay.
-    citation_relevance_version: Literal[1] | None = None
 
     @field_validator(
         "evidence_reasoning_version",
         "bounded_rebuttal_version",
         "public_account_version",
         "attributed_testimony_version",
-        "citation_relevance_version",
         mode="before",
     )
     @classmethod
@@ -108,8 +100,5 @@ class MeetingEvidenceProfile(BaseModel):
             public_account_version=1 if _enabled(PUBLIC_ACCOUNTS_ENV, source) else None,
             attributed_testimony_version=1
             if _enabled(ATTRIBUTED_TESTIMONY_ENV, source)
-            else None,
-            citation_relevance_version=1
-            if _enabled(CITATION_RELEVANCE_ENV, source)
             else None,
         )

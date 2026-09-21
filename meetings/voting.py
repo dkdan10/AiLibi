@@ -126,10 +126,15 @@ def ballot_target_rewrite_provenance(
     Returns the ``model_copy`` update naming the target the VOTER authored
     (:attr:`VoteBallot.guard_redirected_from`, bounded) and why it was replaced
     (:attr:`VoteBallot.guard_rewrite_reason`). Empty when the ballot already
-    carries a reason: the meeting chain can rewrite one target twice — a
-    10.9.2 under-gate redirect whose result the 16.6 citation gate then coerces
-    to SKIP — and the fields name what the VOTER wrote, so the first rewrite
-    owns them and a later one leaves them untouched. Every rewrite still
+    carries a reason, and the fields name what the VOTER wrote, so the first
+    rewrite owns them and a later one leaves them untouched. Committed bytes
+    carry stacks of two — a 10.9.2 under-gate redirect whose result the 16.6
+    citation gate then coerced to SKIP — and both guards were retired by ruling
+    D6 of 2026-09-19, so no live chain stacks any more: after
+    :func:`normalize_ballot_target` the target is ``"SKIP"``, which the teammate
+    firewall never coerces. The branch stays because it is what makes the pair
+    the VOTER's word on a recording that does stack, and because a future guard
+    must inherit that rule rather than overwrite it. Every rewrite still
     prepends its own marker, so the display channel keeps the whole stack.
 
     Not for :func:`meetings.manager._vote_parse_default`, whose ballot authored
@@ -231,6 +236,29 @@ def tally_ballots(
     of exactly ``skip_confidence_threshold`` ejects. The rule is
     "below threshold, skip", so the threshold value itself is on the
     eject side.
+
+    **The tally reads no grounding label, by decision** (ruling D6 of
+    2026-09-19). This function takes no argument carrying
+    :attr:`VoteBallot.grounding_label` and its body never touches the field:
+    an ``uncited``, ``off_target`` or ``invalid_citation`` EJECT is counted
+    for the player the voter named, exactly like a ``supported`` one. The
+    reason is that the shown decision must be the agent's, and dropping an
+    unsupported EJECT is the engine deciding -- one-sidedly, always toward
+    SKIP. The predecessor did exactly that and reached 6 of 2,516 committed
+    ``ml_corpus/9p2i`` ballots and 0 of 869 in ``samples/9p2i``. "Innocents
+    are ejectable but not at random" is served instead by the label being
+    visible and counted on every ballot, which is why plurality and the
+    confidence cutoff above are unchanged by that ruling.
+
+    Two rewrites DO reach a target before the tally sees it, because a tally
+    cannot do without them, and both record themselves under
+    :data:`~meetings.schemas.BallotTargetRewriteReason`:
+    :func:`normalize_ballot_target` (an illegal target cannot be tallied) and
+    :func:`meetings.manager.coerce_teammate_ballot_to_skip` (a role rule the
+    voter was told in its own prompt, not an evidence judgement). A ballot
+    that never parsed adds a third, :func:`meetings.manager._vote_parse_default`.
+    ``tests/meetings/test_grounding_label.py::TestTheOnlyTargetRewrites``
+    asserts those three are the whole list.
 
     Args:
         ballots: Living participants' ballots, parsed and (ideally)

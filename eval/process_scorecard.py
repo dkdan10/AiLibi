@@ -39,9 +39,10 @@ generated, drawn or rendered, and no prefix, prompt or transcript TEXT reaches a
 output — only counts. Nothing is written inside a recording directory; the
 writer that publishes this fold
 (``scripts/publish_process_scorecard.py``) protects every ``replays/**`` path and
-the fifth run's archive before it opens its destination. ``citation_relevance_version``
-stays ``None``: relevance is computed offline here and the production lever never
-goes on.
+the fifth run's archive before it opens its destination. Relevance is computed
+offline here, over recorded bytes; the ``citation_relevance_version`` lever that
+once gated it at recording time is retired (ruling D6 of 2026-09-19), and every
+recording this suite folds was made while it was OFF.
 
 Reuse, not re-implementation
 ----------------------------

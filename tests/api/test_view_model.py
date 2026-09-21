@@ -32,6 +32,7 @@ from api.main import create_app
 from api.replay_loader import (
     _COLOR_PALETTE,
     _advantage_view,
+    _ballot_view,
     _color_for,
     _contradiction_view,
     _gate_view,
@@ -48,6 +49,7 @@ from engine.world import WorldState, load_canonical_map
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+    INVALID_BASIS_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
@@ -403,8 +405,9 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
     coerced = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-6") + "over threshold"
     assert _parse_rewrite_reasons(coerced) == (("uncited_coerced",), "over threshold")
 
-    # Task 17.3: the live stacking order on the committed 9p2i set (seed 48) --
-    # 16.5 nulls the citation first, 16.6 then coerces the now-uncited ballot, so
+    # Task 17.3: the stacking order on the committed 9p2i set (seed 48), which
+    # ruling D6 of 2026-09-19 froze as history -- 16.5 nulled the citation
+    # first, 16.6 then coerced the now-uncited ballot, so
     # the coercion marker is prepended OUTSIDE the observation marker and both
     # chips surface front-to-back. The observation payload carries spaces/colons
     # (``'obs p-7:9:4'``) -- the repr-quoted match consumes it whole.
@@ -416,6 +419,25 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
     reasons_gate, clean_gate = _parse_rewrite_reasons(stacked_gate)
     assert reasons_gate == ("uncited_coerced", "invalid_observation_id")
     assert clean_gate == "I found p-3."
+
+    # Ruling D6 of 2026-09-19, and the ONE row of this table a live meeting can
+    # still add (review round 3): a fabricated ``decision_basis`` dropped from
+    # the payload before validation. Unregistered, the strip stops in front of
+    # it and the machinery's own sentence is served to the spectator as the
+    # voter's words -- so the row is asserted here, plain and stacked in the
+    # order production writes it (the basis marker goes on at the top of the
+    # ballot chain, the teammate firewall prepends OUTSIDE it).
+    basis = INVALID_BASIS_MARKER.format(basis="absolutely certain") + "they lied."
+    assert _parse_rewrite_reasons(basis) == (("invalid_basis",), "they lied.")
+    stacked_basis = (
+        TEAMMATE_VOTE_TARGET_MARKER.format(target="p-4")
+        + INVALID_BASIS_MARKER.format(basis="absolutely certain")
+        + "they lied."
+    )
+    assert _parse_rewrite_reasons(stacked_basis) == (
+        ("teammate_coerced", "invalid_basis"),
+        "they lied.",
+    )
 
     # VOTE_PARSE_DEFAULT is the WHOLE rationale -> clean is empty.
     parse_default = VOTE_PARSE_DEFAULT_MARKER.format(head="<<garbage>>")
@@ -429,6 +451,48 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
         + "real rationale"
     )
     assert _parse_rewrite_reasons(nasty) == (("invalid_target",), "real rationale")
+
+
+def test_ballot_view_mirrors_the_stated_basis_and_the_layers_finding() -> None:
+    """The loader seam ruling D6 of 2026-09-19 added, planted (review round 2).
+
+    ``_ballot_view`` is the ONE place a recorded :class:`VoteBallot` becomes the
+    served :class:`BallotView`, and the frontend cases build ``BallotView``
+    fixtures by hand, so nothing downstream of here notices if the two new
+    fields stop being copied: the leak test pins their NAMES against a
+    frozenset, and every committed recording reads ``None`` for both. Replace
+    either mirror with a literal ``None`` and this case goes red; without it the
+    chip would silently never render after the re-record.
+    """
+
+    ballot = VoteBallot(
+        voter="p-1",
+        target="p-3",
+        confidence=0.8,
+        primary_reason_id="m-1:turn-0",
+        primary_reason_observation_id="p-1:4:0",
+        considered_alternatives=("p-2", "p-3"),
+        rationale_text="they cannot have been in STORAGE.",
+        decision_basis="cited",
+        grounding_label="supported",
+    )
+
+    view = _ballot_view(ballot)
+
+    assert view.decision_basis == "cited"
+    assert view.grounding_label == "supported"
+    # Served, not merely held: both keys reach the payload the spectator reads.
+    served = view.model_dump()
+    assert served["decision_basis"] == "cited"
+    assert served["grounding_label"] == "supported"
+
+    # The other half of the same seam, and what every committed recording
+    # takes: a ballot predating the fields serves ``None`` for both, which is
+    # what keeps the shipped pages byte-unchanged until the re-record.
+    legacy = _ballot_view(ballot.model_copy(update={"grounding_label": None}))
+    assert legacy.grounding_label is None
+    unstated = _ballot_view(ballot.model_copy(update={"decision_basis": None}))
+    assert unstated.decision_basis is None
 
 
 def test_ballot_markers_parse_on_the_real_9p2i_set(
@@ -456,11 +520,13 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
     widening re-record cascaded the trajectories.
 
     Census over the 869 committed ballots of this record: invalid_observation_id
-    (16.5) x3, uncited_coerced (16.6) back to an honest zero, and the live gate
-    chip under_gate_redirect x23. The live gate-marker chip is the under-gate
-    eject REDIRECT (the owner-principle guard: an under-gate eject target is
-    redirected, never left to a random innocent); it is anchored here as the
-    real-bytes chip pin so a future substrate cannot silently drop the chips. The
+    (16.5) x3, uncited_coerced (16.6) back to an honest zero, and the gate chip
+    under_gate_redirect x23. The chip with real bytes behind it is the under-gate
+    eject REDIRECT (the owner-principle guard: an under-gate eject target WAS
+    redirected rather than left to a random innocent -- ruling D6 of 2026-09-19
+    retired that guard, so these 23 are history and no new recording adds one);
+    it is anchored here as the real-bytes chip pin so a future substrate cannot
+    silently drop the chips. The
     DTO/chip rendering mechanism itself stays covered synthetically by
     tests/api/test_schemas.
     """
@@ -481,8 +547,9 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
     coerced = [b for b in ballots if "uncited_coerced" in b.rewrite_reasons]
     assert len(coerced) == 0  # was 1
 
-    # The live gate-marker chip: the under-gate eject redirect. 23 ballots carry
-    # it (prior record: 36; baseline 6: 13).
+    # The gate-marker chip with recorded bytes behind it: the under-gate eject
+    # redirect, retired by ruling D6. 23 ballots carry it (prior record: 36;
+    # baseline 6: 13), and no later recording will.
     redirected = [b for b in ballots if "under_gate_redirect" in b.rewrite_reasons]
     assert len(redirected) == 23  # was 36
 

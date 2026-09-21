@@ -184,13 +184,16 @@ def test_this_meta_test_runs_in_the_default_tier() -> None:
     assert not _MODULE_MARK_RE.search(text)
 
 
-#: The five modules that imported ``tests.meetings.test_manager`` as a library
+#: The modules that imported ``tests.meetings.test_manager`` as a library
 #: before Task 19.27 extracted the shared harness into the non-test
-#: ``tests/meetings/_manager_helpers.py`` — plus ``test_manager.py`` itself.
+#: ``tests/meetings/_manager_helpers.py`` — plus ``test_manager.py`` itself
+#: and ``test_grounding_label.py``, which reads the same harness. The
+#: citation-gate module left the list with the gate it pinned, retired by
+#: ruling D6 of 2026-09-19.
 _NO_CROSS_TEST_IMPORT_FILES: Final[tuple[str, ...]] = (
     "tests/meetings/test_ballot_observation_citation.py",
-    "tests/meetings/test_citation_gate.py",
     "tests/meetings/test_elicitation_fixtures.py",
+    "tests/meetings/test_grounding_label.py",
     "tests/meetings/test_manager.py",
     "tests/meetings/test_vote_guard_rationale.py",
     "tests/meetings/test_vouch_grounding.py",

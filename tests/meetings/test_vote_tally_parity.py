@@ -150,9 +150,10 @@ _EXPECTED_RECORDED_OUTCOMES: Final[dict[MeetingOutcome, int]] = {
 # The ballot-guard marker families, keyed by the stable label
 # ``api.replay_loader`` uses for the same set. Matched by the literal's fixed
 # PREFIX (everything before the ``{...}`` interpolation) and by ``in`` rather
-# than ``startswith`` because the guards stack: 16.5 nulls a citation, 16.6
-# then coerces the now-uncited ballot, so the second marker sits behind the
-# first.
+# than ``startswith`` because the guards stack on recorded bytes: 16.5 nulled a
+# citation, 16.6 then coerced the now-uncited ballot, so the second marker sits
+# behind the first. Ruling D6 of 2026-09-19 retired the coercion; the recordings
+# that carry the pair are still read here.
 _MARKER_TEMPLATES: Final[dict[str, str]] = {
     "invalid_target": MANAGER_INVALID_VOTE_TARGET_MARKER,
     "teammate_coerced": TEAMMATE_VOTE_TARGET_MARKER,

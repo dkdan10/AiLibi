@@ -970,14 +970,24 @@ def recorded_completion_status(entries: Sequence[ReplayLogEntry]) -> CompletionS
     return "unfinished"
 
 
-# The substrate levers a baseline record has ADOPTED: unconditionally ON, their
-# ``AILIBI_*`` env gates deleted, kept in the snapshot as provenance so the
-# loader can still refuse a legacy stamp that recorded one of them OFF. Mirrors
+# The substrate levers a baseline record has ADOPTED: their ``AILIBI_*`` env
+# gates deleted, kept in the snapshot as provenance so the loader can still
+# refuse a legacy stamp that recorded one of them OFF. Mirrors
 # ``experiments.lab.probe_backends.active_substrate_flags`` exactly, so the
 # recorded MANIFEST ``flags`` column, the sweep result rows and the replay stamp
 # all describe the same levers with identical keys. A bare-environment recording
 # stamps every key in THIS tuple ``True`` and every live toggle below ``False`` —
 # which IS the committed baseline-7 substrate.
+#
+# Twenty of the twenty-one name behaviour that is unconditional in this build.
+# ``citation_gate`` is the exception and is PROVENANCE ONLY: ruling D6 of
+# 2026-09-19 retired the Task-16.6 coercion it named outright (an uncited
+# zero-flag EJECT is now labelled by
+# ``meetings.manager.label_ballot_grounding`` and tallied for the player the
+# voter named), and the key is kept because dropping it would shift
+# ``SUBSTRATE_FLAG_KEYS`` and move the ``flags`` cell of every committed
+# MANIFEST. From the re-record its ``True`` says which mechanism the RECORDER
+# was built from, not that a coercion ran.
 #
 # Order is graduation order and only ever grows at the end, so every already
 # recorded key keeps its index. The adopting records: Task 14.9 (the four
@@ -1246,7 +1256,7 @@ def substrate_slate_mismatches(
     for key in sorted(wanted - toggleable):
         if key in registry:
             problems.append(
-                f"{key!r} is a graduated lever (unconditionally ON, no env gate) "
+                f"{key!r} is a graduated lever (stamped ON, no env gate) "
                 "and cannot be named as an expected toggle"
             )
         else:

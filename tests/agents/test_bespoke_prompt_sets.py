@@ -524,23 +524,36 @@ class TestQwen3627bV5InWorldRegister:
     are checked separately in the meeting fixture suites.
     """
 
-    def test_registry_stamps_all_four_templates_v5(self) -> None:
+    def test_registry_stamps_vote_ballot_v7_others_v6(self) -> None:
+        # Ruling D6 of 2026-09-19 (the grounded SKIP) advances vote_ballot ALONE
+        # v6 -> v7, for the SKIP register and the "decision_basis" key. The
+        # other three bodies are byte-unchanged and stay v6.
         versions = prompt_versions_for_set("qwen3_6_27b")
         assert versions == {
             "crewmate_report": "crewmate_report.qwen3_6_27b.v6",
             "impostor_report": "impostor_report.qwen3_6_27b.v6",
             "accusation_round": "accusation_round.qwen3_6_27b.v6",
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v6",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v7",
         }
 
     def test_bumped_stamps_never_collide_with_prior_bodies(self) -> None:
-        # Current bodies must not reuse an earlier lineage's version stamp.
-        for value in prompt_versions_for_set("qwen3_6_27b").values():
-            assert value.endswith(".qwen3_6_27b.v6")
-            assert ".v1" not in value
-            assert ".v2" not in value
-            assert ".v3" not in value
-            assert ".v4" not in value
+        # Current bodies must not reuse an earlier lineage's version stamp. The
+        # per-template bump is exactly why this is a floor rather than one
+        # value: the vote body is a version ahead of the other three.
+        for key, value in prompt_versions_for_set("qwen3_6_27b").items():
+            expected = ".v7" if key == "vote_ballot" else ".v6"
+            assert value.endswith(f".qwen3_6_27b{expected}")
+            for stale in (".v1", ".v2", ".v3", ".v4", ".v5"):
+                assert stale not in value
+
+    def test_the_variant_registry_inherits_the_per_template_bump(self) -> None:
+        # The roll-call arm renders the DEFAULT vote body, so its vote stamp
+        # must be the default one: a restated version there would serve the new
+        # body under the old stamp.
+        variant = IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS["qwen3_6_27b"]
+        default = prompt_versions_for_set("qwen3_6_27b")
+        assert variant["vote_ballot"] == default["vote_ballot"]
+        assert variant["crewmate_report"] == default["crewmate_report"]
 
 
 def test_cross_set_parse_invariant_is_shared() -> None:
@@ -1023,7 +1036,7 @@ class TestVersionMarkersMatchTheRegistry:
             encoding="utf-8"
         )
         stale_file.write_text(
-            live.replace("vote_ballot.qwen3_6_27b.v6", "vote_ballot.qwen3_6_27b.v5", 1),
+            live.replace("vote_ballot.qwen3_6_27b.v7", "vote_ballot.qwen3_6_27b.v6", 1),
             encoding="utf-8",
         )
 

@@ -145,8 +145,8 @@ class TestimonySupport:
       claim the speaker made.
     * ``flagged`` -- whether any contradiction detected at this table names
       ``subject``. Read off the flags, exactly as
-      :func:`meetings.manager.guard_ballot_citation` reads them, never off a
-      suspicion value.
+      :func:`meetings.manager.label_ballot_grounding` reads them for its
+      ``flag_only`` label, never off a suspicion value.
     * ``opener_charge_turn_id`` -- set only when ``subject`` is the meeting's
       opener AND the originating accusation came from a speaker the opener had
       already accused; it is the opener's own accusing turn, the charge this one

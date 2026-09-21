@@ -38,7 +38,9 @@ from engine.world import load_canonical_map
 from eval.validity import assemble_tournament_report
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
+    INVALID_BASIS_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
+    TEAMMATE_COERCED_VOTE_RATIONALE,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -848,8 +850,11 @@ def test_coerced_skip_detection_follows_the_marker_convention() -> None:
     Built from the imported production literal via the established
     ``api.replay_loader._marker_pattern`` convention (the ``eval.meeting_quality``
     17.2 precedent): a rendered coercion marker matches; a 16.5 nulled-citation
-    marker stacked INSIDE it still matches (the gate is the last guard, so the
-    coercion marker is the outermost prefix); a coerced-target payload that
+    marker stacked INSIDE it still matches (on the recorded bytes this reads,
+    the coercion marker is the outermost prefix of that pair, because the gate
+    that wrote it ran after the citation validators; ruling D6 of 2026-09-19
+    retired the gate and no new recording stacks the pair); a coerced-target
+    payload that
     itself contains the marker's tail parses to the real boundary; the TEAMMATE
     coercion marker (which shares the "coerced to SKIP" suffix) does NOT match;
     and the marker mid-string does not match (anchored ``^``).
@@ -989,12 +994,12 @@ def test_the_structured_guard_reason_leads_and_no_parse_can_remove_it() -> None:
 def test_a_second_guard_survives_the_structured_reason_that_names_the_first() -> None:
     """The structured field is authoritative, never exhaustive — and it bounds.
 
-    ``guard_rewrite_reason`` holds ONE reason, but a ballot can pass two guards:
-    an under-gate redirect whose redirected eject the citation gate then coerces
-    to SKIP. ``meetings.voting.ballot_target_rewrite_provenance`` settles both
+    ``guard_rewrite_reason`` holds ONE reason, but a recorded ballot can carry
+    two guards: an under-gate redirect whose redirected eject the citation gate
+    then coerced to SKIP, a pair ruling D6 of 2026-09-19 left as history. ``meetings.voting.ballot_target_rewrite_provenance`` settles both
     halves of how to read that — the FIRST rewrite owns the field and a later
     one leaves it untouched, while every rewrite still PREPENDS its own marker.
-    So the production stack is citation-gate-outermost with the redirect inside,
+    So the RECORDED stack is citation-gate-outermost with the redirect inside,
     and the field names the inner one.
 
     Reading the field alone would report only the redirect, losing the coercion:
@@ -1026,15 +1031,16 @@ def test_a_second_guard_survives_the_structured_reason_that_names_the_first() ->
 def test_the_structured_reason_bounds_the_parse_at_the_first_rewrites_marker(
     row_template: MeetingTableRow,
 ) -> None:
-    """Past the innermost guard marker the string is the voter's own words.
+    """Past the innermost TARGET marker the string is the voter's own words.
 
     Markers are prepended and the FIRST rewrite owns the structured field, so
-    that rewrite's marker is the innermost one and the guard region ends there.
-    Planted: a ballot the under-gate guard alone rewrote, whose model-authored
-    rationale then opens with marker-shaped text. Parsing on past the boundary
-    would mint an ``uncited_coerced`` that never happened — turning
-    ``ballot_coerced_skip`` True on a ballot no citation gate touched and
-    corrupting the per-kind census.
+    that rewrite's marker is the innermost TARGET one and no target guard can
+    have written behind it. Planted: a ballot the under-gate guard alone
+    rewrote, whose model-authored rationale then opens with marker-shaped text.
+    Parsing on past the boundary would mint an ``uncited_coerced`` that never
+    happened — turning ``ballot_coerced_skip`` True on a ballot no citation gate
+    touched and corrupting the per-kind census. The next case is the other side
+    of the same bound: a CITATION-class marker behind it is real, and is read.
 
     The legacy half of the same bytes is asserted too, and it DOES take the
     false label: without a structured field there is no bound to apply, exactly
@@ -1061,6 +1067,58 @@ def test_the_structured_reason_bounds_the_parse_at_the_first_rewrites_marker(
 
     unbounded = _guarded_ballot(bounded.rationale_text, None)
     assert "uncited_coerced" in ballot_rewrite_labels(unbounded)
+
+
+def test_a_citation_class_marker_behind_a_target_rewrite_is_still_counted() -> None:
+    """The bound stops at target markers, not at every marker.
+
+    The chain prepends the two citation-id markers and (ruling D6 of 2026-09-19)
+    ``INVALID_BASIS_MARKER`` BEFORE any target guard runs, so on a betrayal
+    ballot that also fabricated its ``decision_basis`` the real order is
+    teammate-marker-outermost with the basis marker behind it. Stopping at the
+    structured reason's marker outright dropped that inner label — the shape of
+    the 7-annotation gap the committed-bytes census above carried, and the shape
+    in which a fabricated basis went uncounted on exactly the ballots the
+    teammate firewall also touched.
+
+    Planted with the display layer's parse beside it, because these two tables
+    answering differently about one string is the defect: ``api.replay_loader``
+    strips to exhaustion and always reported both.
+    """
+
+    stacked = _guarded_ballot(
+        TEAMMATE_VOTE_TARGET_MARKER.format(target="p-2")
+        + INVALID_BASIS_MARKER.format(basis="absolutely certain")
+        + TEAMMATE_COERCED_VOTE_RATIONALE,
+        "teammate_coerced",
+    )
+    assert set(ballot_rewrite_labels(stacked)) == {"teammate_coerced", "invalid_basis"}
+    assert set(replay_loader._parse_rewrite_reasons(stacked.rationale_text)[0]) == set(
+        ballot_rewrite_labels(stacked)
+    )
+
+    # The citation-id half, which is what the committed bytes actually carry.
+    nulled_behind = _guarded_ballot(
+        BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
+        + INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-9:12:3")
+        + "they vented",
+        "under_gate_redirect",
+    )
+    assert set(ballot_rewrite_labels(nulled_behind)) == {
+        "under_gate_redirect",
+        "invalid_observation_id",
+    }
+    # And the bound still holds where it must: no second TARGET class is minted
+    # behind the first, however convincing the prose.
+    assert "uncited_coerced" not in ballot_rewrite_labels(
+        _guarded_ballot(
+            BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
+            + INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-9:12:3")
+            + UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-9")
+            + "and I stand by it",
+            "under_gate_redirect",
+        )
+    )
 
 
 def test_the_training_marker_table_cannot_drift_from_the_display_one() -> None:
@@ -1122,16 +1180,18 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
     vote-guard rationale redaction, is a replacement BODY rather than a prefix,
     so the census counts it and the parser does not claim it.
 
-    On the baseline-8 record the two totals no longer agree: 127 bracketed
-    annotations against 120 claimed labels. The 7-annotation gap is real and
-    reproducible — every ballot in it carries a citation-nulling marker
+    The two totals agree at this head: 127 bracketed annotations, 127 claimed
+    labels. They did not on the baseline-8 record — 127 against 120 — because
+    every ballot in that 7-annotation gap carries a citation-nulling marker
     (``invalid_reason_id`` / ``invalid_observation_id``) BEHIND the target-guard
-    marker named by the newly-recorded ``guard_rewrite_reason`` field, and
-    ``ballot_rewrite_labels`` returns as soon as it consumes the marker naming
-    that field, so the citation label is dropped. Both totals are pinned as
-    MEASURED here rather than reconciled, so the gap stays visible; neither
-    dropped label is in ``TARGET_REWRITE_LABELS``, so no fit-side exclusion moves
-    with it.
+    marker named by the recorded ``guard_rewrite_reason`` field, and
+    ``ballot_rewrite_labels`` stopped as soon as it consumed that marker. Round 1
+    of the grounded-SKIP card's review (2026-09-21) bounded the stop to TARGET
+    markers, which are the only ones written after the citation validators, so
+    those 7 labels are claimed now: ``invalid_reason_id`` 1 → 5 and
+    ``invalid_observation_id`` 12 → 15. No recorded byte moved and no fit-side
+    exclusion moved with them — neither label is in ``TARGET_REWRITE_LABELS``,
+    so ``per_set_rewritten`` reads exactly what it read before.
     """
 
     ballots: list[VoteBallot] = []
@@ -1167,14 +1227,15 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
     assert (games, len(ballots), annotations, marked_games) == (300, 3631, 127, 70)
     assert dict(kinds) == {
         "under_gate_redirect": 83,  # was 120
-        "invalid_observation_id": 12,  # was 27
+        "invalid_observation_id": 15,  # was 27, then 12 while the bound was wide
         "teammate_coerced": 7,  # was 18
         "rationale_redaction": 7,  # was 18
-        "invalid_reason_id": 1,  # was 9
+        "invalid_reason_id": 5,  # was 9, then 1 while the bound was wide
         "uncited_coerced": 6,  # was 8
         "invalid_target": 4,
     }
-    assert sum(kinds.values()) == 120  # was 204 (see the docstring's 7-label gap)
+    # Reconciled with the annotation total above: 127 == 127 (see the docstring).
+    assert sum(kinds.values()) == annotations == 127  # was 204, then 120
     # samples-9p2i, ml_corpus-9p2i, samples-4p1i, ml_corpus-4p1i.
     assert per_set_rewritten == [27, 70, 1, 2]  # was [45, 102, 1, 2]
     assert sum(per_set_rewritten) == 100  # was 150

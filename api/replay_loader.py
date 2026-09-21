@@ -137,6 +137,7 @@ from meetings.manager import (
     EMERGENCY_BODY_STRIP_MARKER,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
+    INVALID_BASIS_MARKER,
     INVALID_CORROBORATION_SUPPORTS_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
@@ -298,9 +299,10 @@ _FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
 # the tallied target). DERIVED from
 # ``meetings.schemas.BallotTargetRewriteReason``, the same union a recording
 # stamps on ``VoteBallot.guard_rewrite_reason``, so the display class and the
-# recorded class cannot drift apart. The two citation-only labels
-# (``invalid_reason_id``, ``invalid_observation_id``) null a reference but leave
-# the authored target intact, so they are deliberately not in that union.
+# recorded class cannot drift apart. The THREE non-target labels
+# (``invalid_reason_id``, ``invalid_observation_id``, and ``invalid_basis``,
+# which ruling D6 of 2026-09-19 added) null a reference or a declared basis but
+# leave the authored target intact, so none is in that union.
 _TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
     get_args(BallotTargetRewriteReason)
 )
@@ -3314,6 +3316,12 @@ def _ballot_view(ballot: VoteBallot) -> BallotView:
         # memory; the spectator surface never re-validates.
         primary_reason_observation_id=ballot.primary_reason_observation_id,
         considered_alternatives=tuple(ballot.considered_alternatives),
+        # Ruling D6 of 2026-09-19, both mirrored display-only and both ``None``
+        # on every committed recording, which predates them: the voter's own
+        # statement of what its decision rests on, and the meeting layer's
+        # one-word finding about that basis.
+        decision_basis=ballot.decision_basis,
+        grounding_label=ballot.grounding_label,
         rationale_text=ballot.rationale_text,
         rewrite_reasons=reasons,
         rationale_text_clean=clean,
@@ -3577,14 +3585,23 @@ def _gate_view(
 # hallucinated ``primary_reason_observation_id`` nulled, mirroring
 # ``invalid_reason_id``) and ``UNCITED_ZERO_FLAG_EJECT_MARKER`` (16.6, J2 — an
 # uncited zero-flag eject coerced to SKIP, mirroring ``teammate_coerced``). They
-# stack (16.5 nulls the citation, 16.6 then coerces the now-uncited ballot), so
-# both chips surface in stack order via the front-to-back strip below.
+# stack on RECORDED bytes (16.5 nulled the citation, 16.6 then coerced the
+# now-uncited ballot), so both chips surface in stack order via the front-to-back
+# strip below. Ruling D6 of 2026-09-19 retired the second of the two, so no new
+# recording stacks that pair.
 #
-# ``OFF_TARGET_CITATION_EJECT_MARKER`` is 16.6's relevance half, minted only
-# while ``citation_relevance_version`` is ON: no committed replay carries it, and
-# it stacks the same way (a 10.9.2 redirect keeps a citation about the ORIGINAL
-# target, and this gate then coerces the redirected ballot -- two chips, in
-# order, over one ``guard_rewrite_reason`` naming the FIRST rewrite).
+# ``OFF_TARGET_CITATION_EJECT_MARKER`` was 16.6's relevance half, minted only
+# while the retired ``citation_relevance_version`` lever was ON: no committed
+# replay carries it. It, the redirect marker and the uncited one are READ-ONLY
+# HISTORY since ruling D6 of 2026-09-19 -- the meeting layer now writes a
+# ``grounding_label`` and rewrites no target for any of the three reasons -- and
+# they stay registered because committed replays carry the first two and the
+# spectator must keep rendering them exactly as before.
+#
+# ``INVALID_BASIS_MARKER`` is the one row a live meeting can still add: an
+# out-of-set ``decision_basis`` dropped from the model payload. It rides the
+# marker region like its siblings, so the spectator's ``rationale_text_clean``
+# stays the model's own words.
 _BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_target", INVALID_VOTE_TARGET_MARKER),
     ("teammate_coerced", TEAMMATE_VOTE_TARGET_MARKER),
@@ -3593,6 +3610,7 @@ _BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
     ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
     ("off_target_coerced", OFF_TARGET_CITATION_EJECT_MARKER),
+    ("invalid_basis", INVALID_BASIS_MARKER),
 )
 _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 

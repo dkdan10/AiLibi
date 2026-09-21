@@ -1,11 +1,12 @@
 """The shared aboutness rule, and the agreement it makes structural.
 
 ``meetings/citation_relevance.py`` is ONE definition with two callers: the
-recording-time gate (:func:`meetings.manager.guard_ballot_citation`, under
-``citation_relevance_version``) and the deduction instrument's
+recording-time labeller (:func:`meetings.manager.label_ballot_grounding`, which
+asks it unconditionally since ruling D6 of 2026-09-19 retired the
+``citation_relevance_version`` lever) and the deduction instrument's
 ``grade_citation_relevance``. This module pins the rule itself, the two walkers
 that must agree about a dumped turn, the import direction that made the move
-necessary, and -- the point of the whole exercise -- that the guard and the
+necessary, and -- the point of the whole exercise -- that the labeller and the
 grader cannot reach different verdicts about the same ballot.
 """
 
@@ -24,16 +25,13 @@ from experiments.fresh_deduction_instrument import (
 from meetings.citation_relevance import (
     carries_citation,
     citations_bear_on,
+    citations_bear_on_any,
     cited_line_names,
     every_string_in,
     names_player,
     turn_bears_on,
 )
-from meetings.manager import (
-    OFF_TARGET_CITATION_EJECT_MARKER,
-    UNCITED_ZERO_FLAG_EJECT_MARKER,
-    guard_ballot_citation,
-)
+from meetings.manager import label_ballot_grounding
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -261,18 +259,23 @@ def _committed_meeting_rows() -> list[dict[str, Any]]:
 class TestGuardAndGraderCannotDisagree:
     """One rule, two callers, one verdict per ballot.
 
-    The guard asks "may this EJECT stand?" and the grader asks "was the
-    citation about the ejected player?". They coincide exactly where the
-    primary outcome reads them: ``grade_privileged`` grades the ballots NAMING
-    the ejected player, and on a naming ballot the ejected player IS that
-    ballot's own target -- which is the subject the guard uses. So for a naming
-    ballot the two questions have one answer, and this case walks every
-    committed ballot to say so on the same turns and the same lines.
+    The labeller asks "what basis does this EJECT carry?" and the grader asks
+    "was the citation about the ejected player?". They coincide exactly where
+    the primary outcome reads them: ``grade_privileged`` grades the ballots
+    NAMING the ejected player, and on a naming ballot the ejected player IS
+    that ballot's own target -- which is the subject the labeller uses. So for
+    a naming ballot the two questions have one answer, and this case walks
+    every committed ballot to say so on the same turns and the same lines.
+
+    Since ruling D6 the labeller writes a LABEL where the retired gate wrote a
+    coercion, so the agreement is now read off ``grounding_label`` and the
+    ballot's ``target`` is asserted unchanged on every row -- which is the
+    stronger statement, and the one this card exists to make.
     """
 
     def test_every_committed_ballot_gets_one_verdict(self) -> None:
         compared = 0
-        coerced = 0
+        off_target = 0
         for row in _committed_meeting_rows():
             turns = tuple(
                 MeetingTurn.model_validate(turn) for turn in row["transcript"]["turns"]
@@ -302,42 +305,38 @@ class TestGuardAndGraderCannotDisagree:
                         ballot.voter: tuple(prompts.get(ballot.voter, ()))
                     },
                 )[0]
-                guarded = guard_ballot_citation(
+                labelled = label_ballot_grounding(
                     ballot=ballot,
                     contradictions=flags,
-                    citation_relevance_version=1,
                     turns=turns,
                     prompt_lines=lines,
                 )
                 compared += 1
-                # The guard adds two things the grader does not have: the SKIP
-                # short-circuit (excluded above) and the flag exemption. Outside
-                # the exemption the two verdicts are the same verdict.
-                if ballot.target in {
-                    subject for flag in flags for subject in flag.subjects
-                }:
-                    assert guarded is ballot
+                # The ruling, asserted on every committed EJECT: whatever the
+                # label says, the recorded target does not move.
+                assert labelled.target == ballot.target
+                assert labelled.model_copy(update={"grounding_label": None}) == ballot
+                # A ballot the layer already rewrote is not the voter's, so it
+                # is not assessed and the grader's verdict does not apply.
+                if ballot.guard_rewrite_reason is not None:
+                    assert labelled.grounding_label == "not_assessed"
                     continue
-                # The MARKER is what a coercion is asserted by, not the typed
-                # reason: a recorded ballot may already carry an earlier
-                # rewrite's reason, which `ballot_target_rewrite_provenance`
-                # leaves in place while every rewrite still stacks its marker.
                 if grade.verdict == "off_target":
-                    coerced += 1
-                    assert guarded.target == "SKIP"
-                    assert guarded.rationale_text.startswith(
-                        OFF_TARGET_CITATION_EJECT_MARKER.format(target=ballot.target)
-                    )
+                    off_target += 1
+                    assert labelled.grounding_label == "off_target"
                 elif grade.verdict == "relevant":
-                    assert guarded is ballot
-                else:  # uncited -- the other half of the same gate
-                    assert guarded.target == "SKIP"
-                    assert guarded.rationale_text.startswith(
-                        UNCITED_ZERO_FLAG_EJECT_MARKER.format(target=ballot.target)
-                    )
+                    assert labelled.grounding_label == "supported"
+                else:
+                    # The grader's ONE uncited verdict splits three ways here,
+                    # by what the ballot holds instead of a citation.
+                    assert labelled.grounding_label in {
+                        "flag_only",
+                        "none_held",
+                        "uncited",
+                    }
         assert compared == 578, compared
         # PLANTED would be silent on a set the rule never bites: it bites here.
-        assert coerced > 0, coerced
+        assert off_target > 0, off_target
 
     def test_a_prefix_colliding_citation_is_off_target_for_both_callers(self) -> None:
         """One rule, so a WRONG rule is wrong in both callers and they agree.
@@ -364,17 +363,15 @@ class TestGuardAndGraderCannotDisagree:
                 "- [obs p-1:4:10] tick 4: p-2 vented in MEDBAY.",
             ]
         )
-        guarded = guard_ballot_citation(
+        labelled = label_ballot_grounding(
             ballot=ballot,
             contradictions=(),
-            citation_relevance_version=1,
             prompt_lines=prompt.splitlines(),
         )
-        assert guarded.target == "SKIP"
-        assert guarded.guard_rewrite_reason == "off_target_coerced"
-        assert guarded.rationale_text.startswith(
-            OFF_TARGET_CITATION_EJECT_MARKER.format(target="p-2")
-        )
+        assert labelled.grounding_label == "off_target"
+        # The label is the WHOLE consequence: the vote still stands as cast.
+        assert labelled.target == "p-2"
+        assert labelled.guard_rewrite_reason is None
         grade = grade_citation_relevance(
             [ballot],
             subject="p-2",
@@ -388,13 +385,12 @@ class TestGuardAndGraderCannotDisagree:
             update={"primary_reason_observation_id": "p-1:4:10"}
         )
         assert (
-            guard_ballot_citation(
+            label_ballot_grounding(
                 ballot=on_target,
                 contradictions=(),
-                citation_relevance_version=1,
                 prompt_lines=prompt.splitlines(),
-            )
-            is on_target
+            ).grounding_label
+            == "supported"
         )
         assert (
             grade_citation_relevance(
@@ -471,5 +467,79 @@ class TestTheCompositionIsShared:
             cited_observation_id="p-1:4:0",
             subject="p-2",
             turns_by_id={"m-1:turn-0": turn},
+            lines=["[obs p-1:4:0] tick 4: p-2 left ELECTRICAL."],
+        )
+
+    def test_the_one_subject_case_is_the_pooled_rule(self) -> None:
+        """ONE definition: the single-subject call IS the pooled call.
+
+        Not "agrees with" -- the same answer over every shape this module can
+        build, so a future edit to either cannot open a gap between the
+        grader's single-subject question and the labeller's pooled one.
+        """
+
+        turn = _turn(speaker="p-2")
+        lines = ["[obs p-1:4:0] tick 4: p-2 left ELECTRICAL."]
+        for cited_turn_id in (None, "m-1:turn-0", "m-1:turn-9"):
+            for cited_observation_id in (None, "p-1:4:0", "p-1:4:9"):
+                for subject in ("p-2", "p-3"):
+                    assert citations_bear_on(
+                        cited_turn_id=cited_turn_id,
+                        cited_observation_id=cited_observation_id,
+                        subject=subject,
+                        turns_by_id={"m-1:turn-0": turn},
+                        lines=lines,
+                    ) == citations_bear_on_any(
+                        cited_turn_id=cited_turn_id,
+                        cited_observation_id=cited_observation_id,
+                        subjects=(subject,),
+                        turns_by_id={"m-1:turn-0": turn},
+                        lines=lines,
+                    )
+
+    def test_a_pool_is_satisfied_by_any_one_member(self) -> None:
+        """The SKIP's rule: a citation about one weighed player is a basis.
+
+        And its floor -- a pool holding nobody the citation is about answers
+        ``False``, which is what makes ``off_target`` reachable for a SKIP.
+        """
+
+        lines = ["[obs p-1:4:0] tick 4: p-2 left ELECTRICAL."]
+        assert citations_bear_on_any(
+            cited_turn_id=None,
+            cited_observation_id="p-1:4:0",
+            subjects=("p-4", "p-2"),
+            turns_by_id={},
+            lines=lines,
+        )
+        assert not citations_bear_on_any(
+            cited_turn_id=None,
+            cited_observation_id="p-1:4:0",
+            subjects=("p-4", "p-5"),
+            turns_by_id={},
+            lines=lines,
+        )
+
+    def test_an_empty_pool_answers_before_it_is_read(self) -> None:
+        """Vacuity beats the pool: an uncited ballot is relevant to everyone.
+
+        The order matters. An uncited ballot answers ``True`` against an empty
+        pool (the vacuous branch runs first), while a CITED one answers
+        ``False`` -- there is no subject for it to bear on. Production cannot
+        reach the second: a vote is collected only while a candidate lives.
+        """
+
+        assert citations_bear_on_any(
+            cited_turn_id=None,
+            cited_observation_id=None,
+            subjects=(),
+            turns_by_id={},
+            lines=[],
+        )
+        assert not citations_bear_on_any(
+            cited_turn_id=None,
+            cited_observation_id="p-1:4:0",
+            subjects=(),
+            turns_by_id={},
             lines=["[obs p-1:4:0] tick 4: p-2 left ELECTRICAL."],
         )

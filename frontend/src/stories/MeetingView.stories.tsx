@@ -113,6 +113,11 @@ function ballot(
     primary_reason_id: null,
     primary_reason_observation_id,
     considered_alternatives,
+    // The committed recordings this tour is built from predate both fields, so
+    // the stories carry what the bytes carry: the grounding chip is absent
+    // until the re-record, and the card renders exactly as it shipped.
+    decision_basis: null,
+    grounding_label: null,
     rationale_text: rationale,
     rewrite_reasons,
     rationale_text_clean: rationale,
@@ -407,6 +412,8 @@ const SKIPPED_MEETING: MeetingViewDTO = {
       primary_reason_id: null,
       primary_reason_observation_id: null,
       considered_alternatives: [],
+      decision_basis: null,
+      grounding_label: null,
       rationale_text: "[[VOTE_PARSE_DEFAULT]]",
       rewrite_reasons: ["vote did not parse"],
       rationale_text_clean: "",

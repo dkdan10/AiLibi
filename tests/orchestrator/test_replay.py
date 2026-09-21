@@ -1405,7 +1405,7 @@ class TestSubstrateSlateMismatches:
         # whether or not a stale export is also present.
         for key, env_var in _RETIRED_LEVERS:
             expected = [
-                f"{key!r} is a graduated lever (unconditionally ON, no env gate) "
+                f"{key!r} is a graduated lever (stamped ON, no env gate) "
                 "and cannot be named as an expected toggle"
             ]
             assert substrate_slate_mismatches([key], env={}) == expected, key
@@ -1420,8 +1420,8 @@ class TestSubstrateSlateMismatches:
             env={},
         )
         assert problems == [
-            "'grounded_prosecution' is a graduated lever (unconditionally ON, no "
-            "env gate) and cannot be named as an expected toggle",
+            "'grounded_prosecution' is a graduated lever (stamped ON, no env "
+            "gate) and cannot be named as an expected toggle",
             "impostor_roll_call must be ON but the live slate reads OFF "
             "(AILIBI_IMPOSTOR_ROLL_CALL)",
         ]
@@ -1481,8 +1481,8 @@ class TestSubstrateSlateMismatches:
         # gone, so an operator who expects to control it is mistaken about what
         # this build can produce.
         assert substrate_slate_mismatches(["absence_prior"], env={}) == [
-            "'absence_prior' is a graduated lever (unconditionally ON, no env "
-            "gate) and cannot be named as an expected toggle"
+            "'absence_prior' is a graduated lever (stamped ON, no env gate) "
+            "and cannot be named as an expected toggle"
         ]
 
 

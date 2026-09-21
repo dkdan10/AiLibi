@@ -13,7 +13,7 @@ Three groups, one report:
   meeting whose ejected player is named by ZERO recorded
   :class:`~meetings.schemas.ContradictionRef` (the planning doc §2.1
   definition; the same flagged-subject union
-  ``meetings.manager.guard_ballot_citation`` reads) — with its soft/hard
+  ``meetings.manager.label_ballot_grounding`` reads) — with its soft/hard
   split read off Task 16.3's TYPED :class:`~agents.memory.beliefs.
   SuspicionProvenance` decomposition at the reconstructed PRE-VOTE belief
   state, exactly where the ballot render reads it
@@ -606,7 +606,7 @@ def _cross_check_graphs(
 
 def _flagged_subjects(meeting: _VJMeeting) -> frozenset[PlayerId]:
     """The union of recorded contradiction subjects — the zero-flag predicate's
-    complement (the same set ``guard_ballot_citation`` reads)."""
+    complement (the same set ``label_ballot_grounding`` reads)."""
 
     return frozenset(
         subject for ref in meeting.contradictions for subject in ref.subjects

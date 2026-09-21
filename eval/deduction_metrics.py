@@ -390,6 +390,7 @@ from engine.entities import Role
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
+    INVALID_BASIS_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
@@ -706,6 +707,13 @@ def _marker_pattern(marker: str) -> re.Pattern[str]:
 # provenance split — so no consumer can disagree with another about what "the
 # machinery wrote here" means. The parse-default column is flagged because it is
 # the only marker the writer ever emits as a WHOLE rationale rather than a prefix.
+#
+# A marker missing from this table is not merely uncounted: the scan stops at it,
+# so the machinery's own text falls on the MODEL side of the provenance split and
+# is read as the voter's words. ``INVALID_BASIS_MARKER`` (ruling D6 of
+# 2026-09-19) is registered here for that reason, beside the two citation-id
+# markers it is shaped after; it rewrites no target and no committed byte carries
+# it yet, so it moves no published cell before the re-record.
 _BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool, bool, bool], ...]] = (
     (_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER), True, True, False),
     (_marker_pattern(INVALID_VOTE_TARGET_MARKER), True, False, False),
@@ -713,6 +721,7 @@ _BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool, bool, bool], ...]
     (_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER), True, False, False),
     (_marker_pattern(INVALID_REASON_ID_MARKER), False, False, False),
     (_marker_pattern(INVALID_OBSERVATION_ID_MARKER), False, False, False),
+    (_marker_pattern(INVALID_BASIS_MARKER), False, False, False),
     (_marker_pattern(VOTE_PARSE_DEFAULT_MARKER), False, False, True),
 )
 
