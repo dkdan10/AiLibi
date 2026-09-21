@@ -81,6 +81,7 @@ from eval.report_schema import (
 )
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
+    INVALID_BASIS_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_COERCED_VOTE_RATIONALE,
@@ -2117,6 +2118,53 @@ def test_a_discarded_vote_response_is_not_a_pre_guard_body() -> None:
     assert leakage.model_source_pre_guard_ballots == 0
     assert leakage.model_machinery_quotation_ballots == 0
     assert leakage.model_partner_naming_ballots == 0
+
+
+def test_the_invalid_basis_marker_is_read_as_machinery_not_as_the_voter() -> None:
+    """Ruling D6's new marker is registered, so the census still splits right.
+
+    ``INVALID_BASIS_MARKER`` (2026-09-19) is prepended by the same chain as the
+    two citation-id markers and rewrites no target. Leaving it out of
+    ``_BALLOT_MARKER_CHAIN`` would not merely under-count it: the anchored scan
+    stops at the first prefix it cannot name, so the machinery's own sentence
+    lands in the ballot's MODEL half and every model-side cell reads it as the
+    voter's words. Planted because no committed byte carries the marker yet —
+    it first appears at the re-record, which is exactly too late to find this.
+    """
+
+    body = "p-3 kept changing the story."
+    marked = (
+        INVALID_REASON_ID_MARKER.format(reason_id="m-1:turn-77")
+        + INVALID_BASIS_MARKER.format(basis="absolutely certain")
+        + body
+    )
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="p-2",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=marked,
+        ),
+        (_voter_call("p-1", body),),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    assert leakage.guard_provenance_verified_ballots == 1
+    assert leakage.guard_provenance_unverifiable_ballots == 0
+    assert leakage.guard_marked_ballots == 1
+    # Neither marker moved the target, so no rewrite cell may claim one.
+    assert leakage.guard_target_rewrite_ballots == 0
+
+    # And the scan consumes BOTH markers: the region is machinery to its end.
+    split = _split_rationale(marked, body)
+    chain = _scan_marker_chain(split.marker_region)
+    assert chain.marker_count == 2
+    assert chain.consumed == len(split.marker_region)
+    assert chain.authored_target is None
 
 
 def test_an_unrecognised_leading_marker_fails_into_the_published_bucket() -> None:

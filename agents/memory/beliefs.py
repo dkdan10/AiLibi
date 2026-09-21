@@ -331,8 +331,12 @@ spread already feeds -- the eight-source decomposition is 16.3's frozen
 contract, and absence-of-testimony is testimony-class, soft by construction),
 so the 16.4 hard-evidence gate classifies it as soft and it can never masquerade
 as grounded evidence. It moves SUSPICION only and mints NO
-:class:`ContradictionRef`, so the 16.6 citation gate's zero-flag boundary is
-structurally out of reach (the flag-independence both tasks pin)."""
+:class:`ContradictionRef`, so the zero-flag boundary downstream is structurally
+out of reach (the flag-independence both tasks pin). That boundary was the 16.6
+citation gate's until ruling D6 of 2026-09-19 retired the gate; it is now the
+``flag_only`` arm of :data:`meetings.schemas.BallotGroundingLabel`, which
+reports and coerces nothing, so an absence-lifted target reached by an uncited
+EJECT is labelled ``uncited`` and the vote stands as cast."""
 
 
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05

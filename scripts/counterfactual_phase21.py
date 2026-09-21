@@ -3174,7 +3174,11 @@ def _corroboration_rows(*, walk: _SetWalk, all_on: _LegTallies) -> list[Row]:
             cell_id="C-7",
             label="ejecting ballots citing NOTHING",
             population="ballot",
-            note="expected zero: the citation gate coerces an uncited eject to SKIP",
+            note=(
+                "near zero on these bytes: the retired citation gate coerced an "
+                "uncited eject to SKIP; since ruling D6 of 2026-09-19 it stands "
+                "and is labelled"
+            ),
             reconstructed_off=_pair(
                 walk.ballots.citations.get("none", 0), walk.ballots.ejecting_ballots
             ),

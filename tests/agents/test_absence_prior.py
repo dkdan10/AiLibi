@@ -22,10 +22,12 @@ Task 15.5 :data:`~agents.memory.beliefs.REPORTER_EXCULPATION_SOFT_LIFT_CAP`, the
 §4.7 teammate / self / roster guards, and -- downstream in the manager's
 vote-time graph -- :func:`meetings.manager._joint_capped_suspicion`. It is a SOFT
 ``testimony_spread``-channel movement that mints NO
-:class:`~meetings.schemas.ContradictionRef`, so the Task 16.6 citation gate's
-zero-flag boundary is structurally out of reach (the flag-independence both tasks
-pin -- the 16.8 side mirrors
-:class:`tests.meetings.test_citation_gate.TestAbsenceDeltaNonInteraction`).
+:class:`~meetings.schemas.ContradictionRef`, so the zero-flag boundary
+downstream is structurally out of reach (the flag-independence both tasks pin).
+That boundary was the Task 16.6 citation GATE's until ruling D6 of 2026-09-19
+retired the gate; it is now the ``flag_only`` arm of the grounding label
+(:mod:`tests.meetings.test_grounding_label`), which reports and coerces
+nothing.
 
 Layout mirrors the Task-16.4 hard-evidence-gate suite
 (:mod:`tests.agents.test_beliefs_hard_evidence_gate`): the sizing invariants,
@@ -680,11 +682,12 @@ def _uncited_eject(target: str) -> VoteBallot:
 class TestAbsenceFlagIndependence:
     """Absence moves SUSPICION only and mints no :class:`ContradictionRef`.
 
-    The 16.8 side of the Task-16.6 non-interaction pin
-    (:class:`tests.meetings.test_citation_gate.TestAbsenceDeltaNonInteraction`):
+    The 16.8 side of the Task-16.6 non-interaction pin, now read against the
+    label that replaced the gate (:mod:`tests.meetings.test_grounding_label`):
     structurally the absence fold records no inconsistency, and behaviourally an
-    absence-lifted zero-flag target still coerces under the citation gate --
-    suspicion is not evidence, and a flag is the only escape channel.
+    absence-lifted zero-flag target is still labelled ``uncited`` -- suspicion is
+    not evidence, and a flag is the only channel that changes the word. Since
+    ruling D6 of 2026-09-19 the vote itself stands under either label.
     """
 
     def test_absence_fold_records_no_inconsistency(self) -> None:

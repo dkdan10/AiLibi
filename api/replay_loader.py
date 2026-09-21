@@ -3584,8 +3584,10 @@ def _gate_view(
 # hallucinated ``primary_reason_observation_id`` nulled, mirroring
 # ``invalid_reason_id``) and ``UNCITED_ZERO_FLAG_EJECT_MARKER`` (16.6, J2 — an
 # uncited zero-flag eject coerced to SKIP, mirroring ``teammate_coerced``). They
-# stack (16.5 nulls the citation, 16.6 then coerces the now-uncited ballot), so
-# both chips surface in stack order via the front-to-back strip below.
+# stack on RECORDED bytes (16.5 nulled the citation, 16.6 then coerced the
+# now-uncited ballot), so both chips surface in stack order via the front-to-back
+# strip below. Ruling D6 of 2026-09-19 retired the second of the two, so no new
+# recording stacks that pair.
 #
 # ``OFF_TARGET_CITATION_EJECT_MARKER`` was 16.6's relevance half, minted only
 # while the retired ``citation_relevance_version`` lever was ON: no committed

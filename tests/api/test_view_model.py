@@ -403,8 +403,9 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
     coerced = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-6") + "over threshold"
     assert _parse_rewrite_reasons(coerced) == (("uncited_coerced",), "over threshold")
 
-    # Task 17.3: the live stacking order on the committed 9p2i set (seed 48) --
-    # 16.5 nulls the citation first, 16.6 then coerces the now-uncited ballot, so
+    # Task 17.3: the stacking order on the committed 9p2i set (seed 48), which
+    # ruling D6 of 2026-09-19 froze as history -- 16.5 nulled the citation
+    # first, 16.6 then coerced the now-uncited ballot, so
     # the coercion marker is prepended OUTSIDE the observation marker and both
     # chips surface front-to-back. The observation payload carries spaces/colons
     # (``'obs p-7:9:4'``) -- the repr-quoted match consumes it whole.

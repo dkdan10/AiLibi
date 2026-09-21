@@ -126,10 +126,15 @@ def ballot_target_rewrite_provenance(
     Returns the ``model_copy`` update naming the target the VOTER authored
     (:attr:`VoteBallot.guard_redirected_from`, bounded) and why it was replaced
     (:attr:`VoteBallot.guard_rewrite_reason`). Empty when the ballot already
-    carries a reason: the meeting chain can rewrite one target twice — a
-    10.9.2 under-gate redirect whose result the 16.6 citation gate then coerces
-    to SKIP — and the fields name what the VOTER wrote, so the first rewrite
-    owns them and a later one leaves them untouched. Every rewrite still
+    carries a reason, and the fields name what the VOTER wrote, so the first
+    rewrite owns them and a later one leaves them untouched. Committed bytes
+    carry stacks of two — a 10.9.2 under-gate redirect whose result the 16.6
+    citation gate then coerced to SKIP — and both guards were retired by ruling
+    D6 of 2026-09-19, so no live chain stacks any more: after
+    :func:`normalize_ballot_target` the target is ``"SKIP"``, which the teammate
+    firewall never coerces. The branch stays because it is what makes the pair
+    the VOTER's word on a recording that does stack, and because a future guard
+    must inherit that rule rather than overwrite it. Every rewrite still
     prepends its own marker, so the display channel keeps the whole stack.
 
     Not for :func:`meetings.manager._vote_parse_default`, whose ballot authored

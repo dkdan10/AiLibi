@@ -817,9 +817,10 @@ class MeetingParticipant:
     place, :func:`_normalize_ballot_observation_id`: a cited id outside this
     set is nulled with the audit marker. It never reaches a prompt surface;
     the validated citation's one downstream consumer is the grounding labeller
-    (:func:`label_ballot_grounding`). The default ``()`` keeps every existing construction site valid and means
-    "this voter can cite nothing": any non-null citation from such a
-    participant nulls.
+    (:func:`label_ballot_grounding`), which reports what the citation rests on
+    and moves no target. The default ``()`` keeps every existing construction
+    site valid and means "this voter can cite nothing": any non-null citation
+    from such a participant nulls.
 
     ``persona`` (Task 16.3) is the inert persona-text slot: the orchestrator
     populates it from the deterministic persona-assignment bank in Task 16.9,
@@ -2333,12 +2334,6 @@ class MeetingManager:
             return _vote_parse_default(
                 voter=participant.agent_id, raw_response=unparseable
             )
-        # Defensive normalization: if the LLM hallucinates a target id that
-        # is not in ``candidate_targets`` (and not ``"SKIP"``), ``_tally``
-        # would otherwise count it as a real eject and could resolve to
-        # ``EJECTED`` with a non-participant id. Replace the target with
-        # ``"SKIP"`` and mark the rationale so the original (bad) target is
-        # preserved for audit / replay.
         # A fabricated ``decision_basis`` (ruling D6): the pre-pass dropped the
         # out-of-set token from the raw payload so the field fell back to
         # ``None`` instead of failing the schema and costing the voter its whole
@@ -2347,6 +2342,12 @@ class MeetingManager:
         # the model returned it -- the provenance boundary the teammate
         # redaction below splits on -- which is also what carries this marker
         # across that redaction instead of having it redacted as model prose.
+        # Read the body BEFORE the prepend or that carry silently stops:
+        # :func:`_preserved_ballot_markers` keeps exactly what precedes this
+        # string, so a boundary taken after the marker would hand the redaction
+        # the marker as model prose
+        # (``tests/meetings/test_grounding_label.py``:
+        # ``test_a_fabricated_basis_survives_the_teammate_redaction``).
         authored_rationale_text = parsed.rationale_text
         if prepared.invalid_basis is not None:
             parsed = parsed.model_copy(
@@ -2830,9 +2831,12 @@ def _suspicion_graph_with_contradictions(
     composes through the fold's existing ceilings AND this function's joint cap
     below -- absence + a strong flag caps at ``prior + 0.30`` like every other
     stack -- and it moves suspicion only (no :class:`ContradictionRef` is
-    minted), so the citation gate's zero-flag boundary never sees it. An
-    absence-only meeting with a non-empty absent set therefore enters the fold
-    path; an EMPTY absent set stays a no-op.
+    minted), so the grounding labeller's ``flag_only`` boundary never sees it:
+    an absence-lifted target carries no flag, and an uncited EJECT onto it is
+    labelled ``uncited`` (the Task-16.6 citation GATE that once coerced such a
+    ballot to SKIP was retired by ruling D6 of 2026-09-19). An absence-only
+    meeting with a non-empty absent set therefore enters the fold path; an
+    EMPTY absent set stays a no-op.
     """
 
     # Task 14.10 fail-loud seam guard (PR #217 review; unconditional since the

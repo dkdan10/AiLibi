@@ -1170,11 +1170,24 @@ _SKIP_NOT_MOMENTUM: Final[str] = (
 #: EJECT in either arm below the 0.6 cutoff `tally_ballots` applies
 #: (`meetings/voting.py:187`).
 _CONFIDENCE_SENTENCE: Final[str] = '"confidence" to your honest probability'
+#: F8, the v6 SKIP-basis register: ruling D6 of 2026-09-19 reaching this body
+#: beside the served `vote_ballot.j2`. A SKIP states what it rests on, in the
+#: same closed vocabulary (`meetings.schemas.BallotDecisionBasis`), and the
+#: prompt says the vote is recorded as cast either way.
+_SKIP_BASIS_REGISTER: Final[str] = "A SKIP states its basis too"
+_SKIP_BASIS_NONE_HELD: Final[str] = (
+    'set "decision_basis" to exactly "none_held" — that word and nothing else'
+)
+_SKIP_BASIS_STANDS: Final[str] = (
+    "your vote is recorded as you cast it: nothing here moves your target"
+)
 #: The revisions that name the bodies BEFORE these bounds. A tree whose
 #: templates carry the bounds may not compose a stamp from any of them: the
 #: revision exists so that two generations of one body never share a
-#: `MeetingReplayEntry.prompt_versions` marker.
-_PRE_V5_REVISIONS: Final[frozenset[str]] = frozenset({"v1", "v2", "v3", "v4"})
+#: `MeetingReplayEntry.prompt_versions` marker. `v5` joined the set when ruling
+#: D6 moved this body again: the v5 generation's consequence clause said a
+#: nulled id coerces the ejection to SKIP, which the v6 body no longer says.
+_PRE_V6_REVISIONS: Final[frozenset[str]] = frozenset({"v1", "v2", "v3", "v4", "v5"})
 
 
 def _candidate_ballot() -> str:
@@ -1439,13 +1452,13 @@ def test_the_account_turn_asks_for_one_short_phrase_and_then_a_stop(
     assert _UNBOUNDED_TURN_REASON not in opt_in
 
 
-def test_a_body_carrying_the_v5_bounds_cannot_be_stamped_an_older_revision() -> None:
+def test_a_body_carrying_the_v6_bounds_cannot_be_stamped_an_older_revision() -> None:
     # The revision and the bodies are one fact. `ACCOUNT_PROMPT_SET_REVISION`
     # exists so that two generations of one template never share a stamp, so a
-    # tree that RENDERS these bounds and still composes `v1` through `v4` would
+    # tree that RENDERS these bounds and still composes `v1` through `v5` would
     # record the new bodies under an identifier that already names the old
     # ones. Read off the constant rather than against a literal: what is
-    # asserted is that the stamp is not one of the pre-v5 generations and that
+    # asserted is that the stamp is not one of the pre-v6 generations and that
     # every arm's stamp carries whatever the constant says.
     vote = _candidate_ballot()
     statement = _every_account_prompt(common=1, attributed=1, is_impostor=False)[
@@ -1457,7 +1470,13 @@ def test_a_body_carrying_the_v5_bounds_cannot_be_stamped_an_older_revision() -> 
     # The v5 bodies: the turn channel and the SKIP register (F4 and F7).
     assert _TURN_ID_SHAPE in vote and _ROW_SUFFIX_CLAUSE in vote
     assert _SKIP_TOO_THIN in vote and _SKIP_SOUND_CALL in vote
-    assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V5_REVISIONS
+    # The v6 body: the SKIP-basis register (F8) and the corrected consequence.
+    # These are what a `v5` stamp would now misname, and the whole reason the
+    # revision moved -- so they are asserted beside the constant, not apart.
+    assert _SKIP_BASIS_REGISTER in vote and _SKIP_BASIS_NONE_HELD in vote
+    assert _SKIP_BASIS_STANDS in vote
+    assert _NULLED_CONSEQUENCE in vote
+    assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V6_REVISIONS
     stamps = _account_stamps()
     assert stamps
     for stamp in stamps:

@@ -5136,7 +5136,9 @@ BALLOT_REWRITE_REASONS: Final[tuple[str, ...]] = tuple(
 #: re-aimed by ``under_gate_redirect`` and THEN coerced by the citation gate
 #: keeps ``under_gate_redirect`` in the field while both markers stack on the
 #: rationale. The fifth run's seed 8006 is exactly that ballot, and reading the
-#: single field would report zero coercions on a run full of them. The typed
+#: single field would report zero coercions on a run full of them. Both guards
+#: were retired by ruling D6 of 2026-09-19, so this table reads RECORDED bytes:
+#: no run after that mints either marker, and no new ballot stacks. The typed
 #: field keeps its own jobs -- the AUTHORED target and whether the ballot reached
 #: the tally -- which are properties of the first rewrite and are read from it.
 #:
@@ -5304,9 +5306,11 @@ def _authored_a_legal_target(
 def _reached_the_tally(ballot: VoteBallot) -> bool:
     """Whether the recorded ballot still names a player rather than SKIP.
 
-    "Cleared the citation gate" in the block's terms. Read off the RECORDED
-    target rather than off the rewrite reason, because more than one guard can
-    coerce a ballot to SKIP and the question asked is what the tally saw.
+    "Cleared the citation gate" in the block's terms, which are the RECORDED
+    run's: that gate was retired by ruling D6 of 2026-09-19 and coerces nothing
+    now. Read off the RECORDED target rather than off the rewrite reason,
+    because more than one guard could coerce a ballot to SKIP on those bytes and
+    the question asked is what the tally saw.
     """
 
     return ballot.target != SKIP_TARGET

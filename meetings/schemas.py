@@ -984,9 +984,13 @@ countable and can never degrade the whole vote through
 class ModelAuthoredVoteBallot(_FrozenModel):
     """The ballot a VOTER authors -- the schema the LLM client is handed.
 
-    Exactly :class:`VoteBallot` minus the two fields the meeting layer owns
-    outright (``guard_redirected_from`` / ``guard_rewrite_reason``), and
-    :class:`VoteBallot`'s own base, so the two can never drift apart. Every
+    Exactly :class:`VoteBallot` minus the three fields the meeting layer owns
+    outright (``guard_redirected_from`` / ``guard_rewrite_reason`` /
+    ``grounding_label``, the set ``meetings.manager._LAYER_OWNED_BALLOT_FIELDS``
+    names), and :class:`VoteBallot`'s own base, so the two can never drift
+    apart. The layer's finding about a basis is as far out of the model's reach
+    as the provenance pair: a voter states its basis in ``decision_basis`` and
+    the label is written about it, never by it. Every
     adapter validates the model's completion against the schema it was given
     before returning it (``llm/provider.py``, ``llm/ollama_client.py``,
     ``llm/featherless_client.py``), and the Ollama adapter constrains decoding

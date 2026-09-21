@@ -40,6 +40,8 @@ from meetings.manager import (
     INVALID_BASIS_MARKER,
     INVALID_REASON_ID_MARKER,
     OFF_TARGET_CITATION_EJECT_MARKER,
+    TEAMMATE_COERCED_VOTE_RATIONALE,
+    TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     MeetingParticipant,
     label_ballot_grounding,
@@ -91,6 +93,21 @@ def _roster(*, observation_ids: tuple[str, ...] = ()) -> tuple[MeetingParticipan
         _participant("p-2"),
         _participant("p-3"),
         _participant("p-4"),
+    )
+
+
+def _betrayal_roster() -> tuple[MeetingParticipant, ...]:
+    """The same table with p-3 and p-4 on one impostor team.
+
+    The one roster where a ballot reaches the teammate firewall, which is the
+    only live guard that REPLACES a rationale rather than prefixing it.
+    """
+
+    return (
+        _participant("p-1"),
+        _participant("p-2"),
+        _participant("p-3", role="IMPOSTOR", fellow_impostor_ids=("p-4",)),
+        _participant("p-4", role="IMPOSTOR", fellow_impostor_ids=("p-3",)),
     )
 
 
@@ -452,6 +469,48 @@ class TestEveryBallotDeclaresItsBasis:
         ballot = _p1(result)
         assert ballot.guard_rewrite_reason == "parse_default"
         assert ballot.grounding_label == "not_assessed"
+
+    def test_a_fabricated_basis_survives_the_teammate_redaction(self) -> None:
+        # The provenance boundary, planted. `_collect_vote` reads the model's
+        # body into `authored_rationale_text` BEFORE prepending
+        # `INVALID_BASIS_MARKER`, and `_preserved_ballot_markers` keeps exactly
+        # what precedes that body. Take the boundary one line later and the
+        # marker falls on the MODEL side of the split: the teammate coercion
+        # then redacts it away with the body, and the fabrication is uncounted
+        # for every marker consumer -- on precisely the ballots the firewall
+        # also touched. Nothing else in the suite pins that ordering.
+        result, _ = _run_meeting_unvalidated(
+            _responder(
+                {"p-3": {"target": "p-4", "decision_basis": "absolutely certain"}}
+            ),
+            participants=_betrayal_roster(),
+        )
+
+        ballot = next(b for b in result.ballots if b.voter == "p-3")
+        assert ballot.target == "SKIP"
+        assert ballot.guard_rewrite_reason == "teammate_coerced"
+        assert ballot.guard_redirected_from == "p-4"
+        assert ballot.decision_basis is None
+        # The marker survives as a CLASS with its payload redacted -- the model
+        # chose that payload, so it is untrusted text like the body.
+        assert ballot.rationale_text == (
+            TEAMMATE_VOTE_TARGET_MARKER.format(target="p-4")
+            + INVALID_BASIS_MARKER.format(basis="(redacted)")
+            + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+        assert "stub-vote-p-3-p-4" not in ballot.rationale_text
+        assert ballot.grounding_label == "not_assessed"
+
+        # Non-vacuous: the same betrayal without a fabricated basis records the
+        # teammate marker alone, so the assertion above is about THIS marker.
+        clean, _ = _run_meeting_unvalidated(
+            _responder({"p-3": {"target": "p-4"}}),
+            participants=_betrayal_roster(),
+        )
+        assert next(b for b in clean.ballots if b.voter == "p-3").rationale_text == (
+            TEAMMATE_VOTE_TARGET_MARKER.format(target="p-4")
+            + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
 
     @pytest.mark.parametrize(
         "basis", [123, ["cited"], {"basis": "cited"}, "CITED", " none_held"]

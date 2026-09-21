@@ -1243,8 +1243,8 @@ def _require_testimony_shapes_bodies(
 #:   a pre-filled skeleton; and the turn's ``"reason"`` as one short
 #:   phrase with a "then stop" reply instruction. The first two repair a
 #:   live defect rather than a style note: an id carrying the tag word is
-#:   nulled by the meeting layer, which then coerces the uncited ejection
-#:   to SKIP.
+#:   nulled by the meeting layer, which (as the v4 body stated it, before
+#:   ruling D6 of 2026-09-19) then coerced the uncited ejection to SKIP.
 #: * ``v5`` -- the ballot's TURN channel and its SKIP register, both on
 #:   ``vote_ballot_accounts.j2`` alone. The turn channel: the prompt now
 #:   names the bracket at the HEAD of a transcript turn line as the one id
@@ -1252,9 +1252,10 @@ def _require_testimony_shapes_bodies(
 #:   whereabouts:N]`` rows ``_account_transcript.j2`` renders beneath it as
 #:   pointers INSIDE a turn rather than ballot ids, and ports
 #:   ``vote_ballot.j2``'s copy-VERBATIM / never-invent-or-abbreviate warning
-#:   with a never-append-a-row-suffix clause and the consequence (a
-#:   non-canonical id is nulled by ``meetings.manager`` and the uncited
-#:   ejection coerced to SKIP). The skeleton keeps ``primary_reason_id``
+#:   with a never-append-a-row-suffix clause and the consequence, as that
+#:   generation stated it (a non-canonical id is nulled by ``meetings.manager``
+#:   and the uncited ejection coerced to SKIP -- ``v6`` corrects the second
+#:   half). The skeleton keeps ``primary_reason_id``
 #:   null: the shape is shown in prose and never pre-filled into the object
 #:   a model copies verbatim, on the same ground the observation id was not.
 #:   The SKIP register: ``vote_ballot.j2``'s "SKIP if the evidence is too
@@ -1263,7 +1264,18 @@ def _require_testimony_shapes_bodies(
 #:   surface rather than in how readily each asks for an ejection. The
 #:   reference's confidence sentence is NOT ported: the register is all the
 #:   fifth run's diagnosis put for decision.
-ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v5"
+#: * ``v6`` -- ruling D6 of 2026-09-19 reaching ``vote_ballot_accounts.j2``,
+#:   the one body of the four it touches. The consequence clause is corrected
+#:   where it became false: a nulled id now leaves the ejection "with no source
+#:   on the record" rather than coercing it to SKIP, because the citation gate
+#:   that coerced was retired. Beside it the SKIP-basis register the same
+#:   ruling put in ``vote_ballot.j2`` (v7): which slot a SKIP may cite, the
+#:   exact ``"none_held"`` token, and the statement that the vote is recorded
+#:   as cast either way -- with ``"decision_basis"`` in the returned-JSON
+#:   skeleton, so the two families ask for one decision record rather than
+#:   two. Prose-only would have moved these bytes just as far: the revision
+#:   advances because the BODY changed, not because of how much of it did.
+ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v6"
 
 
 def public_account_prompt_versions(

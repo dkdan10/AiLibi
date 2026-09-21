@@ -185,8 +185,8 @@ _MARKER_REPR_VALUE: str = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 # (label, marker) for every audit marker the meeting layer PREPENDS to a ballot's
 # ``rationale_text``, built from the imported production literals so a rename
 # breaks loudly here. Mirrors ``api.replay_loader._BALLOT_PREFIX_MARKERS`` — the
-# display layer's table over the same seven kinds — and a test pins the two label
-# sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the eighth kind and
+# display layer's table over the same eight kinds — and a test pins the two label
+# sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the ninth kind and
 # sits apart: it is the WHOLE rationale, not a prefix.
 #
 # ``off_target_coerced`` was the relevance half of the citation gate, minted only
@@ -240,7 +240,7 @@ def _marker_pattern(marker: str) -> re.Pattern[str]:
 _BALLOT_MARKER_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
     (label, _marker_pattern(marker)) for label, marker in BALLOT_AUDIT_MARKERS
 )
-# The seventh kind, matched with the same repr-aware machinery: the WHOLE
+# The ninth kind, matched with the same repr-aware machinery: the WHOLE
 # marker, not its static head. A model-authored rationale that merely opens
 # with the head's words is not a defaulted ballot, and dropping it from the fit
 # for a phrase would be a false exclusion of an authored target.
@@ -264,20 +264,28 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
     merge in, deduplicated: the structured value is authoritative, never
     exhaustive.
 
-    That same rule BOUNDS the parse. Markers are prepended, so the first
-    rewrite's marker is the innermost one, and the guard region of the string
-    ends where it ends — everything past it is the voter's own words. When the
-    structured reason is present the strip therefore stops as soon as it
-    consumes the marker naming it, so a rationale that merely opens with
-    marker-shaped text cannot mint a rewrite that never happened. A legacy
-    recording carries no such bound and strips to exhaustion, exactly as the
-    display layer's parse does.
+    That same rule BOUNDS the parse, for TARGET rewrites only. Every target
+    guard runs after the two citation validators and the basis pre-pass, so the
+    first TARGET rewrite's marker is the innermost target one and no genuine
+    target marker can sit behind it: past that point marker-shaped target text
+    is the voter's own words, and the strip stops there rather than minting a
+    rewrite that never happened. The citation-id and basis markers are the
+    opposite case — the chain prepends them BEFORE any target guard, so they sit
+    behind the bound and are still read past it. Stripping stopped at the bound
+    outright until ruling D6's review (2026-09-21), which is what dropped an
+    ``invalid_reason_id`` / ``invalid_observation_id`` / ``invalid_basis`` label
+    from a ballot that also carried a target rewrite. The strength this delivers,
+    stated exactly: a fabricated target class cannot be minted past the bound,
+    while a fabricated CITATION class can, on a rationale that opens with a
+    citation marker's own text — the same exposure a legacy recording (no
+    structured field, strips to exhaustion) has always had, and the same one the
+    display layer's parse carries.
 
-    The chain is stripped front-to-back through :data:`BALLOT_AUDIT_MARKERS` so
-    a stacked ordering cannot hide the inner label behind the outer one. The
-    parse-default marker replaces the whole rationale rather than prefixing it,
-    so it is matched apart — as the WHOLE marker, head and repr payload and
-    tail, never the head alone.
+    The chain is stripped front-to-back through :data:`BALLOT_AUDIT_MARKERS`, so
+    within those bounds a stacked ordering cannot hide the inner label behind
+    the outer one. The parse-default marker replaces the whole rationale rather
+    than prefixing it, so it is matched apart — as the WHOLE marker, head and
+    repr payload and tail, never the head alone.
 
     Order is structured-first, then recovery order; callers read the SET.
     """
@@ -295,6 +303,7 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
     if _VOTE_PARSE_DEFAULT_PATTERN.match(text) is not None:
         keep(_VOTE_PARSE_DEFAULT_LABEL)
         return tuple(labels)
+    past_the_bound = False
     stripped = True
     while stripped:
         stripped = False
@@ -302,11 +311,14 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
             match = pattern.match(text)
             if match is None:
                 continue
+            if past_the_bound and label in TARGET_REWRITE_LABELS:
+                # Behind the first rewrite's marker no target guard can have
+                # written: they all run last. This is model prose in the shape
+                # of one.
+                return tuple(labels)
             keep(label)
             text = text[match.end() :]
-            if label == first_rewrite:
-                # The innermost guard marker; the rest is the voter's own text.
-                return tuple(labels)
+            past_the_bound = past_the_bound or label == first_rewrite
             stripped = True
             break
     return tuple(labels)
@@ -319,6 +331,11 @@ def _ballot_is_coerced_skip(ballot: VoteBallot) -> bool:
     citation gate coerced records ``target="SKIP"`` but was a FORCED eject. It is
     one member of the wider :data:`TARGET_REWRITE_LABELS` class the fit excludes,
     kept as its own column because the report counts the kinds apart.
+
+    A question about RECORDED bytes only: ruling D6 of 2026-09-19 retired that
+    coercion, so 6 committed ballots read True here and no future recording
+    will. An uncited EJECT is now tallied for the player the voter named and
+    labelled :data:`~meetings.schemas.BallotGroundingLabel` ``uncited``.
     """
 
     return "uncited_coerced" in ballot_rewrite_labels(ballot)

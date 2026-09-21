@@ -287,11 +287,13 @@ class ReconstructedMeeting:
     from ``entry``, read as recorded rather than re-derived. That is what lets
     this walk keep reconstructing committed bytes across a deliberate change to
     the ballot chain -- ruling D6 of 2026-09-19 retired two target-rewriting
-    guards, which moves 41 of the 1,215 committed sample ballots and 9 of the
-    252 meetings -- instead of making every recording unwalkable until the
-    re-record. Every consumer of this walk therefore reads the decision the
-    recording actually made, which is what each of them was already asserting
-    about.
+    guards, which moves 24 of the 986 committed sample ballots across 15 of the
+    190 meetings this walk covers -- instead of making every recording
+    unwalkable until the re-record. Those four figures are not prose: they are
+    the census :func:`test_every_reconstruction_divergence_is_a_retired_guard`
+    pins per set, ``(151, 869, 23, 14)`` for 9p2i and ``(39, 117, 1, 1)`` for
+    4p1i. Every consumer of this walk therefore reads the decision the recording
+    actually made, which is what each of them was already asserting about.
 
     ``rebuilt_ballots`` is the other half, kept rather than discarded: the
     ballots TODAY's chain produced from the same recorded completions. Nothing
