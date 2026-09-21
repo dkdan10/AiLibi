@@ -117,16 +117,15 @@ def test_version_two_profiles_preserve_version_one_encoding_and_typed_schema() -
     )
 
 
-def test_the_citation_relevance_key_is_absent_until_the_lever_is_on() -> None:
-    """The lever is additive to a format every committed recording already has.
+def test_the_retired_citation_relevance_key_is_gone_and_refused() -> None:
+    """The lever is retired (ruling D6 of 2026-09-19), field and all.
 
-    PLANTED, and the plant is the obvious implementation: serialize the key
-    unconditionally and every format-1 and format-2 recording gains
-    ``"citation_relevance_version": null``. The committed replay sets are
-    written with the default config, which normalizes to an absent field
-    entirely, so ``scripts/verify_samples.sh`` would stay green while the two
-    instrument arms' own format-2 rows moved. The assertion is therefore made
-    HERE, on the serializer, at the two formats that are frozen.
+    It was never ON in a committed recording and was omitted from the
+    serialization whenever it was OFF, so deleting it removes no recorded key
+    from any format-1 or format-2 row -- which is what lets the retirement land
+    without a re-record. ``extra="forbid"`` is what makes that checkable: a
+    config still passing the keyword is refused loud rather than carrying a
+    field nothing reads.
     """
 
     for version in (1, 2):
@@ -136,20 +135,16 @@ def test_the_citation_relevance_key_is_absent_until_the_lever_is_on() -> None:
         )
         assert "citation_relevance_version" not in off.model_dump()
         assert "citation_relevance_version" not in off.model_dump_json()
-    on = RecordedExperimentConfig(
-        format_version=2, evidence_reasoning_version=2, citation_relevance_version=1
-    )
-    assert on.model_dump()["citation_relevance_version"] == 1
-    assert RecordedExperimentConfig.model_validate_json(on.model_dump_json()) == on
-    # The typed field survives into the serialization schema despite the
-    # conditional omission, the rule the version-one keys already follow.
     assert (
         "citation_relevance_version"
-        in RecordedExperimentConfig.model_json_schema(mode="serialization")[
+        not in RecordedExperimentConfig.model_json_schema(mode="serialization")[
             "properties"
         ]
     )
-    # An all-OFF format-2 config still normalizes away entirely: the lever does
-    # not make a baseline recording non-default.
+    with pytest.raises(ValidationError):
+        RecordedExperimentConfig(
+            format_version=2,
+            citation_relevance_version=1,  # type: ignore[call-arg]
+        )
+    # A bare format-2 config still normalizes away entirely.
     assert RecordedExperimentConfig(format_version=2).is_default
-    assert not on.is_default

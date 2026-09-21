@@ -111,9 +111,11 @@ census in this module:
 Phase 17 Wave 0 (Task 17.2) teaches the SKIP partition the citation-gate
 coercion in this module:
 
-* *Citation-coerced SKIPs* — the ballots the citation gate
-  (:func:`meetings.manager.guard_ballot_citation`) rewrote from an uncited
-  zero-flag EJECT to SKIP, keyed on
+* *Citation-coerced SKIPs* — the ballots the citation gate, retired by ruling
+  D6 of 2026-09-19, rewrote from an uncited zero-flag EJECT to SKIP. A HISTORY
+  class: 6 committed ``ml_corpus/9p2i`` ballots carry it and no live path mints
+  it, because :func:`meetings.manager.label_ballot_grounding` labels such a
+  ballot ``uncited`` and leaves the EJECT standing. Keyed on
   :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` and censused as a
   fourth by-design bucket of the SKIP partition
   (``citation_coerced_skip_ballots``, beside correct / missed /
@@ -672,11 +674,12 @@ class ConversionReport(BaseModel):
       degraded SKIP can never read as a missed skip or a genuine
       ``threshold_inversions`` entry.
     * ``citation_coerced_skip_ballots`` is the 16.6 citation-gate coercion
-      class (:func:`meetings.manager.guard_ballot_citation`, marker
-      :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER`): the gate
-      rewrote an uncited zero-flag EJECT to SKIP — the gate working, never
-      the voter's decision, so a marker-anchored SKIP is neither a correct
-      skip, a missed skip, nor a §4.6 ``threshold_inversions`` entry. It is
+      class (marker :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER`):
+      the gate rewrote an uncited zero-flag EJECT to SKIP — the gate working,
+      never the voter's decision, so a marker-anchored SKIP is neither a
+      correct skip, a missed skip, nor a §4.6 ``threshold_inversions`` entry.
+      The gate is retired (ruling D6 of 2026-09-19), so this class counts
+      recorded history and can only shrink to zero at a re-record. It is
       diverted BEFORE the correct/missed/unclassified tri-split and the
       divert is role- and verdict-blind (Task 17.2 designer ruling
       tasks/phase-17.md; audits/audit-phase-16-close.md §8 routed contract
@@ -1505,9 +1508,13 @@ def compute_defaulted_ballots(
 class BallotTargetRedirectReport(BaseModel):
     """The ballot-target redirect census (Task 10.9.2; PR #147 F2).
 
-    Frozen value object censusing the ballots the meeting layer's
-    ballot-target graph guard
-    (:func:`meetings.manager.guard_ballot_target_graph`) rewrote -- keyed
+    A HISTORY census since ruling D6 of 2026-09-19 retired the guard outright:
+    83 committed ballots carry the marker and no live path mints another, so
+    this report reads recorded bytes and reads 0 on anything recorded after
+    that ruling.
+
+    Frozen value object censusing the ballots the meeting layer's retired
+    ballot-target graph guard rewrote -- keyed
     on the pinned :data:`~meetings.manager.BALLOT_TARGET_REDIRECT_MARKER`
     -- published beside the invalid-target
     (``missed_skip_invalid_target``) and teammate-coercion

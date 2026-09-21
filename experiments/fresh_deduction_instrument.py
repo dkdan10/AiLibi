@@ -1125,9 +1125,6 @@ class InstrumentArm(BaseModel):
                     config.attributed_testimony_version or 0
                 ),
                 "AILIBI_BOUNDED_REBUTTAL": str(config.bounded_rebuttal_version or 0),
-                "AILIBI_CITATION_RELEVANCE": str(
-                    config.citation_relevance_version or 0
-                ),
             }
         )
 
@@ -1139,13 +1136,15 @@ def instrument_arms() -> tuple[InstrumentArm, InstrumentArm]:
     froze, so it cannot be paired on an identical prefix and the card puts it
     out of scope.
 
-    ``citation_relevance_version=1`` is on BOTH arms, so the pair still differs
-    in the accounts channels alone and the relevance rule is not a second
-    treatment (``test_the_arms_differ_only_in_the_account_channels`` is the
-    assertion). It RE-BASELINES the reference arm: it changes which ejections
-    happen on both sides, so the fifth run's reference figures are not
-    comparable with the next run's and no reference cell may be carried across.
-    The manifest's dated section of 2026-09-18 says so in full.
+    The relevance rule used to ride ``citation_relevance_version=1``, set on
+    BOTH arms so it was never a second treatment. That lever is retired: the
+    rule is unconditional and decides a ``grounding_label`` rather than a
+    coercion (ruling D6 of 2026-09-19), so neither arm carries the keyword and
+    the pair still differs in the accounts channels alone
+    (``test_the_arms_differ_only_in_the_account_channels`` is the assertion).
+    The fifth run's re-baselining stands as recorded: its reference figures
+    were taken on the coercing surface and are not comparable with a later
+    run's, and the manifest's dated section of 2026-09-18 says so in full.
     """
 
     return (
@@ -1154,7 +1153,6 @@ def instrument_arms() -> tuple[InstrumentArm, InstrumentArm]:
             experiment_config=RecordedExperimentConfig(
                 format_version=2,
                 evidence_reasoning_version=2,
-                citation_relevance_version=1,
             ),
         ),
         InstrumentArm(
@@ -1164,7 +1162,6 @@ def instrument_arms() -> tuple[InstrumentArm, InstrumentArm]:
                 evidence_reasoning_version=2,
                 public_account_version=1,
                 attributed_testimony_version=1,
-                citation_relevance_version=1,
             ),
         ),
     )
@@ -1831,11 +1828,6 @@ class CalibrationMode:
     #: on both spent modes, whose committed outputs were written without it and
     #: have to keep re-deriving the same bytes.
     reports_authored_diagnostics: bool
-    #: Whether this mode requires the revision of 2026-09-18 resolved ON for
-    #: both arms. See :func:`assert_the_revised_wave_is_enabled`: the 2026-09-18
-    #: sitting exists to measure that wave, so a sitting of it with the lever
-    #: resolved off would measure the surface it was sent to replace.
-    requires_the_revised_wave: bool
 
     def describe(self) -> str:
         return (
@@ -1859,7 +1851,6 @@ CALIBRATION_MODES: Final[tuple[CalibrationMode, ...]] = (
         sizing_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
         reports_the_role_split=False,
         reports_authored_diagnostics=False,
-        requires_the_revised_wave=False,
     ),
     CalibrationMode(
         name="2026-09-15",
@@ -1872,7 +1863,6 @@ CALIBRATION_MODES: Final[tuple[CalibrationMode, ...]] = (
         sizing_unit_output_tokens=CALIBRATION_SIZING_UNIT_OUTPUT_TOKENS,
         reports_the_role_split=True,
         reports_authored_diagnostics=False,
-        requires_the_revised_wave=False,
     ),
     CalibrationMode(
         name="2026-09-18",
@@ -1885,7 +1875,6 @@ CALIBRATION_MODES: Final[tuple[CalibrationMode, ...]] = (
         sizing_unit_output_tokens=CALIBRATION_3_SIZING_UNIT_OUTPUT_TOKENS,
         reports_the_role_split=True,
         reports_authored_diagnostics=True,
-        requires_the_revised_wave=True,
     ),
 )
 
@@ -1939,64 +1928,19 @@ def calibration_mode_for(
 def arm_lever_profile(arm: InstrumentArm) -> Mapping[str, str]:
     """The SUBSTRATE levers one arm resolves, without the transport key.
 
-    One reader for two callers that must not disagree:
-    :func:`assert_the_revised_wave_is_enabled`, which refuses a sitting whose
-    levers are not the ones its mode was authorized for, and the calibration
-    report, which publishes what each arm actually resolved. The provider is
-    dropped because it is transport rather than substrate and the report names
-    it once at the top level; the value passed in is therefore immaterial.
+    One reader, for the calibration report that publishes what each arm
+    actually resolved. It had a second caller, the pre-flight that refused a
+    sitting of the 2026-09-18 mode while either arm resolved the relevance
+    revision OFF; ruling D6 of 2026-09-19 retired that lever into the default,
+    so the question has no answer any more and the gate went with it -- a check
+    whose plant cannot be constructed is not a check. The provider is dropped
+    because it is transport rather than substrate and the report names it once
+    at the top level; the value passed in is therefore immaterial.
     """
 
     resolved = dict(arm.environment(provider=AUTHORIZED_PROVIDER))
     resolved.pop("AILIBI_LLM_PROVIDER", None)
     return MappingProxyType(dict(sorted(resolved.items())))
-
-
-#: What the revision of 2026-09-18 resolves to on an arm that carries it. The
-#: relevance-aware citation guard is the lever the wave puts on BOTH arms
-#: (``tasks/work/relevance-aware-citation-guard.md``); its declared default stays
-#: ``None``, where ``None`` preserves recorded behaviour, so a sitting that
-#: measures the wave has to pass it explicitly and a sitting that forgot to is a
-#: sitting of the surface the wave replaced.
-#:
-#: The prompt SET is here for the same reason and with a stated limit: this gate
-#: can say the arms render ``qwen3_6_27b`` and cannot say which accounts
-#: revision those templates are at. The v5 revision is pinned by the accounts
-#: card's own version test and by the prompt-version markers the run records; a
-#: pre-flight that claimed to check it would be claiming a mechanism this module
-#: does not have.
-REVISED_WAVE_LEVERS: Final[Mapping[str, str]] = MappingProxyType(
-    {
-        "AILIBI_CITATION_RELEVANCE": "1",
-        "AILIBI_PROMPT_SET": AUTHORIZED_PROMPT_SET,
-    }
-)
-
-
-def assert_the_revised_wave_is_enabled(mode: CalibrationMode) -> None:
-    """Refuse a mode that measures the wave while an arm resolves it OFF.
-
-    Arithmetic over :func:`instrument_arms` and nothing else — no file, no
-    client — so it runs inside the calibration gate before a credential exists.
-    A mode that does not require the wave passes untouched: the two spent modes
-    measured the surface they were run on, and holding them to a lever that did
-    not exist then would refuse a spend the manifest already records.
-    """
-
-    if not mode.requires_the_revised_wave:
-        return
-    for arm in instrument_arms():
-        resolved = arm_lever_profile(arm)
-        for name, expected in REVISED_WAVE_LEVERS.items():
-            if resolved.get(name) != expected:
-                raise LiveRunNotAuthorized(
-                    f"the {mode.name} calibration measures the revision of "
-                    f"2026-09-18 and arm {arm.name} resolves {name} to "
-                    f"{resolved.get(name)!r}, not {expected!r}: a sitting with "
-                    "the revision off on either arm measures the surface that "
-                    "revision replaced, under a clause that authorized the "
-                    "other one"
-                )
 
 
 def assert_resume_is_authorized(*, provider: str, repo_root: Path = _REPO_ROOT) -> None:
@@ -2054,9 +1998,6 @@ def assert_calibration_is_authorized(
       RUN's turn cap to 4,096, so a calibration sizing that run has to draw at
       4,096 under ceilings that clear its 15,360-token schedule, which is what
       the second and third modes are;
-    * a mode that measures the revision of 2026-09-18 is refused unless both
-      arms resolve that revision's levers ON
-      (:func:`assert_the_revised_wave_is_enabled`);
     * ``fake`` passes without an invocation, and refuses one, exactly as
       :func:`assert_live_run_is_authorized` does — a rehearsal is not a run.
       The mode lookup above still runs for it, so a rehearsal of a crossing is
@@ -2086,10 +2027,6 @@ def assert_calibration_is_authorized(
     mode = calibration_mode_for(
         limits=limits, sampling=sampling, paired_seeds=paired_seeds
     )
-    # Before the fake-provider return, for the reason the mode lookup is: a
-    # rehearsal of a sitting no live run could take rehearses nothing, and the
-    # levers are the whole subject of the 2026-09-18 mode.
-    assert_the_revised_wave_is_enabled(mode)
     if provider == "fake":
         if invocation is not None:
             raise LiveRunNotAuthorized(
@@ -4926,7 +4863,8 @@ RelevanceVerdict = Literal["relevant", "off_target", "uncited"]
 # module. It used to live here, which is why the recording-time gate could not
 # ask it: ``meetings/`` may not import ``experiments/``, while this module
 # imports ``meetings`` freely. One definition, two callers -- this grader and
-# :func:`meetings.manager.guard_ballot_citation` under its lever -- and
+# :func:`meetings.manager.label_ballot_grounding`, which asks it unconditionally
+# to decide ``supported`` versus ``off_target`` -- and
 # ``tests/meetings/test_citation_relevance.py`` asserts the two cannot reach
 # different verdicts about the same ballot.
 

@@ -43,12 +43,6 @@ class RecordedExperimentConfig(BaseModel):
     bounded_rebuttal_version: Literal[1] | None = None
     public_account_version: Literal[1] | None = None
     attributed_testimony_version: Literal[1] | None = None
-    #: The relevance half of the ballot citation gate. Serialized only when it
-    #: is ON (below), because it is additive to a format the frozen deduction
-    #: manifest already binds at 2: a format bump would move every committed
-    #: recording's bytes and take both instrument arms off the bound format.
-    citation_relevance_version: Literal[1] | None = None
-
     investigation_version: Literal[1] | None = None
     contextual_self_report_version: Literal[1] | None = None
 
@@ -58,7 +52,6 @@ class RecordedExperimentConfig(BaseModel):
         "bounded_rebuttal_version",
         "public_account_version",
         "attributed_testimony_version",
-        "citation_relevance_version",
         "investigation_version",
         "contextual_self_report_version",
         mode="before",
@@ -111,15 +104,6 @@ class RecordedExperimentConfig(BaseModel):
         if self.format_version < 3:
             del payload["investigation_version"]
             del payload["contextual_self_report_version"]
-        # Omitted whenever it is OFF, at EVERY format version -- the other
-        # omissions above are keyed on the format that introduced them, this
-        # one on the value. Both committed formats are already frozen (format 2
-        # by the deduction manifest, format 1 by every older recording), so an
-        # unconditional key would move bytes nobody may move, while a format
-        # bump would take both instrument arms off the format the manifest
-        # binds. ``is_default`` is unaffected: the field defaults to ``None``.
-        if self.citation_relevance_version is None:
-            del payload["citation_relevance_version"]
         return payload
 
     @classmethod

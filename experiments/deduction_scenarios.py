@@ -506,15 +506,6 @@ def run_case(
             experiment_config.attributed_testimony_version or 0
         ),
         "AILIBI_BOUNDED_REBUTTAL": str(experiment_config.bounded_rebuttal_version or 0),
-        # Every field of `EXPERIMENT_ENV_NAMES` (`meetings/evidence_profile.py`)
-        # is exported, including this one: a lever the config carries and the
-        # environment drops is a scenario that SAYS it ran with the relevance
-        # rule on and rendered with it off. It resolves to 0 for every arm this
-        # harness builds today, which is the same behaviour as the absent key
-        # and is why the export is a no-op here and a correctness fix.
-        "AILIBI_CITATION_RELEVANCE": str(
-            experiment_config.citation_relevance_version or 0
-        ),
     }
     runner = build_default_meeting_runner(
         llm_client=provider, env=env, public_map=public_map
