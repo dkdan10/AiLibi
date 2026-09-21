@@ -221,8 +221,10 @@ different record from saying it holds nothing
 The meeting's own one-word finding about that basis, written after the vote and
 onto the record beside it. It **describes** and never corrects: the recorded
 vote stays the one the voter cast, and the tally never reads the label. The
-seven values are `supported` (a citation survived and is about a player this
-ballot weighed), `off_target` (it survived but is about somebody else),
+seven values are `supported` (a citation survived and is about the right player
+— for an ejection that is the player it names, and for a skip it is one of the
+alternatives the voter weighed, or any living candidate when it weighed none),
+`off_target` (it survived but is about somebody else),
 `invalid_citation` (the voter cited something that matched nothing on record),
 `none_held` (the voter said so), `flag_only` (an ejection whose target carries a
 contradiction raised at that meeting, and nothing else), `uncited` (nothing

@@ -5190,9 +5190,10 @@ _BALLOT_MARKER_TERMINATOR: Final[str] = "] "
 def ballot_rewrites_that_fired(ballot: VoteBallot) -> tuple[str, ...]:
     """Every target rewrite this ballot's marker stack records, sorted by reason.
 
-    One ballot can carry two (the redirect-then-coerce class); the typed
-    ``guard_rewrite_reason`` names only the first, which is why this reads the
-    stack. A ballot no guard touched returns ``()``.
+    One RECORDED ballot can carry two (the redirect-then-coerce class, which
+    ruling D6 of 2026-09-19 left as history — no live chain stacks it now); the
+    typed ``guard_rewrite_reason`` names only the first, which is why this reads
+    the stack. A ballot no guard touched returns ``()``.
 
     ANCHORED to the stack rather than searched for anywhere in the rationale.
     Every guard in the ballot chain PREPENDS its marker and none of them edits
@@ -5200,8 +5201,9 @@ def ballot_rewrites_that_fired(ballot: VoteBallot) -> tuple[str, ...]:
     if that is ever untrue -- so the markers are a contiguous block at position
     zero and the model's own text is the suffix. A substring search over the
     whole rationale therefore counts a model that ECHOES a marker phrase as a
-    guard that fired: the vote prompt renders coerced ballots back to later
-    voters, so "[off-target citation for eject target 'p-2' coerced to SKIP]"
+    guard that fired: on the recorded runs this grades the vote prompt rendered
+    coerced ballots back to later voters, so "[off-target citation for eject
+    target 'p-2' coerced to SKIP]"
     is a phrase the model has seen and can reproduce, and one echo would move
     the rewrite tally of a sitting the guard never touched. This walks the
     block from position zero, consuming one recognised marker at a time and
@@ -5444,7 +5446,8 @@ def authored_ballot_diagnostics(
       is the impostor and WRONGFUL otherwise. ``cleared`` and ``converted`` are
       different counts: a coalition clears when every one of its ballots
       reached the tally, and converts when every one of them reached it ON THE
-      AUTHORED TARGET, which an under-gate redirect breaks.
+      AUTHORED TARGET, which an under-gate redirect broke on the recorded bytes
+      this instrument grades (ruling D6 of 2026-09-19 retired that redirect).
     * **The ejection** — whether it was role-correct, and whether every
       recorded ballot naming the ejected player was its voter's own rather than
       a guard's rewrite (the ``voter_authored`` condition the primary outcome

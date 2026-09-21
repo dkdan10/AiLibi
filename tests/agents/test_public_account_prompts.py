@@ -1055,7 +1055,10 @@ def test_the_default_sets_response_examples_are_copyable_json_too(
 # the fourth live run stopped on a ballot whose `rationale_text` ran past the
 # vote cap, and thirteen of fourteen candidate EJECT citations copied the
 # `[obs ...]` tag word into `primary_reason_observation_id`, which
-# `meetings/manager.py` nulls before coercing the now-uncited ejection to SKIP.
+# `meetings/manager.py` nulled -- and, on the build that run was made on, the
+# Task-16.6 citation gate then coerced the now-uncited ejection to SKIP. Ruling
+# D6 of 2026-09-19 retired that coercion: the id is still nulled, and the
+# ejection now stands with `grounding_label="invalid_citation"` on it.
 # The reference family bounds the same three fields and its ballots did
 # neither. v5 ports the two the fifth live run then measured
 # (`tasks/diagnosis-2026-09-18-fifth-run.md`): the TURN channel, dead on 0 of
@@ -1323,12 +1326,17 @@ def test_every_citation_the_ballot_shows_is_the_bare_id_the_layer_accepts() -> N
     # The SKELETON, which is the object a model copies verbatim, keeps
     # `primary_reason_observation_id` null, exactly as `vote_ballot.j2`'s own
     # skeleton does. A literal id pre-filled there is copyable into an EJECT,
-    # and a copied literal that is not in the voter's own valid set is nulled
-    # and the ejection then coerced to SKIP -- the defect this fix repairs,
-    # re-entering through its own example. On the one voter whose real ids the
-    # literal happens to match (p-N, tick 12, seq 0) it is worse, not better:
+    # and a copied literal that is not in the voter's own valid set is nulled;
+    # the ejection then stands on the record carrying
+    # `grounding_label="invalid_citation"` (ruling D6 of 2026-09-19 retired the
+    # coercion that used to follow) -- the defect this fix repairs, re-entering
+    # through its own example. On the one voter whose real ids the literal
+    # happens to match (p-N, tick 12, seq 0) it is worse, not better:
     # `grade_supported` cannot tell a copied example from a citation the voter
-    # actually made. The skeleton is a SKIP, and a SKIP needs no citation.
+    # actually made. The skeleton is a SKIP, which since D6 states its basis in
+    # `decision_basis` rather than being exempt from one; the citation slot
+    # stays null because a pre-filled literal is copyable, not because a SKIP
+    # may cite nothing.
     vote = _candidate_ballot()
     skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
     assert len(skeleton) == 1

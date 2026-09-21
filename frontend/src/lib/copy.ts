@@ -444,7 +444,10 @@ export const SPECTATOR_COPY = Object.freeze({
     // does not render.
     groundingLabel: "Basis on the record",
     groundingLabels: Object.freeze({
-      supported: "Cited evidence about who was weighed",
+      // Both subjects in one line: an ejection's is the player it names, a
+      // skip's is the alternatives it weighed (or any living candidate when it
+      // weighed none).
+      supported: "Cited evidence about the accused, or about who was weighed",
       off_target: "Cited evidence about someone else",
       invalid_citation: "Citation did not match anything on record",
       none_held: "Voter said it held nothing",

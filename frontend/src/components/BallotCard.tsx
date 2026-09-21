@@ -160,8 +160,10 @@ export function BallotCard({
   const rationale = visibleRationale(ballot, omniscient, observerId);
   const rewriteReasons = privateVisible ? ballot.rewrite_reasons : [];
   // Same private class as the citations and the weighed list: the label reports
-  // what the voter cited, and `not_assessed` names a firewall coercion, so it
-  // rides the perspective gate rather than sitting beside the public target.
+  // what the voter cited, and `not_assessed` names any vote the meeting itself
+  // set — an illegal target, the teammate firewall, a ballot that never parsed,
+  // or a missed deadline — so it rides the perspective gate rather than sitting
+  // beside the public target.
   const grounding = groundingLabelText(ballot.grounding_label);
 
   // Correctness: a non-SKIP vote is "correct" iff its target was actually an

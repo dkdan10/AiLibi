@@ -82,6 +82,81 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
 
 ## Acceptance
 
+- [x] Review correction: the `invalid_citation`-over-`none_held` ordering has
+  the planted case it exists for, and the two orderings that are genuinely
+  unreachable say so in the code. A voter that declares
+  `decision_basis="none_held"` AND cites a turn id this meeting does not own
+  reaches the labeller carrying both halves — the validator nulls the id while
+  the in-set basis rides the pre-pass untouched — and the record says what the
+  ballot DID: `invalid_citation`. Proved by
+  `tests/meetings/test_grounding_label.py::TestEveryBallotDeclaresItsBasis::test_a_fabricated_citation_outranks_a_declared_none_held`,
+  with the declared-basis twin beside it and the combination added to
+  `TestEveryRecordedBallotIsLabelled._SPECS` (probe: swap the two branches —
+  `1 failed, 44 passed`). `label_ballot_grounding`'s docstring now records the
+  two lines that are unreachable-by-construction at the one call site and KEPT
+  as defensive lines: `invalid_citation` can never race `supported` /
+  `off_target` there, because `citation_nulled` requires both ids `None`; and
+  the `ballot.target != SKIP` half of the `flag_only` guard can never be what
+  decides it, because a live `ContradictionRef.subjects` holds a speaker or a
+  claim subject and never the literal `"SKIP"`.
+- [x] Review correction: `"grounding_label"` in `_LAYER_OWNED_BALLOT_FIELDS`
+  (`meetings/manager.py:3030-3034`) is an enforced line. Removing the row left
+  `tests/meetings` green while costing a voter its WHOLE vote on a
+  non-validating client: an out-of-set `grounding_label` then fails the schema
+  and the ballot degrades to `parse_default`.
+  `tests/meetings/test_manager.py::test_a_model_authored_provenance_value_never_reaches_the_record`
+  gains `{"grounding_label": "fabricated"}` and the in-set
+  `{"grounding_label": "supported"}`, and asserts the vote survives on its
+  authored target with the LAYER's label on it (probe: drop the row —
+  `1 failed, 1,382 passed`).
+- [x] Review correction: `bounded_marker_original(dropped)` on the invalid
+  basis (`meetings/manager.py:3107`) is an enforced line. Removing it left
+  `tests/meetings tests/api` green while a 5,000-character fabricated
+  `decision_basis` grew the recorded rationale from 111 characters to 5,048.
+  `test_an_over_length_fabricated_basis_is_quoted_bounded` drives that value
+  through the manager and asserts the recorded rationale is the marker quoting
+  a head bounded by `MARKER_QUOTED_ORIGINAL_MAX_CHARS` plus
+  `MARKER_TRUNCATION_SUFFIX` (probe: drop the bound — `1 failed, 1,820 passed,
+  2 skipped`).
+- [x] Review correction: the call surface is walked a SECOND time, because
+  round 3's claim that it was covered was wrong three times over. Every added
+  or changed executable line and tuple row of the eight production modules was
+  neutered again; two MORE came back green and now carry cases — the
+  observation half of `cited_before_validation` at the labeller's call site (a
+  voter that cites a fabricated own-observation id read `uncited` where it must
+  read `invalid_citation`) and the JSON rendering of a non-string
+  `decision_basis` in the pre-pass. Two lines are recorded as unobservable
+  rather than planted, with the reason: both conjuncts of the `citation_nulled`
+  expression are masked by the `supported` / `off_target` branch above them.
+  The complete table with every count is in the round-4 Results subsection.
+- [x] Review correction: the prose sweep is closed against every inflection of
+  `coerc`, not the five phrases earlier rounds grepped.
+  `tests/agents/test_public_account_prompts.py` said in the present tense that
+  a nulled citation coerces the ejection to SKIP and that "a SKIP needs no
+  citation"; `tests/api/test_view_model.py` called the under-gate redirect the
+  "live" gate chip; `tests/training/test_surrogate_dataset.py` called the
+  retired gate "the last guard" and its stack "the production stack"; and
+  `experiments/fresh_deduction_instrument.py` said an under-gate redirect
+  "breaks" the authored target. Each now states the retirement at the strength
+  the code delivers. The widened greps and their output are quoted in the
+  round-4 Results subsection.
+- [x] Review correction: the smaller items. Three sites said the labels outside
+  `TARGET_REWRITE_LABELS` are "the two citation-only" ones and this card made
+  them three (`api/replay_loader.py:302-305`,
+  `training/surrogate/dataset.py:212-221`,
+  `training/surrogate/ballots.py:65-68`);
+  `docs/glossary.md` and `frontend/src/lib/copy.ts` glossed `supported` with
+  the SKIP's subject only, and now say both; `BallotCard.tsx`'s comment called
+  `not_assessed` a firewall coercion and now names all four paths;
+  `scripts/record_ml_corpus.sh`'s lineage comment said "all four at v5" above a
+  literal reading v6/v6/v6/v7; `docs/artifacts.md:101` said the live set reads
+  v6 with no mention of `vote_ballot`'s v7 (the row's class, where and size
+  cells are untouched, so no inventory row is recomputed); and the schema's
+  "`None` is reserved for a recording made before the field" is restated as a
+  claim about MEETING recordings, because
+  `training/surrogate/runner.py`, `training/composed_runner.py` and
+  `eval/reasoning_evidence.py` build `VoteBallot` objects that are not
+  recordings and correctly carry `None`.
 - [x] Review correction: the labeller's `turns=` argument at the manager's call
   site has the enforcing case it lacked. An EJECT citing a REAL turn of this
   meeting that NAMES its target reads `supported`; replacing `turns=` with `()`
@@ -124,7 +199,10 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   `tests/meetings/test_elicitation_fixtures.py::TestCitationRequiredConfidence::test_the_skeleton_leaves_the_basis_for_the_voter_to_write`
   (probe: restore `"cited"` — `1 failed, 27 passed`) and
   `tests/agents/test_public_account_prompts.py::test_the_skeleton_leaves_the_basis_for_the_voter_to_write`
-  (probe: restore `"none_held"` — `2 failed, 92 passed`).
+  (probe: restore `"none_held"` — `2 failed, 92 passed`). That file's total is
+  94 here and 93 in the accounts-revision item below: both are as measured, at
+  the round-3 head and the round-1 head respectively, and the difference is the
+  case round 3 added (dated note, review round 4, 2026-09-21).
 - [x] Review correction: `TestTheOnlyTargetRewrites` reads `node.keywords`
   beside `node.args`, so a `ballot_target_rewrite_provenance(ballot,
   reason=...)` call can no longer be visited and contribute nothing. Proved by
@@ -191,9 +269,11 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   `scripts/check_doc_facts.py` (the note still labels the class always-ON).
 - [x] Review correction: the ten stale file:line citations in Results resolve
   at this head. Re-measured by SYMBOL after every code edit of this round, so
-  `meetings/schemas.py:1010` / `:1073` / `:886`, `meetings/manager.py:2352` /
-  `:2376` / `:3001` / `:3027-3031` / `:3054` / `:3703` / `:3730`,
-  `meetings/voting.py:192` and `api/replay_loader.py:3612` are the true lines;
+  `meetings/schemas.py:1016` / `:1079` / `:886`, `meetings/manager.py:2352` /
+  `:2376` / `:3001` / `:3030-3034` / `:3057` / `:3706` / `:3733`,
+  `meetings/voting.py:192` and `api/replay_loader.py:3613` are the true lines
+  (re-derived by symbol again after round 4's last edit, which moved eight of
+  them; the round-2 and round-3 subsections keep the figures of THEIR heads);
   the round-1 subsection's `_LAYER_OWNED_BALLOT_FIELDS` and provenance-boundary
   citations move with them.
 - [x] Review correction: `INVALID_BASIS_MARKER` is registered in the eval
@@ -209,12 +289,12 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   invalid-basis marker survives the firewall redaction; the card's universal
   probe claim is corrected above the probe table.
 - [x] Review correction: `ModelAuthoredVoteBallot`'s docstring names THREE
-  layer-owned fields (`meetings/schemas.py:987-990`), the set
+  layer-owned fields (`meetings/schemas.py:993-996`), the set
   `_LAYER_OWNED_BALLOT_FIELDS` holds. Pinned by
   `tests/meetings/test_manager.py::TestBallotRewriteProvenanceSites::test_the_model_facing_schema_is_the_ballot_minus_the_guard_pair`,
   which DERIVES the three-name difference rather than restating it.
 - [x] Review correction: `ACCOUNT_PROMPT_SET_REVISION` advances `v5` → `v6`
-  (`agents/strategic/prompts/loader.py:1278`) with its history bullet, because
+  (`agents/strategic/prompts/loader.py:1283`) with its history bullet, because
   ruling D6 moved `vote_ballot_accounts.j2`'s bytes. Proved by
   `tests/agents/test_public_account_prompts.py::test_a_body_carrying_the_v6_bounds_cannot_be_stamped_an_older_revision`
   (probe: set the constant back to `v5` — `1 failed, 92 passed`).
@@ -241,7 +321,7 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   `2 failed, 38 passed`).
 - [x] Review correction: the two unresolvable file:line citations in Results
   now read `frontend/src/types/api.ts:391-392` and
-  `frontend/src/components/BallotCard.tsx:291-292`, checked by
+  `frontend/src/components/BallotCard.tsx:292-294`, checked by
   `grep -n "decision_basis\|grounding_label" frontend/src/types/api.ts` and
   `grep -n "under_gate_redirect" frontend/src/components/BallotCard.tsx`.
 - [x] Every ballot declares a basis. `ModelAuthoredVoteBallot` gains
@@ -285,7 +365,7 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   go. `BALLOT_TARGET_REDIRECT_MARKER` and `BallotTargetRewriteReason`'s
   `under_gate_redirect` member (`meetings/schemas.py:725-732`) survive as
   read-only history, because 83 committed ballots carry that marker and four
-  consumers parse it (`api/replay_loader.py:3569-3577`,
+  consumers parse it (`api/replay_loader.py:3605-3614`,
   `training/surrogate/dataset.py:195-203`, `eval/meeting_quality.py:1454-1455`,
   `experiments/fresh_deduction_instrument.py:5015`); a test asserts no live path
   mints it. It goes rather than becoming a label because re-aiming at the argmax
@@ -542,18 +622,18 @@ alibi card, so nothing here needed a stop-and-report.
 ### What changed
 
 **Every ballot declares a basis.** `ModelAuthoredVoteBallot` gains
-`decision_basis: BallotDecisionBasis | None = None` (`meetings/schemas.py:1010`),
-with the closed set as a named alias at `:969` so the schema and the pre-pass
+`decision_basis: BallotDecisionBasis | None = None` (`meetings/schemas.py:1016`),
+with the closed set as a named alias at `:975` so the schema and the pre-pass
 cannot disagree about it. `None` is what every committed recording parses to
 and means the voter answered nothing; `"none_held"` is its explicit statement
 that it holds nothing that resolves. An out-of-set token is dropped from the
 raw payload before validation by `_prepared_ballot_payload`
-(`meetings/manager.py:3054`, the renamed pre-pass that strips the layer-owned
+(`meetings/manager.py:3057`, the renamed pre-pass that strips the layer-owned
 keys), which reports the dropped value so the call site prepends
 `INVALID_BASIS_MARKER` (`:438`) at `meetings/manager.py:2352` — after taking a
 copy of the model's own body, so the marker survives the teammate firewall's
 rationale redaction instead of being redacted as model prose. The marker is
-registered as the `invalid_basis` spectator chip (`api/replay_loader.py:3612`),
+registered as the `invalid_basis` spectator chip (`api/replay_loader.py:3613`),
 so it never reaches `rationale_text_clean`.
 
 **The suspicion-argmax redirect is retired outright.**
@@ -571,12 +651,12 @@ case runs the same scan over `INVALID_REASON_ID_MARKER` and asserts it finds
 one, so an empty result is a fact about the tree and not about the scanner.
 
 **`guard_ballot_citation` became `label_ballot_grounding`**
-(`meetings/manager.py:3730`) and rewrites nothing. It writes one
-`grounding_label` (`meetings/schemas.py:1073`, alias at `:923`) on `VoteBallot`
+(`meetings/manager.py:3733`) and rewrites nothing. It writes one
+`grounding_label` (`meetings/schemas.py:1079`, alias at `:923`) on `VoteBallot`
 only, in the card's precedence, and returns a ballot identical in every other
 field. The subject is the EJECT's target and, for a SKIP,
 `considered_alternatives` when non-empty and `candidate_targets` otherwise
-(`_ballot_grounding_subjects`, `:3703`). `invalid_citation` is separated from
+(`_ballot_grounding_subjects`, `:3706`). `invalid_citation` is separated from
 `uncited` by `citation_nulled`, computed at the call site
 (`meetings/manager.py:2376` and `:2448`) from the ballot before and after the
 two citation validators.
@@ -619,7 +699,7 @@ and never copies one (review round 3; the same holds of
 `vote_ballot_accounts.j2:23`). The marker at `:3` and the `qwen3_6_27b`
 entry in `PROMPT_VERSION_SETS` (`orchestrator/game.py:435`) advance
 `vote_ballot` ALONE, v6 → v7, in the Task 15.5 `qwen3_32b` form. The cascade
-also moves `REQUIRED_PROMPT_VERSIONS_BASE` (`scripts/record_ml_corpus.sh:166`),
+also moves `REQUIRED_PROMPT_VERSIONS_BASE` (`scripts/record_ml_corpus.sh:169`),
 the live-registry and marker-equality pins, and the four lever-arm overlays
 (see decision 7). Recorded-manifest pins do NOT move: every committed replay
 stamps `.v5` and reads as recorded.
@@ -630,7 +710,7 @@ stamps `.v5` and reads as recorded.
 `BallotCard.tsx` renders the label as one plain-language chip beside the
 alternatives heading, behind the same perspective gate as the citations.
 `rewriteLabel` keeps its `under_gate_redirect` and `uncited_coerced` cases and
-the `BallotCard.tsx:291-292` redirect disclosure, and gains `off_target_coerced`
+the `BallotCard.tsx:292-294` redirect disclosure, and gains `off_target_coerced`
 and `invalid_basis`. Every label value has a `docs/glossary.md` entry, as does the
 stated basis. A label this build has not been taught renders nothing rather
 than a guess.
@@ -748,25 +828,45 @@ than a guess.
     `[0, 0]`), where it carries its own explanation. The token counts are still
     read off the manifest; no `audits/` byte moves, so no `docs/artifacts.md`
     row is recomputed.
+12. **Two unreachable-by-construction lines in the labeller are KEPT, and say
+    so (review round 4, 2026-09-21).** The round-4 walk found two guards no
+    perturbation can turn red, and keeping or removing them is a decision
+    rather than a finding. Both stay, and `label_ballot_grounding`'s docstring
+    names them with the construction that makes them unreachable, so no later
+    reader re-derives them as an unenforced-line report. `invalid_citation` can
+    never race `supported` / `off_target`, because the one call site computes
+    `citation_nulled` as "cited before the validators AND both ids `None` after
+    them"; it stays BELOW them because that is the correct order for a caller
+    that holds both, which is a grader's shape over recorded bytes. The
+    `ballot.target != _SKIP_TARGET` half of the `flag_only` guard can never
+    decide the label, because every live `ContradictionRef.subjects` entry is a
+    speaker or a claim subject and never the literal `"SKIP"`; it stays because
+    `PlayerId` is `str` and nothing in the type forbids that value, and because
+    `flag_only` is defined as an EJECT's word. What this card forbids is an
+    unexplained unenforced line; an explained one is a defensive line.
 
 ### Verification
 
 Every command run from this worktree, exit codes captured directly (never
-through a pipe). **Measured at the round-3 head** — the table carries the round
-it was taken at because three of its cells were stale under a heading that
+through a pipe). **Measured at the round-4 head** — the table carries the round
+it was taken at because three of its cells were once stale under a heading that
 claimed the head of the day (review round 3): it read 8,153 for 8,158 passed,
-1,810 for 1,813, and 38 for 40 at `7e6747c7`. The dated round-1 and round-2
-tables below are the record of THOSE heads and are not re-measured.
+1,810 for 1,813, and 38 for 40 at `7e6747c7`. Every cell below is re-measured
+at THIS head; round 4's cases move four of them, and `tests/training` joins the
+table because this round edits `training/surrogate/`. The dated round-1,
+round-2 and round-3 tables below are the record of THOSE heads and are not
+re-measured.
 
 | command | result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — 8,163 passed, 20 skipped, 3 xfailed; 4 import contracts kept, 0 broken; 73 work cards validated; 390 prompts in sync; 552 frontend tests; frontend build OK |
+| `bash scripts/check.sh` | exit 0 — 8,167 passed, 20 skipped, 3 xfailed; 4 import contracts kept, 0 broken; 73 work cards validated; 390 prompts in sync; 552 frontend tests; frontend build OK |
 | `uv run mypy .` | Success: no issues found in 488 source files |
 | `uv run ruff check .` / `ruff format --check .` | All checks passed / 517 files already formatted |
-| `uv run pytest tests/meetings tests/api -q` | exit 0 — 1,817 passed, 2 skipped |
-| `uv run pytest tests/meetings/test_grounding_label.py -q` | exit 0 — 43 passed |
+| `uv run pytest tests/meetings tests/api -q` | exit 0 — 1,821 passed, 2 skipped |
+| `uv run pytest tests/meetings/test_grounding_label.py -q` | exit 0 — 45 passed |
 | `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | exit 0 — 25 passed |
 | `uv run pytest tests/agents tests/experiments -q` | exit 0 — 1,977 passed |
+| `uv run pytest tests/training -q` | exit 0 — 472 passed, 335 deselected |
 | `bash scripts/verify_samples.sh` | exit 0 — 50/50 + 50/50 = 100/100 clean |
 | `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check` ×4 | exit 0 — consistent on all four sets |
 | `uv run python scripts/publish_process_scorecard.py --check` | exit 0 — consistent |
@@ -816,8 +916,9 @@ target moves must carry a retired reason, and its new target must equal the
 
 Sixteen probes at the first head, five more in
 [round 1](#review-corrections-round-1-2026-09-21), two in
-[round 2](#review-corrections-round-2-2026-09-21) and twenty new ones in
-[round 3](#review-corrections-round-3-2026-09-21) — forty-three. Round 3 also
+[round 2](#review-corrections-round-2-2026-09-21), twenty new ones in
+[round 3](#review-corrections-round-3-2026-09-21) and thirteen in
+[round 4](#review-corrections-round-4-2026-09-21) — fifty-six. Round 3 also
 RE-MEASURED six lines an earlier round had already probed, because its new
 cases move their counts; those six carry both figures in the round-3
 call-surface table and are not counted again. Each probe neutered ONE
@@ -828,9 +929,12 @@ the provenance-boundary line (`meetings/manager.py:2352`) unprobed, round 2
 found the `_ballot_view` mirrors unprobed, and round 3 found four more — the
 labeller's `turns=` and `candidate_targets=` arguments, the `invalid_basis`
 row of `api/replay_loader.py`'s marker table, and the two `rewriteLabel` cases
-`BallotCard.tsx` gained. All four are planted now, and round 3's table is a
-walk of the whole call surface rather than of the lines a finding happened to
-name.
+`BallotCard.tsx` gained. All four are planted now. Round 3's claim that its
+table was a walk of the WHOLE call surface was itself wrong, and round 4 says
+so: five more lines were unenforced at `53335618`, three of them named by the
+round-4 verifiers and two found by walking the diff again. That walk, and the
+two lines it records as unobservable rather than planted, are in the round-4
+subsection.
 
 | probe (line neutered) | perturbed | restored |
 | --- | --- | --- |
@@ -1406,3 +1510,329 @@ sample report, scorecard figure, prompt archive or golden moved. No `audits/`
 or `tests/fixtures/` byte moved, so no `docs/artifacts.md` row is recomputed,
 and the `tasks/README.md` inventory sentence is unchanged because Status was
 already `done` before this round.
+
+### Review corrections, round 4 (2026-09-21)
+
+Four blocking findings from the round-4 verifiers. The first three are one
+class of defect found three times: a production line nothing enforced, left
+standing by a round-3 walk that claimed to cover the whole call surface. The
+fourth is a prose site three closing greps had missed, because all three
+grepped phrases rather than inflections. The verifiers reproduced every figure
+in this card, all 26 round-3 probes and the card's universal guarantee on their
+own 1,848-meeting family with 0 failures, so nothing above is withdrawn; what
+follows is added to it. Every command quoted below was run from this worktree
+at this head.
+
+**1. `invalid_citation` over `none_held` was unenforced, and the reachable case
+untested.** Swapping the two branches of `label_ballot_grounding` left the
+WHOLE Python suite green. The pair is reachable through the manager and only
+the branch order decides it: a voter that declares `decision_basis="none_held"`
+AND cites a turn id this meeting does not own arrives at the labeller carrying
+both halves, because the validator nulls the id (`citation_nulled=True`) while
+the in-set basis rides the pre-pass untouched.
+`test_a_fabricated_citation_outranks_a_declared_none_held` plants exactly that
+ballot through `MeetingManager` — `p-1` SKIP,
+`primary_reason_id="m-1:turn-99"`, `decision_basis="none_held"` — and asserts
+both halves are really on the recorded ballot (the id nulled with its marker,
+the voter's word surviving beside it) before asserting `invalid_citation`, with
+the declared-basis twin beside it reading `none_held`. The combination is also
+in `TestEveryRecordedBallotIsLabelled._SPECS`, so the generated family carries
+the one shape where two branches of the precedence both hold. The ordering is
+the ruling it looks like: the record says what the ballot DID, not what it said
+it held.
+
+*The two orderings that are genuinely unreachable, decided and written down.*
+Both lines STAY as defensive lines and `label_ballot_grounding`'s docstring now
+says so, with why, so no later reader re-finds them as findings. First,
+`invalid_citation` can never race `supported` / `off_target`: at the one
+production call site `citation_nulled` is computed as "cited before the
+validators AND both ids `None` after them", which forces `cited` false, so no
+ordering between branches 2 and 3 is observable there. Branch 3 stays BELOW
+branch 2 for a caller that passes `citation_nulled=True` beside a surviving id
+— a grader's shape over recorded bytes, never the manager's. Second, the
+`ballot.target != _SKIP_TARGET` half of the `flag_only` guard can never be what
+decides it: every live `ContradictionRef.subjects` entry is a speaker or a
+claim subject (`meetings.transcript.detect_contradictions`,
+`meetings.public_accounts`), so the literal `"SKIP"` is never in `flagged` and
+the membership test alone would answer the same. It stays because `PlayerId` is
+`str` and nothing in the type forbids that value, and because `flag_only` is
+defined as an EJECT's word.
+
+**2. `"grounding_label"` in `_LAYER_OWNED_BALLOT_FIELDS` was unenforced, and
+removing it costs a voter its whole vote.** Dropping the row left
+`tests/meetings` green. With a non-validating client a model that sends
+`grounding_label="fabricated"` goes from `target='p-3', reason=None,
+label='uncited'` at head to `target='SKIP', reason='parse_default',
+label='not_assessed'` perturbed: the `Literal` refuses the value, so an
+unstripped key fails the schema and the ballot degrades — the identical failure
+mode the half-pair provenance rows exist for.
+`test_a_model_authored_provenance_value_never_reaches_the_record` asserted that
+property for `guard_redirected_from` / `guard_rewrite_reason` and was never
+given the third name. It now carries `{"grounding_label": "fabricated"}` and
+the in-set `{"grounding_label": "supported"}`, and asserts the vote survives on
+its authored target AND that the recorded label is the layer's `uncited`. The
+in-set row states what the strip does and does not buy: the labeller overwrites
+the field at the end of the chain either way, so what the strip keeps out is
+the model's word from the payload the layer validates.
+
+**3. `bounded_marker_original(dropped)` on the invalid basis was unenforced,
+and removing it unbounds the record.** Dropping the call left
+`tests/meetings tests/api` green while a 5,000-character `decision_basis`
+through the manager grew the recorded rationale from 111 characters to 5,048.
+`test_an_over_length_fabricated_basis_is_quoted_bounded` drives that value and
+asserts the recorded rationale is exactly the marker quoting a head bounded by
+`MARKER_QUOTED_ORIGINAL_MAX_CHARS` plus `MARKER_TRUNCATION_SUFFIX`, that the
+runaway string is absent, and that the whole rationale stays inside the
+constant's bound — the Task 10.6 rule, whose measured reason is seed 35 m1's
+3,499-char blob.
+
+**The call surface, walked again.** Every added or changed executable line and
+tuple/dict row of `git diff 038a22a5 HEAD` over `meetings/manager.py`,
+`meetings/schemas.py`, `meetings/citation_relevance.py`, `meetings/voting.py`,
+`api/replay_loader.py`, `api/schemas.py`, `training/surrogate/dataset.py` and
+`eval/deduction_metrics.py` that is NOT in the round-3 table and not one of the
+three findings above. `meetings/voting.py` contributes no row: its whole diff
+is docstring. Each row neutered ONE line, ran the selection, and was reverted
+from a COPY taken first.
+
+| site | line neutered | selection | perturbed | restored |
+| --- | --- | --- | --- | --- |
+| labeller precedence | branches 3 and 4 swapped | `test_grounding_label.py` | 1 failed, 44 passed | 45 passed |
+| `_LAYER_OWNED_BALLOT_FIELDS` | the `"grounding_label"` row dropped | `tests/meetings` | 1 failed, 1,382 passed | 1,383 passed |
+| the basis pre-pass | `bounded_marker_original(dropped)` dropped | `tests/meetings tests/api` | 1 failed, 1,820 passed, 2 skipped | 1,821 passed, 2 skipped |
+| labeller call | `cited_before_validation` loses its observation half | `test_grounding_label.py` | 45 passed — GREEN | 45 passed |
+| labeller call | the same, after the planted case | `test_grounding_label.py` | 1 failed, 44 passed | 45 passed |
+| labeller call | `citation_nulled`'s turn conjunct dropped | `test_grounding_label.py` | 45 passed — UNOBSERVABLE | 45 passed |
+| labeller call | `citation_nulled`'s observation conjunct dropped | `test_grounding_label.py` | 45 passed — UNOBSERVABLE | 45 passed |
+| the basis pre-pass | `drop_basis` loses its `basis is not None` guard | `test_grounding_label.py` | 1 failed, 44 passed | 45 passed |
+| the basis pre-pass | the byte-conservative early return dropped | `tests/meetings tests/api` | 1 failed, 1,820 passed, 2 skipped | 1,821 passed, 2 skipped |
+| the basis pre-pass | a non-string basis rendered `str()` not `json.dumps()` | `test_grounding_label.py` + `tests/api` | 483 passed, 2 skipped — GREEN | 483 passed, 2 skipped |
+| the basis pre-pass | the same, after the planted case | `test_grounding_label.py` + `tests/api` | 2 failed, 481 passed, 2 skipped | 483 passed, 2 skipped |
+| `citations_bear_on_any` | the vacuous-true early return dropped | `tests/meetings` | 1 failed, 1,382 passed | 1,383 passed |
+| `meetings/schemas.py` | the `decision_basis` field row dropped | `test_grounding_label.py` | 25 failed, 20 passed | 45 passed |
+| `meetings/schemas.py` | the `grounding_label` field row dropped | `test_grounding_label.py` | 10 failed, 35 passed | 45 passed |
+| `api/schemas.py` | both `BallotView` field rows dropped | `test_view_model.py` | 21 failed, 30 passed | 50 passed, 1 skipped |
+
+Thirteen distinct lines, TWO of which first came back GREEN and are now
+planted, and TWO of which are recorded as unobservable rather than planted.
+
+*The two that first came back green.* `cited_before_validation` reads BOTH
+citation channels at the call site, and its observation disjunct was reachable
+by no assertion: every `invalid_citation` case in the tree cited a TURN id, so
+a voter that reached for a private memory line and missed was recorded
+`uncited` — the same record as a voter that reached for nothing, which is the
+one distinction the label exists to make.
+`test_a_fabricated_turn_id_is_invalid_citation` now carries the observation
+channel beside the turn channel, driven through the manager against a voter
+holding no typed observation ids. The second is the pre-pass's rendering of a
+NON-STRING basis: `json.dumps(basis)` reports the value as the bytes the model
+sent, `str(basis)` reports Python's repr of the parsed object, and
+`test_every_out_of_set_shape_is_dropped_rather_than_refused` asserted only that
+SOME marker was prepended. Its parametrize now carries the expected quoted
+rendering per shape, spelled out literally rather than recomputed.
+
+*The two that are unobservable, and why they are not planted.* Both conjuncts
+of the `citation_nulled` expression at the call site are masked by the
+`supported` / `off_target` branch above `invalid_citation`: dropping either one
+can only make `citation_nulled` true on a ballot whose citation SURVIVED, and
+such a ballot never reaches branch 3. That is the same construction the
+reachability note in the labeller's docstring states, reached from the other
+end — so the honest record is that the conjuncts are belt-and-braces at this
+call site, not that a case is missing. No test can distinguish them without a
+second call site, and this card adds none.
+
+**4. The prose sweep left false current-intent sentences in a file this PR
+touches.** Rounds 1 to 3 closed the sweep against five phrases, then against
+the two deleted symbol names, case-insensitively. All three rounds grepped
+PHRASES (`coerces|still coerces|then coerces`), so a sentence using another
+inflection survived. `tests/agents/test_public_account_prompts.py` carried
+three: the fourth-live-run paragraph said the layer "nulls before coercing the
+now-uncited ejection to SKIP" (now history — the id is still nulled, and since
+D6 the ejection stands carrying `grounding_label="invalid_citation"`); the
+citation test said a copied literal "is nulled and the ejection then coerced to
+SKIP" (same correction); and the same test closed on "The skeleton is a SKIP,
+and a SKIP needs no citation" — false since D6, and now: the skeleton is a
+SKIP, which states its basis in `decision_basis` rather than being exempt from
+one, and the citation slot stays null because a pre-filled literal is COPYABLE,
+not because a SKIP may cite nothing.
+
+The widened sweep found four more sites no finding had named, each a live-tense
+claim about a mechanism this card removed:
+
+* `tests/api/test_view_model.py:522-529` and `:550-552` — called the under-gate
+  redirect "the live gate chip" and described the guard in the present tense.
+  Now: the chip with real bytes behind it, 23 of them, retired by D6, and no
+  later recording adds one.
+* `tests/training/test_surrogate_dataset.py:850-856` — "the gate is the last
+  guard, so the coercion marker is the outermost prefix", present tense about a
+  retired gate. Now a statement about the RECORDED marker order and why it is
+  what it is.
+* `tests/training/test_surrogate_dataset.py:1002` — "the production stack is
+  citation-gate-outermost"; now "the RECORDED stack".
+* `experiments/fresh_deduction_instrument.py:5193-5194`, `:5204-5206` and
+  `:5449-5450` — "One ballot can carry two", "the vote prompt renders coerced
+  ballots back to later voters" and "which an under-gate redirect breaks". All
+  three are about bytes the instrument grades, and all three now say so.
+
+The closing greps at this head, widened to every inflection and
+case-insensitive, over the whole tree minus `.venv`, `.git`, `node_modules`,
+`audits/`, `replays/` and the dated card history under `tasks/` and
+`agent_prompts/`:
+
+```
+grep -rniE "SKIP needs|needs no citation|needs neither" . \
+  --include="*.py" --include="*.j2" --include="*.ts" --include="*.tsx" \
+  --exclude-dir=.venv --exclude-dir=.git --exclude-dir=node_modules \
+  --exclude-dir=audits --exclude-dir=replays --exclude-dir=tasks \
+  --exclude-dir=agent_prompts
+```
+
+returns five lines and cannot return none: two are
+`tests/fixtures/prompt_archive/qwen3_6_27b_v5/vote_ballot.j2:259` and `:268`,
+the ARCHIVED v5 body whose bytes are the record of what every committed replay
+was generated from; two are `tests/meetings/test_elicitation_fixtures.py:344`
+and `:345`, the gate asserting both phrases are GONE from the live body; and
+the fifth is `tests/orchestrator/test_replay.py:95`, an unrelated sentence
+saying a by-identity lever binding "needs neither a mirror nor an equivalence
+pin".
+
+```
+grep -rniE "guard_ballot_citation|guard_ballot_target_graph" . \
+  --include="*.py" --include="*.j2" --include="*.ts" --include="*.tsx" \
+  --exclude-dir=.venv --exclude-dir=.git --exclude-dir=node_modules \
+  --exclude-dir=audits --exclude-dir=replays --exclude-dir=tasks \
+  --exclude-dir=agent_prompts
+```
+
+returns the same six lines round 2 recorded, at their current numbers, and
+cannot return none for the same reason: two are the gate asserting both symbols
+are gone from the manager, and four name the retired symbols on purpose,
+because the markers they minted are still on 89 committed ballots.
+
+```
+grep -rniE "two layer-owned|two citation-only" . \
+  --include="*.py" --include="*.j2" --include="*.ts" --include="*.tsx" \
+  --exclude-dir=.venv --exclude-dir=.git --exclude-dir=node_modules \
+  --exclude-dir=audits --exclude-dir=replays --exclude-dir=tasks \
+  --exclude-dir=agent_prompts
+```
+
+returns nothing (exit 1).
+
+```
+grep -rniE "default.off" . --include="*.py" --include="*.j2" --include="*.ts" \
+  --include="*.tsx" --exclude-dir=.venv --exclude-dir=.git \
+  --exclude-dir=node_modules --exclude-dir=audits --exclude-dir=replays \
+  | grep -iE "citation|relevance"
+```
+
+returns nothing (exit 1).
+
+The two broad sweeps are read rather than claimed empty, because both must
+return lines:
+
+```
+grep -rniE "coerc" . --include="*.py" --include="*.j2" --include="*.ts" \
+  --include="*.tsx" --exclude-dir=.venv --exclude-dir=.git \
+  --exclude-dir=node_modules --exclude-dir=audits --exclude-dir=replays \
+  --exclude-dir=tasks --exclude-dir=agent_prompts
+```
+
+```
+grep -rniE "redirect" . --include="*.py" --include="*.j2" --include="*.ts" \
+  --include="*.tsx" --exclude-dir=.venv --exclude-dir=.git \
+  --exclude-dir=node_modules --exclude-dir=audits --exclude-dir=replays \
+  --exclude-dir=tasks --exclude-dir=agent_prompts | grep -iE "ballot|gate|argmax"
+```
+
+737 and 355 lines respectively. Every one is in one of four classes, and none is
+a live-tense claim about a retired mechanism: the LIVE teammate firewall and
+invalid-target normalization; Pydantic / SDK type coercion in `llm/`,
+`training/realpath_schema.py` and their tests; the retired markers' own
+identifiers, chip copy and report cells, which stay because 89 committed
+ballots carry them; and sentences about RECORDED bytes, which say what produced
+those bytes and are still true.
+
+**The smaller items.** Three sites called the labels outside
+`TARGET_REWRITE_LABELS` "the two citation-only" ones where this card makes them
+three: `api/replay_loader.py:302-305`, `training/surrogate/dataset.py:212-221`
+and `training/surrogate/ballots.py:65-68`, the third found by the same grep and
+named by no finding. `docs/glossary.md` and `frontend/src/lib/copy.ts` glossed
+`supported` with the SKIP's subject alone and now say both — an ejection's
+subject is the player it names, a skip's is the alternatives it weighed, or any
+living candidate when it weighed none; the frontend cases read
+`BALLOT_COPY.groundingLabels` by KEY rather than by text, so no test
+expectation moved. `BallotCard.tsx`'s comment called `not_assessed` a firewall
+coercion and now names all four paths (an illegal target, the teammate
+firewall, a ballot that never parsed, a missed deadline).
+`scripts/record_ml_corpus.sh:159-165` said "all four at v5" above a literal
+reading v6/v6/v6/v7, and now carries the real lineage through v6 (the alibi
+card, four as a unit) and v7 (`vote_ballot` alone, this card).
+`docs/artifacts.md:101` said the live set reads v6 and now adds
+`vote_ballot`'s v7; its class, `where` and size cells are untouched, and
+`scripts/verify_ml_evidence.py` keys that row on its first backticked token, so
+the row's pin is unmoved.
+
+**The schema's `None` reservation, restated at the strength the code
+delivers.** `BallotGroundingLabel`'s docstring said `None` "is reserved for a
+recording made before the field existed". That holds for MEETING recordings,
+which is what the two writers cover; `training/surrogate/runner.py:367`,
+`training/composed_runner.py:726` and `eval/reasoning_evidence.py:167` build
+`VoteBallot` objects for a surrogate tally or a fixture and leave the field
+`None` — correctly, because no meeting assessed them and none of those objects
+is a recording. That docstring and `_default_vote`'s now say exactly that. The
+three call sites are unchanged.
+
+**Citations, re-derived at this head after the last code edit.** Eight moved
+again with this round's docstring additions and are corrected in Acceptance and
+in the CURRENT Results text: `meetings/schemas.py` `decision_basis` 1016,
+`grounding_label` 1079, `BallotDecisionBasis` 975 (`BallotGroundingLabel` 923
+and `under_gate_redirect` 886 are unmoved); `meetings/manager.py`
+`_LAYER_OWNED_BALLOT_FIELDS` 3030-3034, `_prepared_ballot_payload` 3057,
+`_ballot_grounding_subjects` 3706, `label_ballot_grounding` 3733 (the
+provenance boundary 2352, `cited_before_validation` 2376, the labeller call
+2444, `citation_nulled` 2448, `_default_vote` 3001 and `INVALID_BASIS_MARKER`
+438 are unmoved); `api/replay_loader.py` `_ballot_view` 3307 and the
+`invalid_basis` row 3613; `scripts/record_ml_corpus.sh`
+`REQUIRED_PROMPT_VERSIONS_BASE` 169; `BallotCard.tsx`'s redirect disclosure
+292-294. Two Acceptance citations were wrong before this round's edits and are
+corrected too: `agents/strategic/prompts/loader.py:1278` to `:1283`, and
+`api/replay_loader.py:3569-3577` to the marker table's real span `:3605-3614`.
+The round-1, round-2 and round-3 subsections keep the figures of THEIR heads
+and are not re-anchored.
+
+**One Acceptance pair quoted two different totals for one file, and both were
+right.** `tests/agents/test_public_account_prompts.py` reads 94 in the skeleton
+item and 93 in the accounts-revision item: the first was measured at the
+round-3 head, the second at the round-1 head, and the difference is the case
+round 3 added. A dated note now says so, rather than making the two agree by
+rewriting a measurement.
+
+**Verification at this head (round 4).** Commands run from this worktree, exit
+codes captured directly (never through a pipe).
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — 8,167 passed, 20 skipped, 3 xfailed; 4 import contracts kept, 0 broken; 73 work cards validated; 390 prompts in sync; mypy clean over 488 files; ruff clean and 517 files formatted; 552 frontend tests; frontend build OK |
+| `uv run pytest tests/meetings tests/api -q` | exit 0 — 1,821 passed, 2 skipped |
+| `uv run pytest tests/meetings/test_grounding_label.py -q` | exit 0 — 45 passed |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | exit 0 — 25 passed |
+| `uv run pytest tests/agents tests/experiments -q` | exit 0 — 1,977 passed |
+| `uv run pytest tests/training -q` | exit 0 — 472 passed, 335 deselected |
+| `npm --prefix frontend test` | exit 0 — 552 passed over 20 files |
+| `bash scripts/verify_samples.sh` | exit 0 — 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check` x4 | exit 0 — consistent on all four sets |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 — consistent |
+| `uv run python scripts/check_doc_facts.py` | exit 0 — 26-lever substrate registry, 4-switch experiment registry |
+| `uv run python scripts/validate_task_docs.py` | exit 0 — 73 work cards |
+| `uv run python scripts/generate_prompts.py --check` | exit 0 — all 390 prompts in sync |
+| `uv run python scripts/verify_ml_evidence.py` | exit 0 — 61 checks, 0 FAIL, 7 evidence-branch-absent |
+
+No live provider call, no calibration, no recording and no re-record in this
+round either; band 2100-2999 was not generated or opened and
+`scripts/verify_ml_evidence.py --complete` was not run. No recorded flag,
+sample report, scorecard figure, prompt archive or golden moved. No `audits/`
+or `tests/fixtures/` byte moved, so no `docs/artifacts.md` row is recomputed
+(the `docs/artifacts.md` edit is PROSE inside one row's description cell, which
+no inventory figure reads), and the `tasks/README.md` inventory sentence is
+unchanged because Status was already `done` before this round.

@@ -299,9 +299,10 @@ _FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
 # the tallied target). DERIVED from
 # ``meetings.schemas.BallotTargetRewriteReason``, the same union a recording
 # stamps on ``VoteBallot.guard_rewrite_reason``, so the display class and the
-# recorded class cannot drift apart. The two citation-only labels
-# (``invalid_reason_id``, ``invalid_observation_id``) null a reference but leave
-# the authored target intact, so they are deliberately not in that union.
+# recorded class cannot drift apart. The THREE non-target labels
+# (``invalid_reason_id``, ``invalid_observation_id``, and ``invalid_basis``,
+# which ruling D6 of 2026-09-19 added) null a reference or a declared basis but
+# leave the authored target intact, so none is in that union.
 _TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
     get_args(BallotTargetRewriteReason)
 )

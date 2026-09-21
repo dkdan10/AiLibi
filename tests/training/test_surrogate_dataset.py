@@ -850,8 +850,11 @@ def test_coerced_skip_detection_follows_the_marker_convention() -> None:
     Built from the imported production literal via the established
     ``api.replay_loader._marker_pattern`` convention (the ``eval.meeting_quality``
     17.2 precedent): a rendered coercion marker matches; a 16.5 nulled-citation
-    marker stacked INSIDE it still matches (the gate is the last guard, so the
-    coercion marker is the outermost prefix); a coerced-target payload that
+    marker stacked INSIDE it still matches (on the recorded bytes this reads,
+    the coercion marker is the outermost prefix of that pair, because the gate
+    that wrote it ran after the citation validators; ruling D6 of 2026-09-19
+    retired the gate and no new recording stacks the pair); a coerced-target
+    payload that
     itself contains the marker's tail parses to the real boundary; the TEAMMATE
     coercion marker (which shares the "coerced to SKIP" suffix) does NOT match;
     and the marker mid-string does not match (anchored ``^``).
@@ -996,7 +999,7 @@ def test_a_second_guard_survives_the_structured_reason_that_names_the_first() ->
     then coerced to SKIP, a pair ruling D6 of 2026-09-19 left as history. ``meetings.voting.ballot_target_rewrite_provenance`` settles both
     halves of how to read that — the FIRST rewrite owns the field and a later
     one leaves it untouched, while every rewrite still PREPENDS its own marker.
-    So the production stack is citation-gate-outermost with the redirect inside,
+    So the RECORDED stack is citation-gate-outermost with the redirect inside,
     and the field names the inner one.
 
     Reading the field alone would report only the redirect, losing the coercion:

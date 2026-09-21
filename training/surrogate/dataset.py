@@ -213,9 +213,11 @@ _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 #: choice — the meeting layer redirected, coerced, normalized or wholly defaulted
 #: it. Read from the public :data:`meetings.schemas.BallotTargetRewriteReason`
 #: union, the same source ``api.replay_loader._TARGET_REWRITE_LABELS`` derives
-#: from, so the training class and the display class cannot drift apart. The two
-#: citation-only labels are deliberately outside it: they null a reference and
-#: leave the authored target intact.
+#: from, so the training class and the display class cannot drift apart. The
+#: THREE non-target labels are deliberately outside it -- ``invalid_reason_id``,
+#: ``invalid_observation_id`` and the ``invalid_basis`` ruling D6 of 2026-09-19
+#: added: each nulls a reference or a declared basis and leaves the authored
+#: target intact.
 TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
     get_args(BallotTargetRewriteReason)
 )

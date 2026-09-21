@@ -960,9 +960,15 @@ The precedence is fixed and total -- the first that holds wins:
 ``none_held`` outranks ``flag_only`` on purpose: a voter that says it holds
 nothing must not be upgraded by the layer.
 
-``None`` is reserved for a recording made before the field existed. Every
-committed recording reads ``None``; the first bytes carrying a value are the
-single re-record that follows the substrate wave.
+``None`` means nobody labelled this ballot, and on a MEETING recording that is
+reserved for a recording made before the field existed: the two writers above
+run on every ballot the meeting layer records, so a live meeting leaves none
+unlabelled. Every committed recording reads ``None``; the first bytes carrying
+a value are the single re-record that follows the substrate wave. Outside the
+meeting layer the default says only what it says -- a surrogate or fixture
+ballot built directly from this class (``training.surrogate.runner``,
+``training.composed_runner``, ``eval.reasoning_evidence``) carries ``None``
+because no meeting assessed it, and none of those objects is a recording.
 """
 
 

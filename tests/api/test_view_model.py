@@ -520,11 +520,13 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
     widening re-record cascaded the trajectories.
 
     Census over the 869 committed ballots of this record: invalid_observation_id
-    (16.5) x3, uncited_coerced (16.6) back to an honest zero, and the live gate
-    chip under_gate_redirect x23. The live gate-marker chip is the under-gate
-    eject REDIRECT (the owner-principle guard: an under-gate eject target is
-    redirected, never left to a random innocent); it is anchored here as the
-    real-bytes chip pin so a future substrate cannot silently drop the chips. The
+    (16.5) x3, uncited_coerced (16.6) back to an honest zero, and the gate chip
+    under_gate_redirect x23. The chip with real bytes behind it is the under-gate
+    eject REDIRECT (the owner-principle guard: an under-gate eject target WAS
+    redirected rather than left to a random innocent -- ruling D6 of 2026-09-19
+    retired that guard, so these 23 are history and no new recording adds one);
+    it is anchored here as the real-bytes chip pin so a future substrate cannot
+    silently drop the chips. The
     DTO/chip rendering mechanism itself stays covered synthetically by
     tests/api/test_schemas.
     """
@@ -545,8 +547,9 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
     coerced = [b for b in ballots if "uncited_coerced" in b.rewrite_reasons]
     assert len(coerced) == 0  # was 1
 
-    # The live gate-marker chip: the under-gate eject redirect. 23 ballots carry
-    # it (prior record: 36; baseline 6: 13).
+    # The gate-marker chip with recorded bytes behind it: the under-gate eject
+    # redirect, retired by ruling D6. 23 ballots carry it (prior record: 36;
+    # baseline 6: 13), and no later recording will.
     redirected = [b for b in ballots if "under_gate_redirect" in b.rewrite_reasons]
     assert len(redirected) == 23  # was 36
 

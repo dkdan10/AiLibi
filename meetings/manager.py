@@ -3006,8 +3006,11 @@ def _default_vote(*, voter: PlayerId) -> VoteBallot:
     missed deadline and a twice-failed completion both return before the chain
     starts. The value is the same one the labeller writes for every other
     ballot whose target is the layer's and not the voter's, and stating it is
-    what leaves every live-recorded ballot labelled -- so a ``None`` label means
-    a recording made before the field and nothing else.
+    what leaves every live-recorded ballot labelled -- so on a MEETING recording
+    a ``None`` label means a recording made before the field and nothing else.
+    A ``VoteBallot`` built outside this layer (a surrogate tally, a fixture)
+    keeps the field's ``None`` default because nothing assessed it, which is the
+    limit of what the reservation claims.
     """
 
     return VoteBallot(
@@ -3788,7 +3791,29 @@ def label_ballot_grounding(
     6. ``uncited`` -- nothing cited, nothing declared, no flag.
 
     ``none_held`` outranks ``flag_only`` deliberately: a voter that says it holds
-    nothing must not be upgraded by the layer reading a flag on its behalf.
+    nothing must not be upgraded by the layer reading a flag on its behalf. The
+    other ordering a ruling decides is branch 3 over branch 4, and that pair IS
+    reachable through the manager: a voter may declare ``none_held`` and cite a
+    fabricated id in ONE ballot, where the record says what the ballot DID
+    rather than what it said.
+
+    Two lines above are unreachable-by-construction at the one production call
+    site. Both are KEPT as defensive lines, said so here rather than left to be
+    re-found:
+
+    * branch 3 can never race branch 2. ``_collect_vote`` computes
+      ``citation_nulled`` as "cited before the validators AND both ids ``None``
+      after them", so a nulled citation forces ``cited`` false there and no
+      ordering between the two is observable; branch 3 stays BELOW branch 2 for
+      a caller that passes ``citation_nulled=True`` beside a surviving id, which
+      is a grader's shape over recorded bytes and never the manager's.
+    * the ``ballot.target != _SKIP_TARGET`` half of branch 5 can never be what
+      decides it: every live ``ContradictionRef.subjects`` entry is a speaker or
+      a claim subject (:func:`meetings.transcript.detect_contradictions`,
+      :mod:`meetings.public_accounts`), so the literal ``"SKIP"`` is never in
+      ``flagged`` and the membership test alone would answer the same. It stays
+      because ``PlayerId`` is ``str`` and nothing in the type forbids that
+      value, and because ``flag_only`` is defined as an EJECT's word.
 
     Pure function of its inputs -- no RNG, no clock, no env read, no I/O -- so
     replaying the same ballot, flags and surfaces yields the same label.

@@ -7842,6 +7842,17 @@ class _ProvenanceForgingVoteClient:
         # would raise and replace the entire vote with the parse default.
         {"guard_redirected_from": "p-4"},
         {"guard_rewrite_reason": "under_gate_redirect"},
+        # The third layer-owned field (ruling D6 of 2026-09-19, planted in
+        # review round 4). Out-of-set: the `Literal` refuses it, so leaving it
+        # in the payload costs the voter its WHOLE vote rather than the forged
+        # claim — which is exactly what dropping `"grounding_label"` from
+        # `_LAYER_OWNED_BALLOT_FIELDS` did, with `tests/meetings` green.
+        {"grounding_label": "fabricated"},
+        # And in-set, which the schema would accept: the strip is not what
+        # makes this one harmless to the record — the labeller overwrites the
+        # field at the end of the chain — but it is what keeps a model's word
+        # out of the payload the layer validates in the first place.
+        {"grounding_label": "supported"},
     ],
 )
 def test_a_model_authored_provenance_value_never_reaches_the_record(
@@ -7855,6 +7866,10 @@ def test_a_model_authored_provenance_value_never_reaches_the_record(
     nothing still loses only that claim — nothing in the recorded meeting
     reports a rewrite that did not happen, and no ballot degrades to the parse
     default over it.
+
+    All THREE names in ``meetings.manager._LAYER_OWNED_BALLOT_FIELDS`` are
+    covered, in and out of their own value sets, because the cost of missing one
+    is the same either way: the vote itself.
     """
 
     client = _ProvenanceForgingVoteClient(forged=forged)
@@ -7877,7 +7892,12 @@ def test_a_model_authored_provenance_value_never_reaches_the_record(
         assert ballot.guard_rewrite_reason is None
         # And the vote itself survived: the model's OWN body is on the record,
         # so the strip cost it the forged field and nothing else.
+        assert ballot.target == "SKIP"
         assert ballot.rationale_text.endswith(f"stub-vote-{ballot.voter}")
+        # The recorded label is the LAYER's finding about this bare SKIP, never
+        # the model's word for it — which is the assertion the in-set forgery
+        # above exists for.
+        assert ballot.grounding_label == "uncited"
     assert manager.defaulted_calls == ()
 
 

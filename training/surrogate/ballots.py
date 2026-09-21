@@ -62,9 +62,11 @@ per-candidate softmax and the SKIP alternative, so there is no channel to poison
 in isolation. Both fit paths (:meth:`BallotSurrogateModel.fit` and
 :func:`fit_corpus_ballot_predictor`) DROP every row whose
 ``MeetingTableRow.ballot_rewrite_labels`` meets
-:data:`~training.surrogate.dataset.TARGET_REWRITE_LABELS`; the two citation-only
-labels stay in the fit, because they null a reference and leave the authored
-target intact. The dropped count is reported in
+:data:`~training.surrogate.dataset.TARGET_REWRITE_LABELS`; the three non-target
+labels -- ``invalid_reason_id``, ``invalid_observation_id`` and the
+``invalid_basis`` ruling D6 of 2026-09-19 added -- stay in the fit, because each
+nulls a reference or a declared basis and leaves the authored target intact.
+The dropped count is reported in
 ``training/reports/report-ballot-surrogate.md``. Fit-side only: the fidelity
 replay scores the recorded bytes unfiltered.
 

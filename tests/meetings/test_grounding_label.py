@@ -39,6 +39,7 @@ from llm.client import LLMResponse, TokenUsage
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_BASIS_MARKER,
+    INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     OFF_TARGET_CITATION_EJECT_MARKER,
     TEAMMATE_COERCED_VOTE_RATIONALE,
@@ -48,6 +49,8 @@ from meetings.manager import (
     label_ballot_grounding,
 )
 from meetings.schemas import (
+    MARKER_QUOTED_ORIGINAL_MAX_CHARS,
+    MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
     AlibiSegment,
@@ -359,6 +362,31 @@ class TestEveryBallotDeclaresItsBasis:
             INVALID_REASON_ID_MARKER.format(reason_id="m-1:turn-77")
         )
 
+        # The OBSERVATION channel of the same case (review round 4). Both halves
+        # of `cited_before_validation` are read at the call site, and dropping
+        # its observation disjunct left every test green while turning this
+        # exact ballot `uncited`: a voter that reached for a private memory line
+        # and missed would have been recorded as one that reached for nothing.
+        # p-1 holds no typed observation ids here, so the validator nulls it.
+        observed, _ = _run_meeting(
+            _responder(
+                {
+                    "p-1": {
+                        "target": "SKIP",
+                        "primary_reason_observation_id": "p-1:99:9",
+                        "decision_basis": "cited",
+                    }
+                }
+            ),
+            participants=_roster(),
+        )
+        obs_ballot = _p1(observed)
+        assert obs_ballot.primary_reason_observation_id is None
+        assert obs_ballot.rationale_text.startswith(
+            INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-1:99:9")
+        )
+        assert obs_ballot.grounding_label == "invalid_citation"
+
     def test_a_declared_none_held_is_none_held(self) -> None:
         # Case 4. The voter's own word, carried onto the record.
         result, _ = _run_meeting(
@@ -500,6 +528,48 @@ class TestEveryBallotDeclaresItsBasis:
         )
         assert [flag.subjects for flag in flagged.contradictions] == [("p-3",)]
         assert _p1(flagged).grounding_label == "flag_only"
+
+    def test_a_fabricated_citation_outranks_a_declared_none_held(self) -> None:
+        # Case 13, review round 4: the OTHER ordering the precedence decides,
+        # and the one nothing pinned -- swapping branches 3 and 4 left the whole
+        # Python suite green. The pair is reachable through the manager because
+        # the two halves come from different places: the validator nulls the
+        # fabricated id (`citation_nulled`) while the in-set `decision_basis`
+        # rides through the pre-pass untouched, so ONE ballot arrives at the
+        # labeller carrying both. `invalid_citation` wins because the record
+        # says what the ballot DID, not what it said it held.
+        result, _ = _run_meeting(
+            _responder(
+                {
+                    "p-1": {
+                        "target": "SKIP",
+                        "primary_reason_id": "m-1:turn-99",
+                        "decision_basis": "none_held",
+                    }
+                }
+            ),
+            participants=_roster(),
+        )
+
+        ballot = _p1(result)
+        # Both halves are really on this ballot: the id was nulled by the
+        # validator, and the voter's own word survived beside it.
+        assert ballot.primary_reason_id is None
+        assert ballot.rationale_text.startswith(
+            INVALID_REASON_ID_MARKER.format(reason_id="m-1:turn-99")
+        )
+        assert ballot.decision_basis == "none_held"
+        assert ballot.grounding_label == "invalid_citation"
+
+        # The twin, so the case is about the ORDER rather than about either
+        # branch being reachable: the same declared basis with no fabricated id
+        # is the `none_held` half.
+        declared, _ = _run_meeting(
+            _responder({"p-1": {"target": "SKIP", "decision_basis": "none_held"}}),
+            participants=_roster(),
+        )
+        assert _p1(declared).decision_basis == "none_held"
+        assert _p1(declared).grounding_label == "none_held"
 
     def test_an_eject_citing_a_turn_that_names_its_target_is_supported(self) -> None:
         # Case 11, review round 3: the TURN channel through the production
@@ -714,10 +784,17 @@ class TestEveryBallotDeclaresItsBasis:
         )
 
     @pytest.mark.parametrize(
-        "basis", [123, ["cited"], {"basis": "cited"}, "CITED", " none_held"]
+        ("basis", "quoted"),
+        [
+            (123, "123"),
+            (["cited"], '["cited"]'),
+            ({"basis": "cited"}, '{"basis": "cited"}'),
+            ("CITED", "CITED"),
+            (" none_held", " none_held"),
+        ],
     )
     def test_every_out_of_set_shape_is_dropped_rather_than_refused(
-        self, basis: object
+        self, basis: object, quoted: str
     ) -> None:
         # Case, whitespace and type are all significant, and none of them may
         # reach the schema: the closed set is exact.
@@ -729,7 +806,43 @@ class TestEveryBallotDeclaresItsBasis:
         ballot = _p1(result)
         assert ballot.decision_basis is None
         assert ballot.guard_rewrite_reason is None
-        assert ballot.rationale_text.startswith(INVALID_BASIS_MARKER.split("{")[0])
+        # `quoted` is the JSON rendering of what the model sent, spelled out
+        # here rather than recomputed (review round 4): a non-string is reported
+        # as the bytes it arrived as, so the marker payload a spectator reads is
+        # the model's own JSON and not Python's repr of a parsed object.
+        assert ballot.rationale_text.startswith(
+            INVALID_BASIS_MARKER.format(basis=quoted)
+        )
+
+    def test_an_over_length_fabricated_basis_is_quoted_bounded(self) -> None:
+        # Review round 4: the Task 10.6 bound on the quoted original, planted.
+        # `_prepared_ballot_payload` hands the dropped token to
+        # `bounded_marker_original` before the caller interpolates it, so a
+        # hallucinated mega-value cannot balloon the recorded ballot. Drop that
+        # call and this rationale grows to the model's own 5,000 characters,
+        # with `tests/meetings tests/api` green: seed 35's 3,499-char blob is
+        # the measured reason that bound exists.
+        runaway = "z" * 5_000
+        result, _ = _run_meeting_unvalidated(
+            _responder({"p-1": {"target": "SKIP", "decision_basis": runaway}}),
+            participants=_roster(),
+        )
+
+        ballot = _p1(result)
+        assert ballot.rationale_text == (
+            INVALID_BASIS_MARKER.format(
+                basis=runaway[:MARKER_QUOTED_ORIGINAL_MAX_CHARS]
+                + MARKER_TRUNCATION_SUFFIX
+            )
+            + "stub-vote-p-1-SKIP"
+        )
+        assert MARKER_TRUNCATION_SUFFIX in ballot.rationale_text
+        assert runaway not in ballot.rationale_text
+        # The bound is the constant's, not a number restated here.
+        assert (
+            len(ballot.rationale_text)
+            < MARKER_QUOTED_ORIGINAL_MAX_CHARS + len(INVALID_BASIS_MARKER) + 64
+        )
 
 
 class TestEveryRecordedBallotIsLabelled:
@@ -740,6 +853,14 @@ class TestEveryRecordedBallotIsLabelled:
         {"target": "SKIP", "decision_basis": "none_held"},
         {"target": "SKIP", "primary_reason_id": "m-1:turn-0"},
         {"target": "SKIP", "primary_reason_id": "m-1:turn-99"},
+        # The declared basis MEETING a fabricated citation, the combination
+        # review round 4 added: it is the one shape where two branches of the
+        # precedence both hold on one ballot.
+        {
+            "target": "SKIP",
+            "primary_reason_id": "m-1:turn-99",
+            "decision_basis": "none_held",
+        },
         {"target": "SKIP", "primary_reason_observation_id": _OBS_ID},
         {"target": "SKIP", "decision_basis": "fabricated"},
         {"target": "p-3"},
