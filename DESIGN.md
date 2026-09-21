@@ -443,7 +443,7 @@ See Section 6 for the full memory architecture. At a glance:
 
 - **Episodic store:** raw event log, append-only, indexed by tick and entity.
 - **Working memory:** current goal, current path, current intent — overwritten frequently.
-- **Belief state:** trust score, suspicion score, alibi map per other player; updated by perception and by meeting outcomes.
+- **Belief state:** trust score, suspicion score, alibi map per other player; updated by perception and by meeting outcomes. *(As built: the suspicion score and the alibi map are updated; the trust score is not, and its writer was deleted by ruling D5 of 2026-09-19 — see §6.6's note and `docs/adr/0001-three-load-bearing-decisions.md`.)*
 - **Meeting memos:** persistent across meetings; the running narrative the agent builds about who's likely impostor.
 
 ### 4.4 Reasoning
@@ -713,10 +713,13 @@ For scale (later phase): switch episodic store to SQLite per agent, add embeddin
 
 ### 6.6 Rendering memory for the LLM
 
-> **Target, not as built (2026-08-19) — two lines of the sample view below never render.**
+> **Target, not as built (2026-08-19; trust settled 2026-09-19) — two lines of the sample view below never render.**
 > The `p1: trust 0.70` line and the whole `## Open contradictions:` block are the intended
-> shape, not HEAD's output. `BeliefState.adjust_trust` has no caller outside `tests/`, so a
-> production trust score never moves off its initial value; and `apply_contradiction_rule`
+> shape, not HEAD's output. `BeliefState.adjust_trust` had no caller outside `tests/`, so a
+> production trust score never moved off its initial value — and ruling D5 of 2026-09-19
+> deleted that writer and the renderer's trust branch with it, so no view can print a
+> trust line at all now; the field survives only because six frozen prompt sets render it.
+> Meanwhile `apply_contradiction_rule`
 > calls `record_contradiction` on the derived `BeliefState` it returns rather than on the
 > agent's persistent store, so the contradictions block appeared in **0 of 1,656** replay
 > renders sampled by the 2026-08-19 review. Suspicion, the alibi map and the observations

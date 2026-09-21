@@ -215,16 +215,18 @@ def _build_memory_from_fixture(fixture: Mapping[str, Any]) -> AgentMemory:
 
     for belief in fixture["beliefs"]:
         player_id = str(belief["player_id"])
-        suspicion_delta = float(belief["suspicion"]) - 0.5
-        trust_delta = float(belief["trust"]) - 0.5
-        if suspicion_delta != 0.0:
-            memory.beliefs.adjust_suspicion(player_id, delta=suspicion_delta)
-        if trust_delta != 0.0:
-            memory.beliefs.adjust_trust(player_id, delta=trust_delta)
-        # A belief at neutral both ways still touches the store so
-        # known_players() can list everyone the fixture mentions.
-        if suspicion_delta == 0.0 and trust_delta == 0.0:
-            memory.beliefs.adjust_suspicion(player_id, delta=0.0)
+        # ``seed_player`` rather than the two ``adjust_*`` mutators since ruling
+        # D5 of 2026-09-19 deleted ``adjust_trust``: it writes both scores in one
+        # call, so a fixture row still lands exactly as written -- including the
+        # non-default trust values two of these fixtures were authored with,
+        # which the loader must keep able to express even though no production
+        # mechanism produces one. It also seeds a wholly neutral row, which is
+        # what the old third branch was for.
+        memory.beliefs.seed_player(
+            player_id,
+            suspicion=float(belief["suspicion"]),
+            trust=float(belief["trust"]),
+        )
 
     for contradiction in fixture["contradictions"]:
         memory.beliefs.record_contradiction(
@@ -490,14 +492,28 @@ class TestBeliefsAndContradictions:
 
         assert "- p-3: suspicion 0.75" in view
 
-    def test_beliefs_section_shows_trust_when_trust_deviates_more(self) -> None:
+    def test_a_row_whose_only_deviation_is_trust_renders_nothing(self) -> None:
+        """Ruling D5 of 2026-09-19: the trust branch of the row is gone.
+
+        This used to assert ``- p-4: trust 0.80`` off an ``adjust_trust`` call.
+        Nothing in production ever made that call -- all 14,880 rendered graph
+        rows across the four committed sets read ``trust 0.50`` -- so the branch
+        was unreachable outside this file, and it is deleted with its writer. A
+        row seeded directly to a deviating trust is now simply neutral, because
+        suspicion is the only score the renderer reads. Seeded through
+        ``seed_player``, the one API that can still express such a row at all,
+        so this stays a real test of the RENDER rather than of the missing
+        writer.
+        """
+
         memory = AgentMemory()
         memory.episodic.append(_self_state_event(tick=0))
-        memory.beliefs.adjust_trust("p-4", delta=0.3)
+        memory.beliefs.seed_player("p-4", suspicion=0.5, trust=0.8)
 
         view = render_for_prompt(memory)
 
-        assert "- p-4: trust 0.80" in view
+        assert "p-4" not in view
+        assert "trust" not in view
 
     def test_beliefs_section_omits_neutral_players(self) -> None:
         # A player known to the belief store but at neutral suspicion AND trust

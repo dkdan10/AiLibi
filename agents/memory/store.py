@@ -2798,18 +2798,26 @@ def _format_belief_score(
     # all read the folded suspicion. ``None`` -> stored value, byte-identical.
     effective_suspicion = belief.suspicion if suspicion is None else suspicion
     suspicion_dev = abs(effective_suspicion - 0.5)
-    trust_dev = abs(belief.trust - 0.5)
     # Anything within half of the displayed precision (0.01) rounds to
     # "0.50" in the rendered line and carries no signal, so treat it as
     # neutral. Float accumulation from repeated ``decay_suspicion``
     # toward 0.5 can otherwise leave a non-zero residue that escapes an
     # exact equality check and bloats the prompt with empty belief
     # rows.
-    if suspicion_dev < 0.005 and trust_dev < 0.005:
+    #
+    # HISTORY (ruling D5 of 2026-09-19): this function used to compare the
+    # suspicion deviation against a TRUST deviation and render
+    # ``f"trust {belief.trust:.2f}"`` when trust deviated further. Nothing ever
+    # wrote trust -- ``BeliefState.adjust_trust`` had only test callers and all
+    # 14,880 rendered graph rows in the four committed sets read ``trust 0.50``
+    # -- so the trust deviation was 0.0 on every production row, the comparison
+    # ``suspicion_dev >= trust_dev`` always held, and the trust branch was
+    # unreachable. Both the branch and the comparison are gone with
+    # ``adjust_trust``; the render is byte-identical across the deletion, which
+    # ``tests/agents/test_memory_rendering.py`` asserts over the §6.6 view.
+    if suspicion_dev < 0.005:
         return None
-    if suspicion_dev >= trust_dev:
-        return f"suspicion {effective_suspicion:.2f}"
-    return f"trust {belief.trust:.2f}"
+    return f"suspicion {effective_suspicion:.2f}"
 
 
 def _format_last_seen_suffix(last_seen: LastSeen | None) -> str:

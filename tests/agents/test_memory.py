@@ -197,17 +197,35 @@ class TestBeliefState:
 
         assert beliefs.view("p2").suspicion == 0.0
 
-    def test_adjust_trust_updates_and_clamps(self) -> None:
+    def test_no_belief_mutator_writes_trust(self) -> None:
+        """Trust has no writer at all, which is what ruling D5 deleted.
+
+        ``adjust_trust`` was the only one and had no caller outside this file;
+        its three assertions (a delta lands, the ceiling clamps, the floor
+        clamps) covered a scalar nothing in production ever moved. The field
+        STAYS -- six frozen prompt sets render ``entry.trust`` and their byte
+        pins must not move -- so what is worth pinning now is that it is a
+        constant: exercise every public mutator on one row and read the default
+        back. A re-added writer that moved trust would turn this red.
+        """
+
         beliefs = BeliefState()
+        beliefs.adjust_suspicion("p1", delta=0.4)
+        beliefs.decay_suspicion("p1", rate=0.5)
+        beliefs.record_alibi(
+            AlibiClaim(player_id="p1", tick=10, room="ADMIN", source="p1")
+        )
+        beliefs.record_contradiction(
+            "p1",
+            ContradictionRef(
+                summary="alibi disagreement",
+                left_ref="alibi:p1@10",
+                right_ref="sighting:p2:p1@11",
+            ),
+        )
 
-        beliefs.adjust_trust("p1", delta=0.4)
-        assert beliefs.view("p1").trust == pytest.approx(0.9)
-
-        beliefs.adjust_trust("p1", delta=0.5)
-        assert beliefs.view("p1").trust == 1.0
-
-        beliefs.adjust_trust("p1", delta=-2.0)
-        assert beliefs.view("p1").trust == 0.0
+        assert beliefs.view("p1").trust == pytest.approx(0.5)
+        assert not hasattr(beliefs, "adjust_trust")
 
     def test_record_alibi_appends_in_order(self) -> None:
         beliefs = BeliefState()
@@ -269,7 +287,17 @@ class TestBeliefState:
     def test_known_players_lists_only_touched_players(self) -> None:
         beliefs = BeliefState()
         beliefs.adjust_suspicion("p2", delta=0.1)
-        beliefs.adjust_trust("p3", delta=0.1)
+        # Was ``adjust_trust("p3", ...)`` before ruling D5 deleted that writer.
+        # The assertion is about which players a mutator TOUCHES, so any
+        # surviving mutator serves; the row still has to appear.
+        beliefs.record_contradiction(
+            "p3",
+            ContradictionRef(
+                summary="alibi disagreement",
+                left_ref="alibi:p3@10",
+                right_ref="sighting:p2:p3@11",
+            ),
+        )
         beliefs.record_alibi(
             AlibiClaim(player_id="p4", tick=10, room="ADMIN", source="p4")
         )

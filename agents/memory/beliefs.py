@@ -1,10 +1,16 @@
 """Belief state (DESIGN.md §6.1, §6.3).
 
-Per other-player view tracking ``trust``, ``suspicion``, ``alibi_map``,
-and ``inconsistencies``. The store exposes write-path primitives that
-perception (Task 2.4) and contradiction detection (Phase 3) drive — the
-specific update weights from §6.3 are config that lives outside this
-module so they can be tuned against the eval harness.
+Per other-player view tracking ``suspicion``, ``alibi_map`` and
+``inconsistencies``, plus a ``trust`` field NOTHING writes. The store exposes
+write-path primitives that perception (Task 2.4) and contradiction detection
+(Phase 3) drive — the specific update weights from §6.3 are config that lives
+outside this module so they can be tuned against the eval harness.
+
+``trust`` is a frozen-set RENDER INPUT only, as of ruling D5 of 2026-09-19: its
+one writer, ``BeliefState.adjust_trust``, had no caller outside ``tests/`` and
+was deleted rather than wired (see the comment where it stood). The field stays
+because six frozen prompt sets render ``entry.trust`` and their byte pins must
+not move; every row therefore reads :data:`_DEFAULT_TRUST` forever.
 
 Read paths beyond the simple ``view`` accessor and prompt rendering ship
 in Phase 3 (Task 3.3).
@@ -957,14 +963,19 @@ class BeliefState:
         for belief in self._beliefs.values():
             belief.provenance = belief.provenance.carried()
 
-    def adjust_trust(self, player_id: PlayerId, *, delta: float) -> PlayerBelief:
-        belief = self._ensure(player_id)
-        belief.trust = _clamp(
-            belief.trust + delta,
-            floor=_TRUST_FLOOR,
-            ceil=_TRUST_CEIL,
-        )
-        return belief.snapshot()
+    # HISTORY (ruling D5 of 2026-09-19). ``adjust_trust`` lived here and had no
+    # caller outside ``tests/``: across the four committed sets 14,880 of 14,880
+    # rendered suspicion rows read ``trust 0.50``, the ``_DEFAULT_TRUST`` every
+    # row is born with. It is DELETED rather than wired, and the reason is this
+    # card's own subject: a credibility scalar is a second number the engine
+    # computes and hands the agent, which is the defect ruling D5 exists to
+    # remove. The credibility information itself still arrives, as evidence --
+    # a speaker whose own account a route-aware detector broke appears in the
+    # ballot's evidence rows with that contradiction's id, for the listener to
+    # price. :attr:`PlayerBelief.trust` and
+    # :attr:`meetings.render_contract.SuspicionEntry.trust` STAY: six frozen
+    # prompt sets render ``entry.trust`` and their byte pins must not move, so
+    # the field is now a frozen-set RENDER INPUT only, written by nothing.
 
     def record_alibi(self, claim: AlibiClaim) -> PlayerBelief:
         """Append an alibi claim to ``claim.player_id``'s belief row.
