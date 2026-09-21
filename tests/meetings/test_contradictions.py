@@ -20,11 +20,15 @@ observation appears on a :class:`MeetingTurn`, regardless of turn-kind):
 from __future__ import annotations
 
 import functools
-from collections.abc import Iterator, Mapping
+import itertools
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from meetings.constants import (
     GROUNDED_PROSECUTION_MIN_SOURCES,
@@ -34,6 +38,7 @@ from meetings.constants import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     Claim,
     CompletedTaskObservation,
     ContradictionRef,
@@ -63,15 +68,20 @@ from meetings.transcript import (
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_PAIR,
     WEAK_REASON_UNGROUNDED_SIGHTING,
+    _IndexedAlibi,
     _event_speaker_index,
+    _iter_alibis,
     turn_observation_id,
     _turn_whereabouts_id,
     absent_players,
     canonical_rooms,
     detect_contradictions,
+    detect_corroborations,
     is_weak_contradiction,
     reconstruct_stated_paths,
+    self_refuted_alibi_claim_ids,
 )
+from meetings.public_accounts import detect_public_account_conflicts
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from tests._helpers.committed import sighting_records_from_recorded_flags
 
@@ -82,9 +92,7 @@ def _alibi(*, subject: str, from_tick: int, to_tick: int, room: str) -> AlibiCla
     return AlibiClaim(
         type="alibi",
         subject=subject,
-        from_tick=from_tick,
-        to_tick=to_tick,
-        room=room,
+        route=(AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick),),
     )
 
 
@@ -3671,7 +3679,8 @@ def _degenerate_self_alibi_ids(
         for index, claim in enumerate(turn.claims):
             if (
                 isinstance(claim, AlibiClaim)
-                and claim.from_tick == claim.to_tick
+                and len(claim.route) == 1
+                and claim.route[0].from_tick == claim.route[0].to_tick
                 and claim.subject == turn.speaker
                 and claim.subject in roster
             ):
@@ -4617,3 +4626,1792 @@ class TestMapAwareArbitrationCommittedCensus:
             and WEAK_REASON_ADJACENT_ONE_TICK in flag.description
         ]
         assert survivors == []
+
+
+# --------------------------------------------------------------------------- #
+# The alibi is a ROUTE: the seed-41 adverse pair + the one-segment property     #
+# --------------------------------------------------------------------------- #
+
+_SEED_41_MEETING: Final[str] = "headless-seed-41:meeting-2"
+
+#: p-9's true path through that meeting, as p-9's own ``evidence`` rows state
+#: it: ENGINEERING at 12, then EAST_HALL, ADMIN and WEST_HALL one tick each.
+_SEED_41_ROUTE: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="ENGINEERING", from_tick=12, to_tick=12),
+    AlibiSegment(room="EAST_HALL", from_tick=13, to_tick=13),
+    AlibiSegment(room="ADMIN", from_tick=14, to_tick=14),
+    AlibiSegment(room="WEST_HALL", from_tick=15, to_tick=15),
+)
+
+
+def _seed_41_entry() -> MeetingReplayEntry:
+    """The committed seed-41 meeting the direction memo makes its exhibit."""
+
+    for set_name, seed, entry in _committed_meeting_entries():
+        if seed == 41 and entry.meeting_id == _SEED_41_MEETING:
+            assert set_name == "samples/9p2i"
+            return entry
+    raise AssertionError(f"{_SEED_41_MEETING} is not in the committed corpus")
+
+
+def _with_p9_route(
+    entry: MeetingReplayEntry, route: tuple[AlibiSegment, ...]
+) -> MeetingTranscript:
+    """The same meeting with p-9's own account stated as ``route``."""
+
+    replaced = 0
+    turns: list[MeetingTurn] = []
+    for turn in entry.transcript.turns:
+        claims: list[Claim] = []
+        for claim in turn.claims:
+            if isinstance(claim, AlibiClaim) and claim.subject == "p-9":
+                claim = claim.model_copy(
+                    update={"route": route, "claim_format": 2 if len(route) > 1 else 1}
+                )
+                replaced += 1
+            claims.append(claim)
+        turns.append(turn.model_copy(update={"claims": tuple(claims)}))
+    assert replaced == 1, f"expected exactly one p-9 self-alibi, found {replaced}"
+    return entry.transcript.model_copy(update={"turns": tuple(turns)})
+
+
+class TestTheAlibiIsARoute:
+    """Seed 41: the honest mover, the envelope that convicted them, and a liar.
+
+    The direction memo of 2026-09-19 §5 makes this meeting the exhibit: p-9
+    (crew) states ENGINEERING ticks 12-15 whose OWN evidence rows read "moved to
+    EAST_HALL @ 13 / ADMIN @ 14 / WEST_HALL @ 15", every one of them true, and
+    the detectors mint flags against p-9 for the walk p-9 itemised. The pair
+    below is the adverse case in both directions: the truthful route mints
+    nothing, and the same turn stating the one-room envelope still mints exactly
+    what the recording holds.
+    """
+
+    def test_the_record_holds_five_flags_against_an_honest_mover(self) -> None:
+        entry = _seed_41_entry()
+
+        assert len(entry.contradictions) == 5
+        assert {flag.subjects for flag in entry.contradictions} == {("p-9",)}
+        claim_id = f"turn:{_SEED_41_MEETING}:turn-4:claim:0"
+        assert all(
+            claim_id in (flag.event_a_id, flag.event_b_id)
+            for flag in entry.contradictions
+        )
+
+    def test_the_envelope_still_mints_its_flags(self) -> None:
+        # Four of the five, not all five: this meeting is one of the
+        # ``_MOVEMENT_CHANNEL_DIVERGING_MEETINGS`` above, whose fifth flag rests
+        # on the private movement channel a replay cannot rebuild. What matters
+        # here is the direction -- the envelope prosecutes p-9 -- and the
+        # corpus-wide byte identity is pinned by the walk above, not here.
+        entry = _seed_41_entry()
+        rederived = _rederive(entry)
+
+        assert len(rederived) == 4
+        assert {flag.subjects for flag in rederived} == {("p-9",)}
+        assert {flag.kind for flag in rederived} == {
+            "alibi_conflict",
+            "alibi_vs_sighting",
+        }
+
+    def test_the_truthful_route_mints_nothing(self) -> None:
+        entry = _seed_41_entry()
+        routed = _with_p9_route(entry, _SEED_41_ROUTE)
+
+        flags = detect_contradictions(
+            routed,
+            roster=_living_roster(entry),
+            vent_witness_records=_vent_records_from_recorded_flags(entry),
+            sighting_records=sighting_records_from_recorded_flags(entry),
+        )
+
+        assert flags == ()
+
+    def test_the_same_turn_stating_a_flat_lie_is_still_prosecuted(self) -> None:
+        # The other half of the adverse pair, on the SAME meeting: a one-segment
+        # route naming a room p-9 held at no covered tick. Every flag the
+        # envelope minted comes back, so the route buys a liar nothing.
+        entry = _seed_41_entry()
+        lying = _with_p9_route(
+            entry, (AlibiSegment(room="STORAGE", from_tick=12, to_tick=15),)
+        )
+
+        flags = detect_contradictions(
+            lying,
+            roster=_living_roster(entry),
+            vent_witness_records=_vent_records_from_recorded_flags(entry),
+            sighting_records=sighting_records_from_recorded_flags(entry),
+        )
+
+        sighting_flags = [flag for flag in flags if flag.kind == "alibi_vs_sighting"]
+        assert len(sighting_flags) == 4
+        assert {flag.subjects for flag in flags} == {("p-9",)}
+
+    def test_a_flat_lie_reaches_the_strong_band(self) -> None:
+        # The band, on a shape the seed-41 meeting cannot show: its four
+        # sightings all sit on or one tick from the window's edges, so today's
+        # endpoint and corridor guards weak-band every one of them. A lie over a
+        # WIDE window, contradicted at a deeply interior tick by a room two or
+        # more doorways away, is the clean case -- and it still convicts.
+        transcript = MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m:turn-0",
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    reply_to=None,
+                    free_text="I never left.",
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-1",
+                            route=(
+                                AlibiSegment(room="REACTOR", from_tick=2, to_tick=14),
+                            ),
+                        ),
+                    ),
+                ),
+                MeetingTurn(
+                    turn_id="m:turn-1",
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    reply_to=None,
+                    free_text="Not true.",
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player", tick=8, subject="p-1", room="MEDBAY"
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        flags = detect_contradictions(transcript, roster=frozenset({"p-1", "p-2"}))
+
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_vs_sighting"
+        assert flags[0].subjects == ("p-1",)
+        assert is_weak_contradiction(flags[0]) is False
+
+    def test_dropping_the_segment_comparison_turns_the_honest_route_red(
+        self,
+    ) -> None:
+        # The planted failure for the route rule, expressed as the rule itself:
+        # a detector that compared the ROUTE's outer endpoints (12-15) and its
+        # FIRST room instead of the leg covering each sighting's tick is exactly
+        # the pre-card envelope, and it flags the honest mover. Asserted here so
+        # the green case above cannot be green for a reason other than the
+        # segment comparison.
+        entry = _seed_41_entry()
+        routed = _with_p9_route(entry, _SEED_41_ROUTE)
+        p9_route = next(
+            claim.route
+            for turn in routed.turns
+            for claim in turn.claims
+            if isinstance(claim, AlibiClaim) and claim.subject == "p-9"
+        )
+        envelope_rooms = canonical_rooms(p9_route[0].room)
+        window = (p9_route[0].from_tick, p9_route[-1].to_tick)
+
+        would_flag = [
+            (observation.room, observation.tick)
+            for turn in routed.turns
+            for observation in turn.observations
+            if isinstance(observation, SawPlayerObservation)
+            and observation.subject == "p-9"
+            and window[0] <= observation.tick <= window[1]
+            and not (canonical_rooms(observation.room) & envelope_rooms)
+        ]
+
+        assert would_flag, "the envelope rule must still indict the honest route"
+
+
+class TestARouteDoesNotSoftenItsOwnConflict:
+    """A truthful earlier leg must not downgrade a later leg's conflict.
+
+    One flag is minted per pair of CLAIMS, so a two-leg route disagreeing with
+    a rival account offers the detector two candidate leg pairs and only one
+    can carry the band. Taking the FIRST candidate -- the shape the detector
+    shipped with when a claim held exactly one leg -- let the boundary guard
+    fire on a leg that merely ends where the rival begins, and the genuinely
+    interior disagreement inherited that weak band. Prepending a leg the
+    speaker really walked would then buy a liar a softer flag, which is the
+    opposite of what the route change is for.
+    """
+
+    _RIVAL = AlibiClaim(
+        type="alibi",
+        subject="p-3",
+        route=(AlibiSegment(room="STORAGE", from_tick=10, to_tick=15),),
+    )
+
+    def _flags(self, route: tuple[AlibiSegment, ...]) -> tuple[ContradictionRef, ...]:
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(AlibiClaim(type="alibi", subject="p-3", route=route),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    claims=(self._RIVAL,),
+                ),
+            )
+        )
+        return detect_contradictions(
+            transcript,
+            roster=frozenset({"p-1", "p-2", "p-3"}),
+            evidence_reasoning_version=1,
+        )
+
+    def test_the_interior_leg_carries_the_band_not_the_boundary_leg(self) -> None:
+        # CAFETERIA 1-10 ends on the tick STORAGE 10-15 begins (the boundary
+        # pair, weak by WEAK_REASON_BOUNDARY_OVERLAP); ADMIN 11-20 overlaps
+        # STORAGE across five interior ticks and is the real disagreement.
+        (flag,) = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),
+            )
+        )
+
+        assert flag.kind == "alibi_conflict"
+        assert flag.evidence_band == "strong"
+        assert is_weak_contradiction(flag) is False
+        # The description quotes the legs the flag rests on, so the softened
+        # boundary leg must not be the one the listener is shown.
+        assert "ADMIN" in flag.description
+        assert "CAFETERIA" not in flag.description
+
+    def test_the_lone_interior_leg_is_the_control(self) -> None:
+        # The same ADMIN leg stated alone: identical band, identical sentence.
+        (control,) = self._flags(
+            (AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),)
+        )
+        (routed,) = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),
+            )
+        )
+
+        assert control.evidence_band == routed.evidence_band
+        assert control.description == routed.description
+
+    def test_a_route_whose_every_leg_is_weak_stays_weak(self) -> None:
+        # The guard is "fewest weak reasons", not "never weak": a route that
+        # only ever touches STORAGE at the boundary keeps the boundary marker.
+        (flag,) = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=16, to_tick=20),
+            )
+        )
+
+        assert flag.evidence_band == "weak"
+        assert WEAK_REASON_BOUNDARY_OVERLAP in flag.description
+
+    def test_one_flag_per_claim_pair_however_many_legs_disagree(self) -> None:
+        flags = self._flags(
+            (
+                AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=10),
+                AlibiSegment(room="ADMIN", from_tick=11, to_tick=20),
+            )
+        )
+
+        assert len(flags) == 1
+        assert len({flag.contradiction_id for flag in flags}) == 1
+
+
+class TestSplittingARouteDoesNotSoftenItsEvidence:
+    """Stating one continuous stay as several legs must buy the speaker nothing.
+
+    The card's rule: the LEG decides ROOM and WINDOW MEMBERSHIP, but the
+    movement-fuzz bands read the whole ROUTE's OUTER endpoints, because an
+    interior boundary is a transition the speaker DECLARED, not movement fuzz.
+    Two fuzz sites were pointed at the leg, and a leg boundary is something the
+    speaker chooses, so both were free evidence deletion:
+
+    * ``alibi_vs_physical`` required a contradicting placement at a STRICTLY
+      INTERIOR leg tick. "STORAGE 2-14" co-placed elsewhere at tick 8 by two
+      voices mints two strong flags; the SAME account as "STORAGE 2-7" plus
+      "STORAGE 8-14" minted none, and as the one-tick legs the operational
+      prompts ask for, no leg has a strict interior at all.
+    * ``_adjacent_within_one_tick`` measured the map-arbitration gap to the
+      leg's endpoints, so splitting a window put a manufactured "edge" next to
+      any interior sighting and weak-banded a flag that could otherwise eject.
+
+    Every case below is stated twice, as the envelope and as the split, and
+    asserted EQUAL -- the property the fix is for. The bands themselves still
+    have to work, so the last two tests hold the genuine outer-endpoint fuzz
+    weak and the honest seed-41 route silent.
+    """
+
+    _ROSTER: Final = frozenset({"p-1", "p-2", "p-3", "p-4", "p-5"})
+
+    # --- alibi_vs_physical -------------------------------------------------
+
+    def _physical(
+        self, route: tuple[AlibiSegment, ...]
+    ) -> tuple[ContradictionRef, ...]:
+        # p-1's own STORAGE account against two independent CO-PRESENCE
+        # placements in MEDBAY at tick 8 -- the two-source conjunction, and far
+        # enough from STORAGE that no map arbitration is in play.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(AlibiClaim(type="alibi", subject="p-1", route=route),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(tick=8, subject="p-3", room="MEDBAY", co_present=("p-1",)),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-5",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(tick=8, subject="p-4", room="MEDBAY", co_present=("p-1",)),
+                    ),
+                ),
+            )
+        )
+        return tuple(
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=self._ROSTER, evidence_reasoning_version=1
+            )
+            if flag.kind == "alibi_vs_physical"
+        )
+
+    @staticmethod
+    def _shape(flags: tuple[ContradictionRef, ...]) -> list[tuple[object, ...]]:
+        """What "the same flags" means here: count, identity, subjects, band."""
+
+        return [
+            (
+                flag.contradiction_id,
+                flag.subjects,
+                flag.evidence_band,
+                is_weak_contradiction(flag),
+            )
+            for flag in flags
+        ]
+
+    def test_splitting_at_the_contradicted_tick_keeps_both_strong_flags(self) -> None:
+        envelope = self._physical(
+            (AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),)
+        )
+        split = self._physical(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),
+            )
+        )
+
+        # The baseline the split has to match: one flag per contradicting
+        # voice, both strong (nothing weak-bands a two-source conjunction).
+        assert len(envelope) == 2
+        assert {flag.evidence_band for flag in envelope} == {"strong"}
+        assert self._shape(split) == self._shape(envelope)
+
+    def test_one_tick_legs_keep_both_strong_flags(self) -> None:
+        # The shape the new prompts ask for, and the worst case for a leg-local
+        # interior test: a one-tick leg has no strict interior whatsoever, so
+        # before the fix this route deleted every flag the envelope minted.
+        envelope = self._physical(
+            (AlibiSegment(room="STORAGE", from_tick=6, to_tick=9),)
+        )
+        legs = self._physical(
+            (
+                AlibiSegment(room="STORAGE", from_tick=6, to_tick=6),
+                AlibiSegment(room="STORAGE", from_tick=7, to_tick=7),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=8),
+                AlibiSegment(room="STORAGE", from_tick=9, to_tick=9),
+            )
+        )
+
+        assert len(envelope) == 2
+        assert self._shape(legs) == self._shape(envelope)
+
+    def test_the_route_s_own_outer_endpoint_is_still_transit_fuzz(self) -> None:
+        # The exclusion still excludes: contradicted on the first tick the
+        # account covers, the route mints nothing in either shape. Splitting
+        # cannot manufacture a flag any more than it can delete one.
+        envelope = self._physical(
+            (AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),)
+        )
+        split = self._physical(
+            (
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=10),
+                AlibiSegment(room="STORAGE", from_tick=11, to_tick=14),
+            )
+        )
+
+        assert envelope == ()
+        assert split == ()
+
+    # --- alibi_vs_sighting map arbitration ---------------------------------
+
+    def _sighting(
+        self, route: tuple[AlibiSegment, ...], *, seen_tick: int
+    ) -> tuple[ContradictionRef, ...]:
+        # p-1's REACTOR account against one sighting in ENGINEERING, a single
+        # doorway away -- the pair the map-arbitration band exists to arbitrate.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(AlibiClaim(type="alibi", subject="p-1", route=route),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(tick=seen_tick, subject="p-1", room="ENGINEERING"),
+                    ),
+                ),
+            )
+        )
+        return tuple(
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=self._ROSTER, evidence_reasoning_version=1
+            )
+            if flag.kind == "alibi_vs_sighting"
+        )
+
+    def test_splitting_does_not_soften_an_interior_adjacent_room_sighting(
+        self,
+    ) -> None:
+        # Tick 8 is six ticks inside REACTOR 2-14 -- far too deep for one hop
+        # of walking to reconcile. Splitting the stay at exactly that tick used
+        # to put a leg edge beside the sighting and weak-band the flag, which
+        # is the difference between evidence that can eject and evidence that
+        # cannot.
+        (envelope,) = self._sighting(
+            (AlibiSegment(room="REACTOR", from_tick=2, to_tick=14),), seen_tick=8
+        )
+        (split,) = self._sighting(
+            (
+                AlibiSegment(room="REACTOR", from_tick=2, to_tick=7),
+                AlibiSegment(room="REACTOR", from_tick=8, to_tick=14),
+            ),
+            seen_tick=8,
+        )
+
+        assert envelope.evidence_band == "strong"
+        assert is_weak_contradiction(envelope) is False
+        assert split.evidence_band == envelope.evidence_band
+        assert is_weak_contradiction(split) is False
+        assert WEAK_REASON_ADJACENT_ONE_TICK not in split.description
+
+    def test_the_band_still_fires_one_tick_from_the_route_s_outer_endpoint(
+        self,
+    ) -> None:
+        # The other direction, or the fix would just be "never arbitrate": tick
+        # 13 sits one tick inside the route's own last tick, which one hop of
+        # walking genuinely covers, so the flag is weak in BOTH shapes and
+        # carries the same marker.
+        (envelope,) = self._sighting(
+            (AlibiSegment(room="REACTOR", from_tick=2, to_tick=14),), seen_tick=13
+        )
+        (split,) = self._sighting(
+            (
+                AlibiSegment(room="REACTOR", from_tick=2, to_tick=7),
+                AlibiSegment(room="REACTOR", from_tick=8, to_tick=14),
+            ),
+            seen_tick=13,
+        )
+
+        assert envelope.evidence_band == "weak"
+        assert WEAK_REASON_ADJACENT_ONE_TICK in envelope.description
+        assert split.evidence_band == envelope.evidence_band
+        assert WEAK_REASON_ADJACENT_ONE_TICK in split.description
+
+    def test_the_honest_seed_41_route_still_mints_nothing(self) -> None:
+        # The control the whole card rests on, re-asserted at this head: moving
+        # two fuzz bands from the leg to the route's outer endpoints must not
+        # start prosecuting the honest mover it was written to acquit.
+        entry = _seed_41_entry()
+        routed = _with_p9_route(entry, _SEED_41_ROUTE)
+
+        flags = detect_contradictions(
+            routed,
+            roster=_living_roster(entry),
+            vent_witness_records=_vent_records_from_recorded_flags(entry),
+            sighting_records=sighting_records_from_recorded_flags(entry),
+        )
+
+        assert flags == ()
+
+
+class TestOneSegmentRoutesReadLikeTheEnvelope:
+    """The property: on a ONE-SEGMENT route the pairing rule is unchanged.
+
+    An independent oracle, not a re-run of the detector: for a self-stated
+    one-room account and one third-party sighting of the same subject, an
+    ``alibi_vs_sighting`` flag is minted exactly when the sighting's room
+    differs from the claimed room and its tick falls inside the claimed window.
+    That is the pre-route rule stated in four lines, so a segment-level edit
+    (comparing the route's outer endpoints instead of the leg covering the
+    tick, say) turns this red rather than agreeing with itself.
+
+    The corpus-wide half of the same property is
+    :meth:`TestLiveDetectorCommittedBytesByteIdentity.
+    test_re_derivation_equals_recorded_on_every_committed_meeting`, which holds
+    672 committed meetings of one-segment claims to their recorded flags.
+    """
+
+    @staticmethod
+    def _transcript(
+        *, room: str, from_tick: int, to_tick: int, seen_room: str, seen_tick: int
+    ) -> MeetingTranscript:
+        return MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m:turn-0",
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    reply_to=None,
+                    free_text="my account",
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-1",
+                            route=(
+                                AlibiSegment(
+                                    room=room, from_tick=from_tick, to_tick=to_tick
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                MeetingTurn(
+                    turn_id="m:turn-1",
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    reply_to=None,
+                    free_text="what I saw",
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player",
+                            tick=seen_tick,
+                            subject="p-1",
+                            room=seen_room,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+    @given(
+        from_tick=st.integers(min_value=0, max_value=18),
+        span=st.integers(min_value=0, max_value=6),
+        seen_tick=st.integers(min_value=0, max_value=24),
+        rooms=st.tuples(
+            st.sampled_from(sorted(CANONICAL_ROOMS)),
+            st.sampled_from(sorted(CANONICAL_ROOMS)),
+        ),
+    )
+    @settings(max_examples=200, deadline=None)
+    def test_the_envelope_rule_decides_every_one_segment_pair(
+        self,
+        from_tick: int,
+        span: int,
+        seen_tick: int,
+        rooms: tuple[str, str],
+    ) -> None:
+        room, seen_room = rooms
+        to_tick = from_tick + span
+        transcript = self._transcript(
+            room=room,
+            from_tick=from_tick,
+            to_tick=to_tick,
+            seen_room=seen_room,
+            seen_tick=seen_tick,
+        )
+
+        flags = [
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=frozenset({"p-1", "p-2"})
+            )
+            if flag.kind == "alibi_vs_sighting"
+        ]
+
+        expected = room != seen_room and from_tick <= seen_tick <= to_tick
+        assert bool(flags) is expected, (room, from_tick, to_tick, seen_room, seen_tick)
+
+
+# --- Round 4: re-cutting one stay must be invisible to every detector -------
+
+
+def _cuts_of_one_stay(stay: AlibiSegment) -> tuple[tuple[AlibiSegment, ...], ...]:
+    """Every way of narrating ONE continuous stay as contiguous same-room legs.
+
+    A stay of ``n`` ticks has ``n - 1`` interior boundaries and each may be cut
+    or not, so this enumerates all ``2 ** (n - 1)`` shapes: the uncut stay at
+    mask 0, every partial cut, and the all-one-tick legs at the last mask --
+    the shape the operational prompts ask for, and the worst case for any band
+    whose geometry reads a leg.
+    """
+
+    boundaries = stay.to_tick - stay.from_tick
+    shapes: list[tuple[AlibiSegment, ...]] = []
+    for mask in range(1 << boundaries):
+        legs: list[AlibiSegment] = []
+        start = stay.from_tick
+        for offset in range(boundaries):
+            if mask >> offset & 1:
+                legs.append(
+                    AlibiSegment(
+                        room=stay.room,
+                        from_tick=start,
+                        to_tick=stay.from_tick + offset,
+                    )
+                )
+                start = stay.from_tick + offset + 1
+        legs.append(AlibiSegment(room=stay.room, from_tick=start, to_tick=stay.to_tick))
+        shapes.append(tuple(legs))
+    return tuple(shapes)
+
+
+def _recuts_of(route: tuple[AlibiSegment, ...]) -> tuple[tuple[AlibiSegment, ...], ...]:
+    """Every re-cut of ``route``: the cross product of each stay's own cuts."""
+
+    shapes: tuple[tuple[AlibiSegment, ...], ...] = ((),)
+    for stay in route:
+        shapes = tuple(
+            (*prefix, *legs) for prefix in shapes for legs in _cuts_of_one_stay(stay)
+        )
+    return shapes
+
+
+def _spellings_of(room: str) -> tuple[str, ...]:
+    """Canonically-equal ways the model spells one room (round 6).
+
+    Case is free text to a model and ``_TRANSITION`` is the token it appends to
+    a room it names as transit, so all three of these are ONE place to
+    :func:`canonical_rooms` -- and therefore three labels a speaker may hang on
+    the legs of one continuous stay.
+    """
+
+    spellings = (room, room.lower(), f"{room}_TRANSITION")
+    assert len({canonical_rooms(spelling) for spelling in spellings}) == 1, room
+    return spellings
+
+
+def _spelled_cuts_of_one_stay(
+    stay: AlibiSegment,
+) -> dict[frozenset[str], list[tuple[AlibiSegment, ...]]]:
+    """Every (cut, spelling assignment) of ONE stay, grouped by the label SET."""
+
+    groups: dict[frozenset[str], list[tuple[AlibiSegment, ...]]] = {}
+    spellings = _spellings_of(stay.room)
+    for cut in _cuts_of_one_stay(stay):
+        for assignment in itertools.product(spellings, repeat=len(cut)):
+            groups.setdefault(frozenset(assignment), []).append(
+                tuple(
+                    AlibiSegment(
+                        room=room, from_tick=leg.from_tick, to_tick=leg.to_tick
+                    )
+                    for leg, room in zip(cut, assignment, strict=True)
+                )
+            )
+    return groups
+
+
+def _spelled_narrations_of(
+    route: tuple[AlibiSegment, ...],
+) -> dict[tuple[int, frozenset[str]], list[tuple[AlibiSegment, ...]]]:
+    """Every mixed-spelling narration of ``route``, grouped by ACCOUNT.
+
+    One stay at a time: stay ``i`` is restated as every cut of itself under
+    every assignment of its canonically-equal spellings, while the other stays
+    are left exactly as the route states them -- linear in the number of stays
+    rather than the cross product of them, and exhaustive over each. The key is
+    ``(i, the label SET used)``: two narrations in ONE group are the same
+    account said the same way, so every output must match byte for byte; two
+    narrations in different groups are different WORDINGS of it, whose quoted
+    label legitimately differs (``LABS 2-14`` against ``labs 2-14``).
+    """
+
+    groups: dict[tuple[int, frozenset[str]], list[tuple[AlibiSegment, ...]]] = {}
+    for index, stay in enumerate(route):
+        for labels, narrations in _spelled_cuts_of_one_stay(stay).items():
+            groups[(index, labels)] = [
+                (*route[:index], *legs, *route[index + 1 :]) for legs in narrations
+            ]
+    return groups
+
+
+def _flag_shape(flags: tuple[ContradictionRef, ...]) -> list[tuple[object, ...]]:
+    """Everything a listener can see about a flag, description included.
+
+    The descriptions are compared too, not just the bands: every builder quotes
+    the STAY the flag rests on, and a merged stay's room text is the smallest of
+    the labels merged into it, so a re-cut has to reproduce the sentence byte
+    for byte.
+    """
+
+    return [
+        (
+            flag.kind,
+            flag.contradiction_id,
+            flag.event_a_id,
+            flag.event_b_id,
+            flag.subjects,
+            flag.evidence_band,
+            is_weak_contradiction(flag),
+            flag.description,
+        )
+        for flag in flags
+    ]
+
+
+_RECUT_ROSTER: Final = frozenset({"p-1", "p-2", "p-3", "p-4", "p-5"})
+
+
+def _self_alibi_turn(
+    route: tuple[AlibiSegment, ...],
+    *,
+    turn_index: int = 0,
+    speaker: str = "p-1",
+    subject: str = "p-1",
+    observations: tuple[ObservationClaim, ...] = (),
+) -> MeetingTurn:
+    return _turn(
+        turn_index=turn_index,
+        speaker=speaker,
+        observations=observations,
+        claims=(AlibiClaim(type="alibi", subject=subject, route=route),),
+    )
+
+
+@dataclass(frozen=True)
+class _ReCutScenario:
+    """One meeting, the account under test, and the surface that must not move.
+
+    ``route`` is the account in MAXIMAL-STAY form -- what the speaker means.
+    ``build`` restates that account as an arbitrary re-cut of it, and ``read``
+    is the detector surface whose output the re-cut must reproduce exactly.
+    """
+
+    name: str
+    route: tuple[AlibiSegment, ...]
+    build: Callable[[tuple[AlibiSegment, ...]], MeetingTranscript]
+    read: Callable[[MeetingTranscript], Sequence[object]]
+
+
+def _read_flags(transcript: MeetingTranscript) -> Sequence[object]:
+    return _flag_shape(detect_contradictions(transcript, roster=_RECUT_ROSTER))
+
+
+def _read_banded_flags(transcript: MeetingTranscript) -> Sequence[object]:
+    return _flag_shape(
+        detect_contradictions(
+            transcript, roster=_RECUT_ROSTER, evidence_reasoning_version=1
+        )
+    )
+
+
+def _read_kill_scene_flags(transcript: MeetingTranscript) -> Sequence[object]:
+    return _flag_shape(
+        detect_contradictions(
+            transcript,
+            roster=_RECUT_ROSTER,
+            trigger_kind="report",
+            evidence_reasoning_version=1,
+        )
+    )
+
+
+def _read_vent_flags(transcript: MeetingTranscript) -> Sequence[object]:
+    return _flag_shape(
+        detect_contradictions(
+            transcript,
+            roster=_RECUT_ROSTER,
+            vent_witness_records={
+                "p-2": (_vent_record(tick=5, subject="p-1", room="MEDBAY"),)
+            },
+            evidence_reasoning_version=1,
+        )
+    )
+
+
+def _read_corroborations(transcript: MeetingTranscript) -> Sequence[object]:
+    return [
+        (row.subject, row.alibi_event_id, row.sighting_event_id)
+        for row in detect_corroborations(transcript, roster=_RECUT_ROSTER)
+    ]
+
+
+def _read_self_refutation(transcript: MeetingTranscript) -> Sequence[object]:
+    return sorted(self_refuted_alibi_claim_ids(transcript))
+
+
+def _read_public_accounts(transcript: MeetingTranscript) -> Sequence[object]:
+    return _flag_shape(
+        detect_public_account_conflicts(
+            transcript,
+            roster=_RECUT_ROSTER,
+            room_neighbors={
+                room: tuple(sorted(neighbors))
+                for room, neighbors in CANONICAL_ROOM_NEIGHBORS.items()
+            },
+        )
+    )
+
+
+# The two accounts every scenario is stated in. ``_ONE_STAY`` is a single
+# continuous stay, whose re-cuts are the whole defect class; ``_TWO_STAYS``
+# adds a GENUINE room change, so the enumeration also re-cuts each stay of a
+# real path and the stay/route split of labour is exercised on both sides of a
+# declared transition. Spans are kept short because the enumeration is
+# exponential in each stay's length (2 ** (n - 1) shapes per stay).
+_ONE_STAY: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="STORAGE", from_tick=2, to_tick=8),
+)
+_TWO_STAYS: Final[tuple[AlibiSegment, ...]] = (
+    AlibiSegment(room="STORAGE", from_tick=2, to_tick=6),
+    AlibiSegment(room="CAFETERIA", from_tick=7, to_tick=11),
+)
+
+
+def _scenario_conflict_rival(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # The round-4 shape: a rival account whose OVERLAPPING leg is a single tick
+    # inside the stay, plus a far second leg that keeps the rival's own route
+    # out of the narrow-window band so the conflict band is readable.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        route=(
+                            AlibiSegment(room="MEDBAY", from_tick=5, to_tick=5),
+                            AlibiSegment(room="LABS", from_tick=20, to_tick=30),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+def _scenario_conflict_mirror(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # The mirror: the rival's overlapping tick sits at the account's own LAST
+    # tick, so a cut just before it manufactures the junction from the other
+    # side.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        route=(
+                            AlibiSegment(room="MEDBAY", from_tick=8, to_tick=8),
+                            AlibiSegment(room="LABS", from_tick=20, to_tick=30),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+def _scenario_sighting(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(_saw(tick=5, subject="p-1", room="MEDBAY"),),
+            ),
+        )
+    )
+
+
+def _scenario_adjacent_sighting(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # ENGINEERING is one doorway from STORAGE, so the map-arbitration band is
+    # live and its geometry -- the gap to the ROUTE's outer endpoints -- is
+    # what a re-cut used to move.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(_saw(tick=4, subject="p-1", room="ENGINEERING"),),
+            ),
+        )
+    )
+
+
+def _scenario_physical(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # Two independent CO-PRESENCE voices: the regular arm's two-source
+    # conjunction, with no body room in play.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(
+                    _saw(tick=5, subject="p-3", room="MEDBAY", co_present=("p-1",)),
+                ),
+            ),
+            _turn(
+                turn_index=2,
+                speaker="p-5",
+                turn_kind="opt_in",
+                observations=(
+                    _saw(tick=5, subject="p-4", room="MEDBAY", co_present=("p-1",)),
+                ),
+            ),
+        )
+    )
+
+
+def _scenario_kill_scene(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # The Task 13.5.3 arm: the body is in MEDBAY, so the relevance gate drops
+    # those co-presences from the regular path and only the kill-scene arm can
+    # recover them.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(
+                route,
+                observations=(
+                    FoundBodyObservation(
+                        type="found_body", tick=9, room="MEDBAY", body_of="p-3"
+                    ),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(
+                    _saw(tick=5, subject="p-3", room="MEDBAY", co_present=("p-1",)),
+                ),
+            ),
+            _turn(
+                turn_index=2,
+                speaker="p-5",
+                turn_kind="opt_in",
+                observations=(
+                    _saw(tick=5, subject="p-4", room="MEDBAY", co_present=("p-1",)),
+                ),
+            ),
+        )
+    )
+
+
+def _scenario_vent(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # The grounded vent-placement arm, whose window check reads the stay.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(_saw_vent(tick=5, subject="p-1", room="MEDBAY"),),
+            ),
+        )
+    )
+
+
+def _scenario_corroboration(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # The exculpatory twin: a sighting INSIDE the claimed room must keep
+    # corroborating however the stay was cut.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(_saw(tick=4, subject="p-1", room="STORAGE"),),
+            ),
+        )
+    )
+
+
+def _scenario_self_refutation(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # The speaker's own completed task, in a room their account denies.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(
+                route,
+                observations=(
+                    CompletedTaskObservation(
+                        type="completed_task", tick=4, room="MEDBAY", task_id="t-1"
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+def _scenario_echo(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # A defender repeats the account as ONE-TICK LEGS while the speaker states
+    # it as ``route``. Same account, different narration: the dedup has to see
+    # one account, or the echo mints a second flag against the player it
+    # defends. The echo is derived by expanding every leg it is given, which is
+    # the SAME tuple for every re-cut of one account -- so the defender's words
+    # are held fixed while the speaker's narration varies, without this fixture
+    # calling the helper under test.
+    echo = tuple(
+        AlibiSegment(room=leg.room, from_tick=tick, to_tick=tick)
+        for leg in route
+        for tick in range(leg.from_tick, leg.to_tick + 1)
+    )
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-4",
+                turn_kind="opt_in",
+                claims=(AlibiClaim(type="alibi", subject="p-1", route=echo),),
+            ),
+            _turn(
+                turn_index=2,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(_saw(tick=5, subject="p-1", room="MEDBAY"),),
+            ),
+        )
+    )
+
+
+def _scenario_whereabouts(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    # A roll-call self-placement beside the account: the interior-exempt class
+    # keys on whether the speaker's whole account is ONE stay, which a re-cut
+    # must not be able to leave.
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(
+                route, observations=(_whereabouts(tick=5, room="STORAGE"),)
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(_saw(tick=5, subject="p-1", room="MEDBAY"),),
+            ),
+        )
+    )
+
+
+def _scenario_public_accounts(route: tuple[AlibiSegment, ...]) -> MeetingTranscript:
+    return MeetingTranscript(
+        turns=(
+            _self_alibi_turn(route),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="opt_in",
+                observations=(_saw(tick=5, subject="p-1", room="MEDBAY"),),
+            ),
+        )
+    )
+
+
+_RECUT_SCENARIOS: Final[tuple[_ReCutScenario, ...]] = tuple(
+    _ReCutScenario(name=f"{name}:{shape}", route=route, build=build, read=read)
+    for name, build, read in (
+        ("alibi_conflict_rival", _scenario_conflict_rival, _read_banded_flags),
+        ("alibi_conflict_mirror", _scenario_conflict_mirror, _read_banded_flags),
+        ("alibi_vs_sighting", _scenario_sighting, _read_banded_flags),
+        ("alibi_vs_sighting_adjacent", _scenario_adjacent_sighting, _read_banded_flags),
+        ("alibi_vs_physical", _scenario_physical, _read_banded_flags),
+        ("alibi_vs_physical_kill_scene", _scenario_kill_scene, _read_kill_scene_flags),
+        ("alibi_vs_physical_vent", _scenario_vent, _read_vent_flags),
+        ("corroboration", _scenario_corroboration, _read_corroborations),
+        ("self_refutation", _scenario_self_refutation, _read_self_refutation),
+        ("echo_dedup", _scenario_echo, _read_flags),
+        ("whereabouts_interior", _scenario_whereabouts, _read_banded_flags),
+        ("public_accounts", _scenario_public_accounts, _read_public_accounts),
+    )
+    for shape, route in (("one_stay", _ONE_STAY), ("two_stays", _TWO_STAYS))
+)
+
+
+class TestReCuttingAStayChangesNoDetectorOutput:
+    """The class-closing property: how an account is CUT is not evidence.
+
+    Where a speaker ends one leg and starts the next inside a continuous stay
+    in one room is free -- the account says exactly the same thing either way
+    -- so any band, id or count that moves with the cut is a dial the ACCUSED
+    holds. Three review rounds found that dial at site after site (evidence
+    DELETED from ``alibi_vs_physical``, ``alibi_vs_sighting`` softened through
+    map arbitration, ``alibi_conflict`` softened through boundary overlap, the
+    public-account flags multiplied), each repaired one site at a time. This
+    closes the CLASS instead: :func:`meetings.transcript.maximal_stays`
+    normalises an account into maximal stays at every DETECTION and SCORING
+    index, so no re-cut can reach a comparison at all.
+
+    The gate is exhaustive rather than sampled. For each scenario the account
+    is restated as EVERY re-cut of its stays -- all ``2 ** (n - 1)`` shapes per
+    stay, including the uncut stay and the all-one-tick legs the operational
+    prompts ask for -- and the detector surface must reproduce byte for byte:
+    the same flags in the same order, with the same ``contradiction_id``,
+    endpoints, subjects, band, weak/strong reading and DESCRIPTION.
+
+    The family covers every kind that reads an alibi: both conflict shapes,
+    the sighting path and its map-arbitration band, ``alibi_vs_physical`` on
+    the regular AND the Task 13.5.3 kill-scene arm, the grounded
+    vent-placement arm, the exculpatory corroboration path, the self-refutation
+    classifier, the echo dedup, the roll-call interior-exempt class, and the
+    public-account channel -- each stated twice, once as a single continuous
+    stay and once as a route with a GENUINE room change, so re-cuts of each
+    stay of a real path are exercised too.
+    """
+
+    @pytest.mark.parametrize(
+        "scenario", _RECUT_SCENARIOS, ids=[s.name for s in _RECUT_SCENARIOS]
+    )
+    def test_every_recut_of_the_account_reads_identically(
+        self, scenario: _ReCutScenario
+    ) -> None:
+        baseline = scenario.read(scenario.build(scenario.route))
+        recuts = _recuts_of(scenario.route)
+
+        # The enumeration must actually contain the adverse shapes, or the
+        # property would pass on a family of one.
+        assert len(recuts) == functools.reduce(
+            lambda total, stay: total * (1 << (stay.to_tick - stay.from_tick)),
+            scenario.route,
+            1,
+        )
+        assert scenario.route in recuts
+        assert (
+            tuple(
+                AlibiSegment(room=stay.room, from_tick=tick, to_tick=tick)
+                for stay in scenario.route
+                for tick in range(stay.from_tick, stay.to_tick + 1)
+            )
+            in recuts
+        )
+
+        for recut in recuts:
+            assert scenario.read(scenario.build(recut)) == baseline, (
+                scenario.name,
+                [(leg.room, leg.from_tick, leg.to_tick) for leg in recut],
+            )
+
+    def test_the_baseline_of_every_scenario_is_non_empty(self) -> None:
+        # A property that compares two empty lists proves nothing, so every
+        # scenario has to produce output for the invariance to be about
+        # something.
+        for scenario in _RECUT_SCENARIOS:
+            assert scenario.read(scenario.build(scenario.route)), scenario.name
+
+    def test_the_family_covers_every_kind_that_reads_an_alibi(self) -> None:
+        # The family degrades silently if a scenario stops minting the kind it
+        # was written for (a tick moved out of a window, say), so the kinds are
+        # pinned here rather than left implicit in the scenario names.
+        minted: set[str] = set()
+        for scenario in _RECUT_SCENARIOS:
+            for row in scenario.read(scenario.build(scenario.route)):
+                if isinstance(row, tuple) and isinstance(row[0], str):
+                    minted.add(row[0])
+
+        assert {
+            "alibi_conflict",
+            "alibi_vs_sighting",
+            "alibi_vs_physical",
+            "vent_sighting",
+        } <= minted
+
+
+class TestMixedSpellingsOfOneStayReadIdentically:
+    """The round-6 half of the same property: the cut must not pick the LABEL.
+
+    Round 4's family enumerates every re-cut in ONE spelling, so it could not
+    see the half of the defect that survives coalescing: ``maximal_stays`` kept
+    the FIRST leg's room text, so ``STORAGE 2-4`` + ``storage 5-8`` and its
+    mirror -- one account, cut the same way, narrated with the same two
+    canonically-equal labels -- quoted DIFFERENT rooms, and every description
+    that quotes the stay moved with them. The merged label is now the
+    lexicographically smallest of the labels merged, a function of the SET
+    rather than of the order.
+
+    The family here is every (cut, spelling assignment) of one continuous stay,
+    grouped by the label SET the narration uses; within a group every narration
+    must read byte for byte the same. Narrations whose label SETS DIFFER are
+    two WORDINGS of one account rather than two cuts of it -- exactly as
+    ``LABS 2-14`` and ``labs 2-14`` are with one leg -- so their quoted label
+    legitimately differs and they are not compared here.
+    """
+
+    @pytest.mark.parametrize(
+        "scenario", _RECUT_SCENARIOS, ids=[s.name for s in _RECUT_SCENARIOS]
+    )
+    def test_every_spelling_of_every_cut_reads_identically(
+        self, scenario: _ReCutScenario
+    ) -> None:
+        for narrations in _spelled_narrations_of(scenario.route).values():
+            baseline = scenario.read(scenario.build(narrations[0]))
+            for narration in narrations[1:]:
+                assert scenario.read(scenario.build(narration)) == baseline, (
+                    scenario.name,
+                    [(leg.room, leg.from_tick, leg.to_tick) for leg in narration],
+                )
+
+    @pytest.mark.parametrize(
+        ("shape", "route"), (("one_stay", _ONE_STAY), ("two_stays", _TWO_STAYS))
+    )
+    def test_the_family_carries_the_shapes_the_finding_was_about(
+        self, shape: str, route: tuple[AlibiSegment, ...]
+    ) -> None:
+        # A family of singletons would pass vacuously. The groups that matter
+        # are the ones whose label SET has more than one member, because those
+        # are the narrations where the cut used to choose the surviving label.
+        groups = _spelled_narrations_of(route)
+        # One group per non-empty subset of each stay's spellings.
+        assert len(groups) == len(route) * (2 ** len(_spellings_of(route[0].room)) - 1)
+
+        mixed = {key: members for key, members in groups.items() if len(key[1]) > 1}
+        assert mixed
+        for (index, labels), members in mixed.items():
+            assert len(members) > 1
+            for narration in members:
+                # The stay under test really does use every label of its set,
+                # and the other stays are untouched.
+                stay = route[index]
+                under_test = [
+                    leg
+                    for leg in narration
+                    if stay.from_tick <= leg.from_tick <= stay.to_tick
+                ]
+                assert {leg.room for leg in under_test} == set(labels)
+
+        # And the exhibit itself: the two mirror-image narrations of one cut,
+        # which is the pair that used to quote two different rooms.
+        stay = route[0]
+        first, second = _spellings_of(stay.room)[:2]
+        midpoint = (stay.from_tick + stay.to_tick) // 2
+        pair = groups[(0, frozenset({first, second}))]
+        for left, right in ((first, second), (second, first)):
+            assert (
+                AlibiSegment(room=left, from_tick=stay.from_tick, to_tick=midpoint),
+                AlibiSegment(room=right, from_tick=midpoint + 1, to_tick=stay.to_tick),
+                *route[1:],
+            ) in pair
+
+
+class TestTheRoundFourReCutExhibits:
+    """The two verified round-4 findings, as the verifier stated them.
+
+    The property above is the durable gate; these are the two concrete
+    accounts it was written from, kept as named tests so a regression reads as
+    the reported defect rather than as a parametrised id.
+    """
+
+    @staticmethod
+    def _conflict(
+        route: tuple[AlibiSegment, ...], rival: tuple[AlibiSegment, ...]
+    ) -> ContradictionRef:
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn(route),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    claims=(AlibiClaim(type="alibi", subject="p-1", route=rival),),
+                ),
+            )
+        )
+        (flag,) = [
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=_RECUT_ROSTER, evidence_reasoning_version=1
+            )
+            if flag.kind == "alibi_conflict"
+        ]
+        return flag
+
+    # The rival's SECOND leg is far away and never overlaps; it is there so the
+    # rival's own route clears the narrow-window band and the conflict band is
+    # readable. Without it a one-tick rival is weak whatever the accused says.
+    _RIVAL: Final = (
+        AlibiSegment(room="MEDBAY", from_tick=8, to_tick=8),
+        AlibiSegment(room="CAFETERIA", from_tick=20, to_tick=30),
+    )
+    _MIRROR_RIVAL: Final = (
+        AlibiSegment(room="MEDBAY", from_tick=12, to_tick=12),
+        AlibiSegment(room="CAFETERIA", from_tick=20, to_tick=30),
+    )
+    _ENVELOPE: Final = (AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),)
+
+    def test_a_recut_does_not_soften_a_strong_alibi_conflict(self) -> None:
+        # Round-4 blocking 2. p-2 places p-1 in MEDBAY at tick 8; p-1's own
+        # "STORAGE 2-14" is contradicted six ticks inside its window, which is
+        # STRONG. Re-cutting the identical account at exactly that tick used to
+        # manufacture a junction there and publish the flag WEAK with
+        # "endpoint-tick overlap" -- the accused downgrading the evidence
+        # against themself by choosing where to put a full stop.
+        envelope = self._conflict(self._ENVELOPE, self._RIVAL)
+        assert envelope.evidence_band == "strong"
+        assert WEAK_REASON_BOUNDARY_OVERLAP not in envelope.description
+
+        for recut in (
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=8),
+                AlibiSegment(room="STORAGE", from_tick=9, to_tick=14),
+            ),
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),
+            ),
+            tuple(
+                AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+                for tick in range(2, 15)
+            ),
+        ):
+            flag = self._conflict(recut, self._RIVAL)
+            assert flag == envelope, [
+                (leg.room, leg.from_tick, leg.to_tick) for leg in recut
+            ]
+
+    def test_the_mirror_recut_at_the_other_end_is_the_same(self) -> None:
+        # The junction manufactured from the other side: the rival's tick sits
+        # near the account's END, so the cut goes just before it.
+        envelope = self._conflict(self._ENVELOPE, self._MIRROR_RIVAL)
+        assert envelope.evidence_band == "strong"
+
+        recut = self._conflict(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=11),
+                AlibiSegment(room="STORAGE", from_tick=12, to_tick=14),
+            ),
+            self._MIRROR_RIVAL,
+        )
+        assert recut == envelope
+
+    def test_a_genuine_transit_pair_is_still_weak_banded(self) -> None:
+        # The other direction, or the repair would just be "never arbitrate".
+        # An account that really ENDS at tick 8 and a rival claim that really
+        # BEGINS there is the honest movement pair the boundary reason exists
+        # for, and it stays weak -- coalescing removes manufactured junctions,
+        # not declared ones.
+        flag = self._conflict(
+            (AlibiSegment(room="STORAGE", from_tick=2, to_tick=8),), self._RIVAL
+        )
+
+        assert flag.evidence_band == "weak"
+        assert WEAK_REASON_BOUNDARY_OVERLAP in flag.description
+
+    def test_a_declared_room_change_still_carries_the_boundary_reason(self) -> None:
+        # And a junction that SURVIVES the merge is a real transition: the
+        # speaker asserted leaving STORAGE at 8 for LABS, which is a separately
+        # checkable claim, not a cut.
+        flag = self._conflict(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=8),
+                AlibiSegment(room="LABS", from_tick=9, to_tick=14),
+            ),
+            self._RIVAL,
+        )
+
+        assert flag.evidence_band == "weak"
+        assert WEAK_REASON_BOUNDARY_OVERLAP in flag.description
+
+
+class TestADeclaredTransitionIsNotMovementFuzz:
+    """Each transit-fuzz band reads the ROUTE's outer endpoints, and is held to it.
+
+    The complement of the re-cut property. Coalescing makes a re-cut invisible,
+    which also means a re-cut can no longer EXERCISE the leg-vs-route split of
+    labour -- so every scenario here states a route with a GENUINE room change,
+    where the stay's own window and the route's outer endpoints really differ.
+    That is what keeps each of these production lines reachable and enforced:
+    the sighting/co-presence lands on the FIRST tick of a later stay, which is
+    an edge of a leg but the deep interior of the account, and the flag must
+    come out at full strength.
+
+    Without these, three of the four lines would be unenforced code: the
+    round-3 cases all state ONE continuous stay, and those now coalesce, so
+    pointing the comparisons back at ``alibi.segment`` leaves them green.
+
+    Each test pairs the interior case with the control at the route's own outer
+    endpoint, where the band genuinely applies -- the repair must not read as
+    "never arbitrate".
+    """
+
+    _CHANGE_AT_8: Final = (
+        AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+        AlibiSegment(room="CAFETERIA", from_tick=8, to_tick=14),
+    )
+
+    @staticmethod
+    def _physical(
+        route: tuple[AlibiSegment, ...], *, tick: int, with_body: bool
+    ) -> tuple[ContradictionRef, ...]:
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn(
+                    route,
+                    observations=(
+                        FoundBodyObservation(
+                            type="found_body", tick=16, room="MEDBAY", body_of="p-3"
+                        ),
+                    )
+                    if with_body
+                    else (),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(
+                            tick=tick, subject="p-3", room="MEDBAY", co_present=("p-1",)
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-5",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(
+                            tick=tick, subject="p-4", room="MEDBAY", co_present=("p-1",)
+                        ),
+                    ),
+                ),
+            )
+        )
+        return tuple(
+            flag
+            for flag in detect_contradictions(
+                transcript,
+                roster=_RECUT_ROSTER,
+                # A report meeting carries the body room, so the relevance gate
+                # drops these MEDBAY co-presences from the regular path and only
+                # the Task 13.5.3 arm can recover them. An emergency meeting has
+                # no kill scene, so the regular arm sees them.
+                trigger_kind="report" if with_body else "emergency",
+                evidence_reasoning_version=1,
+            )
+            if flag.kind == "alibi_vs_physical"
+        )
+
+    def test_the_kill_scene_arm_flags_the_first_tick_of_a_later_stay(self) -> None:
+        # Round-4 blocking 1's repair, enforced. The body is in MEDBAY and two
+        # independent voices put p-1 there at tick 8 -- the first tick p-1
+        # claims CAFETERIA. Tick 8 is an edge of that LEG and the deep interior
+        # of the account, so the transit-fuzz exclusion must read the route.
+        flags = self._physical(self._CHANGE_AT_8, tick=8, with_body=True)
+
+        assert len(flags) == 2
+        assert {flag.evidence_band for flag in flags} == {"strong"}
+        # These came through the kill-scene arm, not the regular one.
+        assert all(
+            "places them at the kill scene" in flag.description for flag in flags
+        )
+
+    def test_the_kill_scene_arm_still_excludes_the_routes_outer_endpoint(self) -> None:
+        assert self._physical(self._CHANGE_AT_8, tick=2, with_body=True) == ()
+        assert self._physical(self._CHANGE_AT_8, tick=14, with_body=True) == ()
+
+    def test_the_regular_arm_flags_the_first_tick_of_a_later_stay(self) -> None:
+        flags = self._physical(self._CHANGE_AT_8, tick=8, with_body=False)
+
+        assert len(flags) == 2
+        assert {flag.evidence_band for flag in flags} == {"strong"}
+        assert not any(
+            "places them at the kill scene" in flag.description for flag in flags
+        )
+
+    def test_the_regular_arm_still_excludes_the_routes_outer_endpoint(self) -> None:
+        assert self._physical(self._CHANGE_AT_8, tick=2, with_body=False) == ()
+        assert self._physical(self._CHANGE_AT_8, tick=14, with_body=False) == ()
+
+    @staticmethod
+    def _sighting(
+        route: tuple[AlibiSegment, ...], *, room: str, tick: int
+    ) -> ContradictionRef:
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn(route),
+                _turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    observations=(_saw(tick=tick, subject="p-1", room=room),),
+                ),
+            )
+        )
+        (flag,) = [
+            flag
+            for flag in detect_contradictions(
+                transcript, roster=_RECUT_ROSTER, evidence_reasoning_version=1
+            )
+            if flag.kind == "alibi_vs_sighting"
+        ]
+        return flag
+
+    # ENGINEERING is one doorway from REACTOR, so map arbitration is live.
+    _ADJACENT_ROUTE: Final = (
+        AlibiSegment(room="CAFETERIA", from_tick=2, to_tick=7),
+        AlibiSegment(room="REACTOR", from_tick=8, to_tick=14),
+    )
+
+    def test_map_arbitration_measures_the_gap_to_the_routes_outer_endpoint(
+        self,
+    ) -> None:
+        # Tick 8 is six ticks inside the account, which no single doorway hop
+        # reconciles -- but it is the REACTOR leg's own first tick, so a
+        # leg-measured gap of 0 would weak-band a flag that can eject.
+        flag = self._sighting(self._ADJACENT_ROUTE, room="ENGINEERING", tick=8)
+
+        assert flag.evidence_band == "strong"
+        assert WEAK_REASON_ADJACENT_ONE_TICK not in flag.description
+
+    def test_map_arbitration_still_fires_at_the_routes_outer_endpoint(self) -> None:
+        flag = self._sighting(self._ADJACENT_ROUTE, room="ENGINEERING", tick=13)
+
+        assert flag.evidence_band == "weak"
+        assert WEAK_REASON_ADJACENT_ONE_TICK in flag.description
+
+    def test_the_endpoint_tick_band_reads_the_routes_outer_endpoints(self) -> None:
+        # The same geometry for the endpoint-tick band: tick 8 opens the
+        # STORAGE stay but sits deep inside the account.
+        flag = self._sighting(self._CHANGE_AT_8, room="MEDBAY", tick=8)
+
+        assert flag.evidence_band == "strong"
+        assert WEAK_REASON_ENDPOINT_TICK not in flag.description
+
+    def test_the_endpoint_tick_band_still_fires_at_the_routes_last_tick(self) -> None:
+        flag = self._sighting(self._CHANGE_AT_8, room="MEDBAY", tick=14)
+
+        assert flag.evidence_band == "weak"
+        assert WEAK_REASON_ENDPOINT_TICK in flag.description
+
+
+class TestTheAlibiIndexReadsMaximalStays:
+    """The index itself, asserted directly rather than through a detector.
+
+    Every detector in the module reads :class:`_IndexedAlibi`, so the whole
+    re-cut property rests on this one construction. Two of its fields --
+    :attr:`one_segment_route` and the route endpoints -- are conjoined with
+    other conditions at their call sites, which can make a regression in them
+    invisible to a detector-level test (``interior_exempt`` also requires a
+    single-TICK stay, and a stay of one tick cannot be re-cut at all, so there
+    the coalesced and uncoalesced readings are provably equal). They are
+    therefore pinned here, where the distinction IS observable.
+    """
+
+    @staticmethod
+    def _indexed(route: tuple[AlibiSegment, ...]) -> tuple[_IndexedAlibi, ...]:
+        return tuple(_iter_alibis(MeetingTranscript(turns=(_self_alibi_turn(route),))))
+
+    _ENVELOPE: Final = (AlibiSegment(room="STORAGE", from_tick=2, to_tick=8),)
+
+    def test_every_recut_indexes_identically(self) -> None:
+        def shape(route: tuple[AlibiSegment, ...]) -> list[tuple[object, ...]]:
+            return [
+                (
+                    entry.event_id,
+                    entry.speaker,
+                    entry.segment.room,
+                    entry.segment.from_tick,
+                    entry.segment.to_tick,
+                    entry.segment_index,
+                    entry.rooms,
+                    entry.stays,
+                    entry.route_from_tick,
+                    entry.route_to_tick,
+                    entry.one_segment_route,
+                )
+                for entry in self._indexed(route)
+            ]
+
+        baseline = shape(self._ENVELOPE)
+        assert len(baseline) == 1
+        for recut in _recuts_of(self._ENVELOPE):
+            assert shape(recut) == baseline, [
+                (leg.from_tick, leg.to_tick) for leg in recut
+            ]
+
+    def test_a_recut_account_is_still_one_segment(self) -> None:
+        # The roll-call interior-exempt class keys on this, and so would any
+        # future "the speaker's whole account" rule.
+        for recut in _recuts_of(self._ENVELOPE):
+            (entry,) = self._indexed(recut)
+            assert entry.one_segment_route is True, len(recut)
+
+    def test_a_genuine_room_change_is_not_one_segment(self) -> None:
+        entries = self._indexed(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=6),
+                AlibiSegment(room="CAFETERIA", from_tick=7, to_tick=11),
+            )
+        )
+
+        assert len(entries) == 2
+        assert [entry.one_segment_route for entry in entries] == [False, False]
+        assert [entry.segment_index for entry in entries] == [0, 1]
+
+    def test_a_gap_is_not_one_segment(self) -> None:
+        # A tick no leg covers is a tick the account makes no claim about, so
+        # the two sides are two claims and the merge must not join them.
+        entries = self._indexed(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=6),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=11),
+            )
+        )
+
+        assert len(entries) == 2
+        assert [entry.one_segment_route for entry in entries] == [False, False]
+
+    def test_the_route_endpoints_are_the_whole_accounts(self) -> None:
+        for recut in _recuts_of(self._ENVELOPE):
+            for entry in self._indexed(recut):
+                assert (entry.route_from_tick, entry.route_to_tick) == (2, 8)
+
+
+class TestTheAccountKeyIsBlindToTheCut:
+    """Two copies of one account are one account, however each was narrated.
+
+    ``_claim_route_key`` is the ACCOUNT's identity -- the echo dedup's key and
+    the self-refutation classifier's propagation key are the same statement --
+    and it reads the MAXIMAL STAYS. Keyed on the legs as stated, a defender
+    repeating an account in a different shape was a NEW account: it escaped the
+    dedup and minted its own flags against the player it was defending, and a
+    self-refuted account was laundered by restating it with the cut moved.
+    """
+
+    _ENVELOPE: Final = (AlibiSegment(room="CAFETERIA", from_tick=5, to_tick=9),)
+    _ONE_TICK_LEGS: Final = tuple(
+        AlibiSegment(room="CAFETERIA", from_tick=tick, to_tick=tick)
+        for tick in range(5, 10)
+    )
+
+    def test_a_restated_account_is_an_echo_even_when_recut(self) -> None:
+        # p-1 states the account and p-4 repeats it as one-tick legs. The echo
+        # adds no location account, so it must not pair with the witness.
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn(self._ENVELOPE),
+                _turn(
+                    turn_index=1,
+                    speaker="p-4",
+                    turn_kind="opt_in",
+                    claims=(
+                        AlibiClaim(
+                            type="alibi", subject="p-1", route=self._ONE_TICK_LEGS
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-2",
+                    turn_kind="opt_in",
+                    observations=(_saw(tick=7, subject="p-1", room="MEDBAY"),),
+                ),
+            )
+        )
+
+        flags = detect_contradictions(transcript, roster=_RECUT_ROSTER)
+
+        # One flag, against p-1's own copy -- the echo minted nothing of its
+        # own, and the two copies did not indict each other as rival accounts.
+        assert [flag.kind for flag in flags] == ["alibi_vs_sighting"]
+        assert flags[0].event_a_id == "turn:m-1:turn-0:claim:0"
+
+    def test_a_self_refuted_account_stays_refuted_when_recut(self) -> None:
+        # The subject disproves their own account within one turn, then a proxy
+        # states the SAME account in a different shape. The classification is a
+        # property of the account, so both copies are marked.
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn(
+                    self._ONE_TICK_LEGS,
+                    observations=(
+                        CompletedTaskObservation(
+                            type="completed_task", tick=7, room="MEDBAY", task_id="t-1"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-4",
+                    turn_kind="opt_in",
+                    claims=(
+                        AlibiClaim(type="alibi", subject="p-1", route=self._ENVELOPE),
+                    ),
+                ),
+            )
+        )
+
+        assert self_refuted_alibi_claim_ids(transcript) == frozenset(
+            {"turn:m-1:turn-0:claim:0", "turn:m-1:turn-1:claim:0"}
+        )
+
+    def test_a_genuinely_different_account_is_still_its_own(self) -> None:
+        # The control: a restatement that NARROWS what is claimed asserts new
+        # information (a gap is a tick the speaker no longer accounts for), so
+        # it keeps its own identity and is not folded into the first.
+        narrowed = (
+            AlibiSegment(room="CAFETERIA", from_tick=5, to_tick=6),
+            AlibiSegment(room="CAFETERIA", from_tick=8, to_tick=9),
+        )
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn(
+                    self._ONE_TICK_LEGS,
+                    observations=(
+                        CompletedTaskObservation(
+                            type="completed_task", tick=7, room="MEDBAY", task_id="t-1"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-4",
+                    turn_kind="opt_in",
+                    claims=(AlibiClaim(type="alibi", subject="p-1", route=narrowed),),
+                ),
+            )
+        )
+
+        assert self_refuted_alibi_claim_ids(transcript) == frozenset(
+            {"turn:m-1:turn-0:claim:0"}
+        )

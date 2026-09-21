@@ -224,7 +224,8 @@ class TestExtractorNormalizationSeam:
         turn = MeetingTurn.model_validate_json(out)
         claim = turn.claims[0]
         assert isinstance(claim, AlibiClaim)
-        assert (claim.from_tick, claim.to_tick) == (1, 8)
+        assert claim.claim_format == 1
+        assert (claim.route[0].from_tick, claim.route[0].to_tick) == (1, 8)
 
     def test_normalize_json_text_is_byte_identical_on_valid(self) -> None:
         valid = _valid_turn_text()
@@ -311,7 +312,8 @@ class TestOllamaProviderNormalization:
         turn = MeetingTurn.model_validate_json(resp.text)
         claim = turn.claims[0]
         assert isinstance(claim, AlibiClaim)
-        assert (claim.from_tick, claim.to_tick) == (1, 8)
+        assert claim.claim_format == 1
+        assert (claim.route[0].from_tick, claim.route[0].to_tick) == (1, 8)
 
     def test_complete_is_byte_identical_on_valid(self) -> None:
         valid = _valid_turn_text()

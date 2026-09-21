@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Final, Literal, TypeAlias
+from typing import Any, Final, Literal, TypeAlias
 
 from meetings.schemas import (
     AlibiClaim,
@@ -25,6 +25,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_PROXY_INTRA_TURN,
+    maximal_stays,
 )
 
 
@@ -54,16 +55,40 @@ def validate_public_accounts(
         for player in data.get("co_present", ()):
             if player not in roster:
                 raise PublicAccountValidationError("unknown co-present player")
-        for key in ("room", "from_room", "to_room"):
-            if key in data and data[key] not in room_ids:
-                raise PublicAccountValidationError(f"unknown public room in {key}")
         if "task_id" in data and data["task_id"] not in task_ids:
             raise PublicAccountValidationError("unknown public task")
-        for key in ("tick", "from_tick", "to_tick", "on_tick"):
-            if key in data and not 0 <= data[key] <= current_tick:
-                raise PublicAccountValidationError(
-                    "account tick is outside game history"
-                )
+        # The row AND every segment of an alibi ROUTE. A format-2
+        # :class:`~meetings.schemas.AlibiClaim` states its rooms and ticks
+        # inside ``route`` and carries none of them at the top level, so a
+        # top-level-only read would accept a route naming a room the map does
+        # not have, or a tick before the game began, purely for having been
+        # stated as a route -- exactly what the same account is REFUSED for as a
+        # format-1 envelope (AGENTS.md rule 5, "invalid input raises").
+        for scope in _validated_scopes(data):
+            for key in ("room", "from_room", "to_room"):
+                if key in scope and scope[key] not in room_ids:
+                    raise PublicAccountValidationError(f"unknown public room in {key}")
+            for key in ("tick", "from_tick", "to_tick", "on_tick"):
+                if key in scope and not 0 <= scope[key] <= current_tick:
+                    raise PublicAccountValidationError(
+                        "account tick is outside game history"
+                    )
+
+
+def _validated_scopes(data: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """One dumped row, followed by each segment of its route if it states one.
+
+    The legs exactly AS STATED, never :func:`maximal_stays`. This gate asks
+    whether the words a speaker used refer to the public game context, so it
+    has to read every word of them: coalescing is a DETECTION reading of an
+    account, and applying it here would hide a leg's spelling from the room
+    allowlist behind whichever leg happened to come first.
+    """
+
+    route = data.get("route")
+    if not isinstance(route, (list, tuple)):
+        return (data,)
+    return (data, *(leg for leg in route if isinstance(leg, Mapping)))
 
 
 # How a placement was read out of one spoken account. ``stated`` is a direct
@@ -102,6 +127,15 @@ class _Placement:
     # Which ``co_present`` name a ``co_present`` row reads; 0 for every other
     # derivation. Part of :attr:`identity`, never of the event id.
     slot: int = 0
+    # Which MAXIMAL STAY of an alibi route this row reads, for an account
+    # carrying more than one. ``None`` for every other row AND for a one-stay
+    # account, so the identity of every placement that could exist before the
+    # route schema is the bare event id and no committed ``contradiction_id``
+    # moves. The stays, not the legs as stated: a speaker re-cutting one
+    # continuous stay would otherwise multiply their own flags and shift every
+    # id, which is output they choose rather than evidence. Part of
+    # :attr:`identity`, never of the event id.
+    leg: int | None = None
     # Hops of room uncertainty this placement carries. A directly stated
     # placement names the room outright (0). A ``witness`` placement is
     # inferred from what the speaker claims to have seen, and vision reaches
@@ -117,11 +151,19 @@ class _Placement:
         speaker's implied witness position, one per named bystander), so the
         ``contradiction_id`` hashes THIS rather than the event id -- otherwise
         two different derived pairs off one pair of artifacts would collide on
-        a single id. It is never an endpoint: :attr:`event_id` is.
+        a single id. An alibi route is a fourth way one artifact yields several
+        rows -- one stated placement per MAXIMAL STAY -- so a multi-stay
+        account names its stay here for exactly the same reason: two stays of
+        one route disagreeing with one sighting are two different
+        disagreements and must not hash to one id. A one-stay account keeps
+        the bare event id, so every id a committed recording carries is
+        unmoved. It is never an endpoint: :attr:`event_id` is.
         """
 
         if self.derivation == "stated":
-            return self.event_id
+            if self.leg is None:
+                return self.event_id
+            return f"{self.event_id}:leg:{self.leg}"
         if self.derivation == "co_present":
             return f"{self.event_id}:co_present:{self.slot}"
         return f"{self.event_id}:witness"
@@ -203,15 +245,30 @@ def _placements(transcript: MeetingTranscript) -> tuple[_Placement, ...]:
                 )
         for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
-                rows.append(
+                # One placement per MAXIMAL STAY (:func:`maximal_stays`): the
+                # account places its subject in each room it names, over that
+                # stay's own window. Reading the legs as stated let a speaker
+                # re-cut one continuous stay and multiply the flags against
+                # themself (1 -> 2 -> 7 for "STORAGE 2-14" as the envelope, two
+                # legs, then thirteen one-tick legs) and re-key every id, which
+                # is output the accused chooses rather than evidence. A
+                # multi-stay account stamps the stay index into
+                # :attr:`identity` so two stays of one route cannot hash to one
+                # ``contradiction_id``; a one-stay account stamps nothing,
+                # which is what keeps every recorded id byte-identical.
+                stays = maximal_stays(claim.route)
+                multi_leg = len(stays) > 1
+                rows.extend(
                     _Placement(
                         f"turn:{turn.turn_id}:claim:{index}",
                         turn.speaker,
                         claim.subject,
-                        claim.room,
-                        claim.from_tick,
-                        claim.to_tick,
+                        segment.room,
+                        segment.from_tick,
+                        segment.to_tick,
+                        leg=leg_index if multi_leg else None,
                     )
+                    for leg_index, segment in enumerate(stays)
                 )
     return tuple(rows)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
 
@@ -40,6 +41,7 @@ from meetings.schemas import (
     MeetingResult,
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
@@ -392,6 +394,227 @@ def test_public_reference_gate_rejects_invalid_context(change: dict[str, Any]) -
         )
 
 
+def _validate_alibi(claim: AlibiClaim) -> None:
+    """Put one alibi through the public-reference gate of a ten-tick game."""
+
+    validate_public_accounts(
+        MeetingTurn(
+            turn_id="p-1",
+            turn_index=0,
+            speaker="p-1",
+            turn_kind="opening",
+            reply_to=None,
+            claims=(claim,),
+            free_text="unsure",
+        ),
+        roster=frozenset({"p-1"}),
+        current_tick=10,
+        room_ids=frozenset(_map().room_ids),
+        task_ids=frozenset(_map().task_locations),
+    )
+
+
+def test_the_context_gate_reads_every_leg_of_an_alibi_route() -> None:
+    """A route states its rooms and ticks in its SEGMENTS, so the gate walks them.
+
+    The gate read only the top level, where a format-2 claim carries neither a
+    room nor a tick — so the very account it REFUSES as a flat envelope was
+    accepted once it arrived as a route. That is the silent widening AGENTS.md
+    rule 5 forbids, and it is the shape the new prompts ask models for.
+    """
+
+    legal = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="STORAGE", from_tick=3, to_tick=4),
+            AlibiSegment(room="ENGINEERING", from_tick=5, to_tick=6),
+        ),
+    )
+    _validate_alibi(legal)
+
+    with pytest.raises(PublicAccountValidationError, match="unknown public room"):
+        _validate_alibi(
+            AlibiClaim(
+                type="alibi",
+                subject="p-1",
+                route=(
+                    AlibiSegment(room="STORAGE", from_tick=3, to_tick=4),
+                    AlibiSegment(room="NOT_A_ROOM", from_tick=5, to_tick=6),
+                ),
+            )
+        )
+    with pytest.raises(PublicAccountValidationError, match="outside game history"):
+        _validate_alibi(
+            AlibiClaim(
+                type="alibi",
+                subject="p-1",
+                route=(
+                    AlibiSegment(room="STORAGE", from_tick=3, to_tick=4),
+                    AlibiSegment(room="ENGINEERING", from_tick=900, to_tick=901),
+                ),
+            )
+        )
+    # The asymmetry this closes: the same room, stated flat, was always refused.
+    with pytest.raises(PublicAccountValidationError, match="unknown public room"):
+        _validate_alibi(
+            AlibiClaim.model_validate(
+                {
+                    "type": "alibi",
+                    "subject": "p-1",
+                    "room": "NOT_A_ROOM",
+                    "from_tick": 3,
+                    "to_tick": 4,
+                }
+            )
+        )
+
+
+def test_two_legs_of_one_route_mint_two_DISTINCT_contradiction_ids() -> None:
+    """A route's legs are separate rows, so they cannot hash to ONE flag id.
+
+    ``_Placement.identity`` exists precisely so two rows read out of ONE
+    artifact do not collide (its docstring says so), and a route is a fourth
+    way one artifact yields several rows. With the bare event id for every
+    stated row, a two-leg account disagreeing with one sighting returned TWO
+    flags carrying the SAME ``contradiction_id`` and different descriptions —
+    a duplicate key every reader that indexes by id silently drops.
+
+    The control is the reason the leg index is conditional: a ONE-leg claim
+    keeps the bare event id, so every id a committed recording carries is
+    byte-identical to what it was recorded with.
+    """
+
+    route = AlibiClaim(
+        type="alibi",
+        subject="p-3",
+        route=(
+            AlibiSegment(room="REACTOR", from_tick=1, to_tick=2),
+            AlibiSegment(room="ENGINEERING", from_tick=3, to_tick=4),
+        ),
+    )
+    sighting = MeetingTurn(
+        turn_id="p-2",
+        turn_index=1,
+        speaker="p-2",
+        turn_kind="opt_in",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(type="saw_player", tick=3, subject="p-3", room="LABS"),
+        ),
+        free_text="unsure",
+    )
+    roster = frozenset({"p-1", "p-2", "p-3"})
+
+    flags = _flags(_claim_turn("p-1", (route,)), sighting, roster=roster)
+
+    assert len(flags) == 2
+    assert len({flag.contradiction_id for flag in flags}) == 2
+    assert len({flag.description for flag in flags}) == 2
+    # Both endpoints still resolve to the artifact a reader can cite: the leg
+    # index lives in the hashed identity, never in the event id.
+    assert {flag.event_a_id for flag in flags} == {"turn:p-1:claim:0"}
+
+    # The control: a ONE-leg claim hashes the bare event ids, exactly as every
+    # committed recording's public-account flag already does.
+    (single,) = _flags(
+        _claim_turn("p-1", (_alibi("p-3", "REACTOR", 1),)), sighting, roster=roster
+    )
+    source = f"{single.event_a_id}|{single.event_b_id}"
+    assert single.contradiction_id == (
+        "public-account-" + sha256(source.encode()).hexdigest()[:16]
+    )
+
+
+def test_recutting_one_stay_mints_the_same_public_account_flags() -> None:
+    """Re-cutting one continuous stay must not multiply a speaker's own flags.
+
+    ``_placements`` emits one stated row per unit of an alibi account, and
+    reading the LEGS as stated made that unit something the speaker chooses:
+    "STORAGE 2-14" against one MEDBAY sighting minted ONE flag, the identical
+    account re-cut as "STORAGE 2-7" plus "STORAGE 8-14" minted TWO, and as
+    thirteen one-tick legs SEVEN — each with its own ``contradiction_id``.
+    Every one of them is weak and they fold onto one lift key, so no band
+    moved, but the count, the ids and the descriptions are published output and
+    the accused was choosing them. Reading MAXIMAL STAYS closes it: the flags
+    are byte-identical across every narration of one account.
+
+    The round-2 two-ids gate above is the other half and still holds — two legs
+    in DIFFERENT rooms are two claims and keep two distinct ids.
+    """
+
+    sighting = MeetingTurn(
+        turn_id="p-2",
+        turn_index=1,
+        speaker="p-2",
+        turn_kind="opt_in",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(
+                type="saw_player", tick=8, subject="p-1", room="MEDBAY"
+            ),
+        ),
+        free_text="unsure",
+    )
+    roster = frozenset({"p-1", "p-2", "p-3"})
+
+    def account(
+        route: tuple[AlibiSegment, ...],
+    ) -> list[tuple[str, tuple[str, ...], str]]:
+        flags = _flags(
+            _claim_turn("p-1", (AlibiClaim(type="alibi", subject="p-1", route=route),)),
+            sighting,
+            roster=roster,
+        )
+        return [
+            (flag.contradiction_id, flag.subjects, flag.description) for flag in flags
+        ]
+
+    envelope = account((AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),))
+    assert len(envelope) == 1
+
+    for recut in (
+        (
+            AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+            AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),
+        ),
+        tuple(
+            AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+            for tick in range(2, 15)
+        ),
+    ):
+        assert account(recut) == envelope, len(recut)
+
+    # An ACCUSER re-cutting a proxy account they state about someone else is
+    # the same lever pointed the other way, and it is closed too.
+    def proxy(route: tuple[AlibiSegment, ...]) -> int:
+        return len(
+            _flags(
+                _claim_turn(
+                    "p-3", (AlibiClaim(type="alibi", subject="p-1", route=route),)
+                ),
+                sighting,
+                roster=roster,
+            )
+        )
+
+    assert (
+        proxy((AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),))
+        == proxy(
+            (
+                AlibiSegment(room="STORAGE", from_tick=2, to_tick=7),
+                AlibiSegment(room="STORAGE", from_tick=8, to_tick=14),
+            )
+        )
+        == proxy(
+            tuple(
+                AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+                for tick in range(2, 15)
+            )
+        )
+    )
+
+
 def test_task_account_retains_attribution_without_completion_evidence() -> None:
     result, _ = asyncio.run(_meeting(grounded=False))
     activity = TaskActivityAccount(
@@ -615,7 +838,9 @@ def _claim_turn(speaker: str, claims: tuple[AlibiClaim, ...]) -> MeetingTurn:
 
 def _alibi(subject: str, room: str, tick: int) -> AlibiClaim:
     return AlibiClaim(
-        type="alibi", subject=subject, room=room, from_tick=tick, to_tick=tick
+        type="alibi",
+        subject=subject,
+        route=(AlibiSegment(room=room, from_tick=tick, to_tick=tick),),
     )
 
 

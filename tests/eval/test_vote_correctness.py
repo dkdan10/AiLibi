@@ -69,6 +69,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     Claim,
     ContradictionRef,
     FoundBodyObservation,
@@ -2061,7 +2062,10 @@ def _has_detector_material(meeting: MeetingReport, subject: PlayerId) -> bool:
                 and claim.subject == subject
                 and turn.speaker == subject
             ):
-                self_accounts.append((claim.room, claim.from_tick, claim.to_tick))
+                self_accounts.extend(
+                    (segment.room, segment.from_tick, segment.to_tick)
+                    for segment in claim.route
+                )
 
     if any(
         start <= tick <= end and _rooms_disjoint(room, seen_room)
@@ -2338,7 +2342,9 @@ def test_detector_material_rule_separates_a_miss_from_pure_rhetoric() -> None:
 
     def _proxy_alibi(room: str) -> AlibiClaim:
         return AlibiClaim(
-            type="alibi", subject=_IMPOSTOR, from_tick=5, to_tick=9, room=room
+            type="alibi",
+            subject=_IMPOSTOR,
+            route=(AlibiSegment(room=room, from_tick=5, to_tick=9),),
         )
 
     proxy = _meeting(

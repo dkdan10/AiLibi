@@ -450,7 +450,10 @@ async def probe_p5(ctxs: list[KillContext], *, sink: Any) -> None:
             # supports = mentions teammate favorably or places teammate in troom;
             # contradicts = places teammate elsewhere.
             teammate_alibis = [
-                a for a in turn.claims if isinstance(a, AlibiClaim) and a.subject == tid
+                segment
+                for a in turn.claims
+                if isinstance(a, AlibiClaim) and a.subject == tid
+                for segment in a.route
             ]
             supports = (
                 (tid.lower() in text and troom.lower() in text)

@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     CompletedTaskObservation,
     ContradictionRef,
     FoundBodyObservation,
@@ -69,9 +70,7 @@ def _opening_turn(**overrides: object) -> MeetingTurn:
             AlibiClaim(
                 type="alibi",
                 subject="p-3",
-                from_tick=380,
-                to_tick=410,
-                room="ADMIN",
+                route=(AlibiSegment(room="ADMIN", from_tick=380, to_tick=410),),
                 evidence=("wiring_admin", "saw_player:p-5"),
             ),
             AccusationClaim(
@@ -238,33 +237,27 @@ class TestAlibiClaimChronology:
         claim = AlibiClaim(
             type="alibi",
             subject="p-3",
-            from_tick=400,
-            to_tick=400,
-            room="ADMIN",
+            route=(AlibiSegment(room="ADMIN", from_tick=400, to_tick=400),),
         )
 
-        assert claim.from_tick == claim.to_tick == 400
+        assert claim.route[0].from_tick == claim.route[0].to_tick == 400
 
     def test_chronological_range_is_allowed(self) -> None:
         claim = AlibiClaim(
             type="alibi",
             subject="p-3",
-            from_tick=380,
-            to_tick=410,
-            room="ADMIN",
+            route=(AlibiSegment(room="ADMIN", from_tick=380, to_tick=410),),
         )
 
-        assert claim.from_tick == 380
-        assert claim.to_tick == 410
+        assert claim.route[0].from_tick == 380
+        assert claim.route[0].to_tick == 410
 
     def test_reversed_range_is_rejected_at_parse_time(self) -> None:
         with pytest.raises(ValidationError, match="chronological"):
             AlibiClaim(
                 type="alibi",
                 subject="p-3",
-                from_tick=410,
-                to_tick=380,
-                room="ADMIN",
+                route=(AlibiSegment(room="ADMIN", from_tick=410, to_tick=380),),
             )
 
     def test_reversed_range_inside_turn_is_rejected(self) -> None:
@@ -290,6 +283,120 @@ class TestAlibiClaimChronology:
                         }
                     ],
                     "free_text": "",
+                }
+            )
+
+
+class TestAlibiClaimIsARoute:
+    """An alibi is a ROUTE, in one claim type with two wire surfaces.
+
+    The card's planted set: a recorded legacy line round-trips byte-identically
+    at format 1, a route payload reads as format 2, and the shapes that would
+    let an account mean two things at once -- both surfaces, neither surface,
+    an empty route, out-of-order or overlapping legs -- each raise rather than
+    being widened into an envelope the speaker never stated.
+    """
+
+    LEGACY = (
+        '{"type":"alibi","subject":"p-9","from_tick":12,"to_tick":15,'
+        '"room":"ENGINEERING","evidence":["saw p-7 in ENGINEERING @ tick 12"]}'
+    )
+
+    def test_a_recorded_legacy_line_round_trips_byte_identically(self) -> None:
+        claim = AlibiClaim.model_validate_json(self.LEGACY)
+
+        # Lifted, not widened: one segment holding exactly what was recorded.
+        assert claim.claim_format == 1
+        assert claim.route == (
+            AlibiSegment(room="ENGINEERING", from_tick=12, to_tick=15),
+        )
+        assert claim.model_dump_json() == self.LEGACY
+
+    def test_a_route_payload_reads_and_writes_as_a_route(self) -> None:
+        payload = (
+            '{"type":"alibi","subject":"p-9","route":['
+            '{"room":"ENGINEERING","from_tick":12,"to_tick":12},'
+            '{"room":"EAST_HALL","from_tick":13,"to_tick":13}],'
+            '"evidence":[]}'
+        )
+        claim = AlibiClaim.model_validate_json(payload)
+
+        assert claim.claim_format == 2
+        assert [segment.room for segment in claim.route] == [
+            "ENGINEERING",
+            "EAST_HALL",
+        ]
+        assert claim.model_dump_json() == payload
+
+    def test_a_payload_carrying_both_surfaces_is_refused(self) -> None:
+        with pytest.raises(ValidationError, match="both a route and the legacy"):
+            AlibiClaim.model_validate(
+                {
+                    "type": "alibi",
+                    "subject": "p-9",
+                    "from_tick": 12,
+                    "to_tick": 15,
+                    "room": "ENGINEERING",
+                    "route": [{"room": "ADMIN", "from_tick": 12, "to_tick": 15}],
+                }
+            )
+
+    def test_a_payload_carrying_neither_surface_is_refused(self) -> None:
+        with pytest.raises(ValidationError, match="neither a route nor"):
+            AlibiClaim.model_validate({"type": "alibi", "subject": "p-9"})
+
+    def test_a_half_stated_legacy_envelope_is_refused_not_widened(self) -> None:
+        with pytest.raises(ValidationError, match="envelope is incomplete"):
+            AlibiClaim.model_validate(
+                {
+                    "type": "alibi",
+                    "subject": "p-9",
+                    "from_tick": 12,
+                    "room": "ENGINEERING",
+                }
+            )
+
+    def test_an_empty_route_is_refused(self) -> None:
+        with pytest.raises(ValidationError, match="at least one segment"):
+            AlibiClaim.model_validate({"type": "alibi", "subject": "p-9", "route": []})
+
+    def test_out_of_order_legs_are_refused(self) -> None:
+        with pytest.raises(ValidationError, match="strictly non-overlapping"):
+            AlibiClaim.model_validate(
+                {
+                    "type": "alibi",
+                    "subject": "p-9",
+                    "route": [
+                        {"room": "EAST_HALL", "from_tick": 13, "to_tick": 13},
+                        {"room": "ENGINEERING", "from_tick": 12, "to_tick": 12},
+                    ],
+                }
+            )
+
+    def test_overlapping_legs_are_refused(self) -> None:
+        with pytest.raises(ValidationError, match="strictly non-overlapping"):
+            AlibiClaim.model_validate(
+                {
+                    "type": "alibi",
+                    "subject": "p-9",
+                    "route": [
+                        {"room": "ENGINEERING", "from_tick": 12, "to_tick": 14},
+                        {"room": "EAST_HALL", "from_tick": 14, "to_tick": 15},
+                    ],
+                }
+            )
+
+    def test_a_format_1_claim_is_one_segment_by_construction(self) -> None:
+        with pytest.raises(ValidationError, match="one segment"):
+            AlibiClaim.model_validate(
+                {
+                    "type": "alibi",
+                    "subject": "p-9",
+                    "claim_format": 1,
+                    "route": [
+                        {"room": "ENGINEERING", "from_tick": 12, "to_tick": 12},
+                        {"room": "EAST_HALL", "from_tick": 13, "to_tick": 13},
+                    ],
                 }
             )
 
@@ -541,9 +648,9 @@ class TestSawMoveObservation:
                         AlibiClaim(
                             type="alibi",
                             subject="p-5",
-                            from_tick=380,
-                            to_tick=380,
-                            room="ADMIN",
+                            route=(
+                                AlibiSegment(room="ADMIN", from_tick=380, to_tick=380),
+                            ),
                         ),
                     ),
                 ),
@@ -651,9 +758,9 @@ class TestSawKillObservation:
                         AlibiClaim(
                             type="alibi",
                             subject="p-5",
-                            from_tick=380,
-                            to_tick=380,
-                            room="ADMIN",
+                            route=(
+                                AlibiSegment(room="ADMIN", from_tick=380, to_tick=380),
+                            ),
                         ),
                     ),
                 ),
@@ -679,9 +786,9 @@ class TestSawKillObservation:
                         AlibiClaim(
                             type="alibi",
                             subject="p-5",
-                            from_tick=380,
-                            to_tick=380,
-                            room="ADMIN",
+                            route=(
+                                AlibiSegment(room="ADMIN", from_tick=380, to_tick=380),
+                            ),
                         ),
                     ),
                 ),

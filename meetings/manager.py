@@ -182,6 +182,7 @@ from meetings.transcript import (
     grounded_vouch_subjects,
     independent_voices,
     is_relevant_sighting,
+    maximal_stays,
     next_chain_step,
     triggering_body_rooms,
 )
@@ -4476,15 +4477,34 @@ def derive_reported_testimony(
         for index, claim in enumerate(turn.claims):
             before = len(statements)
             if isinstance(claim, AlibiClaim):
-                statements.append(
+                # ONE statement per MAXIMAL STAY (:func:`maximal_stays`), in
+                # route order. A four-room walk still lands as four statements
+                # -- those are four stays -- so the listener keeps every room
+                # the speaker named instead of collapsing to "ENGINEERING from
+                # tick 12"; ``ReportedStatement`` is unchanged, because a stay
+                # IS the shape it already carries. The stays rather than the
+                # legs AS STATED because what a listener HOLDS is a fact about
+                # the account, not about its wording: one continuous stay
+                # restated as several contiguous same-room legs says exactly
+                # the same thing, and the ``[meeting]`` line count, the belief
+                # rows and the capped §6.6 alibi suffix must not move with the
+                # speaker's choice of where to put a full stop (round-5 review;
+                # a 13-leg narration of one stay evicted a rival's
+                # contradicting placement from the listener's belief block).
+                # Nothing that REPORTS the account moves with it: the
+                # transcript, the serializer, the meeting-transcript render of
+                # the speaker's own turn and the served DTO all keep the legs
+                # the speaker gave.
+                statements.extend(
                     ReportedStatement(
                         speaker=speaker,
                         kind="alibi",
                         subject=claim.subject,
-                        from_tick=claim.from_tick,
-                        to_tick=claim.to_tick,
-                        room=claim.room,
+                        from_tick=stay.from_tick,
+                        to_tick=stay.to_tick,
+                        room=stay.room,
                     )
+                    for stay in maximal_stays(claim.route)
                 )
             elif isinstance(claim, AccusationClaim):
                 statements.append(
@@ -4505,11 +4525,15 @@ def derive_reported_testimony(
                     )
                 )
             if provenance_on and len(statements) > before:
-                statements[-1] = statements[-1].model_copy(
-                    update={
-                        "source_event_id": f"turn:{turn.turn_id}:claim:{index}",
-                    }
-                )
+                # EVERY statement this claim produced, not just the last: a
+                # route emits one per maximal STAY and each of them traces to
+                # the same public claim id.
+                for position in range(before, len(statements)):
+                    statements[position] = statements[position].model_copy(
+                        update={
+                            "source_event_id": f"turn:{turn.turn_id}:claim:{index}",
+                        }
+                    )
     return tuple(sorted(statements, key=_reported_statement_sort_key))
 
 

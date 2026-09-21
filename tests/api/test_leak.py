@@ -104,6 +104,10 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "WhereaboutsClaimView",
         # Spectator mirror of the witnessed transition (meetings SawMoveObservation):
         "SawMoveObservationView",
+        # An alibi is a ROUTE, so its legs are their own DTO. Room, from_tick
+        # and to_tick only -- the same three values the flat envelope carried,
+        # named once per leg; no role, belief or engine state joins them.
+        "AlibiSegmentView",
         "AlibiClaimView",
         "AccusationClaimView",
         "CorroborationClaimView",
@@ -740,6 +744,14 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "role_proof_flags",
         "roles",
         "room",
+        # An alibi is a ROUTE: the ordered (room, from_tick, to_tick) legs the
+        # speaker stated, and the marker for which surface the claim arrived
+        # on. Both are spoken-transcript structure -- the same public content
+        # the flat envelope carried, said per leg -- so no role or engine state
+        # crosses with them and they stay out of
+        # FORBIDDEN_EVAL_ENGINE_FIELDS.
+        "route",
+        "claim_format",
         "scaffold_leakage",
         "seed",
         "seeds_used",

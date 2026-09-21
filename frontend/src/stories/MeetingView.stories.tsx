@@ -58,8 +58,25 @@ function accusation(against: string, confidence: number, reason: string): Statem
   return { type: "accusation", against, confidence, reason };
 }
 
+// A claim recorded before the alibi became a route: the flat one-room
+// envelope, which the spectator still serves and renders exactly as before.
 function alibi(subject: string, from_tick: number, to_tick: number, room: string): StatementClaimView {
   return { type: "alibi", subject, from_tick, to_tick, room, evidence: [] };
+}
+
+// A route claim: the legs in the order the speaker walked them, with the
+// evidence rows the claim carried.
+function alibiRoute(
+  subject: string,
+  legs: readonly (readonly [string, number, number])[],
+  evidence: readonly string[] = [],
+): StatementClaimView {
+  return {
+    type: "alibi",
+    subject,
+    route: legs.map(([room, from_tick, to_tick]) => ({ room, from_tick, to_tick })),
+    evidence: [...evidence],
+  };
 }
 
 function turn(partial: Partial<TurnView> & Pick<TurnView, "turn_id" | "speaker" | "free_text">): TurnView {
@@ -363,7 +380,17 @@ const SKIPPED_MEETING: MeetingViewDTO = {
       turn_kind: "reply",
       reply_to: "k-1",
       free_text: "That's not fair — I was doing tasks in Admin all round.",
-      claims: [alibi("p-3", 70, 88, "ADMIN")],
+      claims: [
+      alibiRoute(
+        "p-3",
+        [
+          ["ENGINEERING", 70, 74],
+          ["EAST_HALL", 75, 79],
+          ["ADMIN", 80, 88],
+        ],
+        ["saw p-7 in ENGINEERING @ tick 70", "moved to ADMIN @ tick 80"],
+      ),
+    ],
     }),
   ],
   ballots: [

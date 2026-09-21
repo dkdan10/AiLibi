@@ -91,6 +91,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
@@ -2632,17 +2633,18 @@ def test_the_visible_net_reads_the_claim_reason_not_only_free_text() -> None:
     )
 
 
-def test_the_net_does_not_read_an_alibi_claims_evidence() -> None:
-    """The surface is what the table READS, so a string nothing renders is out.
+def test_the_net_reads_an_alibi_claims_evidence_because_the_table_shows_it() -> None:
+    """The surface is what the table READS, and the shipped block prints the rows.
 
-    Every transcript block spells an alibi as subject / room / tick range and
-    never its ``evidence`` tuple, so those strings are model-authored text no
-    player ever sees. Counting them would file hidden output as table-visible
-    testimony — the same ruling the oracle-register net already carries — and
-    would make the cell's own name false.
+    The locked set's transcript block appends "They back it with: ..." to the
+    alibi line and the frozen reference set writes "(evidence: ...)", so an
+    alibi's ``evidence`` reaches every later speaker and every ballot exactly as
+    ``free_text`` does. While the render dropped the rows this net excluded them
+    to match; leaving them out now would file table-visible testimony as hidden
+    and make the cell's own name false.
     """
 
-    hidden = MeetingTurn(
+    spoken = MeetingTurn(
         turn_id="m:turn-0",
         turn_index=0,
         speaker="p-1",
@@ -2653,26 +2655,35 @@ def test_the_net_does_not_read_an_alibi_claims_evidence() -> None:
             AlibiClaim(
                 type="alibi",
                 subject="p-1",
-                from_tick=1,
-                to_tick=2,
-                room="CAFETERIA",
+                route=(AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=2),),
                 evidence=("I am the impostor and I was alone",),
             ),
         ),
         free_text="",
     )
     report = _synthetic_report(
-        turns=(hidden,),
+        turns=(spoken,),
         ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
         roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
     )
     leakage = compute_deduction_metrics(report).scaffold_leakage
-    assert leakage.model_self_disclosure_visible_turns == 0
-    # ...and the gate is not vacuous: the SAME sentence in a rendered surface
-    # scores, so the exclusion is about visibility and not about the phrase.
+    assert leakage.model_self_disclosure_visible_turns == 1
+    assert leakage.crew_self_disclosure_control_turns == 0
+    # ...and the net still reads the surface rather than the phrase: the SAME
+    # sentence in an accusation reason scores identically.
     assert _visible_cells(
         speaker_role="IMPOSTOR", reason="I am the impostor and I was alone"
     ) == (1, 0)
+    # The crew control sees it too, which is what keeps the impostor cell from
+    # being quoted as a leak RATE.
+    crew = _synthetic_report(
+        turns=(spoken,),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": "CREWMATE", "p-2": "CREWMATE"},
+    )
+    crew_leakage = compute_deduction_metrics(crew).scaffold_leakage
+    assert crew_leakage.crew_self_disclosure_control_turns == 1
+    assert crew_leakage.model_self_disclosure_visible_turns == 0
 
 
 def test_the_crew_cell_is_the_false_positive_control() -> None:

@@ -55,6 +55,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     Claim,
     FoundBodyObservation,
     MeetingResult,
@@ -814,9 +815,7 @@ class TestWhereaboutsClaimMechanism:
                     AlibiClaim(
                         type="alibi",
                         subject="p-3",
-                        from_tick=5,
-                        to_tick=9,
-                        room="REACTOR",
+                        route=(AlibiSegment(room="REACTOR", from_tick=5, to_tick=9),),
                     ),
                 ),
             )
@@ -975,9 +974,7 @@ class TestWhereaboutsIsNotACorroborationSurface:
                     AlibiClaim(
                         type="alibi",
                         subject="p-3",
-                        from_tick=6,
-                        to_tick=8,
-                        room="MEDBAY",
+                        route=(AlibiSegment(room="MEDBAY", from_tick=6, to_tick=8),),
                     ),
                 ),
             ),

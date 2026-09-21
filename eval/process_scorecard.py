@@ -150,6 +150,7 @@ from meetings.schemas import (
     RoomId,
     VoteBallot,
 )
+from meetings.transcript import maximal_stays
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 #: Bumped only when the published JSON changes shape in a way an older reader
@@ -256,8 +257,11 @@ ROW_DEFINITIONS: Final[Mapping[str, str]] = {
         "TRUE at at least one tick of its own span against that speaker's "
         "engine route from a state-hash-verified walk_replay. Denominator: all "
         "alibi-class flags. Not-evaluable: an alibi-class flag naming no "
-        "self-alibi speaker in its meeting, or one whose claim covers a tick the "
-        "walk does not reach. Ticks are agent-frame and resolve against engine "
+        "self-alibi speaker in its meeting, one whose claim covers a tick the "
+        "walk does not reach, or one resting on a multi-leg route, which a "
+        "recorded flag does not attribute to a leg - scoring it across the whole "
+        "route would file a flag that caught a fabricated leg as manufactured. "
+        "Ticks are agent-frame and resolve against engine "
         "tick T - 1. It does NOT measure intent, and it does NOT clear a flag "
         "whose subject lied at every tick - that flag is evidence, not an "
         "artifact."
@@ -973,32 +977,84 @@ def _claim_truth(
 
     ``None`` when the claim's span reaches a tick the walk does not hold — the
     not-evaluable branch, published rather than counted as a lie.
+
+    The fold is over the WHOLE account, every stay of it, which is what the claim
+    census beside row 3 asks: how much of what this player said about themselves
+    was true. It is NOT how a FLAG is scored — see
+    :func:`_flag_scored_claim_truth`, which refuses a route the flag cannot be
+    attributed to a stay of.
     """
 
     every = True
     some = False
-    for spoken_tick in range(claim.from_tick, claim.to_tick + 1):
-        rooms = route.get(spoken_tick - AGENT_CLOCK_OFFSET)
-        if rooms is None:
-            return None
-        if rooms.get(speaker) == claim.room:
-            some = True
-        else:
-            every = False
+    # Per LEG AS STATED, deliberately NOT
+    # :func:`~meetings.transcript.maximal_stays`. The fold is already invariant
+    # under a re-cut -- merging contiguous same-room legs changes neither the
+    # ticks walked nor the room claimed for any of them -- and this comparison
+    # is on the RAW room text against the engine's own room id, so coalescing
+    # would substitute the merged stay's single label for a contiguous leg's
+    # and quietly re-score a label the speaker did not use there. The re-cut lever
+    # is closed where it exists, in :func:`_flag_scored_claim_truth`'s count.
+    # On a one-segment claim -- which is every claim on the committed
+    # recordings -- this is the identical walk, so the census the module
+    # reproduces (955 / 104 / 103 / 2) does not move.
+    for segment in claim.route:
+        for spoken_tick in range(segment.from_tick, segment.to_tick + 1):
+            rooms = route.get(spoken_tick - AGENT_CLOCK_OFFSET)
+            if rooms is None:
+                return None
+            if rooms.get(speaker) == segment.room:
+                some = True
+            else:
+                every = False
     return every, some
+
+
+def _flag_scored_claim_truth(
+    claim: AlibiClaim,
+    speaker: PlayerId,
+    route: Mapping[int, Mapping[PlayerId, RoomId]],
+) -> tuple[bool, bool] | None:
+    """:func:`_claim_truth` for row 3, refusing a claim the flag cannot be tied to.
+
+    Row 3 asks whether the SCHEMA invented a flag, and on a multi-stay route
+    that question is per STAY: an account of ENGINEERING 12-12 then STORAGE
+    14-14 can be true in its first stay and fabricated in its second, and a flag
+    that caught the fabricated stay is evidence, not an artifact. A recorded
+    flag names the CLAIM's event id and not the stay, so this module cannot say
+    which stay it rests on, and it publishes the flag as NOT EVALUABLE rather
+    than scoring it on a fold across the whole route (which would read "true at
+    some tick" off a stay the flag never touched and file a caught lie as
+    manufactured).
+
+    The refusal counts MAXIMAL STAYS, not the legs as stated. Counting legs
+    would let the cut decide whether a flag is scored at all: "STORAGE 2-14" is
+    evaluable and the identical account re-cut as "STORAGE 2-7" plus "STORAGE
+    8-14" would not be, which is a published figure the accused controls. One
+    continuous stay is one stay however it was narrated, and the flag rests on
+    it unambiguously.
+
+    Every committed claim is a one-segment route, so no committed cell moves;
+    the shape arrives with the re-record, and when a flag carries segment
+    attribution this refusal is what has to go.
+    """
+
+    if len(maximal_stays(claim.route)) != 1:
+        return None
+    return _claim_truth(claim, speaker, route)
 
 
 def _self_alibi_truths(
     meeting: MeetingReport, route: Mapping[int, Mapping[PlayerId, RoomId]]
 ) -> dict[PlayerId, list[tuple[bool, bool] | None]]:
-    """Each speaker's own alibi claims in this meeting, resolved against the route."""
+    """Each speaker's own alibi claims in this meeting, as ROW 3 scores them."""
 
     truths: dict[PlayerId, list[tuple[bool, bool] | None]] = {}
     for turn in meeting.transcript.turns:
         for claim in turn.claims:
             if isinstance(claim, AlibiClaim) and claim.subject == turn.speaker:
                 truths.setdefault(turn.speaker, []).append(
-                    _claim_truth(claim, turn.speaker, route)
+                    _flag_scored_claim_truth(claim, turn.speaker, route)
                 )
     return truths
 
@@ -1009,9 +1065,11 @@ def _flag_is_manufactured(
 ) -> tuple[bool, bool] | None:
     """``(manufactured, rests on a wholly true claim)``; ``None`` when unanswerable.
 
-    ``None`` on two shapes, both published as not-evaluable rather than scored:
+    ``None`` on three shapes, all published as not-evaluable rather than scored:
     a flag naming no speaker who filed a self-alibi in this meeting (there is no
-    claim to test), and one whose claim reaches a tick the walk does not hold.
+    claim to test), one whose claim reaches a tick the walk does not hold, and
+    one resting on a multi-leg ROUTE, which the flag does not attribute to a leg
+    (:func:`_flag_scored_claim_truth`).
     Otherwise the flag is MANUFACTURED iff some named speaker's own alibi was
     true at some tick of its span — a claim false at every tick is a lie the
     detector caught, not an artifact the schema minted. The second element says
@@ -1433,7 +1491,10 @@ def _fold_alibi_census(
                 tally.other_subject_alibi_claims += 1
                 continue
             tally.self_alibi_claims += 1
-            multi_tick = claim.to_tick > claim.from_tick
+            # The whole ROUTE's span: the census row asks how many ticks the
+            # account covers, which a one-segment claim answers the same way it
+            # always did.
+            multi_tick = claim.route[-1].to_tick > claim.route[0].from_tick
             if multi_tick:
                 tally.self_alibi_multi_tick += 1
             truth = _claim_truth(claim, turn.speaker, route)

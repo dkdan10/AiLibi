@@ -199,6 +199,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     MeetingTranscript,
     SawMoveObservation,
@@ -208,6 +209,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     canonical_rooms,
     is_weak_contradiction,
+    maximal_stays,
     sighting_placement,
 )
 from observation.action_intent import ActionIntent
@@ -2273,6 +2275,43 @@ def _sighting_placement(artifact: object) -> SawPlayerObservation | None:
     return sighting_placement(artifact)
 
 
+def _leg_under_sighting(alibi: AlibiClaim, tick: int) -> AlibiSegment | None:
+    """The MAXIMAL STAY a sighting at ``tick`` bears on, or ``None``.
+
+    ``meetings.transcript._detect_alibi_vs_sightings`` compares a STAY
+    (:func:`~meetings.transcript.maximal_stays`) to a sighting and mints the
+    flag only when the sighting's tick falls inside that stay's window, and
+    :class:`~meetings.schemas.AlibiClaim` keeps its legs chronological and
+    strictly non-overlapping, so the stays are too. At most one stay can
+    therefore cover a tick: the stay is FORCED by the recorded pair, not picked
+    by this module, which is what lets a multi-leg route resolve at all.
+
+    It reads the stays and not the legs as stated for the same reason the
+    detector does: the geometry fold prices the distance between the claimed
+    room and the sighting, and re-cutting one continuous stay must not change
+    the window this module reports for a flag the detector minted from the
+    whole stay.
+
+    A ONE-stay account answers with that stay whatever the tick. That is the
+    shape every committed recording carries, and reading it unconditionally
+    keeps every recorded cell byte-identical to the pre-route module --
+    including a recorded flag whose sighting sits outside the stated window,
+    which earlier detector revisions could mint. A multi-stay account whose
+    stays all miss the sighting's tick is a pair this module cannot
+    reconstruct, and it returns ``None`` exactly like the resolver's other
+    unresolvable shapes, which the caller raises on rather than silently
+    dropping from the census.
+    """
+
+    stays = maximal_stays(alibi.route)
+    if len(stays) == 1:
+        return stays[0]
+    for leg in stays:
+        if leg.from_tick <= tick <= leg.to_tick:
+            return leg
+    return None
+
+
 def _resolve_flag(
     flag: ContradictionRef, *, index: Mapping[str, tuple[PlayerId, object]]
 ) -> _ResolvedFlag | None:
@@ -2311,7 +2350,20 @@ def _resolve_flag(
     speaker, sighting, movement_origin = sightings[0]
     alibi = alibis[0]
     if isinstance(alibi, AlibiClaim):
-        alibi_room, from_tick, to_tick = alibi.room, alibi.from_tick, alibi.to_tick
+        # The I-6 geometry fold measures the distance between ONE claimed room
+        # and one sighting, so a route has to say WHICH stay the sighting bears
+        # on. :func:`_leg_under_sighting` does not choose: the detector minted
+        # the flag from the stay whose window covers the sighting's tick, and
+        # the schema keeps the legs strictly non-overlapping, so the stays are
+        # too and at most one can answer.
+        segment = _leg_under_sighting(alibi, sighting.tick)
+        if segment is None:
+            return None
+        alibi_room, from_tick, to_tick = (
+            segment.room,
+            segment.from_tick,
+            segment.to_tick,
+        )
     elif isinstance(alibi, WhereaboutsClaim):
         alibi_room, from_tick, to_tick = alibi.room, alibi.tick, alibi.tick
     else:

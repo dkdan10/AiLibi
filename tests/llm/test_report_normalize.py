@@ -453,10 +453,11 @@ class TestNonChronologicalAlibi:
         # Range was repaired...
         assert normalized["claims"][0]["from_tick"] == 1
         assert normalized["claims"][0]["to_tick"] == 8
-        # ...but the missing required field still fails loud.
-        with pytest.raises(ValidationError) as exc:
+        # ...but the half-stated envelope still fails loud, and the message
+        # says WHICH key is missing rather than widening the claim over a room
+        # the speaker never named (the alibi-as-route refusal contract).
+        with pytest.raises(ValidationError, match="envelope is incomplete"):
             MeetingTurn.model_validate(normalized)
-        assert any(err["type"] == "missing" for err in exc.value.errors())
 
     def _turn_with_bounds(self, from_tick: Any, to_tick: Any) -> dict[str, Any]:
         return _turn(

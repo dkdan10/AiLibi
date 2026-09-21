@@ -155,11 +155,11 @@ def test_contract_version_and_action_set_move_in_lockstep() -> None:
     # carrying an unsupported one, reading the value from the generated module. The
     # assertions above compare each side to itself and so cannot see a Python
     # bump that never reached the generated file; these pin the literal.
-    assert VIEW_MODEL_VERSION == "4"
+    assert VIEW_MODEL_VERSION == "5"
     generated = gen_frontend_types._OUT_TYPES.read_text(encoding="utf-8")
     assert f'export const VIEW_MODEL_VERSION = "{VIEW_MODEL_VERSION}";' in generated
 
-    # Version 4 preserves v2's action vocabulary and adds a spoken account kind.
+    # Version 5 preserves v2's action vocabulary and v4's spoken account kind.
     assert get_args(CurrentAction) == (
         "IDLE",
         "MOVING",
@@ -179,6 +179,42 @@ def test_contract_version_and_action_set_move_in_lockstep() -> None:
     assert "export interface TaskActivityAccountView" in generated
     assert 'type: "task_activity";' in generated
     assert "| TaskActivityAccountView;" in generated
+
+
+def test_an_optional_alibi_surface_forces_the_contract_stamp_past_four() -> None:
+    """Dropping a required field is the BREAKING direction, so the stamp moved.
+
+    ``AlibiClaimView`` used to serve ``room`` / ``from_tick`` / ``to_tick`` on
+    every alibi; the route surface serves ``route`` and none of the three. A
+    build stamped ``"4"`` indexes those fields unconditionally, so if the stamp
+    had stayed at ``"4"`` that build would pass the guard and then read an
+    alibi with no room. The header at ``api/schemas.py`` says the stamp is
+    bumped on exactly this, so it is pinned against the version that served the
+    three fields unconditionally rather than against a literal.
+
+    The other half is the compatibility direction: reading an OLDER server is
+    still safe (every version-4 alibi carries the flat triple this build still
+    renders), so ``"4"`` joins the client's accepted list instead of being
+    dropped from it.
+    """
+
+    generated = gen_frontend_types._OUT_TYPES.read_text(encoding="utf-8")
+    start = generated.index("export interface AlibiClaimView {")
+    alibi_block = generated[start : generated.index("}", start)]
+    for field in ("from_tick?:", "to_tick?:", "room?:"):
+        assert field in alibi_block, field
+    assert "route?:" in alibi_block
+
+    assert int(VIEW_MODEL_VERSION) > 4, (
+        "an alibi view whose room/from_tick/to_tick are optional is a breaking "
+        "shape change; the served stamp must move past the version that "
+        "required them"
+    )
+
+    client = (
+        gen_frontend_types._REPO_ROOT / "frontend" / "src" / "api" / "client.ts"
+    ).read_text(encoding="utf-8")
+    assert 'received === "4"' in client
 
 
 def test_player_color_serves_playful_identity_palette(

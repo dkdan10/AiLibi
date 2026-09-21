@@ -64,8 +64,28 @@ function claimText(claim: StatementClaimView): string {
   switch (claim.type) {
     case "accusation":
       return `accused ${claim.against} (conf ${claim.confidence.toFixed(2)}) — ${claim.reason}`;
-    case "alibi":
-      return `alibi for ${claim.subject}: ${claim.room}, ticks ${claim.from_tick}–${claim.to_tick}`;
+    case "alibi": {
+      // An alibi is a route; a claim recorded before that change carries the
+      // flat one-room envelope instead, and reads the same way it always did.
+      const legs =
+        claim.route ??
+        (claim.room != null && claim.from_tick != null && claim.to_tick != null
+          ? [
+              {
+                room: claim.room,
+                from_tick: claim.from_tick,
+                to_tick: claim.to_tick,
+              },
+            ]
+          : []);
+      if (legs.length === 0) {
+        return `alibi for ${claim.subject}: no route stated`;
+      }
+      const path = legs
+        .map((leg) => `${leg.room}, ticks ${leg.from_tick}–${leg.to_tick}`)
+        .join(" → ");
+      return `alibi for ${claim.subject}: ${path}`;
+    }
     case "corroboration":
       return `corroborated ${claim.supports} on tick ${claim.on_tick} — ${claim.reason}`;
   }

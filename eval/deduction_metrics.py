@@ -268,8 +268,8 @@ pins say so.
   ``player_visible_leak_turns`` is the partner net over turn ``free_text``, and
   ``model_self_disclosure_visible_turns`` /
   ``crew_self_disclosure_control_turns`` are the self-kill and role nets over
-  ``free_text`` plus each accusation / corroboration ``reason`` — the whole of
-  what a transcript block renders. The impostor cell is an explicit UPPER BOUND and the
+  ``free_text`` plus each accusation / corroboration ``reason`` plus each
+  alibi's ``evidence`` rows — the whole of what a transcript block renders. The impostor cell is an explicit UPPER BOUND and the
   crew cell is its false-positive control; neither may be quoted alone as a leak
   rate. :data:`CONFESSION_QUOTATION_EXCLUSIONS` drops the quotation and
   conditional forms first.
@@ -400,6 +400,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AccusationClaim,
+    AlibiClaim,
     ContradictionRef,
     CorroborationClaim,
     MeetingTurn,
@@ -1700,9 +1701,9 @@ class ScaffoldLeakageCells(_FrozenModel):
     * ``model_self_disclosure_visible_turns`` /
       ``crew_self_disclosure_control_turns`` — :data:`SELF_KILL_PHRASES` and
       :data:`ROLE_STATEMENT_PHRASES` over the player-visible surface
-      (``free_text`` plus every accusation / corroboration ``reason``; an
-      ``AlibiClaim``'s ``evidence`` is never rendered, so it is never read
-      here either), split by the speaker's role; denominator ``turns_total``.
+      (``free_text``, every accusation / corroboration ``reason``, and every
+      ``AlibiClaim``'s ``evidence`` rows, which the shipped transcript block
+      now prints), split by the speaker's role; denominator ``turns_total``.
       :data:`CONFESSION_QUOTATION_EXCLUSIONS` is cut out first. The impostor
       cell is an explicit UPPER BOUND — a substring net cannot tell an
       admission from a taunt or a rebuttal that quotes one, the same limit
@@ -2342,18 +2343,22 @@ def _matches(text: str, phrases: Sequence[str]) -> bool:
 def _player_visible_text(turn: MeetingTurn) -> str:
     """Everything of a turn the table actually reads.
 
-    ``free_text`` plus the ``reason`` of each accusation and corroboration: the
-    transcript render puts the reason on the table beside the free text, so a
-    disclosure there reaches every later speaker and every ballot exactly as one
-    in ``free_text`` does.
+    ``free_text``, the ``reason`` of each accusation and corroboration, and the
+    ``evidence`` rows of each alibi: the transcript render puts all three on the
+    table beside the free text, so a disclosure in any of them reaches every
+    later speaker and every ballot exactly as one in ``free_text`` does.
 
-    ``AlibiClaim.evidence`` is deliberately NOT read, and the render is the
-    reason: every transcript block spells an alibi as subject / room / tick
-    range and never its ``evidence`` tuple, so those strings are model-authored
-    text no player ever sees. Scoring them would file hidden output as
-    table-visible testimony and make the cell's own name false. (Excluding
-    ``evidence`` costs nothing on the committed bytes: the visible nets return
-    the same 10 turns either way.) Built once per turn, shared by the nets below.
+    ``AlibiClaim.evidence`` is read because the SHIPPED bodies print it. The
+    locked set's transcript block appends "They back it with: ..." to the alibi
+    line (``agents/strategic/prompts/qwen3_6_27b/accusation_round.j2`` and
+    ``vote_ballot.j2``) and the frozen reference set writes "(evidence: ...)"
+    (``qwen3_5_9b/accusation_round.j2``). The pre-route locked bodies dropped
+    the rows, and this net excluded them to match the render; now that the render
+    carries them, excluding them would file table-visible testimony as hidden
+    and make the cell's own name false. The committed bytes are unmoved either
+    way -- the visible nets return the same 10 turns with the rows in or out --
+    so the correction is to the CELL's meaning on the next recording, not to a
+    published number. Built once per turn, shared by the nets below.
     """
 
     return "\n".join(
@@ -2362,6 +2367,12 @@ def _player_visible_text(turn: MeetingTurn) -> str:
             claim.reason
             for claim in turn.claims
             if isinstance(claim, (AccusationClaim, CorroborationClaim))
+        ]
+        + [
+            row
+            for claim in turn.claims
+            if isinstance(claim, AlibiClaim)
+            for row in claim.evidence
         ]
     )
 

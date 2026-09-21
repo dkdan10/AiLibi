@@ -311,6 +311,19 @@ class _Generator:
                     ("AgentTickStateView", "investigation_plan"),
                     ("ExperimentConfigView", "investigation_version"),
                     ("ExperimentConfigView", "contextual_self_report_version"),
+                    # An alibi is a ROUTE, and ``AlibiClaimView`` serves the
+                    # ONE surface each claim arrived on: a recorded one-room
+                    # envelope keeps its three flat keys and carries no
+                    # ``route``, a route claim carries ``route`` and none of
+                    # the three. Both halves are therefore absent from some
+                    # payloads, which is what ``?`` says. Not the "older
+                    # bundle" case the rows above cover -- here it is the
+                    # payload's own shape, and the spectator narrows on
+                    # ``route`` rather than on a field it may not be served.
+                    ("AlibiClaimView", "from_tick"),
+                    ("AlibiClaimView", "to_tick"),
+                    ("AlibiClaimView", "room"),
+                    ("AlibiClaimView", "route"),
                 }
                 else ""
             )

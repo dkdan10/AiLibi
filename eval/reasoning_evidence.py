@@ -38,6 +38,7 @@ from meetings.corroboration import _walkable_transits
 from meetings.render_contract import BodyDiscoveryRecord
 from meetings.schemas import (
     AlibiClaim,
+    AlibiSegment,
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
@@ -118,9 +119,7 @@ def marker_fixture(*, injected: bool) -> MeetingTranscript:
                     AlibiClaim(
                         type="alibi",
                         subject="p-2",
-                        from_tick=3,
-                        to_tick=10,
-                        room="LABS",
+                        route=(AlibiSegment(room="LABS", from_tick=3, to_tick=10),),
                     ),
                 ),
             ),

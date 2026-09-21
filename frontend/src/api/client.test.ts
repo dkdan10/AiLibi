@@ -70,7 +70,7 @@ describe("highlight source freshness", () => {
 });
 
 describe("the view-model version gate", () => {
-  it.each(["2", "3", VIEW_MODEL_VERSION])("reads compatible audio in version %s", async (version) => {
+  it.each(["2", "3", "4", VIEW_MODEL_VERSION])("reads compatible audio in version %s", async (version) => {
     const replay = {
       ...stampedReplay(version),
       ticks: [{ agent_states: [
@@ -82,7 +82,7 @@ describe("the view-model version gate", () => {
     await expect(getReplay("headless-seed-0")).resolves.toEqual(replay);
   });
 
-  it.each(["2", "3", VIEW_MODEL_VERSION])("rejects unsupported audio in version %s", async (version) => {
+  it.each(["2", "3", "4", VIEW_MODEL_VERSION])("rejects unsupported audio in version %s", async (version) => {
     stubFetch(jsonResponse({
       ...stampedReplay(version),
       ticks: [{ agent_states: [{ visibility: {
@@ -145,6 +145,19 @@ describe("the view-model version gate", () => {
     const replay = await getReplay("headless-seed-0");
 
     expect(replay.viewModelVersion).toBe(VIEW_MODEL_VERSION);
+  });
+
+  it("still reads a version-4 server, whose alibis all carry a room", async () => {
+    // Version 5 made an alibi a ROUTE: a route claim serves `route` and no
+    // `room`/`from_tick`/`to_tick`, which is exactly why a build stamped 4
+    // must NOT read a version-5 payload — it would render an alibi with no
+    // room. The other direction stays open and is pinned here: every alibi a
+    // version-4 server serves carries the flat triple this build renders.
+    stubFetch(jsonResponse(stampedReplay("4")));
+
+    const replay = await getReplay("headless-seed-0");
+
+    expect(replay.viewModelVersion).toBe("4");
   });
 
   it("passes through a payload the server does not stamp", async () => {

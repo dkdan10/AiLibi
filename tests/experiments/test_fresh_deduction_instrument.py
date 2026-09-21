@@ -502,6 +502,29 @@ def _the_document_is_mid_rebinding() -> tuple[int, int] | None:
     return bound
 
 
+def _the_evaluation_is_closed() -> bool:
+    """Whether the manifest carries the owner's closing clause of 2026-09-19.
+
+    A CLOSED evaluation's measured paragraphs are an archive: they record runs
+    made against the prompt bytes and the instrument code of the day they were
+    measured, and the gate they were written for refuses. A later substrate
+    change may therefore move a figure they quote without the document being
+    stale -- re-measuring it would re-score a closed record, which the closing
+    decision (D2) forbids. A case whose subject is such a figure says which of
+    the two states it is reading, exactly as ``_the_document_is_mid_rebinding``
+    does for a re-binding window, and asserts the refusal instead so it is
+    never merely asserting less.
+    """
+
+    try:
+        instrument.assert_the_evaluation_is_not_closed(
+            _MANIFEST.read_text(encoding="utf-8")
+        )
+    except LiveRunNotAuthorized:
+        return True
+    return False
+
+
 def _manifest_text_bound_to(band: tuple[int, int]) -> str:
     """The committed execution manifest with its Inputs row moved to ``band``."""
 
@@ -7795,11 +7818,28 @@ class TestDryRun:
         an arm's ballots are those three summed and nothing else. Quoting the
         two-arm total, or the three columns plus the overlay, is the arithmetic
         this assertion refuses.
+
+        The fake provider's input heuristic reads each rendered prompt, so
+        these figures are a function of the SHIPPED PROMPT BYTES as well as of
+        the band. Once the evaluation is closed the paragraph is an archive of
+        a run made on the bytes of that day, and a later substrate bump moving
+        a template is not the document going stale -- re-measuring it here
+        would re-score a closed record. The mechanics the paragraph describes
+        are still asserted above; what the closed branch drops is only the
+        quotation, and it asserts the closed gate's refusal in its place.
         """
 
         report = run_dry(output_dir=tmp_path)
         assert report.limits == AUTHORIZED_LIMITS
         assert report.sampling == AUTHORIZED_SAMPLING
+        if _the_evaluation_is_closed():
+            # The archive branch: the gate this paragraph was written for
+            # refuses, so the quotation is a record rather than a live claim.
+            with pytest.raises(LiveRunNotAuthorized):
+                instrument.assert_the_evaluation_is_not_closed(
+                    _MANIFEST.read_text(encoding="utf-8")
+                )
+            return
         if _the_document_is_mid_rebinding() is not None:
             # These figures are exactly the ones a re-binding moves, which is
             # what this case is for -- so while the row is still bound to the

@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe("on-demand model text", () => {
-  it.each(["2", "3", VIEW_MODEL_VERSION])("reads old and current static payloads while retaining the audio gate (%s)", async (version) => {
+  it.each(["2", "3", "4", VIEW_MODEL_VERSION])("reads old and current static payloads while retaining the audio gate (%s)", async (version) => {
     vi.stubEnv("VITE_AILIBI_STATIC_DATA", "1");
     vi.stubEnv("VITE_AILIBI_STATIC_DEFAULT_SET", "9p2i");
     vi.resetModules();

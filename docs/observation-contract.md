@@ -120,8 +120,34 @@ exercise these gates. Packet census format 2 includes checked event batches,
 source-time kill/vent/movement views and actor task receipts, so temporal channels
 are counted rather than disappearing from the census.
 
-Spectator contract version 4 admits the `task_activity` observation/account union
-and attributed public statement fields. Compatible version-2/3 inputs retain
-their historical audio and event interpretation; unsupported audio and versions
-still fail. Spectator knowledge remains privileged: a public account is labeled
+Spectator contract version 5 serves a spoken alibi as a route, over version 4's
+`task_activity` observation/account union and attributed public statement
+fields. The served route keeps the legs the speaker stated, and so do the
+transcript and the listener render of the turn: the meeting layer labels an
+account and never rewrites what was said. The contradiction detectors, the
+scored metrics and the reported-testimony reduction read the same account as
+MAXIMAL STAYS instead — contiguous legs naming one room merge into the stay
+they restate — because where a speaker cuts one continuous stay is free, so no
+flag, band, identifier, count or belief a listener holds may depend on it. A
+merged stay is labelled with the smallest of the labels merged into it, so the
+cut cannot choose the spelling a description quotes either. The reduction files
+one reported statement per stay, so a listener's rendered memory is identical
+for every narration of one account. Rendered alibi rows are capped per speaker
+so no voice's volume evicts another's placement, and the belief block is not
+budgeted, so a second cap bounds it: a subject's OWN rows and the rows other
+players stated about that subject are selected in SEPARATE pools, three and
+four, so the per-subject bound is seven and nothing an accused says — stays,
+ticks, spelling, restatements — can change which of the other voices' rows a
+listener sees, nor anything the others say change which of the accused's own
+rows it sees. Selection never reads a room label above a total tie-break, so a
+wording cannot move it either. The others pool is filled round-robin by recency
+across speakers — every voice's newest row first, then every voice's
+second-newest — so a voice is dropped only when more others than the pool have
+named one subject, and then the stalest voices go first; below that, a voice
+with several rows can lose its older rows to another voice's rows. Both numbers are
+judgments about how much of a render reported testimony may take from the
+elastic memory below it, not the largest values that still fit the budget. A
+boundary that survives the merge is a declared room change or a gap, which is a
+claim a listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
+interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled
 as a speaker's claim even if the viewer can independently inspect engine truth.

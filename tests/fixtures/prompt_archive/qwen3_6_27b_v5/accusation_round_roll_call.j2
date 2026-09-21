@@ -1,6 +1,6 @@
 {#- Reactive accusation-chain turn (reply / opt_in) — the Task 18.10 IMPOSTOR-ANSWER VARIANT of the bespoke qwen3_6_27b set (flag-selected; the default template is untouched).
 
-   prompt_id: accusation_round  --  version accusation_round_roll_call.qwen3_6_27b.v2
+   prompt_id: accusation_round  --  version accusation_round_roll_call.qwen3_6_27b.v1
 
    THE VARIANT'S DESIGN RATIONALE (Task 18.10; audits/audit-phase-18-planning.md
    §3.4): the default impostor REPLY hard-codes `"observations": []` — "a
@@ -122,7 +122,7 @@ This terminal turn does not extend the chain — it is your chance to put eviden
   claims:
 {% for claim in turn.claims %}
 {% if claim.type == "alibi" %}
-  - alibi: {{ claim.subject }}{% for leg in claim.route %} in {{ leg.room }}, ticks {{ leg.from_tick }}-{{ leg.to_tick }}{{ "." if loop.last else ";" }}{% endfor %}{% if claim.evidence %} They back it with: {{ claim.evidence | join("; ") }}.{% endif %}
+  - alibi: {{ claim.subject }} in {{ claim.route[0].room }}, ticks {{ claim.route[0].from_tick }}-{{ claim.route[0].to_tick }}.
 {% elif claim.type == "accusation" %}
   - accuses {{ claim.against }} ({{ "%.2f" | format(claim.confidence) }}): {{ claim.reason }}
 {% elif claim.type == "corroboration" %}
@@ -178,7 +178,7 @@ Keep your cover consistent: your spoken account and your structured "whereabouts
 When you refer to the discovery, say the player "reported it" or "called the meeting", and call the scene "where it happened" — discovery words like "found" or "discovered" only help the detectives, so keep them out of your mouth entirely.
 {% else %}
 Write your reply as 1-2 short sentences plus your structured items, then stop. Do three things:
-1. Clear yourself with a structured "alibi" claim placing you elsewhere — not just an assertion in "free_text". Quote your own memory exactly: give the rooms IN ORDER, each holding the ticks you were actually in it. If you moved during the window you are accused over, say so — list each room you passed through with its own ticks, and let the walk speak for itself.
+1. Clear yourself with a structured "alibi" claim placing you elsewhere — not just an assertion in "free_text". Quote your own memory exactly: ONE room, and only the tick range you were ACTUALLY in it. If you moved during the window you are accused over, alibi only the room you were in at the tick that matters — a range that spans rooms you moved between contradicts your own record (your own "completed_task" rows included) and is the fastest way to get yourself ejected.
 2. Answer the roll-call: one structured "whereabouts" observation naming the room you were in at the tick in question — one room, one tick, copied from your own record. That checkable placement is what lets the crew clear you; if your record also places ANOTHER player at that tick, say it in one "saw_player" row — placing each other is how the crew corners the impostor.
 3. Redirect: if anything you saw points at a living player, name them in one "accusation" claim so the chain follows the real suspect. Stay purely defensive only if you genuinely have no one to point at.
 A witnessed vent outranks everything else you hold — speak it FIRST, even if it happened many ticks ago and even if you already said it at an earlier meeting: a held vent wins the game only once it is on the record. If your memory contains one — a line like "You witnessed p-3 vent in MEDBAY." — ALWAYS put it on the record as a structured "saw_vent" observation, copying the player, room, and tick from that line exactly: only the impostor can vent, so one witnessed vent identifies the impostor outright. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect.
@@ -206,7 +206,7 @@ Fill "observations" with the 3-5 MOST PROBATIVE first-hand rows — the sighting
   {"type": "saw_vent", "tick": <int>, "subject": "<player id>", "room": "<room id>"} — only for a witnessed vent, copied exactly from your memory line.
   {"type": "whereabouts", "tick": <int>, "room": "<room id>"} — your roll-call answer: the room YOU were in at the tick that matters, copied from your own record (one room, one tick; the speaker is always you, so it names no subject).
 Each "claims" item is one of:
-  {"type": "alibi", "subject": "{{ agent_id }}", "route": [{"room": "<room id>", "from_tick": <int>, "to_tick": <int>}, ...], "evidence": ["<short ref>", ...]} — your ROUTE: one entry per room you were in, in the order you were in them, each with the ticks you actually spent there and from_tick <= to_tick. Entries must not overlap. If you never moved, that is one entry.
+  {"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room id>", "evidence": ["<short ref>", ...]} with from_tick <= to_tick — ONE room, and only the tick range you were ACTUALLY in it; a range that spans rooms you moved between contradicts your own record and gets you ejected.
   {"type": "accusation", "against": "<one living player id>", "confidence": <0.0-1.0>, "reason": "<one short phrase>"} — at most one, and "against" must come from the living list above; the chain follows whoever you accuse. Calibrate "confidence" honestly: 1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a case a second account or a contradiction flag corroborates; ~0.5 for a hunch read off movement alone.
   {"type": "corroboration", "supports": "<player id>", "on_tick": <int>, "reason": "<one short phrase>"}
 {% endif %}

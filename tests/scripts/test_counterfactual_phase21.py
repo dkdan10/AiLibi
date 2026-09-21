@@ -85,7 +85,11 @@ from orchestrator.replay import (
     substrate_flag_snapshot,
 )
 from tests._helpers.lever_on_recording import record_replay_set
-from tests.meetings.test_prompt_byte_golden import walk_replay_meetings
+from tests.meetings.test_prompt_byte_golden import (
+    _ARCHIVE_ROOT,
+    ARCHIVED_PROMPT_VERSION_SETS,
+    walk_replay_meetings,
+)
 
 import counterfactual_phase21 as cf
 
@@ -930,15 +934,30 @@ def test_the_impostor_half_bites_on_a_breached_firewall(
     # T-9b must leave zero. The OFF body is byte-identical either way, because
     # the guard's first conjunct is false with the arm down, so the walk still
     # reproduces the record and only the ON column moves.
+    #
+    # The victim is the body the WALK actually renders. During a bump-in-flight
+    # window that is the ARCHIVED set the committed recordings stamp, not the
+    # live one -- breaching a live body the walk never reaches would leave every
+    # column untouched and assert nothing. Both roots are copied and both are
+    # redirected, so the leg follows the window instead of being re-aimed by
+    # hand each time it moves.
     scratch = tmp_path / "prompts"
     shutil.copytree(_PROMPTS_ROOT, scratch)
-    target = scratch / _PROMPT_SET / "accusation_round.j2"
+    archive_scratch = tmp_path / "archive"
+    if _ARCHIVE_ROOT.is_dir():
+        shutil.copytree(_ARCHIVE_ROOT, archive_scratch)
+    rendered_set = next(iter(ARCHIVED_PROMPT_VERSION_SETS), None) or _PROMPT_SET
+    victim_root = (
+        archive_scratch if rendered_set in ARCHIVED_PROMPT_VERSION_SETS else scratch
+    )
+    target = victim_root / rendered_set / "accusation_round.j2"
     body = target.read_text(encoding="utf-8")
     breached = body.replace(
         _CREW_GUARD, "{% if testimony_shapes is defined and testimony_shapes %}"
     )
     assert breached != body
     target.write_text(breached, encoding="utf-8")
+    monkeypatch.setattr(cf, "_ARCHIVE_ROOT", archive_scratch)
     monkeypatch.setattr(
         cf,
         "build_prompt_renderers",

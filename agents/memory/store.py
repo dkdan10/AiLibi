@@ -44,6 +44,7 @@ from agents.perception import (
     PROVENANCE_REPORTED,
 )
 from meetings.schemas import ReportedStatement
+from meetings.transcript import canonical_rooms
 from observation.public_map import PublicMapView
 
 PlayerId: TypeAlias = str
@@ -148,12 +149,88 @@ _SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY: Final[int] = 15
 # would change what those comparisons measured, so this stays where it shipped.
 _SALIENCE_EVIDENCE_V1_CONTEXT: Final[int] = 90
 
-# Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
-# belief block is the non-elastic carve-out (``_assemble_view`` never budgets it),
-# so an unbounded accumulated alibi list could push ``render_for_prompt`` over
-# ``DEFAULT_TOKEN_BUDGET``. Render only the most-recent few per subject; a newer
-# alibi supersedes a stale one and N x subjects x this cap stays bounded.
+# Per-(subject, SOURCE) cap on rendered reported alibi rows (Task 13.5.2, Codex
+# P2; scoped to the source by the round-5 review). The §6.6 belief block is the
+# non-elastic carve-out (``_assemble_view`` never budgets it), so an unbounded
+# accumulated alibi list could push ``render_for_prompt`` over
+# ``DEFAULT_TOKEN_BUDGET``. An alibi is a ROUTE and reduces to one reported
+# statement per maximal STAY, so the unit this bounds is the stay rather than the
+# claim: render only the most-recent few per subject PER SPEAKER; a newer stay
+# supersedes that speaker's stale one. A long walk is therefore rendered as its
+# most recent stays -- the tail of the path, which is the part a listener is
+# weighing -- rather than as an envelope over rooms the speaker never joined
+# (see :func:`_format_alibi_suffix` for what the cap does and does not promise
+# between speakers).
+#
+# This cap is ALSO the whole bound on the subject's OWN rows (round-7 review):
+# a subject's self-alibis are a reserved pool of their own, so what the subject
+# says about itself is bounded by this and by nothing else. It is NOT the whole
+# bound on the block -- ``subjects x sources x this cap`` is 168 rows on a
+# nine-player roster, over the budget. The second bound is
+# ``_MAX_RENDERED_ALIBIS_FROM_OTHERS`` below, and the per-subject total is the
+# two pools added: this cap plus that one.
 _MAX_RENDERED_ALIBIS: Final[int] = 3
+
+# Cap on the rows OTHER players stated about one subject (the round-7
+# correctness finding, repaired in round 8; round 6 shipped a single per-SUBJECT
+# total, `_MAX_RENDERED_ALIBIS_PER_SUBJECT`, which this replaces). The
+# per-source cap alone bounds the block at subjects x sources x cap, which on a
+# nine-player roster is 168 rows and 1,605 estimated tokens -- OVER
+# ``DEFAULT_TOKEN_BUDGET``, and because the belief block is the non-elastic
+# carve-out it is the ELASTIC observations section that is shed to pay for it.
+# This is the second of the two POOLS ``_format_alibi_suffix`` selects into, and
+# the per-subject bound is the two added: ``_MAX_RENDERED_ALIBIS`` self rows
+# plus this, so 3 + 4 = 7.
+#
+# Two pools rather than one total because the guarantee has to be STRUCTURAL.
+# Round 6's single total was filled round-robin so that one voice's volume
+# could not evict another's, but the accused and the rivals were still ranked
+# against each other, and the ranking leaked twice: the accused's own SPELLING
+# of a tied placement decided which source counted as fresher, and below the
+# total an accused claiming a later tick became the freshest source and cost a
+# rival its older row. With the self rows in their own reserved pool nothing
+# the accused says -- stays, ticks, spelling, restatements -- can reach another
+# voice's rows at all, and nothing the others say can reach the accused's.
+# Among the OTHER voices the guarantee is per VOICE, not per row: a voice is
+# dropped only when more than this many distinct others have spoken about one
+# subject, and then the one whose newest row is stalest; below that a voice
+# with several rows can lose its OLDER rows to other voices' newer ones.
+#
+# The VALUE is a JUDGMENT about how much of the render reported testimony may
+# take from the elastic section, not "the largest that fits" (round-7 review;
+# round 6 sized it by the latter rule and landed on a total of 18). Four leaves
+# a per-subject total of 7: the subject's own three most-recent stays PLUS four
+# other voices, or four distinct others at one row each beside a silent
+# subject.
+#
+# Measured at the round-8 head on the worst legal nine-player case (eight
+# subjects; every living player proxy-alibis every other AND self-alibis, a
+# three-stay route apiece, so BOTH pools saturate -- the round-6/7 fixture
+# proxy-alibied only and so left the self pool empty), against
+# ``DEFAULT_TOKEN_BUDGET``: 3 -> 48 rows / 1,466 tokens / 34 headroom / 39
+# elastic lines; 4 -> 56 / 1,469 / 31 / 36; 5 -> 64 / 1,471 / 29 / 33; 15 ->
+# 144 / 1,482 / 18 / 3; 18 -> 168 / 1,603 / -103 and the block SHED whole. The
+# elastic section pays about three lines per unit all the way up, which is why
+# the number is worth choosing rather than maximising. Against the elastic
+# lines the pre-card ``32d0cae7`` rule leaves on the same case (48, measured
+# live), the shipped 4 keeps 0.75 of them, against 0.81 at 3 and 0.69 at 5.
+#
+# What the elastic section holds in that case is REPORTED ``[meeting]`` rows,
+# NOT first-hand observation lines: the case offers reported candidates at
+# ``_SALIENCE_REPORTED_TESTIMONY`` above the agent's own sightings, so
+# first-hand retention there is ZERO at every value the roster allows and this
+# cap is not the lever that protects it. The card's round-8 sweep publishes the
+# curve, and that sweep -- not this constant -- is what an owner would move the
+# number against.
+#
+# On the committed record this pool never binds: the widest subject holds four
+# rows and they are all its OWN, so 2 of 5,256 belief states sit over the self
+# pool -- which cuts exactly the row the pre-card per-subject rule cut -- and 0
+# over this one, and no committed byte moves. The difference exists only in the
+# pathological corner, where leaving the render to elastic memory is worth more
+# than a fifth reported voice. Sized against the TOKEN
+# BUDGET and ELASTIC retention only, never against role-correctness.
+_MAX_RENDERED_ALIBIS_FROM_OTHERS: Final[int] = 4
 
 _EVENT_SAW_BODY: Final[str] = "saw_body"
 _EVENT_SAW_PLAYER: Final[str] = "saw_player"
@@ -2537,7 +2614,7 @@ def _build_belief_lines(
         # list, written by :func:`absorb_reported_testimony` from each public
         # ``AlibiClaim``. Empty (so this is the empty string) for a subject
         # never alibied.
-        alibi_suffix = _format_alibi_suffix(belief.alibis)
+        alibi_suffix = _format_alibi_suffix(belief.alibis, subject=player_id)
         parentheticals = [s for s in (last_seen_suffix, alibi_suffix) if s]
         if belief_text is None and not parentheticals:
             continue
@@ -2553,30 +2630,161 @@ def _build_belief_lines(
     return lines
 
 
-def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
-    """Render a subject's recorded alibi claims for the §6.6 belief view (Task 13.5.2).
+def _alibi_row_sort_key(alibi: AlibiClaim) -> tuple[int, tuple[str, ...], str, str]:
+    """The render order of one reported alibi row: cut- and spelling-independent.
+
+    ``(tick, canonical rooms, raw room, source)``. The raw label alone would put
+    the order in the SPEAKER's hands: ``maximal_stays`` keeps one label out of
+    the set a stay was narrated in, so ``labs 2-14`` and ``LABS 2-14`` -- two
+    wordings of one account -- sorted on opposite sides of a rival's ``MEDBAY``
+    row (round-6 review). Canonicalising first makes the chronology read the
+    same for either wording; the raw label stays in the key underneath it so two
+    genuinely different rooms at one tick keep a total, deterministic order, and
+    the source closes it so the key is total over any set of rows.
+
+    This is the RENDER order only. What SELECTION uses is
+    :func:`_alibi_source_rank_key` plus this key restricted to one source, both
+    of which keep the raw label strictly below a total tie-break, because a
+    render order that merely READS the same for two wordings is not enough: the
+    round-6 key also decided which source was freshest, so an accused's own
+    SPELLING could evict a rival's row (round-7 review).
+    """
+
+    return (
+        alibi.tick,
+        tuple(sorted(canonical_rooms(alibi.room))),
+        alibi.room,
+        alibi.source,
+    )
+
+
+def _alibi_within_source_key(alibi: AlibiClaim) -> tuple[int, tuple[str, ...], str]:
+    """How one source's OWN rows rank against each other for the per-source cut.
+
+    ``(tick, canonical rooms, raw room)``. The placement decides; the raw label
+    is only ever the last deterministic tie-break, separating two rows that are
+    otherwise THE SAME PLACEMENT -- so which label survives a cut can differ
+    between two wordings of one account, but which PLACEMENT does cannot. The
+    source is constant here, so it adds nothing and is left out.
+    """
+
+    return (alibi.tick, tuple(sorted(canonical_rooms(alibi.room))), alibi.room)
+
+
+def _alibi_source_rank_key(alibi: AlibiClaim) -> tuple[int, tuple[str, ...], PlayerId]:
+    """How one source's NEWEST row ranks that source against the other sources.
+
+    ``(tick, canonical rooms, source)`` -- the placement, then the speaker, and
+    no raw label anywhere in it. Round 6 ranked sources by the position of their
+    newest row under :func:`_alibi_row_sort_key`, which carries the raw label
+    ABOVE the source: when an accused's newest row and a rival's newest row
+    agreed on ``(tick, canonical rooms)``, the accused's own WORDING decided
+    which of the two was "fresher" and so which one took the last slot in the
+    others pool. Spelling `MEDBAY` as `medbay` cost a rival a row the listener
+    would otherwise have held (round-7 review). The source closes the key, so it
+    is total over any set of rows and the order is the same for every
+    permutation of the stored rows.
+    """
+
+    return (alibi.tick, tuple(sorted(canonical_rooms(alibi.room))), alibi.source)
+
+
+def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...], *, subject: PlayerId) -> str:
+    """Render a subject's recorded alibi rows for the §6.6 belief view (Task 13.5.2).
 
     Empty for a subject with no recorded alibi, so that subject's belief line
-    carries no suffix. Claims are sorted by ``(tick, room, source)`` for replay
-    determinism; each renders as ``in ROOM at tick T per SPEAKER`` so the alibi
-    stays attributed to the player who asserted it.
+    carries no suffix. An alibi is a ROUTE, and
+    :func:`meetings.manager.derive_reported_testimony` files one statement per
+    maximal STAY, so a subject who stated a four-room walk arrives here as four
+    rows and renders as the path: ``in ENGINEERING at tick 12 per p-9; in
+    EAST_HALL at tick 13 per p-9; ...``. Rows are sorted by
+    :func:`_alibi_row_sort_key` for replay determinism -- which is route order
+    for one speaker's own walk -- and each stays attributed to the player who
+    asserted it. A stationary account is one row and reads exactly as it always
+    did.
+
+    ``subject`` is whose belief line this is; :func:`_build_belief_lines` knows
+    it. It is what splits the rows into the two pools below, so the function
+    cannot be called without saying which of the sources is the accused
+    speaking about itself.
     """
 
     if not alibis:
         return ""
-    # Cap the rendered alibis per subject so the non-elastic §6.6 belief block
-    # cannot grow unbounded across many meetings and push the budgeted render over
-    # ``DEFAULT_TOKEN_BUDGET`` (Codex P2): keep the most-recent
-    # ``_MAX_RENDERED_ALIBIS`` by tick (a newer alibi supersedes a stale one),
-    # then render oldest-first for a stable, replay-deterministic line.
-    ordered = sorted(alibis, key=lambda a: (a.tick, a.room, a.source))
-    if len(ordered) > _MAX_RENDERED_ALIBIS:
-        recent = sorted(ordered, key=lambda a: (a.tick, a.room, a.source))[
-            -_MAX_RENDERED_ALIBIS:
-        ]
-        ordered = recent
+    # Cap the rendered alibis so the non-elastic §6.6 belief block cannot grow
+    # unbounded across many meetings and push the budgeted render over
+    # ``DEFAULT_TOKEN_BUDGET`` (Codex P2): keep the most-recent rows (a newer
+    # alibi supersedes a stale one), rendered oldest-first for a stable,
+    # replay-deterministic line.
+    #
+    # TWO POOLS that never compete, which is what makes the guarantee
+    # STRUCTURAL rather than a property of a fill order (round-7 review). The
+    # subject's OWN rows (``alibi.source == subject``) are selected against
+    # ``_MAX_RENDERED_ALIBIS`` alone; what OTHER players stated about that
+    # subject is selected against ``_MAX_RENDERED_ALIBIS_FROM_OTHERS`` alone.
+    # NOTHING the accused says -- how many stays, which ticks, which spelling,
+    # how often restated -- can change which of the other voices' rows render,
+    # and nothing the others say can change which of the accused's own rows
+    # render. Rounds 5 and 6 sought that guarantee through the SELECTION (a
+    # per-source cap, then a round-robin total) and each time it leaked: round
+    # 6's round-robin ranked sources under a key carrying the raw label, so the
+    # accused's own SPELLING evicted a rival's row, and below the total an
+    # accused claiming a later tick became the freshest source and cost a rival
+    # its older row. Separate pools cannot leak, because the two sets are never
+    # ranked against each other at all.
+    #
+    # Inside the OTHERS pool the guarantee is per VOICE, not per row: the pool
+    # is filled ROUND-ROBIN by recency across the other sources -- every
+    # source's newest row first, then every source's second-newest, and so on --
+    # so a voice is dropped only when more than ``_MAX_RENDERED_ALIBIS_FROM_
+    # OTHERS`` distinct others have spoken about one subject, and then it is the
+    # one whose newest row is stalest. Below that a voice with several rows can
+    # still lose its OLDER rows to another voice's newer ones.
+    #
+    # Selection is SPELLING-BLIND. Sources rank by
+    # :func:`_alibi_source_rank_key` and a source's own rows by
+    # :func:`_alibi_within_source_key`; neither carries a raw label above a
+    # total tie-break. The RENDER order is :func:`_alibi_row_sort_key`, exactly
+    # as round 6 shipped it.
+    #
+    # On the committed record the OTHERS pool is never reached, and the self
+    # pool binds on 2 of 5,256 belief states -- four rows, all the subject's own
+    # -- where it keeps the same three rows the pre-card per-subject rule kept,
+    # so no committed render moves.
+    ordered = sorted(alibis, key=_alibi_row_sort_key)
+    by_source: dict[PlayerId, list[int]] = {}
+    for position, alibi in enumerate(ordered):
+        by_source.setdefault(alibi.source, []).append(position)
+    # Each source's own rows, newest first, already cut to the per-source cap.
+    ranked = {
+        source: sorted(
+            positions,
+            key=lambda position: _alibi_within_source_key(ordered[position]),
+        )[-_MAX_RENDERED_ALIBIS:][::-1]
+        for source, positions in by_source.items()
+    }
+    # Pool 1: the subject's own account of itself, reserved.
+    kept: set[int] = set(ranked.get(subject, ()))
+    # Pool 2: the other voices, ranked by the recency of their NEWEST row.
+    others = sorted(
+        (source for source in ranked if source != subject),
+        key=lambda source: _alibi_source_rank_key(ordered[ranked[source][0]]),
+        reverse=True,
+    )
+    from_others = 0
+    for rank in range(_MAX_RENDERED_ALIBIS):
+        for source in others:
+            if from_others >= _MAX_RENDERED_ALIBIS_FROM_OTHERS:
+                break
+            if rank < len(ranked[source]):
+                kept.add(ranked[source][rank])
+                from_others += 1
+        if from_others >= _MAX_RENDERED_ALIBIS_FROM_OTHERS:
+            break
     parts = [
-        f"in {alibi.room} at tick {alibi.tick} per {alibi.source}" for alibi in ordered
+        f"in {alibi.room} at tick {alibi.tick} per {alibi.source}"
+        for position, alibi in enumerate(ordered)
+        if position in kept
     ]
     return "alibi: " + "; ".join(parts)
 

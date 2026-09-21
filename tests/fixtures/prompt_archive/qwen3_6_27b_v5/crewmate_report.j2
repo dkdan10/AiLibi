@@ -1,6 +1,6 @@
 {#- Crewmate OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: crewmate_report  --  version crewmate_report.qwen3_6_27b.v6
+   prompt_id: crewmate_report  --  version crewmate_report.qwen3_6_27b.v5
 
    Baseline-4 merge (v1, Task 16.13): the owner-directed from-scratch ladder's
    style base (experiments/lab/qwen36_prompt_scratch/v5/ — tag-sectioned,
@@ -153,7 +153,7 @@ Fill "observations" with your curated first-hand records, each item one of these
 {% endif %}
   {"type": "whereabouts", "tick": <int>, "room": "<room id>"} — your roll-call answer: the room YOU were in at the tick that matters, copied from your own record (one room, one tick; the speaker is always you, so it names no subject).
 Each "claims" item is one of:
-  {"type": "alibi", "subject": "{{ agent_id }}", "route": [{"room": "<room id>", "from_tick": <int>, "to_tick": <int>}, ...], "evidence": ["<short ref>", ...]} — your ROUTE, quoted from your own memory: one entry per room you were in, in the order you were in them, each with the ticks you actually spent there and from_tick <= to_tick. Entries must not overlap, and your "completed_task" rows must sit inside the entry that covers their tick. If you never moved, that is one entry.
+  {"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room id>", "evidence": ["<short ref>", ...]} with from_tick <= to_tick — quote your own memory exactly: ONE room, and only the ticks you actually spent there. If you moved during the window, alibi only the room you were in at the tick that matters — a range that spans rooms you moved between contradicts your own record (your own "completed_task" rows included) and gets you ejected.
   the "accusation" shown in the skeleton above — at most one. Calibrate "confidence" honestly: 1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a case a second account or a contradiction corroborates; ~0.5 for a hunch read off movement alone — almost nothing you infer from paths deserves 1.0.
   {"type": "corroboration", "supports": "<player id>", "on_tick": <int>, "reason": "<one short phrase>"}
 Reference only ticks, rooms, players, and tasks that appear above — an invented identifier fails validation. If you are not sure, use "claims": [] and say so in "free_text".

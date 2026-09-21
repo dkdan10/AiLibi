@@ -22,7 +22,10 @@ import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
-from eval.alibi_fabrication import ALIBI_CONTRADICTION_KINDS
+from eval.alibi_fabrication import (
+    ALIBI_CONTRADICTION_KINDS,
+    compute_alibi_fabrication_rate,
+)
 from eval.process_scorecard import (
     ALIBI_FLAG_KINDS,
     ROLE_CORRECTNESS_NOTE,
@@ -33,13 +36,21 @@ from eval.process_scorecard import (
     RateCell,
     SetInputs,
     SetScorecard,
+    _context_cells,
     _walk_config,
     fold_set,
     pool,
     scorecard_from_tally,
 )
 from eval.replay_walk import WalkViolation
-from eval.report_schema import GameCostSummary, GameReport, MeetingReport
+from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
+    GameCostSummary,
+    GameReport,
+    MeetingReport,
+    TournamentReport,
+)
+from eval.reporter_justice import ReporterJusticeCells
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_REASON_ID_MARKER,
@@ -50,6 +61,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     BallotTargetRewriteReason,
     ContradictionRef,
     MeetingOutcome,
@@ -109,7 +121,9 @@ def _alibi(
     *, subject: PlayerId, room: RoomId, from_tick: int, to_tick: int
 ) -> AlibiClaim:
     return AlibiClaim(
-        type="alibi", subject=subject, from_tick=from_tick, to_tick=to_tick, room=room
+        type="alibi",
+        subject=subject,
+        route=(AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick),),
     )
 
 
@@ -703,6 +717,96 @@ def test_a_claim_reaching_past_the_walk_is_not_evaluable_rather_than_false() -> 
     assert row.self_alibi_claims_unresolvable == 1
     assert row.self_alibi_claims_envelope_false == 0
     assert row.flags.not_evaluable == 1
+
+
+def test_a_part_true_route_is_not_evaluable_rather_than_manufactured() -> None:
+    """A flag that caught a fabricated LEG is evidence, and row 3 must not claim it.
+
+    p-1's route states CAFETERIA at agent tick 1 (true: engine tick 0) and
+    STORAGE at agent tick 2 (false: p-1 is in EAST_HALL at engine tick 1). A
+    fold across the whole route reads "true at some tick" off the FIRST leg and
+    files the flag as schema-manufactured, although the flag may be exactly the
+    one that caught the second leg. The recorded flag names the claim, not the
+    leg, so the cell publishes it as not evaluable.
+    """
+
+    claim = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=1),
+            AlibiSegment(room="STORAGE", from_tick=2, to_tick=2),
+        ),
+    )
+    row = _card(
+        _inputs(meetings=(_alibi_meeting(claim, "p-1"),), route=_ROUTE)
+    ).manufactured_contradiction
+    assert (row.flags.numerator, row.flags.denominator) == (0, 1)
+    assert row.flags.not_evaluable == 1
+    assert "multi-leg route" in row.definition
+    # The CLAIM census beside the row still reads the whole account, leg by leg:
+    # the refusal is about attributing a FLAG, not about walking a route.
+    assert row.self_alibi_claims == 1
+    assert row.self_alibi_claims_multi_tick == 1
+    assert row.self_alibi_claims_envelope_false == 1
+    assert row.self_alibi_claims_strict_false == 0
+
+
+def test_a_one_segment_route_is_still_scored_by_row_three() -> None:
+    """The other side: the refusal is keyed on the STAY COUNT and nothing else.
+
+    Every committed claim is a one-segment route, so this is the case that must
+    not move — the same envelope as the seed-41 shape above, scored.
+    """
+
+    claim = _alibi(subject="p-1", room="CAFETERIA", from_tick=1, to_tick=2)
+    row = _card(
+        _inputs(meetings=(_alibi_meeting(claim, "p-1"),), route=_ROUTE)
+    ).manufactured_contradiction
+    assert (row.flags.numerator, row.flags.denominator) == (1, 1)
+    assert row.flags.not_evaluable == 0
+
+
+def test_recutting_one_stay_does_not_change_whether_row_three_scores_a_flag() -> None:
+    """Whether a flag is evaluable must not be the speaker's to choose.
+
+    The refusal counts MAXIMAL STAYS, not the legs as stated. Counting legs
+    made a PUBLISHED figure a dial the accused holds: "CAFETERIA 1-2" is
+    scored, and the identical account re-cut as "CAFETERIA 1-1" plus
+    "CAFETERIA 2-2" would drop out of the denominator as not evaluable — a
+    caught flag quietly removed from the row that measures whether flags are
+    manufactured. One continuous stay is one stay however it was narrated.
+    """
+
+    envelope = _alibi(subject="p-1", room="CAFETERIA", from_tick=1, to_tick=2)
+    recut = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=1),
+            AlibiSegment(room="CAFETERIA", from_tick=2, to_tick=2),
+        ),
+    )
+
+    def scored(claim: AlibiClaim) -> tuple[int, int, int]:
+        row = _card(
+            _inputs(meetings=(_alibi_meeting(claim, "p-1"),), route=_ROUTE)
+        ).manufactured_contradiction
+        return (row.flags.numerator, row.flags.denominator, row.flags.not_evaluable)
+
+    assert scored(recut) == scored(envelope) == (1, 1, 0)
+
+    # The control: a GENUINE second stay — a different room — is the shape the
+    # refusal exists for, and it is still refused.
+    part_true = AlibiClaim(
+        type="alibi",
+        subject="p-1",
+        route=(
+            AlibiSegment(room="CAFETERIA", from_tick=1, to_tick=1),
+            AlibiSegment(room="STORAGE", from_tick=2, to_tick=2),
+        ),
+    )
+    assert scored(part_true) == (0, 1, 1)
 
 
 def test_a_vent_flag_is_outside_the_alibi_denominator() -> None:
@@ -1329,3 +1433,110 @@ def test_pooling_the_chance_baseline_is_exact_and_order_free() -> None:
     backwards = pool([right, left], label="x", sources=()).argmax_independence
     assert forwards.chance_baseline == backwards.chance_baseline
     assert forwards.chance_baseline == round(float(Fraction(5, 12)), 6)
+
+
+# ---------------------------------------------------------------------------
+# Round 5: the published impostor_alibis* context cells
+# ---------------------------------------------------------------------------
+
+# A zero-filled reporter half. ``_context_cells`` carries these through
+# untouched and they are irrelevant to the alibi cells under test; they are
+# spelled out anyway so a new reporter cell fails this construction loudly
+# rather than being silently defaulted.
+_ZERO_REPORTER = ReporterJusticeCells(
+    set_name="planted",
+    games=0,
+    meetings=0,
+    body_report_meetings=0,
+    emergency_meetings=0,
+    reporter_crewmate_meetings=0,
+    reporter_impostor_meetings=0,
+    ejections=0,
+    innocent_ejections=0,
+    impostor_ejections=0,
+    reporter_slots=0,
+    reporter_ejections=0,
+    reporter_innocent_ejections=0,
+    innocent_non_reporter_slots=0,
+    innocent_non_reporter_ejections=0,
+    impostor_slots=0,
+    impostor_slot_ejections=0,
+    crew_accusations=0,
+    crew_accusations_at_reporter=0,
+    impostor_accusations=0,
+    impostor_accusations_at_reporter=0,
+    crew_ballots=0,
+    crew_ballots_at_reporter=0,
+    impostor_ballots=0,
+    impostor_ballots_at_reporter=0,
+    ballot_rationales=0,
+    ballot_rationales_mentioning_report=0,
+    ballot_rationales_with_hinge=0,
+    speech_turns=0,
+    speech_turns_mentioning_report=0,
+    speech_turns_with_hinge=0,
+    speech_turns_with_hinge_by_reporter=0,
+    meetings_with_co_discoverer=0,
+    co_discoverer_slots_crewmate=0,
+    co_discoverer_slots_impostor=0,
+)
+
+
+def test_recutting_a_restated_alibi_does_not_move_the_impostor_alibi_cells() -> None:
+    """The scorecard's context cells adopt the fabrication metric as computed.
+
+    ``impostor_alibis``, ``impostor_alibis_survived`` and
+    ``impostor_alibi_survival_rate`` are PUBLISHED in
+    ``docs/process-scorecard.{md,json}`` and pinned by
+    ``scripts/publish_process_scorecard.py --check``. They are
+    ``compute_alibi_fabrication_rate``'s counts, so the round-5 dedup repair --
+    keying the ACCOUNT rather than the narration -- is what keeps them out of
+    the accused's hands; this closes the chain from the metric to the cell.
+    """
+
+    account = (AlibiSegment(room="STORAGE", from_tick=2, to_tick=14),)
+    one_tick_legs = tuple(
+        AlibiSegment(room="STORAGE", from_tick=tick, to_tick=tick)
+        for tick in range(2, 15)
+    )
+
+    def cells(restatement: tuple[AlibiSegment, ...]) -> ContextCells:
+        turns = tuple(
+            _turn(
+                index=index,
+                speaker="p-3",
+                claims=(AlibiClaim(type="alibi", subject="p-3", route=route),),
+            )
+            for index, route in enumerate((account, restatement))
+        )
+        game = GameReport(
+            game_id="planted",
+            seed=7,
+            winner="CREWMATES",
+            reason="planted",
+            final_tick=9,
+            roles=_ROLES,
+            replay_ref="replay-seed-7.jsonl",
+            meetings=(_meeting(turns=turns),),
+            failed_calls=(),
+            prompt_versions={},
+            cost=GameCostSummary(
+                total_cost_usd=0.0,
+                total_input_tokens=0,
+                total_output_tokens=0,
+                by_model={},
+            ),
+        )
+        report = TournamentReport(
+            format_version=CURRENT_FORMAT_VERSION, games=(game,), seeds_used=(7,)
+        )
+        alibi = compute_alibi_fabrication_rate(report)
+        return _context_cells(
+            alibi.total_impostor_alibis, alibi.survived, _ZERO_REPORTER
+        )
+
+    verbatim = cells(account)
+    # Non-vacuous: the restatement really is deduped to ONE published alibi.
+    assert verbatim.impostor_alibis == 1
+    assert verbatim.impostor_alibi_survival_rate == 1.0
+    assert cells(one_tick_legs) == verbatim

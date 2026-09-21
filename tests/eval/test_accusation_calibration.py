@@ -42,6 +42,7 @@ from eval.report_schema import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     Claim,
     CorroborationClaim,
     MeetingTranscript,
@@ -362,7 +363,9 @@ def test_accusation_claims_counted_from_reports_and_statements() -> None:
 
 def test_non_accusation_claims_are_ignored() -> None:
     alibi: Claim = AlibiClaim(
-        type="alibi", subject="p-0", from_tick=1, to_tick=5, room="MEDBAY"
+        type="alibi",
+        subject="p-0",
+        route=(AlibiSegment(room="MEDBAY", from_tick=1, to_tick=5),),
     )
     corroboration: Claim = CorroborationClaim(
         type="corroboration", supports="p-1", on_tick=3, reason="r"

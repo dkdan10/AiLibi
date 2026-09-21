@@ -50,6 +50,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AlibiClaim,
+    AlibiSegment,
     Claim,
     ContradictionRef,
     MeetingTurn,
@@ -111,18 +112,14 @@ def _conflict_claims() -> dict[str, tuple[Claim, ...]]:
             AlibiClaim(
                 type="alibi",
                 subject="p-2",
-                from_tick=100,
-                to_tick=200,
-                room="STORAGE",
+                route=(AlibiSegment(room="STORAGE", from_tick=100, to_tick=200),),
             ),
         ),
         "p-3": (
             AlibiClaim(
                 type="alibi",
                 subject="p-2",
-                from_tick=150,
-                to_tick=180,
-                room="CAFETERIA",
+                route=(AlibiSegment(room="CAFETERIA", from_tick=150, to_tick=180),),
             ),
         ),
     }

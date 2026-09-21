@@ -13,6 +13,7 @@ classification (DESIGN.md §5.4; audit gp-1 precision) is pinned here.
 
 from __future__ import annotations
 
+import itertools
 from typing import Final
 
 import pytest
@@ -20,6 +21,7 @@ import pytest
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    AlibiSegment,
     ContradictionRef,
     FoundBodyObservation,
     MeetingTranscript,
@@ -53,6 +55,7 @@ from meetings.transcript import (
     is_canonically_ordered,
     is_relevant_sighting,
     is_weak_contradiction,
+    maximal_stays,
     next_chain_step,
     sighting_placement,
     sort_turns_canonically,
@@ -336,9 +339,7 @@ def _alibi_turn(
             AlibiClaim(
                 type="alibi",
                 subject=subject,
-                from_tick=from_tick,
-                to_tick=to_tick,
-                room=room,
+                route=(AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick),),
             ),
         ),
         free_text=f"turn {turn_index}",
@@ -632,6 +633,134 @@ class TestWeakContradictionClassification:
         assert is_weak_contradiction(marked_conflict) is True
         assert is_weak_contradiction(unmarked_sighting) is False
         assert is_weak_contradiction(unmarked_conflict) is False
+
+
+# --- The maximal-stay normalisation (round 4 of the alibi-as-route card) ----
+
+
+def _seg(room: str, from_tick: int, to_tick: int) -> AlibiSegment:
+    return AlibiSegment(room=room, from_tick=from_tick, to_tick=to_tick)
+
+
+def _shape(route: tuple[AlibiSegment, ...]) -> list[tuple[str, int, int]]:
+    return [(leg.room, leg.from_tick, leg.to_tick) for leg in route]
+
+
+class TestMaximalStays:
+    """`maximal_stays` is the single normalisation point for how a route is CUT.
+
+    The sibling of :func:`canonical_rooms`: that one makes the ROOM comparison
+    independent of how the model spelled a label, this one makes every
+    detection comparison independent of where the speaker put a full stop
+    inside one continuous stay. A leg boundary is free to state, so any
+    geometry read off the legs is a dial the accused holds.
+    """
+
+    def test_a_one_segment_route_is_unchanged(self) -> None:
+        # The shape every committed recording carries: the normalisation is the
+        # identity on it, which is why no recorded flag, band or id can move.
+        route = (_seg("STORAGE", 2, 14),)
+        assert maximal_stays(route) == route
+
+    def test_contiguous_same_room_legs_merge(self) -> None:
+        assert _shape(
+            maximal_stays((_seg("STORAGE", 2, 7), _seg("STORAGE", 8, 14)))
+        ) == [("STORAGE", 2, 14)]
+
+    def test_one_tick_legs_merge_into_the_whole_stay(self) -> None:
+        # The shape the operational prompts ask for, and the worst case for a
+        # leg-local band: no one-tick leg has a strict interior at all.
+        legs = tuple(_seg("STORAGE", tick, tick) for tick in range(6, 10))
+        assert _shape(maximal_stays(legs)) == [("STORAGE", 6, 9)]
+
+    def test_a_room_change_ends_a_stay(self) -> None:
+        route = (_seg("STORAGE", 2, 7), _seg("CAFETERIA", 8, 14))
+        assert maximal_stays(route) == route
+
+    def test_a_gap_ends_a_stay(self) -> None:
+        # Tick 8 is a tick the account claims nothing about, so the two sides
+        # are two claims and not one stay. Narrowing an account narrows what it
+        # asserts -- that is the membership rule working, not a cut.
+        route = (_seg("STORAGE", 2, 7), _seg("STORAGE", 9, 14))
+        assert maximal_stays(route) == route
+
+    def test_only_the_contiguous_run_merges(self) -> None:
+        assert _shape(
+            maximal_stays(
+                (
+                    _seg("STORAGE", 2, 4),
+                    _seg("STORAGE", 5, 7),
+                    _seg("CAFETERIA", 8, 9),
+                    _seg("STORAGE", 10, 11),
+                )
+            )
+        ) == [("STORAGE", 2, 7), ("CAFETERIA", 8, 9), ("STORAGE", 10, 11)]
+
+    def test_the_merge_compares_canonical_rooms_and_keeps_the_smallest_label(
+        self,
+    ) -> None:
+        # Two spellings of one room are one place, so they merge. The stay
+        # keeps the LEXICOGRAPHICALLY SMALLEST of the labels merged -- still a
+        # label the speaker actually used, and now a function of the SET of
+        # them rather than of their order. Keeping the FIRST leg's text made
+        # the CUT choose the spelling, which moved every description that
+        # quotes the stay and the §6.6 row order with it (round-6 review).
+        for route in (
+            (_seg("CAFEteria", 2, 7), _seg("cafeteria", 8, 14)),
+            (_seg("cafeteria", 2, 7), _seg("CAFEteria", 8, 14)),
+        ):
+            assert _shape(maximal_stays(route)) == [("CAFEteria", 2, 14)]
+
+    def test_the_kept_label_does_not_depend_on_the_order_of_a_longer_run(
+        self,
+    ) -> None:
+        # Three legs, every permutation of three canonically-equal spellings
+        # across them: one account, one label.
+        spellings = ("CAFETERIA", "cafeteria", "CAFETERIA_TRANSITION")
+        for assignment in itertools.permutations(spellings):
+            route = tuple(
+                _seg(room, 2 + 2 * index, 3 + 2 * index)
+                for index, room in enumerate(assignment)
+            )
+            assert _shape(maximal_stays(route)) == [("CAFETERIA", 2, 7)]
+
+    def test_two_non_spatial_legs_merge_under_the_same_label_rule(self) -> None:
+        # Both canonicalise to the empty set, so they are one stay; the label
+        # kept is the smallest of the two either way round. The other label
+        # does not reach a belief row -- recorded as a known consequence of
+        # having ONE normalisation point, not a second merge rule.
+        for route in (
+            (_seg("UNKNOWN", 2, 5), _seg("NOWHERE", 6, 8)),
+            (_seg("NOWHERE", 2, 5), _seg("UNKNOWN", 6, 8)),
+        ):
+            assert _shape(maximal_stays(route)) == [("NOWHERE", 2, 8)]
+
+    def test_a_non_spatial_label_does_not_merge_with_a_real_room(self) -> None:
+        route = (_seg("SOMEWHERE_ELSE", 2, 7), _seg("STORAGE", 8, 14))
+        assert maximal_stays(route) == route
+
+    def test_the_result_is_idempotent(self) -> None:
+        # Coalescing a coalesced account changes nothing, which is what lets
+        # every consumer call it without coordinating on who called it first.
+        route = (
+            _seg("STORAGE", 2, 4),
+            _seg("STORAGE", 5, 7),
+            _seg("CAFETERIA", 8, 9),
+        )
+        once = maximal_stays(route)
+        assert maximal_stays(once) == once
+
+    def test_the_outer_endpoints_never_move(self) -> None:
+        # The transit-fuzz bands read these, so the merge must leave them
+        # exactly where the account put them.
+        for route in (
+            (_seg("STORAGE", 2, 14),),
+            (_seg("STORAGE", 2, 7), _seg("STORAGE", 8, 14)),
+            tuple(_seg("STORAGE", tick, tick) for tick in range(2, 15)),
+            (_seg("STORAGE", 2, 7), _seg("CAFETERIA", 8, 14)),
+        ):
+            stays = maximal_stays(route)
+            assert (stays[0].from_tick, stays[-1].to_tick) == (2, 14)
 
 
 # --- Task 10.1: room canonicalization (audit gp-2 C-C-1) --------------------
@@ -1587,7 +1716,9 @@ def _alibi_rooms_by_event_id(entry: MeetingReplayEntry) -> dict[str, frozenset[s
     """Canonical room set per alibi-claim event id, detector-id format."""
 
     return {
-        f"turn:{turn.turn_id}:claim:{index}": canonical_rooms(claim.room)
+        f"turn:{turn.turn_id}:claim:{index}": frozenset(
+            room for segment in claim.route for room in canonical_rooms(segment.room)
+        )
         for turn in entry.transcript.turns
         for index, claim in enumerate(turn.claims)
         if isinstance(claim, AlibiClaim)
@@ -2385,9 +2516,7 @@ class TestProxyIntraTurnGuard:
                 AlibiClaim(
                     type="alibi",
                     subject=subject,
-                    from_tick=2,
-                    to_tick=8,
-                    room=alibi_room,
+                    route=(AlibiSegment(room=alibi_room, from_tick=2, to_tick=8),),
                 ),
             ),
             observations=(
@@ -2440,16 +2569,12 @@ class TestProxyIntraTurnGuard:
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="EAST_HALL",
+                    route=(AlibiSegment(room="EAST_HALL", from_tick=1, to_tick=6),),
                 ),
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="ENGINEERING",
+                    route=(AlibiSegment(room="ENGINEERING", from_tick=1, to_tick=6),),
                 ),
             ),
             free_text="turn 1",
@@ -2531,16 +2656,12 @@ class TestProxyIntraTurnGuard:
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="EAST_HALL",
+                    route=(AlibiSegment(room="EAST_HALL", from_tick=1, to_tick=6),),
                 ),
                 AlibiClaim(
                     type="alibi",
                     subject="p-4",
-                    from_tick=1,
-                    to_tick=6,
-                    room="ENGINEERING",
+                    route=(AlibiSegment(room="ENGINEERING", from_tick=1, to_tick=6),),
                 ),
             ),
             free_text="turn 0",
@@ -2593,16 +2714,18 @@ class TestProxyIntraTurnGuard:
                         AlibiClaim(
                             type="alibi",
                             subject="p-4",
-                            from_tick=1,
-                            to_tick=6,
-                            room="EAST_HALL",
+                            route=(
+                                AlibiSegment(room="EAST_HALL", from_tick=1, to_tick=6),
+                            ),
                         ),
                         AlibiClaim(
                             type="alibi",
                             subject="p-4",
-                            from_tick=1,
-                            to_tick=6,
-                            room="ENGINEERING",
+                            route=(
+                                AlibiSegment(
+                                    room="ENGINEERING", from_tick=1, to_tick=6
+                                ),
+                            ),
                         ),
                     ),
                     observations=(
