@@ -474,7 +474,9 @@ class TestRowOrderAndBound:
             )
 
         transcript = MeetingTranscript(
-            turns=tuple(_voice(index, speaker) for index, speaker in enumerate(speakers))
+            turns=tuple(
+                _voice(index, speaker) for index, speaker in enumerate(speakers)
+            )
         )
         rows = build_evidence_rows(
             voter=_participant("p-1"),
