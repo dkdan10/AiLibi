@@ -82,6 +82,75 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
 
 ## Acceptance
 
+- [x] Review correction: the labeller's `turns=` argument at the manager's call
+  site has the enforcing case it lacked. An EJECT citing a REAL turn of this
+  meeting that NAMES its target reads `supported`; replacing `turns=` with `()`
+  at that call site turns the same ballot `off_target` and was invisible to the
+  whole suite. Proved by
+  `tests/meetings/test_grounding_label.py::TestEveryBallotDeclaresItsBasis::test_an_eject_citing_a_turn_that_names_its_target_is_supported`,
+  driven through `MeetingManager`, with the off-target twin citing a turn that
+  names somebody else (probe: `turns=()` — `1 failed, 42 passed`, and
+  `1 failed, 1,816 passed, 2 skipped` over `tests/meetings tests/api`).
+- [x] Review correction: the labeller's `candidate_targets=` argument has one
+  too. A SKIP with EMPTY `considered_alternatives` — the generous-pool branch,
+  23 of the 1,359 shipped 9p2i SKIPs — citing an own-observation line that names
+  a living candidate reads `supported`; replacing the argument with `()` turns
+  it `off_target`, because a citation with no subject bears on nobody. Proved by
+  `tests/meetings/test_grounding_label.py::TestEveryBallotDeclaresItsBasis::test_a_skip_that_weighed_nobody_is_read_against_the_living_pool`,
+  with the twin citing the line that names only the VOTER, who is never its own
+  candidate (probe: `candidate_targets=()` — `1 failed, 42 passed`, and
+  `1 failed, 1,816 passed, 2 skipped`).
+- [x] Review correction: the whole call surface this card added is walked and
+  probed, not just those two arguments — every argument of the labeller call,
+  every argument of the `citations_bear_on_any` call inside it, all three
+  branches of `_ballot_grounding_subjects`, the `_ballot_view` mirrors, the
+  pre-pass call, `_default_vote`'s label, the four marker registrations and the
+  two prompt skeletons. Two came back GREEN and now carry cases: the
+  `invalid_basis` row of `api/replay_loader.py`'s `_BALLOT_PREFIX_MARKERS`
+  (`tests/api/test_view_model.py::test_parse_rewrite_reasons_uses_imported_markers`)
+  and the two `rewriteLabel` cases `BallotCard.tsx` gained
+  (`frontend/src/components/PrivateReasoning.test.tsx`). The table with every
+  probe's counts is in the round-3 Results subsection.
+- [x] Review correction: the skeleton no longer pre-answers the basis.
+  `vote_ballot.j2:263` and `vote_ballot_accounts.j2:23` ship
+  `"decision_basis": null`, on this repo's own discipline — a slot is shown in
+  PROSE and never pre-filled into the object a model copies verbatim
+  (`agents/strategic/prompts/loader.py`'s `v5` bullet) — which binds hardest
+  here, because ruling D6 exists to make the VOTER state its basis and a voter
+  that edits `target` and leaves the skeleton alone would record one it never
+  chose. Both prose registers keep the two legal tokens and now say the skeleton
+  shows null. Still `vote_ballot` `v7` and still `ACCOUNT_PROMPT_SET_REVISION`
+  `v6`, both unreleased. Pinned by
+  `tests/meetings/test_elicitation_fixtures.py::TestCitationRequiredConfidence::test_the_skeleton_leaves_the_basis_for_the_voter_to_write`
+  (probe: restore `"cited"` — `1 failed, 27 passed`) and
+  `tests/agents/test_public_account_prompts.py::test_the_skeleton_leaves_the_basis_for_the_voter_to_write`
+  (probe: restore `"none_held"` — `2 failed, 92 passed`).
+- [x] Review correction: `TestTheOnlyTargetRewrites` reads `node.keywords`
+  beside `node.args`, so a `ballot_target_rewrite_provenance(ballot,
+  reason=...)` call can no longer be visited and contribute nothing. Proved by
+  `tests/meetings/test_grounding_label.py::TestTheOnlyTargetRewrites::test_the_scan_sees_a_reason_passed_as_a_keyword`,
+  which runs the REAL scanner over a planted source carrying the keyword,
+  dotted-keyword and positional forms (probe: read `node.args` only —
+  `1 failed, 42 passed`).
+- [x] Review correction: decision 4's `state_hash_after` claim is stated at the
+  strength the code delivers. The check is unweakened on the ENGINE leg and
+  that is now the whole of it: `_run_recorded_meeting` applies the RECORDED
+  decision, so the hash cannot transitively say today's ballot chain still
+  reaches it, and `test_every_reconstruction_divergence_is_a_retired_guard` is
+  what carries that half. Corrected in decision 4 and in the comment above the
+  check (`tests/meetings/test_prompt_byte_golden.py`).
+- [x] Review correction: the undated Verification table is re-measured at THIS
+  head and labelled with the round it was measured at; the dated round-1 and
+  round-2 tables stay as history. Three of its cells were stale at `7e6747c7`
+  — 8,153 where `check.sh` printed 8,158, 1,810 where `tests/meetings tests/api`
+  printed 1,813, and 38 where `test_grounding_label.py` printed 40.
+- [x] Review correction: the card's own record is complete. The
+  planted-failures running total counts rounds 2 and 3; the three files the
+  diff touches that `## Expected scope` does not name are recorded by a dated
+  note rather than by a silent rewrite (decision 10); the test pin that moved
+  off `audits/deduction-candidate/execution-manifest.md` is declared (decision
+  11); and every citation in the CURRENT sections was re-derived mechanically
+  at this head AFTER the last code edit.
 - [x] Review correction: the `none_held`-over-`flag_only` ordering has the
   planted case it exists for. An EJECT onto a target carrying a contradiction
   detected THIS meeting, whose voter declared `decision_basis="none_held"`,
@@ -100,7 +169,7 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
 - [x] Review correction: the prose sweep is finished against the RETIRED SYMBOL
   names and case-insensitively, not only against the round-1 phrases.
   `tests/meetings/test_manager.py:829-833` no longer says the gate coerces in
-  the present tense, and `eval/meeting_quality.py:277-282` / `:981-985` no
+  the present tense, and `eval/meeting_quality.py:277-282` / `:983-987` no
   longer say the citation gate IS the last guard in the live chain. The closing
   greps and their exact results are quoted in the round-2 Results subsection;
   no test pins prose, so the enforcing check is the grep.
@@ -250,10 +319,10 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   cutoff are unchanged, and the coercion removed here reached 6 of 2,516 and 0
   of 869 committed ballots. The two rewrites that remain say so: an illegal
   target cannot be tallied, so `normalize_ballot_target`
-  (`meetings/voting.py:147`) still records `target="SKIP"`,
+  (`meetings/voting.py:152`) still records `target="SKIP"`,
   `guard_rewrite_reason="invalid_target"`, the bounded authored string, its
   marker and `grounding_label="not_assessed"`; and the teammate firewall
-  (`coerce_teammate_ballot_to_skip`, `meetings/manager.py:3531`) enforces a role
+  (`coerce_teammate_ballot_to_skip`, `meetings/manager.py:3628`) enforces a role
   rule the voter was told in its own prompt (`vote_ballot.j2:243`), not an
   evidence judgement. A test asserts these two plus `parse_default` are the only
   target-rewriting paths.
@@ -408,6 +477,19 @@ recording can be misread. The accounts bodies are not `vote_ballot`'s: the
 `v7` bump above is still `vote_ballot` ALONE, and the weighing card's `v8`
 is unaffected.
 
+That `v6` ABSORBS a second edit, declared in review round 3: the skeleton's
+`"decision_basis"` is now `null` in both bodies rather than pre-filled. Neither
+stamp moves again, and both gates agree that they must not. `v6` is unreleased
+— `test_no_committed_capture_already_carries_todays_account_stamps` is the
+assertion that no capture carries it, and `vote_ballot`'s `v7` reaches no
+recording until the re-record — so there is no generation of either body under
+its own stamp for this edit to collide with, which is the whole property the
+revision exists to hold. `_PRE_V6_REVISIONS` is unchanged and
+`test_a_body_carrying_the_v6_bounds_cannot_be_stamped_an_older_revision` still
+passes: the edit touches none of the v6 spans that gate names, and the gate now
+asserts the null skeleton beside them so the two facts move together or not at
+all.
+
 A SUBSTRATE-STAMP cell changes meaning without moving, declared in review round
 2: the `citation_gate` key stays in `_RETIRED_ALWAYS_ON_LEVERS`, so every
 recording and every MANIFEST `flags` cell keeps asserting `citation_gate` true
@@ -532,7 +614,9 @@ module can build rather than on one example.
 you cannot source either way is a call to SKIP, and a SKIP needs no citation"
 and `:268` loses "a SKIP needs neither", replaced by the SKIP register harvested
 from `vote_ballot_accounts.j2`; `:262`'s key count moves 7 → 8 and `:263`'s
-skeleton gains `"decision_basis"`. The marker at `:3` and the `qwen3_6_27b`
+skeleton gains `"decision_basis"`, carried NULL — the voter states its basis
+and never copies one (review round 3; the same holds of
+`vote_ballot_accounts.j2:23`). The marker at `:3` and the `qwen3_6_27b`
 entry in `PROMPT_VERSION_SETS` (`orchestrator/game.py:435`) advance
 `vote_ballot` ALONE, v6 → v7, in the Task 15.5 `qwen3_32b` form. The cascade
 also moves `REQUIRED_PROMPT_VERSIONS_BASE` (`scripts/record_ml_corpus.sh:166`),
@@ -591,8 +675,15 @@ than a guess.
    keeps the re-derived ballots under `ReconstructedMeeting.rebuilt_ballots`,
    and `test_every_reconstruction_divergence_is_a_retired_guard` measures and
    explains the difference rather than dropping it. The `state_hash_after`
-   check is unweakened: it still applies a result to the reconstructed state
-   and demands the recorded bytes.
+   check is unweakened on the ENGINE leg, and — restated at exactly that
+   strength in review round 3 — the engine leg is now the whole of what it
+   pins: it still applies a result to the reconstructed state and demands the
+   recorded bytes, so drift in `apply_meeting_result`, in the tick walk or in
+   the recording fails it loud. It no longer pins the BALLOT leg even
+   transitively, because the decision it applies is read as recorded rather
+   than re-derived. What says today's chain still REACHES that decision is the
+   divergence census, ballot by ballot against `rebuilt_ballots`, and nothing
+   else.
 5. **The pre-pass's reach is stated, not overclaimed.** Acceptance says an
    out-of-set basis "never defaults the vote". That holds for every payload
    that reaches the manager, which is what `_prepared_ballot_payload` governs.
@@ -629,27 +720,61 @@ than a guess.
    behaviour, and the deduction evaluation is closed. No `GENERATOR_SOURCES`
    file's scripted prefixes move, so no restamp is owed and the two archive
    readers stay green.
+10. **Three files the diff touches are not in `## Expected scope`, recorded
+    here rather than written into it (review round 3, 2026-09-21).** Expected
+    scope is what the card asked for before the work; a file discovered during
+    it is declared, not retrofitted. The three:
+    `agents/strategic/prompts/qwen3_5_9b/vote_ballot.j2` and
+    `eval/process_scorecard.py`, both comment-only sweeps of sentences that
+    said an uncited EJECT coerces (the card's own prose-sweep requirement
+    reaches whatever file carries the sentence, which is why neither needed a
+    scope amendment to be correct); and
+    `experiments/fresh_deduction_instrument.py` beyond the one keyword Expected
+    scope names — `assert_the_revised_wave_is_enabled`, `REVISED_WAVE_LEVERS`
+    and `CalibrationMode.requires_the_revised_wave` are deleted with the lever
+    they gate, because `RecordedExperimentConfig` is `extra="forbid"` and a
+    wave assertion over a field that no longer exists cannot be written at all.
+11. **A test pin moved off a closed evaluation's archive, declared here
+    (review round 3, 2026-09-21).** `TestUsageReplay` read the terminal/partial
+    SHAPE off a paragraph of `audits/deduction-candidate/execution-manifest.md`
+    that quotes "49 terminal units with one `partial`" against "16 terminal
+    units and 34 `partial`" — a split that paragraph itself attributes to the
+    relevance rule of 2026-09-18 meeting an ARCHIVED distribution, and says
+    read 50 and none with the rule OFF. Ruling D6 retired the coercion that
+    rule drove, so the archive's meetings decide again and the shape is back to
+    50 and none. The manifest is the record of a spent sitting and no card may
+    rewrite it, so the assertion moved into the test
+    (`assert [arm.terminal_units for arm in report.arms] == [50, 50]` and
+    `[0, 0]`), where it carries its own explanation. The token counts are still
+    read off the manifest; no `audits/` byte moves, so no `docs/artifacts.md`
+    row is recomputed.
 
 ### Verification
 
-Every command run from this worktree at this head, exit codes captured
-directly (never through a pipe).
+Every command run from this worktree, exit codes captured directly (never
+through a pipe). **Measured at the round-3 head** — the table carries the round
+it was taken at because three of its cells were stale under a heading that
+claimed the head of the day (review round 3): it read 8,153 for 8,158 passed,
+1,810 for 1,813, and 38 for 40 at `7e6747c7`. The dated round-1 and round-2
+tables below are the record of THOSE heads and are not re-measured.
 
 | command | result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — 8,153 passed, 20 skipped, 3 xfailed; 4 import contracts kept, 0 broken; 73 work cards validated; 390 prompts in sync; 550 frontend tests; frontend build OK |
-| `.venv/bin/python -m mypy .` | Success: no issues found in 488 source files |
-| `.venv/bin/python -m ruff check .` / `ruff format --check .` | All checks passed / 517 files already formatted |
-| `.venv/bin/python -m pytest tests/meetings tests/api -q` | 1,810 passed, 2 skipped |
-| `.venv/bin/python -m pytest tests/meetings/test_grounding_label.py -q` | 38 passed |
-| `.venv/bin/python -m pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
-| `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
-| `.venv/bin/python scripts/build_sample_report.py --sample-dir replays/<set> --check` ×4 | consistent on all four sets |
-| `.venv/bin/python scripts/publish_process_scorecard.py --check` | consistent |
-| `.venv/bin/python scripts/validate_task_docs.py` | passed |
-| `.venv/bin/python scripts/check_doc_facts.py` | verified (4-switch experiment registry) |
-| `.venv/bin/python scripts/verify_ml_evidence.py` | offline, no FAIL rows |
-| `npm --prefix frontend test` / `run build` | 550 passed / built |
+| `bash scripts/check.sh` | exit 0 — 8,163 passed, 20 skipped, 3 xfailed; 4 import contracts kept, 0 broken; 73 work cards validated; 390 prompts in sync; 552 frontend tests; frontend build OK |
+| `uv run mypy .` | Success: no issues found in 488 source files |
+| `uv run ruff check .` / `ruff format --check .` | All checks passed / 517 files already formatted |
+| `uv run pytest tests/meetings tests/api -q` | exit 0 — 1,817 passed, 2 skipped |
+| `uv run pytest tests/meetings/test_grounding_label.py -q` | exit 0 — 43 passed |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | exit 0 — 25 passed |
+| `uv run pytest tests/agents tests/experiments -q` | exit 0 — 1,977 passed |
+| `bash scripts/verify_samples.sh` | exit 0 — 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check` ×4 | exit 0 — consistent on all four sets |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 — consistent |
+| `uv run python scripts/validate_task_docs.py` | exit 0 — 73 work cards |
+| `uv run python scripts/check_doc_facts.py` | exit 0 — 26-lever substrate registry, 4-switch experiment registry |
+| `uv run python scripts/generate_prompts.py --check` | exit 0 — all 390 prompts in sync |
+| `uv run python scripts/verify_ml_evidence.py` | exit 0 — 61 checks, 0 FAIL, 7 evidence-branch-absent |
+| `npm --prefix frontend test` / `run build` | 552 passed / built |
 
 No live provider call, no calibration, no recording, no re-record. Band
 2100-2999 was not generated or opened and
@@ -689,14 +814,23 @@ target moves must carry a retired reason, and its new target must equal the
 
 ### The planted failures
 
-Sixteen probes at the first head, and five more in
-[round 1](#review-corrections-round-1-2026-09-21) — twenty-one. Each neutered
-ONE production line, ran the selection, and was reverted; both counts are
-recorded. The claim at the first head, that every line this card changed in a
-production module had one, was WRONG: review round 1 found the
-provenance-boundary line (`meetings/manager.py:2352`) unprobed, and a
-perturbation of it left `tests/meetings tests/api` fully green. It has one now,
-and so does every line round 1 added.
+Sixteen probes at the first head, five more in
+[round 1](#review-corrections-round-1-2026-09-21), two in
+[round 2](#review-corrections-round-2-2026-09-21) and twenty new ones in
+[round 3](#review-corrections-round-3-2026-09-21) — forty-three. Round 3 also
+RE-MEASURED six lines an earlier round had already probed, because its new
+cases move their counts; those six carry both figures in the round-3
+call-surface table and are not counted again. Each probe neutered ONE
+production line, ran the selection, and was reverted; both counts are recorded.
+The claim at the first head, that every line this card changed in a production
+module had one, was WRONG, and was wrong twice more after that: round 1 found
+the provenance-boundary line (`meetings/manager.py:2352`) unprobed, round 2
+found the `_ballot_view` mirrors unprobed, and round 3 found four more — the
+labeller's `turns=` and `candidate_targets=` arguments, the `invalid_basis`
+row of `api/replay_loader.py`'s marker table, and the two `rewriteLabel` cases
+`BallotCard.tsx` gained. All four are planted now, and round 3's table is a
+walk of the whole call surface rather than of the lines a finding happened to
+name.
 
 | probe (line neutered) | perturbed | restored |
 | --- | --- | --- |
@@ -1079,4 +1213,196 @@ round either; band 2100-2999 was not generated or opened and
 `scripts/verify_ml_evidence.py --complete` was not run. No `audits/` or
 `tests/fixtures/` byte moved, so no `docs/artifacts.md` row is recomputed, and
 the `tasks/README.md` inventory sentence is unchanged because Status was
+already `done` before this round.
+
+### Review corrections, round 3 (2026-09-21)
+
+Three blocking findings from the round-3 verifiers, and the smaller items
+beside them. The first two are one defect reached twice: an argument of the
+labeller's call site that no test enforced. Answering them properly meant
+walking the WHOLE call surface this card added rather than the two lines the
+findings named, and that walk found two more — both green, both now planted.
+Every command quoted below was run from this worktree at this head.
+
+**1. `turns=transcript.turns` at the labeller's call site had no enforcing
+test.** Replacing it with `turns=()` in `_collect_vote` left the whole suite
+green (8,158 passed at `7e6747c7`), yet it is not a no-op:
+`citations_bear_on_any` resolves a cited turn id through `turns_by_id`, and an
+id that resolves to no turn bears on NOBODY, so an EJECT citing a real turn
+that names its target reads `supported` at head and `off_target` perturbed. The
+reason nothing caught it: every `supported` assertion in the tree was on the
+OBSERVATION channel (`prompt_lines`) or called the labeller directly with its
+own `turns`. `test_an_eject_citing_a_turn_that_names_its_target_is_supported`
+plants the turn channel through `MeetingManager`: p-1's opening accuses p-3, so
+`m-1:turn-0` names p-3, and p-1's ballot EJECTs p-3 citing that turn. The case
+asserts the cited turn is a real one of this meeting and that it is the turn
+naming the target BEFORE asserting the label, and the off-target twin — the
+same EJECT citing `m-1:turn-2`, where p-2 accuses p-4 and nothing names p-3 —
+sits beside it, so the pin is about ABOUTNESS and not about an id resolving.
+
+**2. `candidate_targets=candidate_targets` had none either.** Same
+perturbation class, different branch: `_ballot_grounding_subjects` returns the
+caller's `candidate_targets` for a SKIP that wrote down no alternatives — 23 of
+the 1,359 shipped 9p2i SKIPs — and with a citation present and an EMPTY subject
+pool `citations_bear_on_any` answers `False` by construction. So a SKIP citing
+an own-observation line that names a living candidate reads `supported` at head
+and `off_target` perturbed, and the suite stayed green.
+`test_a_skip_that_weighed_nobody_is_read_against_the_living_pool` plants it
+through the manager, with a twin citing a second own-observation line that
+names only the VOTER: `_candidate_targets` is the living roster MINUS the
+voter, so that citation bears on nobody in the pool. The twin is what makes the
+case a statement about the POOL rather than about a citation surviving.
+
+**The call surface, walked and probed.** Every argument of the labeller call,
+every argument of the `citations_bear_on_any` call inside it, all three
+branches of `_ballot_grounding_subjects`, and every other site this card added.
+Each row neutered ONE line, ran the selection, and was reverted.
+
+| site | line neutered | selection | perturbed | restored |
+| --- | --- | --- | --- | --- |
+| labeller call | `ballot=normalized` to `parsed` | `test_grounding_label.py` | 4 failed, 39 passed | 43 passed |
+| labeller call | `contradictions=` to `()` | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| labeller call | `candidate_targets=` to `()` — NEW | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| labeller call | `candidate_targets=` to `()` — NEW | `tests/meetings tests/api` | 1 failed, 1,816 passed, 2 skipped | 1,817 passed, 2 skipped |
+| labeller call | `citation_nulled=` to `False` | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| labeller call | `turns=` to `()` — NEW | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| labeller call | `turns=` to `()` — NEW | `tests/meetings tests/api` | 1 failed, 1,816 passed, 2 skipped | 1,817 passed, 2 skipped |
+| labeller call | `prompt_lines=` to `()` | `test_grounding_label.py` | 2 failed, 41 passed | 43 passed |
+| `citations_bear_on_any` | `cited_turn_id=` to `None` | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| `citations_bear_on_any` | `cited_observation_id=` to `None` | `test_grounding_label.py` | 2 failed, 41 passed | 43 passed |
+| `citations_bear_on_any` | `subjects=` to `(ballot.target,)` | `test_grounding_label.py` | 2 failed, 41 passed | 43 passed |
+| `citations_bear_on_any` | `turns_by_id=` to `{}` | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| `citations_bear_on_any` | `lines=` to `()` | `test_grounding_label.py` | 2 failed, 41 passed | 43 passed |
+| `_ballot_grounding_subjects` | the EJECT branch removed | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| `_ballot_grounding_subjects` | the `considered_alternatives` branch removed | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| `_ballot_grounding_subjects` | the `candidate_targets` fallback to `()` | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| the basis pre-pass | `_prepared_ballot_payload(...)` bypassed | `test_grounding_label.py` | 8 failed, 35 passed | 43 passed |
+| the basis pre-pass | `INVALID_BASIS_MARKER` never prepended | `test_grounding_label.py` | 7 failed, 36 passed | 43 passed |
+| the basis pre-pass | the provenance boundary read AFTER the prepend | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+| `_default_vote` | `grounding_label="not_assessed"` dropped | `test_grounding_label.py` | 2 failed, 41 passed | 43 passed |
+| `_ballot_view` | both mirrors to `None` | `tests/api` | 1 failed, 437 passed, 2 skipped | 438 passed, 2 skipped |
+| `api/replay_loader` marker table | the `invalid_basis` row dropped | `tests/api` | 438 passed, 2 skipped — GREEN | 438 passed, 2 skipped |
+| `api/replay_loader` marker table | the same, after the planted case | `tests/api` | 1 failed, 437 passed, 2 skipped | 438 passed, 2 skipped |
+| `training/surrogate` marker table | the `invalid_basis` row dropped | `tests/training` | 2 failed, 470 passed, 335 deselected | 472 passed, 335 deselected |
+| `eval/deduction_metrics` marker chain | the `invalid_basis` row dropped | `test_deduction_metrics.py` | 1 failed, 117 passed | 118 passed |
+| `BallotCard.tsx` `rewriteLabel` | the `off_target_coerced` + `invalid_basis` cases dropped | `PrivateReasoning.test.tsx` | 39 passed — GREEN | 39 passed |
+| `BallotCard.tsx` `rewriteLabel` | the same, after the planted cases | `PrivateReasoning.test.tsx` | 2 failed, 37 passed | 39 passed |
+| `vote_ballot.j2` | the skeleton pre-fills `"cited"` | `test_elicitation_fixtures.py` | 1 failed, 27 passed | 28 passed |
+| `vote_ballot_accounts.j2` | the skeleton pre-fills `"none_held"` | `test_public_account_prompts.py` | 2 failed, 92 passed | 94 passed |
+| `TestTheOnlyTargetRewrites` | the scan reads `node.args` only | `test_grounding_label.py` | 1 failed, 42 passed | 43 passed |
+
+Twenty-six perturbations. Six of them RE-MEASURE a line an earlier round had
+already probed — the pre-pass marker prepend, the provenance boundary, the
+`_default_vote` label, the `eval/deduction_metrics` row, the `_ballot_view`
+mirrors and the `considered_alternatives` branch — because this round's new
+cases move their counts; those six are not counted again in the card's running
+total, which reads forty-three.
+
+**The two the walk caught, and why each was invisible.** The `invalid_basis`
+row of `api/replay_loader._BALLOT_PREFIX_MARKERS` is the one row of that table
+a LIVE meeting can still add, and no committed recording carries it, so the
+real-bytes case could not reach it and the hand-built `BallotView` fixtures
+never parse a rationale at all. Unregistered, the front-to-back strip stops in
+front of the marker and the machinery's own sentence is served to the spectator
+as the voter's words. `test_parse_rewrite_reasons_uses_imported_markers` now
+asserts the row plain AND stacked in the order production writes it — the basis
+marker goes on at the top of the ballot chain, the teammate firewall prepends
+OUTSIDE it. The two `rewriteLabel` cases are the display twin of the same gap:
+`off_target_coerced` never fired on any recording and `invalid_basis` first
+mints at the re-record, so deleting either case degraded the chip to the
+generic "Recorded vote adjustment" with the suite green.
+
+**3. The undated Verification table was stale under a heading claiming this
+head.** At `7e6747c7` it read 8,153 where `check.sh` printed 8,158; 1,810 where
+`tests/meetings tests/api` printed 1,813; and 38 where
+`test_grounding_label.py` printed 40. Every cell is re-measured at THIS head
+below and the table now says which round it was measured at; the dated round-1
+and round-2 tables stay exactly as they were, as the record of those heads.
+
+**The skeleton stops pre-answering the basis.** `vote_ballot.j2:263` shipped
+`"decision_basis": "cited"` and `vote_ballot_accounts.j2:23` shipped
+`"decision_basis": "none_held"`, inside the JSON object each prompt tells the
+model to copy. This repo's own discipline forbids that — the `v5` accounts
+bullet in `agents/strategic/prompts/loader.py` states it for
+`primary_reason_id` ("the shape is shown in prose and never pre-filled into the
+object a model copies verbatim"), on the measured ground that 7 of the
+reference arm's 14 surviving citations were the id its skeleton pre-filled. It
+binds harder here than anywhere: the pre-filled token is the very thing this
+card exists to make the VOTER state, and a voter that edits `target` and leaves
+the rest alone would record a basis it never chose. Both skeletons now carry
+the KEY with a NULL value — the ballot still declares one — and both prose
+registers keep the two legal tokens unchanged and say the skeleton shows null.
+No further version bump: `vote_ballot` `v7` is unreleased (nothing is recorded
+on it) and `ACCOUNT_PROMPT_SET_REVISION` `v6` is the unreleased revision round
+1 opened for this card, so the same `v6` absorbs the edit —
+`test_no_committed_capture_already_carries_todays_account_stamps` is what says
+no capture carries it, `_PRE_V6_REVISIONS` is unchanged, and the v6 gate still
+passes because the edit touches none of the spans that gate names. The gate now
+asserts the null skeleton BESIDE them, so the revision and the body cannot
+drift apart. A null basis still labels honestly: `test_a_bare_skip_is_uncited`
+(SKIP) and `test_an_uncited_eject_survives_the_whole_production_chain` (EJECT)
+both run a `decision_basis` of `None` through the manager and read `uncited`.
+
+**The smaller items.** `TestTheOnlyTargetRewrites` scanned `node.args` only, so
+`ballot_target_rewrite_provenance(ballot, reason=...)` — an ordinary
+positional-or-keyword parameter — would have been visited and contributed
+nothing; the scan is now a shared helper reading `node.keywords` too, and
+`test_the_scan_sees_a_reason_passed_as_a_keyword` runs that REAL helper over a
+planted source carrying the keyword, dotted-keyword and positional forms.
+Decision 4's `state_hash_after` sentence is restated at the strength the code
+delivers, above and in the comment at the check itself: unweakened on the
+ENGINE leg, and no longer pinning the BALLOT leg at all, because the decision
+it applies is read as recorded. The running probe total counts rounds 2 and 3.
+Decisions 10 and 11 record the three files outside `## Expected scope` and the
+test pin that moved off `audits/deduction-candidate/execution-manifest.md`.
+
+**Citations, re-derived at this head after the last code edit.** Three were
+wrong and are corrected in Acceptance: `normalize_ballot_target`
+`meetings/voting.py:147` to `:152`, `coerce_teammate_ballot_to_skip`
+`meetings/manager.py:3531` to `:3628`, and the second anchored-match comment
+`eval/meeting_quality.py:981-985` to `:983-987` (the first, `:277-282`, was
+right). Re-derived by symbol and unchanged since round 2:
+`meetings/schemas.py` `decision_basis` 1010, `grounding_label` 1073,
+`under_gate_redirect` 886; `meetings/manager.py` the provenance boundary 2352,
+`cited_before_validation` 2376, the labeller call 2444, `citation_nulled` 2448,
+`_default_vote` 3001, `_LAYER_OWNED_BALLOT_FIELDS` 3027-3031,
+`_prepared_ballot_payload` 3054, `_ballot_grounding_subjects` 3703,
+`label_ballot_grounding` 3730; `meetings/voting.py` `tally_ballots` 192;
+`meetings/citation_relevance.py` `citations_bear_on_any` 143,
+`citations_bear_on` 216; `api/replay_loader.py` `_ballot_view` 3306 and the
+`invalid_basis` row 3612; `api/schemas.py` 1082-1083;
+`eval/deduction_metrics.py` 724; `training/surrogate/dataset.py` 208;
+`orchestrator/game.py` 435; `frontend/src/types/api.ts` 391-392;
+`agents/strategic/prompts/loader.py` `ACCOUNT_PROMPT_SET_REVISION` 1283 (moved
+by this round's history-bullet edit); `vote_ballot.j2` 3, 259, 262, 263;
+`vote_ballot_accounts.j2` 23. The `## Evidence` section's citations are NOT
+re-anchored and are not stale: they were taken on `main` before this card and
+several name constructs it then DELETED (`MeetingEvidenceProfile`'s
+`citation_relevance_version`, the guard call site at `:2412-2419`), so they are
+the record of what was found, which is what that section is for.
+
+**Verification at this head (round 3).** Commands run from this worktree, exit
+codes captured directly (never through a pipe).
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — 8,163 passed, 20 skipped, 3 xfailed; 4 import contracts kept, 0 broken; 73 work cards validated; 390 prompts in sync; mypy clean over 488 files; ruff clean and 517 files formatted; 552 frontend tests; frontend build OK |
+| `uv run pytest tests/meetings tests/api -q` | exit 0 — 1,817 passed, 2 skipped |
+| `uv run pytest tests/meetings/test_grounding_label.py -q` | exit 0 — 43 passed |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | exit 0 — 25 passed |
+| `uv run pytest tests/agents tests/experiments -q` | exit 0 — 1,977 passed |
+| `bash scripts/verify_samples.sh` | exit 0 — 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check` x4 | exit 0 — consistent on all four sets |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 — consistent |
+| `uv run python scripts/check_doc_facts.py` | exit 0 — 26-lever substrate registry, 4-switch experiment registry |
+| `uv run python scripts/generate_prompts.py --check` | exit 0 — all 390 prompts in sync |
+| `uv run python scripts/validate_task_docs.py` | exit 0 — 73 work cards |
+| `uv run python scripts/verify_ml_evidence.py` | exit 0 — 61 checks, 0 FAIL, 7 evidence-branch-absent |
+
+No live provider call, no calibration, no recording and no re-record in this
+round either; band 2100-2999 was not generated or opened and
+`scripts/verify_ml_evidence.py --complete` was not run. No recorded flag,
+sample report, scorecard figure, prompt archive or golden moved. No `audits/`
+or `tests/fixtures/` byte moved, so no `docs/artifacts.md` row is recomputed,
+and the `tasks/README.md` inventory sentence is unchanged because Status was
 already `done` before this round.
