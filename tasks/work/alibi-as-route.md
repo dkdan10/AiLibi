@@ -82,6 +82,44 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
+- [x] Review correction: the guarantee "what an accused says never decides
+  WHICH other voices' rows survive" is now STRUCTURAL, and the two items below
+  are superseded where they state a single per-subject TOTAL. Round 6 put the
+  raw label into `_alibi_row_sort_key` and ranked SOURCES by the position of
+  their newest row under that same key, so when an accused's newest row and a
+  rival's newest row tied on `(tick, canonical rooms)` the accused's own
+  SPELLING decided which source was fresher and took the last slot: with four
+  speakers, spelling `MEDBAY` as `medbay` cost `p-4` a contradicting row
+  (repro and before/after in the round-8 subsection). The same ranking also
+  falsified the row-level claim "a speaker can only ever displace their OWN
+  older rows" below the threshold. As built: a subject's SELF rows and the rows
+  OTHER players stated about it are selected in SEPARATE POOLS that are never
+  ranked against each other — `_MAX_RENDERED_ALIBIS` (3) for the self pool and
+  a new `_MAX_RENDERED_ALIBIS_FROM_OTHERS` (**4**, replacing
+  `_MAX_RENDERED_ALIBIS_PER_SUBJECT`) for the others pool, so the per-subject
+  bound is 3 + 4 = 7. Nothing the accused says — stays, ticks, spelling,
+  restatements — can change which of the other voices' rows render, and nothing
+  the others say can change which of the accused's own rows render. Among the
+  OTHER voices the guarantee is per VOICE, not per row: a voice is dropped only
+  when more than four distinct others have spoken about one subject, and then
+  the one whose newest row is stalest; below that a voice with several rows can
+  lose its OLDER rows to other voices' newer ones. Every ordering that decides
+  SELECTION is spelling-blind — `(tick, canonical rooms, source)` between
+  sources and `(tick, canonical rooms)` within one, the raw label only the last
+  tie-break between rows that are otherwise the same placement; the RENDER
+  order is `_alibi_row_sort_key` exactly as round 6 shipped it. Why 4,
+  re-measured at this head on the worst legal nine-player case under the NEW
+  rule (both pools saturated, so the fixture now carries self-alibis too): 56
+  rows, 1,469 estimated tokens, 31 of headroom, 36 elastic lines — 0.75 of the
+  48 the pre-card `32d0cae7` rule leaves, against 0.81 at 3 and 0.69 at 5. A
+  judgment about how much reported testimony may displace elastic memory in the
+  pathological corner, sized against the token budget and elastic retention
+  only, never role-correctness. Byte-neutral on the record: 5,256 subject
+  belief states, 0 renders differing from `32d0cae7` and 0 from round 5. Gate:
+  the same `::TestTheBeliefBlockCannotOutgrowTheTokenBudget`, re-pinned at the
+  new rule so that changing EITHER constant in EITHER direction turns it red,
+  plus two new property families closing the accused's reach and the
+  spelling-blindness of selection.
 - [x] Review correction: the per-SUBJECT total is a JUDGMENT, not a maximum,
   and it is **6**. The item below sized it by the rule "the largest value for
   which the worst legal nine-player case stays inside `DEFAULT_TOKEN_BUDGET`
@@ -699,6 +737,17 @@ prune and repairs a reversed range per segment, both keyed on field names.
   twice the per-source cap, and the round-7 sweep is published so the number can
   be moved against a curve rather than re-derived. Never sized against
   role-correctness.
+* **There is no single per-subject total any more** (round 8; supersedes the "6"
+  in the bullet above and round 6's 18). A single total keeps the accused and
+  the rivals in ONE ranking, and a ranking is something the accused can reach:
+  round 6's ranked sources by a key carrying the raw label, so the accused's own
+  SPELLING evicted a rival's row. The rows a subject states about ITSELF and the
+  rows others state about it are now separate POOLS, `_MAX_RENDERED_ALIBIS` (3)
+  and `_MAX_RENDERED_ALIBIS_FROM_OTHERS` (4), never ranked against each other,
+  so the guarantee stops depending on a fill order and becomes a fact about the
+  shape of the selection. The per-subject bound is their sum, 7. Both numbers
+  stay judgments and the round-8 sweep is published the same way. Never sized
+  against role-correctness.
 * **The deduction evaluation's dry-run paragraph is an archive.** Its figures are
   a function of the shipped prompt bytes, which this card moves. The evaluation
   is CLOSED (PR #473), so re-measuring the paragraph would re-score a closed
@@ -708,16 +757,16 @@ prune and repairs a reversed range per segment, both keyed on field names.
 ### Verification
 
 Run from a clean worktree at the head of this branch, re-measured at the
-ROUND-7 head (the dated round-1 to round-6 subsections below keep their own
-figures). Two cells moved against the round-6 measurement, both by the four
-tests round 7 adds; the two frontend cells marked below are the round-2
-measurement, because rounds 3 to 7 change detector geometry, a metric key and a
+ROUND-8 head (the dated round-1 to round-7 subsections below keep their own
+figures). Two cells moved against the round-7 measurement, both by the seven
+tests round 8 adds; the two frontend cells marked below are the round-2
+measurement, because rounds 3 to 8 change detector geometry, a metric key and a
 memory render only, and move no served byte.
 
 | command | result |
 | --- | --- |
-| `bash scripts/check.sh` | exit 0 — 8,270 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
-| `uv run pytest tests/meetings tests/agents -q` | 2,837 passed |
+| `bash scripts/check.sh` | exit 0 — 8,277 Python passed, 20 skipped, 3 xfailed; 532 frontend tests; 73 work cards validated |
+| `uv run pytest tests/meetings tests/agents -q` | 2,844 passed |
 | `uv run pytest tests/api tests/llm -q` | 765 passed, 19 skipped |
 | `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
 | `uv run pytest tests/scripts/test_counterfactual_phase21.py -q` | 112 passed |
@@ -810,6 +859,13 @@ Neither the count nor the membership moves on this branch.
   keeping the first spelling -- inert for the detectors, but the second label
   then does not reach a listener's belief row. Repros and reasons are in the
   round-5 subsection.
+  * **Round-8 note (2026-09-21).** The third residual's "keeping the first
+    spelling" is stale and has been since round 6: a merged stay keeps the
+    LEXICOGRAPHICALLY SMALLEST of the labels merged into it, non-spatial legs
+    included -- `UNKNOWN 2-5` + `NOWHERE 6-8` and its mirror both coalesce to
+    `NOWHERE 2-8`. The residual itself stands: whichever label loses still does
+    not reach a listener's belief row. The rule and its repro are in the round-6
+    subsection, under "As built, at the ONE normalisation point".
 
 ### Review corrections, round 1 (2026-09-20)
 
@@ -2342,3 +2398,373 @@ and still renders no committed byte differently. `docs/observation-contract.md`
 gains one sentence saying the total is twice the per-speaker cap and a judgment
 rather than the largest that fits; `check_doc_facts.py` stays verified.
 `docs/architecture.md` and `docs/glossary.md` are NOT touched.
+
+### Review corrections, round 8 (2026-09-21)
+
+One blocking finding and the documentation items beside it. Rounds 6 and 7 built
+a per-SUBJECT total and sized it; what they did not do is make the guarantee the
+total exists FOR independent of the accused. This round stops seeking it in the
+fill order and puts it in the SHAPE of the selection.
+
+Dates: rounds 6, 7 and 8 all carry 2026-09-21. All three were committed on the
+evening of 2026-09-20 US Eastern, which is 2026-09-21 UTC.
+
+**The finding: the accused's own SPELLING evicted a rival's contradicting row.**
+Round 6 put the raw label into `_alibi_row_sort_key`, and its round-robin ranked
+SOURCES by the POSITION of their newest row under that same key. When an
+accused's newest row and a rival's newest row tied on `(tick, canonical rooms)`,
+the RAW LABEL decided which source was "fresher" and so which one took the last
+slot. Repro at the round-7 head `c52c4159` through the production path
+(`derive_reported_testimony` -> `absorb_reported_testimony` ->
+`render_for_prompt`), listener `p-9`, subject `p-1`:
+
+```
+p-3  STORAGE 10-10
+p-4  LABS 29-29 | MEDBAY 30-30        <- the rival; its tick-29 row contradicts p-1
+p-5  CAFETERIA 40-40 | UPPER_HALL 41-41
+p-1  UPPER_HALL 29-29 | <label> 30-31
+
+                                     BEFORE (c52c4159)          AFTER (this head)
+p-1 narrates its stay as MEDBAY      p-4 keeps LABS@29, MEDBAY@30   MEDBAY@30
+p-1 narrates it as medbay            p-4 keeps MEDBAY@30            MEDBAY@30
+p-1 narrates it as MEDBAY_TRANSITION p-4 keeps MEDBAY@30            MEDBAY@30
+```
+
+Not present at `b22544ef`: round 5's per-source cap gave every voice its own
+rows and ranked nothing. The same ranking also falsified round 6's ROW-level
+claim that "a speaker can only ever displace their OWN older rows", below the
+threshold and on the same field — moving the accused's stay later makes it the
+fresher source:
+
+```
+                                     BEFORE (c52c4159)          AFTER (this head)
+p-1's stay at tick 20                p-4 keeps LABS@29, MEDBAY@30   MEDBAY@30
+p-1's stay at tick 30                p-4 keeps LABS@29, MEDBAY@30   MEDBAY@30
+p-1's stay at tick 35                p-4 keeps MEDBAY@30            MEDBAY@30
+```
+
+And the same defect at SEVEN voices, where the boundary falls between two whole
+VOICES rather than between two rows. Six others about `p-1`, `p-8`'s only row
+tied with the accused's newest on `(tick, canonical rooms)`:
+
+```
+p-4 LABS 40-40 | MEDBAY 41-41   p-5 CAFETERIA 39-39   p-6 REACTOR 38-38
+p-7 WEST_HALL 37-37             p-3 ADMIN 36-36       p-8 MEDBAY 30-30
+p-1 UPPER_HALL 29-29 | <label> 30-31
+
+                                     BEFORE (c52c4159)          AFTER (this head)
+p-1 narrates its stay as MEDBAY      p-8, p-3, p-7, p-6, p-5, p-4   p-7, p-6, p-5, p-4
+p-1 narrates it as medbay            p-3, p-7, p-6, p-5, p-4        p-7, p-6, p-5, p-4
+p-1 narrates it as MEDBAY_TRANSITION p-3, p-7, p-6, p-5, p-4        p-7, p-6, p-5, p-4
+```
+
+`p-8`'s presence in the block was the accused's to decide, by spelling one word.
+
+**As built: TWO POOLS that are never ranked against each other.** A subject's
+SELF rows (`alibi.source == subject`) are selected against `_MAX_RENDERED_ALIBIS`
+(3) alone; the rows OTHER players stated about that subject are selected against
+`_MAX_RENDERED_ALIBIS_FROM_OTHERS` (**4**, `agents/memory/store.py:231`), which
+REPLACES `_MAX_RENDERED_ALIBIS_PER_SUBJECT`. The per-subject bound is the two
+added, 3 + 4 = 7. `_format_alibi_suffix` now takes the `subject` keyword —
+`_build_belief_lines` knows whose belief line it is rendering — and the rendered
+whole-block order and row text are exactly as round 6 left them.
+
+Why this replaces the single round-robin total: a total keeps the accused and
+the rivals in ONE ranking, and a ranking is something the accused can reach.
+Rounds 5 and 6 each sought the guarantee inside the SELECTION — a per-source cap,
+then a round-robin fill — and it leaked both times, the second time through a
+sort key and through the very recency the round-robin is built on. Separate pools
+cannot leak, because the two sets are never compared. Consequence, stated
+plainly: NOTHING the accused says — how many stays, which ticks, which spelling,
+how often restated — can change which of the other voices' rows render, and
+nothing the others say can change which of the accused's own rows render. Among
+the OTHER voices the guarantee is per VOICE, not per ROW: a voice is dropped only
+when more than four distinct others have spoken about one subject, and then the
+one whose newest row is stalest; BELOW that, a voice with several rows can lose
+its OLDER rows to other voices' newer ones. That is what the four-speaker
+"after" column above shows — `p-4` keeps a voice, not both of its rows.
+
+**Selection is SPELLING-BLIND; the render order is not asked to be.** Every
+ordering that decides SELECTION now keeps the raw label strictly below a total
+tie-break: `_alibi_source_rank_key` (`:2672-2687`) is `(tick, canonical rooms,
+source)` between sources, and `_alibi_within_source_key` (`:2659-2669`) is
+`(tick, canonical rooms, raw room)` within one — where the raw label separates
+only two rows that are otherwise THE SAME PLACEMENT, so which LABEL survives a
+cut may differ between two wordings and which PLACEMENT does may not.
+`_alibi_row_sort_key` (`:2631-2656`) is unchanged and is now the RENDER order
+only. Round 6 made the render order spelling-independent and stopped there; the
+defect was that the same key was also the selection order.
+
+**Why 4, re-measured at THIS head.** The worst legal nine-player case MOVED with
+the rule, so it is re-measured rather than read off round 7's sweep: the self
+pool is reserved, so a fixture in which every living player only proxy-alibis
+saturates one pool and leaves the other empty. Here every living player
+proxy-alibis every other AND self-alibis, a three-stay route apiece, so both
+pools are full and every subject sits at 3 + 4 = 7 rows. "Elastic" is the lines
+the observations block actually keeps; "1st-hand" is how many of those are the
+agent's own rather than reported `[meeting]` rows; the ratio is against the 48
+elastic lines the pre-card `32d0cae7` rule leaves on the same case, measured
+live.
+
+| others pool | rows | est. tokens | headroom | elastic | ratio | 1st-hand | block |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 24 | 1,459 | 41 | 48 | 1.00 | 0 | alive |
+| 1 | 32 | 1,461 | 39 | 45 | 0.94 | 0 | alive |
+| 2 | 40 | 1,464 | 36 | 42 | 0.88 | 0 | alive |
+| 3 | 48 | 1,466 | 34 | 39 | 0.81 | 0 | alive |
+| **4** | **56** | **1,469** | **31** | **36** | **0.75** | **0** | **alive — shipped** |
+| 5 | 64 | 1,471 | 29 | 33 | 0.69 | 0 | alive |
+| 6 | 72 | 1,474 | 26 | 30 | 0.63 | 0 | alive |
+| 7 | 80 | 1,476 | 24 | 27 | 0.56 | 0 | alive |
+| 8 | 88 | 1,477 | 23 | 24 | 0.50 | 0 | alive |
+| 12 | 120 | 1,479 | 21 | 12 | 0.25 | 0 | alive |
+| 15 | 144 | 1,482 | 18 | 3 | 0.06 | 0 | alive |
+| 18 | 168 | 1,603 | -103 | 0 | 0.00 | 0 | over budget, SHED |
+
+**56 rows, 1,469 estimated tokens, 31 of headroom, 36 elastic lines.** The
+elastic section still pays about three lines per unit, as rounds 6 and 7 found.
+The number is a JUDGMENT about how much reported testimony may displace elastic
+memory in the pathological corner, sized against the token budget and ELASTIC
+retention only, never role-correctness — the same rule round 7 established, at
+the same two-thirds floor, now applied to the pool rather than to a total.
+First-hand retention is ZERO across the whole range, as round 7 measured; the
+caps are not its lever and no floor above zero is supportable on it here.
+
+Round 7's own sweep reproduces exactly when the fixture is restored to its
+proxy-only shape: at an others pool of 7 it reads 56 rows / 1,471 tokens / 29
+headroom / 36 elastic, which is round 7's row for a total of 7 cell for cell.
+The shipped case differs from it (1,469 / 31) because the widened fixture speaks
+81 turns instead of 72 and the elastic selector fills the remaining budget with
+different `[meeting]` rows; the belief block itself is the same 56 rows.
+
+**BYTE-NEUTRAL on the committed record.** Count-only, over the four committed
+sets, with the PRODUCTION `_format_alibi_suffix` at this head against verbatim
+copies of BOTH historical rules. The unit is one SUBJECT BELIEF STATE carrying
+an alibi at a meeting open, LIVING listeners only. Meetings are keyed by
+`(set, meeting)` because `meeting_id` collides across `replays/ml_corpus/4p1i`
+and `9p2i` at seed 1010.
+
+| set | subject belief states with an alibi | over the per-source cap | with >= 2 sources | differing from `32d0cae7` | differing from round 5 |
+| --- | --- | --- | --- | --- | --- |
+| `replays/samples/4p1i` | 0 | 0 | 0 | 0 | 0 |
+| `replays/samples/9p2i` | 1,446 (1,250 / 176 / 20 rows) | 0 | 40 | 0 | 0 |
+| `replays/ml_corpus/4p1i` | 0 | 0 | 0 | 0 | 0 |
+| `replays/ml_corpus/9p2i` | 3,810 (3,305 / 466 / 37 / 2 rows) | 2 | 28 | 0 | 0 |
+| total | 5,256 | 2 | 68 | 0 | 0 |
+
+672 meetings keyed by `(set, meeting)`. Every figure rounds 6 and 7 published
+reproduces, including round 7's correction of the `>= 2 sources` column to 68.
+The mechanical reason nothing moves: the widest subject anywhere holds FOUR
+rows, so the others pool (4) never binds, and the self pool IS the per-source
+cap, which is exactly what decided every committed render already.
+
+**The durable gate.** Two new property families in the round-4/5/6 idiom, plus
+three named example tests and the permutation family extended to both pools.
+
+| family | what is enumerated | what must be identical |
+| --- | --- | --- |
+| `::TestTheAccusedCannotMoveARivalsRow::test_no_account_the_accused_gives_moves_the_others_rows` | 56 self-row families against ONE fixed rival field of 6 rows over 4 voices: 0 to 6 rows; ticks tying with the field's 29/30/40/41, undercutting them and outrunning them; every spelling in `_spellings_of` on the tied rooms; restatements | the rendered NON-SELF rows, `(source, tick, room)` in order |
+| `::TestTheAccusedCannotMoveARivalsRow::test_no_field_of_rivals_moves_the_accuseds_own_rows` | the mirror: 7 rival fields (empty, the base field, twelve proxy voices, a thirty-row flood from one voice, three spellings of a four-row tied voice) against one fixed self account | the rendered SELF rows |
+| `::TestSelectionIsSpellingBlind::test_every_assignment_of_spellings_keeps_the_same_placements` | every assignment of canonically-equal spellings to ALL nine rows of ALL six sources — four self rows in four different rooms into a pool of three, five other voices all tied on one room into a pool of four — 19,683 narrations | the multiset of kept `(source, tick, canonical rooms)` |
+
+Beside them:
+
+* `::TestTheAccusedCannotMoveARivalsRow::test_the_round_seven_four_speaker_repro`
+  and `::test_the_four_speaker_repro_is_tick_blind_too` and
+  `::test_the_seven_voice_variant_of_the_four_speaker_repro` — the three exhibits
+  above, each driven through the PRODUCTION path and each carrying a
+  non-vacuity assertion that the others pool really binds.
+* `::TestTheOthersPoolIsFilledRoundRobin::test_the_permutations_reach_both_pools_at_their_bounds`
+  — NEW, beside the kept 120-permutation test: the same exhaustive permutation
+  shape where BOTH pools bind and every row ties on `(tick, canonical rooms)`,
+  so the tie-breaks are what decides selection rather than there being room for
+  everything.
+* `::TestTheBeliefBlockCannotOutgrowTheTokenBudget` — re-pinned at the new rule
+  on the widened fixture, with both constants spelled as literals so that
+  changing EITHER one in EITHER direction turns the class red.
+
+`tests/agents/test_reported_testimony.py` is 70 passed at this head (round 7
+recorded 63). No test is weakened, skipped or deleted; the corrections are
+declared below.
+
+**Round-8 planted failures.** Each applied to the tree, run, restored; the file
+restores to the same checksum. Counts are what pytest prints on
+`tests/agents/test_reported_testimony.py`, whose baseline is `70 passed`. No
+probe came back green on its first run.
+
+| # | production line neutered | perturbed | restored |
+| --- | --- | --- | --- |
+| r8a | the two pools MERGED back into one, filled round-robin against 3 + 4 | `7 failed, 63 passed` | `70 passed` |
+| r8b | source ranking back to the POSITION under `_alibi_row_sort_key` | `1 failed, 69 passed` | `70 passed` |
+| r8c | within-source recency back to the raw-label key `(tick, raw room)` | `1 failed, 69 passed` | `70 passed` |
+| r8d | `_MAX_RENDERED_ALIBIS_FROM_OTHERS` 4 -> 5 | `3 failed, 67 passed` | `70 passed` |
+| r8e | `_MAX_RENDERED_ALIBIS_FROM_OTHERS` 4 -> 3 | `3 failed, 67 passed` | `70 passed` |
+| r8f | `_MAX_RENDERED_ALIBIS` 3 -> 4 | `9 failed, 61 passed` | `70 passed` |
+| r8g | `_MAX_RENDERED_ALIBIS` 3 -> 2 | `9 failed, 61 passed` | `70 passed` |
+
+The self pool IS `_MAX_RENDERED_ALIBIS`, the same constant as the per-source
+cap, so r8f and r8g move both at once and are reported as such — that is why
+they redden nine tests rather than the three r8d/r8e do, and why five of r8f's
+nine are EARLIER rounds' per-source tests rather than round-8 ones
+(`::TestReviewFixes::test_rendered_alibis_are_capped_per_subject`,
+`::TestTheRoundFiveListenerExhibits::test_an_honest_four_stay_route_does_not_evict_a_rivals_row`,
+both `::TestTheAlibiCapIsPerSource` cases and the lone-speaker byte-neutrality
+case). r8g's nine differ by one: it also reddens the slow corpus-walk survival
+census, because two rows per source changes what the 9p2i corpus renders. r8b
+and r8c each
+redden exactly the spelling-blindness family, which is the property they are
+the mechanism for; r8a reddens the whole accused-cannot-reach family plus the
+worst-case pin and the stalest-voice test.
+
+**Every changed test expectation.** No test is weakened, skipped or deleted.
+
+| test | change |
+| --- | --- |
+| `::TestTheSubjectTotalIsFilledRoundRobin` | RENAMED `::TestTheOthersPoolIsFilledRoundRobin`. There is no per-subject total to fill any more; the class is about the OTHERS pool, and its docstring now says the guarantee there is per VOICE and not per row |
+| `::test_no_voice_is_zeroed_while_the_total_permits` | RENAMED `..._while_the_pool_permits`; the voice count reads `_MAX_RENDERED_ALIBIS_FROM_OTHERS` where it read the old total |
+| `::test_a_rivals_row_survives_a_flood_of_stays_and_of_proxy_speakers` | the proxy count is now `pool - 1` (the rival itself fills the last slot) and the kept-row count is the SUM of the two pools; the accused's thirty stays are now in a different pool from the rival, which is the point |
+| `::test_only_the_stalest_voice_goes_when_speakers_outnumber_the_total` | RENAMED `..._when_others_outnumber_the_pool`; the speaker count reads the others pool |
+| `::test_the_total_is_at_least_the_per_source_cap` | RENAMED `::test_the_others_pool_is_at_least_the_per_source_cap`. The SELF pool needs no such assertion: it IS `_MAX_RENDERED_ALIBIS`, so a lone self speaker is unaffected by construction |
+| `::test_the_selection_is_deterministic_under_every_permutation` | still 120 permutations; one row is re-attributed to the SUBJECT so the permutations cross both pools |
+| `::TestTheBeliefBlockCannotOutgrowTheTokenBudget` fixture | every living player now SELF-alibis as well as proxy-alibiing every other, because the WORST CASE moved: the round-6/7 fixture saturated the others pool only and left the self pool empty |
+| `::test_the_shipped_total_pins_its_measured_worst_case` | RENAMED `::test_the_shipped_pools_pin_their_measured_worst_case` and re-pinned: both constants as literals, 56 rows, 1,469 tokens, 31 headroom, 36 elastic lines |
+| `::test_the_elastic_section_holds_reported_rows_not_first_hand_ones` | the pinned line count is 39 -> 36; the round-7 finding it holds is unchanged |
+| `::test_first_hand_retention_does_not_move_with_the_total` | RENAMED `..._with_the_caps`; measured at others pools 0, 3, 4, 5 and 15 instead of at totals 3, 5, 6, 7 and 18. Retention is still 0 at every one |
+| `::test_the_elastic_block_clears_two_thirds_of_the_pre_card_comparator` | the comparator is now the VERBATIM `32d0cae7` function monkeypatched over the same memory, rather than a cap value that reproduced its row count — which the two-pool rule no longer can, because the self pool is reserved. The comparator still measures 48; shipped is 39 -> 36; the ratio is 0.81 -> 0.75 and the floor is unchanged |
+| `::test_the_case_really_is_the_worst_the_roster_allows` | the per-subject count is now the SUM of the two pools, and it gains a second non-vacuity assertion that the roster offers MORE other voices than the pool admits |
+| `::TestTheAlibiCapIsPerSource`, `::TestReviewFixes`, `::TestTheRoundFiveListenerExhibits` and every other earlier class | unchanged and green. `_format_alibi_suffix` gained a required `subject`, so the two row-level helpers were folded into one module-level `_rows_suffix` that passes it; `BeliefAlibiClaim.player_id` already carried the subject, so no case changed meaning |
+
+**Documentation corrections (the round-7 record-integrity lens).**
+
+* `agents/memory/store.py`, the per-subject constant's comment. It declined "a
+  nineteenth testimony row", which was true of round 6's 18 and false of round
+  7's shipped 6. The constant is replaced and the comment rewritten; every
+  sentence in it is measured at this head, and the clause now reads "a fifth
+  reported voice".
+* The same comment's closing "Sized against the TOKEN BUDGET and first-hand
+  retention only" contradicted its own finding that first-hand retention is 0 at
+  every value. It now reads ELASTIC retention, which is what the sweep measures
+  and what the two-thirds floor is against.
+* `_MAX_RENDERED_ALIBIS`'s comment (`agents/memory/store.py:152-172`) presented `subjects x sources x
+  this cap` as THE bound with no mention of the second one. It now says this cap
+  is the whole bound on the subject's OWN rows and is NOT the whole bound on the
+  block, names `_MAX_RENDERED_ALIBIS_FROM_OTHERS`, and states that the
+  per-subject bound is the two pools added.
+* `agents/memory/beliefs.py`'s two references to the suffix being "capped per
+  subject and SOURCE" (`PlayerBelief.alibis` and `BeliefState.record_alibi`) now
+  say per SOURCE, and name the two pools.
+* `docs/observation-contract.md`'s cap paragraph said the subject total is
+  filled round-robin and is twice the per-speaker cap. It now states the two
+  pools, the bound of seven, that selection never reads a room label above a
+  total tie-break, and that the per-voice guarantee among the others has a
+  per-row exception below the pool. It stays inside its word budget and
+  `check_doc_facts.py` stays verified.
+* This card's `### Limitations` said two contiguous non-spatial legs merge
+  "keeping the first spelling". False since round 6 (`min` of the labels). A
+  dated round-8 note is attached to that bullet, pointing at round 6's
+  restatement; the residual itself stands.
+* The census unit is stated in one clause everywhere it appears: subject belief
+  states carrying an alibi at a meeting open, LIVING listeners only.
+
+**Dated notes superseding earlier subsections.** The dated round-1 to round-7
+subsections keep their figures and sentences byte-identical; these are the
+notes.
+
+* **Round 6's row-level guarantee is FALSE below the threshold.** Its "As built"
+  paragraph and the comment it quotes say "a speaker can only ever displace
+  their OWN older rows". The repro above shows an accused claiming a later tick,
+  or spelling one word differently, costing a rival its older row with four
+  speakers — well below any threshold. The correct statement is the one this
+  subsection makes: the guarantee is per VOICE among the other voices, and
+  absolute only between the accused and everybody else, which is what the pools
+  buy.
+* **Round 6's and round 7's per-subject TOTAL of 18 and 6 are superseded.** There
+  is no single per-subject total. The bound is 3 + 4 = 7, as two pools. Round
+  7's sweep and round 6's are still correct measurements of the rule they
+  measured; they are not measurements of this one, because their fixture leaves
+  the self pool empty.
+* **Round 6's sort-key paragraph is right about what it fixed and silent about
+  what it did not.** `(tick, sorted canonical rooms, raw room, source)` made the
+  RENDER order spelling-independent, which is what that paragraph claims and
+  measures. The same key was also the SELECTION order, which is the round-7
+  finding; the two are separated here.
+* **Round 7's "the pin ... so ANY change to the constant turns the class red"
+  covered one constant.** It now covers both, and the probes exercise each in
+  both directions.
+* **Round 6's consumer-table citations into `agents/memory/store.py` are
+  stale.** Round 7 noted a +21-line shift; this round moves them again. The
+  table below is re-derived at THIS head.
+
+**The consumer table at THIS head, ranges derived mechanically.** Every range is
+the `ast` start/end line of the named function or class at this head, not a
+hand-read span. No classification changes this round. `agents/memory/store.py`
+and `agents/memory/beliefs.py` are the only source files in this round's diff.
+
+| site | unit | class |
+| --- | --- | --- |
+| `meetings/transcript.py:908-981` `maximal_stays` | the whole route | NORMALISATION — the one place a re-cut AND its spelling are erased |
+| `meetings/transcript.py:2553-2634` `_iter_alibis` | stays | DETECTS |
+| `meetings/transcript.py:2955-2966` `_claim_route_key` | stays + canonical rooms | DETECTS (IDENTITY) |
+| `meetings/transcript.py:1136-1164` `_route_self_refuted` | legs | DETECTS, already invariant |
+| `meetings/transcript.py:1979-2022` `_escape_untrusted_band_markers` | legs | REPORTS — it must see every word the speaker wrote |
+| `meetings/public_accounts.py:172-273` `_placements` | stays | DETECTS |
+| `meetings/public_accounts.py:78-91` `_validated_scopes` | legs | REPORTS — the allowlist reads each word |
+| `meetings/schemas.py:416-560` `AlibiClaim` validator + wrap serializer | legs | REPORTS — the record is what was SAID |
+| `meetings/manager.py:4334-4537` `derive_reported_testimony` | stays | IS-HELD-BY-A-LISTENER (round 5) |
+| `agents/memory/store.py:826-975` `absorb_reported_testimony` | per statement | IS-HELD-BY-A-LISTENER, invariant by the reduction |
+| `agents/memory/store.py:2400-2406` the `[meeting]` alibi line, inside `_render_reported_testimony` (`:2345-2429`) | per statement | IS-HELD-BY-A-LISTENER — this is what went 2 -> 14 |
+| `agents/memory/store.py:2547-2628` `_build_belief_lines` | per subject | IS-HELD-BY-A-LISTENER — the caller that now supplies `subject` |
+| `agents/memory/store.py:172` `_MAX_RENDERED_ALIBIS`, `:231` `_MAX_RENDERED_ALIBIS_FROM_OTHERS`, `:2631-2656` `_alibi_row_sort_key`, `:2659-2669` `_alibi_within_source_key`, `:2672-2687` `_alibi_source_rank_key`, `:2690-2785` `_format_alibi_suffix` | rows, capped per `(subject, source)` and selected in a SELF pool and an OTHERS pool | IS-HELD-BY-A-LISTENER — **round-8 blocking** |
+| `agents/memory/beliefs.py:965-997` `record_alibi` | per statement | IS-HELD-BY-A-LISTENER |
+| `agents/memory/evidence_context.py:335-586` `v2_evidence_context_rows` reported placements | per statement | IS-HELD-BY-A-LISTENER, invariant by the reduction |
+| `eval/alibi_fabrication.py:252-276` `_impostor_alibi_keys` | stays + canonical rooms | SCORES (round 5) |
+| `eval/process_scorecard.py:1013-1044` `_flag_scored_claim_truth` | stays | SCORES |
+| `eval/process_scorecard.py:971-1010` `_claim_truth` | legs | SCORES, already invariant — it compares RAW room text to the engine's room id |
+| `eval/process_scorecard.py:1497-1508` `multi_tick` | route outer endpoints | SCORES, already invariant — merging never moves an outer endpoint |
+| `eval/evidence_honesty.py:2278-2312` `_leg_under_sighting` | stays | SCORES |
+| `scripts/counterfactual_phase21.py:2229-2290` `_accounts_reaching_the_map`, `:2293-2301` `_ingest_rows` | per statement | SCORES (round 6) |
+| `api/replay_loader.py:3219-3263` `_statement_claim_view` | legs | REPORTS — the served DTO mirrors the wire surface |
+| `api/schemas.py:712-717` `AlibiSegmentView`, `:720-778` `AlibiClaimView` | legs | REPORTS |
+| `experiments/lab/deception_battery.py:181-204` `_self_alibis` | legs | REPORTS — a probe of what a model AUTHORED |
+
+**Round-8 residuals, recorded and NOT changed.** Rounds 5, 6 and 7's stand,
+except the round-5 third restated above. One more:
+
+* **The others pool is a bound on VOICES first and on rows second.** Below five
+  distinct other speakers every voice keeps a row, and past that the stalest
+  voice goes; but a voice that spoke several times can lose its older rows to
+  another voice's newer ones at any load, which is the round-robin working as
+  designed and is what the four-speaker exhibit's "after" column shows. Closing
+  that would mean reserving a slot per voice, which bounds the block at
+  `others x 1` and discards the recency ordering the card's own exhibits rest
+  on. No finding asked for it.
+
+**Round-8 gate.** Measured at this head, from this worktree.
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — ruff `520 files already formatted` + `All checks passed!`, `lint-imports` 4 contracts kept / 0 broken, `validate_task_docs.py` 390 historical phase tasks and 390 prompts plus 73 work cards, `mypy` Success on 491 source files, `8,277 passed, 20 skipped, 3 xfailed` in 3:14, frontend 20 test files / 532 tests, build green |
+| `uv run pytest tests/meetings tests/eval tests/agents tests/experiments tests/api tests/scripts/test_counterfactual_phase21.py -q` | 5,196 passed, 3 skipped (round 7: 5,189 / 3 — the seven new tests) |
+| `uv run pytest tests/meetings tests/agents -q` | 2,844 passed (round 7: 2,837) |
+| `uv run pytest tests/agents/test_reported_testimony.py -q` | 70 passed (round 7: 63) |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 23 passed |
+| `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on `replays/{samples,ml_corpus}/{4p1i,9p2i}` |
+| `uv run python scripts/publish_process_scorecard.py --check` | consistent |
+| `uv run python scripts/check_doc_facts.py` | verified |
+| `uv run python scripts/validate_task_docs.py` | passed |
+| `uv run python scripts/verify_ml_evidence.py` | 61 checks, OK 49, FAIL 0, ABSENT 7, INFO 5 |
+
+Nothing recorded moved.
+
+**Round-8 record impact.** None. No file under `replays/`, `audits/` or
+`tests/fixtures/` is in the diff; no prompt stamp and no served contract stamp
+moves; `tests/meetings/test_prompt_byte_golden.py` is green. The Constraints
+stamp/lever sentence covers this round exactly as it covered rounds 6 and 7 —
+the reachable non-committed state it names is now "a subject with more than
+three rows of its own, or more than four other voices" instead of "more than 6
+rows, or more than 6 speakers", which is a strictly wider set of states and
+still renders no committed byte differently; the census measures it at 0 of
+5,256. `docs/observation-contract.md`'s cap paragraph is rewritten for the two
+pools and `check_doc_facts.py` stays verified. `docs/architecture.md` and
+`docs/glossary.md` are NOT touched.
