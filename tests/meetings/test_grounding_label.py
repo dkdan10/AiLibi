@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from dataclasses import replace
 from pathlib import Path
+from typing import Final
 
 import pytest
 from pydantic import BaseModel
@@ -47,7 +48,10 @@ from meetings.manager import (
     label_ballot_grounding,
 )
 from meetings.schemas import (
+    AlibiClaim,
+    AlibiSegment,
     BallotGroundingLabel,
+    Claim,
     ContradictionRef,
     MeetingResult,
     VoteBallot,
@@ -144,16 +148,32 @@ def _ballot_payload(
 
 def _responder(
     ballots: dict[str, dict[str, object]],
+    *,
+    accusations: dict[str, str | None] | None = None,
+    claims_by: dict[str, tuple[Claim, ...]] | None = None,
 ) -> Callable[[str, type[BaseModel] | None], str]:
     """Drive every turn to a bare opening and every vote off ``ballots``.
 
     A voter with no entry casts a bare SKIP, which is the shipped default shape
     and keeps each planted case to the one ballot it is about.
+
+    ``accusations`` and ``claims_by`` are the turn-side knobs the flag cases
+    need: a contradiction is DETECTED from the transcript, never injected, so
+    the only way to reach ``flag_only`` through the production chain is to make
+    two turns say incompatible things about one player.
     """
+
+    accusations = accusations or {}
+    claims_by = claims_by or {}
 
     def _respond(prompt: str, schema: type[BaseModel] | None) -> str:
         if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
-            return _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+            speaker = _extract_marker(prompt, "agent_id=")
+            return _turn_json(
+                speaker=speaker,
+                accuses=accusations.get(speaker),
+                claims=claims_by.get(speaker, ()),
+            )
         if "PHASE=VOTE" in prompt:
             voter = _extract_marker(prompt, "voter=")
             spec = dict(ballots.get(voter, {"target": "SKIP"}))
@@ -162,6 +182,29 @@ def _responder(
         raise AssertionError(f"unrecognised prompt: {prompt!r}")
 
     return _respond
+
+
+#: The two turn bodies that make the transcript contradict itself about p-3:
+#: one speaker puts p-3 in STORAGE across ticks 100-200, another in CAFETERIA
+#: inside that window. ``detect_contradictions`` mints one ``alibi_conflict``
+#: whose ``subjects`` is ``("p-3",)`` -- the flag ``flag_only`` reads.
+_FLAG_ACCUSATIONS: Final[dict[str, str | None]] = {"p-1": "p-2", "p-2": None}
+_FLAG_CLAIMS: Final[dict[str, tuple[Claim, ...]]] = {
+    "p-1": (
+        AlibiClaim(
+            type="alibi",
+            subject="p-3",
+            route=(AlibiSegment(room="STORAGE", from_tick=100, to_tick=200),),
+        ),
+    ),
+    "p-2": (
+        AlibiClaim(
+            type="alibi",
+            subject="p-3",
+            route=(AlibiSegment(room="CAFETERIA", from_tick=150, to_tick=180),),
+        ),
+    ),
+}
 
 
 @dataclass
@@ -409,6 +452,46 @@ class TestEveryBallotDeclaresItsBasis:
             "EJECTED",
             "p-3",
         )
+
+    def test_a_declared_none_held_outranks_a_flag_on_the_target(self) -> None:
+        # Case 10, review round 2: the one ordering the precedence list calls
+        # deliberate, and the only pair of branches whose ORDER is a ruling
+        # rather than an arithmetic necessity. A voter that says it holds
+        # nothing must not be upgraded by the layer reading a flag on its
+        # behalf, so `none_held` sits ABOVE `flag_only` -- swap the two branches
+        # and this case reads `flag_only`. Driven through the manager chain
+        # because the flag has to be DETECTED from the transcript for the
+        # ordering to be exercised where it ships.
+        result, _ = _run_meeting(
+            _responder(
+                {"p-1": {"target": "p-3", "decision_basis": "none_held"}},
+                accusations=_FLAG_ACCUSATIONS,
+                claims_by=_FLAG_CLAIMS,
+            ),
+            participants=_roster(),
+        )
+
+        # The flag the layer could have upgraded this ballot with is real, was
+        # minted this meeting, and names this ballot's target.
+        assert [flag.subjects for flag in result.contradictions] == [("p-3",)]
+        ballot = _p1(result)
+        assert ballot.target == "p-3"
+        assert ballot.decision_basis == "none_held"
+        assert ballot.grounding_label == "none_held"
+
+        # Non-vacuous: the SAME meeting with the SAME flag, minus the voter's
+        # own word, is the `flag_only` half. Without this half the assertion
+        # above would also pass on a build that never reached `flag_only`.
+        flagged, _ = _run_meeting(
+            _responder(
+                {"p-1": {"target": "p-3"}},
+                accusations=_FLAG_ACCUSATIONS,
+                claims_by=_FLAG_CLAIMS,
+            ),
+            participants=_roster(),
+        )
+        assert [flag.subjects for flag in flagged.contradictions] == [("p-3",)]
+        assert _p1(flagged).grounding_label == "flag_only"
 
     def test_an_uncited_eject_survives_the_whole_production_chain(self) -> None:
         # The same ruling at the chokepoint rather than on the pure function:

@@ -274,10 +274,12 @@ _BALLOT_REDIRECT_MARKER_PREFIX: Final[str] = BALLOT_TARGET_REDIRECT_MARKER.split
 #   itself contains the marker's tail (``... coerced to SKIP] ``): the
 #   quote-matching consumes the whole repr first, so the match ends at the
 #   REAL marker boundary, not inside the payload.
-# * Anchored ``^`` because the citation gate is the LAST guard in the
-#   manager's ballot chain (Task 16.6), so the coercion marker is always the
-#   OUTERMOST prefix; any stacked 16.5/16.6-era markers (e.g. a nulled
-#   :data:`~meetings.manager.INVALID_OBSERVATION_ID_MARKER`) ride INSIDE it.
+# * Anchored ``^`` because the citation gate RAN LAST in the manager's ballot
+#   chain (Task 16.6), so on every recording that carries it the coercion
+#   marker is the OUTERMOST prefix; any stacked 16.5/16.6-era markers (e.g. a
+#   nulled :data:`~meetings.manager.INVALID_OBSERVATION_ID_MARKER`) ride
+#   INSIDE it. Ruling D6 of 2026-09-19 retired that gate, so the anchor is a
+#   statement about recorded bytes and no live path adds a marker outside it.
 # * Mirrors :func:`api.replay_loader._marker_pattern`, replicated locally
 #   because that helper is private to the api layer (a cross-layer import of
 #   it would couple eval to api internals).
@@ -978,10 +980,11 @@ def _iter_skip_ballot_views(game: GameReport) -> Iterator[_SkipBallotView]:
             # ruling: a forced eject poisons the decision channel the
             # verdict hinges on). The role- and verdict-blind divert
             # matches the invalid-target / teammate precedent. The
-            # anchored match is sound because the citation gate is the
-            # LAST guard in the manager's ballot chain, so this marker is
-            # always the outermost prefix; any stacked 16.5/16.6 markers
-            # ride inside it.
+            # anchored match is sound because the citation gate RAN LAST in
+            # the manager's ballot chain, so on the recordings that carry
+            # it this marker is the outermost prefix; any stacked 16.5/16.6
+            # markers ride inside it. Ruling D6 of 2026-09-19 retired the
+            # gate, so no recording made after it reaches this branch.
             elif _UNCITED_ZERO_FLAG_MARKER_PATTERN.match(ballot.rationale_text):
                 category = "citation_coerced"
             elif rendered_max is None:

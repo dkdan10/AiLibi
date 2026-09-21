@@ -1987,8 +1987,10 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
 
     While any set reads below 1.0 the module may not call the rate structurally
     pinned. That claim was true of a substrate where the only eject path ran
-    through the contradiction detector; since the citation gate it is not, and
-    the committed reports are what say so.
+    through the contradiction detector; since the citation gate it is not --
+    and less so since ruling D6 of 2026-09-19 retired that gate's coercion, so
+    an uncited EJECT now reaches the tally labelled rather than rewritten. The
+    committed reports are what say so.
     """
 
     module = read_document(repo_root, _VOTE_CORRECTNESS_MODULE, errors)

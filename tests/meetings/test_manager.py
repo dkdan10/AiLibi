@@ -826,9 +826,11 @@ class TestVotingAndResolution:
         assert result.ejected_player_id is None
 
     def test_eject_on_plurality(self) -> None:
-        # EJECT ballots cite the opening turn: the graduated citation gate
-        # (16.6, unconditional since 16.17) coerces an UNCITED zero-flag
-        # eject, and the mechanism under test here is the tally, not the gate.
+        # EJECT ballots cite the opening turn. They were written that way for
+        # the Task-16.6 citation gate, which coerced an UNCITED zero-flag eject
+        # to SKIP; ruling D6 of 2026-09-19 retired that coercion outright, so
+        # today the citations only keep the ballots labelled `supported` rather
+        # than `uncited`. Either way the mechanism under test is the tally.
         result, _ = _run_meeting(
             _make_responder(
                 vote_targets={"p-1": "p-3", "p-2": "p-3", "p-3": "SKIP", "p-4": "p-3"},

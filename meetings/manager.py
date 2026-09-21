@@ -825,7 +825,8 @@ class MeetingParticipant:
     ``persona`` (Task 16.3) is the inert persona-text slot: the orchestrator
     populates it from the deterministic persona-assignment bank in Task 16.9,
     and Task 16.16 renders it into the report / statement / ballot prompts
-    (evidence-gated, after the citation gate). The manager threads it verbatim
+    (evidence-gated, and ordered after what was then the Task-16.6 citation
+    gate -- retired by ruling D6 of 2026-09-19). The manager threads it verbatim
     into every render seam as the ``persona`` kwarg the widened renderer
     Protocols accept. The default ``""`` keeps every existing construction site
     valid and renders byte-identically until 16.16 edits the templates (the

@@ -1394,8 +1394,10 @@ class TestFlagged:
     _CHARGE = _transcript(_turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)))
 
     def test_the_field_reads_the_flags_not_a_suspicion_value(self) -> None:
-        # The same zero-flag predicate ``guard_ballot_citation`` uses: a
-        # contradiction naming the subject in ``subjects``, nothing else.
+        # The same zero-flag predicate the retired ``guard_ballot_citation``
+        # used and :func:`meetings.manager.label_ballot_grounding` now reads for
+        # its ``flag_only`` label (ruling D6 of 2026-09-19): a contradiction
+        # naming the subject in ``subjects``, nothing else.
         assert _row(_ledger(self._CHARGE), "p-5").flagged is False
         assert (
             _row(
@@ -1950,9 +1952,11 @@ class TestRender:
         )
 
     def test_the_flag_clause_states_both_polarities(self) -> None:
-        # The zero-flag half of the case, read off the flags exactly as
-        # ``guard_ballot_citation`` reads them and stated symmetrically, so the
-        # row does not lean either way on its own.
+        # The zero-flag half of the case, read off the flags exactly as the
+        # retired ``guard_ballot_citation`` read them -- and as
+        # :func:`meetings.manager.label_ballot_grounding` reads them since
+        # ruling D6 of 2026-09-19 -- and stated symmetrically, so the row does
+        # not lean either way on its own.
         unflagged = _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
         )

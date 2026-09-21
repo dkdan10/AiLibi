@@ -32,6 +32,7 @@ from api.main import create_app
 from api.replay_loader import (
     _COLOR_PALETTE,
     _advantage_view,
+    _ballot_view,
     _color_for,
     _contradiction_view,
     _gate_view,
@@ -430,6 +431,48 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
         + "real rationale"
     )
     assert _parse_rewrite_reasons(nasty) == (("invalid_target",), "real rationale")
+
+
+def test_ballot_view_mirrors_the_stated_basis_and_the_layers_finding() -> None:
+    """The loader seam ruling D6 of 2026-09-19 added, planted (review round 2).
+
+    ``_ballot_view`` is the ONE place a recorded :class:`VoteBallot` becomes the
+    served :class:`BallotView`, and the frontend cases build ``BallotView``
+    fixtures by hand, so nothing downstream of here notices if the two new
+    fields stop being copied: the leak test pins their NAMES against a
+    frozenset, and every committed recording reads ``None`` for both. Replace
+    either mirror with a literal ``None`` and this case goes red; without it the
+    chip would silently never render after the re-record.
+    """
+
+    ballot = VoteBallot(
+        voter="p-1",
+        target="p-3",
+        confidence=0.8,
+        primary_reason_id="m-1:turn-0",
+        primary_reason_observation_id="p-1:4:0",
+        considered_alternatives=("p-2", "p-3"),
+        rationale_text="they cannot have been in STORAGE.",
+        decision_basis="cited",
+        grounding_label="supported",
+    )
+
+    view = _ballot_view(ballot)
+
+    assert view.decision_basis == "cited"
+    assert view.grounding_label == "supported"
+    # Served, not merely held: both keys reach the payload the spectator reads.
+    served = view.model_dump()
+    assert served["decision_basis"] == "cited"
+    assert served["grounding_label"] == "supported"
+
+    # The other half of the same seam, and what every committed recording
+    # takes: a ballot predating the fields serves ``None`` for both, which is
+    # what keeps the shipped pages byte-unchanged until the re-record.
+    legacy = _ballot_view(ballot.model_copy(update={"grounding_label": None}))
+    assert legacy.grounding_label is None
+    unstated = _ballot_view(ballot.model_copy(update={"decision_basis": None}))
+    assert unstated.decision_basis is None
 
 
 def test_ballot_markers_parse_on_the_real_9p2i_set(

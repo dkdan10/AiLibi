@@ -82,6 +82,51 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
 
 ## Acceptance
 
+- [x] Review correction: the `none_held`-over-`flag_only` ordering has the
+  planted case it exists for. An EJECT onto a target carrying a contradiction
+  detected THIS meeting, whose voter declared `decision_basis="none_held"`,
+  labels `none_held`; the same meeting and the same flag without the voter's
+  word labels `flag_only`. Both run the manager chain, and the flag is detected
+  from the transcript rather than injected. Proved by
+  `tests/meetings/test_grounding_label.py::TestEveryBallotDeclaresItsBasis::test_a_declared_none_held_outranks_a_flag_on_the_target`
+  (probe: lift the `flag_only` branch above the `none_held` one —
+  `1 failed, 39 passed`).
+- [x] Review correction: the spectator mirror in `_ballot_view` is an enforced
+  production line. `tests/api/test_view_model.py::test_ballot_view_mirrors_the_stated_basis_and_the_layers_finding`
+  drives a `VoteBallot` carrying both fields through the loader seam and asserts
+  both survive into the served payload, with the `None` half beside it (probe:
+  replace both mirrors with `None` — `1 failed, 437 passed, 2 skipped` over
+  `tests/api`).
+- [x] Review correction: the prose sweep is finished against the RETIRED SYMBOL
+  names and case-insensitively, not only against the round-1 phrases.
+  `tests/meetings/test_manager.py:829-833` no longer says the gate coerces in
+  the present tense, and `eval/meeting_quality.py:277-282` / `:981-985` no
+  longer say the citation gate IS the last guard in the live chain. The closing
+  greps and their exact results are quoted in the round-2 Results subsection;
+  no test pins prose, so the enforcing check is the grep.
+- [x] Review correction: the four live-tense references to the deleted
+  `guard_ballot_citation` are swept the way `eval/meeting_quality.py:114` was —
+  `tests/eval/test_meeting_quality.py:5-11` and `:291-297`,
+  `tests/meetings/test_corroboration.py:1397-1400` and `:1955-1959`, and
+  `tests/experiments/test_fresh_deduction_instrument.py:10153-10158` — each now
+  naming the retirement rather than a live function.
+- [x] Review correction: the retired `citation_gate` key carries the history
+  line the lever-retirement procedure requires, at `_RETIRED_ALWAYS_ON_LEVERS`
+  (`orchestrator/replay.py:982-990`) and in the `.env.example` graduated-levers
+  note (`.env.example:120-126`), and the false "unconditionally ON" claim is
+  corrected at `orchestrator/replay.py:973` and `:1259`. The key STAYS, because
+  dropping it would shift `SUBSTRATE_FLAG_KEYS` and move every committed
+  MANIFEST `flags` cell; Record impact declares that from the re-record that
+  cell keeps reading `citation_gate` true for a retired mechanism. Pinned by
+  `tests/orchestrator/test_replay.py` (111 passed) and
+  `scripts/check_doc_facts.py` (the note still labels the class always-ON).
+- [x] Review correction: the ten stale file:line citations in Results resolve
+  at this head. Re-measured by SYMBOL after every code edit of this round, so
+  `meetings/schemas.py:1010` / `:1073` / `:886`, `meetings/manager.py:2352` /
+  `:2376` / `:3001` / `:3027-3031` / `:3054` / `:3703` / `:3730`,
+  `meetings/voting.py:192` and `api/replay_loader.py:3612` are the true lines;
+  the round-1 subsection's `_LAYER_OWNED_BALLOT_FIELDS` and provenance-boundary
+  citations move with them.
 - [x] Review correction: `INVALID_BASIS_MARKER` is registered in the eval
   marker-chain table (`eval/deduction_metrics.py:724`), so the machinery's own
   sentence stays on the machinery side of the provenance split instead of being
@@ -89,7 +134,7 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   `tests/eval/test_deduction_metrics.py::test_the_invalid_basis_marker_is_read_as_machinery_not_as_the_voter`
   (probe: drop the row — `1 failed, 117 passed`).
 - [x] Review correction: the provenance-boundary line
-  (`meetings/manager.py:2351`) has a probe. `test_a_fabricated_basis_survives_the_teammate_redaction`
+  (`meetings/manager.py:2352`) has a probe. `test_a_fabricated_basis_survives_the_teammate_redaction`
   (`tests/meetings/test_grounding_label.py`) drives an impostor voter naming a
   teammate with an out-of-set `decision_basis` and asserts the redacted
   invalid-basis marker survives the firewall redaction; the card's universal
@@ -363,6 +408,19 @@ recording can be misread. The accounts bodies are not `vote_ballot`'s: the
 `v7` bump above is still `vote_ballot` ALONE, and the weighing card's `v8`
 is unaffected.
 
+A SUBSTRATE-STAMP cell changes meaning without moving, declared in review round
+2: the `citation_gate` key stays in `_RETIRED_ALWAYS_ON_LEVERS`, so every
+recording and every MANIFEST `flags` cell keeps asserting `citation_gate` true
+— from the re-record for a mechanism this build no longer runs, because ruling
+D6 retired the coercion that key named. The key is kept deliberately: dropping
+it would shift `SUBSTRATE_FLAG_KEYS` and move the `flags` cell of all four
+committed MANIFESTs, which this card forbids. It now carries the one history
+line [the lever-retirement procedure](../../docs/agent-procedures.md#retiring-substrate-levers)
+requires, in the registry comment and in the `.env.example` note, so a reader
+of a post-merge stamp is told what the cell does and does not mean. No
+committed byte moves here: the stamp's SHAPE, key order and values are
+unchanged.
+
 ## Validation
 
 `uv run pytest tests/meetings tests/api tests/agents tests/orchestrator
@@ -402,18 +460,18 @@ alibi card, so nothing here needed a stop-and-report.
 ### What changed
 
 **Every ballot declares a basis.** `ModelAuthoredVoteBallot` gains
-`decision_basis: BallotDecisionBasis | None = None` (`meetings/schemas.py:1006`),
+`decision_basis: BallotDecisionBasis | None = None` (`meetings/schemas.py:1010`),
 with the closed set as a named alias at `:969` so the schema and the pre-pass
 cannot disagree about it. `None` is what every committed recording parses to
 and means the voter answered nothing; `"none_held"` is its explicit statement
 that it holds nothing that resolves. An out-of-set token is dropped from the
 raw payload before validation by `_prepared_ballot_payload`
-(`meetings/manager.py:3049`, the renamed pre-pass that strips the layer-owned
+(`meetings/manager.py:3054`, the renamed pre-pass that strips the layer-owned
 keys), which reports the dropped value so the call site prepends
-`INVALID_BASIS_MARKER` (`:438`) at `meetings/manager.py:2351` — after taking a
+`INVALID_BASIS_MARKER` (`:438`) at `meetings/manager.py:2352` — after taking a
 copy of the model's own body, so the marker survives the teammate firewall's
 rationale redaction instead of being redacted as model prose. The marker is
-registered as the `invalid_basis` spectator chip (`api/replay_loader.py:3610`),
+registered as the `invalid_basis` spectator chip (`api/replay_loader.py:3612`),
 so it never reaches `rationale_text_clean`.
 
 **The suspicion-argmax redirect is retired outright.**
@@ -422,7 +480,7 @@ site and the four test classes pinning it are deleted, and
 `tests/meetings/test_manager_gate_band.py` goes with them.
 `BALLOT_TARGET_REDIRECT_MARKER` (`meetings/manager.py:333`) and the
 `under_gate_redirect` member of `BallotTargetRewriteReason`
-(`meetings/schemas.py:885`) survive as read-only history, both re-documented as
+(`meetings/schemas.py:886`) survive as read-only history, both re-documented as
 such, because 83 committed ballots carry the marker and four consumers parse
 it. `TestTheRetiredGuardsMintNothing` walks `agents/`, `api/`, `eval/`,
 `meetings/`, `orchestrator/` and `training/` with `ast` and fails on any
@@ -431,17 +489,17 @@ case runs the same scan over `INVALID_REASON_ID_MARKER` and asserts it finds
 one, so an empty result is a fact about the tree and not about the scanner.
 
 **`guard_ballot_citation` became `label_ballot_grounding`**
-(`meetings/manager.py:3725`) and rewrites nothing. It writes one
-`grounding_label` (`meetings/schemas.py:1069`, alias at `:923`) on `VoteBallot`
+(`meetings/manager.py:3730`) and rewrites nothing. It writes one
+`grounding_label` (`meetings/schemas.py:1073`, alias at `:923`) on `VoteBallot`
 only, in the card's precedence, and returns a ballot identical in every other
 field. The subject is the EJECT's target and, for a SKIP,
 `considered_alternatives` when non-empty and `candidate_targets` otherwise
-(`_ballot_grounding_subjects`, `:3698`). `invalid_citation` is separated from
+(`_ballot_grounding_subjects`, `:3703`). `invalid_citation` is separated from
 `uncited` by `citation_nulled`, computed at the call site
-(`meetings/manager.py:2374` and `:2447`) from the ballot before and after the
+(`meetings/manager.py:2376` and `:2448`) from the ballot before and after the
 two citation validators.
 
-**The tally is untouched.** `tally_ballots` (`meetings/voting.py:187`) takes no
+**The tally is untouched.** `tally_ballots` (`meetings/voting.py:192`) takes no
 new argument and its body names no label; the decision and its reason are
 recorded in its docstring.
 `TestTheTallyNeverReadsTheLabel::test_the_tally_takes_no_label_argument_and_names_no_label`
@@ -503,7 +561,7 @@ than a guess.
    of 869 in `samples/9p2i` (re-measured at this head, below).
 2. **A second writer of `grounding_label`, stated rather than hidden.** A
    deadline miss and a twice-failed completion both return before the guard
-   chain starts, so `_default_vote` (`meetings/manager.py:2996`) states
+   chain starts, so `_default_vote` (`meetings/manager.py:3001`) states
    `not_assessed` itself. That is the same value the labeller derives for any
    ballot whose target is the layer's, and it is what leaves every
    live-recorded ballot labelled — which is what reserves `None` for a
@@ -636,7 +694,7 @@ Sixteen probes at the first head, and five more in
 ONE production line, ran the selection, and was reverted; both counts are
 recorded. The claim at the first head, that every line this card changed in a
 production module had one, was WRONG: review round 1 found the
-provenance-boundary line (`meetings/manager.py:2351`) unprobed, and a
+provenance-boundary line (`meetings/manager.py:2352`) unprobed, and a
 perturbation of it left `tests/meetings tests/api` fully green. It has one now,
 and so does every line round 1 added.
 
@@ -729,7 +787,7 @@ green. The row is added beside the two citation-id markers it is shaped after,
 with the consequence written into the table's comment.
 
 **2. The provenance-boundary line had no probe.** Moving
-`authored_rationale_text = parsed.rationale_text` (`meetings/manager.py:2351`)
+`authored_rationale_text = parsed.rationale_text` (`meetings/manager.py:2352`)
 to after the marker prepend left `tests/meetings tests/api` at
 `1810 passed, 2 skipped` — fully green — while silently dropping the
 invalid-basis marker from every betrayal ballot, because
@@ -745,7 +803,7 @@ it, so the assertion is about THIS marker.
 **3. The authored schema's docstring undercounted the layer's fields.** It said
 two (`guard_redirected_from` / `guard_rewrite_reason`) where the code has three;
 `grounding_label` is the third, and `_LAYER_OWNED_BALLOT_FIELDS`
-(`meetings/manager.py:3022-3026`) already listed all three. Rewritten to name
+(`meetings/manager.py:3027-3031`) already listed all three. Rewritten to name
 three and to say why the third belongs there.
 
 **4 and 5. The accounts body moved without its revision.**
@@ -798,7 +856,7 @@ Expected scope for it and had been missed entirely; its v4 and v5 bullets said
 an uncited ejection is coerced. Swept with it, in the same commit:
 `meetings/voting.py:122-137` (the two-rewrite stack is now stated as recorded
 history, with the reason no live chain stacks), `meetings/manager.py:818-824`
-and `:2826-2839`, `agents/memory/beliefs.py:333-339`,
+and `:2828-2840`, `agents/memory/beliefs.py:333-339`,
 `scripts/counterfactual_phase21.py`'s C-7 row note (a live description, not the
 published memo row, which stays untouched as the record of a past measurement),
 `tests/agents/test_absence_prior.py:25-30` and `:685-690` (which also pointed at
@@ -861,3 +919,164 @@ No live provider call, no calibration, no recording and no re-record in this
 round either; band 2100-2999 was not generated or opened and
 `scripts/verify_ml_evidence.py --complete` was not run. No `audits/` or
 `tests/fixtures/` byte moved, so no `docs/artifacts.md` row is recomputed.
+
+### Review corrections, round 2 (2026-09-21)
+
+Six blocking findings from three independent lenses, five distinct defects
+(findings 3 and 6 are the same unfinished prose sweep, reached from two
+lenses). Every command quoted below was run from this worktree at this head.
+
+**1. The stated `none_held`-over-`flag_only` precedence had no planted case.**
+The ordering is a RULING, not an arithmetic necessity — a voter that says it
+holds nothing must not be upgraded by the layer reading a flag on its behalf —
+and it was the one branch pair whose order nothing pinned: lifting the
+`flag_only` branch above `none_held` left the whole suite byte-identical,
+because `none_held` appeared in tests only on SKIP targets, where `flag_only`
+cannot fire. `test_a_declared_none_held_outranks_a_flag_on_the_target` plants
+it through the manager chain: two turns place p-3 in two rooms across one
+window, the detector mints one `alibi_conflict` naming p-3, and the voter
+EJECTs p-3 with `decision_basis="none_held"` and no citation. The case asserts
+the flag exists before asserting the label, and the SAME meeting minus the
+voter's word is asserted `flag_only` beside it, so the pin is about the ORDER
+rather than about either branch being reachable.
+
+**2. The spectator mirror in `_ballot_view` was an unprobed production line.**
+Replacing both mirrors with `None` left `tests/api` and the full suite green:
+the frontend cases build `BallotView` fixtures by hand, the leak test pins the
+field NAMES against a frozenset, and every committed recording reads `None` for
+both — so after the re-record the chip would have silently never rendered.
+`test_ballot_view_mirrors_the_stated_basis_and_the_layers_finding`
+(`tests/api/test_view_model.py`) drives a `VoteBallot` carrying both fields
+through the seam, asserts both survive into `model_dump()`, and asserts the
+`None` half beside it, which is the identity every committed recording takes.
+
+**3 and 6. The prose sweep was not finished.** Round 1 closed it against five
+phrases, case-SENSITIVELY. Re-run case-insensitively and widened to the two
+deleted symbol names, it still hit six sites, five of them in files this card
+edits. Swept in this round's commit, each stating the retirement at the
+strength the code now delivers:
+
+* `tests/meetings/test_manager.py:829-833` — said the graduated citation gate
+  "coerces an UNCITED zero-flag eject" in the present tense. Now: the ballots
+  were written that way FOR that gate, ruling D6 retired the coercion, and the
+  citations today only decide `supported` versus `uncited`.
+* `tests/eval/test_meeting_quality.py:5-11` — a `:func:` link to
+  `guard_ballot_citation`, a function this PR deletes, in the present tense.
+  Now names the retirement and the labeller that replaced it, and says the
+  bucket counts 6 committed `ml_corpus/9p2i` ballots.
+* `tests/eval/test_meeting_quality.py:291-297` — "the citation gate is the LAST
+  guard in the manager's ballot chain". Now past tense, with the anchor stated
+  as a fact about recorded bytes.
+* `tests/meetings/test_corroboration.py:1397-1400` and `:1955-1959` — the
+  zero-flag predicate, attributed to a live `guard_ballot_citation`. Now
+  attributed to the retired gate AND to `label_ballot_grounding`'s `flag_only`
+  branch, which is the live reader of that predicate.
+* `tests/experiments/test_fresh_deduction_instrument.py:10153-10160` — "Both
+  authored ballots pass `guard_ballot_citation`". Now: they carry no rewrite of
+  the class that gate wrote, and both guards are history the instrument reads
+  off recorded bytes.
+
+Three further sites were live-tense claims about the retired gate that the
+widened grep surfaced and no finding had named:
+`eval/meeting_quality.py:277-282` and `:981-986` (the anchored-match comments,
+"the citation gate IS the LAST guard"), and `meetings/manager.py:828-830` (the
+persona render ordered "after the citation gate"). `scripts/check_doc_facts.py`
+gained the D6 half of its sub-1.0 sentence. Sentences describing a RECORDING's
+stamped substrate — `eval/watchability.py:758` is the example — were
+deliberately left as recorded: they say what produced those bytes, which is
+still true.
+
+The two closing greps and their results at this head:
+
+```
+grep -rni "coerces it to SKIP\|coerces an uncited\|coerces the uncited\|still coerces\|then coerces" . \
+  --include="*.py" --include="*.j2" --include="*.ts" --include="*.tsx" \
+  --exclude-dir=.venv --exclude-dir=.git --exclude-dir=node_modules
+```
+
+returns nothing (exit 1).
+
+```
+grep -rn "guard_ballot_citation\|guard_ballot_target_graph" . \
+  --include="*.py" --include="*.j2" --include="*.ts" --include="*.tsx" \
+  --exclude-dir=.venv --exclude-dir=.git --exclude-dir=node_modules
+```
+
+returns six lines, and cannot return none: two are
+`tests/meetings/test_grounding_label.py:799-800`, the gate that asserts BOTH
+symbols are gone from the manager by name, and the other four are the swept
+sites above, which name the retired symbols on purpose because the markers they
+minted are still on 89 committed ballots. The result is quoted as what the tree
+delivers rather than claimed empty.
+
+**4. The retired citation gate still shipped as an unconditionally-ON lever.**
+`guard_ballot_citation` became a labeller that rewrites nothing, but its lever
+key `citation_gate` sits in `_RETIRED_ALWAYS_ON_LEVERS`, every snapshot stamps
+it `True`, and both the registry comment and the `.env.example` note called
+that class "unconditionally ON" / "always ON" — so each post-merge recording
+and MANIFEST `flags` cell asserts a mechanism that no longer exists. The key
+STAYS: dropping it shifts `SUBSTRATE_FLAG_KEYS` and moves the `flags` cell of
+all four committed MANIFESTs. What changed is the truth around it — the one
+history line
+[the procedure](../../docs/agent-procedures.md#retiring-substrate-levers)
+requires, at `orchestrator/replay.py:982-990` and `.env.example:120-126`,
+naming `citation_gate` provenance-only since ruling D6; the registry comment at
+`:973`, which now says twenty of the twenty-one name behaviour that is
+unconditional in this build and this one does not; and the refusal message at
+`:1259`, which says "stamped ON" rather than "unconditionally ON", with its
+three pins in `tests/orchestrator/test_replay.py` moved with it. The
+`.env.example` note keeps the "always ON" label its own gate requires
+(`scripts/check_doc_facts.py` fails the file without it), because that label is
+the class's, and carries the exception underneath it. Declared in Record
+impact.
+
+**5. Ten Results citations did not resolve at this head.** Commit `968ed6ab`
+shifted them itself — the same defect class its own round-1 entry 8 fixed — so
+this round re-anchored every one by SYMBOL and re-measured them AFTER the last
+code edit of the round, which moved eight of them again by one line.
+`meetings/schemas.py`: `decision_basis` 1010, `grounding_label` 1073,
+`under_gate_redirect` 886. `meetings/manager.py`: the provenance boundary 2352,
+`cited_before_validation` 2376, `citation_nulled` 2448, `_default_vote` 3001,
+`_LAYER_OWNED_BALLOT_FIELDS` 3027-3031, `_prepared_ballot_payload` 3054,
+`_ballot_grounding_subjects` 3703, `label_ballot_grounding` 3730.
+`meetings/voting.py`: `tally_ballots` 192. `api/replay_loader.py`: the
+`invalid_basis` row 3612. The round-1 subsection's two citations of the same
+symbols moved with them, as did the Acceptance round-1 item citing the
+provenance boundary. Each was re-derived by grepping the symbol and re-read at
+the line now cited.
+
+**The round-2 probes.** Two more, each neutering ONE production line, run, and
+reverted. Both are red only because of this round's tests: the first is the
+perturbation the finding reported as byte-identical over the full suite, the
+second was green over `tests/api` AND the full suite.
+
+| probe (line neutered) | perturbed | restored |
+| --- | --- | --- |
+| `flag_only` lifted above `none_held` in the precedence | 1 failed, 39 passed | 40 passed |
+| both `_ballot_view` mirrors replaced with `None` | 1 failed, 437 passed, 2 skipped | 438 passed, 2 skipped |
+
+**Verification at this head.** Commands run from this worktree, exit codes
+captured directly (never through a pipe).
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — 8,158 passed, 20 skipped, 3 xfailed; 4 import contracts kept, 0 broken; 73 work cards validated; 390 prompts in sync; mypy clean over 488 files; ruff clean and 517 files formatted; 550 frontend tests; frontend build OK |
+| `.venv/bin/python -m pytest tests/meetings/test_grounding_label.py -q` | 40 passed |
+| `.venv/bin/python -m pytest tests/api/test_view_model.py -q` | 50 passed, 1 skipped |
+| `.venv/bin/python -m pytest tests/api -q` | 438 passed, 2 skipped |
+| `.venv/bin/python -m pytest tests/orchestrator/test_replay.py -q` | 111 passed |
+| `.venv/bin/python -m pytest tests/eval/test_meeting_quality.py -q` | 21 passed |
+| `.venv/bin/python -m pytest tests/experiments/test_fresh_deduction_instrument.py -q` | 526 passed |
+| `bash scripts/verify_samples.sh` | exit 0 — 50/50 + 50/50 = 100/100 clean |
+| `.venv/bin/python scripts/build_sample_report.py --sample-dir replays/<set> --check` ×4 | exit 0 — consistent on all four sets |
+| `.venv/bin/python scripts/publish_process_scorecard.py --check` | exit 0 — consistent |
+| `.venv/bin/python scripts/verify_ml_evidence.py` | exit 0 — 61 checks, 0 FAIL, 7 evidence-branch-absent |
+| `.venv/bin/python scripts/check_doc_facts.py` | exit 0 — 26-lever substrate registry, 4-switch experiment registry |
+| `.venv/bin/python scripts/validate_task_docs.py` | exit 0 — 73 work cards |
+
+No live provider call, no calibration, no recording and no re-record in this
+round either; band 2100-2999 was not generated or opened and
+`scripts/verify_ml_evidence.py --complete` was not run. No `audits/` or
+`tests/fixtures/` byte moved, so no `docs/artifacts.md` row is recomputed, and
+the `tasks/README.md` inventory sentence is unchanged because Status was
+already `done` before this round.

@@ -10150,11 +10150,14 @@ class TestTheAuthoredLayerIsRecoverable:
     def test_a_coalition_can_clear_the_gate_without_converting(self) -> None:
         """PLANTED: the two meanings the memo's single "cleared" column carried.
 
-        Both authored ballots pass ``guard_ballot_citation``, so the coalition
-        CLEARS; one of them is then re-aimed by ``under_gate_redirect``, so it
-        reached the tally naming somebody its voter did not, and the coalition
-        does NOT convert. Counting those two as one figure is what made "10
-        wrongful coalitions cleared" and "8 converted" read as one number.
+        Both authored ballots carry no rewrite of the class the retired
+        ``guard_ballot_citation`` wrote, so the coalition CLEARS; one of them is
+        then re-aimed by ``under_gate_redirect``, so it reached the tally naming
+        somebody its voter did not, and the coalition does NOT convert. Counting
+        those two as one figure is what made "10 wrongful coalitions cleared"
+        and "8 converted" read as one number. Both guards are history since
+        ruling D6 of 2026-09-19 retired them; the instrument reads them off
+        recorded bytes, which is why this case is stated in their vocabulary.
         """
 
         counts = instrument.authored_ballot_diagnostics(
