@@ -158,9 +158,9 @@ _SALIENCE_EVIDENCE_V1_CONTEXT: Final[int] = 90
 # claim: render only the most-recent few per subject PER SPEAKER; a newer stay
 # supersedes that speaker's stale one. A long walk is therefore rendered as its
 # most recent stays -- the tail of the path, which is the part a listener is
-# weighing -- rather than as an envelope over rooms the speaker never joined,
-# and never at the cost of another speaker's row
-# (see :func:`_format_alibi_suffix`).
+# weighing -- rather than as an envelope over rooms the speaker never joined
+# (see :func:`_format_alibi_suffix` for what the cap does and does not promise
+# between speakers).
 #
 # This cap is ALSO the whole bound on the subject's OWN rows (round-7 review):
 # a subject's self-alibis are a reserved pool of their own, so what the subject
@@ -223,10 +223,12 @@ _MAX_RENDERED_ALIBIS: Final[int] = 3
 # curve, and that sweep -- not this constant -- is what an owner would move the
 # number against.
 #
-# At every load the committed record reaches (the widest subject holds four
-# rows) neither pool binds, so this moves no committed byte; the difference
-# exists only in the pathological corner, where leaving the render to elastic
-# memory is worth more than a fifth reported voice. Sized against the TOKEN
+# On the committed record this pool never binds: the widest subject holds four
+# rows and they are all its OWN, so 2 of 5,256 belief states sit over the self
+# pool -- which cuts exactly the row the pre-card per-subject rule cut -- and 0
+# over this one, and no committed byte moves. The difference exists only in the
+# pathological corner, where leaving the render to elastic memory is worth more
+# than a fifth reported voice. Sized against the TOKEN
 # BUDGET and ELASTIC retention only, never against role-correctness.
 _MAX_RENDERED_ALIBIS_FROM_OTHERS: Final[int] = 4
 
@@ -2745,8 +2747,10 @@ def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...], *, subject: PlayerId) -
     # total tie-break. The RENDER order is :func:`_alibi_row_sort_key`, exactly
     # as round 6 shipped it.
     #
-    # Neither pool is reached on the committed record: the widest subject there
-    # holds four rows, and no subject anywhere is over either bound.
+    # On the committed record the OTHERS pool is never reached, and the self
+    # pool binds on 2 of 5,256 belief states -- four rows, all the subject's own
+    # -- where it keeps the same three rows the pre-card per-subject rule kept,
+    # so no committed render moves.
     ordered = sorted(alibis, key=_alibi_row_sort_key)
     by_source: dict[PlayerId, list[int]] = {}
     for position, alibi in enumerate(ordered):

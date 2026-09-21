@@ -1918,7 +1918,7 @@ class TestTheBeliefBlockCannotOutgrowTheTokenBudget:
         # Non-vacuity: if the fixture stopped saturating the pools the budget
         # assertions above would be measuring nothing. Eight subjects reach the
         # block (the listener holds no belief row about itself); each one has
-        # spoken about itself at the per-source cap AND has the six other living
+        # spoken about itself at the per-source cap AND has the seven other living
         # voices talking about it, each of those also at the per-source cap --
         # so BOTH pools bind on every subject.
         rows = [line for line in self._rendered().splitlines() if "alibi:" in line]

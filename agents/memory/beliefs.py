@@ -779,10 +779,10 @@ class PlayerBelief:
     unconditionally since Task 14.9 (the ``AILIBI_TESTIMONY_AS_CONTENT`` gate is
     retired). The §6.6 memory render (``agents/memory/store.py``) reads the field
     too -- the belief line's alibi suffix
-    (:func:`agents.memory.store._format_alibi_suffix`, capped per SOURCE, so no
-    speaker's volume evicts another's row, and selected in two separate pools --
-    the subject's own rows and everybody else's -- so nothing the accused says
-    can reach a rival's row) --
+    (:func:`agents.memory.store._format_alibi_suffix`, capped per SOURCE and
+    selected in two separate pools -- the subject's own rows and everybody
+    else's -- so nothing the accused says can reach a rival's row; among the
+    other voices the guarantee is per VOICE, not per row) --
     so testimony reaches beliefs as CONTENT, not only as a scalar suspicion
     delta. History: the field was declared DEAD by the 2026-06-25
     memory-pipeline diagnosis (workflow `wg54kfoxy`) and kept as scaffolding,

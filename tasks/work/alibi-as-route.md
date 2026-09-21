@@ -82,6 +82,16 @@ payload matters. And the format-preserving serializer precedent exists at
 
 ## Acceptance
 
+- [x] Review correction: round 9 is wording only, and it changes no executable
+  line. Four comments in `agents/memory/store.py` and `agents/memory/beliefs.py`
+  claimed more than the code delivers or the census measures: two still
+  promised that no speaker's volume evicts another speaker's ROW, which round 8
+  itself declared false among the other voices (the guarantee there is per
+  VOICE); two said neither pool binds on the committed record, where the self
+  pool binds on 2 of 5,256 belief states and keeps the same three rows the
+  pre-card rule kept. Two Acceptance items below still gave the first-leg label
+  rule as live; each now carries a dated note in place. The dated round-9
+  subsection in Results lists every site.
 - [x] Review correction: the guarantee "what an accused says never decides
   WHICH other voices' rows survive" is now STRUCTURAL, and the two items below
   are superseded where they state a single per-subject TOTAL. Round 6 put the
@@ -247,7 +257,12 @@ payload matters. And the format-preserving serializer precedent exists at
   `maximal_stays` over `canonical_rooms`, the same normalisation
   `meetings/transcript.py::_claim_route_key` uses; the canonical half is
   load-bearing rather than cosmetic, because a merged stay keeps the FIRST
-  leg's spelling and so the CUT decides which spelling survives. The identity
+  leg's spelling and so the CUT decides which spelling survives. [Round-9 note,
+  2026-09-21: that reason has not been live since round 6. A merged stay now
+  takes the SMALLEST of the labels merged, a function of the label set and not
+  of the cut; the canonical half stays load-bearing because two WORDINGS of one
+  account, `cafeteria` throughout against `CAFETERIA` throughout, must still be
+  one alibi.] The identity
   on committed data was MEASURED before the change, not assumed: 1,016 alibi
   claims over the 672 committed meetings, none longer than one segment, none
   spelling a room non-canonically, 1,016 distinct keys either way.
@@ -271,7 +286,10 @@ payload matters. And the format-preserving serializer precedent exists at
   render, the served DTO, the one-`ReportedStatement`-per-leg reduction and
   `validate_public_accounts`'s scope walk all keep the legs as the speaker gave
   them. A merged stay keeps the FIRST leg's room text, so every description is
-  deterministic. Coalescing is the identity on a one-segment route, which every
+  deterministic. [Round-9 note, 2026-09-21: superseded twice. Since round 5 the
+  testimony reduction files one `ReportedStatement` per maximal STAY, not per
+  leg; since round 6 a merged stay takes the SMALLEST of the labels merged, not
+  the first leg's.] Coalescing is the identity on a one-segment route, which every
   committed recording is, so no recorded flag, band, `contradiction_id`, sample
   report or scorecard figure moves.
   `tests/meetings/test_contradictions.py::TestReCuttingAStayChangesNoDetectorOutput`
@@ -757,9 +775,9 @@ prune and repairs a reversed range per segment, both keyed on field names.
 ### Verification
 
 Run from a clean worktree at the head of this branch, re-measured at the
-ROUND-8 head (the dated round-1 to round-7 subsections below keep their own
-figures). Two cells moved against the round-7 measurement, both by the seven
-tests round 8 adds; the two frontend cells marked below are the round-2
+ROUND-9 head (the dated round-1 to round-8 subsections below keep their own
+figures). Round 9 is wording only and moves no cell; two cells moved at round 8
+against the round-7 measurement, both by the seven tests round 8 adds; the two frontend cells marked below are the round-2
 measurement, because rounds 3 to 8 change detector geometry, a metric key and a
 memory render only, and move no served byte.
 
@@ -2768,3 +2786,90 @@ still renders no committed byte differently; the census measures it at 0 of
 5,256. `docs/observation-contract.md`'s cap paragraph is rewritten for the two
 pools and `check_doc_facts.py` stays verified. `docs/architecture.md` and
 `docs/glossary.md` are NOT touched.
+
+### Review corrections, round 9 (2026-09-21)
+
+Wording only. Both round-8 verifiers reproduced every measured figure, the
+census, all seven probes and the structural guarantee (an independent generator
+found 0 counterexamples in 51,965 renders where the accused varies and 10,444
+where the rivals vary, against 341 and 400 at `c52c4159`), and both failed the
+head on sentences that claim more than the code delivers. The orchestrator made
+these edits directly; no executable line moves, so no probe is re-planted.
+
+**Comments corrected.**
+
+| site | what it said | why it was false | now |
+| --- | --- | --- | --- |
+| `agents/memory/store.py`, `_MAX_RENDERED_ALIBIS` header | a long walk renders as its recent stays "and never at the cost of another speaker's row" | among the OTHER voices the guarantee is per voice, not per row: with rival `p-4` at MEDBAY 10/11/12 and ally `p-2` in LABS, `p-2` speaking three rows instead of one costs `p-4` its tick-10 row, with two other voices | the clause is gone; the comment points at `_format_alibi_suffix` for what the cap does and does not promise between speakers |
+| `agents/memory/beliefs.py`, `PlayerBelief.alibis` | "capped per SOURCE, so no speaker's volume evicts another's row" | the same | "nothing the accused says can reach a rival's row; among the other voices the guarantee is per VOICE, not per row" |
+| `agents/memory/store.py`, `_MAX_RENDERED_ALIBIS_FROM_OTHERS` header | "neither pool binds" on the committed record | the census this card publishes: 2 of 5,256 states hold four rows, all the subject's OWN, so the SELF pool binds on both | the others pool never binds; the self pool binds on 2 of 5,256 and cuts exactly the row the pre-card per-subject rule cut, so no committed byte moves |
+| `agents/memory/store.py`, `_format_alibi_suffix` body | "no subject anywhere is over either bound" | the same | the same statement, in place |
+
+**Acceptance items corrected in place.** The round-5 `eval/alibi_fabrication.py`
+item and the round-4 "nothing that REPORTS an account moves" item each gave "a
+merged stay keeps the FIRST leg's spelling" as live rationale. Each now carries
+a bracketed round-9 note beside the sentence; the sentences themselves are left
+as written. The PR body's Decisions bullet already said this; the card now
+agrees with it.
+
+**Looser wording tightened.** `docs/observation-contract.md` said a multi-row
+voice loses older rows "to other voices' newer ones" and that above the
+threshold "only the stalest" voice drops. Measured: `p-2` at ticks 100 and 1
+against `p-4` at 10/11/12 costs `p-4` its tick-10 row while `p-2`'s tick-1 row
+is kept, because the fill is every voice's newest row, then every voice's
+second-newest; and with six or more other voices more than one voice drops. The
+paragraph now states the fill order and says the stalest voices go first. A
+test comment in `test_the_case_really_is_the_worst_the_roster_allows` said six
+other living voices where the fixture gives seven; the assertions were right.
+
+**Round-8 statements corrected by this note, not rewritten.**
+
+* The round-8 Dates line says rounds 6, 7 and 8 were all committed on
+  2026-09-21 UTC. Only round 8 and this round were: `40fa0182` (round 6) is
+  2026-09-20 22:30 UTC and `c52c4159` (round 7) is 2026-09-20 23:02 UTC.
+* Probe r8g's failing set does not "differ by one" from r8f's: each fails nine,
+  and the sets differ by two members in each direction. The named five
+  earlier-round per-source tests and the corpus-walk census reproduce as stated.
+* The round-8 sweep prints 0.63 at an others pool of 6; 30/48 is 0.625.
+* The consumer table says every range is an `ast` function or class span;
+  `eval/process_scorecard.py:1497-1508` `multi_tick` is a local variable's
+  assignment-to-last-use span, correct as cited.
+* The "Selection is SPELLING-BLIND" paragraph presents both keys as the round-8
+  repair. The material one is `_alibi_source_rank_key`. Within one source,
+  `_alibi_within_source_key` orders rows exactly as the whole-block order
+  already did (the source is constant there), so that re-sort is the identity:
+  dropping it leaves the file at 70 passed and 6,000 random fields
+  byte-identical. It is kept as the named statement of what within-source
+  recency reads, and probe r8c, which changes the KEY, is red.
+* The pinned worst case is the POOL-SATURATING case, not the maximum-token one.
+  At the same 56 rows, eight-stay routes read 1,481 estimated tokens and 19 of
+  headroom against the pinned 1,469 and 31; across longer labels, repeat
+  meetings, 20- and 40-stay routes and 10- to 20-player rosters the verifier's
+  maximum was 1,492, under `DEFAULT_TOKEN_BUDGET`.
+
+**Residual recorded, not changed.** Among the other voices an ALLY of the
+accused can displace a rival's OLDER rows by speaking more rows about the same
+subject. It costs the ally public, checkable claims; no voice can be zeroed
+below five other voices (0 zeroed in 4,000 generated fields); and the code
+comment, this card and `docs/observation-contract.md` now all say per voice.
+
+**Round-9 gate.** Measured at this head, from a clean worktree.
+
+| command | result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — ruff `520 files already formatted` + `All checks passed!`, `lint-imports` 4 contracts kept / 0 broken, `validate_task_docs.py` 390 historical phase tasks and 390 prompts plus 73 work cards, `mypy` Success on 491 source files, `8,277 passed, 20 skipped, 3 xfailed` in 3:43, frontend 20 test files / 532 tests, build green |
+| `uv run pytest tests/meetings tests/eval tests/agents tests/experiments tests/api tests/scripts/test_counterfactual_phase21.py -q` | 5,196 passed, 3 skipped |
+| `uv run pytest tests/meetings tests/agents -q` | 2,844 passed |
+| `uv run pytest tests/api tests/llm -q` | 765 passed, 19 skipped |
+| `uv run pytest tests/orchestrator tests/experiments -q` | 1,213 passed, 3 xfailed |
+| `bash scripts/verify_samples.sh` | 50/50 + 50/50 = 100/100 clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check` x4 | consistent on `replays/{samples,ml_corpus}/{4p1i,9p2i}` |
+| `uv run python scripts/publish_process_scorecard.py --check` | consistent |
+| `uv run python scripts/check_doc_facts.py` | verified |
+| `uv run python scripts/verify_ml_evidence.py` | every check passed (offline; never `--complete`) |
+
+Every figure is the round-8 figure, as a comment-only round should leave it.
+
+**Round-9 record impact.** None. Comments, one docs paragraph, one test comment
+and this card; nothing under `replays/`, `audits/` or `tests/fixtures/`; no
+stamp moves.
