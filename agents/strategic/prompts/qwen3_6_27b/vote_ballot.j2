@@ -107,8 +107,12 @@
    may vote for -- its own sightings, vents, transits and body discoveries, the
    contradictions raised here, and who spoke against whom -- each row naming its
    speaker, whether that speaker perceived it first-hand, and the id a ballot may
-   cite for it. It is what is behind the numbers that the meeting layer can NAME,
-   not a complete decomposition of them: a witnessed KILL and the BODY-PROXIMITY
+   cite for it. That provenance clause reads ``first_hand`` BEFORE it reads the
+   speaker, so a name the voter itself spoke at this table renders as a statement
+   made here and never as something the voter perceived; only a row the speaker's
+   own record bears out may say it was seen first-hand. The block is what is
+   behind the numbers that the meeting layer can NAME, not a complete
+   decomposition of them: a witnessed KILL and the BODY-PROXIMITY
    lift move a number with no row of their own, which is why the block below
    calls itself a PARTIAL summary. The assembler orders and groups them
    (``meetings.manager.build_evidence_rows``); this template only loops, the
@@ -249,7 +253,7 @@ Two accounts that name rooms one door apart at nearby ticks can BOTH be honest �
 <evidence>
 What you actually hold on each of them, and where each piece came from. Every line is either something you perceived yourself, a conflict raised at this table, or a name someone here spoke; nothing below is a conclusion. They are grouped by the player they concern, your own first-hand lines before anything you are repeating, then by the channel they came through and in the order they arrived — that order says nothing about who did it. A line marked first-hand was perceived by the speaker it names; one that is not is a statement made at this table, which may still be true. Where one player's lines run long the oldest are left in your memory above rather than repeated here. Weigh them yourself, including the ones that point away from whoever you are leaning towards.
 {% for row in evidence_rows %}
-- `{{ row.subject }}` — {{ row.description }} ({% if row.speaker == voter_id %}first-hand: you saw this yourself{% elif row.first_hand %}first-hand: {{ row.speaker }} saw it themselves{% else %}not first-hand: {{ row.speaker }} stated it at this table{% endif %}{% if row.citation_id %}; cite `{{ row.citation_id }}`{% else %}; nothing here you could cite{% endif %})
+- `{{ row.subject }}` — {{ row.description }} ({% if row.first_hand %}{% if row.speaker == voter_id %}first-hand: you saw this yourself{% else %}first-hand: {{ row.speaker }} saw it themselves{% endif %}{% else %}{% if row.speaker == voter_id %}not first-hand: you stated it at this table{% else %}not first-hand: {{ row.speaker }} stated it at this table{% endif %}{% endif %}{% if row.citation_id %}; cite `{{ row.citation_id }}`{% else %}; nothing here you could cite{% endif %})
 {% endfor %}
 </evidence>
 {% endif %}

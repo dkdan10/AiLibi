@@ -107,6 +107,37 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
 
 ## Acceptance
 
+- [x] Review correction (round 2): the served row reads `first_hand` BEFORE the
+  speaker, so a testimony or contradiction row the voter itself spoke renders as
+  a statement made at this table and never as something the voter perceived.
+  `tests/meetings/test_weighing_channel.py::TestTheServedBody` —
+  `test_what_the_voter_merely_said_here_is_not_rendered_as_perception` over both
+  kinds, its planted twin `test_planted_the_old_branch_order_is_detected`, and
+  one test per branch:
+  `test_a_row_the_voter_perceived_says_it_saw_it_itself`,
+  `test_a_grounded_voice_names_the_speaker_who_saw_it`,
+  `test_another_voice_at_this_table_names_that_speaker`.
+- [x] Review correction (round 2): the two production constructs the round-0
+  pass left unenforced are enforced — the self-accusation drop by
+  `test_a_speaker_who_names_themselves_is_no_voice_against_themselves` (whose
+  first leg drives a real meeting and shows the claim arriving intact), and the
+  provenance class ranks by
+  `test_the_three_provenance_classes_rank_in_the_stated_order`, which states them
+  as LITERALS instead of re-deriving them from `_EVIDENCE_KIND_CLASS`. Six
+  perturbation rows, all red, in the round-2 subsection of Results.
+- [x] Review correction (round 2): `VotePromptRenderer`'s `evidence_rows`
+  paragraph (`meetings/render_contract.py:461-473`) states the limit the code
+  delivers, naming the witnessed-kill and body-proximity channels that reach no
+  row, and the round-1 paragraph that claimed this site had already been
+  corrected is restated true.
+- [x] Review correction (round 2): the three comments this diff falsified are
+  updated to the counts the code delivers — nine prefix kinds
+  (`training/surrogate/dataset.py:189`) and the vote body TWO versions ahead at
+  v8 (`tests/scripts/test_record_ml_corpus.py:980`,
+  `tests/agents/test_bespoke_prompt_sets.py:548`), with two more hits the
+  closing grep found (`tests/meetings/test_prompt_byte_golden.py:1341`,
+  `tests/agents/test_impostor_answer_arm.py:683`). Greps and output quoted in
+  Results.
 - [x] Review correction: the §4.7 TEAMMATE firewall is re-applied at assembly,
   so no own-channel row and no `co_present` companion names a fellow impostor.
   `tests/meetings/test_weighing_channel.py::TestTheTeammateFirewall` —
@@ -386,7 +417,7 @@ commits that landed after it.
 | Contract item | Symbol | Line at the final head (round-0 table's value) |
 | --- | --- | --- |
 | the row DTO | `EvidenceRow` / `EvidenceRowKind` | `meetings/render_contract.py:155` / `:131` (new) |
-| the renderer widening | `VotePromptRenderer.evidence_rows` | `meetings/render_contract.py:487` (round 0 said `:481`; card said `:340-400`) |
+| the renderer widening | `VotePromptRenderer.evidence_rows` | `meetings/render_contract.py:492` (round 1 said `:487`, round 0 `:481`; card said `:340-400`); its Protocol paragraph, weakened in round 2, at `:461-473` |
 | the three witness stamps | `VentWitnessRecord` / `SightingRecord` / `MoveWitnessRecord` `.observation_id` | `meetings/schemas.py:318` / `:358` / `:389` (card said `:306-308`, `:340-343`, `:366-369`) |
 | the ninth ballot key | `ModelAuthoredVoteBallot.counter_reason_id` | `meetings/schemas.py:1035` (card said `:767-773`) |
 | row assembly | `build_evidence_rows` + its three builders | `meetings/manager.py:3710`, `:3449`, `:3568`, `:3646` (round 0 said `:3618`, `:3424`, `:3510`, `:3557`) |
@@ -394,7 +425,7 @@ commits that landed after it.
 | the counter validator | `_normalize_ballot_counter_reason_id` | `meetings/manager.py:3989`, called at `:2499` (round 0 said `:3863` / `:2477`) |
 | the two shared decisions | `_resolved_reason_id` / `_resolved_observation_id` | `meetings/manager.py:3849` / `:3874` (round 0 said `:3730` / `:3753`), extracted from `_normalize_ballot_reason_id` at `:3894` (card said `:3199`) and `_normalize_ballot_observation_id` at `:3940` (card said `:3241`) |
 | the counter marker | `INVALID_COUNTER_REASON_MARKER` | `meetings/manager.py:412` |
-| the served body | `vote_ballot.j2` | `:249-254` the `<evidence>` block, `:257-258` the relabelled PARTIAL summary, `:261` the row without `trust`, `:293` the sentence deleted, `:296-297` nine keys, `:303` the counter bullet |
+| the served body | `vote_ballot.j2` | `:253-258` the `<evidence>` block with the provenance branch at `:256`, `:261-262` the relabelled PARTIAL summary, `:265` the row without `trust`, `:297` the sentence deleted, `:300-301` nine keys, `:307` the counter bullet (each +4 on round 1's `:249-254` / `:257-258` / `:261` / `:293` / `:296-297` / `:303`: round 2 added four header lines) |
 | the row pattern | `_SUSPICION_GRAPH_ROW_RE` | `eval/meeting_quality.py:341` (card said `:326`) and, added in round 1, `eval/validity.py:190` |
 | the served DTO | `BallotView.counter_reason_id` | `api/schemas.py:1093` (card said `:962-970`), mirrored at `api/replay_loader.py:3324` (card said `:3286`) |
 | the spectator card | `BallotCard.tsx` | `:261` the third `EvidenceLink`, `:68` `counterKind` (round 0 said `:57`), `frontend/src/lib/copy.ts:450` the chip label (round 0 said `BallotCard.tsx:32`) |
@@ -585,7 +616,12 @@ which is why all four `--check` recomputations are byte-identical.
 
 ### Planted and perturbed failures
 
-A mechanical pass over the WHOLE production diff, 32 rows. Each row edits ONE thing,
+A mechanical pass over the WHOLE production diff, 32 rows — INCOMPLETE, as
+round 2 found: three production constructs it did not reach survive neutering
+with the suite green, and the round-2 subsection below carries the six rows that
+repair that. The table and the "0 unenforced" line beneath it are the round-0
+reading, kept as filed and read against that correction.
+Each row edits ONE thing,
 runs the named probe, and restores the file from an in-memory COPY (never `git
 checkout`). Run with `PYTHONDONTWRITEBYTECODE=1` and `-p no:cacheprovider`
 after a first pass produced three FALSE reds from stale `__pycache__` bytecode:
@@ -638,7 +674,14 @@ unenforced production line; five tests were added for them —
 `test_a_grounded_voice_sorts_above_an_ungrounded_one` (the rank is only
 observable between two rows alike in every earlier key) and
 `test_the_suspicion_row_pattern_reads_both_rendered_shapes` — and the pass was
-re-run from scratch: 32 rows, 0 unenforced.
+re-run from scratch: 32 rows, 0 unenforced AMONG THE ROWS THIS PASS COVERED.
+That is the true statement; the claim as filed at `cf20c03f` said "0
+unenforced" flat, and round 2 falsified it — the pass never perturbed the
+template's provenance branch, the self-accusation drop or the values of
+`_EVIDENCE_KIND_CLASS`, and all three survived. Six further rows are in the
+round-2 subsection, and the coverage rule they were found under is now stated
+plainly: a mechanical pass must perturb every BRANCH and every CONSTANT the diff
+adds, not only the statements.
 
 Beside the table, the acceptance items' own planted cases:
 
@@ -832,10 +875,13 @@ the proximity lift raised. Of the two repairs the finding offered, the rows were
 NOT added — a kill channel is new plumbing on the participant, the orchestrator
 and the firewall, which this card may not take — so the claim is weakened to
 what is true. The served line now reads "only a PARTIAL summary of the lines
-above" and NAMES both inputs (`vote_ballot.j2:258`), the same correction is made
-in `build_evidence_rows`, `EvidenceRow`, the template header, the renderer
-Protocol docstring, this card's Outcome and the PR body, and a Limitations
-bullet is added. Pinned by
+above" and NAMES both inputs (`vote_ballot.j2:262` at this head, `:258` at
+`6b79ff08`), the same correction is made
+in `build_evidence_rows`, `EvidenceRow`, the template header, this card's
+Outcome and the PR body, and a Limitations bullet is added. The renderer
+Protocol paragraph was named in this list at `6b79ff08` and was NOT in fact
+corrected — round 2's finding 3 caught the overclaim and made the sixth edit;
+this sentence is the round-1 list restated true. Pinned by
 `test_the_number_is_called_a_partial_summary_of_the_rows` with its planted twin
 `test_planted_the_complete_summary_claim_is_detected`. The weakened sentence
 names no player, ranks nothing and still points at the evidence rather than the
@@ -940,3 +986,199 @@ as the narrow one did.
 No `audits/` or `tests/fixtures/` byte moved in this round, so no
 `docs/artifacts.md` row is recomputed here; deviation 1's recomputation from the
 first pass stands unchanged.
+
+### Review corrections, round 2 (2026-09-21)
+
+Four blocking findings from two independent lenses, four distinct defects. Every
+command quoted below was run in this worktree at this head, and every `file:line`
+is re-derived here by `grep -n` on the symbol, not carried forward.
+
+**1. The served v8 row told the voter it had PERCEIVED its own rhetoric.** The
+provenance clause tested `row.speaker == voter_id` BEFORE `row.first_hand`, so
+the two row kinds that can carry the voter's own id with `first_hand=False` —
+a `testimony` row for a name the voter itself spoke (`speaker=turn.speaker`,
+`meetings/manager.py:3702`) and a `contradiction` row that resolved to a turn the
+voter spoke (`speaker=speaker_by_turn_id.get(...)`, `:3638`) — rendered as
+"first-hand: you saw this yourself". That is the one thing a provenance clause
+may never invent: it hands the voter its own accusation back as evidence it
+perceived, on the shipped default path, in the block this card exists to make
+honest. The clause now branches on `first_hand` FIRST and only then on the
+speaker (`agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2:256`), giving four
+leaves — "first-hand: you saw this yourself", "first-hand: `<speaker>` saw it
+themselves", "not first-hand: you stated it at this table", "not first-hand:
+`<speaker>` stated it at this table" — and the template header states the
+precedence at `:110-113`. One test per leaf plus the two-kind case and its
+planted twin, in `TestTheServedBody`.
+
+Count-only census over the two committed sample sets at THIS head, through the
+real `build_evidence_rows` and the real `renderers.vote("qwen3_6_27b")`, keyed by
+(set, meeting), printing no rendered prompt and no seed-band prefix (the same
+reconstruction `test_the_invariant_holds_over_committed_meeting_transcripts`
+uses: recorded transcripts and recorded flags, a voter whose own channels are
+empty):
+
+| samples set | meetings | ballots | rows the voter itself spoke, NOT first-hand | of which contradiction / testimony | ballots carrying one |
+| --- | --- | --- | --- | --- | --- |
+| 9p2i | 151 | 869 | 739 | 90 / 649 | 738 |
+| 4p1i | 39 | 117 | 103 | 20 / 83 | 103 |
+
+That reproduces the finding's own census to the digit, pooled testimony 732 and
+contradiction 110. At the reviewed head all 842 rendered "first-hand: you saw
+this yourself"; at this head all 842 render "not first-hand: you stated it at
+this table" and that string appears 739 + 103 times. The 89 + 20 lines that
+still read "you saw this yourself" are exactly the 109 `testimony` rows the
+ledger marked first-hand for a voter who watched the vent it is naming
+(`meetings/corroboration._speaker_grounding_places`' vent channel grounds a
+speaker with no `SightingRecord` in hand), where the clause is TRUE. Nothing is
+re-scored: the recordings are read as recorded and the rows are minted at render
+time exactly as production mints them.
+
+**2. Three production constructs survived neutering with the suite green.** The
+round-0 pass perturbed statements and call-site arguments but never a BRANCH
+ORDER or the VALUE of a constant, and all three of the finding's probes
+reproduced here. Each is now enforced, and the coverage rule is written into the
+round-0 paragraph above so the next pass cannot repeat the omission:
+
+* the template's provenance branch — the four leaf tests of finding 1, of which
+  `test_what_the_voter_merely_said_here_is_not_rendered_as_perception` runs over
+  both kinds that can reach the adverse pair;
+* the self-accusation drop, `or subject == turn.speaker`
+  (`meetings/manager.py:3685`) —
+  `test_a_speaker_who_names_themselves_is_no_voice_against_themselves`. Its
+  first leg drives a REAL meeting in which p-2 accuses p-2, asserts the
+  `("p-2", "p-2")` claim in the final transcript (nothing upstream removes it:
+  `_drop_non_roster_claims` drops only names off the roster and a living speaker
+  is on it), and then asserts no ballot's rows carry a row whose speaker is its
+  own subject; the second leg puts the same claim through the assembler
+  directly, where the one row the transcript may yield is the other speaker's;
+* the ranks in `_EVIDENCE_KIND_CLASS` (`meetings/manager.py:3421`) —
+  `test_the_three_provenance_classes_rank_in_the_stated_order`, which states the
+  order as LITERAL kinds. The pre-existing
+  `test_the_stated_order_holds_under_every_adjacent_swap` re-derives its key from
+  that same constant, so exchanging two of its values moved the rendered order
+  AND the expectation together; the new test drives four rows about ONE subject
+  built so arrival time disagrees with class rank inside each first-hand group,
+  and fails on both the value exchange and on dropping the class term from the
+  sort key.
+
+**The round-2 perturbation pass.** Six rows over every branch and constant this
+round's findings name, each editing ONE thing, running the named probe and
+restoring the file from an in-memory COPY (never `git checkout`), with
+`PYTHONDONTWRITEBYTECODE=1` and `-p no:cacheprovider`; `git status` clean after
+every row.
+
+| # | perturbation | probe | result |
+| --- | --- | --- | --- |
+| R2-1 | the clause tests the speaker before `first_hand` (the reviewed head's own bytes) | `tests/meetings/test_weighing_channel.py` | red (2 failed, 55 passed) |
+| R2-2 | the two FIRST-HAND leaves exchanged | same | red (2 failed) |
+| R2-3 | the two NOT-first-hand leaves exchanged | same | red (3 failed) |
+| R2-4 | the first-hand and not-first-hand blocks exchanged | same | red (5 failed) |
+| R2-5 | `or subject == turn.speaker` deleted | `test_weighing_channel.py`, `test_corroboration.py` | red (1 failed, 167 passed) |
+| R2-6 | `_EVIDENCE_KIND_CLASS` `contradiction`/`testimony` values exchanged | `test_weighing_channel.py` | red (1 failed, 56 passed) |
+
+**Named plainly: R2-1, R2-5 and R2-6 first came back GREEN**, at the reviewed
+head `04214220`, which is the finding. R2-2, R2-3 and R2-4 are new branches this
+round adds and were red from the first attempt. The prose corrections of
+findings 3 and 4 are docstrings and comments with no observable behaviour; they
+carry no perturbation row and are verified by the closing greps below.
+
+**3. The renderer Protocol kept the completeness claim.** `VotePromptRenderer`'s
+`evidence_rows` paragraph still read "the typed `EvidenceRow` pieces THIS
+voter's suspicion numbers were built FROM", the exact claim round 1 weakened in
+five other places and then listed this one among them. It now states the limit
+the code delivers (`meetings/render_contract.py:461-473`), naming both channels
+that reach no row — a witnessed KILL, because the participant carries no kill
+channel, and the BODY-PROXIMITY lift, because the body-discovery row names the
+dead victim rather than the nearby suspect — and says a template must render the
+figure as a PARTIAL summary and never as the rows' total, mirroring `:164-166`
+and `build_evidence_rows` at `meetings/manager.py:3730-3739`. The round-1
+paragraph that claimed this site had already been corrected is restated true
+above rather than left standing.
+
+**4. Comments this diff made false.** Three named by the finding and two more the
+closing grep turned up, all corrected to the counts the code delivers:
+`training/surrogate/dataset.py:189` ("the same eight kinds" → nine; both tables
+print nine labels, and the very next line's "tenth kind" was already updated in
+this diff), and the vote body's version distance at
+`tests/scripts/test_record_ml_corpus.py:980`,
+`tests/agents/test_bespoke_prompt_sets.py:548`,
+`tests/meetings/test_prompt_byte_golden.py:1341` and
+`tests/agents/test_impostor_answer_arm.py:683` — "a version ahead" → TWO versions
+ahead, D6 having moved `vote_ballot` alone v6 → v7 and D5 alone again v7 → v8,
+beside three templates at v6.
+
+**The closing greps, run at this head.**
+
+```
+$ len(BALLOT_AUDIT_MARKERS), len(api.replay_loader._BALLOT_PREFIX_MARKERS)
+  9 9                       (identical label sets)
+$ grep -rniE "eight kinds|nine kinds|same eight|ninth kind|tenth kind" \
+      --include=*.py --include=*.j2 --include=*.md --include=*.ts --include=*.tsx .
+  training/surrogate/dataset.py:189   "the same nine kinds"      -- corrected
+  training/surrogate/dataset.py:190   "the tenth kind"           -- true
+  training/surrogate/dataset.py:247   "The tenth kind"           -- true
+  tests/scripts/test_counterfactual_phase21.py:3213  eight REPORTED-STATEMENT
+                                       kinds -- unrelated, true
+  tests/meetings/test_elicitation_fixtures.py:267    eight SuspicionProvenance
+                                       channels -- unrelated, true
+  (everything else is tasks/phase-*, audits/ and agent_prompts/ history)
+$ grep -rniE "versions? ahead" --include=*.py --include=*.j2 --include=*.md \
+      --include=*.ts --include=*.tsx --include=*.sh . | grep -v tasks/phase-
+  four test comments, all reading "TWO versions ahead"; plus this card
+$ grep -rni "saw this yourself" --include=*.py --include=*.j2 --include=*.md \
+      --include=*.ts --include=*.tsx .
+  vote_ballot.j2:256                   the first-hand leaf of the new branch
+  test_weighing_channel.py:1394,1423,1437,1440   the leaf test, the
+                                       not-perception assertion and its twin
+$ grep -rniE "trust them over|adjust_trust|deference|credibility scalar" \
+      --include=*.py --include=*.j2 --include=*.ts --include=*.tsx .
+  experiments/lab/qwen36_prompt_scratch/v3,v4,v5  frozen scratch rungs (history)
+  tests/fixtures/prompt_archive/qwen3_6_27b_v5/vote_ballot.j2:259  the archived
+                                       v5 body the golden replays (history)
+  the rest are past-tense test comments naming the deletion -- round 1's sweep
+```
+
+**No version bump for this round's v8 body edit**, on the same reasoning round 1
+recorded: nothing has been recorded under v8, so the one-stamp-one-body rule
+separates no two generations here — the v8 body is still unshipped and
+unrecorded, and the only stamp any committed game carries is `v5`, which the
+alibi card's archive covers. Nothing is re-recorded or re-scored in this round;
+the four `--check` recomputations and the scorecard are byte-identical again.
+
+**Gates re-measured at this round's head**, each exit code captured directly,
+never through a pipe or a compound command. The card's own Validation list is
+covered in full; no live provider call of any kind was made and none is a check.
+
+```
+$ bash scripts/check.sh                                   EXIT=0
+  ruff check . / ruff format --check .  518 files, all clean
+  lint-imports                          4 contracts kept, 0 broken, 189 modules
+  validate_task_docs.py                 390 phase tasks + 390 prompts; 73 work
+                                        cards (2 ready, 71 done — re-derived,
+                                        and this card's Status does not move)
+  generate_prompts.py --check           all 390 prompts in sync
+  mypy .                                no issues in 489 source files
+  pytest -n auto --dist loadfile        8227 passed, 20 skipped, 3 xfailed
+                                        (8220 in round 1: +7 new tests)
+  frontend lint / tsc:check / vitest    557 tests in 20 files passed; build green
+$ bash scripts/verify_samples.sh                          EXIT=0
+  replays/samples/4p1i  All 50 samples verified clean.
+  replays/samples/9p2i  All 50 samples verified clean.
+$ uv run python scripts/build_sample_report.py --sample-dir <set> --check
+  the two replays/samples/ and two replays/ml_corpus/ sets       EXIT=0 each
+  ("consistent with its replays" on all four)
+$ uv run python scripts/publish_process_scorecard.py --check              EXIT=0
+$ uv run python scripts/verify_ml_evidence.py                             EXIT=0
+  checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5   (never --complete)
+$ uv run python scripts/check_doc_facts.py                                EXIT=0
+$ uv run pytest tests/scripts/test_verify_ml_evidence.py -q               EXIT=0
+  80 passed
+```
+
+`tests/meetings/test_prompt_byte_golden.py` is inside that suite and stayed
+green through its recorded-decision walk and divergence census: the v8 body is
+unrecorded, the 300 committed games replay from the v5 archive, and no
+bump-in-flight entry is owed. No test was weakened, skipped or deleted in this
+round and no expectation changed; the only test-file edits are seven added tests
+and five corrected comments. No `audits/` or `tests/fixtures/` byte moved, so no
+`docs/artifacts.md` row is recomputed.

@@ -459,13 +459,18 @@ class VotePromptRenderer(Protocol):
     ad-hoc render -- omits the block and renders the previous bytes.
 
     ``evidence_rows`` (ruling D5 of 2026-09-19) is the weighing channel: the
-    typed :class:`EvidenceRow` pieces THIS voter's suspicion numbers were built
-    from, already grouped and ordered by
-    :func:`meetings.manager.build_evidence_rows` so a template only loops. It is
-    the same additive, defaulted widening ``reporter_id`` / ``persona`` /
-    ``testimony_ledger`` use: the default ``()`` renders nothing, and the six
-    non-serving prompt sets reference no such variable, so their bytes are
-    unchanged whatever the manager threads.
+    typed :class:`EvidenceRow` pieces behind THIS voter's suspicion numbers that
+    the meeting layer can NAME -- not a complete decomposition of those numbers.
+    Two provenance channels of :class:`SuspicionEntry` reach no row: a witnessed
+    KILL (the participant carries no kill channel) and the BODY-PROXIMITY lift
+    (the body-discovery row names the dead victim, not the nearby suspect), so a
+    template must render the figure as a PARTIAL summary of the rows and never
+    as their total. :func:`meetings.manager.build_evidence_rows` states the same
+    limit and hands the rows over already grouped and ordered, so a template
+    only loops. It is the same additive, defaulted widening ``reporter_id`` /
+    ``persona`` / ``testimony_ledger`` use: the default ``()`` renders nothing,
+    and the six non-serving prompt sets reference no such variable, so their
+    bytes are unchanged whatever the manager threads.
     """
 
     def __call__(

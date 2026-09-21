@@ -186,7 +186,7 @@ _MARKER_REPR_VALUE: str = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 # (label, marker) for every audit marker the meeting layer PREPENDS to a ballot's
 # ``rationale_text``, built from the imported production literals so a rename
 # breaks loudly here. Mirrors ``api.replay_loader._BALLOT_PREFIX_MARKERS`` — the
-# display layer's table over the same eight kinds — and a test pins the two label
+# display layer's table over the same nine kinds — and a test pins the two label
 # sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the tenth kind and
 # sits apart: it is the WHOLE rationale, not a prefix.
 #

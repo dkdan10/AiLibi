@@ -545,7 +545,7 @@ class TestQwen3627bV5InWorldRegister:
     def test_bumped_stamps_never_collide_with_prior_bodies(self) -> None:
         # Current bodies must not reuse an earlier lineage's version stamp. The
         # per-template bump is exactly why this is a floor rather than one
-        # value: the vote body is a version ahead of the other three.
+        # value: the vote body is TWO versions ahead of the other three.
         for key, value in prompt_versions_for_set("qwen3_6_27b").items():
             expected = ".v8" if key == "vote_ballot" else ".v6"
             assert value.endswith(f".qwen3_6_27b{expected}")

@@ -401,6 +401,121 @@ class TestRowOrderAndBound:
         for left, right in zip(rows, rows[1:]):
             assert _key(left) <= _key(right), (left, right)
 
+    def test_the_three_provenance_classes_rank_in_the_stated_order(self) -> None:
+        """Perceived, then raised here, then said here -- pinned as LITERALS.
+
+        The adjacent-swap test above re-derives its key from
+        :data:`~meetings.manager._EVIDENCE_KIND_CLASS` itself, so exchanging two
+        of that mapping's values moves the rendered order AND the expectation
+        with it and the swap goes unseen. This states the order independently,
+        as the kind sequence the assembler's docstring and the template both
+        promise, over four rows about ONE subject built so the class term is the
+        only thing deciding them:
+
+        * ``own_sighting`` -- first-hand, class 0, but the LAST to arrive
+          (tick 50);
+        * a grounded voice, first-hand, class 2, the FIRST to arrive (turn 0);
+        * a flag, not first-hand, class 1, arriving at turn 2;
+        * an ungrounded voice, not first-hand, class 2, arriving at turn 1.
+
+        Within each first-hand group arrival time therefore disagrees with class
+        rank, so dropping the class term from the sort key, or exchanging the
+        ``contradiction`` and ``testimony`` values, reorders this list.
+        """
+
+        def _turn(
+            index: int,
+            speaker: str,
+            *,
+            accuses: str | None = None,
+            spoke: bool = False,
+        ) -> MeetingTurn:
+            return MeetingTurn(
+                turn_id=f"m-1:turn-{index}",
+                turn_index=index,
+                speaker=speaker,
+                turn_kind="opening" if index == 0 else "reply",
+                reply_to=None if index == 0 else f"m-1:turn-{index - 1}",
+                observations=(
+                    (
+                        SawPlayerObservation(
+                            type="saw_player", tick=5, subject="p-2", room="MEDBAY"
+                        ),
+                    )
+                    if spoke
+                    else ()
+                ),
+                claims=(
+                    (
+                        AccusationClaim(
+                            type="accusation",
+                            against=accuses,
+                            confidence=0.6,
+                            reason=f"{speaker} accuses {accuses}",
+                        ),
+                    )
+                    if accuses is not None
+                    else ()
+                ),
+                free_text="I was in MEDBAY." if accuses is None else "p-2 did it.",
+            )
+
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(0, "p-3", accuses="p-2", spoke=True),
+                _turn(1, "p-4", accuses="p-2"),
+                _turn(2, "p-2"),
+            )
+        )
+        flag = ContradictionRef(
+            contradiction_id="c-1",
+            kind="alibi_vs_sighting",
+            event_a_id="turn:m-1:turn-2:claim:0",
+            event_b_id="turn:m-1:turn-2:obs:0",
+            subjects=("p-2",),
+            description="p-2's account cannot be squared with a sighting.",
+        )
+        voter = _voter(
+            "p-1",
+            sightings=(
+                SightingRecord(
+                    subject="p-2", room="REACTOR", tick=50, observation_id="p-1:50:0"
+                ),
+            ),
+            observation_ids=("p-1:50:0",),
+        )
+        rows = build_evidence_rows(
+            voter=voter,
+            candidate_targets=("p-2",),
+            contradictions=(flag,),
+            transcript=transcript,
+            testimony_ledger=build_testimony_ledger(
+                transcript,
+                contradictions=(),
+                sighting_records={
+                    "p-3": (
+                        SightingRecord(
+                            subject="p-2",
+                            room="MEDBAY",
+                            tick=5,
+                            observation_id="p-3:5:0",
+                        ),
+                    )
+                },
+                move_witness_records={},
+                opener="p-3",
+                roster=frozenset({"p-1", "p-2", "p-3", "p-4"}),
+                trigger_kind="report",
+            ),
+        )
+
+        assert [(row.kind, row.first_hand) for row in rows] == [
+            ("own_sighting", True),
+            ("testimony", True),
+            ("contradiction", False),
+            ("testimony", False),
+        ], rows
+
     def test_each_subject_and_class_is_bounded(self) -> None:
         """An over-budget group keeps the LATEST rows and drops the earliest.
 
@@ -797,6 +912,72 @@ class TestRowOrderAndBound:
         # claims first-hand status. The leg below is the other half.
         assert all(row.first_hand is False for row in testimony)
 
+    def test_a_speaker_who_names_themselves_is_no_voice_against_themselves(
+        self,
+    ) -> None:
+        """A self-accusation builds NO testimony row, and the case is reachable.
+
+        Nothing upstream removes it: the manager's ``_drop_non_roster_claims``
+        drops only names off the roster, and a living speaker naming themselves
+        is on it, so the claim arrives here intact -- the first leg drives a real
+        meeting in which p-2 accuses p-2 and shows the claim surviving into the
+        final transcript. Without the drop the block would print "p-2 spoke
+        against them in turn N" under p-2's own name and read as one more voice
+        against p-2, inflating exactly the count
+        :mod:`meetings.corroboration` refuses to inflate.
+        """
+
+        captured, prompt = _capturing_vote_prompt()
+        result, _ = _run_meeting(
+            _vote_responder(accusations={"p-1": "p-3", "p-2": "p-2", "p-3": "p-2"}),
+            participants=_channel_voters(),
+            vote_prompt=prompt,
+        )
+        spoken = [
+            (turn.speaker, claim.against)
+            for turn in result.transcript.turns
+            for claim in turn.claims
+            if isinstance(claim, AccusationClaim)
+        ]
+        assert ("p-2", "p-2") in spoken, spoken
+        for voter_rows in captured.values():
+            assert not [
+                row
+                for row in voter_rows
+                if row.kind == "testimony" and row.speaker == row.subject
+            ], voter_rows
+
+        # The same claim through the assembler directly, where the ONE row the
+        # transcript may yield is the other speaker's.
+        def _turn(index: int, speaker: str, against: str) -> MeetingTurn:
+            return MeetingTurn(
+                turn_id=f"m-1:turn-{index}",
+                turn_index=index,
+                speaker=speaker,
+                turn_kind="opening" if index == 0 else "reply",
+                reply_to=None if index == 0 else f"m-1:turn-{index - 1}",
+                observations=(),
+                claims=(
+                    AccusationClaim(
+                        type="accusation",
+                        against=against,
+                        confidence=0.6,
+                        reason=f"{speaker} accuses {against}",
+                    ),
+                ),
+                free_text="p-2 did it.",
+            )
+
+        rows = build_evidence_rows(
+            voter=_participant("p-1"),
+            candidate_targets=("p-2",),
+            contradictions=(),
+            transcript=MeetingTranscript(
+                turns=(_turn(0, "p-2", "p-2"), _turn(1, "p-3", "p-2"))
+            ),
+        )
+        assert [(row.speaker, row.subject) for row in rows] == [("p-3", "p-2")], rows
+
     def test_a_grounded_voice_is_marked_first_hand_on_the_default_path(self) -> None:
         """The ledger that decides ``first_hand`` is built with the lever OFF.
 
@@ -1175,6 +1356,96 @@ class TestTheServedBody:
             )
         )
         assert "nothing here you could cite" in rendered
+
+    @staticmethod
+    def _provenance_clause(
+        *, kind: str, first_hand: bool, speaker: str
+    ) -> tuple[str, str]:
+        """``(the row's rendered parenthetical, the whole body)``.
+
+        One row, rendered through the real served template, so the four
+        provenance clauses below are read off the bytes a voter is served and
+        not off a re-implementation of the branch.
+        """
+
+        rendered = _served_ballot(
+            evidence_rows=(
+                EvidenceRow(
+                    subject="p-2",
+                    description="the row's own sentence",
+                    kind=kind,  # type: ignore[arg-type]
+                    first_hand=first_hand,
+                    speaker=speaker,
+                    citation_id="m-1:turn-0",
+                ),
+            )
+        )
+        line = next(
+            row for row in rendered.splitlines() if "the row's own sentence" in row
+        )
+        return line[line.index("(") + 1 : line.rindex(";")], rendered
+
+    def test_a_row_the_voter_perceived_says_it_saw_it_itself(self) -> None:
+        """Branch 1 of 4: first-hand AND spoken by this voter."""
+
+        clause, _ = self._provenance_clause(
+            kind="own_sighting", first_hand=True, speaker="p-1"
+        )
+        assert clause == "first-hand: you saw this yourself"
+
+    def test_a_grounded_voice_names_the_speaker_who_saw_it(self) -> None:
+        """Branch 2 of 4: first-hand, spoken by somebody else."""
+
+        clause, _ = self._provenance_clause(
+            kind="testimony", first_hand=True, speaker="p-3"
+        )
+        assert clause == "first-hand: p-3 saw it themselves"
+
+    def test_what_the_voter_merely_said_here_is_not_rendered_as_perception(
+        self,
+    ) -> None:
+        """Branch 3 of 4, and the defect it exists to stop.
+
+        ``first_hand`` is read BEFORE the speaker. The voter's own accusations
+        and the flags resolving to its own turn carry ``speaker`` = this voter
+        with ``first_hand=False`` (``_testimony_evidence_rows`` /
+        ``_contradiction_evidence_rows``), so testing the speaker first told the
+        voter it had PERCEIVED its own rhetoric -- the one thing a provenance
+        clause may never invent. Both kinds that can reach this pair are
+        asserted.
+        """
+
+        for kind in ("testimony", "contradiction"):
+            clause, rendered = self._provenance_clause(
+                kind=kind, first_hand=False, speaker="p-1"
+            )
+            assert clause == "not first-hand: you stated it at this table", kind
+            assert "first-hand: you saw this yourself" not in rendered, kind
+
+    def test_planted_the_old_branch_order_is_detected(self) -> None:
+        """PLANTED: the predicate above fails on bytes rendered speaker-first.
+
+        A COPY of the served body has the one clause replaced by what the
+        swapped branch order produced, and the same predicate is run.
+        """
+
+        _, rendered = self._provenance_clause(
+            kind="testimony", first_hand=False, speaker="p-1"
+        )
+        speaker_first = rendered.replace(
+            "not first-hand: you stated it at this table",
+            "first-hand: you saw this yourself",
+        )
+        assert speaker_first != rendered
+        assert "first-hand: you saw this yourself" in speaker_first
+
+    def test_another_voice_at_this_table_names_that_speaker(self) -> None:
+        """Branch 4 of 4: not first-hand, spoken by somebody else."""
+
+        clause, _ = self._provenance_clause(
+            kind="testimony", first_hand=False, speaker="p-3"
+        )
+        assert clause == "not first-hand: p-3 stated it at this table"
 
     def test_the_deference_sentence_is_gone_and_nothing_replaced_it(self) -> None:
         """The one sentence ruling D5 names, deleted with no substitute."""

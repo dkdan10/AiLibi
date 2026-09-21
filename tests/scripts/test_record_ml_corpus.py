@@ -977,8 +977,9 @@ def _run_prompt_version_check(
     )
 
 
-# The vote body is a version ahead of the other three: ruling D6 of
-# 2026-09-19 bumped vote_ballot ALONE, v6 -> v7.
+# The vote body is TWO versions ahead of the other three: ruling D6 of
+# 2026-09-19 bumped vote_ballot ALONE v6 -> v7, and ruling D5 bumped it alone
+# again v7 -> v8.
 _BARE_VERSION_CELL = (
     "accusation_round.qwen3_6_27b.v6, crewmate_report.qwen3_6_27b.v6, "
     "impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v8"
