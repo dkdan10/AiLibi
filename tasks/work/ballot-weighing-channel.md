@@ -1,6 +1,6 @@
 # Give the voter evidence to weigh instead of a verdict to follow
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -103,7 +103,7 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
 
 ## Acceptance
 
-- [ ] Typed evidence rows, assembled from typed inputs only. A frozen
+- [x] Typed evidence rows, assembled from typed inputs only. A frozen
   `EvidenceRow` in `meetings/render_contract.py` (the leaf that breaks the
   `agents` cycle, so it imports no `agents.*`) carries the subject, a one-line
   description, `kind` (own sighting, own vent, own transit, own body discovery,
@@ -120,7 +120,7 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   `turn_id` of this meeting's final transcript or a member of THAT voter's own
   `observation_ids`. Planted: a row built from another participant's channel is
   red.
-- [ ] Evidence renders first, the number last, and no wording pushes at a
+- [x] Evidence renders first, the number last, and no wording pushes at a
   target. `VotePromptRenderer` (`meetings/render_contract.py:340-400`) gains
   `evidence_rows: tuple[EvidenceRow, ...] = ()`, the inert widening
   `reporter_id`, `persona` and `testimony_ledger` already use, so the six
@@ -133,7 +133,7 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   [the previous card](grounded-skip-and-guard-labels.md) put there. Planted:
   the deference sentence restored is red; a rendered ballot naming a
   recommended target is red.
-- [ ] `counter_reason_id` end to end, composing into ONE decision record.
+- [x] `counter_reason_id` end to end, composing into ONE decision record.
   `ModelAuthoredVoteBallot` (`meetings/schemas.py:767-773`) gains
   `counter_reason_id: str | None = None`, so `VoteBallot` inherits it and the
   adapters that constrain decoding on the authored model carry it. The manager
@@ -158,7 +158,7 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   existing two, the THIRD and last edit that component takes in this plan.
   `tests/api/test_leak.py` gains the field on the same rows the grounded-SKIP
   card widened, and a frontend test covers present, null and unresolvable.
-- [ ] Trust is DELETED, not wired, and the card says why: a credibility scalar
+- [x] Trust is DELETED, not wired, and the card says why: a credibility scalar
   would be a second engine-computed verdict handed to the agent, the defect this
   card exists to remove, while the credibility information itself already
   arrives as evidence, a speaker whose own account a route-aware detector broke
@@ -173,7 +173,7 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   must not move, so one history line says the field is now a frozen-set render
   input only. `docs/adr/0001-three-load-bearing-decisions.md:30` and
   `DESIGN.md:718` are corrected.
-- [ ] The version cascade, the archive window, and old recordings that keep
+- [x] The version cascade, the archive window, and old recordings that keep
   loading. The wave takes THREE `qwen3_6_27b` bumps, one per card whose
   template bytes move, so no stamp ever covers two bodies: the alibi card's
   set-wide `v6`, then `vote_ballot` ALONE to `v7` on the grounded-SKIP card,
@@ -191,7 +191,7 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   four `--check` runs stay green on unchanged bytes. Planted, each red
   before and green after: an archived body edited by one byte, the old row shape
   under a narrowed pattern, and a `--check` run over a committed set drifting.
-- [ ] The prediction is written down BEFORE anything is re-recorded, and is not
+- [x] The prediction is written down BEFORE anything is re-recorded, and is not
   a gate. This card's Results and [the scorecard](process-scorecard.md)'s
   argmax-independence row state, dated, that after
   [the re-record](process-rerecord.md) the follower share should FALL from 93.6%
@@ -309,3 +309,346 @@ over the two `replays/samples/` and two `replays/ml_corpus/` sets,
 counts-only re-tally that reproduces this card's argmax table, and
 `bash scripts/check.sh` run whole in a clean worktree so no gate after the first
 failure is masked. No live evaluation, calibration or provider call is a check.
+## Results
+
+Delivered on `work/ballot-weighing-channel`, the THIRD and last card of the
+substrate wave. Every `file:line` this card was written against was taken at
+`cdefb7a6`, before [the alibi card](alibi-as-route.md) and
+[the grounded-SKIP card](grounded-skip-and-guard-labels.md) landed; every
+citation below is re-anchored by SYMBOL at this card's base, `0a1100ea`, and
+the true lines are given. No cited construct had disappeared and neither
+earlier card had changed one's meaning, so nothing was blocked.
+
+### Architecture and contract references
+
+`docs/architecture.md` layering is unchanged: the engine stays a deterministic
+tick function, `agents/` imports no `engine/`, and
+`meetings/render_contract.py` stays the leaf that breaks the `agents ↛
+meetings.manager` cycle — `EvidenceRow` carries ids and rendered strings only
+and imports no `agents.*`, which `uv run lint-imports` re-checks (4 contracts
+kept, 0 broken). DESIGN.md §5.5 is the ballot contract the ninth key joins;
+§6.6 is the render whose trust branch is deleted. The basis is ruling D5 of
+[the direction of 2026-09-19](../direction-2026-09-19-process-over-outcome.md),
+§4 (the finding and property P6), §7 ("render the evidence rows the suspicion
+number was built from … drop the 'trust them over meeting rhetoric'
+instruction … or delete the column rather than display a constant") and §12
+(the ruling table).
+
+### What was built, and where it actually lives
+
+| Contract item | Symbol | Line at `0a1100ea` + after |
+| --- | --- | --- |
+| the row DTO | `EvidenceRow` / `EvidenceRowKind` | `meetings/render_contract.py:155` / `:131` (new) |
+| the renderer widening | `VotePromptRenderer.evidence_rows` | `meetings/render_contract.py:481` (card said `:340-400`) |
+| the three witness stamps | `VentWitnessRecord` / `SightingRecord` / `MoveWitnessRecord` `.observation_id` | `meetings/schemas.py:318` / `:358` / `:389` (card said `:306-308`, `:340-343`, `:366-369`) |
+| the ninth ballot key | `ModelAuthoredVoteBallot.counter_reason_id` | `meetings/schemas.py:1035` (card said `:767-773`) |
+| row assembly | `build_evidence_rows` + its three builders | `meetings/manager.py:3618`, `:3424`, `:3510`, `:3557` (new) |
+| the render call site | `MeetingManager._collect_one_ballot` | `meetings/manager.py:2248` threads the rows, `:2300` passes them (card said `:2151`) |
+| the counter validator | `_normalize_ballot_counter_reason_id` | `meetings/manager.py:3863`, called at `:2477` |
+| the two shared decisions | `_resolved_reason_id` / `_resolved_observation_id` | `meetings/manager.py:3730` / `:3753` (extracted from `_normalize_ballot_reason_id` at `:3773`, card said `:3199`, and `_normalize_ballot_observation_id` at `:3822`, card said `:3241`) |
+| the counter marker | `INVALID_COUNTER_REASON_MARKER` | `meetings/manager.py:412` |
+| the served body | `vote_ballot.j2` | `:244-251` the `<evidence>` block, `:254-255` the relabelled summary, `:258` the row without `trust`, `:290` the sentence deleted, `:293-294` nine keys, `:300` the counter bullet |
+| the row pattern | `_SUSPICION_GRAPH_ROW_RE` | `eval/meeting_quality.py:341` (card said `:326`) |
+| the served DTO | `BallotView.counter_reason_id` | `api/schemas.py:1093` (card said `:962-970`), mirrored at `api/replay_loader.py:3324` (card said `:3286`) |
+| the spectator card | `BallotCard.tsx` | `:261` the third `EvidenceLink`, `:57` `counterKind`, `:32` the chip label |
+| the marker tables | three | `api/replay_loader.py:3618`, `training/surrogate/dataset.py:205` (card said `:213`), `eval/deduction_metrics.py:724` |
+| the trust deletion | `BeliefState.adjust_trust` / `_format_belief_score` | `agents/memory/beliefs.py:966` (history note where it stood; card said `:953`), `agents/memory/store.py:2808` |
+
+### Decisions
+
+**The evidence block's sources, and the one the card named that is lever-gated.**
+The card names "the participant's typed channels, `contradictions` and
+`testimony_ledger`". The first two are unconditional; the ledger was built ONLY
+while the `corroboration_discipline` lever was ON (`meetings/manager.py:1568`
+before this card), so on the shipped default path every testimony row would have
+read "not first-hand" whatever the speaker's own record said — the block would
+have shipped with its third source dark. The ledger is a pure derivation of
+bytes the meeting already holds, so it is now built unconditionally
+(`meetings/manager.py:1568`) and used for the `first_hand` bit alone; the LEVER
+still decides whether the `<testimony_sources>` BLOCK renders, so an OFF
+meeting's prompt bytes are unchanged, which the prompt-byte golden re-asserts
+over all 300 committed games. The testimony ROWS themselves are built from the
+transcript's typed `AccusationClaim`s — the ledger carries no per-speaker turn
+id, and a row must carry an id a ballot may cite.
+
+**What `first_hand` means, stated at the strength the code delivers.** True only
+where the row's speaker perceived the thing themselves: every own-channel row,
+and a testimony row whose speaker is in the ledger's first-hand set for that
+subject. A contradiction row is the meeting layer's cross-check of two
+statements rather than one speaker's perception, so it is False — said in the
+DTO docstring, in `build_evidence_rows`, and in the template's own wording
+("not first-hand: {speaker} stated it at this table", which is accurate for a
+contradiction row as well as for an ungrounded voice).
+
+**Row order encodes no guilt, and the bound is a page rule.** Order is: subject
+(the `candidate_targets` roster order, then any other subject by id), first-hand
+before not, then the provenance CLASS (own perception → the detector's flags →
+what was said here), then earliest-first, then kind/speaker/citation. A
+witnessed vent and an ordinary sighting share class 0 on purpose, so the block
+cannot rank one player's evidence above another's. `MAX_EVIDENCE_ROWS_PER_SUBJECT
+= 8` (`meetings/manager.py:3390`) bounds each (subject, class) group, not each
+subject: a single budget would have let many own sightings of one player crowd
+out the contradictions and the voices against that same player. Where it bites
+the EARLIEST rows of that group go, by position and never by content, and the
+template says so in one standing sentence.
+
+**A body discovery's subject is the victim.** It is the one own-channel kind
+whose subject is dead and therefore never an ejection target; it is kept (the
+card lists the kind) and sorts after the living targets. Nothing is dropped for
+being exculpatory.
+
+**`counter_reason_id` is a gate over nothing, and the code says how.** It is
+validated through the SAME two decisions as the primary slots — which is why
+those decisions were extracted into `_resolved_reason_id` /
+`_resolved_observation_id` and the three validators now share them, rather than
+a third copy that could drift. A null counter returns the ballot untouched. A
+fabricated counter costs exactly this field plus a marker; it is deliberately
+outside the `cited_before_validation` read (`meetings/manager.py:2444`), so it
+cannot turn an `uncited` ballot into an `invalid_citation` one, and no guard, no
+`tally_ballots` and no `label_ballot_grounding` branch reads it.
+
+**The counter's null is ELIDED from the recorded bytes**, like `decision_basis`
+and for the same reason: the four committed `tournament-eval-report.json` files
+embed re-serialized ballots, so a `null` key written there would have moved
+bytes in four reports this card may not move. `VoteBallot._serialize`
+(`meetings/schemas.py:1163`).
+
+**Trust is DELETED, not wired**, with the card's reason recorded in three
+places: the comment where `adjust_trust` stood
+(`agents/memory/beliefs.py:966`), the ADR's 2026-08-19 note
+(`docs/adr/0001-three-load-bearing-decisions.md:30`) and DESIGN.md's §6.6
+banner (`:718`). A credibility scalar would be a second engine-computed verdict
+handed to the agent — the defect this card exists to remove — while the
+credibility information itself already arrives as evidence. `PlayerBelief.trust`
+and `SuspicionEntry.trust` STAY: six frozen sets render `entry.trust` and their
+byte pins must not move, so one history line in each of the three documents says
+the field is now a frozen-set render input only.
+
+**`VIEW_MODEL_VERSION` is NOT bumped.** It stays `"5"`. The constant's own rule
+(`api/schemas.py:56`) is that a BREAKING shape change bumps it and an additive
+projection does not; `counter_reason_id` is additive with a `None` default, the
+same shape `decision_basis` and `grounding_label` took without a bump.
+`frontend/src/types/api.ts` was regenerated by
+`uv run python scripts/gen_frontend_types.py`, which reproduced the hand edit
+exactly, so the DTO and the TS type cannot have drifted.
+
+### Deviations from the card, declared
+
+1. **One `tests/fixtures/` byte moved, and the `docs/artifacts.md` row was
+   recomputed** — which Record impact said would not happen and Expected scope
+   put out of bounds. Deleting `_format_belief_score`'s trust branch is not
+   invisible to the committed goldens after all: `crewmate_basic.json:44` seeds
+   `p-1` at `suspicion 0.5, trust 0.7`, a row production cannot produce, and its
+   golden carried `- p-1: trust 0.70`. The alternatives were to keep the branch
+   (failing the acceptance item) or to move one line of one golden. The golden
+   line is removed, the fixture INPUT is left exactly as its author wrote it (it
+   is the historical record of what that fixture asked for), and
+   `docs/artifacts.md:101` is recomputed with the change staged: **2,196,268 →
+   2,196,250 tracked bytes, 35 files unchanged** (`git ls-files tests/fixtures |
+   xargs wc -c`). `scripts/verify_ml_evidence.py` (offline) and
+   `tests/scripts/test_verify_ml_evidence.py` are green on the new row. The
+   alibi card, which owned that row, is merged, so no concurrent writer was
+   displaced.
+2. **`scripts/record_ml_corpus.sh` was edited** — not in Expected scope, but the
+   card's own cascade clause says the bump must reach "the lever-arm overlays
+   that now spread `PROMPT_VERSION_SETS` and `scripts/record_ml_corpus.sh`". Its
+   `REQUIRED_PROMPT_VERSIONS_BASE` preflight pin (`:169`) would otherwise refuse
+   every future recording under the v8 body.
+3. **Two frontend story fixtures** (`MeetingView.stories.tsx`,
+   `MindInspector.stories.tsx`) gained the new required field. `npm run
+   tsc:check` fails without them; this is the "directly necessary
+   call-site follow-through" AGENTS.md permits.
+4. **`agents/strategic/prompts/loader.py`** takes the new kwarg. The card's
+   Expected scope names `meetings/render_contract.py` for "the renderer kwarg";
+   the Protocol and the callable that conforms to it are two files, and a
+   Protocol nothing implements renders nothing.
+5. **`audits/workflows/extract_gameplay_facts.py:272` keeps the NARROWED row
+   pattern.** It is a second reader of the same rendered row shape, and after
+   the re-record it will silently skip a post-card row. It is not edited because
+   it lives under `audits/`, whose bytes this card may not move and whose
+   `docs/artifacts.md` row it may not recompute. It reads committed bytes only,
+   which all carry the trust suffix, so it is correct today; the re-record card
+   should take it. Recorded here rather than left to be re-found.
+
+### Verification
+
+Every command below was run at the final head in this clean worktree, with its
+real exit code captured directly.
+
+```
+$ bash scripts/check.sh                                   EXIT=0
+  ruff check . / ruff format --check .  518 files, all clean
+  lint-imports                          4 contracts kept, 0 broken, 188 modules
+  validate_task_docs.py                 390 phase tasks + 390 prompts; 73 work cards
+  generate_prompts.py --check           clean
+  mypy .                                no issues in 489 source files
+  pytest -n auto --dist loadfile        8204 passed, 20 skipped, 3 xfailed
+  frontend lint / tsc:check / vitest    557 tests in 20 files passed; build green
+
+$ bash scripts/verify_samples.sh                          EXIT=0
+  replays/samples/4p1i  All 50 samples verified clean.
+  replays/samples/9p2i  All 50 samples verified clean.
+
+$ uv run python scripts/build_sample_report.py --sample-dir <set> --check
+  replays/samples/4p1i     consistent with its replays.      EXIT=0
+  replays/samples/9p2i     consistent with its replays.      EXIT=0
+  replays/ml_corpus/4p1i   consistent with its replays.      EXIT=0
+  replays/ml_corpus/9p2i   consistent with its replays.      EXIT=0
+
+$ uv run python scripts/publish_process_scorecard.py --check              EXIT=0
+$ uv run python scripts/verify_ml_evidence.py                             EXIT=0
+  checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5   (never --complete)
+$ uv run python scripts/check_doc_facts.py                                EXIT=0
+$ uv run pytest tests/scripts/test_verify_ml_evidence.py -q               EXIT=0
+$ cd frontend && npm run e2e                              13 passed, 3 skipped
+```
+
+The card's own Validation list is covered: `tests/meetings tests/agents
+tests/api tests/eval tests/training tests/scripts tests/test_firewall.py` all
+run inside the `pytest` line above (fake and replay providers only — no live
+provider call of any kind was made, and none is a check here), `lint-imports`,
+`mypy`, `validate_task_docs.py`, `check_doc_facts.py`, `verify_ml_evidence.py`
+offline with its own test, `verify_samples.sh`, the four `--check` runs, the
+three frontend commands, the re-tally below, and the whole gate.
+
+**The argmax re-tally, count-only, through the production path.** The card's
+Evidence table is reproduced by
+`uv run python scripts/publish_process_scorecard.py --check` (EXIT=0), which
+recomputes `docs/process-scorecard.md` from the committed recordings and
+compares it byte for byte. Its rows read, unchanged by this card:
+`ml_corpus/9p2i` deviating **81/1270 = 6.4%** (so 1,189 following = 93.6%),
+role-correct **1143/1189 = 96.1% vs 7/81 = 8.6%** (`:107-108`);
+`samples/9p2i` deviating **31/434 = 7.1%** (403 following = 92.9%),
+role-correct **358/403 = 88.8% vs 2/31 = 6.5%** (`:142-143`). Every cell of the
+card's table to the digit. The census is keyed by (set, meeting), prints no
+rendered prompt and no seed-band prefix, and re-scores nothing: the widened row
+pattern reads the committed `, trust 0.50` rows exactly as the narrow one did,
+which is why all four `--check` recomputations are byte-identical.
+
+### Planted and perturbed failures
+
+A mechanical pass over the WHOLE production diff. Each row edits ONE thing,
+runs the named probe, and restores the file from an in-memory COPY (never `git
+checkout`). Run with `PYTHONDONTWRITEBYTECODE=1` and `-p no:cacheprovider`
+after a first pass produced three FALSE reds from stale `__pycache__` bytecode:
+the `v8 → v7` edit preserves file SIZE, so a restore inside the same second let
+CPython reuse the perturbed `.pyc`. That is recorded because it is exactly the
+kind of thing that makes a perturbation table lie.
+
+| # | perturbation | probe | result |
+| --- | --- | --- | --- |
+| 1 | own sighting row's `citation_id` → `None` | `test_weighing_channel.py` | red |
+| 2 | own vent row's `first_hand` → `False` | same | red |
+| 3 | body-discovery rows dropped | same | red |
+| 4 | transit rows dropped | same | red |
+| 5 | contradiction → turn resolution neutered | same | red |
+| 6 | testimony rows ignore the ledger's first-hand set | same | red |
+| 7 | the (speaker, subject) dedupe removed | same | red |
+| 8 | first-hand rank removed from the sort key | same | red |
+| 9 | subject grouping removed from the sort key | same | red |
+| 10 | the per-(subject, class) budget disabled | same | red |
+| 11 | `evidence_rows` not threaded into the render | same | red |
+| 12 | the ledger built only while the lever is ON | same | red |
+| 13 | the counter validator removed from the chain | same | red |
+| 14 | the counter's observation-id branch removed | same | red |
+| 15 | the counter marker payload left unbounded | same | red |
+| 16 | the shared turn-suffix recovery neutered | `test_manager.py` | red |
+| 17 | `counter_reason_id` not elided from recorded bytes | `test_weighing_channel.py` | red |
+| 18 | sighting accessor drops the episodic stamp | `test_sighting_accessor.py` | red |
+| 19 | vent accessor drops the episodic stamp | `test_meeting_integration.py` | red |
+| 20 | `vote_ballot` rolled back to v7 | `test_bespoke_prompt_sets.py` | red |
+| 21 | the row pattern re-requires `, trust <N>` | `test_elicitation_fixtures.py`, `test_meeting_quality.py` | red |
+| 22 | `BallotView` stops mirroring the counter | `test_view_model.py` | red |
+| 23 | the counter marker leaves the replay-loader table | `test_view_model.py`, `test_weighing_channel.py` | red |
+| 24 | the counter marker leaves the surrogate table | `test_surrogate_dataset.py`, `test_weighing_channel.py` | red |
+| 25 | the counter marker leaves the deduction chain | `test_weighing_channel.py` | red |
+| 26 | the deference sentence restored in the served body | same | red |
+| 27 | the trust column restored on the served row | same | red |
+| 28 | the evidence block rendered below the number | same | red |
+| 29 | the ninth contract key dropped from the skeleton | same | red |
+| 30 | the row's citation clause dropped | same | red |
+| 31 | the belief render's trust branch restored | `test_memory_rendering.py`, `test_beliefs_hard_evidence_gate.py` | red |
+
+**Five of these first came back GREEN and are named plainly**: #2 (the
+`first_hand` bit on own rows), #5 (the contradiction→turn resolution), #7 (the
+dedupe), #8 (the first-hand rank) and #21 (the widened row pattern). Each was an
+unenforced production line; five tests were added for them —
+`test_every_own_channel_row_is_marked_first_hand`,
+`test_a_contradiction_row_resolves_to_the_turn_it_was_spoken_in`,
+`test_one_speaker_naming_one_subject_twice_makes_one_row`,
+`test_a_grounded_voice_sorts_above_an_ungrounded_one` (the rank is only
+observable between two rows alike in every earlier key) and
+`test_the_suspicion_row_pattern_reads_both_rendered_shapes` — and the pass was
+re-run from scratch: 31 rows, 0 unenforced.
+
+Beside the table, the acceptance items' own planted cases:
+
+* **a row built from another participant's channel** —
+  `test_a_row_built_from_another_participants_channel_is_caught` runs the real
+  assembler on p-1's records and checks the rows against p-2's id set: 4
+  violations, and 0 against their real owner, so the invariant is not vacuously
+  red;
+* **the deference sentence restored** —
+  `test_planted_the_restored_deference_sentence_is_detected` puts it back into a
+  COPY of the rendered bytes and shows the predicate fires;
+* **a rendered ballot recommending a target** —
+  `test_planted_a_recommended_target_is_detected` runs the same
+  recommendation-verb scan over a body that names one;
+* **an archived body edited by one byte, the old row shape under a narrowed
+  pattern, and a drifting `--check`** — the first is
+  `tests/meetings/test_prompt_byte_golden.py::test_one_byte_template_perturbation_breaks_the_golden`
+  and its archive sibling, both already gates and both green here; the second is
+  row 21; the third is the four `--check` runs, whose failure mode
+  `tests/scripts/` already plants.
+
+**Properties, not examples.** `counter_reason_id` is exercised over a generated
+family driven through the real `MeetingManager`: for each of seven counter
+values — absent, fabricated, a valid turn id, a valid observation id, another
+player's observation id, an injection-shaped string and a marker-shaped string —
+the recorded target, the confidence, the outcome, the ejected player, both
+primary citations and every `grounding_label` equal what the identical meeting
+produced with no counter at all. A separate case shows a marker-shaped counter
+lands INSIDE the counter marker's quoted payload (the chain consumes exactly one
+marker and the model's body survives intact), and an over-length value is bounded
+by `bounded_marker_original`.
+
+### The prediction, written down BEFORE anything is re-recorded
+
+Dated **2026-09-21**, and it is NOT a gate. After
+[the re-record](process-rerecord.md) runs on this substrate:
+
+* the FOLLOWER share of crew EJECT ballots should FALL from today's **93.6%**
+  (`ml_corpus/9p2i`, 1,189 of 1,270) and **92.9%** (`samples/9p2i`, 403 of 434);
+* deviating EJECTs should be AT LEAST as role-correct as following ones, against
+  today's **8.6% versus 96.1%** (`ml_corpus/9p2i`) and **6.5% versus 88.8%**
+  (`samples/9p2i`).
+
+The same prediction is recorded, dated, in
+[the scorecard card](process-scorecard.md)'s Results. Under ruling D1
+role-correctness is reported beside and gates nothing: a wrong call on rows the
+voter can cite is the outcome the owner asked for, and this card's Record
+impact already says the ejection rate will move in either direction. Neither
+figure is a merge condition for anything.
+
+### Limitations
+
+* **Nothing is measured on new bytes.** No provider call, no recording, no
+  re-scored report; every number above is either a committed-bytes
+  recomputation or a test count. What the v8 body actually does to a voter is
+  unknown until the re-record, by design.
+* **The testimony rows' `first_hand` bit is only as good as the ledger's
+  grounding predicates**, which are the detector's own. A speaker who saw
+  something their record does not bear out reads as "not first-hand", which is
+  what is known, not a claim that they lied.
+* **A contradiction row's speaker is a resolution, not a certainty.** Where the
+  flag's event ids name no turn of this meeting the row renders with no citation
+  and the SUBJECT as its speaker — honest, but thinner than the resolved case.
+* **The per-(subject, class) budget can hide evidence.** Eight rows per group is
+  a page bound, not a claim that a ninth did not exist; the rendered memory block
+  above still carries it, and the template says so.
+* **`audits/workflows/extract_gameplay_facts.py` keeps the narrowed row
+  pattern** (deviation 5): it will skip post-re-record rows until someone who may
+  move `audits/` bytes widens it.
+* **The four committed `tournament-eval-report.json` files stay byte-identical**
+  only because the new ballot key is elided when null. A future field that is not
+  elided moves them.
