@@ -27,6 +27,7 @@ backward-compat pin mirrors ``tests.meetings.test_schemas_pooling``.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -38,7 +39,7 @@ from meetings.manager import (
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     _default_vote,  # noqa: PLC2701
 )
-from meetings.schemas import ObservationId, VoteBallot
+from meetings.schemas import MeetingResult, ObservationId, VoteBallot
 from observation.packet import GlobalView, ObservationPacket, PlayerView, SelfView
 from orchestrator.game import (
     MeetingAwareAgent,
@@ -281,38 +282,73 @@ class TestPrivateWitnessedKillCitation:
 
 
 class TestBallotObservationIdSatisfiesTheGraduatedGate:
-    def test_valid_citation_keeps_the_eject_where_null_coerces(self) -> None:
+    def test_valid_citation_separates_the_label_and_not_the_vote(self) -> None:
         # The 16.5-era "enforcement-free" invariant (no gate consults the
-        # field) was the PRE-graduation contract; Task 16.17 graduated the
-        # 16.6 citation gate to unconditional, so the enforcement has
-        # arrived and the two runs now DIVERGE exactly at the citation: an
-        # observation-cited zero-flag EJECT stands (the C3 honest-witness
-        # path), while the identical uncited ballot is coerced to SKIP with
-        # the audit marker.
+        # field) was the PRE-graduation contract; Task 16.17 graduated the 16.6
+        # citation gate to unconditional, and ruling D6 of 2026-09-19 then
+        # replaced the gate with a LABEL. So the two runs still diverge exactly
+        # at the citation -- an observation-cited zero-flag EJECT reads
+        # `supported`, the identical uncited one reads `uncited` -- but the vote
+        # no longer moves, which is the ruling itself: the target is the
+        # voter's under either label, and the retired gate's marker appears on
+        # neither.
         targets = {voter: "p-3" for voter in ("p-1", "p-2", "p-3", "p-4")}
 
-        def _run(observation_ids_by_voter: dict[str, ObservationId | None]):  # type: ignore[no-untyped-def]
+        def _run(
+            observation_ids_by_voter: dict[str, ObservationId | None],
+            *,
+            names: str = "p-3",
+        ) -> MeetingResult:
+            # p-2's memory RENDERS the observation it cites, which is the only
+            # surface aboutness can be read off -- the shipped render prints one
+            # observation per line and the labeller asks whether the cited line
+            # names the ballot's target. ``names`` is who that line places,
+            # which is what separates ``supported`` from ``off_target`` now that
+            # the relevance rule is the default rather than a lever.
+            roster = tuple(
+                replace(
+                    participant,
+                    rendered_memory=(
+                        f"{participant.rendered_memory}\n"
+                        f"[obs p-2:410:0] tick 410: {names} vented in MEDBAY."
+                    ),
+                )
+                if participant.agent_id == "p-2"
+                else participant
+                for participant in _participants({"p-2": ("p-2:410:0",)})
+            )
             result, _ = _run_meeting(
                 _obs_vote_responder(
                     observation_ids_by_voter=observation_ids_by_voter, targets=targets
                 ),
-                participants=_participants({"p-2": ("p-2:410:0",)}),
+                participants=roster,
             )
             return result
 
         cited = _run({"p-2": "p-2:410:0"})
         uncited = _run({})
+        off_target = _run({"p-2": "p-2:410:0"}, names="p-4")
 
         p2_cited = next(b for b in cited.ballots if b.voter == "p-2")
         p2_uncited = next(b for b in uncited.ballots if b.voter == "p-2")
         gate_prefix = UNCITED_ZERO_FLAG_EJECT_MARKER.split("{", 1)[0]
         assert p2_cited.target == "p-3"
         assert p2_cited.primary_reason_observation_id == "p-2:410:0"
+        assert p2_cited.grounding_label == "supported"
         assert gate_prefix not in p2_cited.rationale_text
-        assert p2_uncited.target == "SKIP"
-        assert p2_uncited.rationale_text.startswith(
-            UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-3")
-        )
+        assert p2_uncited.target == "p-3"
+        assert p2_uncited.primary_reason_observation_id is None
+        assert p2_uncited.grounding_label == "uncited"
+        assert p2_uncited.guard_rewrite_reason is None
+        assert gate_prefix not in p2_uncited.rationale_text
+        # And the third reading the retired lever used to gate: the citation
+        # resolves but places somebody else, so it reads `off_target` -- and the
+        # vote still stands, which is the whole of what changed.
+        p2_off = next(b for b in off_target.ballots if b.voter == "p-2")
+        assert p2_off.target == "p-3"
+        assert p2_off.primary_reason_observation_id == "p-2:410:0"
+        assert p2_off.grounding_label == "off_target"
+        assert p2_off.guard_rewrite_reason is None
 
     def test_default_vote_carries_a_null_citation(self) -> None:
         # The manager's fail-soft default ballot cites nothing.

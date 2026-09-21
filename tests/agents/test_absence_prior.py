@@ -78,7 +78,7 @@ from meetings.manager import (
     SuspicionEntry,
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     derive_belief_evidence,
-    guard_ballot_citation,
+    label_ballot_grounding,
 )
 from meetings.schemas import (
     ContradictionRef,
@@ -694,18 +694,28 @@ class TestAbsenceFlagIndependence:
         assert result.view("p-2").suspicion == 0.58  # noqa: PLR2004
         assert result.view("p-2").inconsistencies == ()
 
-    def test_absence_lift_over_the_gate_still_coerces_an_uncited_eject(self) -> None:
+    def test_absence_lift_over_the_gate_still_labels_an_uncited_eject(self) -> None:
         # Behavioural mirror of TestAbsenceDeltaNonInteraction from the absence
-        # side: even when the absence prior lifts a zero-flag target over the gate,
-        # the citation gate coerces an uncited EJECT to SKIP -- the gate reads only
-        # this meeting's flags, never suspicion.
+        # side: even when the absence prior lifts a zero-flag target over the
+        # gate, the label reads ``uncited`` -- the labeller reads only THIS
+        # meeting's flags, never suspicion, so a suspicion lift cannot change
+        # the word. Since ruling D6 the vote itself stands either way, which is
+        # asserted here beside the label.
         ballot = _uncited_eject("p-2")
-        assert guard_ballot_citation(ballot=ballot, contradictions=()).target == "SKIP"
-        # The ONLY escape channel is a flag -- which absence never mints.
-        assert (
-            guard_ballot_citation(ballot=ballot, contradictions=(_strong_flag("p-2"),))
-            is ballot
+        labelled = label_ballot_grounding(
+            ballot=ballot, contradictions=(), candidate_targets=("p-2",)
         )
+        assert labelled.grounding_label == "uncited"
+        assert labelled.target == "p-2"
+        # The ONLY channel that moves the word is a flag -- which absence never
+        # mints. It still moves no target.
+        flagged = label_ballot_grounding(
+            ballot=ballot,
+            contradictions=(_strong_flag("p-2"),),
+            candidate_targets=("p-2",),
+        )
+        assert flagged.grounding_label == "flag_only"
+        assert flagged.target == "p-2"
 
 
 # --------------------------------------------------------------------------- #

@@ -892,17 +892,92 @@ BallotTargetRewriteReason: TypeAlias = Literal[
 ]
 """Why a recorded ballot's ``target`` is not the one the voter authored.
 
-The six classes under which the meeting layer redirected, coerced,
-normalized, or wholly defaulted a target -- as opposed to the citation-only
-rewrites, which null a reference and leave the authored target intact. A
-consumer that judges what a voter BELIEVED must exclude a ballot carrying any
-of these.
+The classes under which the meeting layer redirected, coerced, normalized, or
+wholly defaulted a target -- as opposed to the citation-only rewrites, which
+null a reference and leave the authored target intact. A consumer that judges
+what a voter BELIEVED must exclude a ballot carrying any of these.
 
-``off_target_coerced`` is the relevance half of the citation gate and rides the
-``citation_relevance_version`` lever: the citation resolved, but it was not
-about the player the ballot named. No recording made before that lever exists
-carries it, and the default-``None`` lever means none is created until a run
-turns it on.
+THREE of the six are live. ``invalid_target``
+(:func:`meetings.voting.normalize_ballot_target`) and ``teammate_coerced``
+(:func:`meetings.manager.coerce_teammate_ballot_to_skip`) are the two rewrites
+a tally cannot do without, and ``parse_default``
+(:func:`meetings.manager._vote_parse_default`) records a ballot that never
+parsed. The other three are READ-ONLY HISTORY, kept because committed
+recordings carry them and four consumers parse those bytes:
+
+* ``under_gate_redirect`` -- the suspicion-argmax redirect, retired outright by
+  the grounded-SKIP card (ruling D6 of 2026-09-19). Re-aiming a ballot at the
+  voter's own argmax was the engine pushing the agent toward its arithmetic, so
+  the mechanism went rather than becoming a label. 83 committed ballots carry
+  it; no live path mints it (``tests/meetings/test_grounding_label.py``).
+* ``uncited_coerced`` -- an uncited zero-flag EJECT coerced to SKIP, replaced by
+  the ``uncited`` / ``flag_only`` :data:`BallotGroundingLabel`. 6 committed
+  ballots carry it; no live path mints it.
+* ``off_target_coerced`` -- the relevance half of the same gate, which rode the
+  retired ``citation_relevance_version`` lever. It was never ON in a committed
+  recording, so NO recorded byte carries it; the member survives so a reader
+  written against the old vocabulary keeps resolving.
+"""
+
+
+BallotGroundingLabel: TypeAlias = Literal[
+    "not_assessed",
+    "supported",
+    "off_target",
+    "invalid_citation",
+    "none_held",
+    "flag_only",
+    "uncited",
+]
+"""What basis the meeting layer found under a recorded ballot, in one word.
+
+Two writers, and no third. :func:`meetings.manager.label_ballot_grounding`
+derives it for every ballot a voter actually authored, and
+:func:`meetings.manager._default_vote` states ``not_assessed`` outright on the
+two ballots the layer synthesizes when no completion arrived at all (a missed
+deadline, and a completion that failed validation twice). Both paths leave
+every live-recorded ballot labelled, which is what reserves ``None`` for a
+recording made before the field.
+
+The layer LABELS and never rewrites: the label is a description of the basis the
+ballot carries, it is never an input to :func:`meetings.voting.tally_ballots`,
+and an ``uncited`` / ``off_target`` / ``invalid_citation`` EJECT is tallied for
+the player the voter named (ruling D6 of 2026-09-19).
+
+The precedence is fixed and total -- the first that holds wins:
+
+* ``not_assessed`` -- the recorded target is the LAYER's, not the voter's
+  (``guard_rewrite_reason`` is set), so there is no authored decision to assess;
+* ``supported`` / ``off_target`` -- a citation survived validation, and
+  :func:`meetings.citation_relevance.citations_bear_on_any` says whether it
+  bears on the ballot's subjects;
+* ``invalid_citation`` -- the voter cited something and a validator nulled it;
+* ``none_held`` -- the voter said ``decision_basis="none_held"``;
+* ``flag_only`` -- an EJECT whose target carries a contradiction flag detected
+  this meeting, with nothing else under it;
+* ``uncited`` -- none of the above: nothing was cited and nothing was declared.
+
+``none_held`` outranks ``flag_only`` on purpose: a voter that says it holds
+nothing must not be upgraded by the layer.
+
+``None`` is reserved for a recording made before the field existed. Every
+committed recording reads ``None``; the first bytes carrying a value are the
+single re-record that follows the substrate wave.
+"""
+
+
+BallotDecisionBasis: TypeAlias = Literal["cited", "none_held"]
+"""What a VOTER says its own decision rests on -- the model's word, not the layer's.
+
+``"cited"`` puts the basis in the two citation id slots; ``"none_held"`` is the
+voter's explicit statement that it holds nothing that resolves. The field's
+``None`` means the voter answered nothing, which is what every committed
+recording parses to and is deliberately distinguishable from ``"none_held"``.
+
+Any other token is dropped from the raw payload before validation and counted
+under :data:`meetings.manager.INVALID_BASIS_MARKER`, so a fabricated value is
+countable and can never degrade the whole vote through
+:func:`meetings.manager._vote_parse_default`.
 """
 
 
@@ -928,6 +1003,7 @@ class ModelAuthoredVoteBallot(_FrozenModel):
     primary_reason_id: TurnId | None
     primary_reason_observation_id: ObservationId | None = None
     considered_alternatives: tuple[PlayerId, ...] = ()
+    decision_basis: BallotDecisionBasis | None = None
     rationale_text: str
 
 
@@ -954,6 +1030,22 @@ class VoteBallot(ModelAuthoredVoteBallot):
     field existed -- parse unchanged under ``_FrozenModel``'s config;
     ``None`` means the voter cited no private observation.
 
+    ``decision_basis`` (ruling D6 of 2026-09-19) is the VOTER's own word for
+    what its decision rests on, and the one ballot field on this schema a SKIP
+    is asked to fill: ``"cited"`` says the basis is in the two id slots,
+    ``"none_held"`` says the voter holds nothing that resolves, and ``None``
+    says the voter answered nothing. See :data:`BallotDecisionBasis`. It is
+    model-authored, so it lives on :class:`ModelAuthoredVoteBallot`; no guard
+    reads it except the labeller, which reports it and never acts on it.
+
+    ``grounding_label`` (:data:`BallotGroundingLabel`) is the meeting LAYER's
+    one-word finding about that basis, written by
+    :func:`meetings.manager.label_ballot_grounding`. It is on this class and not
+    on :class:`ModelAuthoredVoteBallot` -- the rule ``guard_rewrite_reason``
+    follows -- so the name never reaches constrained decoding, and the parse
+    path strips it from the raw payload as the belt to that brace. It describes;
+    it never rewrites a target and is never read by the tally.
+
     ``guard_redirected_from`` / ``guard_rewrite_reason`` are the meeting
     layer's typed testimony about its own target rewrite -- the machine channel
     beside the bracketed marker it prepends to ``rationale_text`` for display.
@@ -974,6 +1066,7 @@ class VoteBallot(ModelAuthoredVoteBallot):
     strips them from the raw payload as the belt to that brace.
     """
 
+    grounding_label: BallotGroundingLabel | None = None
     guard_redirected_from: str | None = None
     guard_rewrite_reason: BallotTargetRewriteReason | None = None
 
@@ -1001,7 +1094,7 @@ class VoteBallot(ModelAuthoredVoteBallot):
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """Serialize the ballot, omitting the guard pair when no guard rewrote it.
+        """Serialize the ballot, omitting the layer's keys when it wrote none.
 
         The overwhelming majority of ballots keep the target their voter
         authored, and a key that appears only when a guard fired keeps a
@@ -1010,13 +1103,33 @@ class VoteBallot(ModelAuthoredVoteBallot):
         fields existed. When a guard DID fire both keys are written, including
         the ``null`` ``guard_redirected_from`` a ``parse_default`` carries:
         "rewritten, and nothing was authored" is a fact worth recording.
-        Reading is unaffected; both fields default to ``None``.
+
+        ``grounding_label`` is elided on the same rule and for a second reason
+        besides: this model's own dump is what a test or a fake provider feeds
+        back as a MODEL payload, and :class:`ModelAuthoredVoteBallot` is
+        ``extra="forbid"``, so writing a layer-owned key as ``null`` would make
+        every such round trip fail. A live meeting labels every ballot it
+        records, so the key is elided only on a ballot nothing labelled.
+
+        ``decision_basis`` is elided when ``None`` for the rule's other half.
+        ``None`` means the voter stated no basis, which is exactly what an
+        absent key says, and what every ballot recorded before the field says --
+        so the two shapes are one fact and get one spelling. It is not
+        cosmetic: the committed ``tournament-eval-report.json`` of all four sets
+        embeds recorded ballots, so a ``null`` key written here would move
+        bytes in four reports that no card may move before the re-record.
+
+        Reading is unaffected; all four fields default to ``None``.
         """
 
         data: dict[str, Any] = handler(self)
         if self.guard_rewrite_reason is None:
             data.pop("guard_redirected_from", None)
             data.pop("guard_rewrite_reason", None)
+        if self.grounding_label is None:
+            data.pop("grounding_label", None)
+        if self.decision_basis is None:
+            data.pop("decision_basis", None)
         return data
 
     @classmethod
@@ -1174,6 +1287,8 @@ __all__ = [
     "AccusationClaim",
     "AlibiClaim",
     "AlibiSegment",
+    "BallotDecisionBasis",
+    "BallotGroundingLabel",
     "BallotTargetRewriteReason",
     "BodyId",
     "Claim",

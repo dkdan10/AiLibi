@@ -72,12 +72,13 @@ schema validation after the provider-level retry degrades to the
 default SKIP stamped with :data:`VOTE_PARSE_DEFAULT_MARKER` instead of
 aborting the game. Caps and retry counts are frozen; the net catches,
 it never re-asks. Last in the ballot chain -- after roster
-normalization and the teammate coercion -- the Task 10.9.2 ballot-target
-graph guard (:func:`guard_ballot_target_graph`, PR #147 F2) binds an
-eject ballot under a MUST-vote verdict to a target whose rendered
-suspicion meets the §4.6 threshold, redirecting an under-gate target to
-the argmax-rendered eligible candidate with
-:data:`BALLOT_TARGET_REDIRECT_MARKER`.
+normalization, the two citation validators and the teammate coercion --
+:func:`label_ballot_grounding` writes one
+:data:`~meetings.schemas.BallotGroundingLabel` saying what basis the ballot
+carries. It is the only step that leaves ``target`` alone by construction, and
+the tally never reads what it wrote (ruling D6 of 2026-09-19): the two
+target-shaping guards that used to sit there, the suspicion-argmax redirect and
+the uncited-EJECT coercion, are retired.
 
 The opening additionally content-validates (Task 10.3, audit gp-9): its
 recorded claims must carry an accusation OR its free_text an explicit
@@ -96,7 +97,7 @@ import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import Any, Final, Literal, TypeAlias, TypeVar
+from typing import Any, Final, Literal, TypeAlias, TypeVar, get_args
 
 from pydantic import ValidationError
 
@@ -110,7 +111,7 @@ from agents.memory.beliefs import (
 )
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
-from meetings.citation_relevance import citations_bear_on
+from meetings.citation_relevance import citations_bear_on_any
 from meetings.constants import (
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
 )
@@ -141,7 +142,7 @@ from meetings.schemas import (
     MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
-    BallotTargetRewriteReason,
+    BallotDecisionBasis,
     Claim,
     CompletedTaskObservation,
     TaskActivityAccount,
@@ -300,26 +301,35 @@ TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
     "recorded vote]"
 )
 
-# Audit-trail marker prepended to ``rationale_text`` when the ballot-target
-# graph guard (Task 10.9.2; PR #147 finding F2) rewrites an eject ballot
-# whose target carries no over-gate rendered row. The seed-12 m0 shape:
-# three voters whose rendered §4.6 verdict read MUST-vote off an over-gate
-# row adopted the opening's bare verbal accusation of p-1 -- a candidate
-# their own rendered graph carried NO row for -- and p-1 was ejected 3-2-2
-# with zero design-channel attribution. Every other layered guard held;
-# the leak was that ballot TARGET is unconstrained by the graph the
-# verdict was computed from. The guard (:func:`guard_ballot_target_graph`)
-# redirects such a target to the argmax-rendered eligible candidate (ties
-# to the lowest player id), or coerces to SKIP when no eligible candidate
-# meets the gate (an impostor voter whose only over-gate row is a
-# teammate); either way this marker preserves the original target,
-# bounded per the Task 10.6 rule (:func:`bounded_marker_original`). The guard
-# NEVER fires on a SKIP ballot or under a MUST-skip verdict -- a vote
-# against a MUST-skip verdict stays a recorded inversion (frozen
-# measurement semantics). Downstream eval counts redirects on this
-# literal beside the invalid-target and teammate-coercion counts. Pin the
-# literal exactly. The owner principle this enforces is the phase's
-# oldest line: innocents are ejectable, never at RANDOM.
+# READ-ONLY HISTORY. The ballot-target graph guard that minted this marker
+# (Task 10.9.2; PR #147 finding F2) is RETIRED: ruling D6 of 2026-09-19 ended
+# the layer's re-aiming, because redirecting an eject onto the voter's own
+# suspicion argmax is the engine pushing the agent toward its own arithmetic.
+# The literal survives because 83 committed ballots carry it and four consumers
+# parse those bytes (``api.replay_loader._BALLOT_PREFIX_MARKERS``,
+# ``training.surrogate.dataset.BALLOT_AUDIT_MARKERS``,
+# ``eval.meeting_quality``'s redirect census and
+# ``experiments.fresh_deduction_instrument``). Nothing mints it any more --
+# ``tests/meetings/test_grounding_label.py::TestTheRedirectIsRetired`` walks the
+# source for a live minting site. Pin the literal exactly. The paragraph below
+# is the historical record of what it meant, kept so a reader of those 83
+# ballots can still read them.
+#
+# The seed-12 m0 shape it was built for: three voters whose rendered §4.6
+# verdict read MUST-vote off an over-gate row adopted the opening's bare verbal
+# accusation of p-1 -- a candidate their own rendered graph carried NO row for
+# -- and p-1 was ejected 3-2-2 with zero design-channel attribution. The
+# retired guard redirected such a target to the argmax-rendered eligible
+# candidate (ties to the lowest player id), or coerced to SKIP when no eligible
+# candidate met the gate; either way this marker preserved the original target,
+# bounded per the Task 10.6 rule (:func:`bounded_marker_original`), with the
+# SAME bounded original recorded typed under ``under_gate_redirect``. It never
+# fired on a SKIP ballot or under a MUST-skip verdict. That is what the 83
+# recorded ballots mean; the 2026-09-19 reading of the same seam is that
+# naming a target the graph does not back is a BASIS defect, reported by
+# :data:`~meetings.schemas.BallotGroundingLabel` and left in the voter's hands.
+# "Innocents are ejectable, never at RANDOM" is now served by the label being
+# visible and counted rather than by moving the vote.
 BALLOT_TARGET_REDIRECT_MARKER: Final[str] = (
     "[under-gate eject target {target!r} redirected] "
 )
@@ -376,47 +386,56 @@ INVALID_OBSERVATION_ID_MARKER: Final[str] = (
     "[invalid primary_reason_observation_id {observation_id!r} nulled] "
 )
 
-# Audit-trail marker prepended to ``rationale_text`` when the citation gate
-# (Task 16.6, J2; audits/post-phase-14-Voice-and-Judgment-planning.md §3.4)
-# coerces an EJECT ballot to ``SKIP``: the target carries NO contradiction
-# flag this meeting (zero-flag) and the ballot cites NOTHING -- both
-# ``primary_reason_id`` and ``primary_reason_observation_id`` are null after
-# validation (a fabricated citation has already been nulled by the
-# ``INVALID_REASON_ID_MARKER`` / ``INVALID_OBSERVATION_ID_MARKER`` passes
-# above, so it gates exactly like a bare null). The gate -- and this marker --
-# is armed on every production ballot, and it coerces, never rejects (never a crash,
-# never a re-prompt), so the marker preserves the original target for replay
-# / audit analysis and rides ``rationale_text`` into the recorded ballot the
-# spectator surface already reads (mirrors the ``INVALID_REASON_ID_MARKER``
-# prefix shape; ``api.replay_loader``'s ``_marker_pattern`` relies on the
-# ``{x!r}`` repr interpolation). Both downstream consumers are WIRED: the
-# spectator chip registration (``api.replay_loader._BALLOT_PREFIX_MARKERS``
-# registers this literal as ``"uncited_coerced"`` -- the api-region task,
-# beside 16.5's observation marker) and the eval SKIP partition
-# (``eval.meeting_quality.compute_conversion_report`` learned the literal at
-# Task 17.2 and diverts a citation-coerced SKIP into
-# ``citation_coerced_skip_ballots`` BEFORE the tri-split, so a gated SKIP
-# from a MUST-vote voter never lands in the ``threshold_inversions``
-# sentinel and the §4.6 gate-obedience read cannot over-count). Eval also
-# counts coercions per game by grepping this one string. Pin the literal
-# exactly.
+# READ-ONLY HISTORY, exactly like :data:`BALLOT_TARGET_REDIRECT_MARKER` above.
+# The citation gate that minted this marker (Task 16.6, J2;
+# audits/post-phase-14-Voice-and-Judgment-planning.md §3.4) coerced an EJECT
+# ballot to ``SKIP`` when its target carried NO contradiction flag this meeting
+# and the ballot cited NOTHING. Ruling D6 of 2026-09-19 ended that coercion:
+# dropping an unsupported EJECT is the engine deciding, one-sidedly, toward
+# SKIP, so the same finding is now the ``uncited`` / ``flag_only``
+# :data:`~meetings.schemas.BallotGroundingLabel`
+# (:func:`label_ballot_grounding`) and the vote is tallied for the player the
+# voter named. 6 committed ballots carry this literal (0 in
+# ``replays/samples``); nothing mints it any more. Pin the literal exactly.
+#
+# The consumers that keep reading those 6 ballots: the spectator chip
+# registration (``api.replay_loader._BALLOT_PREFIX_MARKERS`` as
+# ``"uncited_coerced"``), ``training.surrogate.dataset.BALLOT_AUDIT_MARKERS``,
+# and the eval SKIP partition (``eval.meeting_quality.compute_conversion_report``
+# diverts a citation-coerced SKIP into ``citation_coerced_skip_ballots`` BEFORE
+# the tri-split, so a gated SKIP from a MUST-vote voter never lands in the
+# ``threshold_inversions`` sentinel).
 UNCITED_ZERO_FLAG_EJECT_MARKER: Final[str] = (
     "[uncited zero-flag eject target {target!r} coerced to SKIP] "
 )
 
-# The RELEVANCE half of the same gate, and its sibling in every respect: same
-# prefix shape, same ``{x!r}`` repr interpolation, same mark-and-coerce
-# discipline, same spectator-chip registration
-# (``api.replay_loader._BALLOT_PREFIX_MARKERS`` as ``"off_target_coerced"``,
-# mirrored by ``training.surrogate.dataset.BALLOT_AUDIT_MARKERS``). It differs
-# in ONE thing: this ballot DID cite something, and what it cited was about
-# somebody other than the player it named, so the citation fields ride into the
-# record intact -- nulling a real id would erase the evidence the coercion is
-# justified by. Minted only while ``citation_relevance_version`` is ON, so no
-# recording made before that lever carries it.
+# READ-ONLY HISTORY, and the one marker in this block that NO recorded byte
+# carries. It was the RELEVANCE half of the same gate, minted only while the
+# ``citation_relevance_version`` lever was ON -- and that lever was never ON in
+# a committed recording, which is why every set's ``off_target_coerced`` count
+# is 0. The lever is retired (ruling D6 of 2026-09-19) and its rule
+# (:func:`meetings.citation_relevance.citations_bear_on_any`) is now the
+# labeller's ONE definition, deciding ``supported`` versus ``off_target``. The
+# literal survives so a reader written against the old vocabulary --
+# ``api.replay_loader._BALLOT_PREFIX_MARKERS`` as ``"off_target_coerced"``,
+# ``training.surrogate.dataset.BALLOT_AUDIT_MARKERS`` -- keeps resolving.
 OFF_TARGET_CITATION_EJECT_MARKER: Final[str] = (
     "[off-target citation for eject target {target!r} coerced to SKIP] "
 )
+
+# Audit-trail marker prepended to ``rationale_text`` when a vote-ballot payload
+# carried a ``decision_basis`` outside :data:`~meetings.schemas.BallotDecisionBasis`
+# (ruling D6 of 2026-09-19). The value is dropped from the RAW payload before
+# validation, beside the layer-owned keys :data:`_LAYER_OWNED_BALLOT_FIELDS`
+# names, so the field falls back to ``None`` ("the voter answered nothing")
+# instead of failing ``extra="forbid"`` and degrading the whole vote to
+# :func:`_vote_parse_default`. Dropping it is what makes a fabrication cost the
+# voter its declared basis and nothing else; this marker is what makes the
+# fabrication countable, by the same one-string grep every sibling marker above
+# supports (same prefix shape, same ``{x!r}`` repr interpolation, so
+# ``api.replay_loader``'s ``_marker_pattern`` reads it unchanged). Pin the
+# literal exactly.
+INVALID_BASIS_MARKER: Final[str] = "[invalid decision_basis {basis!r} dropped] "
 
 # The recorded-bytes shape of the ``invalid_accusation_target`` annotation:
 # a marker earlier builds prepended to a turn's ``free_text`` when an
@@ -797,8 +816,8 @@ class MeetingParticipant:
     own memory rows and leak nothing). The manager consults it in exactly ONE
     place, :func:`_normalize_ballot_observation_id`: a cited id outside this
     set is nulled with the audit marker. It never reaches a prompt surface;
-    the validated citation's one downstream consumer is the citation gate
-    (:func:`guard_ballot_citation`). The default ``()`` keeps every existing construction site valid and means
+    the validated citation's one downstream consumer is the grounding labeller
+    (:func:`label_ballot_grounding`). The default ``()`` keeps every existing construction site valid and means
     "this voter can cite nothing": any non-null citation from such a
     participant nulls.
 
@@ -2210,7 +2229,7 @@ class MeetingManager:
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the
         # living ejection targets, default 0.0 -- the identical derivation
-        # :func:`guard_ballot_target_graph` and ``vote_ballot.j2`` apply). Rides
+        # ``vote_ballot.j2`` renders). Rides
         # the surfaced default below (Task 10.12, audit H-H-2) so a defaulted
         # ballot -- whose vote call fails before the recording client logs this
         # prompt -- carries its true verdict into the failed_call row.
@@ -2261,9 +2280,8 @@ class MeetingManager:
                 ),
                 timeout=self._config.deadlines.vote_seconds,
             )
-            parsed = VoteBallot.model_validate_json(
-                _without_model_authored_provenance(response.text)
-            )
+            prepared = _prepared_ballot_payload(response.text)
+            parsed = VoteBallot.model_validate_json(prepared.text)
         except asyncio.TimeoutError:
             # Deadline miss: surface the fired default so the orchestrator
             # records it (audit gp-2). Deadline-free headless recording never
@@ -2321,8 +2339,41 @@ class MeetingManager:
         # ``EJECTED`` with a non-participant id. Replace the target with
         # ``"SKIP"`` and mark the rationale so the original (bad) target is
         # preserved for audit / replay.
+        # A fabricated ``decision_basis`` (ruling D6): the pre-pass dropped the
+        # out-of-set token from the raw payload so the field fell back to
+        # ``None`` instead of failing the schema and costing the voter its whole
+        # vote, and the marker is what makes the fabrication countable. Prepended
+        # HERE rather than inside the pre-pass so ``parsed`` stays the ballot as
+        # the model returned it -- the provenance boundary the teammate
+        # redaction below splits on -- which is also what carries this marker
+        # across that redaction instead of having it redacted as model prose.
+        authored_rationale_text = parsed.rationale_text
+        if prepared.invalid_basis is not None:
+            parsed = parsed.model_copy(
+                update={
+                    "rationale_text": (
+                        INVALID_BASIS_MARKER.format(basis=prepared.invalid_basis)
+                        + parsed.rationale_text
+                    )
+                }
+            )
+        # Defensive normalization: if the LLM hallucinates a target id that
+        # is not in ``candidate_targets`` (and not ``"SKIP"``), ``_tally``
+        # would otherwise count it as a real eject and could resolve to
+        # ``EJECTED`` with a non-participant id. Replace the target with
+        # ``"SKIP"`` and mark the rationale so the original (bad) target is
+        # preserved for audit / replay.
         normalized = _normalize_ballot_target(
             ballot=parsed, candidate_targets=candidate_targets
+        )
+        # Whether the voter cited ANYTHING before the two validators below ran.
+        # Compared against what survives them, this is what separates
+        # ``invalid_citation`` from ``uncited``: a voter that reached for
+        # evidence and missed is not the same record as one that reached for
+        # nothing. Read here, off the ballot the model authored.
+        cited_before_validation = (
+            normalized.primary_reason_id is not None
+            or normalized.primary_reason_observation_id is not None
         )
         # primary_reason_id integrity (DESIGN.md §5.5; audit gp-3): the id is
         # the only mechanical deliberation->vote link, so a dangling id
@@ -2347,10 +2398,9 @@ class MeetingManager:
         # the participant (no per-speaker Mapping like the vent channel's --
         # the ballot validator needs only THIS voter's own set, not every
         # speaker's). Out-of-set -> nulled with an audit marker; never
-        # guessed. The validated field's one consumer is the Task 16.6
-        # citation gate at the END of this chain (unconditional since the
-        # Task-16.17 baseline-5 record; default-OFF at 16.6): a nulled
-        # fabrication gates exactly like a bare null.
+        # guessed. The validated field's one consumer is the grounding labeller
+        # at the END of this chain: a nulled fabrication reads as
+        # ``invalid_citation``, distinct from the bare null's ``uncited``.
         normalized = _normalize_ballot_observation_id(
             ballot=normalized,
             valid_observation_ids=frozenset(participant.observation_ids),
@@ -2370,51 +2420,33 @@ class MeetingManager:
         normalized = coerce_teammate_ballot_to_skip(
             ballot=normalized,
             fellow_impostor_ids=participant.fellow_impostor_ids,
-            model_rationale_text=parsed.rationale_text,
+            model_rationale_text=authored_rationale_text,
         )
-        # Ballot-target graph guard (Task 10.9.2; PR #147 F2): an eject
-        # ballot under a MUST-vote verdict must name a target whose
-        # rendered suspicion meets the threshold, or it is redirected to
-        # the argmax-rendered eligible candidate (SKIP-coerced when only a
-        # teammate row is over the gate). The verdict is recomputed from
-        # the SAME ``suspicion_graph`` / ``candidate_targets`` /
-        # ``skip_confidence_threshold`` passed to the prompt renderer
-        # above, so guard and in-prompt §4.6 verdict read one source. Runs
-        # LAST among the target-shaping guards -- after roster
-        # normalization and the §7.12 coercion -- so it only sees valid
-        # living non-teammate targets and can never create a betrayal
-        # ballot for the firewall to re-coerce; only the post-redirect
-        # citation gate below runs after it.
-        normalized = guard_ballot_target_graph(
-            ballot=normalized,
-            voter_id=participant.agent_id,
-            suspicion_graph=suspicion_graph,
-            candidate_targets=candidate_targets,
-            skip_confidence_threshold=self._config.skip_confidence_threshold,
-            fellow_impostor_ids=participant.fellow_impostor_ids,
-        )
-        # Citation gate (Task 16.6, J2; planning doc §3.4): a zero-flag EJECT
-        # ballot -- its target carries no contradiction flag among THIS
-        # meeting's detected ``contradictions`` -- that cites neither a
-        # transcript turn (``primary_reason_id``) nor a private observation
-        # (``primary_reason_observation_id``, the 16.5 path) coerces to SKIP
-        # with :data:`UNCITED_ZERO_FLAG_EJECT_MARKER` -- mark-and-coerce,
-        # never a crash, never a re-prompt. The POST-REDIRECT slot is the
-        # contract: a redirected ballot is judged on the REDIRECTED target's
-        # flag status, not the original's.
+        # Grounding label (ruling D6 of 2026-09-19). The chain's LAST step, and
+        # the only one that does not touch ``target``: it writes one
+        # ``grounding_label`` describing the basis this ballot carries, and the
+        # tally that follows never reads it. What ran before it -- the roster
+        # normalization, the two citation validators and the §7.12 firewall --
+        # is unchanged, so the label is computed over exactly the ballot that
+        # will be recorded. The two retired guards used to sit here: the
+        # suspicion-argmax redirect and the uncited-EJECT coercion, both gone
+        # because re-aiming or dropping a vote is the engine deciding for the
+        # agent.
         #
-        # Under ``citation_relevance_version`` (DEFAULT OFF) the same gate also
-        # asks whether a citation that IS present is ABOUT the recorded target,
-        # and the surfaces are handed in here because only this scope holds
-        # them: this meeting's final transcript turns, and the lines of the
-        # ballot prompt THIS voter was served -- the only memory surface a
-        # private observation id could have been read off. ``None`` leaves the
-        # call byte-identical to the pre-lever one.
-        normalized = guard_ballot_citation(
+        # The surfaces are handed in here because only this scope holds them:
+        # THIS meeting's final transcript turns, the lines of the ballot prompt
+        # THIS voter was served -- the only memory surface a private observation
+        # id could have been read off -- and the same ``candidate_targets``
+        # tuple the prompt rendered, which is the subject pool for a SKIP that
+        # weighed nothing.
+        normalized = label_ballot_grounding(
             ballot=normalized,
             contradictions=contradictions,
-            citation_relevance_version=(
-                self._evidence_profile.citation_relevance_version
+            candidate_targets=candidate_targets,
+            citation_nulled=(
+                cited_before_validation
+                and normalized.primary_reason_id is None
+                and normalized.primary_reason_observation_id is None
             ),
             turns=transcript.turns,
             prompt_lines=prompt.splitlines(),
@@ -2962,6 +2994,17 @@ def _default_turn(
 
 
 def _default_vote(*, voter: PlayerId) -> VoteBallot:
+    """The ballot the layer synthesizes when no completion arrived at all.
+
+    ``grounding_label="not_assessed"`` is stated here rather than derived by
+    :func:`label_ballot_grounding`, because this ballot never reaches it: a
+    missed deadline and a twice-failed completion both return before the chain
+    starts. The value is the same one the labeller writes for every other
+    ballot whose target is the layer's and not the voter's, and stating it is
+    what leaves every live-recorded ballot labelled -- so a ``None`` label means
+    a recording made before the field and nothing else.
+    """
+
     return VoteBallot(
         voter=voter,
         target=_SKIP_TARGET,
@@ -2969,45 +3012,92 @@ def _default_vote(*, voter: PlayerId) -> VoteBallot:
         primary_reason_id=None,
         considered_alternatives=(),
         rationale_text=DEFAULT_VOTE_RATIONALE,
+        grounding_label="not_assessed",
     )
 
 
-# The ballot fields the meeting layer owns outright: they are its testimony
-# about its OWN target rewrite, never anything a voter says.
-_GUARD_PROVENANCE_FIELDS: Final[tuple[str, ...]] = (
+# The ballot fields the meeting LAYER owns outright: its testimony about its own
+# target rewrite, and its one-word finding about the voter's basis. None of them
+# is anything a voter says, so none may survive from a model payload.
+_LAYER_OWNED_BALLOT_FIELDS: Final[tuple[str, ...]] = (
+    "grounding_label",
     "guard_redirected_from",
     "guard_rewrite_reason",
 )
 
+#: The tokens :data:`~meetings.schemas.BallotDecisionBasis` admits, read off the
+#: alias so the pre-pass and the schema can never disagree about the closed set.
+_VALID_DECISION_BASES: Final[frozenset[str]] = frozenset(get_args(BallotDecisionBasis))
 
-def _without_model_authored_provenance(raw_response: str) -> str:
-    """Drop the meeting-owned provenance keys from a model's ballot payload.
 
-    :class:`VoteBallot` is the schema handed to
-    :meth:`llm.client.LLMClient.complete`, so an adapter that constrains
-    decoding on it shows the model these field names, and ``extra="forbid"``
-    stops an unknown key but never a real one the model filled. Stripping
-    BEFORE validation rather than nulling after is what keeps a fabricated
-    value from mattering at all: the pair validates jointly, so a model that
-    sent half of it would otherwise fail the schema and degrade the whole vote
-    to :func:`_vote_parse_default` instead of simply losing the field.
+@dataclass(frozen=True, slots=True)
+class _PreparedBallotPayload:
+    """A raw ballot payload made safe to validate, and what that cost.
 
-    Byte-conservative: a payload that is not a JSON object, or carries neither
-    key -- every real completion -- is returned verbatim, so the common path's
-    parse and its error messages are unchanged.
+    ``text`` is what :class:`~meetings.schemas.VoteBallot` is validated against.
+    ``invalid_basis`` is the dropped ``decision_basis``, rendered as a bounded
+    STRING (the Task 10.6 rule) so :data:`INVALID_BASIS_MARKER`'s ``{basis!r}``
+    always interpolates a quoted value -- what ``api.replay_loader``'s
+    ``_MARKER_REPR_VALUE`` requires to strip the marker off the spectator's
+    rationale. ``None`` when nothing was dropped.
+    """
+
+    text: str
+    invalid_basis: str | None = None
+
+
+def _prepared_ballot_payload(raw_response: str) -> _PreparedBallotPayload:
+    """Drop what a voter may not author from a model's ballot payload.
+
+    Two classes, both dropped from the RAW payload BEFORE validation:
+
+    * the layer-owned keys (:data:`_LAYER_OWNED_BALLOT_FIELDS`).
+      :class:`VoteBallot` is the schema FastAPI publishes and the one a
+      structured-output adapter may build against, so ``extra="forbid"`` stops
+      an unknown key but never a real one the model filled. Stripping rather
+      than nulling after is what keeps a fabricated value from mattering at all:
+      ``guard_redirected_from`` / ``guard_rewrite_reason`` validate JOINTLY, so
+      a model that sent half of the pair would otherwise fail the schema and
+      degrade the whole vote to :func:`_vote_parse_default`;
+    * a ``decision_basis`` outside :data:`_VALID_DECISION_BASES`. The field IS
+      the voter's to fill, so an in-set value rides through untouched; an
+      out-of-set token is a fabrication that ``Literal`` would reject, and
+      rejecting it would cost the voter its whole vote rather than its declared
+      basis. Dropped, reported here, and marked by the caller. Case, whitespace
+      and type are all significant: only the exact tokens survive, and anything
+      else -- a number, a list, ``"CITED"`` -- is dropped and reported as its
+      own ``repr``.
+
+    Byte-conservative: a payload that is not a JSON object, or that carries
+    nothing this function drops -- every well-formed completion -- is returned
+    verbatim, so the common path's parse and its error messages are unchanged.
     """
 
     try:
         payload = json.loads(raw_response)
     except ValueError:
-        return raw_response
+        return _PreparedBallotPayload(raw_response)
     if not isinstance(payload, dict):
-        return raw_response
-    if not any(key in payload for key in _GUARD_PROVENANCE_FIELDS):
-        return raw_response
-    for key in _GUARD_PROVENANCE_FIELDS:
+        return _PreparedBallotPayload(raw_response)
+    basis = payload.get("decision_basis", None)
+    # ``isinstance`` FIRST, and not for tidiness: a model may send a list or an
+    # object here, and an unhashable value cannot be tested against a frozenset
+    # at all -- the membership test raises ``TypeError`` and takes the whole
+    # meeting down, which is the one outcome a fail-soft pre-pass must not have.
+    drop_basis = basis is not None and (
+        not isinstance(basis, str) or basis not in _VALID_DECISION_BASES
+    )
+    if not drop_basis and not any(key in payload for key in _LAYER_OWNED_BALLOT_FIELDS):
+        return _PreparedBallotPayload(raw_response)
+    for key in _LAYER_OWNED_BALLOT_FIELDS:
         payload.pop(key, None)
-    return json.dumps(payload)
+    if not drop_basis:
+        return _PreparedBallotPayload(json.dumps(payload))
+    payload.pop("decision_basis", None)
+    dropped = basis if isinstance(basis, str) else json.dumps(basis)
+    return _PreparedBallotPayload(
+        json.dumps(payload), invalid_basis=bounded_marker_original(dropped)
+    )
 
 
 def _vote_parse_default(*, voter: PlayerId, raw_response: str) -> VoteBallot:
@@ -3263,9 +3353,10 @@ def _normalize_ballot_observation_id(
     ``:turn-{k}`` ordinal recovery is turn-id-specific (the 7B echo shape),
     and an observation id has no in-meeting ordinal table to recover
     against -- an unknown id is nulled, never guessed. The validated field's
-    one consumer is the citation gate
-    (:func:`guard_ballot_citation`): a nulled
-    fabrication gates exactly like a bare null. The tally never reads it.
+    one consumer is the grounding labeller
+    (:func:`label_ballot_grounding`): a nulled fabrication reads as
+    ``invalid_citation`` rather than the bare null's ``uncited``, and neither
+    moves the target. The tally never reads it.
     """
 
     observation_id = ballot.primary_reason_observation_id
@@ -3604,280 +3695,129 @@ def coerce_teammate_ballot_to_skip(
     )
 
 
-def _render_gate_value(value: float) -> float:
-    """Round a suspicion float to the 2dp grid the vote prompt renders (Task 15.6).
+def _ballot_grounding_subjects(
+    ballot: VoteBallot, candidate_targets: tuple[PlayerId, ...]
+) -> tuple[PlayerId, ...]:
+    """Who a ballot's citation has to be ABOUT for it to be ``supported``.
 
-    The frozen ``vote_ballot.j2`` §4.6 max line and every per-player
-    suspicion row format with ``"%.2f"``, so the model reads a 2-decimal
-    value. Any recomputation of the §4.6 verdict that must agree with what
-    the model saw (:func:`guard_ballot_target_graph`) compares on THIS
-    grid, so a raw value in the ``[0.595, 0.60)`` band -- which renders as
-    ``0.60`` (MUST-vote) while its raw float reads MUST-skip -- cannot make
-    guard and model disagree (audit post-phase-14-pause §4.1). Identical to
-    the ``float("%.2f" % ...)`` rounding the persisted ``rendered_vote_max``
-    already applies in :meth:`MeetingManager._collect_vote`.
+    An EJECT names one player, so its subject is that player and nothing else.
+    A SKIP names nobody, so the subject is the pool it weighed:
+    ``considered_alternatives`` when the voter wrote one down -- the only
+    weighing artefact the ballot schema carries, non-empty on 1,336 of the 1,359
+    SKIPs in the two shipped 9p2i sets -- and the voter's own
+    ``candidate_targets`` otherwise. Reading the whole living pool for a SKIP
+    that weighed nothing is deliberately the generous branch: a SKIP is the
+    voter declining to name anyone, so a citation about ANY of the players it
+    could have named is a real basis for that decision.
+
+    The pool is the caller's, never re-derived here: it is the SAME
+    ``candidate_targets`` tuple the vote prompt rendered, so the subjects can
+    never be a set the voter was not shown.
     """
 
-    return float("%.2f" % value)
+    if ballot.target != _SKIP_TARGET:
+        return (ballot.target,)
+    if ballot.considered_alternatives:
+        return tuple(ballot.considered_alternatives)
+    return candidate_targets
 
 
-def guard_ballot_target_graph(
-    *,
-    ballot: VoteBallot,
-    voter_id: PlayerId,
-    suspicion_graph: Sequence[SuspicionEntry],
-    candidate_targets: tuple[PlayerId, ...],
-    skip_confidence_threshold: float,
-    fellow_impostor_ids: tuple[PlayerId, ...] = (),
-) -> VoteBallot:
-    """Bind an eject ballot's target to the voter's rendered graph (Task 10.9.2).
-
-    The PR #147 F2 repair, the last unguarded seam for a RANDOM ejection
-    (DESIGN.md §4.6, §6.3): a voter whose rendered verdict reads MUST-vote
-    may name ANY living candidate -- including one their own rendered graph
-    carries no over-gate row for (seed 12 m0: the opening's bare verbal
-    accusation adopted as ballot target over the graph's 0.80 argmax). The
-    guard is deterministic and fires only when ALL of:
-
-    * the ballot is an eject (``target != "SKIP"``) -- a SKIP ballot is
-      byte-unchanged, always;
-    * the verdict over ``candidate_targets`` reads MUST-vote: the max
-      rendered suspicion among the graph rows naming a candidate is at or
-      above ``skip_confidence_threshold``, the IDENTICAL derivation the
-      frozen ``vote_ballot.j2`` template renders in-prompt (the same
-      ``suspicion_graph`` / ``candidate_targets`` the prompt renderer
-      received). The comparison runs on the 2-decimal grid the template
-      renders each value at (:func:`_render_gate_value`, Task 15.6), so a
-      raw suspicion in the ``[0.595, 0.60)`` band -- which the model reads
-      as ``0.60`` -- cannot make guard and rendered verdict disagree. Under
-      a MUST-skip verdict an eject ballot is byte-unchanged -- it stays a
-      recorded inversion, frozen measurement semantics;
-    * the named target's rendered row is below the threshold or absent.
-      ANY over-gate target passes unredirected, even when a higher row
-      exists -- the model keeps free choice among over-gate targets.
-
-    The redirect goes to the argmax-rendered candidate in the eligible
-    pool -- ``candidate_targets`` minus the voter minus
-    ``fellow_impostor_ids`` -- with ties broken by the lowest player id
-    (lexicographic ``min``, the module's id-ordering convention). The
-    teammate exclusion composes with the §7.12 firewall by construction:
-    the guard can never create the betrayal ballot the firewall exists to
-    coerce. When the eligible pool's max is itself below the threshold (an
-    impostor voter whose only over-gate row is a teammate), the ballot
-    coerces to SKIP instead, nulling the now-stale ``primary_reason_id``
-    exactly as :func:`coerce_teammate_ballot_to_skip` does. Either way
-    :data:`BALLOT_TARGET_REDIRECT_MARKER` is prepended to
-    ``rationale_text`` preserving the original target (bounded per the
-    Task 10.6 rule), and the SAME bounded original is recorded typed on
-    ``VoteBallot.guard_redirected_from`` under the
-    ``under_gate_redirect`` reason, so a consumer reads a field instead of
-    parsing the marker. A redirected eject keeps its ``primary_reason_id``:
-    the cited turn still drove the decision to EJECT -- the guard
-    constrains only the target.
-
-    Runs AFTER roster normalization (:func:`_normalize_ballot_target`) and
-    the §7.12 teammate coercion, so it only ever sees a valid living
-    non-teammate eject target. Pure function of its inputs -- no RNG, no
-    clock -- so replaying the same graph + ballot yields the same redirect.
-    """
-
-    if ballot.target == _SKIP_TARGET:
-        return ballot
-    rendered = {
-        entry.player_id: entry.suspicion
-        for entry in suspicion_graph
-        if entry.player_id in candidate_targets
-    }
-    # The in-prompt §4.6 verdict, recomputed bit-for-bit. The model reads
-    # every suspicion at the 2-decimal grid the frozen ``vote_ballot.j2``
-    # renders ("%.2f"|format on each row AND the §4.6 max line), so the
-    # verdict is recomputed on that SAME rounded grid (Task 15.6, audit
-    # post-phase-14-pause §4.1): a raw value in the [0.595, 0.60) band
-    # renders as 0.60 (the model reads MUST-vote) while its raw float reads
-    # MUST-skip. Quantize-then-compare pins guard and model to the identical
-    # number by construction -- the same rounding the persisted
-    # ``rendered_vote_max`` already applies. The redirect *target* still
-    # selects on the raw argmax below, so the only behavior change is inside
-    # the band; the frozen template reads MUST-vote at or above the threshold.
-    gate = _render_gate_value(skip_confidence_threshold)
-    verdict_max = max(
-        (_render_gate_value(value) for value in rendered.values()), default=0.0
-    )
-    if verdict_max < gate:
-        return ballot
-    target_row = rendered.get(ballot.target)
-    if target_row is not None and _render_gate_value(target_row) >= gate:
-        return ballot
-    authored = bounded_marker_original(ballot.target)
-    marker = BALLOT_TARGET_REDIRECT_MARKER.format(target=authored)
-    eligible = {
-        player_id: suspicion
-        for player_id, suspicion in rendered.items()
-        if player_id != voter_id and player_id not in fellow_impostor_ids
-    }
-    if (
-        not eligible
-        or max(_render_gate_value(value) for value in eligible.values()) < gate
-    ):
-        return ballot.model_copy(
-            update={
-                "target": _SKIP_TARGET,
-                "primary_reason_id": None,
-                "rationale_text": marker + ballot.rationale_text,
-                **ballot_target_rewrite_provenance(ballot, "under_gate_redirect"),
-            }
-        )
-    redirect = min(eligible, key=lambda player_id: (-eligible[player_id], player_id))
-    return ballot.model_copy(
-        update={
-            "target": redirect,
-            "rationale_text": marker + ballot.rationale_text,
-            **ballot_target_rewrite_provenance(ballot, "under_gate_redirect"),
-        }
-    )
-
-
-def guard_ballot_citation(
+def label_ballot_grounding(
     *,
     ballot: VoteBallot,
     contradictions: tuple[ContradictionRef, ...],
-    citation_relevance_version: Literal[1] | None = None,
+    candidate_targets: tuple[PlayerId, ...] = (),
+    citation_nulled: bool = False,
     turns: Sequence[MeetingTurn] = (),
     prompt_lines: Sequence[str] = (),
 ) -> VoteBallot:
-    """Coerce an uncited (and, under the lever, off-target) EJECT to ``SKIP``.
+    """Write one :data:`~meetings.schemas.BallotGroundingLabel` and change nothing else.
 
-    The enforcement tooth of the citation chain
-    (audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2): a claim
-    counts toward conviction only if it cites a specific in-game source. The
-    guard is deterministic and fires only when ALL of:
+    The meeting layer's finding about the basis under a recorded ballot, and the
+    whole of what the layer does with that finding. Ruling D6 of 2026-09-19
+    replaced the Task-16.6 citation GATE -- which coerced an uncited zero-flag
+    EJECT to ``SKIP`` -- with this labeller, on the owner's reasoning that
+    dropping an unsupported EJECT is the engine deciding, one-sidedly, toward
+    SKIP. What this function guarantees, exactly:
 
-    * the ballot is an eject (``target != "SKIP"``) -- a SKIP ballot is
-      byte-unchanged, always;
-    * the target is ZERO-FLAG: no :class:`ContradictionRef` detected THIS
-      meeting names it in ``subjects``. A flagged target is convictable
-      uncited -- the flag IS the in-game source, already on the public
-      record;
-    * the ballot's citation does not carry it. Two classes here, and the
-      second one exists only while the lever is ON:
+    * it returns a ballot whose ``target``, ``confidence``, citation ids,
+      ``considered_alternatives``, ``decision_basis``, ``rationale_text`` and
+      guard-provenance pair are the ones it was handed, byte for byte. The ONLY
+      field it writes is ``grounding_label``;
+    * :func:`meetings.voting.tally_ballots` never reads that field, and takes no
+      argument carrying it. An ``uncited``, ``off_target`` or
+      ``invalid_citation`` EJECT is therefore tallied for the player the voter
+      named. "Innocents are ejectable but not at random" is served by the label
+      being visible and counted, not by suppressing the vote;
+    * it labels EVERY ballot, EJECT and SKIP alike. The SKIP's exemption is what
+      left 40% of the shipped decision record with no machine-checkable basis.
 
-      - UNCITED -- ``primary_reason_id`` (the transcript-turn channel) AND
-        ``primary_reason_observation_id`` (the 16.5 private-observation
-        channel) are BOTH null. The upstream validators
-        (:func:`_normalize_ballot_reason_id` /
-        :func:`_normalize_ballot_observation_id`) have already nulled any
-        fabricated id with its own marker, so a hallucinated citation gates
-        exactly like a bare null -- nulls-then-coerces, two markers;
-      - OFF TARGET -- ``citation_relevance_version`` is ``1`` and a citation
-        that IS present does not bear on this ballot's own target
-        (:func:`meetings.citation_relevance.citations_bear_on`, over
-        ``turns`` and ``prompt_lines``). Marked with
-        :data:`OFF_TARGET_CITATION_EJECT_MARKER` and recorded under
-        ``off_target_coerced``; the citation fields ride into the record
-        intact, because a real id is the evidence the coercion rests on.
+    The precedence is total and the first branch that holds wins; see
+    :data:`~meetings.schemas.BallotGroundingLabel` for the vocabulary.
 
-    The zero-flag exemption is evaluated ONCE and shared by both classes, so
-    the guard cannot hold two opinions about a flagged target. The three new
-    parameters are keyword-only and defaulted -- ``None`` lever, empty turns,
-    empty lines -- so every existing call site keeps its exact behaviour and
-    the OFF path is the pre-lever function byte for byte.
+    1. ``not_assessed`` -- ``guard_rewrite_reason`` is set, so the recorded
+       target is the LAYER's and not the voter's (an illegal target, the
+       teammate firewall, or a ballot that never parsed). There is no authored
+       decision left to assess, and labelling the layer's own rewrite as though
+       a voter had produced it would be the record lying about authorship.
+    2. ``supported`` / ``off_target`` -- a citation SURVIVED validation, and
+       :func:`meetings.citation_relevance.citations_bear_on_any` decides which,
+       over :func:`_ballot_grounding_subjects`. That rule used to ride the
+       ``citation_relevance_version`` lever; it is retired into the default here
+       and is the ONE definition both this labeller and the deduction
+       instrument's grader call.
+    3. ``invalid_citation`` -- ``citation_nulled``: the voter cited something and
+       an upstream validator (:func:`_normalize_ballot_reason_id` /
+       :func:`_normalize_ballot_observation_id`) nulled it. Distinct from
+       ``uncited`` on purpose -- a voter that reached for evidence and missed is
+       not the same record as one that reached for nothing.
+    4. ``none_held`` -- the voter set ``decision_basis="none_held"``: its own
+       statement that it holds nothing that resolves.
+    5. ``flag_only`` -- an EJECT whose target carries a contradiction flag
+       detected THIS meeting. The flag is an in-game source already on the
+       public record, so the ballot is not baseless; it is also not the voter's
+       own citation, which is why it gets its own word rather than
+       ``supported``. Read off ``contradictions`` alone and never off suspicion,
+       so a mechanism that moves suspicion without minting a flag cannot change
+       this label by construction.
+    6. ``uncited`` -- nothing cited, nothing declared, no flag.
 
-    ``citation_relevance_version`` is the lever declared on
-    :class:`~meetings.evidence_profile.MeetingEvidenceProfile` and
-    :class:`~orchestrator.experiment_config.RecordedExperimentConfig`, switched
-    by ``AILIBI_CITATION_RELEVANCE``, DEFAULT OFF. The surfaces are the
-    caller's: the production call site hands this guard THIS meeting's
-    transcript turns and the lines of the ballot prompt this voter was served,
-    which is the only memory surface the voter could have drawn a private
-    observation id from.
+    ``none_held`` outranks ``flag_only`` deliberately: a voter that says it holds
+    nothing must not be upgraded by the layer reading a flag on its behalf.
 
-    A gated ballot COERCES to ``SKIP`` with its class's marker prepended to
-    ``rationale_text`` (the mark-and-coerce pattern of
-    :func:`coerce_teammate_ballot_to_skip`); the gate never rejects, never
-    crashes, never re-prompts. On the UNCITED class both citation fields are
-    already null by the predicate above, so there is no stale reason id to
-    null; on the OFF-TARGET class they are non-null by construction and are
-    kept, which is the one respect in which the two dispositions differ.
-
-    Scope honesty (the planning doc's own analysis): the gate cannot
-    distinguish an honest memory-only conviction from a bare pile-on when the
-    voter cites nothing -- that is WHY 16.5's observation-citation path lands
-    first (an honest witness can cite their private observation id) and why
-    the gate shipped only after the served ballot prompt stopped sanctioning
-    a blanket null-citation register (``vote_ballot.j2`` "use ``null`` when
-    your call rests on your own memory" -- the earlier bespoke sets still
-    carry that prose verbatim). The 16.15 elicitation rewrote the served
-    set's "Gut-read" register to a memory-citing one (every EJECT is asked to
-    source a turn or observation id; a memory-based SKIP legitimately stays
-    null) and 16.17 measured the soundness counterfactual, so this guard runs
-    on every production ballot.
-
-    Runs AFTER :func:`guard_ballot_target_graph` (the post-redirect slot in
-    the chain), so a redirected eject is judged on the REDIRECTED target's
-    flag status, not the original's. A redirect that KEPT its citation also
-    keeps its gate pass: the 10.9.2 redirect deliberately preserves
-    ``primary_reason_id`` (the cited turn still drove the decision to
-    EJECT; that guard constrains only the target), so a cited under-gate
-    eject redirected onto a zero-flag argmax passes this gate on the kept
-    citation while the lever is OFF. That was a scope choice, stated as one:
-    with the lever OFF the gate enforces citation VALIDITY, never relevance
-    -- neither upstream validator links a citation to the ballot's target (a
-    voter naming any target may cite any real turn / own observation), so the
-    direct-vote twin passes identically and the redirect opens no new hole.
-    The lever is what closes that gap, and it closes it for the redirect and
-    the direct-vote twin alike, because it reads the RECORDED target either
-    way: a redirect that kept a citation about the ORIGINAL target now coerces
-    (the fifth run's seed 8006 is exactly that ballot). Nulling the citation
-    at the redirect instead would edit ``guard_ballot_target_graph``'s
-    recorded behavior, which this gate does not own. The zero-flag predicate
-    reads only this meeting's detected ``contradictions`` -- never suspicion
-    values -- so the absence delta (which moves suspicion and mints no flag)
-    cannot change the gate's decision by construction. Pure function of its
-    inputs (no RNG, no clock, no env read), so replaying the same ballot +
-    flags + surfaces yields the same coercion.
+    Pure function of its inputs -- no RNG, no clock, no env read, no I/O -- so
+    replaying the same ballot, flags and surfaces yields the same label.
     """
 
-    if ballot.target == _SKIP_TARGET:
-        return ballot
-    uncited = (
-        ballot.primary_reason_id is None
-        and ballot.primary_reason_observation_id is None
+    if ballot.guard_rewrite_reason is not None:
+        return ballot.model_copy(update={"grounding_label": "not_assessed"})
+    cited = (
+        ballot.primary_reason_id is not None
+        or ballot.primary_reason_observation_id is not None
     )
-    off_target = (
-        not uncited
-        and citation_relevance_version is not None
-        and not citations_bear_on(
+    if cited:
+        bears = citations_bear_on_any(
             cited_turn_id=ballot.primary_reason_id,
             cited_observation_id=ballot.primary_reason_observation_id,
-            subject=ballot.target,
+            subjects=_ballot_grounding_subjects(ballot, candidate_targets),
             turns_by_id={turn.turn_id: turn for turn in turns},
             lines=prompt_lines,
         )
-    )
-    if not uncited and not off_target:
-        return ballot
-    # ONE exemption read, shared: a flagged target is convictable on the flag
-    # alone, and the two classes must not be able to disagree about that.
+        return ballot.model_copy(
+            update={"grounding_label": "supported" if bears else "off_target"}
+        )
+    if citation_nulled:
+        return ballot.model_copy(update={"grounding_label": "invalid_citation"})
+    if ballot.decision_basis == "none_held":
+        return ballot.model_copy(update={"grounding_label": "none_held"})
     flagged = frozenset(
         subject
         for contradiction in contradictions
         for subject in contradiction.subjects
     )
-    if ballot.target in flagged:
-        return ballot
-    if uncited:
-        marker = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target=ballot.target)
-        reason: BallotTargetRewriteReason = "uncited_coerced"
-    else:
-        marker = OFF_TARGET_CITATION_EJECT_MARKER.format(target=ballot.target)
-        reason = "off_target_coerced"
-    return ballot.model_copy(
-        update={
-            "target": _SKIP_TARGET,
-            "rationale_text": marker + ballot.rationale_text,
-            **ballot_target_rewrite_provenance(ballot, reason),
-        }
-    )
+    if ballot.target != _SKIP_TARGET and ballot.target in flagged:
+        return ballot.model_copy(update={"grounding_label": "flag_only"})
+    return ballot.model_copy(update={"grounding_label": "uncited"})
 
 
 def _guard_teammate_turn_claims(
@@ -4706,6 +4646,7 @@ __all__ = [
     "INVALID_ALIBI_SUBJECT_MARKER",
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
     "INVALID_OBSERVATION_ID_MARKER",
+    "INVALID_BASIS_MARKER",
     "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
     "MARKER_QUOTED_ORIGINAL_MAX_CHARS",
@@ -4750,7 +4691,6 @@ __all__ = [
     "exclude_teammate_accusation_claims",
     "exclude_teammate_role_proving_observations",
     "extract_belief_evidence",
-    "guard_ballot_citation",
-    "guard_ballot_target_graph",
+    "label_ballot_grounding",
     "reporter_reasoning_enabled",
 ]

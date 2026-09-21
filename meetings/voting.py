@@ -232,6 +232,29 @@ def tally_ballots(
     "below threshold, skip", so the threshold value itself is on the
     eject side.
 
+    **The tally reads no grounding label, by decision** (ruling D6 of
+    2026-09-19). This function takes no argument carrying
+    :attr:`VoteBallot.grounding_label` and its body never touches the field:
+    an ``uncited``, ``off_target`` or ``invalid_citation`` EJECT is counted
+    for the player the voter named, exactly like a ``supported`` one. The
+    reason is that the shown decision must be the agent's, and dropping an
+    unsupported EJECT is the engine deciding -- one-sidedly, always toward
+    SKIP. The predecessor did exactly that and reached 6 of 2,516 committed
+    ``ml_corpus/9p2i`` ballots and 0 of 869 in ``samples/9p2i``. "Innocents
+    are ejectable but not at random" is served instead by the label being
+    visible and counted on every ballot, which is why plurality and the
+    confidence cutoff above are unchanged by that ruling.
+
+    Two rewrites DO reach a target before the tally sees it, because a tally
+    cannot do without them, and both record themselves under
+    :data:`~meetings.schemas.BallotTargetRewriteReason`:
+    :func:`normalize_ballot_target` (an illegal target cannot be tallied) and
+    :func:`meetings.manager.coerce_teammate_ballot_to_skip` (a role rule the
+    voter was told in its own prompt, not an evidence judgement). A ballot
+    that never parsed adds a third, :func:`meetings.manager._vote_parse_default`.
+    ``tests/meetings/test_grounding_label.py::TestTheOnlyTargetRewrites``
+    asserts those three are the whole list.
+
     Args:
         ballots: Living participants' ballots, parsed and (ideally)
             normalised by :func:`normalize_ballot_target`. Order does
