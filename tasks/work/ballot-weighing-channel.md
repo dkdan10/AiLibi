@@ -489,7 +489,7 @@ $ bash scripts/check.sh                                   EXIT=0
   validate_task_docs.py                 390 phase tasks + 390 prompts; 73 work cards
   generate_prompts.py --check           clean
   mypy .                                no issues in 489 source files
-  pytest -n auto --dist loadfile        8204 passed, 20 skipped, 3 xfailed
+  pytest -n auto --dist loadfile        8210 passed, 20 skipped, 3 xfailed
   frontend lint / tsc:check / vitest    557 tests in 20 files passed; build green
 
 $ bash scripts/verify_samples.sh                          EXIT=0
