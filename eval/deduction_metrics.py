@@ -391,6 +391,7 @@ from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_BASIS_MARKER,
+    INVALID_COUNTER_REASON_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
@@ -721,6 +722,7 @@ _BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool, bool, bool], ...]
     (_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER), True, False, False),
     (_marker_pattern(INVALID_REASON_ID_MARKER), False, False, False),
     (_marker_pattern(INVALID_OBSERVATION_ID_MARKER), False, False, False),
+    (_marker_pattern(INVALID_COUNTER_REASON_MARKER), False, False, False),
     (_marker_pattern(INVALID_BASIS_MARKER), False, False, False),
     (_marker_pattern(VOTE_PARSE_DEFAULT_MARKER), False, False, True),
 )

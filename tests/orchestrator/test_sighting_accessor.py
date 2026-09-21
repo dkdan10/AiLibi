@@ -152,9 +152,19 @@ class TestSightingRecordsAccessor:
         )
 
         expected = (
-            SightingRecord(subject="p-3", room="WEST_HALL", tick=3),
-            SightingRecord(subject="p-5", room="MEDBAY", tick=5),
-            SightingRecord(subject="p-4", room="REACTOR", tick=7),
+            # ``observation_id`` is the episodic stamp each row was
+            # projected from (ruling D5 of 2026-09-19): the ballot's
+            # evidence block renders it as the id a voter may cite, so a
+            # dropped or re-derived stamp is a row nobody can cite.
+            SightingRecord(
+                subject="p-3", room="WEST_HALL", tick=3, observation_id="p-2:3:1"
+            ),
+            SightingRecord(
+                subject="p-5", room="MEDBAY", tick=5, observation_id="p-2:5:1"
+            ),
+            SightingRecord(
+                subject="p-4", room="REACTOR", tick=7, observation_id="p-2:7:1"
+            ),
         )
         assert agent.sighting_records_for_meeting() == expected
 
@@ -198,11 +208,16 @@ class TestSightingRecordsAccessor:
 
         # Only the ordinary sighting survives into the grounding channel.
         assert agent.sighting_records_for_meeting() == (
-            SightingRecord(subject="p-5", room="MEDBAY", tick=5),
+            SightingRecord(
+                subject="p-5", room="MEDBAY", tick=5, observation_id="p-2:5:1"
+            ),
         )
-        # The vent accessor still keeps the vent (its own channel is unchanged).
+        # The vent accessor still keeps the vent (its own channel is unchanged),
+        # with its own episodic stamp carried the same way.
         assert agent.vent_witness_records_for_meeting() == (
-            VentWitnessRecord(subject="p-6", room="REACTOR", tick=9),
+            VentWitnessRecord(
+                subject="p-6", room="REACTOR", tick=9, observation_id="p-2:9:1"
+            ),
         )
 
     def test_co_present_projects_the_same_room_same_tick_companions(self) -> None:
@@ -227,15 +242,33 @@ class TestSightingRecordsAccessor:
 
         assert agent.sighting_records_for_meeting() == (
             SightingRecord(
-                subject="p-6", room="MEDBAY", tick=5, co_present=("p-3", "p-5")
+                subject="p-6",
+                room="MEDBAY",
+                tick=5,
+                co_present=("p-3", "p-5"),
+                observation_id="p-2:5:1",
             ),
             SightingRecord(
-                subject="p-5", room="MEDBAY", tick=5, co_present=("p-3", "p-6")
+                subject="p-5",
+                room="MEDBAY",
+                tick=5,
+                co_present=("p-3", "p-6"),
+                observation_id="p-2:5:2",
             ),
             SightingRecord(
-                subject="p-3", room="MEDBAY", tick=5, co_present=("p-5", "p-6")
+                subject="p-3",
+                room="MEDBAY",
+                tick=5,
+                co_present=("p-5", "p-6"),
+                observation_id="p-2:5:3",
             ),
-            SightingRecord(subject="p-7", room="REACTOR", tick=5, co_present=()),
+            SightingRecord(
+                subject="p-7",
+                room="REACTOR",
+                tick=5,
+                co_present=(),
+                observation_id="p-2:5:4",
+            ),
         )
 
     def test_reported_testimony_never_enters_the_channel(self) -> None:
@@ -257,8 +290,20 @@ class TestSightingRecordsAccessor:
         )
         baseline = agent.sighting_records_for_meeting()
         assert baseline == (
-            SightingRecord(subject="p-3", room="MEDBAY", tick=4, co_present=("p-5",)),
-            SightingRecord(subject="p-5", room="MEDBAY", tick=4, co_present=("p-3",)),
+            SightingRecord(
+                subject="p-3",
+                room="MEDBAY",
+                tick=4,
+                co_present=("p-5",),
+                observation_id="p-2:4:1",
+            ),
+            SightingRecord(
+                subject="p-5",
+                room="MEDBAY",
+                tick=4,
+                co_present=("p-3",),
+                observation_id="p-2:4:2",
+            ),
         )
 
         before_len = len(agent.memory.episodic)
@@ -318,7 +363,9 @@ class TestSightingRecordsAccessor:
 
         by_id = {participant.agent_id: participant for participant in participants}
         assert by_id[witness_id].sighting_records == (
-            SightingRecord(subject="p-5", room="MEDBAY", tick=5),
+            SightingRecord(
+                subject="p-5", room="MEDBAY", tick=5, observation_id="p-1:5:1"
+            ),
         )
         for pid, participant in by_id.items():
             if pid != witness_id:
@@ -390,6 +437,10 @@ class TestSightingRecordsAccessor:
             )
         )
 
+        # These rows are appended straight to the episodic log rather than
+        # ingested through perception, so none carries an episodic stamp and the
+        # projected record's ``observation_id`` is ``None`` -- the
+        # "renders without a citation" case ruling D5's evidence block states.
         assert agent.sighting_records_for_meeting() == (
-            SightingRecord(subject="p-5", room="MEDBAY", tick=5),
+            SightingRecord(subject="p-5", room="MEDBAY", tick=5, observation_id=None),
         )

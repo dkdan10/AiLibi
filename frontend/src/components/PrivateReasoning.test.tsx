@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { BallotCard } from "./BallotCard";
+import { BallotCard, counterKind } from "./BallotCard";
 import { MeetingView } from "./MeetingView";
 import { MindInspectorPanel, type MindInspectorPanelProps } from "./MindInspector";
 import { BALLOT_COPY } from "../lib/copy";
@@ -26,7 +26,7 @@ const players: PlayerView[] = [
 // (which must not). `private-alternative-choice` is also the secret the
 // perspective legs below look for — it appears nowhere else in the fixture, so
 // finding it in the HTML can only mean the alternatives block rendered.
-const ballot: BallotView = { voter: "p-1", target: "p-2", confidence: 0.73, primary_reason_id: "private-statement-choice", primary_reason_observation_id: "private-observation-choice", considered_alternatives: ["p-2", "private-alternative-choice"], decision_basis: null, grounding_label: null, rationale_text: "I killed them", rationale_text_clean: "I killed them", rewrite_reasons: [] };
+const ballot: BallotView = { voter: "p-1", target: "p-2", confidence: 0.73, primary_reason_id: "private-statement-choice", primary_reason_observation_id: "private-observation-choice", counter_reason_id: null, considered_alternatives: ["p-2", "private-alternative-choice"], decision_basis: null, grounding_label: null, rationale_text: "I killed them", rationale_text_clean: "I killed them", rewrite_reasons: [] };
 
 /** The alternatives block's inner markup, so a claim about it cannot be
  *  satisfied by the pill the card's HEADER already renders for the target. */
@@ -244,6 +244,41 @@ describe("private reasoning perspective", () => {
     expect(html).toContain(copy);
     expect(html).not.toContain("Recorded vote adjustment");
     expect(html).not.toContain(reason);
+  });
+  it("links the counter citation beside the two the voter reasoned from", () => {
+    // Ruling D5 of 2026-09-19: what the voter itself named as pointing AWAY
+    // from its vote. Both id shapes are admissible, and which link kind each
+    // resolves to is the point — a turn id is a statement, an observation id
+    // is an observation.
+    state.perspective = { mode: "omniscient" };
+    const turnCited = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, counter_reason_id: "meeting-0:turn-3" }} players={players} omniscient revealOutcome={false} />);
+    expect(turnCited).toContain(BALLOT_COPY.counterLabel);
+    expect(turnCited).toContain("meeting-0:turn-3");
+    expect(counterKind("meeting-0:turn-3")).toBe("statement");
+    expect(counterKind("p-1:12:0")).toBe("observation");
+    const obsCited = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, counter_reason_id: "p-1:12:0" }} players={players} omniscient revealOutcome={false} />);
+    expect(obsCited).toContain("p-1:12:0");
+  });
+  it("renders no counter link for a recording that predates the field", () => {
+    // Every committed recording carries `null` here, so the shipped tour must
+    // look exactly as it did, and a null counter is not narrated as an absence.
+    state.perspective = { mode: "omniscient" };
+    const html = renderToStaticMarkup(<BallotCard ballot={ballot} players={players} omniscient revealOutcome={false} />);
+    expect(html).not.toContain(BALLOT_COPY.counterLabel);
+  });
+  it("keeps the counter citation behind the same perspective gate as the others", () => {
+    state.perspective = { mode: "agent", agentId: "p-2" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, counter_reason_id: "meeting-0:turn-3" }} players={players} omniscient={false} revealOutcome={false} />);
+    expect(html).not.toContain(BALLOT_COPY.counterLabel);
+    expect(html).not.toContain("meeting-0:turn-3");
+  });
+  it("names the unresolvable counter citation instead of the generic chip", () => {
+    // The layer nulls a counter it cannot resolve and chips the ballot; the
+    // chip must say WHICH slot, or a reader reads it as a lost basis.
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["invalid_counter_reason_id"] }} players={players} omniscient revealOutcome={false} />);
+    expect(html).toContain("Unknown counter-evidence citation removed");
+    expect(html).not.toContain("Recorded vote adjustment");
+    expect(html).not.toContain("invalid_counter_reason_id");
   });
   it("explains redirected votes without presenting the original rationale as the applied choice", () => {
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["under_gate_redirect"] }} players={players} omniscient revealOutcome={false} />);

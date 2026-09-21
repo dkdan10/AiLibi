@@ -50,6 +50,7 @@ from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
     INVALID_BASIS_MARKER,
+    INVALID_COUNTER_REASON_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
@@ -439,6 +440,30 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
         "they lied.",
     )
 
+    # Ruling D5 of 2026-09-19: the weighing channel's own marker. Unregistered,
+    # the anchored strip stops in front of it and the machinery's sentence is
+    # served as the voter's words -- exactly the failure the basis row above
+    # documents -- so the row is asserted plain and stacked in the order
+    # production writes it (the counter validator runs after the two primary
+    # ones; the teammate firewall prepends outside all three).
+    counter = (
+        INVALID_COUNTER_REASON_MARKER.format(counter_reason_id="p-9:1:1")
+        + "nothing pointed away."
+    )
+    assert _parse_rewrite_reasons(counter) == (
+        ("invalid_counter_reason_id",),
+        "nothing pointed away.",
+    )
+    stacked_counter = (
+        INVALID_REASON_ID_MARKER.format(reason_id="m:turn-9")
+        + INVALID_COUNTER_REASON_MARKER.format(counter_reason_id="p-9:1:1")
+        + "nothing pointed away."
+    )
+    assert _parse_rewrite_reasons(stacked_counter) == (
+        ("invalid_reason_id", "invalid_counter_reason_id"),
+        "nothing pointed away.",
+    )
+
     # VOTE_PARSE_DEFAULT is the WHOLE rationale -> clean is empty.
     parse_default = VOTE_PARSE_DEFAULT_MARKER.format(head="<<garbage>>")
     assert _parse_rewrite_reasons(parse_default) == (("parse_default",), "")
@@ -472,6 +497,7 @@ def test_ballot_view_mirrors_the_stated_basis_and_the_layers_finding() -> None:
         primary_reason_id="m-1:turn-0",
         primary_reason_observation_id="p-1:4:0",
         considered_alternatives=("p-2", "p-3"),
+        counter_reason_id="m-1:turn-1",
         rationale_text="they cannot have been in STORAGE.",
         decision_basis="cited",
         grounding_label="supported",
@@ -481,10 +507,15 @@ def test_ballot_view_mirrors_the_stated_basis_and_the_layers_finding() -> None:
 
     assert view.decision_basis == "cited"
     assert view.grounding_label == "supported"
-    # Served, not merely held: both keys reach the payload the spectator reads.
+    # Ruling D5's counter citation rides the SAME seam and is mirrored here for
+    # the same reason: replace it with a literal ``None`` and this goes red.
+    assert view.counter_reason_id == "m-1:turn-1"
+    # Served, not merely held: all three keys reach the payload the spectator
+    # reads.
     served = view.model_dump()
     assert served["decision_basis"] == "cited"
     assert served["grounding_label"] == "supported"
+    assert served["counter_reason_id"] == "m-1:turn-1"
 
     # The other half of the same seam, and what every committed recording
     # takes: a ballot predating the fields serves ``None`` for both, which is
@@ -493,6 +524,8 @@ def test_ballot_view_mirrors_the_stated_basis_and_the_layers_finding() -> None:
     assert legacy.grounding_label is None
     unstated = _ballot_view(ballot.model_copy(update={"decision_basis": None}))
     assert unstated.decision_basis is None
+    no_counter = _ballot_view(ballot.model_copy(update={"counter_reason_id": None}))
+    assert no_counter.counter_reason_id is None
 
 
 def test_ballot_markers_parse_on_the_real_9p2i_set(

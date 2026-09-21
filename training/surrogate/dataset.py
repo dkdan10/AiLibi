@@ -131,6 +131,7 @@ from eval.validity import (
 )
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
+    INVALID_COUNTER_REASON_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_BASIS_MARKER,
     INVALID_REASON_ID_MARKER,
@@ -186,7 +187,7 @@ _MARKER_REPR_VALUE: str = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 # ``rationale_text``, built from the imported production literals so a rename
 # breaks loudly here. Mirrors ``api.replay_loader._BALLOT_PREFIX_MARKERS`` — the
 # display layer's table over the same eight kinds — and a test pins the two label
-# sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the ninth kind and
+# sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the tenth kind and
 # sits apart: it is the WHOLE rationale, not a prefix.
 #
 # ``off_target_coerced`` was the relevance half of the citation gate, minted only
@@ -203,6 +204,7 @@ BALLOT_AUDIT_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("under_gate_redirect", BALLOT_TARGET_REDIRECT_MARKER),
     ("invalid_reason_id", INVALID_REASON_ID_MARKER),
     ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
+    ("invalid_counter_reason_id", INVALID_COUNTER_REASON_MARKER),
     ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
     ("off_target_coerced", OFF_TARGET_CITATION_EJECT_MARKER),
     ("invalid_basis", INVALID_BASIS_MARKER),
@@ -214,10 +216,10 @@ _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 #: it. Read from the public :data:`meetings.schemas.BallotTargetRewriteReason`
 #: union, the same source ``api.replay_loader._TARGET_REWRITE_LABELS`` derives
 #: from, so the training class and the display class cannot drift apart. The
-#: THREE non-target labels are deliberately outside it -- ``invalid_reason_id``,
-#: ``invalid_observation_id`` and the ``invalid_basis`` ruling D6 of 2026-09-19
-#: added: each nulls a reference or a declared basis and leaves the authored
-#: target intact.
+#: FOUR non-target labels are deliberately outside it -- ``invalid_reason_id``,
+#: ``invalid_observation_id``, the ``invalid_basis`` ruling D6 of 2026-09-19
+#: added and the ``invalid_counter_reason_id`` ruling D5 added: each nulls a
+#: reference or a declared basis and leaves the authored target intact.
 TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
     get_args(BallotTargetRewriteReason)
 )
@@ -242,7 +244,7 @@ def _marker_pattern(marker: str) -> re.Pattern[str]:
 _BALLOT_MARKER_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
     (label, _marker_pattern(marker)) for label, marker in BALLOT_AUDIT_MARKERS
 )
-# The ninth kind, matched with the same repr-aware machinery: the WHOLE
+# The tenth kind, matched with the same repr-aware machinery: the WHOLE
 # marker, not its static head. A model-authored rationale that merely opens
 # with the head's words is not a defaulted ballot, and dropping it from the fit
 # for a phrase would be a false exclusion of an authored target.

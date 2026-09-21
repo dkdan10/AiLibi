@@ -5292,7 +5292,7 @@ class TestRenderAfterFoldConsistency:
 
         # The graph row shows the post-fold value, on the quantized
         # 2-decimal lattice...
-        assert "- `p-2`: suspicion 0.67, trust 0.50" in crossed
+        assert "- `p-2`: suspicion 0.67" in crossed
         # ...and the §4.6 max-suspicion evidence line -- rendered by the
         # template from the SAME rendered graph -- reads the post-fold max,
         # above the 0.60 gate (the gate-max derivation itself untouched at the
@@ -5311,7 +5311,7 @@ class TestRenderAfterFoldConsistency:
         prompts = self._vote_prompts(self._single_voice_real_template_responder)
         sub_gate = prompts["p-3"]
 
-        assert "- `p-2`: suspicion 0.55, trust 0.50" in sub_gate
+        assert "- `p-2`: suspicion 0.55" in sub_gate
         # The absence prior materialises the unplaced listener p-4 at 0.58,
         # which is the rendered max here (still below the 0.60 gate).
         assert parse_rendered_max_suspicion(sub_gate) == pytest.approx(0.58)

@@ -430,9 +430,15 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # the card is untouched, and a per-template bump is what keeps the pre- and
     # post-D6 vote bodies from ever sharing the vote_ballot.qwen3_6_27b.v6
     # stamp. The other three templates stay v6.
+    # Ruling D5 of 2026-09-19 (the weighing channel): vote_ballot ALONE advances
+    # v7 -> v8, on the same per-template form and for the same reason -- the
+    # evidence-row block, the dropped trust column, the deleted deference
+    # sentence and the "counter_reason_id" key move ONE body and leave the map
+    # card and the other three templates alone. This is the THIRD and last bump
+    # of the substrate wave, so no stamp ever covers two bodies.
     "qwen3_6_27b": {
         **_bespoke_versions("qwen3_6_27b", version="v6"),
-        "vote_ballot": "vote_ballot.qwen3_6_27b.v7",
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v8",
     },
 }
 
@@ -462,7 +468,8 @@ IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] =
     "qwen3_6_27b": {
         # Spread from the DEFAULT registry, not re-stated: the two keys this
         # arm does not override render the default bodies, so a per-template
-        # bump there (vote_ballot v6 -> v7 at ruling D6) must reach this arm's
+        # bump there (vote_ballot v6 -> v7 at ruling D6, then v7 -> v8 at
+        # ruling D5) must reach this arm's
         # stamps or it would serve the new body under the old stamp. Restating
         # a version here is what would let the two drift.
         **PROMPT_VERSION_SETS["qwen3_6_27b"],
@@ -505,7 +512,8 @@ REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] =
     "qwen3_6_27b": {
         # Spread from the DEFAULT registry rather than a restated version:
         # the keys this arm does not override render the default bodies, so
-        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6)
+        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6,
+        # v7 -> v8 at ruling D5)
         # must reach them or the arm would serve a new body under an old
         # stamp.
         **PROMPT_VERSION_SETS["qwen3_6_27b"],
@@ -530,7 +538,8 @@ CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, st
     "qwen3_6_27b": {
         # Spread from the DEFAULT registry rather than a restated version:
         # the keys this arm does not override render the default bodies, so
-        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6)
+        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6,
+        # v7 -> v8 at ruling D5)
         # must reach them or the arm would serve a new body under an old
         # stamp.
         **PROMPT_VERSION_SETS["qwen3_6_27b"],
@@ -561,7 +570,8 @@ TESTIMONY_SHAPES_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
         # Spread from the DEFAULT registry rather than a restated version:
         # the keys this arm does not override render the default bodies, so
-        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6)
+        # a per-template bump there (vote_ballot v6 -> v7 at ruling D6,
+        # v7 -> v8 at ruling D5)
         # must reach them or the arm would serve a new body under an old
         # stamp.
         **PROMPT_VERSION_SETS["qwen3_6_27b"],
@@ -3852,7 +3862,18 @@ class TacticalAgent:
             if not isinstance(player_id, str) or not isinstance(room, str):
                 continue
             records.append(
-                VentWitnessRecord(subject=player_id, room=room, tick=event.tick)
+                VentWitnessRecord(
+                    subject=player_id,
+                    room=room,
+                    tick=event.tick,
+                    # The episodic stamp this row was projected from, read off
+                    # the SAME event the three typed fields come from -- the
+                    # ``body_discovery_records_for_meeting`` precedent. It is
+                    # what lets the D5 weighing channel render this row with an
+                    # id the ballot validators accept; ``None`` (an unstamped
+                    # row) renders without a citation.
+                    observation_id=event.observation_id,
+                )
             )
         return tuple(records)
 
@@ -3899,7 +3920,7 @@ class TacticalAgent:
         and tick-sorted.
         """
 
-        sightings: list[tuple[str, str, int]] = []
+        sightings: list[tuple[str, str, int, str | None]] = []
         co_present: dict[tuple[int, str], set[str]] = {}
         for event in self._memory.episodic.recent(since_tick=0):
             if event.type != EVENT_SAW_PLAYER:
@@ -3923,7 +3944,7 @@ class TacticalAgent:
             room = event.payload.get("room")
             if not isinstance(player_id, str) or not isinstance(room, str):
                 continue
-            sightings.append((player_id, room, event.tick))
+            sightings.append((player_id, room, event.tick, event.observation_id))
             co_present.setdefault((event.tick, room), set()).add(player_id)
         return tuple(
             SightingRecord(
@@ -3933,8 +3954,12 @@ class TacticalAgent:
                 co_present=tuple(
                     sorted(co_present.get((tick, room), set()) - {player_id})
                 ),
+                # The episodic stamp this row was projected from (the
+                # ``body_discovery_records_for_meeting`` precedent), carried so
+                # the D5 weighing channel can render a citable own-channel row.
+                observation_id=observation_id,
             )
-            for player_id, room, tick in sightings
+            for player_id, room, tick, observation_id in sightings
         )
 
     def move_witness_records_for_meeting(self) -> tuple[MoveWitnessRecord, ...]:
@@ -3997,6 +4022,11 @@ class TacticalAgent:
                     from_room=from_room,
                     to_room=to_room,
                     tick=event.tick,
+                    # The episodic stamp this row was projected from (the
+                    # ``body_discovery_records_for_meeting`` precedent), carried
+                    # so the D5 weighing channel can render a citable
+                    # own-channel row.
+                    observation_id=event.observation_id,
                 )
             )
         return tuple(records)

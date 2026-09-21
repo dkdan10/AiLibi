@@ -562,6 +562,14 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "cost_dashboard",
         "cost_usd",
         "count",
+        # The weighing channel's counter citation (ruling D5 of 2026-09-19): an
+        # id the VOTER wrote, in the same two shapes the two primary citation
+        # slots already publish here — a turn id of the meeting this ballot
+        # belongs to, or an observation id belonging to the voter itself. It
+        # names no other player's memory, carries no role and no engine state,
+        # and the manager validated it against exactly those two sets before it
+        # was recorded.
+        "counter_reason_id",
         "crew_ballots",
         "crew_macro_average_coverage",
         "crew_macro_meetings",

@@ -239,12 +239,12 @@ class TestProvenanceSurface:
         rendered = _render_vote(suspicion_provenance=_PROV_ROWS)
         # p-3: flag 0.20 + testimony 0.10 this meeting, nothing carried.
         assert (
-            "- `p-3`: suspicion 0.80, trust 0.50 — built from: this meeting +0.30, "
+            "- `p-3`: suspicion 0.80 — built from: this meeting +0.30, "
             "carried prior +0.00" in rendered
         )
         # p-5: testimony 0.20 this meeting, 0.10 carried — the soft-only class.
         assert (
-            "- `p-5`: suspicion 0.80, trust 0.50 — built from: this meeting +0.20, "
+            "- `p-5`: suspicion 0.80 — built from: this meeting +0.20, "
             "carried prior +0.10 — no contradiction; carried/soft only" in rendered
         )
         # The legend that explains the split renders beside the rows.
@@ -293,12 +293,15 @@ class TestProvenanceSurface:
         assert _SOFT_ONLY_MARKER not in _suspicion_row(rendered, "p-6")
 
     def test_annotated_rows_stay_extractor_readable(self) -> None:
-        # The suffix rides AFTER the trust field (the OUT-OF-THE-GAME
+        # The suffix rides AFTER the suspicion figure (the OUT-OF-THE-GAME
         # precedent): the eval-side row shape and the §4.6 max-suspicion line
-        # both still parse on a provenance-bearing render.
+        # both still parse on a provenance-bearing render. The trust field the
+        # suffix used to follow is gone as of ruling D5 of 2026-09-19, and the
+        # widened row pattern reads either shape.
         rendered = _render_vote(suspicion_provenance=_PROV_ROWS)
         assert parse_rendered_max_suspicion(rendered) == 0.80
-        assert "- `p-3`: suspicion 0.80, trust 0.50" in rendered
+        assert "- `p-3`: suspicion 0.80" in rendered
+        assert "trust" not in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -315,8 +318,10 @@ class TestCitationRequiredConfidence:
         assert "Fill at least one of the two reason ids on every EJECT" in rendered
         # The 16.5 private-evidence channel is in the key contract, with the
         # [obs ...] copy instruction 16.5's id-rendering gives teeth to. EIGHT
-        # keys since ruling D6 of 2026-09-19 added `decision_basis`.
-        assert "EXACTLY these 8 keys" in rendered
+        # keys after ruling D6 of 2026-09-19 added `decision_basis`, NINE
+        # since ruling D5 added `counter_reason_id`.
+        assert "EXACTLY these 9 keys" in rendered
+        assert '"counter_reason_id": null' in rendered
         assert '"primary_reason_observation_id": null' in rendered
         assert "[obs p-2:12:0]" in rendered  # the voter-consistent worked example
 

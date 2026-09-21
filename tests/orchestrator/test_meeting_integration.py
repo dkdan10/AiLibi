@@ -46,6 +46,7 @@ from eval.leak_scan import assert_memory_render_role_disclosure_is_entitled
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.corroboration import MeetingTestimonyLedger
+from meetings.render_contract import EvidenceRow
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -1021,6 +1022,7 @@ def _stub_vote_prompt(
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
     testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
+    evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5 of 2026-09-19
 ) -> str:
     return f"VOTE voter={voter_id}"
 
@@ -2798,9 +2800,16 @@ class TestVentWitnessRecordsAccessor:
             memory=agent.memory.episodic,
         )
 
+        # ``observation_id`` is the episodic stamp each row was projected from
+        # (ruling D5 of 2026-09-19): the ballot's evidence block renders it as
+        # the id a voter may cite, so a dropped stamp is a row nobody can cite.
         assert agent.vent_witness_records_for_meeting() == (
-            VentWitnessRecord(subject="p-5", room="MEDBAY", tick=5),
-            VentWitnessRecord(subject="p-6", room="REACTOR", tick=9),
+            VentWitnessRecord(
+                subject="p-5", room="MEDBAY", tick=5, observation_id="p-2:5:1"
+            ),
+            VentWitnessRecord(
+                subject="p-6", room="REACTOR", tick=9, observation_id="p-2:9:1"
+            ),
         )
 
     def test_alarm_grounds_no_vent_witness(self) -> None:
@@ -2879,7 +2888,9 @@ class TestVentWitnessRecordsAccessor:
 
         by_id = {participant.agent_id: participant for participant in participants}
         assert by_id[witness.agent_id].vent_witness_records == (
-            VentWitnessRecord(subject="p-5", room="MEDBAY", tick=5),
+            VentWitnessRecord(
+                subject="p-5", room="MEDBAY", tick=5, observation_id="p-1:5:1"
+            ),
         )
         for pid, participant in by_id.items():
             if pid != witness.agent_id:

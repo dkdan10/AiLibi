@@ -37,6 +37,7 @@ from engine.entities import BodyState, PlayerId, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.corroboration import MeetingTestimonyLedger
+from meetings.render_contract import EvidenceRow
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -243,6 +244,7 @@ def _vote_prompt(
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
     testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
+    evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5 of 2026-09-19
 ) -> str:
     return f"VO:{voter_id}:{','.join(candidate_targets)}"
 

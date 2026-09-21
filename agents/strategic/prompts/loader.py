@@ -146,6 +146,7 @@ from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 from meetings.constants import ENV_TESTIMONY_SHAPES, testimony_shapes_enabled
 from meetings.corroboration import MeetingTestimonyLedger
 from meetings.render_contract import (
+    EvidenceRow,
     PromptRenderInputs,
     ReporterContext,
     ReportPromptRenderer,
@@ -1037,6 +1038,7 @@ def vote_ballot_prompt(
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     render_inputs: PromptRenderInputs | None = None,
     testimony_ledger: MeetingTestimonyLedger | None = None,
+    evidence_rows: tuple[EvidenceRow, ...] = (),
     testimony_shapes: bool = False,
     environment: Environment | None = None,
     template_name: str | None = None,
@@ -1074,6 +1076,14 @@ def vote_ballot_prompt(
     the manager only while the corroboration lever is ON. The template renders
     one row per accused candidate; ``None`` omits the block entirely, so an OFF
     meeting renders byte-identically to the pre-lever prompt.
+
+    ``evidence_rows`` (ruling D5 of 2026-09-19) carries the typed pieces this
+    voter's suspicion figures were built from, already grouped and ordered by
+    :func:`meetings.manager.build_evidence_rows` -- this renderer passes them
+    through and the v8 body only loops, the ``flag_groups`` precedent. The
+    default ``()`` renders no block, and only the served ``qwen3_6_27b`` body
+    references the variable at all, so every other set is byte-unchanged whatever
+    is threaded.
 
     ``testimony_shapes`` opens the served body's guarded witnessed-kill row in
     the transcript's observation walk, so a voter READS the shape the arm
@@ -1114,6 +1124,7 @@ def vote_ballot_prompt(
             impostors=_impostor_wording(inputs.impostor_count),
             flag_groups=_group_flags(contradiction_flags),
             testimony_ledger=testimony_ledger,
+            evidence_rows=evidence_rows,
             testimony_shapes=testimony_shapes,
         )
     )

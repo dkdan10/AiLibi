@@ -130,6 +130,8 @@ from observation.public_map import PublicMapView
 from meetings.rebuttal import select_bounded_rebuttal
 from meetings.render_contract import (
     BodyDiscoveryRecord,
+    EvidenceRow,
+    EvidenceRowKind,
     PromptRenderInputs,
     ReporterContext,
     ReportPromptRenderer,
@@ -384,6 +386,31 @@ INVALID_REASON_ID_MARKER: Final[str] = (
 # interpolation when a later task registers the chip). Pin the literal exactly.
 INVALID_OBSERVATION_ID_MARKER: Final[str] = (
     "[invalid primary_reason_observation_id {observation_id!r} nulled] "
+)
+
+# Audit-trail marker prepended to ``rationale_text`` when a ballot's
+# ``counter_reason_id`` (ruling D5 of 2026-09-19, the weighing channel) names
+# neither a turn of THIS meeting nor an observation of THIS voter. The counter
+# slot accepts BOTH id shapes, so it is validated through the SAME two decisions
+# the primary slots use (:func:`_resolved_reason_id`,
+# :func:`_resolved_observation_id`) and nulled here when neither resolves --
+# never guessed, the ``INVALID_OBSERVATION_ID_MARKER`` rule.
+#
+# It gets its OWN literal rather than reusing either sibling because the census
+# must be able to say WHICH slot a voter fabricated: a marker shared with the
+# primary citation would report a fabricated counter as a fabricated basis, and
+# the counter is not a basis. Registered in all three marker tables
+# (``api.replay_loader._BALLOT_PREFIX_MARKERS``,
+# ``training.surrogate.dataset.BALLOT_AUDIT_MARKERS``,
+# ``eval.deduction_metrics._BALLOT_MARKER_CHAIN``) as a NON-rewriting marker: it
+# nulls one reference and leaves the authored target, the tally and
+# ``grounding_label`` exactly as they were. The payload is bounded by
+# :func:`bounded_marker_original` (the Task 10.6 rule) so a kilobyte of model
+# text cannot balloon the record through this slot, and it interpolates with
+# ``{x!r}`` like every sibling so ``api.replay_loader``'s ``_marker_pattern``
+# reads it unchanged. Pin the literal exactly.
+INVALID_COUNTER_REASON_MARKER: Final[str] = (
+    "[invalid counter_reason_id {counter_reason_id!r} nulled] "
 )
 
 # READ-ONLY HISTORY, exactly like :data:`BALLOT_TARGET_REDIRECT_MARKER` above.
@@ -1565,19 +1592,24 @@ class MeetingManager:
         # transcript and the final flags, over the SAME firewall-filtered
         # sighting mapping the detector read. ``None`` while the lever is OFF,
         # so an OFF meeting and a ledger-less caller take the identical path.
-        testimony_ledger = (
-            build_testimony_ledger(
-                transcript,
-                contradictions=contradictions,
-                sighting_records=sighting_records,
-                move_witness_records=move_witness_records,
-                opener=trigger.triggered_by,
-                roster=roster,
-                trigger_kind=meeting_trigger_kind,
-            )
-            if corroboration_discipline
-            else None
+        # Built UNCONDITIONALLY since ruling D5 of 2026-09-19: it is the one
+        # thing that knows which accusing speakers' own records bore their
+        # accounts out, which is the ``first_hand`` bit every testimony evidence
+        # row carries, and it is a pure derivation of bytes this meeting already
+        # holds -- no new input, no provider call. The LEVER still decides
+        # whether the ``<testimony_sources>`` BLOCK renders, which is what
+        # ``testimony_ledger`` below carries, so an OFF meeting's prompt bytes
+        # are unchanged by this line.
+        evidence_ledger = build_testimony_ledger(
+            transcript,
+            contradictions=contradictions,
+            sighting_records=sighting_records,
+            move_witness_records=move_witness_records,
+            opener=trigger.triggered_by,
+            roster=roster,
+            trigger_kind=meeting_trigger_kind,
         )
+        testimony_ledger = evidence_ledger if corroboration_discipline else None
         ballots = await self._collect_ballots(
             trigger=trigger,
             participants=ordered_participants,
@@ -1586,6 +1618,7 @@ class MeetingManager:
             evidence=evidence,
             render_inputs=render_inputs,
             testimony_ledger=testimony_ledger,
+            evidence_ledger=evidence_ledger,
         )
 
         # Phase 5: resolution.
@@ -2099,6 +2132,7 @@ class MeetingManager:
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
+        evidence_ledger: MeetingTestimonyLedger | None = None,
     ) -> tuple[VoteBallot, ...]:
         # Sequential collection: concurrent ballots on a single local GPU
         # inflate each call's wall-clock past vote_seconds (measured 0.71x
@@ -2120,6 +2154,7 @@ class MeetingManager:
                     evidence=evidence,
                     render_inputs=render_inputs,
                     testimony_ledger=testimony_ledger,
+                    evidence_ledger=evidence_ledger,
                 )
             )
         return tuple(ballots)
@@ -2135,6 +2170,7 @@ class MeetingManager:
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
+        evidence_ledger: MeetingTestimonyLedger | None = None,
     ) -> VoteBallot:
         # Confirm the candidate set over the FINAL transcript: every living
         # participant except the voter is an eligible eject target (the same
@@ -2198,6 +2234,24 @@ class MeetingManager:
             rendered_memory = participant.rerender_memory(suspicion_override)
         else:
             rendered_memory = participant.rendered_memory
+        # The weighing channel (ruling D5 of 2026-09-19): the typed pieces THIS
+        # voter's suspicion numbers were built from, assembled here -- the one
+        # scope that holds this voter's own channels, the meeting's final flags
+        # and the final transcript together -- so the template only loops.
+        # ``evidence_ledger`` is the SAME per-subject ledger the corroboration
+        # lever renders when it is ON, built unconditionally for this one use:
+        # it is what decides which accusing speakers were borne out first-hand,
+        # and it is a pure derivation of bytes the meeting already holds. It is
+        # NOT threaded into the template -- ``testimony_ledger`` below still
+        # carries the lever's own gate -- so an OFF meeting renders no
+        # ``<testimony_sources>`` block exactly as before.
+        evidence_rows = build_evidence_rows(
+            voter=participant,
+            candidate_targets=candidate_targets,
+            contradictions=contradictions,
+            transcript=transcript,
+            testimony_ledger=evidence_ledger,
+        )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
             rendered_memory=rendered_memory,
@@ -2227,6 +2281,10 @@ class MeetingManager:
             # corroboration lever is ON. The template filters its rows to this
             # voter's candidate targets; ``None`` renders the previous bytes.
             testimony_ledger=testimony_ledger,
+            # Ruling D5's weighing channel. The default ``()`` on the Protocol
+            # keeps every other prompt set byte-identical; only the served v8
+            # body references the variable.
+            evidence_rows=evidence_rows,
         )
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the
@@ -2403,9 +2461,24 @@ class MeetingManager:
         # guessed. The validated field's one consumer is the grounding labeller
         # at the END of this chain: a nulled fabrication reads as
         # ``invalid_citation``, distinct from the bare null's ``uncited``.
+        valid_observation_ids = frozenset(participant.observation_ids)
         normalized = _normalize_ballot_observation_id(
             ballot=normalized,
-            valid_observation_ids=frozenset(participant.observation_ids),
+            valid_observation_ids=valid_observation_ids,
+        )
+        # counter_reason_id integrity (ruling D5 of 2026-09-19): the weighing
+        # channel's second slot takes EITHER id shape, so it is decided by the
+        # SAME two functions the two validators above just used and by no third
+        # rule. Deliberately AFTER them and deliberately outside
+        # ``cited_before_validation``, which was read before any of the three
+        # ran: a fabricated counter costs the voter this one field, and must not
+        # be able to turn an ``uncited`` ballot into an ``invalid_citation`` one
+        # or a null counter into a redirect. Nothing downstream reads the field.
+        normalized = _normalize_ballot_counter_reason_id(
+            ballot=normalized,
+            valid_reason_ids=valid_reason_ids,
+            reason_id_by_ordinal=reason_id_by_ordinal,
+            valid_observation_ids=valid_observation_ids,
         )
         # Teammate firewall guard (Task 7.12): a teammate is a *valid* living
         # candidate, so the invalid-target normalization above never catches
@@ -3295,6 +3368,403 @@ def _normalize_ballot_target(
     )
 
 
+# How many evidence rows one subject may carry PER PROVENANCE CLASS on the
+# ballot page. A bound on the PAGE, not on the evidence: a long game can leave a
+# voter twenty first-hand sightings of one player, and twenty near-identical
+# lines per player would bury the pieces the voter is actually being asked to
+# weigh. Three properties are load-bearing:
+#
+# * the budget is per (subject, class), so a voter with many own sightings of a
+#   player can never crowd out the contradictions or the voices against that
+#   same player -- the failure a single per-subject budget would have;
+# * where it bites, the rows dropped are the EARLIEST of that (subject, class)
+#   group, by POSITION in the order :func:`build_evidence_rows` states and never
+#   by what a row says, so an exculpatory line is exactly as likely to survive
+#   as an incriminating one;
+# * every dropped line is still in the rendered memory block above, and the
+#   template says so in one standing sentence.
+#
+# Sized like :data:`meetings.corroboration.MAX_WALKABLE_TRANSITS_PER_SUBJECT`, by
+# what a decision surface can carry rather than by a measurement.
+MAX_EVIDENCE_ROWS_PER_SUBJECT: Final[int] = 8
+
+# The provenance CLASS each row kind sorts under, and the only ordering the
+# assembler applies across kinds. Three classes: what the voter perceived
+# itself, what the meeting's detector raised, what somebody said here. The order
+# is provenance, never strength -- a witnessed vent and an ordinary sighting
+# share class 0 precisely so the block cannot rank one player's evidence above
+# another's, which is the defect ruling D5 exists to remove.
+_EVIDENCE_KIND_CLASS: Final[Mapping[EvidenceRowKind, int]] = {
+    "own_sighting": 0,
+    "own_vent": 0,
+    "own_transit": 0,
+    "own_body_discovery": 0,
+    "contradiction": 1,
+    "testimony": 2,
+}
+
+
+def _turn_id_for_event(event_id: str, *, turns: Sequence[MeetingTurn]) -> TurnId | None:
+    """The turn a contradiction's event id was minted from, or ``None``.
+
+    Every in-meeting event id the detector mints is
+    ``turn:{turn_id}:{segment}:{index}`` (``meetings.transcript``'s three
+    builders), so the turn is recovered by matching the ``turn:{turn_id}:``
+    PREFIX -- an id the meeting layer itself minted, never rendered prose. The
+    trailing colon is what makes the match unambiguous between ``…:turn-1`` and
+    ``…:turn-10``. ``None`` for an id built from something other than a turn, and
+    the row then renders without a citation rather than citing a guess.
+    """
+
+    for turn in turns:
+        if event_id.startswith(f"turn:{turn.turn_id}:"):
+            return turn.turn_id
+    return None
+
+
+def _own_channel_evidence_rows(
+    *, voter: MeetingParticipant
+) -> list[tuple[int, EvidenceRow]]:
+    """This voter's four own-perception channels, as ``(tick, row)`` pairs.
+
+    One row per typed record, so the count is bounded by the records the voter
+    holds and nothing here can multiply them. Every row is ``first_hand`` and
+    carries the voter as its ``speaker``; ``citation_id`` is the record's own
+    episodic stamp, which is ``None`` for a record written before the stamp
+    existed and renders as "nothing here you could cite".
+    """
+
+    rows: list[tuple[int, EvidenceRow]] = []
+    for vent in voter.vent_witness_records:
+        rows.append(
+            (
+                vent.tick,
+                EvidenceRow(
+                    subject=vent.subject,
+                    description=(
+                        f"you watched them VENT in {vent.room} at tick {vent.tick}"
+                    ),
+                    kind="own_vent",
+                    first_hand=True,
+                    speaker=voter.agent_id,
+                    citation_id=vent.observation_id,
+                ),
+            )
+        )
+    for sighting in voter.sighting_records:
+        company = (
+            f", with {', '.join(sighting.co_present)}" if sighting.co_present else ""
+        )
+        rows.append(
+            (
+                sighting.tick,
+                EvidenceRow(
+                    subject=sighting.subject,
+                    description=(
+                        f"you saw them in {sighting.room} at tick "
+                        f"{sighting.tick}{company}"
+                    ),
+                    kind="own_sighting",
+                    first_hand=True,
+                    speaker=voter.agent_id,
+                    citation_id=sighting.observation_id,
+                ),
+            )
+        )
+    for move in voter.move_witness_records:
+        rows.append(
+            (
+                move.tick,
+                EvidenceRow(
+                    subject=move.subject,
+                    description=(
+                        f"you saw them move {move.from_room} -> {move.to_room}, "
+                        f"arriving at tick {move.tick}"
+                    ),
+                    kind="own_transit",
+                    first_hand=True,
+                    speaker=voter.agent_id,
+                    citation_id=move.observation_id,
+                ),
+            )
+        )
+    for discovery in voter.body_discovery_records:
+        rows.append(
+            (
+                discovery.tick,
+                EvidenceRow(
+                    subject=discovery.victim_id,
+                    description=(
+                        f"you found their body in {discovery.room} at tick "
+                        f"{discovery.tick}"
+                    ),
+                    kind="own_body_discovery",
+                    first_hand=True,
+                    speaker=voter.agent_id,
+                    citation_id=discovery.observation_id,
+                ),
+            )
+        )
+    return rows
+
+
+def _contradiction_evidence_rows(
+    *,
+    contradictions: Sequence[ContradictionRef],
+    turns: Sequence[MeetingTurn],
+    subjects_of_interest: frozenset[PlayerId],
+) -> list[tuple[int, EvidenceRow]]:
+    """The flags naming a subject of interest, as ``(turn index, row)`` pairs.
+
+    One row per (flag, named subject) pair, carrying the detector's OWN sentence
+    -- the same words the ``<contradictions>`` block above prints, so the two
+    surfaces cannot describe one flag differently. ``speaker`` is whoever spoke
+    the account the flag is about, recovered from the flag's first resolvable
+    event id, and ``citation_id`` is that turn: the id the ballot's own
+    instruction ("cite the turn that account was spoken in") already asks for.
+    ``first_hand`` is ``False`` on every such row -- a flag is the meeting
+    layer's cross-check of two statements, not one speaker's perception.
+    """
+
+    ordinal_by_turn_id = {turn.turn_id: turn.turn_index for turn in turns}
+    speaker_by_turn_id = {turn.turn_id: turn.speaker for turn in turns}
+    rows: list[tuple[int, EvidenceRow]] = []
+    for flag in contradictions:
+        turn_id = _turn_id_for_event(flag.event_a_id, turns=turns)
+        if turn_id is None:
+            turn_id = _turn_id_for_event(flag.event_b_id, turns=turns)
+        for subject in flag.subjects:
+            if subject not in subjects_of_interest:
+                continue
+            rows.append(
+                (
+                    ordinal_by_turn_id.get(turn_id or "", 0),
+                    EvidenceRow(
+                        subject=subject,
+                        description=flag.description,
+                        kind="contradiction",
+                        first_hand=False,
+                        # The account's own speaker where the flag resolves to a
+                        # turn; otherwise the subject, who is the one player a
+                        # flag about their account always names.
+                        speaker=speaker_by_turn_id.get(turn_id or "", subject),
+                        citation_id=turn_id,
+                    ),
+                )
+            )
+    return rows
+
+
+def _testimony_evidence_rows(
+    *,
+    turns: Sequence[MeetingTurn],
+    subjects_of_interest: frozenset[PlayerId],
+    testimony_ledger: MeetingTestimonyLedger | None,
+) -> list[tuple[int, EvidenceRow]]:
+    """Who spoke against whom at this table, as ``(turn index, row)`` pairs.
+
+    Built from the transcript's TYPED :class:`~meetings.schemas.AccusationClaim`
+    rows -- never from ``free_text`` -- one row per (speaker, subject) pair,
+    keeping the EARLIEST turn where a speaker named that subject twice, so the
+    count is bounded by the table's distinct voices. A self-accusation is
+    dropped: a speaker is not a voice against themselves, the same rule
+    :mod:`meetings.corroboration` counts voices under.
+
+    ``first_hand`` is ``True`` only where the testimony ledger put this speaker
+    in that subject's first-hand set -- meaning the speaker's OWN typed record
+    bore their account of the subject out, the meeting layer's one definition of
+    first-hand. The ledger is built only while the corroboration lever is ON, so
+    on the default path no testimony row claims first-hand status and the
+    template says "stated it at this table", which is exactly what is known.
+    """
+
+    first_hand_by_subject: dict[PlayerId, frozenset[PlayerId]] = {}
+    if testimony_ledger is not None:
+        first_hand_by_subject = {
+            row.subject: frozenset(row.first_hand) for row in testimony_ledger.rows
+        }
+    seen: set[tuple[PlayerId, PlayerId]] = set()
+    rows: list[tuple[int, EvidenceRow]] = []
+    for turn in turns:
+        for claim in turn.claims:
+            if not isinstance(claim, AccusationClaim):
+                continue
+            subject = claim.against
+            if subject not in subjects_of_interest or subject == turn.speaker:
+                continue
+            if (turn.speaker, subject) in seen:
+                continue
+            seen.add((turn.speaker, subject))
+            rows.append(
+                (
+                    turn.turn_index,
+                    EvidenceRow(
+                        subject=subject,
+                        description=(
+                            f"{turn.speaker} spoke against them in turn "
+                            f"{turn.turn_index}"
+                        ),
+                        kind="testimony",
+                        first_hand=turn.speaker
+                        in first_hand_by_subject.get(subject, frozenset()),
+                        speaker=turn.speaker,
+                        citation_id=turn.turn_id,
+                    ),
+                )
+            )
+    return rows
+
+
+def build_evidence_rows(
+    *,
+    voter: MeetingParticipant,
+    candidate_targets: tuple[PlayerId, ...],
+    contradictions: Sequence[ContradictionRef],
+    transcript: MeetingTranscript,
+    testimony_ledger: MeetingTestimonyLedger | None = None,
+) -> tuple[EvidenceRow, ...]:
+    """The typed pieces THIS voter's suspicion numbers were built from.
+
+    Ruling D5 of 2026-09-19. The ballot used to hand a voter a finished number
+    and instruct it to follow that number; this is the evidence behind the
+    number, assembled from TYPED inputs only -- the participant's four own
+    record channels, the meeting's :class:`~meetings.schemas.ContradictionRef`
+    flags, and the transcript's typed accusation claims (with the testimony
+    ledger deciding which of those speakers were borne out first-hand).
+    ``rendered_memory`` is never read: it is prose, and the standing rule is that
+    the grounding chokepoint never parses rendered prose
+    (:class:`~meetings.schemas.VentWitnessRecord`).
+
+    Only THIS voter's own channels are read. No other participant's records are
+    reachable from here, which is what keeps the block firewall-clean: every own
+    row is something the engine already witness-gated into this agent's packet.
+
+    Subjects. Own-perception rows about any subject are kept, including a body
+    discovery whose subject is the dead VICTIM; the flag and testimony rows are
+    restricted to the living ejection targets, because a flag or a voice about a
+    player nobody may vote for is not a piece of THIS decision.
+
+    Order, stated here and in the template, encoding no role, guilt or engine
+    ranking:
+
+    1. by subject -- the ``candidate_targets`` roster order first, then any
+       other subject (a victim) by id;
+    2. first-hand rows before rows that are not;
+    3. by provenance CLASS (:data:`_EVIDENCE_KIND_CLASS`): what the voter
+       perceived, then what the detector raised, then what was said here. A
+       witnessed vent and an ordinary sighting share a class, so no row is
+       ranked above another for being stronger evidence;
+    4. earliest first within a class -- tick for an own row, turn index for the
+       other two -- then by kind, speaker and citation id, so the tuple is
+       total and deterministic.
+
+    Bounded by construction: one row per own record, per (flag, named subject)
+    pair and per (speaker, subject) accusing pair, then
+    :data:`MAX_EVIDENCE_ROWS_PER_SUBJECT` per (subject, provenance class)
+    applied last -- the EARLIEST rows of an over-budget group go, by position in
+    the order above and never by what a row says.
+    """
+
+    targets = frozenset(candidate_targets)
+    turns = transcript.turns
+    pairs = (
+        _own_channel_evidence_rows(voter=voter)
+        + _contradiction_evidence_rows(
+            contradictions=contradictions,
+            turns=turns,
+            subjects_of_interest=targets,
+        )
+        + _testimony_evidence_rows(
+            turns=turns,
+            subjects_of_interest=targets,
+            testimony_ledger=testimony_ledger,
+        )
+    )
+    target_rank = {subject: index for index, subject in enumerate(candidate_targets)}
+    others = sorted({row.subject for _, row in pairs} - targets)
+    for offset, subject in enumerate(others):
+        target_rank[subject] = len(candidate_targets) + offset
+
+    def _sort_key(pair: tuple[int, EvidenceRow]) -> tuple[Any, ...]:
+        order_value, row = pair
+        return (
+            target_rank[row.subject],
+            0 if row.first_hand else 1,
+            _EVIDENCE_KIND_CLASS[row.kind],
+            order_value,
+            row.kind,
+            row.speaker,
+            row.citation_id or "",
+            row.description,
+        )
+
+    ordered = sorted(pairs, key=_sort_key)
+    # The per-(subject, class) budget, taken off the FRONT of each over-budget
+    # group so the rows that survive are the latest ones. Counted first, then
+    # skipped on the second pass, which keeps the surviving rows in exactly the
+    # order above rather than in a re-sorted one.
+    group_size: dict[tuple[PlayerId, int], int] = {}
+    for _, row in ordered:
+        group = (row.subject, _EVIDENCE_KIND_CLASS[row.kind])
+        group_size[group] = group_size.get(group, 0) + 1
+    kept: list[EvidenceRow] = []
+    dropped_so_far: dict[tuple[PlayerId, int], int] = {}
+    for _, row in ordered:
+        group = (row.subject, _EVIDENCE_KIND_CLASS[row.kind])
+        over_budget = group_size[group] - MAX_EVIDENCE_ROWS_PER_SUBJECT
+        already_dropped = dropped_so_far.get(group, 0)
+        if already_dropped < over_budget:
+            dropped_so_far[group] = already_dropped + 1
+            continue
+        kept.append(row)
+    return tuple(kept)
+
+
+def _resolved_reason_id(
+    reason_id: str,
+    *,
+    valid_reason_ids: frozenset[TurnId],
+    reason_id_by_ordinal: Mapping[int, TurnId],
+) -> TurnId | None:
+    """The turn id ``reason_id`` resolves to in THIS meeting, or ``None``.
+
+    The whole DECISION behind :func:`_normalize_ballot_reason_id`, factored out
+    so the counter slot can be validated through the same one rather than
+    through a second copy that could drift from it: an already-canonical id
+    passes, a recoverable ``:turn-{k}`` suffix form normalizes to the canonical
+    id for that ordinal, and anything else resolves to ``None`` -- never
+    guessed. The two callers differ only in which field they write and which
+    marker they prepend.
+    """
+
+    if reason_id in valid_reason_ids:
+        return reason_id
+    match = _REASON_ID_TURN_SUFFIX.search(reason_id)
+    if match is None:
+        return None
+    return reason_id_by_ordinal.get(int(match.group(1)))
+
+
+def _resolved_observation_id(
+    observation_id: str,
+    *,
+    valid_observation_ids: frozenset[ObservationId],
+) -> ObservationId | None:
+    """The voter's own observation id ``observation_id`` names, or ``None``.
+
+    :func:`_normalize_ballot_observation_id`'s whole decision, factored out for
+    the same reason as :func:`_resolved_reason_id`: the counter slot accepts
+    both id shapes and must accept each of them on exactly the terms the primary
+    slot does. There is deliberately no suffix-recovery branch here -- the
+    ``:turn-{k}`` ordinal table is turn-id-specific and an observation id has
+    none, so an unknown id resolves to ``None``.
+    """
+
+    if observation_id in valid_observation_ids:
+        return observation_id
+    return None
+
+
 def _normalize_ballot_reason_id(
     *,
     ballot: VoteBallot,
@@ -3321,13 +3791,17 @@ def _normalize_ballot_reason_id(
     """
 
     reason_id = ballot.primary_reason_id
-    if reason_id is None or reason_id in valid_reason_ids:
+    if reason_id is None:
         return ballot
-    match = _REASON_ID_TURN_SUFFIX.search(reason_id)
-    if match is not None:
-        canonical = reason_id_by_ordinal.get(int(match.group(1)))
-        if canonical is not None:
-            return ballot.model_copy(update={"primary_reason_id": canonical})
+    canonical = _resolved_reason_id(
+        reason_id,
+        valid_reason_ids=valid_reason_ids,
+        reason_id_by_ordinal=reason_id_by_ordinal,
+    )
+    if canonical is not None:
+        if canonical == reason_id:
+            return ballot
+        return ballot.model_copy(update={"primary_reason_id": canonical})
     marker = INVALID_REASON_ID_MARKER.format(reason_id=reason_id)
     return ballot.model_copy(
         update={
@@ -3368,12 +3842,85 @@ def _normalize_ballot_observation_id(
     """
 
     observation_id = ballot.primary_reason_observation_id
-    if observation_id is None or observation_id in valid_observation_ids:
+    if observation_id is None:
+        return ballot
+    if (
+        _resolved_observation_id(
+            observation_id, valid_observation_ids=valid_observation_ids
+        )
+        is not None
+    ):
         return ballot
     marker = INVALID_OBSERVATION_ID_MARKER.format(observation_id=observation_id)
     return ballot.model_copy(
         update={
             "primary_reason_observation_id": None,
+            "rationale_text": marker + ballot.rationale_text,
+        }
+    )
+
+
+def _normalize_ballot_counter_reason_id(
+    *,
+    ballot: VoteBallot,
+    valid_reason_ids: frozenset[TurnId],
+    reason_id_by_ordinal: Mapping[int, TurnId],
+    valid_observation_ids: frozenset[ObservationId],
+) -> VoteBallot:
+    """Validate / normalize ``counter_reason_id`` (ruling D5 of 2026-09-19).
+
+    The weighing channel's second slot names the strongest thing the voter holds
+    pointing AWAY from the target it chose, in EITHER of the two shapes the
+    primary slots accept between them. So it is decided by exactly those two
+    functions -- :func:`_resolved_reason_id` first, then
+    :func:`_resolved_observation_id` -- and by no third rule: a turn of this
+    meeting (canonicalised from a recoverable ``:turn-{k}`` suffix form like any
+    other) or an observation of THIS voter survives; anything else is nulled
+    with :data:`INVALID_COUNTER_REASON_MARKER`, its original bounded by
+    :func:`bounded_marker_original`, never guessed.
+
+    It is NOT a gate, and everything this function does NOT do is the contract:
+
+    * ``target``, ``confidence``, the two primary citation ids,
+      ``considered_alternatives``, ``decision_basis`` and the guard-provenance
+      pair come back exactly as handed in. Only ``counter_reason_id`` and (on a
+      fabrication) ``rationale_text``'s marker prefix move;
+    * a ``None`` counter returns the ballot untouched -- holding nothing that
+      points the other way is an answer, not a defect, and it costs the voter
+      nothing;
+    * a fabricated counter costs the voter this one field. It never redirects or
+      coerces the target, never lowers ``confidence``, is never read by
+      :func:`meetings.voting.tally_ballots`, and is deliberately absent from the
+      ``cited_before_validation`` read that separates ``invalid_citation`` from
+      ``uncited`` in :func:`label_ballot_grounding`, so a nulled counter cannot
+      move the label either.
+    """
+
+    counter_reason_id = ballot.counter_reason_id
+    if counter_reason_id is None:
+        return ballot
+    canonical = _resolved_reason_id(
+        counter_reason_id,
+        valid_reason_ids=valid_reason_ids,
+        reason_id_by_ordinal=reason_id_by_ordinal,
+    )
+    if canonical is None and (
+        _resolved_observation_id(
+            counter_reason_id, valid_observation_ids=valid_observation_ids
+        )
+        is not None
+    ):
+        canonical = counter_reason_id
+    if canonical is not None:
+        if canonical == counter_reason_id:
+            return ballot
+        return ballot.model_copy(update={"counter_reason_id": canonical})
+    marker = INVALID_COUNTER_REASON_MARKER.format(
+        counter_reason_id=bounded_marker_original(counter_reason_id)
+    )
+    return ballot.model_copy(
+        update={
+            "counter_reason_id": None,
             "rationale_text": marker + ballot.rationale_text,
         }
     )

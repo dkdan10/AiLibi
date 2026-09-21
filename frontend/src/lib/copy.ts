@@ -442,6 +442,12 @@ export const SPECTATOR_COPY = Object.freeze({
     // voter — `invalidCitation` is about the CITATION, not the vote.
     // Recordings made before the label exists carry none of these and the chip
     // does not render.
+    // The weighing channel's second citation (ruling D5 of 2026-09-19): what
+    // the voter itself named as pointing AWAY from the vote it cast. Worded as
+    // the voter's own act, not as a correction — naming it cost the ballot
+    // nothing, the target beside it is the one the voter chose, and no layer
+    // weighed it against them.
+    counterLabel: "Weighed against it",
     groundingLabel: "Basis on the record",
     groundingLabels: Object.freeze({
       // Both subjects in one line: an ejection's is the player it names, a

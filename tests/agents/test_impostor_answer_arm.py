@@ -683,7 +683,7 @@ class TestVariantVersionStamps:
             # A version ahead of the other three: the arm renders the
             # DEFAULT vote body, which ruling D6 of 2026-09-19 bumped
             # alone, so the arm's stamp for it must move with it.
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v7",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v8",
         }
 
     def test_lever_off_serves_the_default_registry_byte_identically(self) -> None:

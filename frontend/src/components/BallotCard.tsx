@@ -29,6 +29,7 @@ function rewriteLabel(reason: string): string {
     case "uncited_coerced": return "Unsupported vote changed to skip";
     case "off_target_coerced": return "Off-target citation changed vote to skip";
     case "invalid_basis": return "Unreadable stated basis removed";
+    case "invalid_counter_reason_id": return "Unknown counter-evidence citation removed";
     case "parse_default": return "Unreadable ballot replaced with skip";
     default: return "Recorded vote adjustment";
   }
@@ -50,6 +51,22 @@ function groundingLabelText(label: string | null): string | null {
   if (label === null) return null;
   const labels: Record<string, string> = BALLOT_COPY.groundingLabels;
   return labels[label] ?? null;
+}
+
+/**
+ * Which evidence surface a `counter_reason_id` points at.
+ *
+ * The counter slot accepts BOTH id shapes the two primary slots accept between
+ * them, and the meeting layer validated whichever the voter wrote
+ * (`meetings.manager._normalize_ballot_counter_reason_id`), so a value that
+ * reaches this component resolves somewhere. The two shapes are disjoint by
+ * construction: a transcript turn id is `{meeting_id}:turn-{k}` and an
+ * observation id is `{agent_id}:{tick}:{seq}`, so the `:turn-` segment is what
+ * tells them apart. Nothing is re-validated here — a mis-read id renders as a
+ * link that finds nothing, exactly as an unresolvable primary citation does.
+ */
+export function counterKind(id: string): "statement" | "observation" {
+  return id.includes(":turn-") ? "statement" : "observation";
 }
 
 interface BallotCardProps {
@@ -231,9 +248,17 @@ export function BallotCard({
         </div>
       )}
 
+      {/* The ballot's citations, in the order the voter filled them: the two
+          that carry its reason, then the one that carries what it weighed
+          AGAINST that reason. The counter slot takes either id shape, so which
+          link kind it resolves to is decided by `counterKind` rather than by a
+          fixed choice; an unresolvable one still renders as a plain token, the
+          same fallback the observation link already has, because the record is
+          that the voter cited it. */}
       {privateVisible && <div className="mb-2 flex flex-wrap gap-2">
         {ballot.primary_reason_id !== null && meetingId !== null && <EvidenceLink target={{ kind: "statement", id: ballot.primary_reason_id, meetingId, observerId: ballot.voter }}>Cited statement · {ballot.primary_reason_id}</EvidenceLink>}
         {ballot.primary_reason_observation_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: "observation", id: ballot.primary_reason_observation_id, meetingId, observerId: ballot.voter }}>Cited observation · {ballot.primary_reason_observation_id}</EvidenceLink> : <span className="text-xs">{ballot.primary_reason_observation_id}</span>)}
+        {ballot.counter_reason_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: counterKind(ballot.counter_reason_id), id: ballot.counter_reason_id, meetingId, observerId: ballot.voter }}>{BALLOT_COPY.counterLabel} · {ballot.counter_reason_id}</EvidenceLink> : <span className="text-xs">{ballot.counter_reason_id}</span>)}
       </div>}
 
       {/* The one weighing artefact already on disk: who this voter wrote down

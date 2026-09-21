@@ -1063,6 +1063,18 @@ class BallotView(_FrozenView):
     source model's additive rationale (recordings predating the field, and
     ballots that cited nothing, surface ``None``).
 
+    ``counter_reason_id`` mirrors the weighing channel's second citation slot
+    (ruling D5 of 2026-09-19): the strongest thing the voter held pointing AWAY
+    from the target it named, in the same two id shapes the two fields above use
+    between them. Display-only here -- the manager validated it through the same
+    two decisions as the primary slots
+    (``meetings.manager._normalize_ballot_counter_reason_id``) and the spectator
+    surface never re-validates. The ``None`` default is the rule
+    ``primary_reason_observation_id`` states: every committed recording predates
+    the field and surfaces ``None``, and ``None`` on a later one means the voter
+    held nothing pointing the other way. It never moved a target and is never an
+    input to the tally.
+
     ``decision_basis`` and ``grounding_label`` mirror the two fields ruling D6
     of 2026-09-19 added to ``meetings.schemas.VoteBallot``: what the VOTER said
     its decision rests on, and the meeting layer's one-word finding about that
@@ -1078,6 +1090,7 @@ class BallotView(_FrozenView):
     confidence: float
     primary_reason_id: str | None
     primary_reason_observation_id: str | None = None
+    counter_reason_id: str | None = None
     considered_alternatives: tuple[str, ...]
     decision_basis: str | None = None
     grounding_label: str | None = None

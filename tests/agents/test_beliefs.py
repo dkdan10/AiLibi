@@ -38,6 +38,7 @@ from agents.memory.beliefs import (
     graduated_spread_delta,
 )
 from meetings.corroboration import MeetingTestimonyLedger
+from meetings.render_contract import EvidenceRow
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import AlibiSegment
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
@@ -3337,6 +3338,7 @@ class TestSelfRefutedAlibiDowngrade:
             suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
             render_inputs: PromptRenderInputs | None = None,  # Task 20.31
             testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
+            evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5
         ) -> str:
             captured[voter_id] = suspicion_graph
             return "cast your ballot"

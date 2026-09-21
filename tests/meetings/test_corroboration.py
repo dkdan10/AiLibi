@@ -41,6 +41,7 @@ from meetings.corroboration import (
 # Aliased so pytest does not try to COLLECT the production row DTO as a test
 # class on its ``Test`` prefix.
 from meetings.corroboration import TestimonySupport as _TestimonySupport
+from meetings.render_contract import EvidenceRow
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -2146,7 +2147,7 @@ class TestProvenance:
         # v7, not v6: ruling D6 of 2026-09-19 bumped the default vote
         # body alone, and this arm's stamp is derived from it.
         assert (
-            arm["vote_ballot"] == "vote_ballot.qwen3_6_27b.v7.corroboration_discipline"
+            arm["vote_ballot"] == "vote_ballot.qwen3_6_27b.v8.corroboration_discipline"
         )
         assert arm["vote_ballot"] != default["vote_ballot"]
         for template in ("crewmate_report", "impostor_report", "accusation_round"):
@@ -2166,7 +2167,7 @@ class TestProvenance:
         assert corroboration_discipline_enabled(on) is True
         assert (
             prompt_versions_for_set(_SET, env=on)["vote_ballot"]
-            == "vote_ballot.qwen3_6_27b.v7.corroboration_discipline"
+            == "vote_ballot.qwen3_6_27b.v8.corroboration_discipline"
         )
         assert "<testimony_sources>" in _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
@@ -2177,7 +2178,7 @@ class TestProvenance:
         # base. The base reads v7 since ruling D6 of 2026-09-19, which
         # moved the vote body alone; the corroboration arm added nothing
         # to that.
-        assert PROMPT_VERSION_SETS[_SET]["vote_ballot"] == "vote_ballot.qwen3_6_27b.v7"
+        assert PROMPT_VERSION_SETS[_SET]["vote_ballot"] == "vote_ballot.qwen3_6_27b.v8"
 
     def test_the_render_decision_is_read_off_the_versions_actually_served(
         self,
@@ -2323,6 +2324,7 @@ class _CapturingVotePrompt:
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
         render_inputs: object | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
+        evidence_rows: tuple[EvidenceRow, ...] = (),
     ) -> str:
         self.seen.append(testimony_ledger)
         return _vote_prompt(
