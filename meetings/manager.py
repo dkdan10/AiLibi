@@ -3378,9 +3378,11 @@ def _normalize_ballot_target(
 #   player can never crowd out the contradictions or the voices against that
 #   same player -- the failure a single per-subject budget would have;
 # * where it bites, the rows dropped are the EARLIEST of that (subject, class)
-#   group, by POSITION in the order :func:`build_evidence_rows` states and never
-#   by what a row says, so an exculpatory line is exactly as likely to survive
-#   as an incriminating one;
+#   group, ranked on ARRIVAL TIME rather than on the render order
+#   :func:`build_evidence_rows` states -- that order puts first-hand rows first
+#   inside a class, so dropping by render position would drop the grounded
+#   voices first. Nothing is dropped for what it says, so an exculpatory line is
+#   exactly as likely to survive as an incriminating one;
 # * every dropped line is still in the rendered memory block above, and the
 #   template says so in one standing sentence.
 #
@@ -3661,8 +3663,11 @@ def build_evidence_rows(
     Bounded by construction: one row per own record, per (flag, named subject)
     pair and per (speaker, subject) accusing pair, then
     :data:`MAX_EVIDENCE_ROWS_PER_SUBJECT` per (subject, provenance class)
-    applied last -- the EARLIEST rows of an over-budget group go, by position in
-    the order above and never by what a row says.
+    applied last. The budget is decided on ARRIVAL TIME, not on the render order
+    above -- the EARLIEST rows of an over-budget group go -- because the render
+    order puts first-hand rows first inside a class, and dropping by render
+    position would drop the grounded voices first. Nothing is ever dropped for
+    what it says.
     """
 
     targets = frozenset(candidate_targets)
@@ -3698,26 +3703,38 @@ def build_evidence_rows(
             row.description,
         )
 
-    ordered = sorted(pairs, key=_sort_key)
-    # The per-(subject, class) budget, taken off the FRONT of each over-budget
-    # group so the rows that survive are the latest ones. Counted first, then
-    # skipped on the second pass, which keeps the surviving rows in exactly the
-    # order above rather than in a re-sorted one.
-    group_size: dict[tuple[PlayerId, int], int] = {}
-    for _, row in ordered:
-        group = (row.subject, _EVIDENCE_KIND_CLASS[row.kind])
-        group_size[group] = group_size.get(group, 0) + 1
-    kept: list[EvidenceRow] = []
-    dropped_so_far: dict[tuple[PlayerId, int], int] = {}
-    for _, row in ordered:
-        group = (row.subject, _EVIDENCE_KIND_CLASS[row.kind])
-        over_budget = group_size[group] - MAX_EVIDENCE_ROWS_PER_SUBJECT
-        already_dropped = dropped_so_far.get(group, 0)
-        if already_dropped < over_budget:
-            dropped_so_far[group] = already_dropped + 1
+    # The per-(subject, class) budget, decided on ARRIVAL TIME alone and never
+    # on the render order. The two differ, and the difference matters: inside
+    # the testimony class the render puts first-hand voices first, so dropping
+    # by render position would drop the GROUNDED voices first -- a budget
+    # deciding by what a row says, which is exactly what this bound must not do.
+    # Ranking each over-budget group by its own arrival key instead drops the
+    # EARLIEST rows of that group, by position in time and by nothing else.
+    by_group: dict[tuple[PlayerId, int], list[int]] = {}
+    for index, (order_value, row) in enumerate(pairs):
+        by_group.setdefault((row.subject, _EVIDENCE_KIND_CLASS[row.kind]), []).append(
+            index
+        )
+
+    def _arrival_key(index: int) -> tuple[Any, ...]:
+        order_value, row = pairs[index]
+        return (
+            order_value,
+            row.kind,
+            row.speaker,
+            row.citation_id or "",
+            row.description,
+        )
+
+    dropped: set[int] = set()
+    for members in by_group.values():
+        over_budget = len(members) - MAX_EVIDENCE_ROWS_PER_SUBJECT
+        if over_budget <= 0:
             continue
-        kept.append(row)
-    return tuple(kept)
+        dropped.update(sorted(members, key=_arrival_key)[:over_budget])
+
+    surviving = [pair for index, pair in enumerate(pairs) if index not in dropped]
+    return tuple(row for _, row in sorted(surviving, key=_sort_key))
 
 
 def _resolved_reason_id(

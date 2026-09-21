@@ -430,6 +430,85 @@ class TestRowOrderAndBound:
         assert kept_ticks == sorted(kept_ticks)
         assert kept_ticks[0] == 3, kept_ticks  # the three earliest went
 
+    def test_the_budget_drops_by_arrival_time_not_by_render_position(self) -> None:
+        """An over-budget TESTIMONY group loses its earliest voices, not its
+        grounded ones.
+
+        The render puts first-hand rows first inside a class, so a budget taken
+        off the front of the RENDER order would drop the grounded voices first
+        -- a bound deciding by what a row says, which is the one thing it must
+        never do. Built so the two rules disagree: nine voices against p-3, and
+        the LAST one to speak is the only grounded one. Under the arrival rule
+        it survives and the earliest voice goes; under the render rule it would
+        be the first thing dropped.
+        """
+
+        speakers = [f"p-{index}" for index in range(10, 19)]
+        grounded_speaker = speakers[-1]
+
+        def _voice(index: int, speaker: str) -> MeetingTurn:
+            return MeetingTurn(
+                turn_id=f"m-1:turn-{index}",
+                turn_index=index,
+                speaker=speaker,
+                turn_kind="opening" if index == 0 else "reply",
+                reply_to=None if index == 0 else f"m-1:turn-{index - 1}",
+                observations=(
+                    (
+                        SawPlayerObservation(
+                            type="saw_player", tick=5, subject="p-3", room="MEDBAY"
+                        ),
+                    )
+                    if speaker == grounded_speaker
+                    else ()
+                ),
+                claims=(
+                    AccusationClaim(
+                        type="accusation",
+                        against="p-3",
+                        confidence=0.6,
+                        reason=f"{speaker} accuses p-3",
+                    ),
+                ),
+                free_text="p-3 did it.",
+            )
+
+        transcript = MeetingTranscript(
+            turns=tuple(_voice(index, speaker) for index, speaker in enumerate(speakers))
+        )
+        rows = build_evidence_rows(
+            voter=_participant("p-1"),
+            candidate_targets=("p-3",),
+            contradictions=(),
+            transcript=transcript,
+            testimony_ledger=build_testimony_ledger(
+                transcript,
+                contradictions=(),
+                sighting_records={
+                    grounded_speaker: (
+                        SightingRecord(
+                            subject="p-3",
+                            room="MEDBAY",
+                            tick=5,
+                            observation_id=f"{grounded_speaker}:5:1",
+                        ),
+                    )
+                },
+                move_witness_records={},
+                opener=speakers[0],
+                roster=frozenset({"p-1", "p-3", *speakers}),
+                trigger_kind="report",
+            ),
+        )
+
+        assert len(rows) == MAX_EVIDENCE_ROWS_PER_SUBJECT
+        kept = [row.speaker for row in rows]
+        # The grounded voice spoke LAST and survives, at the head of the block.
+        assert kept[0] == grounded_speaker
+        assert rows[0].first_hand is True
+        # Exactly the earliest voice was dropped, and nothing else.
+        assert set(speakers) - set(kept) == {speakers[0]}
+
     def test_only_this_voters_own_channels_reach_its_rows(self) -> None:
         """A voter with empty channels gets no own-perception row.
 

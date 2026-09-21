@@ -388,9 +388,16 @@ witnessed vent and an ordinary sighting share class 0 on purpose, so the block
 cannot rank one player's evidence above another's. `MAX_EVIDENCE_ROWS_PER_SUBJECT
 = 8` (`meetings/manager.py:3390`) bounds each (subject, class) group, not each
 subject: a single budget would have let many own sightings of one player crowd
-out the contradictions and the voices against that same player. Where it bites
-the EARLIEST rows of that group go, by position and never by content, and the
-template says so in one standing sentence.
+out the contradictions and the voices against that same player. It is decided
+on ARRIVAL TIME, not on the render order: the render puts first-hand rows first
+inside a class, so a budget taken off the front of the rendered block would
+drop the GROUNDED voices of an over-budget testimony group first — a bound
+deciding by what a row says, which is the one thing it must not do. Ranked on
+arrival, the EARLIEST rows of the group go and nothing is dropped for its
+content; the template says so in one standing sentence. (Found by writing the
+guarantee down and then reading the loop against it; the two rules are made to
+disagree in
+`test_the_budget_drops_by_arrival_time_not_by_render_position`.)
 
 **A body discovery's subject is the victim.** It is the one own-channel kind
 whose subject is dead and therefore never an ejection target; it is kept (the
@@ -527,7 +534,7 @@ which is why all four `--check` recomputations are byte-identical.
 
 ### Planted and perturbed failures
 
-A mechanical pass over the WHOLE production diff. Each row edits ONE thing,
+A mechanical pass over the WHOLE production diff, 32 rows. Each row edits ONE thing,
 runs the named probe, and restores the file from an in-memory COPY (never `git
 checkout`). Run with `PYTHONDONTWRITEBYTECODE=1` and `-p no:cacheprovider`
 after a first pass produced three FALSE reds from stale `__pycache__` bytecode:
@@ -547,6 +554,7 @@ kind of thing that makes a perturbation table lie.
 | 8 | first-hand rank removed from the sort key | same | red |
 | 9 | subject grouping removed from the sort key | same | red |
 | 10 | the per-(subject, class) budget disabled | same | red |
+| 10b | the budget drops by render position, not arrival time | same | red |
 | 11 | `evidence_rows` not threaded into the render | same | red |
 | 12 | the ledger built only while the lever is ON | same | red |
 | 13 | the counter validator removed from the chain | same | red |
@@ -579,7 +587,7 @@ unenforced production line; five tests were added for them —
 `test_a_grounded_voice_sorts_above_an_ungrounded_one` (the rank is only
 observable between two rows alike in every earlier key) and
 `test_the_suspicion_row_pattern_reads_both_rendered_shapes` — and the pass was
-re-run from scratch: 31 rows, 0 unenforced.
+re-run from scratch: 32 rows, 0 unenforced.
 
 Beside the table, the acceptance items' own planted cases:
 
