@@ -1273,8 +1273,13 @@ def _require_testimony_shapes_bodies(
 #:   exact ``"none_held"`` token, and the statement that the vote is recorded
 #:   as cast either way -- with ``"decision_basis"`` in the returned-JSON
 #:   skeleton, so the two families ask for one decision record rather than
-#:   two. Prose-only would have moved these bytes just as far: the revision
-#:   advances because the BODY changed, not because of how much of it did.
+#:   two. The skeleton carries that key NULL, on the same ground ``v5`` kept
+#:   ``primary_reason_id`` null: a slot is shown in prose and never pre-filled
+#:   into the object a model copies verbatim, and this slot least of all --
+#:   ruling D6 exists to make the VOTER state its basis, so a pre-filled token
+#:   would record one the voter never chose. Prose-only would have moved these
+#:   bytes just as far: the revision advances because the BODY changed, not
+#:   because of how much of it did.
 ACCOUNT_PROMPT_SET_REVISION: Final[str] = "v6"
 
 

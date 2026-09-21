@@ -718,10 +718,17 @@ def walk_replay_meetings(
 
             # ``result`` already carries the RECORDED decision
             # (:func:`_run_recorded_meeting` swaps it in), so the world advances
-            # exactly as the recording says it did. The hash check below is
-            # unweakened by that: it still applies a result to the reconstructed
-            # state and demands the recorded bytes, so any drift in the engine,
-            # the walk or the recording fails it loud.
+            # exactly as the recording says it did. What the hash check below
+            # pins is therefore the ENGINE leg, at full strength: applying THIS
+            # decision to the reconstructed state must reproduce the recorded
+            # bytes, so drift in ``apply_meeting_result``, in the tick walk or
+            # in the recording fails it loud. What it no longer pins -- stated
+            # at exactly that strength in review round 3 -- is the BALLOT leg:
+            # because the decision is read as recorded rather than re-derived,
+            # the hash can no longer transitively say that today's ballot chain
+            # still reaches it. ``test_every_reconstruction_divergence_is_a_
+            # retired_guard`` carries that half instead, ballot by ballot
+            # against ``rebuilt_ballots``, and is the only thing that does.
             next_state, post_events = apply_meeting_result(
                 state, result, game_map=game_map, triggering_body_id=body_id
             )

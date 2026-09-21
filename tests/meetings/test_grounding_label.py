@@ -48,6 +48,7 @@ from meetings.manager import (
     label_ballot_grounding,
 )
 from meetings.schemas import (
+    AccusationClaim,
     AlibiClaim,
     AlibiSegment,
     BallotGroundingLabel,
@@ -76,9 +77,16 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _OBS_ID = "p-1:4:0"
 _OBS_LINE = f"[obs {_OBS_ID}] tick 4: p-3 left MEDBAY in a hurry."
 
+#: A second own-observation line that names NOBODY the voter could vote for:
+#: p-1 is the voter, and ``_candidate_targets`` is the living roster MINUS the
+#: voter. It is what makes the generous SKIP pool's planted case a statement
+#: about the POOL rather than about any citation resolving.
+_SELF_OBS_ID = "p-1:5:0"
+_SELF_OBS_LINE = f"[obs {_SELF_OBS_ID}] tick 5: p-1 finished wiring in ELECTRICAL."
+
 
 def _memory_with_observation(agent_id: str) -> str:
-    return f"## Your role: CREWMATE\n{agent_id} memory\n{_OBS_LINE}"
+    return f"## Your role: CREWMATE\n{agent_id} memory\n{_OBS_LINE}\n{_SELF_OBS_LINE}"
 
 
 def _voter_p1(*, observation_ids: tuple[str, ...] = ()) -> MeetingParticipant:
@@ -493,6 +501,116 @@ class TestEveryBallotDeclaresItsBasis:
         assert [flag.subjects for flag in flagged.contradictions] == [("p-3",)]
         assert _p1(flagged).grounding_label == "flag_only"
 
+    def test_an_eject_citing_a_turn_that_names_its_target_is_supported(self) -> None:
+        # Case 11, review round 3: the TURN channel through the production
+        # chain. Every `supported` case before this one cited an OBSERVATION,
+        # so the turns the manager hands the labeller were reachable by no
+        # assertion -- neutering `turns=transcript.turns` at that call site
+        # left the whole suite green while turning this exact ballot
+        # `off_target`, because a turn id that resolves to no turn bears on
+        # nobody. p-1's opening accuses p-3, so turn 0 NAMES p-3, and the
+        # ballot that cites it ejects p-3.
+        result, _ = _run_meeting(
+            _responder(
+                {
+                    "p-1": {
+                        "target": "p-3",
+                        "primary_reason_id": "m-1:turn-0",
+                        "decision_basis": "cited",
+                    }
+                },
+                accusations={"p-1": "p-3", "p-2": "p-4"},
+            ),
+            participants=_roster(),
+        )
+
+        # The cited turn is a REAL one of this meeting -- the validator did not
+        # null it -- and it is the one that names this ballot's target.
+        cited = next(
+            turn for turn in result.transcript.turns if turn.turn_id == "m-1:turn-0"
+        )
+        assert cited.speaker == "p-1"
+        assert [
+            claim.against
+            for claim in cited.claims
+            if isinstance(claim, AccusationClaim)
+        ] == ["p-3"]
+        ballot = _p1(result)
+        assert ballot.primary_reason_id == "m-1:turn-0"
+        assert ballot.target == "p-3"
+        assert ballot.grounding_label == "supported"
+
+        # The twin, so the assertion is about ABOUTNESS and not about a turn id
+        # resolving: the same EJECT citing turn 2, where p-2 accuses p-4 and
+        # nothing names p-3.
+        off, _ = _run_meeting(
+            _responder(
+                {
+                    "p-1": {
+                        "target": "p-3",
+                        "primary_reason_id": "m-1:turn-2",
+                        "decision_basis": "cited",
+                    }
+                },
+                accusations={"p-1": "p-3", "p-2": "p-4"},
+            ),
+            participants=_roster(),
+        )
+        other = next(
+            turn for turn in off.transcript.turns if turn.turn_id == "m-1:turn-2"
+        )
+        assert other.speaker == "p-2"
+        assert _p1(off).primary_reason_id == "m-1:turn-2"
+        assert _p1(off).grounding_label == "off_target"
+
+    def test_a_skip_that_weighed_nobody_is_read_against_the_living_pool(self) -> None:
+        # Case 12, review round 3: the generous branch of
+        # `_ballot_grounding_subjects`, through the production chain. A SKIP
+        # with an EMPTY `considered_alternatives` -- 23 of the 1,359 shipped
+        # 9p2i SKIPs -- has no weighing artefact, so its subjects are the
+        # `candidate_targets` the vote prompt rendered. Neutering that argument
+        # at the call site left the whole suite green and turned this ballot
+        # `off_target`: with a citation present and no subject, nothing can be
+        # borne upon.
+        result, _ = _run_meeting(
+            _responder(
+                {
+                    "p-1": {
+                        "target": "SKIP",
+                        "primary_reason_observation_id": _OBS_ID,
+                        "decision_basis": "cited",
+                    }
+                }
+            ),
+            participants=_roster(observation_ids=(_OBS_ID, _SELF_OBS_ID)),
+        )
+
+        ballot = _p1(result)
+        assert ballot.target == "SKIP"
+        assert ballot.considered_alternatives == ()
+        assert ballot.primary_reason_observation_id == _OBS_ID
+        assert ballot.grounding_label == "supported"
+
+        # The twin: the same shape citing the own-observation line that names
+        # only p-1. The voter is never its own candidate, so the pool is the
+        # living roster MINUS p-1 and this citation bears on nobody in it --
+        # which is what makes the case above a statement about that pool
+        # rather than about any citation surviving.
+        off, _ = _run_meeting(
+            _responder(
+                {
+                    "p-1": {
+                        "target": "SKIP",
+                        "primary_reason_observation_id": _SELF_OBS_ID,
+                        "decision_basis": "cited",
+                    }
+                }
+            ),
+            participants=_roster(observation_ids=(_OBS_ID, _SELF_OBS_ID)),
+        )
+        assert _p1(off).primary_reason_observation_id == _SELF_OBS_ID
+        assert _p1(off).grounding_label == "off_target"
+
     def test_an_uncited_eject_survives_the_whole_production_chain(self) -> None:
         # The same ruling at the chokepoint rather than on the pure function:
         # the recorded ballot is an EJECT and the meeting ejects off it.
@@ -803,6 +921,33 @@ class TestTheRetiredGuardsMintNothing:
 class TestTheOnlyTargetRewrites:
     """Three paths move a ballot's target, and the source names all three."""
 
+    @staticmethod
+    def _reasons_in(tree: ast.AST) -> set[str]:
+        """Every string literal handed to ``ballot_target_rewrite_provenance``.
+
+        POSITIONAL and KEYWORD both (review round 3). ``reason`` is an ordinary
+        positional-or-keyword parameter, so ``provenance(ballot, reason="x")``
+        is a call this scan must see; reading ``node.args`` alone would walk
+        right past it and contribute nothing, which would make the assertion
+        below silently weaker than it reads.
+        """
+
+        reasons: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if name != "ballot_target_rewrite_provenance":
+                continue
+            supplied = list(node.args) + [keyword.value for keyword in node.keywords]
+            for argument in supplied:
+                if isinstance(argument, ast.Constant) and isinstance(
+                    argument.value, str
+                ):
+                    reasons.add(argument.value)
+        return reasons
+
     def test_only_three_reasons_are_reachable_from_a_live_path(self) -> None:
         # ``ballot_target_rewrite_provenance`` is the ONE writer of the typed
         # pair, so every reason a live path can record is a literal handed to
@@ -811,21 +956,26 @@ class TestTheOnlyTargetRewrites:
         reasons: set[str] = set()
         for package in ("agents", "api", "eval", "meetings", "orchestrator"):
             for path in sorted((_REPO_ROOT / package).rglob("*.py")):
-                tree = ast.parse(path.read_text())
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.Call):
-                        continue
-                    func = node.func
-                    name = getattr(func, "id", None) or getattr(func, "attr", None)
-                    if name != "ballot_target_rewrite_provenance":
-                        continue
-                    for argument in node.args:
-                        if isinstance(argument, ast.Constant) and isinstance(
-                            argument.value, str
-                        ):
-                            reasons.add(argument.value)
+                reasons |= self._reasons_in(ast.parse(path.read_text()))
 
         assert reasons == {"invalid_target", "teammate_coerced"}
+
+    def test_the_scan_sees_a_reason_passed_as_a_keyword(self) -> None:
+        # The planted form, so the result above is a fact about the TREE and
+        # not about the shape today's two call sites happen to use: a keyword
+        # call is exactly as live as a positional one, and a scan that missed
+        # it would report an empty set for a package full of them.
+        planted = ast.parse(
+            'ballot_target_rewrite_provenance(ballot, reason="planted_reason")\n'
+            'meetings.voting.ballot_target_rewrite_provenance(b, reason="dotted")\n'
+            'ballot_target_rewrite_provenance(ballot, "positional")\n'
+        )
+
+        assert self._reasons_in(planted) == {
+            "planted_reason",
+            "dotted",
+            "positional",
+        }
 
     def test_the_parse_default_is_the_third_and_writes_the_field_directly(
         self,

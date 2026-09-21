@@ -231,6 +231,20 @@ describe("private reasoning perspective", () => {
     expect(html).not.toContain(BALLOT_COPY.groundingLabels.not_assessed);
     expect(html).not.toContain("data-ballot-grounding");
   });
+  it.each([
+    ["off_target_coerced", "Off-target citation changed vote to skip"],
+    ["invalid_basis", "Unreadable stated basis removed"],
+  ])("names the %s adjustment instead of falling back to the generic chip", (reason, copy) => {
+    // Review round 3: the two `rewriteLabel` cases the substrate wave added.
+    // Neither appears on a committed recording — `off_target_coerced` never
+    // fired at all, and `invalid_basis` first mints at the re-record — so
+    // deleting either case left the suite green while the chip silently
+    // degraded to the default "Recorded vote adjustment".
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: [reason] }} players={players} omniscient revealOutcome={false} />);
+    expect(html).toContain(copy);
+    expect(html).not.toContain("Recorded vote adjustment");
+    expect(html).not.toContain(reason);
+  });
   it("explains redirected votes without presenting the original rationale as the applied choice", () => {
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["under_gate_redirect"] }} players={players} omniscient revealOutcome={false} />);
     expect(html).toContain("Vote redirected by the meeting rule");

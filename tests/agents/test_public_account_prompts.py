@@ -1181,6 +1181,12 @@ _SKIP_BASIS_NONE_HELD: Final[str] = (
 _SKIP_BASIS_STANDS: Final[str] = (
     "your vote is recorded as you cast it: nothing here moves your target"
 )
+#: Review round 3: the basis slot is SHOWN in prose and left null in the object
+#: the model copies verbatim -- the `v5` discipline this file already holds
+#: `primary_reason_id` to, and the one that matters most here, because ruling
+#: D6 exists to make the VOTER state its basis and a pre-filled token records
+#: one it never chose.
+_SKELETON_BASIS_NULL: Final[str] = '"decision_basis":null'
 #: The revisions that name the bodies BEFORE these bounds. A tree whose
 #: templates carry the bounds may not compose a stamp from any of them: the
 #: revision exists so that two generations of one body never share a
@@ -1201,6 +1207,19 @@ def _reference_ballot_source() -> str:
     """The reference ballot's bytes, the source every ported span is held to."""
 
     return Path(_REFERENCE_BALLOT_PATH).read_text(encoding="utf-8")
+
+
+def _ballot_skeleton_line(rendered: str) -> str:
+    """The one line of a rendered ballot a model copies verbatim.
+
+    Isolated rather than searched for across the whole body, because the prose
+    around it legitimately quotes both basis tokens: an assertion that a token
+    is ABSENT is only about the skeleton if it is made against the skeleton.
+    """
+
+    lines = [line for line in rendered.splitlines() if line.startswith('{"voter"')]
+    assert len(lines) == 1, lines
+    return lines[0]
 
 
 def _ballot_over_named_turns() -> tuple[str, tuple[str, ...]]:
@@ -1383,15 +1402,32 @@ def test_the_ballot_shows_the_turn_id_shape_without_prefilling_a_real_one() -> N
     # shape travels in prose only and no real turn id of the rendered meeting
     # appears outside the transcript block it belongs to.
     vote, turn_ids = _ballot_over_named_turns()
-    skeleton = [line for line in vote.splitlines() if line.startswith('{"voter"')]
-    assert len(skeleton) == 1
-    assert '"primary_reason_id":null' in skeleton[0]
+    assert '"primary_reason_id":null' in _ballot_skeleton_line(vote)
     opened = vote.index("<transcript>")
     closed = vote.index("</transcript>") + len("</transcript>")
     outside = vote[:opened] + vote[closed:]
     for turn_id in turn_ids:
         assert turn_id in vote[opened:closed], turn_id
         assert turn_id not in outside, turn_id
+
+
+def test_the_skeleton_leaves_the_basis_for_the_voter_to_write() -> None:
+    # Review round 3, the same v4/v5 discipline one slot further on: a slot is
+    # shown in PROSE and never pre-filled into the object a model copies
+    # verbatim. It binds hardest here, because ruling D6 exists to make the
+    # VOTER state what its decision rests on -- a body that ships
+    # `"decision_basis":"none_held"` inside the skeleton would have every
+    # voter that edits `target` and leaves the rest alone record a basis it
+    # never chose. The KEY stays (the ballot still declares one), its VALUE is
+    # null, and neither legal token appears inside that line.
+    skeleton = _ballot_skeleton_line(_candidate_ballot())
+
+    assert _SKELETON_BASIS_NULL in skeleton
+    assert '"cited"' not in skeleton
+    assert '"none_held"' not in skeleton
+    # Non-vacuous: both tokens are still taught, in the prose register the v6
+    # revision names. The skeleton is where they may not be pre-answered.
+    assert _SKIP_BASIS_NONE_HELD in _candidate_ballot()
 
 
 def test_the_ballot_carries_the_references_skip_register_and_nothing_else() -> None:
@@ -1476,6 +1512,12 @@ def test_a_body_carrying_the_v6_bounds_cannot_be_stamped_an_older_revision() -> 
     assert _SKIP_BASIS_REGISTER in vote and _SKIP_BASIS_NONE_HELD in vote
     assert _SKIP_BASIS_STANDS in vote
     assert _NULLED_CONSEQUENCE in vote
+    # Still v6, and the same unreleased one: review round 3 set the skeleton's
+    # basis to null, which is a further edit to a body no recording carries
+    # (`test_no_committed_capture_already_carries_todays_account_stamps`), so
+    # it is absorbed rather than bumped. The v6 spans above are untouched by
+    # it, which is the property that lets one revision name both edits.
+    assert _SKELETON_BASIS_NULL in _ballot_skeleton_line(vote)
     assert ACCOUNT_PROMPT_SET_REVISION not in _PRE_V6_REVISIONS
     stamps = _account_stamps()
     assert stamps

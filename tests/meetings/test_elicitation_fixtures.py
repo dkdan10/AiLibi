@@ -146,6 +146,19 @@ def _render_vote(
     )
 
 
+def _ballot_skeleton_line(rendered: str) -> str:
+    """The one line of a rendered ballot prompt a model copies verbatim.
+
+    Isolated rather than searched for across the whole body, because the prose
+    around it legitimately quotes both basis tokens: an assertion that a token
+    is ABSENT is only about the skeleton if it is made against the skeleton.
+    """
+
+    lines = [line for line in rendered.splitlines() if line.startswith('{"voter"')]
+    assert len(lines) == 1, lines
+    return lines[0]
+
+
 def _render_crewmate(*, emergency: bool = False) -> str:
     trigger = (
         "p-2 called an emergency meeting at tick 410"
@@ -331,6 +344,20 @@ class TestCitationRequiredConfidence:
         assert "a SKIP needs no citation" not in rendered
         assert "a SKIP needs neither" not in rendered
         assert "a call you cannot source either way is a call to SKIP" not in rendered
+
+    def test_the_skeleton_leaves_the_basis_for_the_voter_to_write(self) -> None:
+        # Review round 3. The slot is shown in PROSE and never pre-filled into
+        # the object the model copies verbatim -- the discipline the `v5`
+        # accounts revision states for `primary_reason_id`, and the one this
+        # card needs most: a voter that edits "target" and leaves the skeleton
+        # alone would record a basis it never chose. So the skeleton carries
+        # the KEY (the ballot still declares one) with a NULL value, and
+        # neither legal token appears inside that line.
+        skeleton = _ballot_skeleton_line(_render_vote())
+
+        assert '"decision_basis": null' in skeleton
+        assert '"cited"' not in skeleton
+        assert '"none_held"' not in skeleton
 
     def test_skip_discipline_reanchored_without_blessing_overrides(self) -> None:
         # Baseline-4 §6 (missed-skip 11 -> 86): a thin best case is re-anchored

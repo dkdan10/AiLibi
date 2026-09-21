@@ -49,6 +49,7 @@ from engine.world import WorldState, load_canonical_map
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+    INVALID_BASIS_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
@@ -418,6 +419,25 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
     reasons_gate, clean_gate = _parse_rewrite_reasons(stacked_gate)
     assert reasons_gate == ("uncited_coerced", "invalid_observation_id")
     assert clean_gate == "I found p-3."
+
+    # Ruling D6 of 2026-09-19, and the ONE row of this table a live meeting can
+    # still add (review round 3): a fabricated ``decision_basis`` dropped from
+    # the payload before validation. Unregistered, the strip stops in front of
+    # it and the machinery's own sentence is served to the spectator as the
+    # voter's words -- so the row is asserted here, plain and stacked in the
+    # order production writes it (the basis marker goes on at the top of the
+    # ballot chain, the teammate firewall prepends OUTSIDE it).
+    basis = INVALID_BASIS_MARKER.format(basis="absolutely certain") + "they lied."
+    assert _parse_rewrite_reasons(basis) == (("invalid_basis",), "they lied.")
+    stacked_basis = (
+        TEAMMATE_VOTE_TARGET_MARKER.format(target="p-4")
+        + INVALID_BASIS_MARKER.format(basis="absolutely certain")
+        + "they lied."
+    )
+    assert _parse_rewrite_reasons(stacked_basis) == (
+        ("teammate_coerced", "invalid_basis"),
+        "they lied.",
+    )
 
     # VOTE_PARSE_DEFAULT is the WHOLE rationale -> clean is empty.
     parse_default = VOTE_PARSE_DEFAULT_MARKER.format(head="<<garbage>>")
