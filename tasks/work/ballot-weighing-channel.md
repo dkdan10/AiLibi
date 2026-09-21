@@ -6,12 +6,16 @@
 
 At vote time the ballot prompt stops handing the voter a finished number and
 stops telling it to follow that number. For each living ejection target it
-renders the EVIDENCE ROWS the suspicion figure was built from: the voter's own
+renders the EVIDENCE ROWS behind the suspicion figure that the meeting layer can
+NAME: the voter's own
 first-hand sightings, vents, transits and body discoveries; the contradictions
 naming the target; and the testimony about the target, each row naming its
 speaker, saying whether that speaker saw it first-hand or is repeating another
-voice, and carrying the id a ballot may cite for it. The scalar stays, moved
-below its rows and relabelled as their summary; the sentence instructing
+voice, and carrying the id a ballot may cite for it. It is not a complete
+decomposition of the figure — a witnessed kill and the body-proximity lift reach
+no row, and review round 1 weakened the template's own wording to match. The
+scalar stays, moved
+below its rows and relabelled their PARTIAL summary; the sentence instructing
 deference is deleted and nothing that points at a target replaces it. The
 ballot gains `counter_reason_id`, the strongest thing the voter holds pointing
 the other way, validated exactly like the primary citation, and the spectator's
@@ -103,6 +107,44 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
 
 ## Acceptance
 
+- [x] Review correction: the §4.7 TEAMMATE firewall is re-applied at assembly,
+  so no own-channel row and no `co_present` companion names a fellow impostor.
+  `tests/meetings/test_weighing_channel.py::TestTheTeammateFirewall` —
+  `test_no_own_row_names_a_fellow_impostor`,
+  `test_the_identical_records_on_a_crewmate_keep_every_row` (the non-vacuity
+  control), `test_the_public_rows_about_a_teammate_are_not_dropped` and
+  `test_the_firewall_holds_through_the_real_meeting`.
+- [x] Review correction: the same finding's documentation half —
+  `orchestrator/game.py`'s sighting and vent accessor docstrings state the
+  guarantee at the strength the code now delivers (these rows DO reach a prompt;
+  the consumer re-applies the firewall).
+- [x] Review correction: `eval/validity.py`'s `_SUSPICION_GRAPH_ROW_RE` is
+  widened exactly as `eval/meeting_quality.py`'s was, so the Task-14.12 railroad
+  gate cannot go vacuous on v8 bytes.
+  `tests/eval/test_validity.py::test_railroad_reads_both_rendered_row_shapes`
+  (parametrised over both rendered shapes).
+- [x] Review correction: a contradiction row resolves to the turn the SUBJECT
+  spoke rather than to the lexically first event id, and the fallback is stated
+  at the strength it delivers.
+  `test_a_cross_turn_flag_cites_the_subjects_own_account` and
+  `test_a_flag_that_names_no_turn_of_the_subjects_falls_back`.
+- [x] Review correction: the four live-tense guarantees inside the diff that
+  were false at `6b79ff08` are rewritten (the testimony builder's ledger
+  sentence, `vent_witness_records`' "never reaches a prompt surface",
+  `observation_ids`' "exactly ONE place", and the stale `None`-while-OFF comment
+  above the unconditional ledger build), with the three sibling paragraphs in
+  the same docstring that had drifted the same way. Verified by the closing
+  greps quoted in Results.
+- [x] Review correction: the suspicion block no longer calls itself "A running
+  summary of the lines above". It is a PARTIAL summary and names the two
+  provenance channels that reach no row.
+  `test_the_number_is_called_a_partial_summary_of_the_rows` with its planted
+  twin `test_planted_the_complete_summary_claim_is_detected`, and the matching
+  Limitations bullet.
+- [x] Review correction: the Results symbol table is re-stamped at this round's
+  final head, re-derived by symbol with `grep -n`, and the two non-Python rows
+  (`BallotCard.tsx` `counterKind`, `meetings/schemas.py`
+  `VoteBallot._serialize`) with it.
 - [x] Typed evidence rows, assembled from typed inputs only. A frozen
   `EvidenceRow` in `meetings/render_contract.py` (the leaf that breaks the
   `agents` cycle, so it imports no `agents.*`) carries the subject, a one-line
@@ -336,35 +378,42 @@ instruction … or delete the column rather than display a constant") and §12
 
 ### What was built, and where it actually lives
 
-| Contract item | Symbol | Line at `0a1100ea` + after |
+Every line below is RE-STAMPED at this card's final head (review round 1) and
+re-derived by symbol with `grep -n`, not carried forward: the round-1 fixes moved
+`meetings/manager.py` again, and the round-0 table had already drifted by the two
+commits that landed after it.
+
+| Contract item | Symbol | Line at the final head (round-0 table's value) |
 | --- | --- | --- |
 | the row DTO | `EvidenceRow` / `EvidenceRowKind` | `meetings/render_contract.py:155` / `:131` (new) |
-| the renderer widening | `VotePromptRenderer.evidence_rows` | `meetings/render_contract.py:481` (card said `:340-400`) |
+| the renderer widening | `VotePromptRenderer.evidence_rows` | `meetings/render_contract.py:487` (round 0 said `:481`; card said `:340-400`) |
 | the three witness stamps | `VentWitnessRecord` / `SightingRecord` / `MoveWitnessRecord` `.observation_id` | `meetings/schemas.py:318` / `:358` / `:389` (card said `:306-308`, `:340-343`, `:366-369`) |
 | the ninth ballot key | `ModelAuthoredVoteBallot.counter_reason_id` | `meetings/schemas.py:1035` (card said `:767-773`) |
-| row assembly | `build_evidence_rows` + its three builders | `meetings/manager.py:3618`, `:3424`, `:3510`, `:3557` (new) |
-| the render call site | `MeetingManager._collect_one_ballot` | `meetings/manager.py:2248` threads the rows, `:2300` passes them (card said `:2151`) |
-| the counter validator | `_normalize_ballot_counter_reason_id` | `meetings/manager.py:3863`, called at `:2477` |
-| the two shared decisions | `_resolved_reason_id` / `_resolved_observation_id` | `meetings/manager.py:3730` / `:3753` (extracted from `_normalize_ballot_reason_id` at `:3773`, card said `:3199`, and `_normalize_ballot_observation_id` at `:3822`, card said `:3241`) |
+| row assembly | `build_evidence_rows` + its three builders | `meetings/manager.py:3710`, `:3449`, `:3568`, `:3646` (round 0 said `:3618`, `:3424`, `:3510`, `:3557`) |
+| the render call site | `MeetingManager._collect_one_ballot` | `meetings/manager.py:2184`; `:2270` builds the rows, `:2309` passes them (round 0 said `:2248` / `:2300`; card said `:2151`) |
+| the counter validator | `_normalize_ballot_counter_reason_id` | `meetings/manager.py:3989`, called at `:2499` (round 0 said `:3863` / `:2477`) |
+| the two shared decisions | `_resolved_reason_id` / `_resolved_observation_id` | `meetings/manager.py:3849` / `:3874` (round 0 said `:3730` / `:3753`), extracted from `_normalize_ballot_reason_id` at `:3894` (card said `:3199`) and `_normalize_ballot_observation_id` at `:3940` (card said `:3241`) |
 | the counter marker | `INVALID_COUNTER_REASON_MARKER` | `meetings/manager.py:412` |
-| the served body | `vote_ballot.j2` | `:244-251` the `<evidence>` block, `:254-255` the relabelled summary, `:258` the row without `trust`, `:290` the sentence deleted, `:293-294` nine keys, `:300` the counter bullet |
-| the row pattern | `_SUSPICION_GRAPH_ROW_RE` | `eval/meeting_quality.py:341` (card said `:326`) |
+| the served body | `vote_ballot.j2` | `:249-254` the `<evidence>` block, `:257-258` the relabelled PARTIAL summary, `:261` the row without `trust`, `:293` the sentence deleted, `:296-297` nine keys, `:303` the counter bullet |
+| the row pattern | `_SUSPICION_GRAPH_ROW_RE` | `eval/meeting_quality.py:341` (card said `:326`) and, added in round 1, `eval/validity.py:190` |
 | the served DTO | `BallotView.counter_reason_id` | `api/schemas.py:1093` (card said `:962-970`), mirrored at `api/replay_loader.py:3324` (card said `:3286`) |
-| the spectator card | `BallotCard.tsx` | `:261` the third `EvidenceLink`, `:57` `counterKind`, `:32` the chip label |
-| the marker tables | three | `api/replay_loader.py:3618`, `training/surrogate/dataset.py:205` (card said `:213`), `eval/deduction_metrics.py:724` |
-| the trust deletion | `BeliefState.adjust_trust` / `_format_belief_score` | `agents/memory/beliefs.py:966` (history note where it stood; card said `:953`), `agents/memory/store.py:2808` |
+| the spectator card | `BallotCard.tsx` | `:261` the third `EvidenceLink`, `:68` `counterKind` (round 0 said `:57`), `frontend/src/lib/copy.ts:450` the chip label (round 0 said `BallotCard.tsx:32`) |
+| the marker tables | three | `api/replay_loader.py:3612` (the tuple; the counter row at `:3618`), `training/surrogate/dataset.py:207` (round 0 said `:205`; card said `:213`), `eval/deduction_metrics.py:718` (the chain; the counter row at `:725`) |
+| the trust deletion | `BeliefState.adjust_trust` / `_format_belief_score` | `agents/memory/beliefs.py:969` (history note where it stood; round 0 said `:966`; card said `:953`), `agents/memory/store.py:2792` (round 0 said `:2808`) |
 
 ### Decisions
 
 **The evidence block's sources, and the one the card named that is lever-gated.**
 The card names "the participant's typed channels, `contradictions` and
 `testimony_ledger`". The first two are unconditional; the ledger was built ONLY
-while the `corroboration_discipline` lever was ON (`meetings/manager.py:1568`
-before this card), so on the shipped default path every testimony row would have
+while the `corroboration_discipline` lever was ON (`meetings/manager.py:1568` at
+this card's base, before this card), so on the shipped default path every
+testimony row would have
 read "not first-hand" whatever the speaker's own record said — the block would
 have shipped with its third source dark. The ledger is a pure derivation of
 bytes the meeting already holds, so it is now built unconditionally
-(`meetings/manager.py:1568`) and used for the `first_hand` bit alone; the LEVER
+(`meetings/manager.py:1625` at the final head) and used for the `first_hand` bit
+alone; the LEVER
 still decides whether the `<testimony_sources>` BLOCK renders, so an OFF
 meeting's prompt bytes are unchanged, which the prompt-byte golden re-asserts
 over all 300 committed games. The testimony ROWS themselves are built from the
@@ -386,7 +435,7 @@ before not, then the provenance CLASS (own perception → the detector's flags �
 what was said here), then earliest-first, then kind/speaker/citation. A
 witnessed vent and an ordinary sighting share class 0 on purpose, so the block
 cannot rank one player's evidence above another's. `MAX_EVIDENCE_ROWS_PER_SUBJECT
-= 8` (`meetings/manager.py:3390`) bounds each (subject, class) group, not each
+= 8` (`meetings/manager.py:3413`) bounds each (subject, class) group, not each
 subject: a single budget would have let many own sightings of one player crowd
 out the contradictions and the voices against that same player. It is decided
 on ARRIVAL TIME, not on the render order: the render puts first-hand rows first
@@ -410,7 +459,7 @@ those decisions were extracted into `_resolved_reason_id` /
 `_resolved_observation_id` and the three validators now share them, rather than
 a third copy that could drift. A null counter returns the ballot untouched. A
 fabricated counter costs exactly this field plus a marker; it is deliberately
-outside the `cited_before_validation` read (`meetings/manager.py:2444`), so it
+outside the `cited_before_validation` read (`meetings/manager.py:2456`), so it
 cannot turn an `uncited` ballot into an `invalid_citation` one, and no guard, no
 `tally_ballots` and no `label_ballot_grounding` branch reads it.
 
@@ -418,11 +467,11 @@ cannot turn an `uncited` ballot into an `invalid_citation` one, and no guard, no
 and for the same reason: the four committed `tournament-eval-report.json` files
 embed re-serialized ballots, so a `null` key written there would have moved
 bytes in four reports this card may not move. `VoteBallot._serialize`
-(`meetings/schemas.py:1163`).
+(`meetings/schemas.py:1148`).
 
 **Trust is DELETED, not wired**, with the card's reason recorded in three
 places: the comment where `adjust_trust` stood
-(`agents/memory/beliefs.py:966`), the ADR's 2026-08-19 note
+(`agents/memory/beliefs.py:969`), the ADR's 2026-08-19 note
 (`docs/adr/0001-three-load-bearing-decisions.md:30`) and DESIGN.md's §6.6
 banner (`:718`). A credibility scalar would be a second engine-computed verdict
 handed to the agent — the defect this card exists to remove — while the
@@ -479,8 +528,10 @@ exactly, so the DTO and the TS type cannot have drifted.
 
 ### Verification
 
-Every command below was run at the final head in this clean worktree, with its
-real exit code captured directly.
+Every command below was run in this clean worktree with its real exit code
+captured directly, at the FIRST PASS's final head (`6b79ff08`). The review round
+below re-ran the same list at its own head and states its own numbers there;
+these are kept as recorded rather than overwritten.
 
 ```
 $ bash scripts/check.sh                                   EXIT=0
@@ -648,9 +699,20 @@ figure is a merge condition for anything.
   grounding predicates**, which are the detector's own. A speaker who saw
   something their record does not bear out reads as "not first-hand", which is
   what is known, not a claim that they lied.
-* **A contradiction row's speaker is a resolution, not a certainty.** Where the
-  flag's event ids name no turn of this meeting the row renders with no citation
-  and the SUBJECT as its speaker — honest, but thinner than the resolved case.
+* **The suspicion number is only PARTLY decomposed by the rows.** Two of the
+  eight provenance channels reach no row: a witnessed KILL (the participant
+  carries no kill channel, and `sighting_records_for_meeting` filters the kill
+  action out) and the BODY-PROXIMITY lift (whose row would name the nearby
+  suspect, while the body-discovery row names the dead victim). A number can
+  therefore sit above lines that do not add up to it; the rendered memory block
+  still carries both, and the template calls itself a PARTIAL summary rather
+  than a running summary of the lines above (review round 1).
+* **A contradiction row's speaker is a resolution, not a certainty.** It cites
+  the turn the SUBJECT spoke where the flag resolves to one; where it resolves
+  only to the other side of the conflict the row cites THAT turn and names its
+  speaker, and where the event ids name no turn of this meeting the row renders
+  with no citation and the SUBJECT as its speaker — honest, but thinner than the
+  resolved case.
 * **The per-(subject, class) budget can hide evidence.** Eight rows per group is
   a page bound, not a claim that a ninth did not exist; the rendered memory block
   above still carries it, and the template says so.
@@ -660,3 +722,221 @@ figure is a merge condition for anything.
 * **The four committed `tournament-eval-report.json` files stay byte-identical**
   only because the new ballot key is elided when null. A future field that is not
   elided moves them.
+
+### Review corrections, round 1 (2026-09-21)
+
+Eight blocking findings from two independent lenses, SIX distinct defects: two
+pairs were the same defect found twice (the teammate firewall, and the
+contradiction row's turn). Every command quoted below was run in this worktree
+at this head, and every `file:line` is re-derived here, not carried forward.
+
+**1 and 5. An impostor's ballot named its own teammate (§4.7).**
+`_own_channel_evidence_rows` read `voter.sighting_records`,
+`vent_witness_records` and `move_witness_records` with no teammate filter, so an
+IMPOSTOR voter's block could render "you watched `p-2` VENT" or "you saw them in
+REACTOR at tick 3, with `p-2`" about its own partner — the 7.12 own-goal, on the
+shipped default path, in the one surface that reaches the model. The two
+accessors hand those rows over ON PURPOSE:
+`sighting_records_for_meeting` keeps a teammate-at-a-kill-window row because
+that is safe for its GROUNDING consumer and its docstring said every other
+consumer must re-apply the suppression, and the §6.6 render never suppressed a
+witnessed teammate vent at all
+(`meetings/transcript.exclude_teammate_role_proving_observations` records that).
+The weighing channel is such a consumer and did not.
+
+The drop is applied at assembly (`meetings/manager.py:3462`), exactly where the
+manager already re-applies it for the prosecution mapping (`:1345`): every row
+whose subject is a fellow impostor is dropped, and every fellow is stripped from
+a sighting's `co_present` companions so the "with …" suffix cannot re-introduce
+one sideways. It is BROADER than `_sighting_is_suppressed`'s kill-window rule —
+any room, any tick, the shape `move_witness_records_for_meeting` already uses —
+and empty for every crewmate and sole impostor, so the crew path is unchanged.
+Body-discovery rows take no filter and need none: `engine/rules.py:80` refuses a
+kill whose target is an impostor, so a body is never a teammate's, and the
+docstring says so rather than carrying a line no test could reach. The
+FLAG and TESTIMONY rows naming a teammate are deliberately NOT dropped: those
+are public facts of this meeting that the `<contradictions>` block and the
+transcript already put in front of everyone, and hiding them would tell the
+impostor something false about the table.
+
+Proofs: `TestTheTeammateFirewall` —
+`test_no_own_row_names_a_fellow_impostor` (an impostor holding all three shapes,
+including the co-present route),
+`test_the_identical_records_on_a_crewmate_keep_every_row` (the same four records
+with `fellow_impostor_ids=()` keep every row AND the `with p-2, p-4` companion,
+so the drop is the firewall's and nothing else's),
+`test_the_public_rows_about_a_teammate_are_not_dropped`, and
+`test_the_firewall_holds_through_the_real_meeting` driven through the real
+`MeetingManager`. The documentation half is the same finding's other leg:
+`orchestrator/game.py:3906-3932` (sighting) and `:3845-3858` (vent) now state
+what is true — these rows DO reach a prompt, and the consumer re-applies the
+firewall — and `meetings/manager.py:1345` and
+`tests/meetings/test_manager.py:7073` name both re-applying consumers instead of
+"its only consumer corroborates". Before this round,
+`grep -ci teammate tests/meetings/test_weighing_channel.py` returned 0; it now
+returns 16 (`impostor`: 0 → 17).
+
+**2. The Task-14.12 railroad gate would have gone VACUOUS on v8 bytes.**
+`eval/validity._SUSPICION_GRAPH_ROW_RE` kept the narrowed `, trust <N>` shape
+while `eval/meeting_quality`'s was widened. It is not a loud failure: a v8 prompt
+matches nothing, `_rendered_suspicions` returns `[]`, no row clears
+`CERTAIN_GUILT_SUSPICION`, and `check_no_railroaded_crew_ejections` —
+`run_validity_gate`'s fifth check, the one `scripts/validity_gate.py` runs over
+any report — reports `passed=True` over a railroaded crew row. Widened at
+`eval/validity.py:190` with the comment (`:176-189`) stating the vacuity, and
+pinned by `test_railroad_reads_both_rendered_row_shapes`, parametrised over
+`", trust 0.0"` and `""` with `rendered_crew_rows > 0` asserted on both legs.
+The two test-local copies of the pattern that read COMMITTED prompts
+(`tests/meetings/test_manager.py:3997`, `tests/agents/test_beliefs.py:3479`) are
+widened in the same move with the reason in a comment; they change no number
+today, because every prompt they read carries the suffix. The one reader left
+narrowed is `audits/workflows/extract_gameplay_facts.py:272`, which deviation 5
+already declares and this card may not touch.
+
+**3 and 6. A contradiction row cited the witness's turn, not the account.**
+`meetings/transcript` canonicalises a flag's event pair with `sorted()`, so
+`event_a_id` is the lexically smaller id — the WITNESS's turn whenever the
+witness spoke first — and the builder resolved `event_a_id` first and stopped.
+A flag about `p-2`'s account spoken in `m-1:turn-1`, raised against a sighting
+spoken by `p-4` in `m-1:turn-0`, rendered `speaker=p-4`, `citation_id=m-1:turn-0`
+under `p-2`'s name, while the ballot tells the voter to "cite the turn that
+account was spoken in". Both event ids are now resolved and the row prefers, PER
+SUBJECT, the turn that subject spoke (`meetings/manager.py:3595-3602`); the
+fallback is stated at the strength it delivers, in the builder's docstring, in
+`EvidenceRow`'s and in the Limitations above. Proofs:
+`test_a_cross_turn_flag_cites_the_subjects_own_account` (the adverse ORDER, which
+the one pre-existing test could not show because it planted both ids inside a
+single turn) and `test_a_flag_that_names_no_turn_of_the_subjects_falls_back`.
+
+**4. Four live-tense guarantees inside the diff were false.** All four are
+rewritten to what the code delivers, and three sibling paragraphs that had
+drifted the same way went with them:
+`_testimony_evidence_rows` (the ledger is built UNCONDITIONALLY since D5, so a
+grounded voice IS marked first-hand on the default path — the reverse of what
+the docstring said and of what
+`test_a_grounded_voice_is_marked_first_hand_on_the_default_path` asserts);
+`vent_witness_records`' "it never reaches a prompt surface" (it does, as this
+voter's own `own_vent` rows); `observation_ids`' "consulted in exactly ONE
+place" (two, both the same shared decision `_resolved_observation_id`); the
+stale "`None` while the lever is OFF" comment sitting directly above the
+unconditional build; plus `sighting_records`' "two consuming seams" and "OFF,
+the channel reaches no prompt surface", `move_witness_records`' "Nothing else
+reads it", and `body_discovery_records`' "reads it in exactly one place".
+
+**7. The suspicion number was called a running summary of rows that cannot
+contain two of its inputs.** `SuspicionEntry` carries `body_proximity` and
+`kill_or_vent_pin`; `MeetingParticipant` has no kill channel,
+`sighting_records_for_meeting` filters the kill action out, and an
+`own_body_discovery` row names the dead victim rather than the nearby suspect
+the proximity lift raised. Of the two repairs the finding offered, the rows were
+NOT added — a kill channel is new plumbing on the participant, the orchestrator
+and the firewall, which this card may not take — so the claim is weakened to
+what is true. The served line now reads "only a PARTIAL summary of the lines
+above" and NAMES both inputs (`vote_ballot.j2:258`), the same correction is made
+in `build_evidence_rows`, `EvidenceRow`, the template header, the renderer
+Protocol docstring, this card's Outcome and the PR body, and a Limitations
+bullet is added. Pinned by
+`test_the_number_is_called_a_partial_summary_of_the_rows` with its planted twin
+`test_planted_the_complete_summary_claim_is_detected`. The weakened sentence
+names no player, ranks nothing and still points at the evidence rather than the
+count, which the same test asserts.
+
+**8. The symbol table cited lines that were wrong at the reviewed head.** The
+whole table is re-stamped above, at THIS head and by `grep -n` on each symbol,
+with the round-0 value kept beside it; the same pass corrected the Decisions
+prose (`MAX_EVIDENCE_ROWS_PER_SUBJECT` `:3390`→`:3413`, the
+`cited_before_validation` read `:2444`→`:2456`, `VoteBallot._serialize`
+`:1163`→`:1148`, the `adjust_trust` history note `:966`→`:969`, the ledger build
+`:1568`→`:1625`) and the two non-Python rows (`BallotCard.tsx` `counterKind`
+`:57`→`:68`; the chip label is `frontend/src/lib/copy.ts:450`, not
+`BallotCard.tsx:32`).
+
+**No version bump for the v8 body edit.** `vote_ballot` stays at
+`qwen3_6_27b.v8`: nothing has been recorded under v8, so the two generations
+this repo's one-stamp-one-body rule separates do not exist here — the v8 body is
+still unshipped and unrecorded, and the only stamp any committed game carries is
+`v5`, which the alibi card's archive covers. Nothing is re-recorded or
+re-scored in this round either.
+
+**The round-1 perturbation pass.** Ten rows over every production line this
+round adds or changes; each edits ONE thing, runs the named probe, and restores
+from an in-memory COPY (never `git checkout`), with
+`PYTHONDONTWRITEBYTECODE=1 -p no:cacheprovider`. **Every one came back RED on
+the first attempt — no probe in this round first returned green.**
+
+| # | perturbation | probe | result |
+| --- | --- | --- | --- |
+| R1 | `eval/validity.py`'s row pattern re-narrowed to require `, trust <N>` | `tests/eval/test_validity.py` | red |
+| R2 | the own-VENT teammate drop removed | `test_weighing_channel.py` | red |
+| R3 | the own-SIGHTING teammate drop removed | same | red |
+| R4 | the `co_present` teammate strip removed | same | red |
+| R5 | the own-TRANSIT teammate drop removed | same | red |
+| R6 | `teammates` read as an empty set instead of `voter.fellow_impostor_ids` | same | red |
+| R7 | the contradiction's per-subject preference removed (cite the first sorted event) | same | red |
+| R8 | only `event_a_id` resolved (the second slot never tried) | same | red |
+| R9 | the contradiction fallback returns `None` instead of the first resolvable turn | same | red |
+| R10 | the template's PARTIAL-summary sentence restored to "A running summary of the lines above" | same | red |
+
+R1 is the finding's own repro: under the narrowed pattern the OTHER railroad
+tests stay green and only the new one fails, which is what "vacuous" means here.
+The two test-local pattern widenings (`test_manager.py`, `test_beliefs.py`) are
+deliberately NOT in the table: they read committed prompts only, every one of
+which carries the trust suffix, so the change is unobservable today and the
+comment beside each says so.
+
+**The closing greps, run at this head.**
+
+```
+$ grep -rni "running summary" --include=*.py --include=*.j2 --include=*.md .
+  audits/audit-2026-06-22-0446-ground-up.md:64   (history, 2026-06-22)
+  tests/meetings/test_weighing_channel.py:77     (the FORBIDDEN string constant)
+  tests/meetings/test_weighing_channel.py:1244   (the docstring naming it)
+$ grep -rni "never reaches a prompt|reaches no prompt|reach a prompt" (per-word)
+  meetings/manager.py:862        observation_ids -- still true
+  orchestrator/game.py:3925      the corrected sighting paragraph
+  orchestrator/game.py:3929      "a teammate reaches no prompt through this channel"
+  eval/evidence_honesty.py:66,359,583   ballot-rationale markers -- unrelated, true
+$ grep -rni "in exactly one place" --include=*.py .        (no hits)
+$ grep -rni "ledger is built only|built only while the corroboration" .
+  tasks/work/ballot-weighing-channel.md:601      the round-0 perturbation row (a
+                                                 perturbation's name, not a claim)
+$ grep -rni "its only consumer" --include=*.py . | grep -i firewall-adjacent
+  meetings/manager.py:1345 and tests/meetings/test_manager.py:7073 -- both rewritten
+```
+
+**Gates re-measured at this round's head**, each exit code captured directly,
+never through a pipe. The card's own Validation list is covered in full; no
+live provider call of any kind was made and none is a check.
+
+```
+$ bash scripts/check.sh                                   EXIT=0
+  ruff check . / ruff format --check .  518 files, all clean
+  lint-imports                          4 contracts kept, 0 broken, 189 modules
+  validate_task_docs.py                 390 phase tasks + 390 prompts; 73 work cards
+  generate_prompts.py --check           all 390 prompts in sync
+  mypy .                                no issues in 489 source files
+  pytest -n auto --dist loadfile        8220 passed, 20 skipped, 3 xfailed
+                                        (8210 at the first pass: +10 new tests)
+  frontend lint / tsc:check / vitest    557 tests in 20 files passed; build green
+$ bash scripts/verify_samples.sh                          EXIT=0
+  replays/samples/4p1i  All 50 samples verified clean.
+  replays/samples/9p2i  All 50 samples verified clean.
+$ uv run python scripts/build_sample_report.py --sample-dir <set> --check
+  the two replays/samples/ and two replays/ml_corpus/ sets       EXIT=0 each
+  ("consistent with its replays" on all four)
+$ uv run python scripts/publish_process_scorecard.py --check              EXIT=0
+$ uv run python scripts/verify_ml_evidence.py                             EXIT=0
+  checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5   (never --complete)
+$ uv run python scripts/check_doc_facts.py                                EXIT=0
+$ uv run pytest tests/scripts/test_verify_ml_evidence.py -q               EXIT=0
+  80 passed
+```
+
+The four `--check` recomputations and the scorecard are byte-identical to the
+first pass, which is the point: this round touched no recorded byte, and the
+widened `eval/validity` pattern reads the committed `, trust 0.50` rows exactly
+as the narrow one did.
+
+No `audits/` or `tests/fixtures/` byte moved in this round, so no
+`docs/artifacts.md` row is recomputed here; deviation 1's recomputation from the
+first pass stands unchanged.

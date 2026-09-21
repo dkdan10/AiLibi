@@ -71,6 +71,11 @@ _DEFERENCE_SENTENCE: Final[str] = (
     "Your suspicion levels above are your own accumulated evidence from the "
     "whole game — trust them over meeting rhetoric."
 )
+_SUSPICION_HEADER: Final[str] = "## Your suspicion of each player"
+#: What the served body may NOT claim: that the number decomposes into the rows
+#: above it. Two provenance channels have no row (see the test that uses this).
+_COMPLETE_SUMMARY_CLAIM: Final[str] = "A running summary of the lines above"
+_PARTIAL_SUMMARY_CLAIM: Final[str] = "only a PARTIAL summary of the lines above"
 
 
 # --------------------------------------------------------------------------- #
@@ -619,6 +624,87 @@ class TestRowOrderAndBound:
         assert orphan[0].citation_id is None
         assert orphan[0].speaker == "p-2"
 
+    @staticmethod
+    def _two_turn_flag_rows(
+        *, subjects: tuple[str, ...] = ("p-2",)
+    ) -> tuple[EvidenceRow, ...]:
+        """A flag spanning TWO turns, with the WITNESS's turn in slot ``a``.
+
+        ``meetings.transcript`` canonicalises a flag's event pair with
+        ``sorted()``, so ``event_a_id`` is the lexically smaller id -- which is
+        the witness's turn whenever the witness spoke first. That is the adverse
+        order: resolving slot ``a`` and stopping cites the wrong turn and names
+        the wrong speaker.
+        """
+
+        def _turn(index: int, speaker: str, text: str) -> MeetingTurn:
+            return MeetingTurn(
+                turn_id=f"m-1:turn-{index}",
+                turn_index=index,
+                speaker=speaker,
+                turn_kind="opening" if index == 0 else "reply",
+                reply_to=None if index == 0 else f"m-1:turn-{index - 1}",
+                observations=(),
+                claims=(),
+                free_text=text,
+            )
+
+        flag = ContradictionRef(
+            contradiction_id="c-1",
+            kind="alibi_vs_sighting",
+            # Canonical (sorted) order: the WITNESS's turn-0 id sorts first.
+            event_a_id="turn:m-1:turn-0:obs:0",
+            event_b_id="turn:m-1:turn-1:claim:0",
+            subjects=subjects,
+            description="p-2's account cannot be squared with a sighting.",
+        )
+        return build_evidence_rows(
+            voter=_participant("p-1"),
+            candidate_targets=subjects,
+            contradictions=(flag,),
+            transcript=MeetingTranscript(
+                turns=(
+                    _turn(0, "p-4", "I saw p-2 in REACTOR."),
+                    _turn(1, "p-2", "I was in MEDBAY."),
+                )
+            ),
+        )
+
+    def test_a_cross_turn_flag_cites_the_subjects_own_account(self) -> None:
+        """The row resolves to the turn the SUBJECT spoke, not to slot ``a``.
+
+        The ballot's own instruction tells the voter to cite "the turn that
+        account was spoken in", and the row's ``speaker`` is rendered as the one
+        who stated it, so citing the witness's turn here would hand the voter an
+        id for somebody else's words under p-2's name. The one pre-existing case
+        planted both event ids inside a SINGLE turn, where the two resolutions
+        agree and the defect is invisible.
+        """
+
+        rows = self._two_turn_flag_rows()
+        assert len(rows) == 1
+        assert rows[0].kind == "contradiction"
+        assert rows[0].citation_id == "m-1:turn-1"
+        assert rows[0].speaker == "p-2"
+
+    def test_a_flag_that_names_no_turn_of_the_subjects_falls_back(self) -> None:
+        """Stated at the strength it delivers: the first RESOLVABLE turn.
+
+        An inferential flag can name a subject who spoke neither of the two
+        events (here p-3, named by a conflict between p-4's and p-2's turns).
+        There is no account of theirs to cite, so the row cites the first
+        resolvable event in the transcript's own canonical order and names ITS
+        speaker -- the other side of the conflict, which is what was actually
+        resolved. The fallback is asserted rather than left implicit, because a
+        guarantee nobody pins is a guarantee that quietly changes.
+        """
+
+        rows = self._two_turn_flag_rows(subjects=("p-3",))
+        assert len(rows) == 1
+        assert rows[0].subject == "p-3"
+        assert rows[0].citation_id == "m-1:turn-0"
+        assert rows[0].speaker == "p-4"
+
     def test_one_speaker_naming_one_subject_twice_makes_one_row(self) -> None:
         """The (speaker, subject) dedupe, and which turn survives it.
 
@@ -844,6 +930,195 @@ class TestRowOrderAndBound:
 
 
 # --------------------------------------------------------------------------- #
+# B2. The §4.7 teammate firewall on the own-channel rows                       #
+# --------------------------------------------------------------------------- #
+
+
+def _impostor_voter(*, fellow: str) -> MeetingParticipant:
+    """An IMPOSTOR whose three own channels all name its own teammate.
+
+    Every row here is one the accessors really can produce:
+    ``sighting_records_for_meeting`` deliberately keeps a teammate sighting (its
+    docstring says so), the §6.6 render never suppressed a witnessed teammate
+    VENT at all, and the second sighting puts the teammate in the ``co_present``
+    companions of a row about somebody else -- the sideways route the render's
+    own ``_collect_co_presence`` mirror exists to close.
+    """
+
+    return replace(
+        _participant("p-1", role="IMPOSTOR", fellow_impostor_ids=(fellow,)),
+        sighting_records=(
+            SightingRecord(
+                subject=fellow,
+                room="REACTOR",
+                tick=3,
+                co_present=("p-3",),
+                observation_id="p-1:3:0",
+            ),
+            SightingRecord(
+                subject="p-3",
+                room="REACTOR",
+                tick=3,
+                co_present=(fellow, "p-4"),
+                observation_id="p-1:3:1",
+            ),
+        ),
+        vent_witness_records=(
+            VentWitnessRecord(
+                subject=fellow,
+                room="ELECTRICAL",
+                tick=4,
+                observation_id="p-1:4:0",
+            ),
+        ),
+        move_witness_records=(
+            MoveWitnessRecord(
+                subject=fellow,
+                from_room="REACTOR",
+                to_room="ADMIN",
+                tick=5,
+                observation_id="p-1:5:0",
+            ),
+        ),
+        observation_ids=("p-1:3:0", "p-1:3:1", "p-1:4:0", "p-1:5:0"),
+    )
+
+
+class TestTheTeammateFirewall:
+    """§4.7 (Task 7.12): an impostor's ballot never narrates its own partner.
+
+    The weighing channel is the FIRST consumer that puts these typed rows in
+    front of the model, and two of the three accessors hand it teammate rows on
+    purpose (:meth:`orchestrator.game.TacticalAgent.sighting_records_for_meeting`
+    for the grounding consumer, and the vent accessor because the render layer
+    never suppressed a witnessed teammate vent). So the drop is applied at
+    assembly, and these are its proofs: the impostor loses those rows, a
+    crewmate holding the IDENTICAL records keeps every one of them, and the
+    public rows -- a flag or a voice naming the teammate at this table -- are
+    untouched, because those are facts the meeting already put in front of
+    everyone.
+    """
+
+    def test_no_own_row_names_a_fellow_impostor(self) -> None:
+        rows = build_evidence_rows(
+            voter=_impostor_voter(fellow="p-2"),
+            candidate_targets=("p-2", "p-3", "p-4"),
+            contradictions=(),
+            transcript=MeetingTranscript(turns=()),
+        )
+
+        assert [row.subject for row in rows] == ["p-3"]
+        assert [row.kind for row in rows] == ["own_sighting"]
+        # ...and not through the "with …" companions either.
+        assert "p-2" not in rows[0].description
+        assert "p-4" in rows[0].description
+        assert all("p-2" not in row.description for row in rows)
+
+    def test_the_identical_records_on_a_crewmate_keep_every_row(self) -> None:
+        """The control that makes the test above non-vacuous.
+
+        Same four records, same assembler, ``fellow_impostor_ids=()``: all four
+        rows survive and the companion list still names p-2. So what the
+        impostor loses is lost to the firewall and to nothing else.
+        """
+
+        crew = replace(
+            _impostor_voter(fellow="p-2"), role="CREWMATE", fellow_impostor_ids=()
+        )
+        rows = build_evidence_rows(
+            voter=crew,
+            candidate_targets=("p-2", "p-3", "p-4"),
+            contradictions=(),
+            transcript=MeetingTranscript(turns=()),
+        )
+
+        assert sorted(row.kind for row in rows) == [
+            "own_sighting",
+            "own_sighting",
+            "own_transit",
+            "own_vent",
+        ]
+        assert {row.subject for row in rows} == {"p-2", "p-3"}
+        companions = [row for row in rows if row.subject == "p-3"]
+        assert len(companions) == 1
+        assert "with p-2, p-4" in companions[0].description
+
+    def test_the_public_rows_about_a_teammate_are_not_dropped(self) -> None:
+        """A flag and a voice naming the teammate still render, and must.
+
+        The firewall closes the impostor's PRIVATE memory, not the meeting's
+        public record: the ``<contradictions>`` block and the transcript already
+        showed both of these to every participant, so dropping them here would
+        hide from the impostor what the table can see and tell it something
+        false about the meeting.
+        """
+
+        turn = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-3",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(),
+            claims=(
+                AccusationClaim(
+                    type="accusation",
+                    against="p-2",
+                    confidence=0.6,
+                    reason="p-3 accuses p-2",
+                ),
+            ),
+            free_text="p-2 did it.",
+        )
+        flag = ContradictionRef(
+            contradiction_id="c-1",
+            kind="alibi_vs_sighting",
+            event_a_id="turn:m-1:turn-0:claim:0",
+            event_b_id="turn:m-1:turn-0:obs:0",
+            subjects=("p-2",),
+            description="p-2's account cannot be squared with a sighting.",
+        )
+        rows = build_evidence_rows(
+            voter=_impostor_voter(fellow="p-2"),
+            candidate_targets=("p-2", "p-3"),
+            contradictions=(flag,),
+            transcript=MeetingTranscript(turns=(turn,)),
+        )
+
+        about_the_teammate = [row for row in rows if row.subject == "p-2"]
+        assert sorted(row.kind for row in about_the_teammate) == [
+            "contradiction",
+            "testimony",
+        ]
+        assert not [row for row in about_the_teammate if row.kind.startswith("own_")]
+
+    def test_the_firewall_holds_through_the_real_meeting(self) -> None:
+        """Driven through the real manager, not through the assembler alone.
+
+        What the manager threads into an IMPOSTOR's ballot render is captured
+        and read: no own row names the teammate, and the crew voters' blocks are
+        untouched, so the drop is per-voter and not a global mute.
+        """
+
+        impostor = _impostor_voter(fellow="p-2")
+        voters = (impostor, _voter("p-2"), _voter("p-3"), _voter("p-4"))
+        captured, prompt = _capturing_vote_prompt()
+        _run_meeting(
+            _vote_responder(accusations={"p-1": "p-3", "p-2": "p-3", "p-3": "p-2"}),
+            participants=voters,
+            vote_prompt=prompt,
+        )
+
+        own = [row for row in captured["p-1"] if row.kind.startswith("own_")]
+        assert own, "the impostor must still hold its non-teammate rows"
+        assert all(row.subject != "p-2" for row in own)
+        assert all("p-2" not in row.description for row in own)
+        # The crew voters' blocks are built by the same call and are unaffected:
+        # p-4 still reads the voice raised against p-2 at this table.
+        assert [row for row in captured["p-4"] if row.subject == "p-2"]
+
+
+# --------------------------------------------------------------------------- #
 # C. The served body                                                           #
 # --------------------------------------------------------------------------- #
 
@@ -954,6 +1229,46 @@ class TestTheServedBody:
             r"(vote|eject|choose|pick|name)\s+`?p-\d+`?", re.IGNORECASE
         )
         assert recommends.search(section) is not None
+
+    def test_the_number_is_called_a_partial_summary_of_the_rows(self) -> None:
+        """The scalar is not claimed to be the sum of the lines above it.
+
+        Two of the eight provenance channels
+        (:class:`~meetings.render_contract.SuspicionEntry`) have no evidence row
+        behind them: a witnessed KILL -- the participant carries no kill channel
+        at all and ``sighting_records_for_meeting`` filters the kill action out
+        of the sightings -- and the BODY-PROXIMITY lift, whose own row would
+        name the nearby suspect while the body-discovery row names the dead
+        victim. So a number CAN sit above rows that do not add up to it, and the
+        header states that at the strength the assembler delivers instead of
+        calling itself a running summary of the lines above.
+        """
+
+        rendered = _served_ballot()
+        section = rendered.split(_SUSPICION_HEADER, 1)[1].split("\n- `", 1)[0]
+        assert _COMPLETE_SUMMARY_CLAIM not in rendered
+        assert _PARTIAL_SUMMARY_CLAIM in section
+        # ...and it NAMES the two inputs that have no row, rather than hedging.
+        assert "a kill you watched happen" in section
+        assert "near a body just before you found it" in section
+        # The weakened wording still points at the evidence, not at the number,
+        # and still names no player.
+        assert "What you decide on is the evidence, not this count." in section
+        assert not re.search(r"`?p-\d+`?", section)
+
+    def test_planted_the_complete_summary_claim_is_detected(self) -> None:
+        """PLANTED: the assertion above fails on a body that overclaims.
+
+        The pre-card sentence is put back into a COPY of the rendered bytes and
+        the same two predicates are run, so the gate is shown to have a failing
+        side rather than being a string that happens to be present.
+        """
+
+        overclaimed = _served_ballot().replace(
+            _PARTIAL_SUMMARY_CLAIM, _COMPLETE_SUMMARY_CLAIM
+        )
+        assert _COMPLETE_SUMMARY_CLAIM in overclaimed
+        assert _PARTIAL_SUMMARY_CLAIM not in overclaimed
 
     def test_the_trust_column_is_gone_from_the_served_row(self) -> None:
         rendered = _served_ballot()

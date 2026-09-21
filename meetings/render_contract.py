@@ -157,11 +157,13 @@ class EvidenceRow:
 
     The weighing channel of ruling D5 of 2026-09-19: the ballot used to hand the
     voter a finished suspicion number and tell it to follow that number, so the
-    pieces the number was built from were never on the page. These rows are those
+    pieces behind the number were never on the page. These rows are those
     pieces, assembled by :func:`meetings.manager.build_evidence_rows` from typed
     inputs ONLY -- the participant's own record channels, the meeting's
     contradiction flags and the transcript's typed accusation claims -- never
-    from ``rendered_memory``, which is prose.
+    from ``rendered_memory``, which is prose. They are what the meeting layer
+    can NAME, not a complete decomposition of the scalar: the assembler's
+    docstring names the two provenance channels that reach no row.
 
     * ``subject`` -- the player this row is about. For the three own-perception
       kinds and for ``contradiction`` / ``testimony`` that is the player named;
@@ -180,7 +182,11 @@ class EvidenceRow:
       statements rather than one speaker's perception, so it is ``False``.
     * ``speaker`` -- who perceived or said it: the voter for an own-channel row,
       the accusing speaker for a ``testimony`` row, and for a ``contradiction``
-      the speaker of the turn the conflicting account was spoken in.
+      the speaker of the turn the row CITES -- the subject's own account where
+      the flag resolved to a turn that subject spoke, the other side of the
+      conflict where it did not, and the subject where the flag resolved to no
+      turn at all (:func:`meetings.manager._contradiction_evidence_rows` states
+      the precedence).
     * ``citation_id`` -- the id a ballot may cite for this row, in one of the two
       shapes the manager's validators accept: a ``turn_id`` of THIS meeting's
       final transcript, or an observation id belonging to THIS voter. ``None``

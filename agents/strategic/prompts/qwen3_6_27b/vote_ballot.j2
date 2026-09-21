@@ -103,15 +103,18 @@
 
    The weighing channel (v8, ruling D5 of 2026-09-19): the page now shows the
    EVIDENCE before the number and stops telling the voter to follow the number.
-   ``<evidence>`` renders the typed rows the suspicion figures were built from
-   -- the voter's own sightings, vents, transits and body discoveries, the
+   ``<evidence>`` renders the typed rows this voter holds about the players it
+   may vote for -- its own sightings, vents, transits and body discoveries, the
    contradictions raised here, and who spoke against whom -- each row naming its
    speaker, whether that speaker perceived it first-hand, and the id a ballot may
-   cite for it. The assembler orders and groups them
+   cite for it. It is what is behind the numbers that the meeting layer can NAME,
+   not a complete decomposition of them: a witnessed KILL and the BODY-PROXIMITY
+   lift move a number with no row of their own, which is why the block below
+   calls itself a PARTIAL summary. The assembler orders and groups them
    (``meetings.manager.build_evidence_rows``); this template only loops, the
    ``flag_groups`` precedent. Below them the suspicion block keeps its machine
-   anchor and its rows but loses the dead ``trust`` column, and is relabelled as
-   the rows' running summary. The sentence that read "Your suspicion levels above
+   anchor and its rows but loses the dead ``trust`` column, and is relabelled
+   the rows' PARTIAL summary. The sentence that read "Your suspicion levels above
    are your own accumulated evidence from the whole game — trust them over
    meeting rhetoric" is DELETED with nothing put in its place: nothing here ranks
    a player, recommends a target, or pushes at SKIP or at EJECT. The contract
@@ -252,7 +255,7 @@ What you actually hold on each of them, and where each piece came from. Every li
 {% endif %}
 
 ## Your suspicion of each player
-A running summary of the lines above, one number per player. It is bookkeeping you have been keeping across the game, not a finding about anyone and not an instruction: what you decide on is the evidence, not this count.
+A running count you have been keeping across the game, one number per player. It is bookkeeping, not a finding about anyone and not an instruction. And it is only a PARTIAL summary of the lines above: a kill you watched happen, or someone you saw near a body just before you found it, moves these numbers with no line of its own up there — your memory block above still carries those. What you decide on is the evidence, not this count.
 {% for entry in suspicion_graph %}
 {% set _prov_rows = (suspicion_provenance | selectattr('player_id', 'equalto', entry.player_id) | list) if suspicion_provenance else [] %}
 - `{{ entry.player_id }}`: suspicion {{ "%.2f" | format(entry.suspicion) }}{% if _prov_rows %}{% set _p = _prov_rows[0] %}{% set _fresh = _p.flag_lift + _p.body_proximity + _p.kill_or_vent_pin + _p.testimony_spread + _p.accusation_carry %}{% set _carried = _p.carried_hard + _p.carried_soft %}{% set _hard = _p.flag_lift + _p.body_proximity + _p.kill_or_vent_pin + _p.carried_hard %}{% set _soft = _p.testimony_spread + _p.accusation_carry + _p.carried_soft %} — built from: this meeting {{ "%+.2f" | format(_fresh) }}, carried prior {{ "%+.2f" | format(_carried) }}{% if (_hard | abs) <= 0.000000001 and (_p.unattributed | abs) <= 0.000000001 and _soft > 0.000000001 %} — no contradiction; carried/soft only{% endif %}{% endif %}{% if candidate_targets is defined and candidate_targets and entry.player_id not in candidate_targets %} — OUT OF THE GAME (dead or ejected; voting them is wasted){% endif +%}

@@ -3991,11 +3991,17 @@ _COMMITTED_BALLOT_SET_DIRS: tuple[Path, ...] = tuple(
 
 # The committed vote_ballot.j2 renders the voter's suspicion graph as
 # "- `p-N`: suspicion X, trust Y" rows under this header (the same parse the
-# audit extractor used to read the decomposition's rendered values).
+# audit extractor used to read the decomposition's rendered values). The
+# ", trust Y" suffix is OPTIONAL here for the same reason it is in
+# ``eval.meeting_quality`` and ``eval.validity``: ruling D5 of 2026-09-19
+# dropped the dead trust column at ``vote_ballot.qwen3_6_27b.v8``, so a reader
+# that still REQUIRED it would return no rows for a post-re-record prompt and
+# pass vacuously. Every prompt these helpers read today is committed and
+# carries the suffix, so the widening changes no number in this module.
 _SUSPICION_GRAPH_HEADER = "## Your suspicion of each player"
 _SUSPICION_GRAPH_ROW_RE = re.compile(
-    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+    r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
 )
 
 
@@ -7066,8 +7072,11 @@ class TestGroundedProsecutionWiring:
     ) -> None:
         # The §4.7 firewall the manager re-applies when it builds the mapping.
         # The accessor keeps an impostor's rows naming a fellow impostor because
-        # its only consumer corroborates; a PROSECUTING consumer must not, so a
-        # row the §6.6 render hides from p-2 cannot ground a flag against p-1.
+        # that is safe for the GROUNDING consumer, which corroborates; a
+        # PROSECUTING consumer must not, so a row the §6.6 render hides from p-2
+        # cannot ground a flag against p-1. The weighing channel is the other
+        # consumer that re-applies it (tests/meetings/test_weighing_channel.py::
+        # TestTheTeammateFirewall).
         result, _seen = _run_prosecution_meeting(
             {
                 "p-2": (self._MATCHING_RECORD,),

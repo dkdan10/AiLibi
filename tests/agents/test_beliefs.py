@@ -3474,9 +3474,13 @@ class TestEvidenceQualityLiftOnCommittedBytes:
 
     _SET_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
     _SUSPICION_GRAPH_HEADER = "## Your suspicion of each player"
+    # The ", trust Y" suffix is OPTIONAL: ruling D5 of 2026-09-19 dropped the
+    # dead trust column at ``vote_ballot.qwen3_6_27b.v8``, and a reader that
+    # still required it would silently return no rows for a post-re-record
+    # prompt. Every prompt read here is committed and carries the suffix.
     _ROW_RE = re.compile(
-        r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-        r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+        r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+        r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
     )
 
     @pytest.fixture(scope="class")

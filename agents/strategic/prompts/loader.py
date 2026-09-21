@@ -1078,8 +1078,11 @@ def vote_ballot_prompt(
     meeting renders byte-identically to the pre-lever prompt.
 
     ``evidence_rows`` (ruling D5 of 2026-09-19) carries the typed pieces this
-    voter's suspicion figures were built from, already grouped and ordered by
-    :func:`meetings.manager.build_evidence_rows` -- this renderer passes them
+    voter holds about the players it may vote for -- what is behind its
+    suspicion figures that the meeting layer can NAME, not a complete
+    decomposition of them (:func:`meetings.manager.build_evidence_rows` states
+    which two provenance channels have no row) -- already grouped and ordered by
+    that assembler; this renderer passes them
     through and the v8 body only loops, the ``flag_groups`` precedent. The
     default ``()`` renders no block, and only the served ``qwen3_6_27b`` body
     references the variable at all, so every other set is byte-unchanged whatever

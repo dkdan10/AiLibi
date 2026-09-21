@@ -791,8 +791,13 @@ class MeetingParticipant:
     ``MeetingAwareAgent.vent_witness_records_for_meeting()`` (episodic
     memory, self-channel only, so it is firewall-clean); the manager threads
     the per-speaker mapping into every
-    :func:`meetings.transcript.detect_contradictions` call and NOTHING else
-    reads it -- in particular it never reaches a prompt surface. The default
+    :func:`meetings.transcript.detect_contradictions` call. Since ruling D5 of
+    2026-09-19 it has a SECOND reader: the VOTER's own rows become
+    ``own_vent`` evidence rows on that voter's ballot
+    (:func:`_own_channel_evidence_rows`), which is the one surface where this
+    channel reaches a prompt -- only ever the holder's own rows, and with the
+    §4.7 teammate drop applied there because the render layer never suppressed
+    a witnessed teammate vent. The default
     ``()`` keeps every existing construction site valid and means "this
     speaker grounds nothing": a spoken vent observation from such a
     participant records as ordinary testimony and raises no flag.
@@ -801,21 +806,24 @@ class MeetingParticipant:
     sibling: the participant's OWN typed first-hand-sighting channel. The
     orchestrator populates it from
     ``MeetingAwareAgent.sighting_records_for_meeting()`` (episodic memory,
-    self-channel only, so it is firewall-clean). It has two consuming seams,
-    at different stages of wiring. The manager threads the per-speaker
-    mapping into every
+    self-channel only, so it is firewall-clean). The manager threads the
+    per-speaker mapping into every
     :func:`meetings.transcript.detect_contradictions` call, where grounded
     prosecution checks a spoken sighting against the speaker's own record
     before it can band an ``alibi_vs_sighting`` flag STRONG. The VOUCH seam -- the ``sighting_records`` parameter of
     :func:`derive_belief_evidence`, which routes the same rows through
     :func:`meetings.transcript.grounded_vouch_subjects` into the
     relevance-gated ``corroborated`` set -- stays fixture-pinned and unfed,
-    because feeding it moves committed ballot-prompt bytes at rest. Under
-    ``corroboration_discipline`` ONLY, the same mapping also reaches
-    :func:`meetings.corroboration.build_testimony_ledger`, which tests each
-    spoken placement against it and renders the ones it bears out as accounts in
-    the ballot's guarded source-count block; OFF, the channel reaches no prompt
-    surface. The default ``()`` keeps every existing construction site valid and
+    because feeding it moves committed ballot-prompt bytes at rest. The same
+    mapping also reaches :func:`meetings.corroboration.build_testimony_ledger`,
+    which tests each spoken placement against it; the LEVER decides whether the
+    ballot's guarded source-count block renders those accounts. Since ruling D5
+    of 2026-09-19 the VOTER's own rows also become ``own_sighting`` evidence
+    rows on that voter's ballot (:func:`_own_channel_evidence_rows`), which is
+    the one surface where this channel reaches a prompt on the default path --
+    only ever the holder's own rows, and with the §4.7 teammate drop applied
+    there because the accessor deliberately does not apply it. The default
+    ``()`` keeps every existing construction site valid and
     means "this speaker grounds nothing": their spoken sightings are ordinary
     testimony that exculpates no one and convicts no one.
 
@@ -826,12 +834,16 @@ class MeetingParticipant:
     ``MoveWitnessAgent.move_witness_records_for_meeting()`` (episodic memory,
     self-channel only, so it is firewall-clean); the manager threads the
     per-speaker mapping into every
-    :func:`meetings.transcript.detect_contradictions` call and -- under
-    ``corroboration_discipline`` ONLY -- into
+    :func:`meetings.transcript.detect_contradictions` call and into
     :func:`meetings.corroboration.build_testimony_ledger`, which grounds spoken
     placements against it and shapes the transit clause's reconstruction with
-    it; the ballot's guarded source-count block is where those rows are read.
-    Nothing else reads it, and OFF it reaches no prompt surface. The default
+    it; the LEVER decides whether the ballot's guarded source-count block
+    renders those rows. Since ruling D5 of 2026-09-19 the VOTER's own rows also
+    become ``own_transit`` evidence rows on that voter's ballot
+    (:func:`_own_channel_evidence_rows`), which is the one surface where this
+    channel reaches a prompt on the default path -- only ever the holder's own
+    rows, already teammate-filtered by the accessor and filtered again there.
+    The default
     ``()`` keeps every existing construction site valid and means "this speaker
     grounds nothing": their spoken placements are read exactly as spoken.
 
@@ -840,8 +852,13 @@ class MeetingParticipant:
     ``primary_reason_observation_id``. The orchestrator populates it from
     ``MeetingAwareAgent.observation_ids_for_meeting()`` (episodic memory,
     self-channel only, so it is firewall-clean -- the ids name the agent's
-    own memory rows and leak nothing). The manager consults it in exactly ONE
-    place, :func:`_normalize_ballot_observation_id`: a cited id outside this
+    own memory rows and leak nothing). The manager consults it in exactly TWO
+    places, and both are the same decision applied to a cited id:
+    :func:`_normalize_ballot_observation_id` for the primary citation and
+    :func:`_normalize_ballot_counter_reason_id` for the counter citation added
+    by ruling D5 of 2026-09-19 -- which is why both call the one shared
+    :func:`_resolved_observation_id` rather than keeping a second copy of the
+    rule. A cited id outside this
     set is nulled with the audit marker. It never reaches a prompt surface;
     the validated citation's one downstream consumer is the grounding labeller
     (:func:`label_ballot_grounding`), which reports what the citation rests on
@@ -863,9 +880,12 @@ class MeetingParticipant:
     channel, the fifth self-channel beside the four above. The orchestrator
     populates it from ``MeetingAwareAgent.body_discovery_records_for_meeting()``
     (episodic memory, self-channel only, so it is firewall-clean). The manager
-    reads it in exactly one place -- deciding whether the reporter-voice lever
+    reads it in two places: deciding whether the reporter-voice lever
     tells THIS speaker their own record places them at the body when the meeting
-    opened -- and it never names another player to anyone. The default ``()``
+    opened, and -- since ruling D5 of 2026-09-19 -- building the holder's own
+    ``own_body_discovery`` evidence rows on their own ballot
+    (:func:`_own_channel_evidence_rows`). It never names another player to
+    anyone: the row's subject is the dead victim. The default ``()``
     keeps every existing construction site valid and means "this speaker
     discovered nothing".
     """
@@ -1314,10 +1334,13 @@ class MeetingManager:
         #
         # The §4.7 TEAMMATE firewall is applied HERE, not inherited: the
         # accessor keeps an impostor's rows naming a fellow impostor because
-        # its only consumer CORROBORATES, and says a prosecuting consumer must
-        # re-apply the suppression. This is that consumer, so a row the §6.6
-        # render hides from its own holder cannot ground a flag against the
-        # teammate it names. The vouch seam is unaffected (it reads the
+        # that is safe for its GROUNDING consumer, which only corroborates, and
+        # says every other consumer must re-apply the suppression. This is one
+        # such consumer, so a row the §6.6 render hides from its own holder
+        # cannot ground a flag against the teammate it names; the OTHER is the
+        # weighing channel's :func:`_own_channel_evidence_rows`, which drops the
+        # same rows before they can reach that impostor's ballot prompt. The
+        # vouch seam is unaffected (it reads the
         # participant field, not this mapping) -- the movement channel draws
         # the same line at its accessor.
         sighting_records: dict[PlayerId, tuple[SightingRecord, ...]] = {}
@@ -1590,8 +1613,7 @@ class MeetingManager:
         # How many voices carry each charge, and how many of them are accounts
         # the speaker's own record confirms. Built ONCE, from the final
         # transcript and the final flags, over the SAME firewall-filtered
-        # sighting mapping the detector read. ``None`` while the lever is OFF,
-        # so an OFF meeting and a ledger-less caller take the identical path.
+        # sighting mapping the detector read.
         # Built UNCONDITIONALLY since ruling D5 of 2026-09-19: it is the one
         # thing that knows which accusing speakers' own records bore their
         # accounts out, which is the ``first_hand`` bit every testimony evidence
@@ -2235,7 +2257,7 @@ class MeetingManager:
         else:
             rendered_memory = participant.rendered_memory
         # The weighing channel (ruling D5 of 2026-09-19): the typed pieces THIS
-        # voter's suspicion numbers were built from, assembled here -- the one
+        # voter holds about the players it may vote for, assembled here -- the one
         # scope that holds this voter's own channels, the meeting's final flags
         # and the final transcript together -- so the template only loops.
         # ``evidence_ledger`` is the SAME per-subject ledger the corroboration
@@ -3434,10 +3456,38 @@ def _own_channel_evidence_rows(
     carries the voter as its ``speaker``; ``citation_id`` is the record's own
     episodic stamp, which is ``None`` for a record written before the stamp
     existed and renders as "nothing here you could cite".
+
+    The §4.7 TEAMMATE firewall is applied HERE, at assembly, and is not
+    inherited. This is the FIRST consumer that puts these typed rows in front of
+    the model: ``sighting_records_for_meeting`` deliberately keeps an impostor's
+    sighting of a teammate at a kill window (safe for its grounding consumer,
+    which only ever corroborates) and the §6.6 render never suppressed a
+    witnessed teammate VENT at all
+    (:func:`meetings.transcript.exclude_teammate_role_proving_observations`
+    records that), so without this filter an impostor's ballot prompt would read
+    "you watched `p-2` VENT" about its own partner -- the 7.12 own-goal the
+    firewall exists to stop. Every row naming a fellow impostor is dropped and
+    every fellow is stripped from a sighting's ``co_present`` companions, so a
+    teammate cannot re-enter sideways through the "with …" suffix the way
+    ``agents.memory.store._collect_co_presence`` mirrors the drop for the render.
+
+    The guard is BROADER than the render's ``_sighting_is_suppressed``
+    kill-window rule -- it drops a teammate row at ANY room and tick, the shape
+    :meth:`orchestrator.game.TacticalAgent.move_witness_records_for_meeting`
+    already uses -- and costs nothing real: a dropped row only means the
+    impostor's ballot does not narrate its own partner. ``fellow_impostor_ids``
+    is ``()`` for every crewmate and for a sole impostor, so the crew path drops
+    nothing and renders exactly what it rendered before this filter.
+    Body-discovery rows take no filter and need none: a body's subject is the
+    dead VICTIM, and ``engine.rules`` refuses a kill whose target is an impostor
+    (the friendly-fire guard), so a fellow impostor is never a victim.
     """
 
+    teammates = frozenset(voter.fellow_impostor_ids)
     rows: list[tuple[int, EvidenceRow]] = []
     for vent in voter.vent_witness_records:
+        if vent.subject in teammates:
+            continue
         rows.append(
             (
                 vent.tick,
@@ -3454,9 +3504,12 @@ def _own_channel_evidence_rows(
             )
         )
     for sighting in voter.sighting_records:
-        company = (
-            f", with {', '.join(sighting.co_present)}" if sighting.co_present else ""
+        if sighting.subject in teammates:
+            continue
+        companions = tuple(
+            player for player in sighting.co_present if player not in teammates
         )
+        company = f", with {', '.join(companions)}" if companions else ""
         rows.append(
             (
                 sighting.tick,
@@ -3474,6 +3527,8 @@ def _own_channel_evidence_rows(
             )
         )
     for move in voter.move_witness_records:
+        if move.subject in teammates:
+            continue
         rows.append(
             (
                 move.tick,
@@ -3520,24 +3575,53 @@ def _contradiction_evidence_rows(
 
     One row per (flag, named subject) pair, carrying the detector's OWN sentence
     -- the same words the ``<contradictions>`` block above prints, so the two
-    surfaces cannot describe one flag differently. ``speaker`` is whoever spoke
-    the account the flag is about, recovered from the flag's first resolvable
-    event id, and ``citation_id`` is that turn: the id the ballot's own
-    instruction ("cite the turn that account was spoken in") already asks for.
-    ``first_hand`` is ``False`` on every such row -- a flag is the meeting
-    layer's cross-check of two statements, not one speaker's perception.
+    surfaces cannot describe one flag differently. ``first_hand`` is ``False``
+    on every such row -- a flag is the meeting layer's cross-check of two
+    statements, not one speaker's perception.
+
+    Which turn a row cites, stated at the strength this resolution delivers. A
+    flag carries TWO event ids and :meth:`meetings.transcript` canonicalises the
+    pair with ``sorted()``, so ``event_a_id`` is the lexically smaller id and NOT
+    necessarily the contradicted account -- a flag whose witness spoke first
+    sorts the WITNESS's turn into the ``a`` slot. So both ids are resolved and
+    the row prefers, PER SUBJECT, the turn THIS subject spoke: that is the
+    account the flag is about, and the id the ballot's own instruction ("cite the
+    turn that account was spoken in") asks for. Where neither event resolves to a
+    turn the subject spoke -- an inferential flag raised off somebody else's two
+    statements, or a subject who never spoke -- the row cites the first
+    resolvable event in the transcript's own canonical order and names ITS
+    speaker: the other side of the conflict, which is what was actually
+    resolved, never a guess at the subject's own words. Where neither event
+    resolves at all the row renders with no citation and the SUBJECT as its
+    speaker. ``speaker`` is therefore always the speaker of the turn the row
+    CITES, and the subject where it cites nothing.
     """
 
     ordinal_by_turn_id = {turn.turn_id: turn.turn_index for turn in turns}
     speaker_by_turn_id = {turn.turn_id: turn.speaker for turn in turns}
     rows: list[tuple[int, EvidenceRow]] = []
     for flag in contradictions:
-        turn_id = _turn_id_for_event(flag.event_a_id, turns=turns)
-        if turn_id is None:
-            turn_id = _turn_id_for_event(flag.event_b_id, turns=turns)
+        resolved = tuple(
+            turn_id
+            for turn_id in (
+                _turn_id_for_event(flag.event_a_id, turns=turns),
+                _turn_id_for_event(flag.event_b_id, turns=turns),
+            )
+            if turn_id is not None
+        )
         for subject in flag.subjects:
             if subject not in subjects_of_interest:
                 continue
+            # The subject's OWN turn first, whichever slot it sorted into; the
+            # first resolvable turn otherwise.
+            turn_id = next(
+                (
+                    candidate
+                    for candidate in resolved
+                    if speaker_by_turn_id.get(candidate) == subject
+                ),
+                resolved[0] if resolved else None,
+            )
             rows.append(
                 (
                     ordinal_by_turn_id.get(turn_id or "", 0),
@@ -3546,9 +3630,11 @@ def _contradiction_evidence_rows(
                         description=flag.description,
                         kind="contradiction",
                         first_hand=False,
-                        # The account's own speaker where the flag resolves to a
-                        # turn; otherwise the subject, who is the one player a
-                        # flag about their account always names.
+                        # The speaker of the turn this row CITES -- the
+                        # subject's own account where the flag resolved to one,
+                        # the other side of the conflict where it did not;
+                        # otherwise the subject, who is the one player a flag
+                        # about their account always names.
                         speaker=speaker_by_turn_id.get(turn_id or "", subject),
                         citation_id=turn_id,
                     ),
@@ -3575,9 +3661,13 @@ def _testimony_evidence_rows(
     ``first_hand`` is ``True`` only where the testimony ledger put this speaker
     in that subject's first-hand set -- meaning the speaker's OWN typed record
     bore their account of the subject out, the meeting layer's one definition of
-    first-hand. The ledger is built only while the corroboration lever is ON, so
-    on the default path no testimony row claims first-hand status and the
-    template says "stated it at this table", which is exactly what is known.
+    first-hand. Since ruling D5 of 2026-09-19 the ledger is built
+    UNCONDITIONALLY (``MeetingManager.run``), so a grounded voice is marked
+    first-hand on the DEFAULT path too; the corroboration lever now decides only
+    whether the ``<testimony_sources>`` block renders. A ``None`` ledger -- a
+    caller that passes none, the fixture path -- means no first-hand set is
+    known, every testimony row reads "stated it at this table", and that is
+    exactly what is known.
     """
 
     first_hand_by_subject: dict[PlayerId, frozenset[PlayerId]] = {}
@@ -3625,11 +3715,11 @@ def build_evidence_rows(
     transcript: MeetingTranscript,
     testimony_ledger: MeetingTestimonyLedger | None = None,
 ) -> tuple[EvidenceRow, ...]:
-    """The typed pieces THIS voter's suspicion numbers were built from.
+    """The typed pieces THIS voter holds about the players it may vote for.
 
     Ruling D5 of 2026-09-19. The ballot used to hand a voter a finished number
-    and instruct it to follow that number; this is the evidence behind the
-    number, assembled from TYPED inputs only -- the participant's four own
+    and instruct it to follow that number; these are the typed pieces behind
+    that number, assembled from TYPED inputs only -- the participant's four own
     record channels, the meeting's :class:`~meetings.schemas.ContradictionRef`
     flags, and the transcript's typed accusation claims (with the testimony
     ledger deciding which of those speakers were borne out first-hand).
@@ -3637,9 +3727,28 @@ def build_evidence_rows(
     the grounding chokepoint never parses rendered prose
     (:class:`~meetings.schemas.VentWitnessRecord`).
 
+    NOT a complete decomposition of the scalar, and the template says so at the
+    same strength. Two of the eight provenance channels
+    (:class:`~meetings.render_contract.SuspicionEntry`) have no row here: a
+    witnessed KILL (``kill_or_vent_pin``'s kill half -- the participant carries
+    no kill channel at all, and ``sighting_records_for_meeting`` filters the
+    kill action out of the sightings) and the BODY-PROXIMITY lift, whose own
+    row would name the nearby suspect while the body-discovery row this
+    assembler builds names the dead victim. So a number can sit above rows that
+    do not add up to it; the rows are what the meeting layer can NAME, never a
+    proof of the figure.
+
     Only THIS voter's own channels are read. No other participant's records are
     reachable from here, which is what keeps the block firewall-clean: every own
-    row is something the engine already witness-gated into this agent's packet.
+    row is something the engine already witness-gated into this agent's packet,
+    and :func:`_own_channel_evidence_rows` drops the rows naming a FELLOW
+    IMPOSTOR before any of them can reach an impostor's prompt. The §4.7 drop is
+    applied to the OWN-channel rows only, and deliberately: a flag or a voice
+    naming a teammate is a PUBLIC fact of this meeting -- the same words the
+    ``<contradictions>`` block and the transcript already put in front of every
+    participant, the impostor included -- while an own row is the impostor's own
+    private memory, which is the one thing that could place its partner at a
+    scene nobody else put them at.
 
     Subjects. Own-perception rows about any subject are kept, including a body
     discovery whose subject is the dead VICTIM; the flag and testimony rows are

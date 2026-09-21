@@ -3843,10 +3843,19 @@ class TacticalAgent:
         model speaks from can never drift. Firewall-clean: every row was
         witness-gated by the engine before it reached this agent's packet
         (``eval/leak_test.py``), and the accessor reports only this agent's
-        own log. Payload reads are defensive per the store convention -- a
-        malformed row contributes nothing. Append order is non-decreasing
-        in tick (the episodic-store invariant), so the returned tuple is
-        deterministic and tick-sorted.
+        own log.
+
+        The §4.7 TEAMMATE firewall is NOT applied here, and the §6.6 render
+        never applied it to a vent either (``_sighting_is_suppressed`` covers
+        kill-window SIGHTINGS only), so an impostor's rows can name a fellow
+        impostor venting. Since ruling D5 of 2026-09-19 these rows reach a
+        prompt as the holder's own ``own_vent`` evidence rows, and that
+        consumer re-applies the firewall at assembly
+        (:func:`meetings.manager._own_channel_evidence_rows`) rather than
+        assuming it here. Payload reads are defensive per the store
+        convention -- a malformed row contributes nothing. Append order is
+        non-decreasing in tick (the episodic-store invariant), so the returned
+        tuple is deterministic and tick-sorted.
         """
 
         records: list[VentWitnessRecord] = []
@@ -3906,14 +3915,20 @@ class TacticalAgent:
         Unlike the §6.6 render this does NOT apply the §4.7
         ``_sighting_is_suppressed`` teammate-at-kill-window drop, so an
         impostor's record CAN name a teammate seen at a kill window that
-        the rendered prose hides. That is safe for the ONE consumer this
-        channel has: grounding only ever CORROBORATES (a teammate
+        the rendered prose hides, and every consumer must re-apply the
+        firewall rather than assume it here. That is safe for the GROUNDING
+        consumer: grounding only ever CORROBORATES (a teammate
         corroboration is retained by the §4.7 firewall, unlike a teammate
-        accusation), a kill-scene vouch is dropped by the relevance gate
-        (:func:`meetings.transcript.grounded_vouch_subjects`), and a
-        ``SightingRecord`` never reaches a prompt or the recorded
-        ``MeetingResult``. A future consumer beyond grounding must re-apply
-        the suppression rather than assume it here. Payload reads are
+        accusation), and a kill-scene vouch is dropped by the relevance gate
+        (:func:`meetings.transcript.grounded_vouch_subjects`).
+        Since ruling D5 of 2026-09-19 these rows have a SECOND consumer that
+        does reach a prompt: the holder's own ``own_sighting`` evidence rows on
+        their own ballot. That consumer re-applies the firewall at assembly
+        (:func:`meetings.manager._own_channel_evidence_rows`), dropping every
+        row naming a fellow impostor and stripping fellows out of the
+        ``co_present`` companions, so a teammate reaches no prompt through this
+        channel. A ``SightingRecord`` still never reaches the recorded
+        ``MeetingResult``. Payload reads are
         defensive per the store convention -- a malformed row contributes
         nothing. Append order is non-decreasing in tick (the
         episodic-store invariant), so the returned tuple is deterministic
