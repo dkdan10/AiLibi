@@ -82,6 +82,11 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
 
 ## Acceptance
 
+- [x] Review correction: round 5 is one citation. The final verifier passed the
+  round-4 head with no blocking finding and found that round 4's note about
+  `api/replay_loader.py:3569-3577` corrected the Acceptance instance and missed
+  the second one in Record impact, which now reads `:3605-3614`, the
+  `_BALLOT_PREFIX_MARKERS` table. No code, test or figure moves.
 - [x] Review correction: the `invalid_citation`-over-`none_held` ordering has
   the planted case it exists for, and the two orderings that are genuinely
   unreachable say so in the code. A voter that declares
@@ -526,7 +531,8 @@ substitution moved 17 of 590 meeting outcomes, two-sided.
 No committed byte moves and no report is re-scored, by the SAME mechanism the
 other two substrate cards use: every recorded shape is read as recorded.
 `decision_basis` and `grounding_label` are additive with `None` defaults; the
-three retired markers stay as constants, so `api/replay_loader.py:3569-3577`,
+three retired markers stay as constants, so `api/replay_loader.py:3605-3614`
+(re-anchored in round 5; the `cdefb7a6` citation was `:3569-3577`),
 `training/surrogate/dataset.py:195-203` and the `eval/` census patterns keep
 resolving over old bytes; and `citation_relevance_version` was `None` in every
 recording and is omitted from the serialized config, so deleting it removes no
@@ -1836,3 +1842,29 @@ or `tests/fixtures/` byte moved, so no `docs/artifacts.md` row is recomputed
 (the `docs/artifacts.md` edit is PROSE inside one row's description cell, which
 no inventory figure reads), and the `tasks/README.md` inventory sentence is
 unchanged because Status was already `done` before this round.
+
+### Review corrections, round 5 (2026-09-21)
+
+The final verifier PASSED the round-4 head `5aa10945` with no blocking finding:
+the six production Python files in the round-4 delta are AST-identical to
+`53335618` with docstrings stripped, all five round-4 probes reproduce with the
+counts above, both UNOBSERVABLE rows held over a 72-case citation matrix driven
+through the real manager under three source variants, twelve marker-forging
+`decision_basis` payloads left the marker chain intact in every parser, and
+every cell of the Verification table reproduced.
+
+One pointer was wrong and is corrected by the orchestrator: Record impact still
+cited `api/replay_loader.py:3569-3577`, which at this head is the `GateView`
+constructor. Round 4's note says that citation was corrected; it corrected the
+Acceptance instance only. Record impact now cites `:3605-3614`. This round
+edits the card alone, so every figure in the round-4 Verification table stands
+as measured.
+
+Recorded, not changed: `docs/cleanup-dispositions.md:271` lists the under-gate
+ballot redirect as retained. That ledger is anchored by its own preamble to the
+bytes reviewed at the cleanup merge `8161689a`, so it is history; ruling D6
+retired the redirect in this card. And `api/replay_loader._parse_rewrite_reasons`
+strips markers by SHAPE for the spectator's chips, so a voter whose own
+rationale opens with marker-shaped prose earns a spurious chip; that predates
+this card, is stated in `training/surrogate/dataset.ballot_rewrite_labels`'s
+docstring, and does not reach the eval parse, which cuts on provenance.
