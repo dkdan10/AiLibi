@@ -110,6 +110,13 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
 
 ## Acceptance
 
+- [x] Review correction (round 5, 2026-09-21): the round-4 neuter table's ten
+  passed counts were one low (measured before the round's fourth test landed);
+  restated in place with a dated note. The final verifier passed every other
+  claim at `28422168`: `meetings/manager.py` AST-identical with docstrings
+  stripped, the rendered v8 delta exactly one sentence, judged definitional
+  and non-steering, 30+ citations re-derived, rounds 1-3 byte-identical, every
+  gate figure reproduced. No code, test or figure elsewhere moves.
 - [x] Review correction (round 4, a CORRECTNESS defect): two of the union
   members `_stated_sighting_subjects` reads were unenforced. Dropping
   `SawKillObservation` alone, or `SawMoveObservation` alone, left the whole
@@ -1974,15 +1981,23 @@ pinned":
 
 | # | perturbation | probe | result | with round 4's cases deselected |
 | --- | --- | --- | --- | --- |
-| 6c-a | `SawPlayerObservation` drops out of the stated set | W | red (5 failed, 86 passed) | red (5 failed, 83 passed, 3 deselected) |
-| 6c-b | `SawVentObservation` drops out of the stated set | W | red (2 failed, 89 passed) | red (1 failed, 87 passed, 3 deselected) |
-| 6c-c | `SawKillObservation` drops out of the stated set | W | red (1 failed, 90 passed) | **GREEN (88 passed, 3 deselected)** |
-| 6c-d | `SawMoveObservation` drops out of the stated set | W | red (1 failed, 90 passed) | **GREEN (88 passed, 3 deselected)** |
-| 6b | the `saw_player` `co_present` companions drop out | W | red (1 failed, 90 passed) | red (1 failed, 87 passed, 3 deselected) |
+| 6c-a | `SawPlayerObservation` drops out of the stated set | W | red (5 failed, 87 passed) | red (5 failed, 84 passed, 3 deselected) |
+| 6c-b | `SawVentObservation` drops out of the stated set | W | red (2 failed, 90 passed) | red (1 failed, 88 passed, 3 deselected) |
+| 6c-c | `SawKillObservation` drops out of the stated set | W | red (1 failed, 91 passed) | **GREEN (89 passed, 3 deselected)** |
+| 6c-d | `SawMoveObservation` drops out of the stated set | W | red (1 failed, 91 passed) | **GREEN (89 passed, 3 deselected)** |
+| 6b | the `saw_player` `co_present` companions drop out | W | red (1 failed, 91 passed) | red (1 failed, 88 passed, 3 deselected) |
 
-The finding's three controls reproduce to the digit in the deselected column:
-`SawPlayerObservation` removed **5 failed / 83**, `SawVentObservation` removed
-**1 failed / 87**, `co_present` dropped **1 failed / 87**. 6c-c and 6c-d are the
+[Round-5 note, 2026-09-21, the orchestrator: the ten passed counts above were
+first published one low, measured at a 91-test state before this round's
+fourth test, the counter-bullet pin, was added; the final verifier re-ran every
+row and the orchestrator re-ran 6c-c (1 failed, 91 passed; restored 92
+passed). Every failed count and every red/green verdict was right as filed.
+The deselected column is round 3's control PLUS ONE, the counter-bullet pin,
+which the three-case deselection does not remove.] The finding's three
+controls reproduce in the deselected column as round 3's figure plus that one
+pin: `SawPlayerObservation` removed **5 failed / 84** (round 3: 83),
+`SawVentObservation` removed **1 failed / 88** (round 3: 87), `co_present`
+dropped **1 failed / 88** (round 3: 87). 6c-c and 6c-d are the
 two that were unenforced, and they are the only two whose deselected column is
 GREEN — which is the statement the split exists to make. Round 3's row 6c is
 superseded by these five; it is left as filed there, as every earlier round's
@@ -2335,3 +2350,30 @@ The four `--check` recomputations and the scorecard are byte-identical again.
 `vote_ballot` stays at **v8**. Every number above is a committed-bytes
 recomputation or a test count; what the v8 body does to a real voter stays
 unknown until [the re-record](process-rerecord.md), by design.
+
+### Review corrections, round 5 (2026-09-21)
+
+The final verifier PASSED every claim at `28422168` but one. `meetings/manager.py`
+is AST-identical to `d7b6be94` with docstrings stripped; the rendered v8 delta
+on two synthetic fixtures is exactly the one counter-bullet sentence, judged
+definitional and symmetric with the EJECT branch (the bullet's follow-on says
+naming a counter costs the vote nothing, null stays an honest answer, and the
+sentence names no player and quotes no number), so it does not steer; its pin
+goes red when the sentence is removed (1 failed, 91 passed) and green restored
+(92). Record integrity, the single moved stamp, house format, the round 1-3
+hash, the closing greps and every gate figure reproduced.
+
+The one finding: the round-4 neuter table's ten passed counts were each one low,
+measured at a 91-test state before the round's fourth test was added. The
+orchestrator corrected them in place with a dated note (above) after re-running
+row 6c-c: 1 failed, 91 passed; restored 92 passed; `git status` clean. Failed
+counts and verdicts were right as filed.
+
+Recorded, not changed (nonblocking, comment-boundary citations): `api/schemas.py:56`
+is the rule's comment line, the assignment is `:76`; `meetings/public_accounts.py`'s
+field loop is `:52-54`; `eval/meeting_quality.py`'s HISTORY paragraph begins at
+`:113`. No blank line precedes `## Results`; the validator accepts it.
+
+**Round-5 gate.** The card alone changes; every figure in the round-4 gate
+block stands as the CURRENT measurement. `validate_task_docs.py` and
+`check_doc_facts.py` re-run green on this edit.
