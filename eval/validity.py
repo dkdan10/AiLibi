@@ -173,13 +173,22 @@ TICK_1_KILL_BAR: Final[int] = 1
 # contradiction flags is the railroad defect.
 CERTAIN_GUILT_SUSPICION: Final[float] = 1.0
 SAME_MEETING_FLAG_BAR: Final[int] = 2
-# The committed vote_ballot.j2 renders the voter's suspicion graph under this
-# header as "- `p-N`: suspicion X, trust Y" rows (the same parse the 14.12
-# tripwire test uses to read the recorded rendered values).
+# The vote_ballot.j2 suspicion graph renders under this header as
+# "- `p-N`: suspicion X" rows, with a trailing ", trust Y" on every row
+# recorded before ruling D5 of 2026-09-19 dropped the dead trust column at
+# ``vote_ballot.qwen3_6_27b.v8``. The ``, trust <N>`` suffix is therefore
+# OPTIONAL, exactly as ``eval.meeting_quality._SUSPICION_GRAPH_ROW_RE`` was
+# widened in the same move and for the same reason: this is an AS-RECORDED
+# read over committed bytes, so the pre-card rows must keep parsing to the
+# identical numbers while the post-re-record rows parse at all. A NARROWED
+# pattern would not fail loudly here -- it would return NO rows for a v8
+# prompt and make :func:`check_no_railroaded_crew_ejections`, the Task-14.12
+# railroad tripwire, pass vacuously over a railroaded crew row. Both shapes
+# are pinned in tests/eval/test_validity.py.
 _SUSPICION_GRAPH_HEADER: Final[str] = "## Your suspicion of each player"
 _SUSPICION_GRAPH_ROW_RE: Final[re.Pattern[str]] = re.compile(
-    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+    r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
 )
 
 # The flat 4p/1i MVP baseline is the only committed set without a roster.json

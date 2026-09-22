@@ -27,10 +27,20 @@ Additive note on a 2026-05-01 record: nothing above is rewritten. Decision 3 nam
 three channels; two are written in production and one is not, so a reader who
 quotes the parenthetical gets a claim the tree does not support.
 
-- **`trust` is present but never written outside tests.** `BeliefState.adjust_trust`
-  (`agents/memory/beliefs.py`) is defined and covered, and every caller of it in the
-  tree is under `tests/`. A live agent's trust score therefore never leaves its
-  initial value, and no rendered memory view has ever shown a moved one.
+- **`trust` was present but never written outside tests, and its writer is now
+  deleted.** `BeliefState.adjust_trust` (`agents/memory/beliefs.py`) was defined and
+  covered, and every caller of it in the tree was under `tests/`. A live agent's trust
+  score therefore never left its initial value, and no rendered memory view ever showed
+  a moved one. Ruling D5 of 2026-09-19
+  ([the direction](../../tasks/direction-2026-09-19-process-over-outcome.md)) deleted
+  the writer rather than wiring it: a credibility scalar computed in Python and handed
+  to the agent is a second engine verdict, which is the defect that ruling exists to
+  remove, and the credibility information reaches the voter as evidence instead — a
+  speaker whose own account a detector broke appears in the ballot's evidence rows with
+  that contradiction's id. The `PlayerBelief.trust` FIELD stays, because six frozen
+  prompt sets render it and their byte pins must not move; it is a frozen-set render
+  input now, written by nothing. Decision 3's "trust scores" above is therefore a
+  design intent that HEAD deliberately does not implement.
 - **The contradictions list is written, but not where it is read from.**
   `apply_contradiction_rule` does call `record_contradiction` — on the derived
   `BeliefState` it returns, not on the agent's persistent store — so the
@@ -40,8 +50,8 @@ quotes the parenthetical gets a claim the tree does not support.
   `record_alibi` from each public alibi claim), and the suspicion channel is the one
   the deterministic fold carries between meetings.
 
-This note records the gap. Repairing the substrate is a separate contract; until one
-lands, "trust scores" above is a design intent, not a description of HEAD.
+This note records the gap. The trust half is settled as of 2026-09-19, by deletion
+rather than by repair; the contradictions half is still open.
 
 ## Note — 2026-08-26: "verbatim" is exact to within one clause, and ≤ 100 calls is a target no gate holds
 

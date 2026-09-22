@@ -3991,11 +3991,17 @@ _COMMITTED_BALLOT_SET_DIRS: tuple[Path, ...] = tuple(
 
 # The committed vote_ballot.j2 renders the voter's suspicion graph as
 # "- `p-N`: suspicion X, trust Y" rows under this header (the same parse the
-# audit extractor used to read the decomposition's rendered values).
+# audit extractor used to read the decomposition's rendered values). The
+# ", trust Y" suffix is OPTIONAL here for the same reason it is in
+# ``eval.meeting_quality`` and ``eval.validity``: ruling D5 of 2026-09-19
+# dropped the dead trust column at ``vote_ballot.qwen3_6_27b.v8``, so a reader
+# that still REQUIRED it would return no rows for a post-re-record prompt and
+# pass vacuously. Every prompt these helpers read today is committed and
+# carries the suffix, so the widening changes no number in this module.
 _SUSPICION_GRAPH_HEADER = "## Your suspicion of each player"
 _SUSPICION_GRAPH_ROW_RE = re.compile(
-    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+    r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
 )
 
 
@@ -5292,7 +5298,7 @@ class TestRenderAfterFoldConsistency:
 
         # The graph row shows the post-fold value, on the quantized
         # 2-decimal lattice...
-        assert "- `p-2`: suspicion 0.67, trust 0.50" in crossed
+        assert "- `p-2`: suspicion 0.67" in crossed
         # ...and the §4.6 max-suspicion evidence line -- rendered by the
         # template from the SAME rendered graph -- reads the post-fold max,
         # above the 0.60 gate (the gate-max derivation itself untouched at the
@@ -5311,7 +5317,7 @@ class TestRenderAfterFoldConsistency:
         prompts = self._vote_prompts(self._single_voice_real_template_responder)
         sub_gate = prompts["p-3"]
 
-        assert "- `p-2`: suspicion 0.55, trust 0.50" in sub_gate
+        assert "- `p-2`: suspicion 0.55" in sub_gate
         # The absence prior materialises the unplaced listener p-4 at 0.58,
         # which is the rendered max here (still below the 0.60 gate).
         assert parse_rendered_max_suspicion(sub_gate) == pytest.approx(0.58)
@@ -7066,8 +7072,11 @@ class TestGroundedProsecutionWiring:
     ) -> None:
         # The §4.7 firewall the manager re-applies when it builds the mapping.
         # The accessor keeps an impostor's rows naming a fellow impostor because
-        # its only consumer corroborates; a PROSECUTING consumer must not, so a
-        # row the §6.6 render hides from p-2 cannot ground a flag against p-1.
+        # that is safe for the GROUNDING consumer, which corroborates; a
+        # PROSECUTING consumer must not, so a row the §6.6 render hides from p-2
+        # cannot ground a flag against p-1. The weighing channel is the other
+        # consumer that re-applies it (tests/meetings/test_weighing_channel.py::
+        # TestTheTeammateFirewall).
         result, _seen = _run_prosecution_meeting(
             {
                 "p-2": (self._MATCHING_RECORD,),

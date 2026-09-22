@@ -38,6 +38,7 @@ from agents.memory.beliefs import (
     graduated_spread_delta,
 )
 from meetings.corroboration import MeetingTestimonyLedger
+from meetings.render_contract import EvidenceRow
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import AlibiSegment
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
@@ -3337,6 +3338,7 @@ class TestSelfRefutedAlibiDowngrade:
             suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
             render_inputs: PromptRenderInputs | None = None,  # Task 20.31
             testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
+            evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5
         ) -> str:
             captured[voter_id] = suspicion_graph
             return "cast your ballot"
@@ -3472,9 +3474,13 @@ class TestEvidenceQualityLiftOnCommittedBytes:
 
     _SET_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
     _SUSPICION_GRAPH_HEADER = "## Your suspicion of each player"
+    # The ", trust Y" suffix is OPTIONAL: ruling D5 of 2026-09-19 dropped the
+    # dead trust column at ``vote_ballot.qwen3_6_27b.v8``, and a reader that
+    # still required it would silently return no rows for a post-re-record
+    # prompt. Every prompt read here is committed and carries the suffix.
     _ROW_RE = re.compile(
-        r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-        r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+        r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+        r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
     )
 
     @pytest.fixture(scope="class")

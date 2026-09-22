@@ -225,7 +225,7 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
         "prompt versions: the declared slate resolves to "
         "[accusation_round.qwen3_6_27b.v6, "
         "crewmate_report.qwen3_6_27b.v6, impostor_report.qwen3_6_27b.v6, "
-        "vote_ballot.qwen3_6_27b.v7]" in proc.stdout
+        "vote_ballot.qwen3_6_27b.v8]" in proc.stdout
     )
 
 
@@ -977,11 +977,12 @@ def _run_prompt_version_check(
     )
 
 
-# The vote body is a version ahead of the other three: ruling D6 of
-# 2026-09-19 bumped vote_ballot ALONE, v6 -> v7.
+# The vote body is TWO versions ahead of the other three: ruling D6 of
+# 2026-09-19 bumped vote_ballot ALONE v6 -> v7, and ruling D5 bumped it alone
+# again v7 -> v8.
 _BARE_VERSION_CELL = (
     "accusation_round.qwen3_6_27b.v6, crewmate_report.qwen3_6_27b.v6, "
-    "impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v7"
+    "impostor_report.qwen3_6_27b.v6, vote_ballot.qwen3_6_27b.v8"
 )
 _WAVE2_VERSION_CELL = (
     "accusation_round.qwen3_6_27b.v6.reporter_reasoning"
@@ -989,8 +990,8 @@ _WAVE2_VERSION_CELL = (
     "crewmate_report.qwen3_6_27b.v6.reporter_reasoning"
     "+crewmate_report.qwen3_6_27b.v6.testimony_shapes, "
     "impostor_report.qwen3_6_27b.v6, "
-    "vote_ballot.qwen3_6_27b.v7.corroboration_discipline"
-    "+vote_ballot.qwen3_6_27b.v7.testimony_shapes"
+    "vote_ballot.qwen3_6_27b.v8.corroboration_discipline"
+    "+vote_ballot.qwen3_6_27b.v8.testimony_shapes"
 )
 _WAVE2_SLATE = "reporter_reasoning,corroboration_discipline,testimony_shapes"
 

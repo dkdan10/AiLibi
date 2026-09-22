@@ -387,6 +387,7 @@ export interface BallotView {
   confidence: number;
   primary_reason_id: string | null;
   primary_reason_observation_id: string | null;
+  counter_reason_id: string | null;
   considered_alternatives: string[];
   decision_basis: string | null;
   grounding_label: string | null;

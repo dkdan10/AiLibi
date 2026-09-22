@@ -139,6 +139,7 @@ from meetings.manager import (
     INVALID_ALIBI_SUBJECT_MARKER,
     INVALID_BASIS_MARKER,
     INVALID_CORROBORATION_SUPPORTS_MARKER,
+    INVALID_COUNTER_REASON_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     OFF_TARGET_CITATION_EJECT_MARKER,
@@ -299,10 +300,11 @@ _FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
 # the tallied target). DERIVED from
 # ``meetings.schemas.BallotTargetRewriteReason``, the same union a recording
 # stamps on ``VoteBallot.guard_rewrite_reason``, so the display class and the
-# recorded class cannot drift apart. The THREE non-target labels
-# (``invalid_reason_id``, ``invalid_observation_id``, and ``invalid_basis``,
-# which ruling D6 of 2026-09-19 added) null a reference or a declared basis but
-# leave the authored target intact, so none is in that union.
+# recorded class cannot drift apart. The FOUR non-target labels
+# (``invalid_reason_id``, ``invalid_observation_id``, ``invalid_basis`` from
+# ruling D6 of 2026-09-19, and ``invalid_counter_reason_id`` from ruling D5) null
+# a reference or a declared basis but leave the authored target intact, so none
+# is in that union.
 _TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
     get_args(BallotTargetRewriteReason)
 )
@@ -3315,6 +3317,11 @@ def _ballot_view(ballot: VoteBallot) -> BallotView:
         # mirrored display-only -- the manager validated it against the voter's
         # memory; the spectator surface never re-validates.
         primary_reason_observation_id=ballot.primary_reason_observation_id,
+        # Ruling D5 of 2026-09-19: the weighing channel's counter citation,
+        # mirrored display-only on the same terms -- the manager validated it,
+        # this surface never re-validates, and every committed recording reads
+        # ``None`` because it predates the field.
+        counter_reason_id=ballot.counter_reason_id,
         considered_alternatives=tuple(ballot.considered_alternatives),
         # Ruling D6 of 2026-09-19, both mirrored display-only and both ``None``
         # on every committed recording, which predates them: the voter's own
@@ -3608,6 +3615,7 @@ _BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("under_gate_redirect", BALLOT_TARGET_REDIRECT_MARKER),
     ("invalid_reason_id", INVALID_REASON_ID_MARKER),
     ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
+    ("invalid_counter_reason_id", INVALID_COUNTER_REASON_MARKER),
     ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
     ("off_target_coerced", OFF_TARGET_CITATION_EJECT_MARKER),
     ("invalid_basis", INVALID_BASIS_MARKER),

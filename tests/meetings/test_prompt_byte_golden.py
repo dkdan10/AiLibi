@@ -1338,12 +1338,13 @@ _ALL_ON_STAMPS: Mapping[str, str] = {
         "+accusation_round.qwen3_6_27b.v6.reporter_reasoning"
         "+accusation_round.qwen3_6_27b.v6.testimony_shapes"
     ),
-    # A version ahead of the other three: ruling D6 of 2026-09-19 bumped
-    # vote_ballot ALONE, v6 -> v7, and the arm stamps are derived from the
-    # default registry so they move with it.
+    # TWO versions ahead of the other three: ruling D6 of 2026-09-19 bumped
+    # vote_ballot ALONE v6 -> v7 and ruling D5 bumped it alone again v7 -> v8,
+    # and the arm stamps are derived from the default registry so they move
+    # with it.
     "vote_ballot": (
-        "vote_ballot.qwen3_6_27b.v7.corroboration_discipline"
-        "+vote_ballot.qwen3_6_27b.v7.testimony_shapes"
+        "vote_ballot.qwen3_6_27b.v8.corroboration_discipline"
+        "+vote_ballot.qwen3_6_27b.v8.testimony_shapes"
     ),
 }
 

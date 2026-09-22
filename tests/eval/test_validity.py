@@ -495,10 +495,20 @@ def test_railroad_passes_on_committed(nine_report: TournamentReport) -> None:
     assert int(check.facts["rendered_crew_rows"]) > 0  # type: ignore[arg-type]
 
 
-def _railroaded_meeting(base: MeetingReport, crew: str) -> MeetingReport:
+def _railroaded_meeting(
+    base: MeetingReport, crew: str, *, trust_suffix: str = ", trust 0.0"
+) -> MeetingReport:
+    """A meeting whose vote prompt railroads ``crew`` at a clamped 1.0.
+
+    ``trust_suffix`` selects the RENDERED ROW SHAPE: ``", trust 0.0"`` is every
+    committed recording, ``""`` is what ``vote_ballot.qwen3_6_27b.v8`` writes
+    after ruling D5 of 2026-09-19 dropped the dead trust column. The gate must
+    catch the same railroad under both.
+    """
+
     prompt = (
         "## Your suspicion of each player\n"
-        f"- `{crew}`: suspicion 1.0, trust 0.0\n"
+        f"- `{crew}`: suspicion 1.0{trust_suffix}\n"
         "## Next section\n"
     )
     call = LLMCallRecord(
@@ -534,6 +544,36 @@ def test_railroad_fails_on_clamped_crew_row(nine_report: TournamentReport) -> No
     )
     assert not check.passed
     assert any(crew in v for v in check.violations)
+
+
+@pytest.mark.parametrize("trust_suffix", [", trust 0.0", ""])
+def test_railroad_reads_both_rendered_row_shapes(
+    nine_report: TournamentReport, trust_suffix: str
+) -> None:
+    """The Task-14.12 tripwire fires on the pre-card AND the post-card row.
+
+    ``_SUSPICION_GRAPH_ROW_RE`` is how this gate sees a rendered suspicion at
+    all, and a pattern that still REQUIRED the ``, trust <N>`` suffix does not
+    fail loudly on a v8 prompt -- it matches nothing, so ``_rendered_suspicions``
+    returns ``[]``, no row clears :data:`CERTAIN_GUILT_SUSPICION`, and the check
+    reports ``passed=True`` over a railroaded crew row. That is a gate going
+    VACUOUS, which is worse than a gate going red, so both shapes are pinned
+    here and the ``rendered_crew_rows`` fact is asserted non-zero for each: the
+    first leg keeps the committed bytes honest, the second is what the
+    re-record will write.
+    """
+
+    game = _first_game_with_meeting(nine_report)
+    crew = next(pid for pid, role in game.roles.items() if role == "CREWMATE")
+    bad_meeting = _railroaded_meeting(game.meetings[0], crew, trust_suffix=trust_suffix)
+    bad_game = game.model_copy(update={"meetings": (bad_meeting, *game.meetings[1:])})
+    check = check_no_railroaded_crew_ejections(
+        _replace_first_game(nine_report, bad_game)
+    )
+
+    assert not check.passed
+    assert any(crew in violation for violation in check.violations)
+    assert int(check.facts["rendered_crew_rows"]) > 0  # type: ignore[arg-type]
 
 
 def test_railroad_ignores_single_flag_certain_guilt(

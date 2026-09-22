@@ -49,6 +49,7 @@ from eval.meeting_quality import (
     ConversionReport,
     ThresholdInversionRecount,
     TournamentEvalReport,
+    _parse_suspicion_graph,
     compute_conversion_report,
     recorded_contradiction_flags,
     recount_threshold_inversions,
@@ -805,3 +806,43 @@ def test_the_two_census_terms_are_disjoint_and_total() -> None:
 
 def test_a_meeting_the_record_flagged_nothing_for_censuses_to_empty() -> None:
     assert recorded_contradiction_flags(_recorded()) == ()
+
+
+def test_the_suspicion_row_pattern_reads_both_rendered_shapes() -> None:
+    """Ruling D5 of 2026-09-19 made the ``, trust <N>`` suffix OPTIONAL.
+
+    The served ``qwen3_6_27b`` body dropped the dead trust column at
+    ``vote_ballot.qwen3_6_27b.v8``; every one of the 14,880 rendered rows in the
+    four committed sets still carries it. So ONE pattern has to read both, and
+    both halves are asserted here:
+
+    * the PRE-card shape, because every ``--check`` recomputation and the
+      process scorecard's argmax row walk committed bytes and must keep
+      producing the identical numbers -- narrowing the pattern back to a
+      required suffix leaves this half green and only the post-card half red,
+      which is why both are pinned;
+    * the POST-card shape, which is what the re-record will write and what a
+      narrowed pattern silently skips -- a skipped row is not an error, it is an
+      argmax computed over fewer players.
+
+    Also pinned: the suffixes that ride AFTER the figure stay ignorable, which
+    is the property the unanchored ``finditer`` has always depended on.
+    """
+
+    pre_card = (
+        "## Your suspicion of each player\n"
+        "- `p-2`: suspicion 0.80, trust 0.50 - built from: this meeting +0.30, "
+        "carried prior +0.00\n"
+        "- `p-3`: suspicion 0.40, trust 0.50 - OUT OF THE GAME (dead or ejected)\n"
+        "## Next\n"
+    )
+    post_card = (
+        "## Your suspicion of each player\n"
+        "- `p-2`: suspicion 0.80 - built from: this meeting +0.30, "
+        "carried prior +0.00\n"
+        "- `p-3`: suspicion 0.40 - OUT OF THE GAME (dead or ejected)\n"
+        "## Next\n"
+    )
+
+    assert _parse_suspicion_graph(pre_card) == {"p-2": 0.80, "p-3": 0.40}
+    assert _parse_suspicion_graph(post_card) == {"p-2": 0.80, "p-3": 0.40}

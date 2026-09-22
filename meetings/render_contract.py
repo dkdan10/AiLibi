@@ -52,7 +52,7 @@ the cycle the split exists to break).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, runtime_checkable
 
 from meetings.schemas import (
     ContradictionRef,
@@ -126,6 +126,90 @@ class BodyDiscoveryRecord:
     room: str
     tick: int
     observation_id: str | None = None
+
+
+EvidenceRowKind: TypeAlias = Literal[
+    "own_sighting",
+    "own_vent",
+    "own_transit",
+    "own_body_discovery",
+    "contradiction",
+    "testimony",
+]
+"""Which typed channel one :class:`EvidenceRow` was assembled from.
+
+The four ``own_*`` kinds are the VOTER's own first-hand record channels
+(:class:`~meetings.schemas.SightingRecord`,
+:class:`~meetings.schemas.VentWitnessRecord`,
+:class:`~meetings.schemas.MoveWitnessRecord`, :class:`BodyDiscoveryRecord`);
+``contradiction`` is one flag the meeting's own detector raised
+(:class:`~meetings.schemas.ContradictionRef`); ``testimony`` is one accusing
+turn's typed :class:`~meetings.schemas.AccusationClaim`. There is no seventh
+kind for rendered prose: the grounding chokepoint never parses rendered memory
+(``meetings/schemas.py`` :class:`~meetings.schemas.VentWitnessRecord`), and a row
+this vocabulary cannot name is a row the assembler did not build.
+"""
+
+
+@dataclass(frozen=True)
+class EvidenceRow:
+    """One piece of evidence a voter holds about one player, typed.
+
+    The weighing channel of ruling D5 of 2026-09-19: the ballot used to hand the
+    voter a finished suspicion number and tell it to follow that number, so the
+    pieces behind the number were never on the page. These rows are those
+    pieces, assembled by :func:`meetings.manager.build_evidence_rows` from typed
+    inputs ONLY -- the participant's own record channels, the meeting's
+    contradiction flags and the transcript's typed accusation claims -- never
+    from ``rendered_memory``, which is prose. They are what the meeting layer
+    can NAME, not a complete decomposition of the scalar: the assembler's
+    docstring names the two provenance channels that reach no row.
+
+    * ``subject`` -- the player this row is about. For the three own-perception
+      kinds and for ``contradiction`` / ``testimony`` that is the player named;
+      for ``own_body_discovery`` it is the VICTIM whose body the voter found,
+      who is dead and therefore never an ejection target. The assembler groups
+      by this field.
+    * ``description`` -- one rendered line, composed by the assembler from typed
+      fields (ids, rooms, ticks, the detector's own sentence). It never quotes a
+      model's free text.
+    * ``kind`` -- see :data:`EvidenceRowKind`.
+    * ``first_hand`` -- provenance AS STATED, never as checked. ``True`` for
+      every own-channel row (the voter's own perception, which the engine
+      witness-gated into its packet) and for a ``testimony`` row whose speaker
+      DESCRIBED seeing that subject somewhere in this meeting's public
+      transcript. Whether their own private record bears that description out
+      is deliberately NOT read: a fabricated sighting and a true one carry the
+      same bit, because the meeting layer may not hand a voter a verdict on
+      which claims are honest (review round 3 of 2026-09-21;
+      :func:`meetings.manager._stated_sighting_subjects` is the whole
+      definition). A ``contradiction`` row is the meeting layer's cross-check
+      of two statements rather than one speaker's account of a perception, so
+      it is ``False``.
+    * ``speaker`` -- who perceived or said it: the voter for an own-channel row,
+      the accusing speaker for a ``testimony`` row, and for a ``contradiction``
+      the speaker of the turn the row CITES -- the subject's own account where
+      the flag resolved to a turn that subject spoke, the other side of the
+      conflict where it did not, and the subject where the flag resolved to no
+      turn at all (:func:`meetings.manager._contradiction_evidence_rows` states
+      the precedence).
+    * ``citation_id`` -- the id a ballot may cite for this row, in one of the two
+      shapes the manager's validators accept: a ``turn_id`` of THIS meeting's
+      final transcript, or an observation id belonging to THIS voter. ``None``
+      means the row carries nothing citable (a record written before ids were
+      stamped, or a flag whose account could not be resolved to a turn), and the
+      template says so rather than inventing a third shape.
+
+    Frozen and leaf-safe: this module must never import ``agents.*`` (see the
+    module docstring), so the DTO carries only ids and rendered strings.
+    """
+
+    subject: PlayerId
+    description: str
+    kind: EvidenceRowKind
+    first_hand: bool
+    speaker: PlayerId
+    citation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -379,6 +463,22 @@ class VotePromptRenderer(Protocol):
     only while the corroboration lever is ON; the template filters its rows to
     this voter's ``candidate_targets``. ``None`` -- an OFF meeting, or any
     ad-hoc render -- omits the block and renders the previous bytes.
+
+    ``evidence_rows`` (ruling D5 of 2026-09-19) is the weighing channel: the
+    typed :class:`EvidenceRow` pieces behind THIS voter's suspicion numbers that
+    the meeting layer can NAME -- not a complete decomposition of those numbers.
+    Two provenance channels of :class:`SuspicionEntry` reach no row: a witnessed
+    KILL (the participant carries no kill channel) and the BODY-PROXIMITY lift
+    (the body-discovery row names the dead victim, not the nearby suspect), so a
+    template must render the figure as a PARTIAL summary of the rows and never
+    as their total. :func:`meetings.manager.build_evidence_rows` states the same
+    limit and hands the rows over already grouped and ordered, so a template
+    only loops. The rows carry provenance AS STATED and no engine verdict on
+    anyone's account (``first_hand`` above), so a template must not render one
+    as confirmed, borne out or true. It is the same additive, defaulted widening
+    ``reporter_id`` / ``persona`` / ``testimony_ledger`` use: the default ``()``
+    renders nothing, and the six non-serving prompt sets reference no such
+    variable, so their bytes are unchanged whatever the manager threads.
     """
 
     def __call__(
@@ -397,11 +497,14 @@ class VotePromptRenderer(Protocol):
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
+        evidence_rows: tuple[EvidenceRow, ...] = (),
     ) -> str: ...
 
 
 __all__ = [
     "BodyDiscoveryRecord",
+    "EvidenceRow",
+    "EvidenceRowKind",
     "PromptRenderInputs",
     "ReportPromptRenderer",
     "ReporterContext",

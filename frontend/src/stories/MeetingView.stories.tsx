@@ -112,6 +112,7 @@ function ballot(
     confidence,
     primary_reason_id: null,
     primary_reason_observation_id,
+    counter_reason_id: null,
     considered_alternatives,
     // The committed recordings this tour is built from predate both fields, so
     // the stories carry what the bytes carry: the grounding chip is absent
@@ -411,6 +412,7 @@ const SKIPPED_MEETING: MeetingViewDTO = {
       confidence: 0.4,
       primary_reason_id: null,
       primary_reason_observation_id: null,
+      counter_reason_id: null,
       considered_alternatives: [],
       decision_basis: null,
       grounding_label: null,

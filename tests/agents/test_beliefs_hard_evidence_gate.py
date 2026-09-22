@@ -359,19 +359,22 @@ class TestStoreBeliefLineReadSite:
         assert "p-2: suspicion 0.66" in rendered  # override value, untouched
         assert "p-4: suspicion 0.59" in rendered  # stored scalar, clamped
 
-    def test_trust_line_wins_when_the_clamp_shrinks_the_suspicion_deviation(
+    def test_the_clamped_value_renders_however_far_trust_deviates(
         self,
     ) -> None:
-        # The clamped value is the row's effective signal: a row whose trust
-        # deviation sits between the clamped and raw suspicion deviations flips to
-        # the trust line under the clamp. suspicion 0.70 soft-only (raw dev 0.20),
-        # trust 0.35 (dev 0.15): the clamped 0.59 (dev 0.09 < 0.15) yields to the
-        # trust line -- where the raw 0.70 (dev 0.20 >= 0.15) would have kept the
-        # suspicion line.
+        # This asserted ``p-5: trust 0.35`` before ruling D5 of 2026-09-19: the
+        # row used to flip to a trust line whenever the trust deviation beat the
+        # clamped suspicion deviation. Nothing in production ever moved trust off
+        # 0.50, so that branch could only ever fire on a directly seeded row like
+        # this one, and it is deleted with ``adjust_trust``. What the clamp does
+        # is unchanged and is what this now pins: suspicion 0.70 soft-only clamps
+        # to 0.59 and renders, whatever trust says.
         memory = _memory_with_beliefs(
             {"p-5": (0.70, 0.35, SuspicionProvenance(carried_soft=0.20))}
         )
-        assert "p-5: trust 0.35" in render_for_prompt(memory)
+        rendered = render_for_prompt(memory)
+        assert "p-5: suspicion 0.59" in rendered
+        assert "trust" not in rendered
 
 
 # --------------------------------------------------------------------------- #

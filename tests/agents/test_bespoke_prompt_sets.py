@@ -343,6 +343,9 @@ class TestQwen332bV4Directives:
         # Exactly the dead entry is tagged; the tag sits AFTER the trust field
         # so the eval-side row parser keeps reading tagged rows (the regex in
         # extract_gameplay_facts is an unanchored finditer over the row shape).
+        # This is the FROZEN qwen3_32b body, which still renders the trust
+        # column: ruling D5 of 2026-09-19 dropped it from the served
+        # qwen3_6_27b body alone, and the six frozen sets keep their bytes.
         assert "`p-9`: suspicion 0.95, trust 0.20 — OUT OF THE GAME" in vote
         assert vote.count(" — OUT OF THE GAME (dead or ejected") == 1
         assert "`p-3`: suspicion 0.80, trust 0.50 —" not in vote  # valid: no tag
@@ -524,26 +527,29 @@ class TestQwen3627bV5InWorldRegister:
     are checked separately in the meeting fixture suites.
     """
 
-    def test_registry_stamps_vote_ballot_v7_others_v6(self) -> None:
-        # Ruling D6 of 2026-09-19 (the grounded SKIP) advances vote_ballot ALONE
-        # v6 -> v7, for the SKIP register and the "decision_basis" key. The
-        # other three bodies are byte-unchanged and stay v6.
+    def test_registry_stamps_vote_ballot_v8_others_v6(self) -> None:
+        # Ruling D6 of 2026-09-19 (the grounded SKIP) advanced vote_ballot ALONE
+        # v6 -> v7, for the SKIP register and the "decision_basis" key, and
+        # ruling D5 (the weighing channel) advanced it ALONE again to v8, for
+        # the evidence block, the dropped trust column, the deleted deference
+        # sentence and the "counter_reason_id" key. The other three bodies are
+        # byte-unchanged and stay v6.
         versions = prompt_versions_for_set("qwen3_6_27b")
         assert versions == {
             "crewmate_report": "crewmate_report.qwen3_6_27b.v6",
             "impostor_report": "impostor_report.qwen3_6_27b.v6",
             "accusation_round": "accusation_round.qwen3_6_27b.v6",
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v7",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v8",
         }
 
     def test_bumped_stamps_never_collide_with_prior_bodies(self) -> None:
         # Current bodies must not reuse an earlier lineage's version stamp. The
         # per-template bump is exactly why this is a floor rather than one
-        # value: the vote body is a version ahead of the other three.
+        # value: the vote body is TWO versions ahead of the other three.
         for key, value in prompt_versions_for_set("qwen3_6_27b").items():
-            expected = ".v7" if key == "vote_ballot" else ".v6"
+            expected = ".v8" if key == "vote_ballot" else ".v6"
             assert value.endswith(f".qwen3_6_27b{expected}")
-            for stale in (".v1", ".v2", ".v3", ".v4", ".v5"):
+            for stale in (".v1", ".v2", ".v3", ".v4", ".v5", ".v7"):
                 assert stale not in value
 
     def test_the_variant_registry_inherits_the_per_template_bump(self) -> None:
@@ -1036,7 +1042,7 @@ class TestVersionMarkersMatchTheRegistry:
             encoding="utf-8"
         )
         stale_file.write_text(
-            live.replace("vote_ballot.qwen3_6_27b.v7", "vote_ballot.qwen3_6_27b.v6", 1),
+            live.replace("vote_ballot.qwen3_6_27b.v8", "vote_ballot.qwen3_6_27b.v7", 1),
             encoding="utf-8",
         )
 

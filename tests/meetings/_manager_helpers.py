@@ -30,6 +30,7 @@ from pydantic import BaseModel
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from meetings.corroboration import MeetingTestimonyLedger
+from meetings.render_contract import EvidenceRow, VotePromptRenderer
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -183,6 +184,7 @@ def _vote_prompt(
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
     testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
+    evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5 of 2026-09-19
 ) -> str:
     # ``reporter_id`` (Task 15.5) conforms to the widened VotePromptRenderer
     # contract; surfaced only when supplied so a lever-OFF (``None``) render is
@@ -413,7 +415,14 @@ def _make_manager(
     llm_client: LLMClient,
     deadlines: MeetingDeadlines | None = None,
     skip_confidence_threshold: float = 0.6,
+    vote_prompt: VotePromptRenderer | None = None,
 ) -> MeetingManager:
+    """``vote_prompt`` overrides the stub ballot renderer for one meeting.
+
+    Added with ruling D5 of 2026-09-19 so a test can CAPTURE what the manager
+    threads into the ballot render -- the evidence rows above all -- without
+    re-implementing the manager's own wiring. ``None`` keeps the module's stub.
+    """
     config = MeetingConfig(
         deadlines=deadlines if deadlines is not None else MeetingDeadlines(),
         skip_confidence_threshold=skip_confidence_threshold,
@@ -423,7 +432,7 @@ def _make_manager(
         crewmate_report_prompt=_crewmate_report_prompt,
         impostor_report_prompt=_impostor_report_prompt,
         statement_prompt=_statement_prompt,
-        vote_prompt=_vote_prompt,
+        vote_prompt=vote_prompt if vote_prompt is not None else _vote_prompt,
         config=config,
     )
 
@@ -445,12 +454,14 @@ def _run_meeting(
     deadlines: MeetingDeadlines | None = None,
     skip_confidence_threshold: float = 0.6,
     dead_ids: tuple[PlayerId, ...] = (),
+    vote_prompt: VotePromptRenderer | None = None,
 ) -> tuple[MeetingResult, _ScriptedLLMClient]:
     client = _ScriptedLLMClient(responder=responder)
     manager = _make_manager(
         llm_client=client,
         deadlines=deadlines,
         skip_confidence_threshold=skip_confidence_threshold,
+        vote_prompt=vote_prompt,
     )
     result = _run(
         manager.run(

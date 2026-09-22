@@ -301,11 +301,21 @@ class VentWitnessRecord(_FrozenModel):
     an agent reporting its own witnessed events leaks nothing, and the
     packet stamp the records derive from is witness-gated by the engine
     (``eval/leak_test.py``).
+
+    ``observation_id`` is the episodic id this row was projected from, mirroring
+    :class:`meetings.render_contract.BodyDiscoveryRecord`: it is what lets the
+    weighing channel of ruling D5 of 2026-09-19 render a citable own-channel
+    evidence row, since the two id shapes a ballot may cite are this meeting's
+    turn ids and the voter's OWN observation ids. ``None`` for a row whose
+    episodic event carried no stamp, and the row then renders without a
+    citation. ADDITIVE with a ``None`` default, so every recording and every
+    direct construction predating it parses unchanged.
     """
 
     subject: PlayerId
     room: RoomId
     tick: int
+    observation_id: ObservationId | None = None
 
 
 class SightingRecord(_FrozenModel):
@@ -335,12 +345,17 @@ class SightingRecord(_FrozenModel):
     suffix uses. Firewall-clean by construction: an agent reporting its
     own witnessed events leaks nothing, and the packet stamp the records
     derive from is witness-gated by the engine (``eval/leak_test.py``).
+
+    ``observation_id`` mirrors :class:`VentWitnessRecord`'s: the episodic id this
+    row was projected from, or ``None`` for an unstamped row, so the D5 weighing
+    channel can render an own-channel evidence row a ballot may actually cite.
     """
 
     subject: PlayerId
     room: RoomId
     tick: int
     co_present: tuple[PlayerId, ...] = ()
+    observation_id: ObservationId | None = None
 
 
 class MoveWitnessRecord(_FrozenModel):
@@ -361,12 +376,17 @@ class MoveWitnessRecord(_FrozenModel):
     by the engine (``eval/leak_test.py``). Deliberately NOT a widening of
     :class:`SightingRecord`: that channel feeds the exculpatory vouch path, and
     a transition is not a vouch.
+
+    ``observation_id`` mirrors :class:`VentWitnessRecord`'s: the episodic id this
+    row was projected from, or ``None`` for an unstamped row, so the D5 weighing
+    channel can render an own-channel evidence row a ballot may actually cite.
     """
 
     subject: PlayerId
     from_room: RoomId
     to_room: RoomId
     tick: int
+    observation_id: ObservationId | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1012,6 +1032,7 @@ class ModelAuthoredVoteBallot(_FrozenModel):
     confidence: float = Field(ge=0.0, le=1.0)
     primary_reason_id: TurnId | None
     primary_reason_observation_id: ObservationId | None = None
+    counter_reason_id: str | None = None
     considered_alternatives: tuple[PlayerId, ...] = ()
     decision_basis: BallotDecisionBasis | None = None
     rationale_text: str
@@ -1039,6 +1060,27 @@ class VoteBallot(ModelAuthoredVoteBallot):
     default is what lets every committed replay -- recorded before the
     field existed -- parse unchanged under ``_FrozenModel``'s config;
     ``None`` means the voter cited no private observation.
+
+    ``counter_reason_id`` (ruling D5 of 2026-09-19) is the weighing channel's
+    second slot: the strongest thing the voter holds pointing AWAY from the
+    target it named, in the SAME two id shapes ``primary_reason_id`` and
+    ``primary_reason_observation_id`` accept between them -- a ``turn_id`` of
+    this meeting, or an observation id from the voter's own memory. It is
+    validated through the same two decisions those fields use
+    (:func:`meetings.manager._normalize_ballot_counter_reason_id`) and nulled
+    with its own marker when it names neither.
+
+    It is NOT a gate, and that is the whole of its contract: a ``None`` counter
+    -- the voter holds nothing pointing the other way -- never coerces,
+    redirects or lowers a ballot; a FABRICATED counter costs the voter this one
+    field and nothing else. No guard, no tally
+    (:func:`meetings.voting.tally_ballots`) and no
+    :data:`BallotGroundingLabel` branch reads it: in particular the
+    ``invalid_citation`` / ``uncited`` split is computed from the two PRIMARY
+    slots alone, so a nulled counter cannot change the label a ballot receives.
+    ADDITIVE with a ``None`` default, the rule
+    ``primary_reason_observation_id`` states above, so every committed recording
+    parses unchanged and reads ``None``.
 
     ``decision_basis`` (ruling D6 of 2026-09-19) is the VOTER's own word for
     what its decision rests on, and the one ballot field on this schema a SKIP
@@ -1121,15 +1163,16 @@ class VoteBallot(ModelAuthoredVoteBallot):
         every such round trip fail. A live meeting labels every ballot it
         records, so the key is elided only on a ballot nothing labelled.
 
-        ``decision_basis`` is elided when ``None`` for the rule's other half.
-        ``None`` means the voter stated no basis, which is exactly what an
-        absent key says, and what every ballot recorded before the field says --
-        so the two shapes are one fact and get one spelling. It is not
-        cosmetic: the committed ``tournament-eval-report.json`` of all four sets
-        embeds recorded ballots, so a ``null`` key written here would move
-        bytes in four reports that no card may move before the re-record.
+        ``decision_basis`` and ``counter_reason_id`` are elided when ``None`` for
+        the rule's other half. ``None`` means the voter stated no basis and held
+        nothing pointing the other way, which is exactly what an absent key says,
+        and what every ballot recorded before the two fields says -- so the two
+        shapes are one fact and get one spelling. It is not cosmetic: the
+        committed ``tournament-eval-report.json`` of all four sets embeds
+        recorded ballots, so a ``null`` key written here would move bytes in four
+        reports that no card may move before the re-record.
 
-        Reading is unaffected; all four fields default to ``None``.
+        Reading is unaffected; all five fields default to ``None``.
         """
 
         data: dict[str, Any] = handler(self)
@@ -1140,6 +1183,8 @@ class VoteBallot(ModelAuthoredVoteBallot):
             data.pop("grounding_label", None)
         if self.decision_basis is None:
             data.pop("decision_basis", None)
+        if self.counter_reason_id is None:
+            data.pop("counter_reason_id", None)
         return data
 
     @classmethod

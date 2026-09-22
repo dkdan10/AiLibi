@@ -327,9 +327,20 @@ _SUSPICION_GRAPH_HEADERS: Final[tuple[str, ...]] = (
     "## Your suspicion of each player",
     "## Your suspicion graph",
 )
+# The ``, trust <N>`` suffix is OPTIONAL as of ruling D5 of 2026-09-19: the
+# served body dropped the dead trust column at ``vote_ballot.qwen3_6_27b.v8``,
+# and every one of the 14,880 rendered rows in the four committed sets still
+# carries it. Both shapes must parse through ONE pattern, because every metric
+# reading this is an AS-RECORDED read -- the four ``--check`` recomputations
+# walk committed bytes and must produce the identical numbers they did before
+# this card, while the same readers stay honest over the bytes the re-record
+# will write. Making the suffix optional is the whole change; the player id and
+# the suspicion figure are matched exactly as before, and the pattern is still
+# an unanchored ``finditer`` so a row's other suffixes (OUT OF THE GAME, the
+# provenance split) stay ignorable.
 _SUSPICION_GRAPH_ROW_RE: Final[re.Pattern[str]] = re.compile(
-    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+    r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
 )
 
 # A defaulted-turn ``deadline_default`` failed-call row carries the turn

@@ -1270,3 +1270,27 @@ single case — and frontend 19 test files / 515 tests passed with the build
 green. Neither flake the earlier rounds recorded reappeared. The
 record-impact statement is unchanged and re-demonstrated. No provider call is a
 check here, and none was made.
+
+### The weighing channel's prediction on the argmax-independence row (2026-09-21)
+
+Recorded here, dated, by [the ballot weighing card](ballot-weighing-channel.md)
+(ruling D5 of 2026-09-19) BEFORE anything is re-recorded, because a prediction
+written after the bytes exist is not a prediction. Nothing about this card's own
+work changes: its rows, its definitions and its `--check` are untouched, and
+this subsection adds no acceptance item and no gate.
+
+Today's argmax-independence cells, as `scripts/publish_process_scorecard.py
+--check` recomputes them from the committed recordings: `ml_corpus/9p2i`
+deviating 81/1270 = 6.4% (so 93.6% follow), role-correct 1143/1189 = 96.1% for
+followers against 7/81 = 8.6% for deviators; `samples/9p2i` deviating 31/434 =
+7.1% (92.9% follow), role-correct 358/403 = 88.8% against 2/31 = 6.5%.
+
+After [the re-record](process-rerecord.md) runs on the substrate the wave
+leaves, the weighing card predicts that the FOLLOWER share FALLS from 93.6% and
+92.9%, and that deviating EJECTs are AT LEAST as role-correct as following ones.
+
+Under ruling D1 role-correctness is reported beside this row and gates nothing,
+so neither half of the prediction is a merge condition: a wrong call on rows the
+voter can cite is the outcome the owner asked for. If the prediction fails, what
+that reports is the substrate change's effect, not a defect to be corrected
+away.

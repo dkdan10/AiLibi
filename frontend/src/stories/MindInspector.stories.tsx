@@ -80,6 +80,7 @@ function ballot(voter: string, target: string): BallotView {
     primary_reason_id: null,
     // Task 16.7.1: the own-episodic-observation citation (display-only).
     primary_reason_observation_id: null,
+    counter_reason_id: null,
     // Both null, as every committed recording carries them.
     decision_basis: null,
     grounding_label: null,
