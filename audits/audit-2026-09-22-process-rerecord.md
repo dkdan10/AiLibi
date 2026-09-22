@@ -345,6 +345,53 @@ the after cell measures what the agents do with it.
 | 8 | wrong-but-believable rate | 10/69 = 0.1449 |
 | 9 | role-correct ejection rate | 29/29 = 1.0000 |
 
+## 1.4 The absolute flag census, before — and why row 3 needs it
+
+Row 3 is a RATE, and its denominator is about to move. The basis test that owns
+the split is `eval.process_scorecard._flag_scored_claim_truth`
+(`eval/process_scorecard.py:1014`): `_claim_truth` walks each segment against
+the engine route, and `meetings.transcript.maximal_stays` decides the cut. It is
+a **shape** gate rather than a prompt-version one. A claim whose route carries
+more than one maximal stay returns not-evaluable, because a recorded flag names
+the CLAIM's event id and not the stay it rests on, so scoring it across the
+whole route would file a caught lie as manufactured.
+
+**Every committed claim is a one-segment route** — measured, not assumed:
+`stays {1: 1003}` over all four sets below, 0 multi-stay. So no old recording is
+re-scored under the new rule, and the multi-segment shape arrives WITH this
+re-record. That makes row 3's denominator liable to shrink on the new bytes, and
+**a falling rate over a shrinking denominator says little**. The absolute counts
+below are published beside it so the cell can be read for what it is: the route
+claim's own thesis is that honest multi-room movers stop minting flags at all,
+which should show as a falling absolute alibi-flag count at a comparable meeting
+count, independently of any rate.
+
+The shape split is pinned by planted fixtures of each shape, already shipped by
+the scorecard card: `tests/eval/test_process_scorecard.py:755` (a one-segment
+route IS scored), `:722` (a part-true multi-segment route is not-evaluable
+rather than manufactured) and `:770` (re-cutting one stay changes nothing).
+
+**BEFORE — absolute contradiction flags by kind, with the meeting count.**
+Read with the shipped loader and the shipped `maximal_stays`, out of tree,
+changing no instrument. `samples/9p2i` is read from the preserved copy, the
+other three from the still-committed bytes.
+
+| set | games | meetings | alibi_conflict | alibi_vs_sighting | alibi_vs_physical | vent_sighting | alibi-class | all flags | flags/meeting | alibi/meeting |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `samples/9p2i` | 50 | 151 | 21 | 31 | 5 | 90 | 57 | 147 | 0.9735 | 0.3775 |
+| `ml_corpus/9p2i` | 150 | 439 | 40 | 86 | 8 | 315 | 134 | 449 | 1.0228 | 0.3052 |
+| `samples/4p1i` | 50 | 39 | 0 | 0 | 0 | 20 | 0 | 20 | 0.5128 | 0.0000 |
+| `ml_corpus/4p1i` | 50 | 43 | 1 | 0 | 0 | 28 | 1 | 29 | 0.6744 | 0.0233 |
+| **pooled** | **300** | **672** | **62** | **117** | **13** | **453** | **192** | **645** | **0.9598** | **0.2857** |
+
+**Self-alibi claim census, before**: 1,003 claims, **0 multi-stay**
+(`samples/9p2i` 259, `ml_corpus/9p2i` 696, `samples/4p1i` 29,
+`ml_corpus/4p1i` 19). Three independent cross-checks that this census reads the
+same population the published instruments do: the pooled alibi-class count
+**192** is row 3's published denominator; the pooled self-alibi count **1,003**
+is the scorecard's own claim census; and `samples/9p2i`'s 147 flags over 151
+meetings is exactly `eval/watchability.py`'s baseline-8 `flags_per_meeting` pin.
+
 ## 2. The legs, as recorded
 
 *(written as each leg completes)*
@@ -368,6 +415,24 @@ the after cell measures what the agents do with it.
 ## 7. What this record does not discharge
 
 *(written at the close)*
+
+### 7.1 For the owner — one follow-up this record exposes, and does not take
+
+**A per-STAY basis test for row 3, so a multi-stay route becomes evaluable.**
+Today a recorded contradiction flag names the claim's event id, not the stay it
+rests on, so `_flag_scored_claim_truth` refuses any claim with more than one
+maximal stay rather than risk filing a caught lie as manufactured (§1.4). That
+refusal was decided deliberately by the alibi-as-route card and is correct for
+the instrument as it stands. Its cost only becomes visible now: the route claim
+is what makes multi-stay accounts common, so the very change row 3 exists to
+measure is the change that moves claims out of row 3's denominator.
+
+The fix is to attribute a flag to the stay it was minted against, and then score
+per stay. That is **a new card after this one**, and it is **never a re-score of
+this record**: this record reads each recording as recorded, and a later
+instrument reads later bytes. Nothing here builds it, and nothing here is
+blocked on it — the absolute counts in §1.4 and §4 carry the reading in the
+meantime.
 
 ## 8. The freeze, shown rather than asserted
 
