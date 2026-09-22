@@ -110,6 +110,40 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
 
 ## Acceptance
 
+- [x] Review correction (round 4, a CORRECTNESS defect): two of the union
+  members `_stated_sighting_subjects` reads were unenforced. Dropping
+  `SawKillObservation` alone, or `SawMoveObservation` alone, left the whole
+  suite green, because round 3's row 6c neutered all three at once and its one
+  failure was the vent case. The served set offers both shapes to speakers
+  (`accusation_round.j2`, `crewmate_report.j2`, `_account_rules.j2`), so it is
+  live behaviour. `test_a_described_sighting_marks_the_row_true_or_fabricated`
+  is parametrised over ALL FOUR shapes, keeping the two-speaker
+  borne-out/fabricated pair in each case, and row 6c is split into per-member
+  rows 6c-a/b/c/d, each red on its own removal. No production behaviour
+  changes.
+- [x] Review correction (round 4, record integrity): the Results symbol table
+  and three prose citations were stale at `d7b6be94` — round 3 moved
+  `meetings/manager.py`, `meetings/render_contract.py` and `vote_ballot.j2`
+  after the table said it was re-stamped at the final head. Every citation in
+  the CURRENT sections is re-derived mechanically (`ast` for definitions,
+  `grep -n` for lines) AFTER this round's last edit, each prior value kept in
+  parentheses, with a dated note saying round 3 left the table behind.
+- [x] Review correction (round 4): the two live Codex review comments carry a
+  dated judgement in the card and the PR body — 4062448106 (null counter vs
+  `none_held`): not a defect, but its second half is a real prompt gap, closed
+  by one prose sentence saying what "pointing away" means for a SKIP, pinned by
+  `test_the_counter_bullet_says_what_points_away_from_a_skip`; 4062448113
+  (HISTORY blocks): premise false against the repo's own practice at base. No
+  PR comment is posted.
+- [x] Review correction (round 4), the smaller items: the trust field's
+  survival is restated at DELIVERED strength; `_stated_sighting_subjects`'
+  false reason for excluding `FoundBodyObservation` is replaced by the true
+  one; `TestTheAssemblerCannotReachTheLedger`'s docstring says what the test is
+  (a per-function name scan, not a call graph) and names the value family as
+  the layered half; the closing greps are re-run and quoted UNCONDENSED; the
+  deviations index gains the five files disclosed elsewhere; and the pre-existing
+  flag-description leak the correctness verifier measured is recorded for the
+  owner, outside this card.
 - [x] Review correction (round 3, the PRINCIPLE defect): a testimony row's
   provenance is a pure function of the PUBLIC transcript — did that speaker
   describe seeing this subject at this table — and never of whether the
@@ -121,7 +155,12 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   round-3 subsection of Results. `TestProvenanceReadsOnlyThePublicTranscript`
   (a 12-case family through the real `MeetingManager`, plus the fabricated-vent
   and described-nothing examples) and `TestTheAssemblerCannotReachTheLedger`
-  (the `ast` call-graph guard).
+  (the `ast` call-graph guard). [CORRECTED, round 4, 2026-09-21: the second is
+  not a call-graph guard. It is a per-function NAME SCAN over five named
+  functions, so a neutrally-named helper that itself called
+  `build_testimony_ledger` would pass it untouched; only the VALUE family
+  catches that. The class docstring now says what the scan is and names the
+  value family as the layered half.]
 - [x] Review correction (round 3): the three production constructs that
   survived neutering with the suite green are enforced —
   `move_witness_records_for_meeting`'s episodic stamp
@@ -179,7 +218,8 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   as LITERALS instead of re-deriving them from `_EVIDENCE_KIND_CLASS`. Six
   perturbation rows, all red, in the round-2 subsection of Results.
 - [x] Review correction (round 2): `VotePromptRenderer`'s `evidence_rows`
-  paragraph (`meetings/render_contract.py:461-473`) states the limit the code
+  paragraph (`meetings/render_contract.py:461-473`; `:467-481` at the round-4
+  head, re-derived 2026-09-21) states the limit the code
   delivers, naming the witnessed-kill and body-proximity channels that reach no
   row, and the round-1 paragraph that claimed this site had already been
   corrected is restated true.
@@ -303,7 +343,14 @@ metrics `scripts/build_sample_report.py --check` recomputes over old bytes.
   `agents/strategic/prompts/qwen3_32b/vote_ballot.j2:79`) and their byte pins
   must not move, so one history line says the field is now a frozen-set render
   input only. `docs/adr/0001-three-load-bearing-decisions.md:30` and
-  `DESIGN.md:718` are corrected.
+  `DESIGN.md:718` are corrected. [RESTATED AT DELIVERED STRENGTH, round 4,
+  2026-09-21: "one history line" understates what shipped, and the card must
+  state what the code delivers. Measured at this head: a 15-line comment block
+  (`agents/memory/beliefs.py:969-983`), a 12-line paragraph inside
+  `_format_belief_score` (`agents/memory/store.py:2808-2819`) and a 14-line ADR
+  bullet (`docs/adr/0001-three-load-bearing-decisions.md:30-43`). The blocks
+  are NOT shrunk — see the round-4 judgement on Codex 4062448113 — only the
+  sentence describing them.]
 - [x] The version cascade, the archive window, and old recordings that keep
   loading. The wave takes THREE `qwen3_6_27b` bumps, one per card whose
   template bytes move, so no stamp ever covers two bodies: the alibi card's
@@ -481,28 +528,36 @@ instruction … or delete the column rather than display a constant") and §12
 
 ### What was built, and where it actually lives
 
-Every line below is RE-STAMPED at this card's final head (review round 1) and
-re-derived by symbol with `grep -n`, not carried forward: the round-1 fixes moved
-`meetings/manager.py` again, and the round-0 table had already drifted by the two
-commits that landed after it.
+Every line below is RE-STAMPED at THIS ROUND's final head (review round 4) and
+re-derived mechanically after this round's last edit — `ast` for every
+definition, `grep -n` for every line — not carried forward. It had drifted
+before: the table said round 1 and then round 3 moved `meetings/manager.py`
+(-6/+32/+38), `meetings/render_contract.py` (+8) and `vote_ballot.j2` (+5)
+underneath it without re-stamping, so at `d7b6be94` fourteen cells were wrong.
+Round 4 moves three files again (this round's `_stated_sighting_subjects`
+docstring is +7 in `meetings/manager.py`, and the SKIP counter sentence is +4
+in `vote_ballot.j2`), which is exactly why the derivation is run LAST. Each
+cell keeps its prior value in parentheses.
 
-| Contract item | Symbol | Line at the final head (round-0 table's value) |
+| Contract item | Symbol | Line at the round-4 head (prior values) |
 | --- | --- | --- |
-| the row DTO | `EvidenceRow` / `EvidenceRowKind` | `meetings/render_contract.py:155` / `:131` (new) |
-| the renderer widening | `VotePromptRenderer.evidence_rows` | `meetings/render_contract.py:492` (round 1 said `:487`, round 0 `:481`; card said `:340-400`); its Protocol paragraph, weakened in round 2, at `:461-473` |
-| the three witness stamps | `VentWitnessRecord` / `SightingRecord` / `MoveWitnessRecord` `.observation_id` | `meetings/schemas.py:318` / `:358` / `:389` (card said `:306-308`, `:340-343`, `:366-369`) |
-| the ninth ballot key | `ModelAuthoredVoteBallot.counter_reason_id` | `meetings/schemas.py:1035` (card said `:767-773`) |
-| row assembly | `build_evidence_rows` + its three builders | `meetings/manager.py:3710`, `:3449`, `:3568`, `:3646` (round 0 said `:3618`, `:3424`, `:3510`, `:3557`) |
-| the render call site | `MeetingManager._collect_one_ballot` | `meetings/manager.py:2184`; `:2270` builds the rows, `:2309` passes them (round 0 said `:2248` / `:2300`; card said `:2151`) |
-| the counter validator | `_normalize_ballot_counter_reason_id` | `meetings/manager.py:3989`, called at `:2499` (round 0 said `:3863` / `:2477`) |
-| the two shared decisions | `_resolved_reason_id` / `_resolved_observation_id` | `meetings/manager.py:3849` / `:3874` (round 0 said `:3730` / `:3753`), extracted from `_normalize_ballot_reason_id` at `:3894` (card said `:3199`) and `_normalize_ballot_observation_id` at `:3940` (card said `:3241`) |
-| the counter marker | `INVALID_COUNTER_REASON_MARKER` | `meetings/manager.py:412` |
-| the served body | `vote_ballot.j2` | `:253-258` the `<evidence>` block with the provenance branch at `:256`, `:261-262` the relabelled PARTIAL summary, `:265` the row without `trust`, `:297` the sentence deleted, `:300-301` nine keys, `:307` the counter bullet (each +4 on round 1's `:249-254` / `:257-258` / `:261` / `:293` / `:296-297` / `:303`: round 2 added four header lines) |
-| the row pattern | `_SUSPICION_GRAPH_ROW_RE` | `eval/meeting_quality.py:341` (card said `:326`) and, added in round 1, `eval/validity.py:190` |
-| the served DTO | `BallotView.counter_reason_id` | `api/schemas.py:1093` (card said `:962-970`), mirrored at `api/replay_loader.py:3324` (card said `:3286`) |
-| the spectator card | `BallotCard.tsx` | `:261` the third `EvidenceLink`, `:68` `counterKind` (round 0 said `:57`), `frontend/src/lib/copy.ts:450` the chip label (round 0 said `BallotCard.tsx:32`) |
-| the marker tables | three | `api/replay_loader.py:3612` (the tuple; the counter row at `:3618`), `training/surrogate/dataset.py:207` (round 0 said `:205`; card said `:213`), `eval/deduction_metrics.py:718` (the chain; the counter row at `:725`) |
-| the trust deletion | `BeliefState.adjust_trust` / `_format_belief_score` | `agents/memory/beliefs.py:969` (history note where it stood; round 0 said `:966`; card said `:953`), `agents/memory/store.py:2792` (round 0 said `:2808`) |
+| the row DTO | `EvidenceRow` / `EvidenceRowKind` | `meetings/render_contract.py:155` / `:131` (unmoved since round 1) |
+| the renderer widening | `VotePromptRenderer.evidence_rows` | `meetings/render_contract.py:500` (round 3 table said `:492`, round 1 `:487`, round 0 `:481`; card said `:340-400`); its Protocol paragraph, weakened in round 2, at `:467-481` (the table said `:461-473`) |
+| the three witness stamps | `VentWitnessRecord` / `SightingRecord` / `MoveWitnessRecord` `.observation_id` | `meetings/schemas.py:318` / `:358` / `:389` (unmoved; card said `:306-308`, `:340-343`, `:366-369`) |
+| the ninth ballot key | `ModelAuthoredVoteBallot.counter_reason_id` | `meetings/schemas.py:1035` (unmoved; card said `:767-773`) |
+| row assembly | `build_evidence_rows` + its three builders | `meetings/manager.py:3749`, `:3443`, `:3562`, `:3689` (the table said `:3710`, `:3449`, `:3568`, `:3646`; round 0 said `:3618`, `:3424`, `:3510`, `:3557`) |
+| the stated-sighting set | `_stated_sighting_subjects` | `meetings/manager.py:3640` (new in round 3; never in the table) |
+| the render call site | `MeetingManager._collect_one_ballot` | `meetings/manager.py:2183`; `:2265` builds the rows, `:2303` passes them (the table said `:2184` / `:2270` / `:2309`; card said `:2151`) |
+| the counter validator | `_normalize_ballot_counter_reason_id` | `meetings/manager.py:4034`, called at `:2493` (the table said `:3989` / `:2499`) |
+| the two shared decisions | `_resolved_reason_id` / `_resolved_observation_id` | `meetings/manager.py:3894` / `:3919` (the table said `:3849` / `:3874`), extracted from `_normalize_ballot_reason_id` at `:3939` (the table said `:3894`; card said `:3199`) and `_normalize_ballot_observation_id` at `:3985` (the table said `:3940`; card said `:3241`) |
+| the counter marker | `INVALID_COUNTER_REASON_MARKER` | `meetings/manager.py:412` (unmoved) |
+| the per-group bound | `MAX_EVIDENCE_ROWS_PER_SUBJECT` | `meetings/manager.py:3407` (Decisions said `:3413`) |
+| the served body | `vote_ballot.j2` | `:262-267` the `<evidence>` block with the provenance branch at `:265`, `:270-271` the relabelled PARTIAL summary, `:274` the row without `trust`, `:306` where the deference sentence was deleted, `:309-310` nine keys, `:316` the counter bullet (the table said `:253-258` / `:256` / `:261-262` / `:265` / `:297` / `:300-301` / `:307`; each +9 on that — round 3's last commit added five lines above them and round 4's SKIP-counter comment adds four) |
+| the row pattern | `_SUSPICION_GRAPH_ROW_RE` | `eval/meeting_quality.py:341` (unmoved; card said `:326`) and, added in round 1, `eval/validity.py:189` (the table said `:190` — the regex is DEFINED at `:189`) |
+| the served DTO | `BallotView.counter_reason_id` | `api/schemas.py:1093` (unmoved; card said `:962-970`), mirrored at `api/replay_loader.py:3324` (card said `:3286`) |
+| the spectator card | `BallotCard.tsx` | `:261` the third `EvidenceLink`, `:68` `counterKind` (round 0 said `:57`), `frontend/src/lib/copy.ts:450` the chip label (round 0 said `BallotCard.tsx:32`) — all unmoved |
+| the marker tables | three | `api/replay_loader.py:3612` (the tuple; the counter row at `:3618`), `training/surrogate/dataset.py:207` (round 0 said `:205`; card said `:213`), `eval/deduction_metrics.py:718` (the chain; the counter row at `:725`) — all unmoved |
+| the trust deletion | `BeliefState.adjust_trust` / `_format_belief_score` | `agents/memory/beliefs.py:969-983` (the 15-line history block where it stood; round 0 said `:966`; card said `:953`), `agents/memory/store.py:2792` with its 12-line paragraph at `:2808-2819` (round 0 said `:2808`) |
 
 ### Decisions
 
@@ -558,7 +613,8 @@ before not, then the provenance CLASS (own perception → the detector's flags �
 what was said here), then earliest-first, then kind/speaker/citation. A
 witnessed vent and an ordinary sighting share class 0 on purpose, so the block
 cannot rank one player's evidence above another's. `MAX_EVIDENCE_ROWS_PER_SUBJECT
-= 8` (`meetings/manager.py:3413`) bounds each (subject, class) group, not each
+= 8` (`meetings/manager.py:3407`, re-derived round 4; this paragraph said
+`:3413`) bounds each (subject, class) group, not each
 subject: a single budget would have let many own sightings of one player crowd
 out the contradictions and the voices against that same player. It is decided
 on ARRIVAL TIME, not on the render order: the render puts first-hand rows first
@@ -582,7 +638,8 @@ those decisions were extracted into `_resolved_reason_id` /
 `_resolved_observation_id` and the three validators now share them, rather than
 a third copy that could drift. A null counter returns the ballot untouched. A
 fabricated counter costs exactly this field plus a marker; it is deliberately
-outside the `cited_before_validation` read (`meetings/manager.py:2456`), so it
+outside the `cited_before_validation` read (`meetings/manager.py:2450`,
+re-derived round 4; this paragraph said `:2456`), so it
 cannot turn an `uncited` ballot into an `invalid_citation` one, and no guard, no
 `tally_ballots` and no `label_ballot_grounding` branch reads it.
 
@@ -602,6 +659,15 @@ credibility information itself already arrives as evidence. `PlayerBelief.trust`
 and `SuspicionEntry.trust` STAY: six frozen sets render `entry.trust` and their
 byte pins must not move, so one history line in each of the three documents says
 the field is now a frozen-set render input only.
+
+[RESTATED AT DELIVERED STRENGTH, round 4, 2026-09-21. "One history line" is not
+what shipped in any of the three. Measured at this head: `beliefs.py:969-983`
+is a 15-line comment block, `store.py:2808-2819` a 12-line paragraph inside
+`_format_belief_score`, and `docs/adr/0001-three-load-bearing-decisions.md:30-43`
+a 14-line bullet. Each records the same three things — that nothing ever wrote
+trust, why it was DELETED rather than wired, and why the FIELD stays — and none
+is shrunk this round; only this sentence and the Acceptance item are corrected
+to the delivered size.]
 
 **`VIEW_MODEL_VERSION` is NOT bumped.** It stays `"5"`. The constant's own rule
 (`api/schemas.py:56`) is that a BREAKING shape change bumps it and an additive
@@ -648,14 +714,26 @@ exactly, so the DTO and the TS type cannot have drifted.
    `docs/artifacts.md` row it may not recompute. It reads committed bytes only,
    which all carry the trust suffix, so it is correct today; the re-record card
    should take it. Recorded here rather than left to be re-found.
+6. **[Added round 4, 2026-09-21.] Five more files outside Expected scope, each
+   disclosed somewhere else in this card but never listed HERE** — which is
+   what this subsection presents itself as, the single index of everything that
+   left the declared scope. Nothing about them is new; they are indexed:
+   `eval/validity.py` (the widened row pattern, a ticked acceptance item of its
+   own), `meetings/corroboration.py` (docstrings only — round 3's finding 1,
+   fourth restated sentence), `eval/deduction_metrics.py` (the counter marker's
+   row in `_BALLOT_MARKER_CHAIN`, which the acceptance item calls "both marker
+   tables" and which is in fact three), `frontend/src/lib/copy.ts` (the counter
+   chip's label constant, in the symbol table) and
+   [the scorecard card](process-scorecard.md) (the dated argmax-independence
+   prediction this card's acceptance requires be written in BOTH places).
 
 ### Verification
 
 Every command below was run in this clean worktree with its real exit code
 captured directly, at the FIRST PASS's final head (`6b79ff08`). Each review
 round below re-ran the same list at its own head and states its own numbers
-there — round 3's is the CURRENT table; these are kept as recorded rather than
-overwritten.
+there — ROUND 4's is the CURRENT table (it was round 3's until 2026-09-21);
+these are kept as recorded rather than overwritten.
 
 ```
 $ bash scripts/check.sh                                   EXIT=0
@@ -1828,3 +1906,432 @@ byte-identical again, which is the point — this round touched no recorded byte
 and every number above is either a committed-bytes recomputation or a test
 count. What the corrected v8 body does to a real voter stays unknown until
 [the re-record](process-rerecord.md), by design.
+
+### Review corrections, round 4 (2026-09-21)
+
+Two blocking findings — one correctness, one record integrity — plus seven
+smaller items and the two live Codex comments, which had no judgement anywhere.
+Round 4's two verifiers first re-established the round-3 gate on their own
+generated families: 0 byte differences in the full rendered v8 prompt across
+twins differing only in other players' private records or roles, every gate
+figure reproduced, and 15 neuter rows re-run to the digit. Every `file:line`
+below is re-derived mechanically at THIS round's head, after this round's last
+edit. Rounds 1 to 3 above are unchanged, byte for byte: the text from
+`### Review corrections, round 1` up to this heading hashes to SHA-256
+`5cc2dd053834005e9c8808d30b93e83bd3bedac0fcda08d168663fa229030ae8`, its value at
+`d7b6be94`. Round 3's gate block calls itself "the CURRENT table"; round 4's
+below is, and round 3's stands as recorded.
+
+**1. Two union members in `_stated_sighting_subjects` were unenforced.** At
+`d7b6be94` the shape test read
+
+```python
+elif isinstance(observation, SawVentObservation | SawKillObservation | SawMoveObservation):
+```
+
+and dropping `SawKillObservation` ALONE, or `SawMoveObservation` ALONE, left the
+whole suite green — 5029 passed over the five test directories in either case.
+Round 3's row 6c neutered all three members at once and its single failure was
+the vent case, which masked the other two: a table row that perturbs a UNION is
+ONE probe for N branches, and it reports the strongest member's pin as if it
+covered the rest.
+
+The two shapes are live behaviour, not dead union members. The turn schema
+accepts both unconditionally (`meetings/schemas.py`'s `SawKillObservation` and
+`SawMoveObservation` docstrings: "parsing never depends on which templates offer
+it"), so a speaker can emit one whatever a template says. And the served
+`qwen3_6_27b` set does offer them: `saw_move` on the DEFAULT path and ungated
+(`crewmate_report.j2:147`, `accusation_round.j2:281`, `_account_rules.j2:28`),
+`saw_kill` inside a lever arm (`crewmate_report.j2:152` under
+`testimony_shapes`, `accusation_round.j2:286` under the same and not-impostor,
+`_account_rules.j2:33` under `public_account_version`; `meetings/manager.py:5057`
+is the disjunction that turns the shape on). A speaker whose testimony row said
+"named them without describing a sighting of their own" after describing a
+witnessed KILL would be understated by the page, which is the one thing the row
+is for.
+
+No production behaviour changes.
+`test_a_described_sighting_marks_the_row_true_or_fabricated` was one example
+over `saw_player`; it is now parametrised over ALL FOUR shapes
+(`_DESCRIBED_SHAPES`, `tests/meetings/test_weighing_channel.py:384`), keeping
+the two-speaker pair in each case — `p-2` holds the private channel that bears
+that shape out, `p-4` holds nothing and speaks the identical words — and
+asserting `first_hand is True` for BOTH speakers. `saw_kill` carries no typed
+grounding channel of its own (none exists for kills), so its borne-out leg holds
+the nearest private perception the engine does record, a sighting of that player
+in that room at that tick; the A/B pair stays a real private difference rather
+than two empty channels. `W` below is
+`tests/meetings/test_weighing_channel.py`, **92 tests** at this head (88 at
+`d7b6be94`: +3 parametrised cases, +1 for the prompt gap in finding 3).
+
+Row 6c is split into one row per union member. Each edits ONE thing, runs the
+probe, and restores `meetings/manager.py` from an in-memory COPY (never `git
+checkout`), with `PYTHONDONTWRITEBYTECODE=1` and `-p no:cacheprovider`; `git
+status` is clean after the pass. The last column re-runs the same perturbation
+with THIS round's three new cases deselected, which is round 3's own idiom for
+separating "red because the pin is new" from "red because it was already
+pinned":
+
+| # | perturbation | probe | result | with round 4's cases deselected |
+| --- | --- | --- | --- | --- |
+| 6c-a | `SawPlayerObservation` drops out of the stated set | W | red (5 failed, 86 passed) | red (5 failed, 83 passed, 3 deselected) |
+| 6c-b | `SawVentObservation` drops out of the stated set | W | red (2 failed, 89 passed) | red (1 failed, 87 passed, 3 deselected) |
+| 6c-c | `SawKillObservation` drops out of the stated set | W | red (1 failed, 90 passed) | **GREEN (88 passed, 3 deselected)** |
+| 6c-d | `SawMoveObservation` drops out of the stated set | W | red (1 failed, 90 passed) | **GREEN (88 passed, 3 deselected)** |
+| 6b | the `saw_player` `co_present` companions drop out | W | red (1 failed, 90 passed) | red (1 failed, 87 passed, 3 deselected) |
+
+The finding's three controls reproduce to the digit in the deselected column:
+`SawPlayerObservation` removed **5 failed / 83**, `SawVentObservation` removed
+**1 failed / 87**, `co_present` dropped **1 failed / 87**. 6c-c and 6c-d are the
+two that were unenforced, and they are the only two whose deselected column is
+GREEN — which is the statement the split exists to make. Round 3's row 6c is
+superseded by these five; it is left as filed there, as every earlier round's
+table is.
+
+**2. The Results symbol table and three prose citations were stale at
+`d7b6be94`.** The table said every line was "RE-STAMPED at this card's final
+head (review round 1)", and that stopped being true when round 3 moved
+`meetings/manager.py` (-6/+32/+38), `meetings/render_contract.py` (+8) and
+`vote_ballot.j2` (+5) underneath it. Fourteen cells and three prose citations
+pointed at the wrong lines. A card that says "re-derived by symbol, not carried
+forward" and then carries a value forward is worse than one that gives no line
+at all, because the next reader trusts it.
+
+Every citation in the CURRENT sections is re-derived MECHANICALLY at this head
+and AFTER this round's last edit — `ast` for every definition and constant,
+`grep -n` for every line — with each prior value kept in parentheses. The table
+above is the re-stamped one, and its preamble now names the round that stamped
+it and the files each round moved. The prose citations outside it:
+
+| where | said | at this head |
+| --- | --- | --- |
+| Decisions, the per-group bound | `MAX_EVIDENCE_ROWS_PER_SUBJECT = 8` (`manager.py:3413`) | `manager.py:3407` |
+| Decisions, the counter's exclusion | the `cited_before_validation` read (`manager.py:2456`) | `manager.py:2450` |
+| Acceptance, the round-2 item | `render_contract.py:461-473` | `render_contract.py:467-481` |
+| the symbol table, the validity pattern | `eval/validity.py:190` | `eval/validity.py:189` — the regex is DEFINED at `:189`, and that cell was off by one from the start |
+
+Round 4 moves two of the same files — this round's `_stated_sighting_subjects`
+docstring is +7 in `meetings/manager.py` and the SKIP-counter sentence is +4 in
+`vote_ballot.j2` — which is exactly why the derivation is the LAST thing run
+before the card is committed.
+
+**3. The two live Codex comments, judged.** Both were open with no judgement in
+the card or the PR. No PR comment is posted; the judgement lives here and in the
+PR body.
+
+* **4062448106, "Separate a null counter from a none-held decision basis"**
+  (`vote_ballot.j2:313` as reviewed, `:316` here). Dated 2026-09-21: **the
+  first half is NOT a defect; the second half is a genuine prompt gap, and it
+  is fixed.** The bullet does not conflate the two facts. The next bullet
+  defines `decision_basis` independently and on its own terms ("replace that
+  null with `cited` when either reason id is filled, and with exactly
+  `none_held` when both are null"); the two fields are validated independently —
+  a fabricated counter costs exactly `counter_reason_id` plus its own marker and
+  is deliberately outside the `cited_before_validation` read, so it cannot turn
+  an `uncited` ballot into an `invalid_citation` one (Decisions, above) — and
+  they are recorded independently. Re-using `none_held`'s wording rather than
+  minting a third vocabulary is a decision this card already records, with the
+  measured cost of a third vocabulary beside it: 27 of 150 ballots nulled on a
+  row suffix, from [the accounts v5 card](accounts-prompt-set-v5.md). What the
+  comment is right about is its last clause. The bullet said "pointing AWAY from
+  the name you just wrote", and a SKIP writes no name — and SKIP is the MAJORITY
+  ballot, so the gap is not a corner case. One prose sentence in the same bullet
+  closes it:
+
+  > When you wrote SKIP, that is the strongest thing you hold pointing TOWARD
+  > ejecting someone — the line that most nearly made you name a name.
+
+  It adds no vocabulary and asks for no new literal: the skeleton still prefills
+  `"counter_reason_id": null`, the same two id shapes are still what it takes,
+  and the only quoted words in the bullet remain `counter_reason_id`,
+  `decision_basis` and `none_held`. It is a v8 body edit and `vote_ballot` STAYS
+  v8 — nothing has ever been recorded under v8, so no stamp covers two bodies.
+  Pinned by `test_the_counter_bullet_says_what_points_away_from_a_skip` in the
+  served-body idiom: render the real body, assert the sentence is in the
+  counter bullet, assert the skeleton's null, and assert the bullet's
+  quoted-literal SET is exactly those three words, so adding a fourth fails.
+* **4062448113, "Replace historical comment blocks with current intent"**
+  (`agents/memory/beliefs.py:973`). Dated 2026-09-21: **not accepted; the
+  premise is false.** It reads AGENTS.md craft rule 1 ("Comments explain current
+  intent. Provenance is at most one trailing line.") as a size limit on a
+  deliberate history block. The repository's own practice at this card's BASE
+  `0a1100ea` says otherwise — READ-ONLY HISTORY blocks recording a retired
+  mechanism, at `meetings/manager.py:304-332` (29 lines), `:389-407` (19) and
+  `:412-421` (10), `api/replay_loader.py:3596-3604` (9),
+  `training/surrogate/dataset.py:196-199` (4), and an 11-line HISTORY paragraph
+  in `eval/meeting_quality.py`'s module docstring at `:115`. Every one exists
+  for the reason this one does: committed bytes still carry the retired thing,
+  and a reader of those bytes needs to know what it meant. Craft rule 1's
+  "provenance" is the attribution line — which task, which PR — not the record
+  of a deletion; craft rule 3's "one history line" is scoped to GRADUATED
+  LEVERS, and trust was never a lever, which this card's Record impact says in
+  those words. The blocks stay at the size they are. What WAS wrong is the
+  card's own description of them, which finding 4 corrects.
+
+**4. The trust field's survival, restated at DELIVERED strength.** Acceptance
+and Decisions both said the reason is recorded by "one history line" in each of
+three documents. Measured at this head, what shipped is a 15-line comment block
+(`agents/memory/beliefs.py:969-983`), a 12-line paragraph inside
+`_format_belief_score` (`agents/memory/store.py:2808-2819`) and a 14-line ADR
+bullet (`docs/adr/0001-three-load-bearing-decisions.md:30-43`). Both sentences
+now carry a dated `[RESTATED AT DELIVERED STRENGTH …]` note. The blocks are NOT
+shrunk (finding 3's second judgement); only the card's description of them
+moves, which is the direction this project's rule runs in — a guarantee is
+stated at exactly the strength the code delivers, and that cuts both ways.
+
+**5. `_stated_sighting_subjects`' docstring gave a FALSE reason for excluding
+`FoundBodyObservation`.** It said the shape "names a DEAD victim, who is never
+among the living ejection targets a testimony row may be about" — which would
+make a branch for it unreachable, a line no probe could hit. It is not
+unreachable. `body_of` is only ROSTER-validated
+(`meetings.public_accounts.validate_public_accounts`, the
+`("subject", "body_of", "against", "supports")` loop at
+`meetings/public_accounts.py:52-55`), which is deliberate — that validator
+checks references and time bounds, never truth — so a speaker CAN file
+`found_body(body_of=<a living candidate>)` and it survives into the transcript,
+leaving that row `first_hand=False`. The docstring now gives the TRUE reason: a
+body report is not a sighting of a living player, and the shape is deliberately
+not read here, so a misfiled one UNDERSTATES the speaker's claim rather than
+confirming it — the safe direction for a page that must never price a claim for
+the voter. Behaviour is unchanged; no executable line moved.
+
+**6. `TestTheAssemblerCannotReachTheLedger`'s docstring said "call graph".** It
+is not one. It is a per-function NAME SCAN over five named functions
+(`build_evidence_rows`, `_own_channel_evidence_rows`,
+`_contradiction_evidence_rows`, `_testimony_evidence_rows`,
+`_stated_sighting_subjects`): it parses `meetings/manager.py`, strips each
+docstring, and asserts that no parameter and no name in the body matches
+`ledger`, `corroboration`, `testimonysupport` or `first_hand_places`. It
+follows no calls, so a neutrally-named helper that itself called
+`build_testimony_ledger` would pass it untouched. The docstring now says exactly
+that, and names `TestProvenanceReadsOnlyThePublicTranscript` as the half that
+DOES catch that case — change only another speaker's private records, and no row
+field and no rendered byte may move, however the assembler reached them. The two
+are layered on purpose: the scan is cheap and catches the obvious reintroduction
+by name, the values catch the rest. The Acceptance item that called it "the
+`ast` call-graph guard" carries a dated `[CORRECTED …]` note.
+
+**7. "Deviations from the card, declared" was not the single index it presents
+itself as.** Five files outside Expected scope were disclosed elsewhere in this
+card but never listed there: `eval/validity.py`, `meetings/corroboration.py`,
+`eval/deduction_metrics.py`, `frontend/src/lib/copy.ts` and
+[the scorecard card](process-scorecard.md). They are added as deviation 6, each
+with where it was already disclosed. Nothing about any of them is new; the index
+is now an index.
+
+**The closing greps, re-run VERBATIM at this head and quoted UNCONDENSED.**
+Round 3's quotation of these was condensed, and the condensation dropped real
+hits and mis-stated one: grep 3 also matches
+`experiments/lab/report-ml-spike.md:27`; grep 7 also matches
+`tasks/work/grounded-skip-and-guard-labels.md:377` and three more lines of
+`tests/meetings/test_weighing_channel.py` than it listed; and grep 6's "six
+impostor-prompt lines" is in fact FIFTEEN prompt lines across nine files in six
+sets, four of them accusation-round prose rather than an impostor report. Below
+is EVERY hit, classified, with the count per grep; nothing is elided.
+
+Run over the live packages (`agents api engine eval experiments llm meetings
+observation orchestrator scripts training tests docs frontend/src DESIGN.md
+AGENTS.md README.md tasks/work tasks/README.md`) with `--include` `*.py` `*.j2`
+`*.md` `*.ts` `*.tsx` `*.sh`, which excludes `audits/`, `replays/`,
+`agent_prompts/` and the dated `tasks/phase-*` history. THIS CARD is excluded
+from the paths as well, and that exclusion is stated rather than silent (round 3
+made it without saying so): the card quotes every one of these strings by
+construction, so any count of its own hits is falsified by the sentence that
+states it. Every hit in every OTHER file is below.
+
+```
+$ grep -rniE "saw (it|them|that) (them)?sel(f|ves)"                     6 hits
+  vote_ballot.j2:234          the default-OFF <testimony_sources> LEVER block,
+                              untouched by this card
+  vote_ballot.j2:263          the evidence block's header sentence
+  vote_ballot.j2:265          the third leaf of the provenance clause
+  prompt_archive/qwen3_6_27b_v5/vote_ballot.j2:198   the archived v5 body the
+                              golden replays (history)
+  test_weighing_channel.py:1502,1920    the two leaf assertions
+
+$ grep -rniE "first.hand" | grep -iE "testimony|ledger|bears? out|borne out|grounded"
+                                                                       47 hits
+  vote_ballot.j2:238          the LEVER's <testimony_sources> row, untouched
+  vote_ballot.j2:265          the evidence row's provenance clause -- the ONE
+                              live site, and it says "says they saw it
+                              themselves", with no bears-out word anywhere
+  _account_rules.j2:14        "Nobody at the table receives a certificate from
+                              another player's private memory" -- the rule
+  meetings/corroboration.py:350    the LEVER's own definition, scoped by that
+                              module's docstring at :17
+  meetings/manager.py:1329,4781    the grounded-prosecution and grounded-vouch
+                              seams, neither on the ballot's row path
+  meetings/transcript.py:2173      the pre-vote testimony spread, unrelated
+  agents/memory/store.py:2428, agents/memory/episodic.py:66,
+  agents/perception.py:23     "not a first-hand citable observation" -- the
+                              episodic-id vocabulary, unrelated
+  agents/memory/beliefs.py:410     the Task-14.9 spread, unrelated
+  scripts/counterfactual_phase21.py:803,2117        the lever's own probe
+  prompt_archive/qwen3_6_27b_v5/vote_ballot.j2:202  archived v5 (history)
+  test_weighing_channel.py:948,1292,1315,1425,1430,1529,1918,1960,1978
+                              this card's own tests; the three `_ledger_*` lines
+                              are the NON-VACUITY check, by design
+  test_corroboration.py:356,374,608,788,820,925     the lever's own tests
+  test_perception.py:400, test_reported_testimony.py:10,361,362,364,365,392,
+  400,1719,1792,1862,1868,1876,1881,1882            reported-testimony
+                              salience, unrelated
+  docs/architecture.md:163    "Attributed testimony … does not become first-hand
+                              proof" -- still true
+  evidence-renderer-salience.md:1491, alibi-as-route.md:2296
+                              other cards' salience prose, unrelated
+  (no live-tense sentence ties an evidence ROW's first_hand to a record)
+
+$ grep -rniE "unconditional" | grep -iE "ledger|testimony|evidence.row|first.hand"
+                                                                        8 hits
+  agents/memory/beliefs.py:792,1002    the Task-14.9 reported-testimony
+                              reduction; neither is the ledger
+  experiments/lab/report-ml-spike.md:27    a Phase-A lab figure ("detector tally
+                              predicts the ejection 56% unconditional") --
+                              unrelated, and OMITTED by round 3
+  test_episodic_ids.py:12     the `[obs {id}]` prefix, unconditional since 14.9
+  test_reported_testimony.py:385,409,683,954   the same 14.9 / baseline-7
+                              reduction
+
+$ grep -rniE "trust them over"                                          8 hits
+  vote_ballot.j2:127          the header comment quoting the DELETED sentence
+  experiments/lab/qwen36_prompt_scratch/v5/vote_ballot.j2:33,
+  …/v4/vote_ballot.j2:33, …/v3/vote_ballot.j2:31      frozen scratch rungs
+  prompt_archive/qwen3_6_27b_v5/vote_ballot.j2:259    the archived v5 body
+  test_weighing_channel.py:77,2038,2061   the forbidden constant and its two
+                              assertions
+
+$ grep -rniE "adjust_trust"                                            12 hits
+  agents/memory/store.py:2811,2816, agents/memory/beliefs.py:10,969
+                              the deletion's own history notes
+  docs/adr/0001-…:31, DESIGN.md:718       the two corrected documents
+  test_memory.py:203,228,290, test_memory_rendering.py:219,498,
+  test_beliefs_hard_evidence_gate.py:369  five past-tense comments plus the
+                              `hasattr` assertion that the writer is gone
+
+$ grep -rniE "credib"                                                  24 hits
+  agents/memory/beliefs.py:973,975, docs/adr/0001-…:36,38
+                              the "not wired" reasoning, in two of the three
+                              history blocks
+  eval/deduction_metrics.py:75      unrelated (flag symmetry)
+  glm_4_32b/impostor_report.j2:36,81, qwen3_5_9b/impostor_report.j2:9,178,190,
+  qwen3_6_27b/impostor_report.j2:124, qwen3_6_27b/accusation_round.j2:275,
+  qwen3_6_27b/impostor_report_roll_call.j2:115,
+  qwen3_6_27b/accusation_round_roll_call.j2:198,
+  qwen3_32b/impostor_report.j2:100,108,147,
+  qwen3_32b_thinking/impostor_report.j2:69,
+  qwen3_30b_a3b/impostor_report.j2:68,71
+                              FIFTEEN "credible opening" / "more credible"
+                              prompt lines, nine files, six sets -- all
+                              unrelated to the deleted scalar, and four are
+                              accusation-round prose rather than an impostor
+                              report. Round 3 called this "six impostor-prompt
+                              lines": the condensation was wrong, not just short
+  prompt_archive/qwen3_6_27b_v5/impostor_report.j2:124,
+  …/accusation_round.j2:275, …/impostor_report_roll_call.j2:115,
+  …/accusation_round_roll_call.j2:198     the archived v5 copies (history)
+
+$ grep -rniE "deferen"                                                 10 hits
+  orchestrator/game.py:435, test_bespoke_prompt_sets.py:534
+                              the two version-entry comments, both naming the
+                              DELETION
+  test_weighing_channel.py:11,75,2033,2037,2047,2058,2060
+                              the module docstring, the forbidden constant, and
+                              the gone / planted pair. Round 3 listed four of
+                              these seven
+  grounded-skip-and-guard-labels.md:377   the PREVIOUS card's prose about the
+                              same deletion, OMITTED by round 3
+
+$ grep -rniE "running summar"                                           2 hits
+  test_weighing_channel.py:82,2098   the FORBIDDEN string constant and the test
+                              that asserts its absence
+```
+
+The `test_weighing_channel.py` line numbers above differ from round 3's because
+this round adds four tests and one constant to that file. No assertion moved.
+
+**N5, a residual this round does NOT change.** A contradiction row renders as
+`not first-hand: p-3 stated it at this table`, and the sentence beside it is the
+DETECTOR's (`flag.description`), not `p-3`'s — the row cites the turn `p-3`
+spoke, but the words are the meeting layer's cross-check of two statements. The
+clause is accurate about provenance and misleading about authorship. It is left
+alone deliberately: the wording is pinned
+(`test_a_flag_somebody_else_spoke_into_is_a_statement_here`), changing it would
+be a SECOND template edit in a round whose other template edit is already a v8
+body change, and the fix belongs with a reader who can see what it does to a
+real voter. [The re-record](process-rerecord.md)'s runner brief carries it.
+
+**For the owner, outside this card.** Round 4's correctness verifier measured a
+PRE-EXISTING leak while checking this card's no-oracle rule. It is recorded here
+so it does not have to be re-found. It is NOT a wave item, and nothing in this
+card caused it, widened it or fixes it.
+
+A contradiction flag's `description` carries the weak-reason vocabulary
+`WEAK_REASON_UNGROUNDED_SIGHTING` / `WEAK_REASON_LONE_GROUNDED_SOURCE`
+(`meetings/transcript.py:726-727`, appended at `:4520` / `:4522`), and which of
+those two a flag earns is decided by the SPEAKER's own private record. The flag
+list is rendered to every participant by `vote_ballot.j2:212` / `:218` / `:224`.
+So the page already tells every voter something about whose account the engine
+bears out, through the `<contradictions>` block, which predates this card.
+Measured: over **60** generated meetings with the PUBLIC transcript held fixed
+and only other participants' private records changed, the flag set or one of its
+descriptions moved in **23 of 60**. Identical at this card's base `0a1100ea`.
+This card's contradiction evidence row repeats that same description VERBATIM,
+and over the committed sets **3032 of 3032** such rows were already rendered in
+the same prompt's `<contradictions>` block: **0 new exposure**. Whether a public
+detector may price a private record at all is a question about the detector, one
+layer below the ballot, and it is the owner's to route.
+
+**Gates re-measured at ROUND 4's head** — the CURRENT table — each exit code
+captured directly, never through a pipe or a compound command. The card's own
+Validation list is covered in full; no live provider call of any kind was made
+and none is a check.
+
+```
+$ bash scripts/check.sh                                   EXIT=0
+  ruff check . / ruff format --check .  518 files, all clean
+  lint-imports                          4 contracts kept, 0 broken, 189 files,
+                                        1034 dependencies
+  validate_task_docs.py                 390 phase tasks + 390 prompts; 73 work
+                                        cards (this card's Status does not move)
+  generate_prompts.py --check           all 390 prompts in sync
+  mypy .                                no issues in 489 source files
+  pytest -n auto --dist loadfile        8264 passed, 20 skipped, 3 xfailed
+                                        (8260 in round 3: +4 new tests)
+  frontend lint / tsc:check / vitest    558 tests in 20 files passed; build green
+$ uv run pytest tests/meetings tests/agents tests/orchestrator tests/eval tests/api -q
+                                                          EXIT=0
+  5033 passed, 3 skipped, 3 xfailed    (5029 in round 3: the same +4)
+$ uv run pytest tests/meetings/test_weighing_channel.py -q                 EXIT=0
+  92 passed                            (88 in round 3)
+$ uv run pytest tests/meetings/test_prompt_byte_golden.py -q               EXIT=0
+  25 passed
+$ npm --prefix frontend test                              EXIT=0
+  20 test files, 558 tests passed
+$ bash scripts/verify_samples.sh                          EXIT=0
+  replays/samples/4p1i  All 50 samples verified clean.
+  replays/samples/9p2i  All 50 samples verified clean.
+$ uv run python scripts/build_sample_report.py --sample-dir <set> --check
+  replays/samples/4p1i     consistent with its replays.      EXIT=0
+  replays/samples/9p2i     consistent with its replays.      EXIT=0
+  replays/ml_corpus/4p1i   consistent with its replays.      EXIT=0
+  replays/ml_corpus/9p2i   consistent with its replays.      EXIT=0
+$ uv run python scripts/publish_process_scorecard.py --check              EXIT=0
+  docs/process-scorecard.md and .json consistent with the committed recordings
+$ uv run python scripts/check_doc_facts.py                                EXIT=0
+$ uv run python scripts/validate_task_docs.py                             EXIT=0
+  390 phase tasks + 390 prompts; 73 work cards
+$ uv run python scripts/generate_prompts.py --check                       EXIT=0
+  All 390 prompts are in sync.
+$ uv run python scripts/verify_ml_evidence.py                             EXIT=0
+  checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5   (never --complete)
+```
+
+Nothing moved that may not move. `git status` names exactly four files at this
+round's head — `agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2`,
+`meetings/manager.py` (a docstring only), `tests/meetings/test_weighing_channel.py`
+and this card. No recording, no sample report, no scorecard figure, no prompt
+archive entry, and no fixture byte beyond the one deviation 1 already declared.
+The four `--check` recomputations and the scorecard are byte-identical again.
+`vote_ballot` stays at **v8**. Every number above is a committed-bytes
+recomputation or a test count; what the v8 body does to a real voter stays
+unknown until [the re-record](process-rerecord.md), by design.

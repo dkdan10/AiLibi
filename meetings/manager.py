@@ -3654,12 +3654,19 @@ def _stated_sighting_subjects(
     they saw), :class:`~meetings.schemas.SawVentObservation`,
     :class:`~meetings.schemas.SawKillObservation` and
     :class:`~meetings.schemas.SawMoveObservation`. The other four shapes of
-    :data:`~meetings.schemas.ObservationClaim` name no living other player:
-    ``CompletedTaskObservation`` and ``TaskActivityAccount`` are the speaker's
-    own task activity, ``WhereaboutsClaim`` is the speaker's own placement (its
-    subject IS the speaker, and a self-accusation builds no row anyway), and
-    ``FoundBodyObservation`` names a DEAD victim, who is never among the living
-    ejection targets a testimony row may be about.
+    :data:`~meetings.schemas.ObservationClaim` are not read:
+    ``CompletedTaskObservation`` and ``TaskActivityAccount`` describe the
+    speaker's own task activity and name no other player, ``WhereaboutsClaim``
+    is the speaker's own placement (its subject IS the speaker, and a
+    self-accusation builds no row anyway), and ``FoundBodyObservation`` reports
+    a BODY rather than a sighting of a living player. That last shape is
+    deliberately not read rather than unreachable: ``body_of`` is only
+    roster-validated (:func:`meetings.public_accounts.validate_public_accounts`),
+    so a speaker CAN file one naming a living candidate and it survives into the
+    transcript. Leaving it out makes such a misfiling understate the speaker's
+    claim -- the row reads ``first_hand=False`` -- rather than confirm one, and
+    an understated row is the safe direction for a page that must never price a
+    claim for the voter.
     """
 
     stated: dict[PlayerId, set[PlayerId]] = {}

@@ -54,6 +54,7 @@ from meetings.schemas import (
     MeetingTurn,
     MoveWitnessRecord,
     ObservationClaim,
+    SawKillObservation,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
@@ -80,6 +81,12 @@ _SUSPICION_HEADER: Final[str] = "## Your suspicion of each player"
 #: above it. Two provenance channels have no row (see the test that uses this).
 _COMPLETE_SUMMARY_CLAIM: Final[str] = "A running summary of the lines above"
 _PARTIAL_SUMMARY_CLAIM: Final[str] = "only a PARTIAL summary of the lines above"
+#: What "pointing AWAY from the name you just wrote" means when no name was
+#: written -- the majority ballot (review round 4).
+_SKIP_COUNTER_SENTENCE: Final[str] = (
+    "When you wrote SKIP, that is the strongest thing you hold pointing TOWARD "
+    "ejecting someone — the line that most nearly made you name a name."
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -363,6 +370,72 @@ class TestEveryCitationResolves:
 # --------------------------------------------------------------------------- #
 # B. Order, bound, and provenance of the rows                                  #
 # --------------------------------------------------------------------------- #
+
+
+#: The four :data:`~meetings.schemas.ObservationClaim` shapes
+#: :func:`meetings.manager._stated_sighting_subjects` reads, each paired with
+#: the private channel that BEARS THAT SHAPE OUT for the speaker who holds one.
+#: ONE case per union member, because the union is four separate branches of
+#: behaviour and one case pins only its own member (review round 4).
+#: ``saw_kill`` carries no typed grounding channel -- none exists for kills --
+#: so its borne-out leg holds the nearest private perception the engine does
+#: record, a sighting of that player in that room at that tick, which keeps the
+#: A/B pair a real private difference rather than two empty channels.
+_DESCRIBED_SHAPES: Final[tuple[tuple[ObservationClaim, dict[str, Any]], ...]] = (
+    (
+        SawPlayerObservation(type="saw_player", tick=5, subject="p-3", room="MEDBAY"),
+        {
+            "sighting_records": (
+                SightingRecord(
+                    subject="p-3", room="MEDBAY", tick=5, observation_id="p-2:5:1"
+                ),
+            )
+        },
+    ),
+    (
+        SawVentObservation(type="saw_vent", tick=5, subject="p-3", room="ENGINEERING"),
+        {
+            "vent_witness_records": (
+                VentWitnessRecord(
+                    subject="p-3",
+                    room="ENGINEERING",
+                    tick=5,
+                    observation_id="p-2:5:1",
+                ),
+            )
+        },
+    ),
+    (
+        SawKillObservation(type="saw_kill", tick=5, subject="p-3", room="REACTOR"),
+        {
+            "sighting_records": (
+                SightingRecord(
+                    subject="p-3", room="REACTOR", tick=5, observation_id="p-2:5:1"
+                ),
+            )
+        },
+    ),
+    (
+        SawMoveObservation(
+            type="saw_move",
+            tick=5,
+            subject="p-3",
+            from_room="ADMIN",
+            to_room="MEDBAY",
+        ),
+        {
+            "move_witness_records": (
+                MoveWitnessRecord(
+                    subject="p-3",
+                    from_room="ADMIN",
+                    to_room="MEDBAY",
+                    tick=5,
+                    observation_id="p-2:5:1",
+                ),
+            )
+        },
+    ),
+)
 
 
 class TestRowOrderAndBound:
@@ -1020,35 +1093,35 @@ class TestRowOrderAndBound:
         )
         assert [(row.speaker, row.subject) for row in rows] == [("p-3", "p-2")], rows
 
-    def test_a_described_sighting_marks_the_row_true_or_fabricated(self) -> None:
+    @pytest.mark.parametrize(
+        ("spoken", "borne_out"),
+        _DESCRIBED_SHAPES,
+        ids=[shape.type for shape, _ in _DESCRIBED_SHAPES],
+    )
+    def test_a_described_sighting_marks_the_row_true_or_fabricated(
+        self, spoken: ObservationClaim, borne_out: Mapping[str, Any]
+    ) -> None:
         """Provenance is AS STATED: the invented account reads like the real one.
 
         The one property the whole round-3 correction exists to deliver, driven
         through a real meeting on the shipped default path. p-2 speaks a
-        sighting of p-3 that p-2's own ``SightingRecord`` bears out; p-4 speaks
-        the SAME sighting holding no record at all. Both accuse p-3. The two
-        rows p-1 reads must be indistinguishable in ``first_hand``: the meeting
-        layer says who described a perception, never whose description the
-        engine confirms, because a voter told which accusers are honest is not
-        weighing evidence -- it is reading a verdict.
+        sighting of p-3 that p-2's own private channel bears out; p-4 speaks the
+        SAME sighting holding no record at all. Both accuse p-3. The two rows
+        p-1 reads must be indistinguishable in ``first_hand``: the meeting layer
+        says who described a perception, never whose description the engine
+        confirms, because a voter told which accusers are honest is not weighing
+        evidence -- it is reading a verdict.
+
+        Run over ALL FOUR shapes :func:`~meetings.manager._stated_sighting_subjects`
+        reads (review round 4). One case per union member, because the union is
+        four separate branches of behaviour and a single case pins only its own:
+        with the vent-only case for company, dropping ``SawKillObservation`` or
+        ``SawMoveObservation`` from that union left the whole suite green.
         """
 
-        speaker = replace(
-            _voter("p-2"),
-            sighting_records=(
-                SightingRecord(
-                    subject="p-3",
-                    room="MEDBAY",
-                    tick=5,
-                    observation_id="p-2:5:1",
-                ),
-            ),
-        )
+        speaker = replace(_voter("p-2"), **borne_out)
         # p-4 holds NOTHING and says exactly what p-2 says.
         voters = (_channel_voters()[0], speaker, _voter("p-3"), _voter("p-4"))
-        spoken = SawPlayerObservation(
-            type="saw_player", tick=5, subject="p-3", room="MEDBAY"
-        )
 
         def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
             if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
@@ -1474,14 +1547,19 @@ class TestProvenanceReadsOnlyThePublicTranscript:
 
 
 class TestTheAssemblerCannotReachTheLedger:
-    """Static: the evidence-row assembler's call graph never meets engine truth.
+    """Static: no ledger name appears in the five row-building functions.
 
-    The property tests above are about VALUES and could in principle be
-    satisfied by an assembler that reads a ledger and happens to agree today.
-    This is the structural half, in the idiom
-    ``tests/meetings/test_grounding_label.py`` already uses for the tally: parse
-    ``meetings/manager.py``, take the five functions that build the rows, and
-    show that none of them takes a ledger parameter or so much as NAMES one.
+    A per-function NAME SCAN, not a call graph (review round 4 states it as
+    what it is): parse ``meetings/manager.py``, take the five functions that
+    build the rows, and show that none of them takes a ledger parameter or so
+    much as names one, in the idiom ``tests/meetings/test_grounding_label.py``
+    already uses for the tally. It does NOT follow calls, so a neutrally-named
+    helper that itself called ``build_testimony_ledger`` would pass this scan
+    untouched. The VALUE family above is the half that catches that one --
+    change only another speaker's private records and no row field and no
+    rendered byte may move, however the assembler reached them. The two halves
+    are layered on purpose: the scan is cheap and catches the obvious
+    reintroduction by name, the values catch the rest.
     """
 
     _ASSEMBLER: Final[tuple[str, ...]] = (
@@ -2070,6 +2148,32 @@ class TestTheServedBody:
             )
             == 9
         )
+
+    def test_the_counter_bullet_says_what_points_away_from_a_skip(self) -> None:
+        """A SKIP's counter is DEFINED, and defining it mints no vocabulary.
+
+        Review round 4: "the strongest thing pointing AWAY from the name you
+        just wrote" says nothing when no name was written, and SKIP is the
+        majority ballot. One prose sentence in the same bullet names that case.
+        It stays prose -- the skeleton still prefills ``null``, the bullet still
+        asks for the same two id shapes, and the only quoted literals in it are
+        the two field names and the one word ``decision_basis`` already spells
+        out, so nothing new is asked of the model.
+        """
+
+        rendered = _served_ballot()
+        bullet = next(
+            line
+            for line in rendered.splitlines()
+            if line.startswith('- "counter_reason_id"')
+        )
+        assert _SKIP_COUNTER_SENTENCE in bullet
+        assert '"counter_reason_id": null' in rendered
+        assert set(re.findall(r'"([a-z_]+)"', bullet)) == {
+            "counter_reason_id",
+            "decision_basis",
+            "none_held",
+        }
 
     def test_the_frozen_sets_keep_their_trust_column(self) -> None:
         """Ruling D5 moved ONE body; the six frozen sets are untouched."""
