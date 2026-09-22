@@ -303,6 +303,69 @@ the ladder tip where the acceptance names it; and the demo bundle, republished
 on the merge. Prior records and their verdicts are preserved: baseline 8 keeps
 its history and loses only its claim to be current.
 
+## Deviations from the card, declared
+
+1. **The sample legs run as two `--seeds` phases, not one `--full` pass.**
+   §0.2 rule 5 of [the previous record](../../audits/audit-phase-21-rerecord.md)
+   requires the honesty probe on a leg's FIRST completed seed before the rest
+   queues, and `scripts/refresh_samples.sh` does **not** skip a replay already on
+   disk, so a `--full` pass after a probe seed would RE-RECORD seed 0 — which
+   Acceptance forbids and which double-spends. Each sample leg therefore runs
+   `--seeds 0`, then the probe, then `--seeds 1..49`, over the identical 0-49
+   set. The only thing `--full` adds is the `canonicalize` sweep, a no-op here
+   because the set dir is emptied before the leg and exactly 0-49 recorded;
+   canonicality is instead verified explicitly per leg (exact seed set, no
+   zero-padded alias, no out-of-range replay, one MANIFEST row per seed) and
+   published in the record. The corpus legs need no such split:
+   `record_ml_corpus.sh` DOES skip a present in-range replay, so `--seeds <first>`
+   then the card's plain `--set <s>` run is used as written.
+
+2. **`audits/workflows/extract_gameplay_facts.py`'s suspicion-row pattern is
+   widened here** (2026-09-22, the orchestrator's decision, on the re-record
+   operator's finding). Not scope creep but ROUTED work:
+   [the weighing card](ballot-weighing-channel.md)'s deviation 5 (`:717-723`)
+   widened the same pattern in `eval/meeting_quality.py` and `eval/validity.py`,
+   left this third reader narrowed because that card could not move `audits/`
+   bytes or recompute their `docs/artifacts.md` row, and said in as many words
+   that "the re-record card should take it". The trust column the pattern
+   required was deleted by that card's own ruling, so on this record's bytes the
+   narrowed pattern matched nothing, emptied the rendered-suspicion map, built no
+   accumulator trajectory and scored `r3_arcs` 0 on every game — silently, with
+   no error. Proven to re-score no history: over every preserved pre-record
+   prompt of both 9p2i sets, 6,779 prompts and 14,599 parsed rows, the narrowed
+   and widened patterns produce **0 mismatches**. Pinned by
+   `tests/experiments/test_gameplay_facts_suspicion_row.py`, whose red half holds
+   the narrowed pattern returning empty on the new shape.
+
+3. **The rubric step is complete by this card's letter and degraded by a
+   pre-existing defect.** Acceptance reads the rubric step's *failure* as meaning
+   the refresh is incomplete. The step RUNS and exits 0 on every leg, so the
+   refresh is **complete** as the card defines it. It nonetheless produces a
+   rubric of zeros, for two causes named in the record and only one of them this
+   card's: the stale row pattern of deviation 2, fixed here; and a **failing
+   extractor self-check**, `re-derived genuine-class == shipped
+   compute_genuine_class_conversion`, which floors every game's score to 0
+   through `experiments/lab/rubric_score.py::_facts_integrity_ok`. The second is
+   independent of the first — over the old bytes both patterns parse identically,
+   so every downstream value including `self_checks` is unchanged — and it
+   predates this record. It is a real disagreement between two production
+   computations, and deciding which side is wrong is instrument work that stays
+   frozen during a measurement. The regenerated rubric is committed as what the
+   shipped tool computes on these bytes, zeros included, because that is a record
+   where the stale committed file was not. Routed to the owner in the record's
+   §7.1 as a small card immediately after this pull request merges: fix the
+   disagreement, then regenerate the rubric on the SAME baseline-9 bytes — a
+   derived view, no re-record, and the highlights surface is restored without
+   reopening this record.
+
+   Measured before the tour was re-pointed, because zeros would otherwise select
+   or break it: **neither the featured criterion nor the head-card guard reads
+   the rubric.** `scripts/measure_featured_criterion.py` contains no rubric
+   reference at all (its criterion is the `role_proof` flag predicate over the
+   set loader), and `frontend/e2e/journey.spec.ts` contains none either (its head
+   guard binds the blurb's claim to the rendered evidence count). The rubric
+   feeds only the separate `/eval/rubric` highlights surface.
+
 ## Validation
 
 `scripts/validity_gate.py <set-dir> --expected-model Qwen/Qwen3.6-27B

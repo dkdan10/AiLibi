@@ -268,9 +268,27 @@ _SUSPICION_GRAPH_HEADERS = (
     "## Your suspicion of each player",
     "## Your suspicion graph",
 )
+# The trust suffix is OPTIONAL. The weighing channel (ruling D5 of 2026-09-19)
+# deleted the trust column from the rendered row rather than keep displaying a
+# constant, so a pre-card row reads "`p-4`: suspicion 0.60, trust 0.50" and a
+# post-card row reads "`p-4`: suspicion 0.60". Both shapes must parse through
+# ONE pattern, the same widening
+# ``eval.meeting_quality._SUSPICION_GRAPH_ROW_RE`` and
+# ``eval.validity._SUSPICION_GRAPH_ROW_RE`` took in that card; this third reader
+# was left narrowed there because the card could not move ``audits/`` bytes, and
+# its deviation 5 routed it here by name. A NARROWED pattern does not fail
+# loudly — it returns NO rows, which empties ``rendered_suspicion_by_target``,
+# builds no accumulator trajectory, and silently scores ``r3_arcs`` 0 on every
+# game, sinking the geomean rubric to 0.0 across a whole set. Making the suffix
+# optional is the whole change: the player id and the suspicion figure are
+# matched exactly as before, so every committed pre-record row parses to the
+# identical number — proven exhaustively at the re-record over the preserved
+# pre-record bytes (0 mismatches, 6,779 prompts, 14,599 parsed rows). Both
+# shapes, and the narrowed pattern's silent emptiness on the new one, are pinned
+# in ``tests/experiments/test_gameplay_facts_suspicion_row.py``.
 _SUSPICION_GRAPH_ROW_RE: re.Pattern[str] = re.compile(
-    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+    r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
 )
 
 

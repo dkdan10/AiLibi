@@ -396,6 +396,97 @@ meetings is exactly `eval/watchability.py`'s baseline-8 `flags_per_meeting` pin.
 
 *(written as each leg completes)*
 
+## 2.1 A reader this record repaired, and one it deliberately did not
+
+### 2.1a The stale suspicion-row pattern, widened
+
+Leg 1's rubric came back scoring **0.0 on all 50 games**, where the pre-record
+one scored 21 of 50 with a live `r3_arcs`. The cause is one literal.
+`audits/workflows/extract_gameplay_facts.py` matched a rendered suspicion row
+as `` `p-N`: suspicion X, trust Y ``, and
+[the weighing channel](../tasks/work/ballot-weighing-channel.md) deleted the
+trust column rather than keep displaying a constant. The pattern then matched
+nothing, which emptied `rendered_suspicion_by_target`, built no accumulator
+trajectory, and scored `r3_arcs` 0 on every game — **silently, with no error**.
+
+**It is a stale reader, not a substrate regression, and the way that was
+established is worth keeping.** The obvious fear was the opposite: that the
+weighing channel had removed the rendered suspicion rows altogether, which would
+make row 2 — argmax-independence, one of the two rows the direction memo calls
+the point of the revision — unmeasurable on the new bytes. The scorecard reads
+those rows through a different, structured channel, so it answers the question
+directly: on the new `samples/9p2i` bytes it reports **`argmax_no_row` = 0**,
+every ballot carrying a rendered row, with 382 followers and 31 deviators. The
+rows are there; only this parser stopped seeing them.
+
+**Routed, not scope creep.** That card's own deviation 5
+(`tasks/work/ballot-weighing-channel.md:717-723`) widened the identical pattern
+in `eval/meeting_quality.py` and `eval/validity.py`, left this third reader
+narrowed because it could not move `audits/` bytes or recompute their
+`docs/artifacts.md` row, and said the re-record card should take it. It is taken
+here, as the same one-line widening, on the orchestrator's decision of
+2026-09-22.
+
+**The neutrality proof is exhaustive, and replaces the single re-run.** The
+intended proof was to re-run the rubric step over the preserved pre-record bytes
+and reproduce the committed pre-record `results-rubric-score.json`. That proof
+is **impossible for any parser**, because the committed rubric never described
+its own bytes: it agrees with the pre-record eval report on **29 of 50 seeds**,
+carries the provenance key `multi:fbdfaedea493` rather than a git sha, and has
+no `source_fingerprint` field at all. On seed 1 the pre-record eval report reads
+`IMPOSTOR_PARITY` over 4 meetings and the committed rubric claims
+`CREWMATE_EJECT` over 3; a fresh run over those same preserved bytes reproduces
+the eval report, not the rubric. **The committed rubric was already stale on
+`main` before this card.**
+
+So the proof was made stronger instead of weaker. Over **every** recorded prompt
+in the preserved pre-record bytes of both 9p2i sets — **6,779 prompts, 3,378
+carrying a suspicion graph, 14,599 rows parsed** — the narrowed and the widened
+pattern produce **0 mismatches**. No committed figure moves. The planted shapes
+behave as they must: the old row parses identically under both, and the new
+trust-less row parses only under the widened one. Both, and the narrowed
+pattern's silent emptiness, are pinned by
+`tests/experiments/test_gameplay_facts_suspicion_row.py`.
+
+### 2.1b The integrity floor, left alone
+
+Widening the pattern restores `r3_arcs` — and the rubric still scores **0.0 on
+every game**, including games whose four dimensions all read 1.0. A second and
+independent cause floors them. One of the extractor's seventeen self-checks
+fails:
+
+```
+re-derived genuine-class == shipped compute_genuine_class_conversion
+  (supplied 1/0, converted 0/0): FAIL
+```
+
+`experiments/lab/rubric_score.py::_facts_integrity_ok` reads that list, any
+`FAIL` sets the floor multiplier to 0, and every game's score becomes 0
+regardless of its dimensions. **It is independent of the pattern**, provably:
+over the old bytes the two patterns parse identically, so every downstream
+value, `self_checks` included, is unchanged. It predates this record, and it is
+what explains the staleness above — the rubric has not been regenerable since
+that check began failing.
+
+**This record does not touch it.** It is a genuine disagreement between two
+production computations, and deciding which side is wrong is instrument work,
+which stays frozen during a measurement. §7.1 routes it to the owner.
+
+**What is committed, and why.** The regenerated rubric, zeros included, as what
+the shipped tool computes on these bytes. A regenerated file that states the
+tool's own output is a record; the stale committed one was not. By the card's
+letter the refresh is **complete** — the rubric step runs and exits 0 on every
+leg, and the card reads only its *failure* as incompleteness — and it is
+**degraded** by the defect above. Both statements are true and both are made.
+
+**Measured before the tour was re-pointed, because zeros would otherwise select
+or break it:** neither the featured criterion nor the head-card guard reads the
+rubric at all. `scripts/measure_featured_criterion.py` carries no rubric
+reference (its criterion is the `role_proof` predicate over the set loader), and
+`frontend/e2e/journey.spec.ts` carries none (its guard binds the blurb's claim
+to the rendered evidence count). The rubric feeds only the separate
+`/eval/rubric` highlights surface, so the tour is unaffected either way.
+
 ## 3. The gates, per leg
 
 *(written as each leg completes)*
@@ -433,6 +524,24 @@ this record**: this record reads each recording as recorded, and a later
 instrument reads later bytes. Nothing here builds it, and nothing here is
 blocked on it — the absolute counts in §1.4 and §4 carry the reading in the
 meantime.
+
+**Second: the genuine-class integrity disagreement that floors the rubric.**
+§2.1b names it in full. One of the gameplay extractor's self-checks reports that
+its re-derived genuine-class census disagrees with the shipped
+`compute_genuine_class_conversion` (`supplied 1/0, converted 0/0`), and
+`experiments/lab/rubric_score.py::_facts_integrity_ok` turns any such `FAIL`
+into a floor of 0 on **every** game's rubric score. Two production computations
+disagree about the same quantity; this record does not decide which is right,
+because that is instrument work and the instruments stay frozen during a
+measurement.
+
+Recommended as **a small card immediately after this pull request merges**: fix
+the disagreement, then regenerate `results-rubric-score.json` on the SAME
+baseline-9 bytes. It is a derived view, so that is a regeneration and **not a
+re-record** — the highlights surface is restored without reopening this record
+or spending a model call. Until then the committed rubric states what the
+shipped tool computes on these bytes, which is a record; the file it replaced
+described no bytes at all.
 
 ## 8. The freeze, shown rather than asserted
 
