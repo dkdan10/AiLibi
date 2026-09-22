@@ -266,6 +266,15 @@ describe("private reasoning perspective", () => {
     const html = renderToStaticMarkup(<BallotCard ballot={ballot} players={players} omniscient revealOutcome={false} />);
     expect(html).not.toContain(BALLOT_COPY.counterLabel);
   });
+  it("words the counter chip as the voter's own act, never as a correction", () => {
+    // Review round 3: the label is asserted through the constant everywhere
+    // else, so its WORDING was unobservable — a chip re-worded "Citation
+    // removed" would have read as a guard's verdict on the ballot, which is
+    // the one thing this slot is not. The property is pinned instead of the
+    // literal, so the copy can still be edited.
+    expect(BALLOT_COPY.counterLabel).not.toMatch(/remov|invalid|unknown|error|reject/i);
+    expect(BALLOT_COPY.counterLabel.toLowerCase()).toContain("against");
+  });
   it("keeps the counter citation behind the same perspective gate as the others", () => {
     state.perspective = { mode: "agent", agentId: "p-2" };
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, counter_reason_id: "meeting-0:turn-3" }} players={players} omniscient={false} revealOutcome={false} />);

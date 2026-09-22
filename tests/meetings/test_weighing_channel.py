@@ -22,6 +22,7 @@ prints no rendered prompt.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -52,7 +53,10 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     MoveWitnessRecord,
+    ObservationClaim,
+    SawMoveObservation,
     SawPlayerObservation,
+    SawVentObservation,
     SightingRecord,
     VentWitnessRecord,
     VoteBallot,
@@ -344,15 +348,6 @@ class TestEveryCitationResolves:
                     candidate_targets=tuple(t for t in targets if t != voter_id),
                     contradictions=entry.contradictions,
                     transcript=entry.transcript,
-                    testimony_ledger=build_testimony_ledger(
-                        entry.transcript,
-                        contradictions=entry.contradictions,
-                        sighting_records={},
-                        move_witness_records={},
-                        opener=entry.triggered_by,
-                        roster=frozenset(voters),
-                        trigger_kind="report",
-                    ),
                 )
                 assert (
                     _citation_violations(
@@ -414,9 +409,11 @@ class TestRowOrderAndBound:
 
         * ``own_sighting`` -- first-hand, class 0, but the LAST to arrive
           (tick 50);
-        * a grounded voice, first-hand, class 2, the FIRST to arrive (turn 0);
+        * a voice that DESCRIBED seeing the subject, first-hand, class 2, the
+          FIRST to arrive (turn 0);
         * a flag, not first-hand, class 1, arriving at turn 2;
-        * an ungrounded voice, not first-hand, class 2, arriving at turn 1.
+        * a voice that described nothing, not first-hand, class 2, arriving at
+          turn 1.
 
         Within each first-hand group arrival time therefore disagrees with class
         rank, so dropping the class term from the sort key, or exchanging the
@@ -489,24 +486,6 @@ class TestRowOrderAndBound:
             candidate_targets=("p-2",),
             contradictions=(flag,),
             transcript=transcript,
-            testimony_ledger=build_testimony_ledger(
-                transcript,
-                contradictions=(),
-                sighting_records={
-                    "p-3": (
-                        SightingRecord(
-                            subject="p-2",
-                            room="MEDBAY",
-                            tick=5,
-                            observation_id="p-3:5:0",
-                        ),
-                    )
-                },
-                move_witness_records={},
-                opener="p-3",
-                roster=frozenset({"p-1", "p-2", "p-3", "p-4"}),
-                trigger_kind="report",
-            ),
         )
 
         assert [(row.kind, row.first_hand) for row in rows] == [
@@ -551,16 +530,17 @@ class TestRowOrderAndBound:
         assert kept_ticks[0] == 3, kept_ticks  # the three earliest went
 
     def test_the_budget_drops_by_arrival_time_not_by_render_position(self) -> None:
-        """An over-budget TESTIMONY group loses its earliest voices, not its
-        grounded ones.
+        """An over-budget TESTIMONY group loses its earliest voices, not the
+        ones that described a sighting.
 
-        The render puts first-hand rows first inside a class, so a budget taken
-        off the front of the RENDER order would drop the grounded voices first
-        -- a bound deciding by what a row says, which is the one thing it must
-        never do. Built so the two rules disagree: nine voices against p-3, and
-        the LAST one to speak is the only grounded one. Under the arrival rule
-        it survives and the earliest voice goes; under the render rule it would
-        be the first thing dropped.
+        The render puts the voices who described a sighting of their own first
+        inside a class, so a budget taken off the front of the RENDER order
+        would drop THOSE first -- a bound deciding by what a row says, which is
+        the one thing it must never do. Built so the two rules disagree: nine
+        voices against p-3, and the LAST one to speak is the only one who
+        describes seeing them. Under the arrival rule it survives and the
+        earliest voice goes; under the render rule it would be the first thing
+        dropped.
         """
 
         speakers = [f"p-{index}" for index in range(10, 19)]
@@ -603,29 +583,11 @@ class TestRowOrderAndBound:
             candidate_targets=("p-3",),
             contradictions=(),
             transcript=transcript,
-            testimony_ledger=build_testimony_ledger(
-                transcript,
-                contradictions=(),
-                sighting_records={
-                    grounded_speaker: (
-                        SightingRecord(
-                            subject="p-3",
-                            room="MEDBAY",
-                            tick=5,
-                            observation_id=f"{grounded_speaker}:5:1",
-                        ),
-                    )
-                },
-                move_witness_records={},
-                opener=speakers[0],
-                roster=frozenset({"p-1", "p-3", *speakers}),
-                trigger_kind="report",
-            ),
         )
 
         assert len(rows) == MAX_EVIDENCE_ROWS_PER_SUBJECT
         kept = [row.speaker for row in rows]
-        # The grounded voice spoke LAST and survives, at the head of the block.
+        # The describing voice spoke LAST and survives, at the head of the block.
         assert kept[0] == grounded_speaker
         assert rows[0].first_hand is True
         # Exactly the earliest voice was dropped, and nothing else.
@@ -908,9 +870,89 @@ class TestRowOrderAndBound:
         assert all(row.citation_id in turn_ids for row in testimony)
         pairs = [(row.speaker, row.subject) for row in testimony]
         assert len(pairs) == len(set(pairs))
-        # Nobody here spoke a sighting their own record bears out, so no row
-        # claims first-hand status. The leg below is the other half.
+        # Nobody here described seeing anyone, so no row reads as an account of
+        # a perception. The leg below is the other half.
         assert all(row.first_hand is False for row in testimony)
+
+    def test_a_flag_about_a_player_nobody_may_vote_for_builds_no_row(self) -> None:
+        """The ``subjects_of_interest`` guard on the CONTRADICTION rows.
+
+        A flag about a player who is not a living ejection target is not a
+        piece of THIS decision, and the assembler drops it. The guard was
+        unenforced at review round 2's head -- deleting it left
+        ``tests/meetings``, ``tests/orchestrator`` and ``tests/agents`` green --
+        so the block would have carried flags about the dead and the already
+        ejected under names no ballot may name. The transcript here carries no
+        accusation at all, so this test can only see the flag guard: neutering
+        the testimony guard beside it leaves it green.
+        """
+
+        def _flag(subject: str, identifier: str) -> ContradictionRef:
+            return ContradictionRef(
+                contradiction_id=identifier,
+                kind="alibi_vs_sighting",
+                event_a_id="turn:m-1:turn-0:claim:0",
+                event_b_id="turn:m-1:turn-0:obs:0",
+                subjects=(subject,),
+                description=f"{subject}'s account cannot be squared.",
+            )
+
+        turn = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-2",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(),
+            claims=(),
+            free_text="I was in MEDBAY -- unsure.",
+        )
+        rows = build_evidence_rows(
+            voter=_participant("p-1"),
+            candidate_targets=("p-2",),
+            contradictions=(_flag("p-9", "c-dead"), _flag("p-2", "c-live")),
+            transcript=MeetingTranscript(turns=(turn,)),
+        )
+
+        # The control is the same flag shape about a player who IS a target, so
+        # an empty result cannot be a fact about the flag or the transcript.
+        assert [(row.kind, row.subject) for row in rows] == [("contradiction", "p-2")]
+
+    def test_a_voice_against_a_player_nobody_may_vote_for_builds_no_row(self) -> None:
+        """The same guard on the TESTIMONY rows, probed on its own.
+
+        Unenforced at the same head and for the same reason. This transcript
+        carries no contradiction flag, so neutering the flag guard beside it
+        leaves this green: each guard has exactly one probe.
+        """
+
+        def _turn(index: int, against: str) -> MeetingTurn:
+            return MeetingTurn(
+                turn_id=f"m-1:turn-{index}",
+                turn_index=index,
+                speaker="p-2",
+                turn_kind="opening" if index == 0 else "reply",
+                reply_to=None if index == 0 else f"m-1:turn-{index - 1}",
+                observations=(),
+                claims=(
+                    AccusationClaim(
+                        type="accusation",
+                        against=against,
+                        confidence=0.6,
+                        reason=f"p-2 accuses {against}",
+                    ),
+                ),
+                free_text=f"{against} did it.",
+            )
+
+        rows = build_evidence_rows(
+            voter=_participant("p-1"),
+            candidate_targets=("p-3",),
+            contradictions=(),
+            transcript=MeetingTranscript(turns=(_turn(0, "p-9"), _turn(1, "p-3"))),
+        )
+
+        assert [(row.kind, row.subject) for row in rows] == [("testimony", "p-3")]
 
     def test_a_speaker_who_names_themselves_is_no_voice_against_themselves(
         self,
@@ -978,19 +1020,17 @@ class TestRowOrderAndBound:
         )
         assert [(row.speaker, row.subject) for row in rows] == [("p-3", "p-2")], rows
 
-    def test_a_grounded_voice_is_marked_first_hand_on_the_default_path(self) -> None:
-        """The ledger that decides ``first_hand`` is built with the lever OFF.
+    def test_a_described_sighting_marks_the_row_true_or_fabricated(self) -> None:
+        """Provenance is AS STATED: the invented account reads like the real one.
 
-        A testimony row's ``first_hand`` bit is the meeting layer's own
-        definition -- the speaker's OWN typed record bore their account of the
-        subject out -- and that is computed by
-        :func:`meetings.corroboration.build_testimony_ledger`. Before ruling D5
-        the manager built that ledger only while the corroboration lever was ON,
-        so on the shipped default path every voice would have read "not
-        first-hand" whatever its record said. This drives a real meeting with
-        the lever OFF: p-2 speaks a sighting of p-3 that p-2's own
-        ``SightingRecord`` bears out, and accuses p-3, so the row p-1 reads must
-        say first-hand.
+        The one property the whole round-3 correction exists to deliver, driven
+        through a real meeting on the shipped default path. p-2 speaks a
+        sighting of p-3 that p-2's own ``SightingRecord`` bears out; p-4 speaks
+        the SAME sighting holding no record at all. Both accuse p-3. The two
+        rows p-1 reads must be indistinguishable in ``first_hand``: the meeting
+        layer says who described a perception, never whose description the
+        engine confirms, because a voter told which accusers are honest is not
+        weighing evidence -- it is reading a verdict.
         """
 
         speaker = replace(
@@ -1004,6 +1044,7 @@ class TestRowOrderAndBound:
                 ),
             ),
         )
+        # p-4 holds NOTHING and says exactly what p-2 says.
         voters = (_channel_voters()[0], speaker, _voter("p-3"), _voter("p-4"))
         spoken = SawPlayerObservation(
             type="saw_player", tick=5, subject="p-3", room="MEDBAY"
@@ -1014,8 +1055,8 @@ class TestRowOrderAndBound:
                 who = _extract_marker(prompt, "agent_id=")
                 return _turn_json(
                     speaker=who,
-                    accuses={"p-1": "p-2", "p-2": "p-3"}.get(who),
-                    observations=(spoken,) if who == "p-2" else (),
+                    accuses={"p-1": "p-2", "p-2": "p-3", "p-4": "p-3"}.get(who),
+                    observations=(spoken,) if who in {"p-2", "p-4"} else (),
                 )
             if "PHASE=VOTE" in prompt:
                 voter = _extract_marker(prompt, "voter=")
@@ -1032,23 +1073,22 @@ class TestRowOrderAndBound:
         captured, prompt = _capturing_vote_prompt()
         _run_meeting(_responder, participants=voters, vote_prompt=prompt)
 
-        grounded = [
-            row
+        against_p3 = {
+            row.speaker: row.first_hand
             for row in captured["p-1"]
-            if row.kind == "testimony" and row.speaker == "p-2" and row.subject == "p-3"
-        ]
-        assert len(grounded) == 1, captured["p-1"]
-        assert grounded[0].first_hand is True
+            if row.kind == "testimony" and row.subject == "p-3"
+        }
+        assert against_p3 == {"p-2": True, "p-4": True}, captured["p-1"]
 
-    def test_a_grounded_voice_sorts_above_an_ungrounded_one(self) -> None:
-        """First-hand before hearsay, inside ONE subject and ONE channel.
+    def test_a_describing_voice_sorts_above_a_silent_one(self) -> None:
+        """A described perception before a bare name, inside ONE subject.
 
         The rank is only observable where two rows are alike in every earlier
         key: same subject, same provenance class, differing only in whether the
-        speaker's own record bore their account out. Two voices against p-3, one
-        grounded and one not, is that case -- and without the rank the order
-        would fall through to the turn index, putting whichever spoke first on
-        top regardless of what either holds.
+        speaker described seeing the subject at this table. Two voices against
+        p-3, one describing and one not, is that case -- and without the rank
+        the order would fall through to the turn index, putting whichever spoke
+        first on top regardless of what either said.
         """
 
         def _voice(index: int, speaker: str, spoke: bool) -> MeetingTurn:
@@ -1078,36 +1118,430 @@ class TestRowOrderAndBound:
                 free_text="p-3 did it.",
             )
 
-        # p-4 speaks first and is NOT grounded; p-2 speaks second and IS.
+        # p-4 speaks first and describes NOTHING; p-2 speaks second and does.
         transcript = MeetingTranscript(
             turns=(_voice(0, "p-4", spoke=False), _voice(1, "p-2", spoke=True))
         )
-        grounding = {
-            "p-2": (
-                SightingRecord(
-                    subject="p-3", room="MEDBAY", tick=5, observation_id="p-2:5:1"
-                ),
-            )
-        }
         rows = build_evidence_rows(
             voter=_participant("p-1"),
             candidate_targets=("p-3",),
             contradictions=(),
             transcript=transcript,
-            testimony_ledger=build_testimony_ledger(
-                transcript,
-                contradictions=(),
-                sighting_records=grounding,
-                move_witness_records={},
-                opener="p-4",
-                roster=frozenset({"p-1", "p-2", "p-3", "p-4"}),
-                trigger_kind="report",
-            ),
         )
         assert [(row.speaker, row.first_hand) for row in rows] == [
             ("p-2", True),
             ("p-4", False),
         ]
+
+
+# --------------------------------------------------------------------------- #
+# B1b. Provenance is a function of the PUBLIC transcript (review round 3)      #
+# --------------------------------------------------------------------------- #
+
+
+def _accusing_turn(
+    prompt: str,
+    *,
+    accuser: str,
+    subject: str,
+    observation: ObservationClaim | None,
+) -> str:
+    """One scripted turn: ``accuser`` names ``subject``, optionally describing."""
+
+    who = _extract_marker(prompt, "agent_id=")
+    return _turn_json(
+        speaker=who,
+        accuses=subject if who == accuser else None,
+        observations=(observation,) if who == accuser and observation else (),
+    )
+
+
+def _skip_ballot(prompt: str) -> str:
+    voter = _extract_marker(prompt, "voter=")
+    return VoteBallot(
+        voter=voter,
+        target="SKIP",
+        confidence=0.2,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=f"stub-vote-{voter}",
+    ).model_dump_json()
+
+
+def _scripted_meeting(
+    *,
+    accuser: str,
+    subject: str,
+    observation: ObservationClaim | None,
+    private_records: Mapping[str, tuple[SightingRecord, ...]] | None = None,
+    private_moves: Mapping[str, tuple[MoveWitnessRecord, ...]] | None = None,
+    private_vents: Mapping[str, tuple[VentWitnessRecord, ...]] | None = None,
+) -> tuple[Any, dict[str, tuple[EvidenceRow, ...]]]:
+    """One real meeting; ``private_*`` seed the OTHER speakers' own channels.
+
+    Everything public -- who speaks, in what order, what they say and whom they
+    name -- is fixed by the arguments above and is identical whatever the
+    private mappings hold. Returns the meeting result and the rows the manager
+    threaded into each voter's ballot render.
+    """
+
+    sightings = private_records or {}
+    moves = private_moves or {}
+    vents = private_vents or {}
+    participants = tuple(
+        _voter(
+            agent_id,
+            sightings=tuple(sightings.get(agent_id, ())),
+            moves=tuple(moves.get(agent_id, ())),
+            vents=tuple(vents.get(agent_id, ())),
+        )
+        for agent_id in ("p-1", "p-2", "p-3", "p-4")
+    )
+
+    def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+        if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+            return _accusing_turn(
+                prompt, accuser=accuser, subject=subject, observation=observation
+            )
+        if "PHASE=VOTE" in prompt:
+            return _skip_ballot(prompt)
+        raise AssertionError("unrecognised prompt")
+
+    captured, prompt = _capturing_vote_prompt()
+    result, _ = _run_meeting(_responder, participants=participants, vote_prompt=prompt)
+    return result, captured
+
+
+def _testimony_rows(rows: Sequence[EvidenceRow]) -> tuple[EvidenceRow, ...]:
+    return tuple(row for row in rows if row.kind == "testimony")
+
+
+def _ledger_first_hand(
+    transcript: MeetingTranscript,
+    *,
+    sighting_records: Mapping[str, tuple[SightingRecord, ...]],
+    move_witness_records: Mapping[str, tuple[MoveWitnessRecord, ...]],
+) -> dict[str, tuple[str, ...]]:
+    """What the corroboration LEVER's ledger would say about these records.
+
+    Used only to prove the two legs below are genuinely different: the ledger is
+    the surface that reads engine truth about a speaker's account, so if IT
+    separates the two legs, the private difference between them is real and the
+    ballot's indifference to it is a fact about the ballot.
+    """
+
+    ledger = build_testimony_ledger(
+        transcript,
+        contradictions=(),
+        sighting_records=dict(sighting_records),
+        move_witness_records=dict(move_witness_records),
+        opener="p-1",
+        roster=frozenset({"p-1", "p-2", "p-3", "p-4"}),
+        trigger_kind="report",
+    )
+    return {row.subject: tuple(row.first_hand) for row in ledger.rows}
+
+
+#: The generated family: who accuses whom, with which spoken shape, at which
+#: tick. Both shapes carry a private grounding channel the ledger reads, which
+#: is what makes the A/B pair below a real difference rather than a formality.
+_PROVENANCE_CASES: Final[tuple[tuple[str, str, str, int], ...]] = tuple(
+    (shape, accuser, subject, tick)
+    for shape in ("saw_player", "saw_move")
+    for accuser, subject in (("p-2", "p-3"), ("p-3", "p-4"), ("p-4", "p-2"))
+    for tick in (5, 9)
+)
+
+
+class TestProvenanceReadsOnlyThePublicTranscript:
+    """The round-3 gate: no ballot byte moves with another player's records.
+
+    The defect this replaces put an ENGINE-TRUTH lie detector on the default
+    ballot: every testimony row said whether the accuser's own private record
+    bore their spoken account out, so an impostor's invented sighting rendered
+    "not first-hand" and an honest witness's rendered "first-hand", per accuser,
+    to every voter. The owner's rule is that an agent "has to pick what data
+    would make sense to follow" out of accurate data, inaccurate data and lies;
+    being handed the answer is not picking. So the property is stated
+    negatively and over a family: change ONLY what is private to the other
+    speakers, and not one field of one testimony row and not one rendered byte
+    may move.
+    """
+
+    @staticmethod
+    def _legs(
+        shape: str, accuser: str, subject: str, tick: int
+    ) -> tuple[
+        tuple[Any, dict[str, tuple[EvidenceRow, ...]]],
+        tuple[Any, dict[str, tuple[EvidenceRow, ...]]],
+        dict[str, Any],
+    ]:
+        """The borne-out leg, the fabricated leg, and the records that differ."""
+
+        if shape == "saw_player":
+            observation: ObservationClaim = SawPlayerObservation(
+                type="saw_player", tick=tick, subject=subject, room="MEDBAY"
+            )
+            records: dict[str, Any] = {
+                "private_records": {
+                    accuser: (
+                        SightingRecord(
+                            subject=subject,
+                            room="MEDBAY",
+                            tick=tick,
+                            observation_id=f"{accuser}:{tick}:0",
+                        ),
+                    )
+                }
+            }
+        else:
+            observation = SawMoveObservation(
+                type="saw_move",
+                tick=tick,
+                subject=subject,
+                from_room="ADMIN",
+                to_room="MEDBAY",
+            )
+            records = {
+                "private_moves": {
+                    accuser: (
+                        MoveWitnessRecord(
+                            subject=subject,
+                            from_room="ADMIN",
+                            to_room="MEDBAY",
+                            tick=tick,
+                            observation_id=f"{accuser}:{tick}:0",
+                        ),
+                    )
+                }
+            }
+        borne_out = _scripted_meeting(
+            accuser=accuser, subject=subject, observation=observation, **records
+        )
+        fabricated = _scripted_meeting(
+            accuser=accuser, subject=subject, observation=observation
+        )
+        return borne_out, fabricated, records
+
+    @pytest.mark.parametrize(("shape", "accuser", "subject", "tick"), _PROVENANCE_CASES)
+    def test_the_other_speakers_records_move_no_row_and_no_byte(
+        self, shape: str, accuser: str, subject: str, tick: int
+    ) -> None:
+        """Two meetings, identical in public, differing only in private records.
+
+        The comparison is over the TESTIMONY rows, which are the rows the
+        defect lived in; the own-channel rows of the accuser itself legitimately
+        differ between the legs, because those are that player's OWN perception
+        on its OWN ballot. Both the row fields and the bytes the served v8 body
+        renders from them are compared.
+        """
+
+        (result_a, rows_a), (result_b, rows_b), records = self._legs(
+            shape, accuser, subject, tick
+        )
+
+        # The two legs really are identical in public: same transcript, and no
+        # flag in either, so nothing the detector raised can differ.
+        assert result_a.transcript == result_b.transcript
+        assert result_a.contradictions == () and result_b.contradictions == ()
+
+        # ... and really do differ in private: the corroboration lever's ledger,
+        # which is the surface that DOES read a speaker's own record, separates
+        # them. Without this the property could hold for the trivial reason that
+        # the two legs were the same meeting twice.
+        ledger_a = _ledger_first_hand(
+            result_a.transcript,
+            sighting_records=records.get("private_records", {}),
+            move_witness_records=records.get("private_moves", {}),
+        )
+        ledger_b = _ledger_first_hand(
+            result_b.transcript, sighting_records={}, move_witness_records={}
+        )
+        assert ledger_a != ledger_b, (ledger_a, ledger_b)
+        assert accuser in ledger_a.get(subject, ())
+        assert accuser not in ledger_b.get(subject, ())
+
+        for voter_id in ("p-1", "p-2", "p-3", "p-4"):
+            spoken_a = _testimony_rows(rows_a[voter_id])
+            spoken_b = _testimony_rows(rows_b[voter_id])
+            assert spoken_a == spoken_b, (voter_id, spoken_a, spoken_b)
+            assert _served_ballot(
+                voter_id=voter_id, evidence_rows=spoken_a
+            ) == _served_ballot(voter_id=voter_id, evidence_rows=spoken_b)
+
+    def test_the_family_is_not_vacuous(self) -> None:
+        """Some voter really did read a testimony row in every case."""
+
+        for shape, accuser, subject, tick in _PROVENANCE_CASES:
+            (_, rows_a), _, _ = self._legs(shape, accuser, subject, tick)
+            assert any(_testimony_rows(rows_a[voter_id]) for voter_id in rows_a), (
+                shape,
+                accuser,
+                subject,
+                tick,
+            )
+
+    def test_a_fabricated_vent_claim_reads_exactly_like_a_true_one(self) -> None:
+        """The named example: an invented role-proof renders the same words.
+
+        A spoken vent is the strongest thing anyone can say at this table, and
+        it is the claim an impostor has most reason to invent. The two legs
+        differ in whether p-2's own ``VentWitnessRecord`` holds the vent it
+        describes; the testimony row and its rendered provenance clause are
+        identical across them.
+
+        The detector's own ``vent_sighting`` flag DOES differ -- it fires only
+        on the borne-out leg -- and that is fine and pre-existing: a flag is a
+        PUBLIC fact of the meeting that the ``<contradictions>`` block already
+        puts in front of every participant. What may not differ is a per-accuser
+        verdict handed privately to each voter, which is what the testimony row
+        was.
+        """
+
+        spoken = SawVentObservation(
+            type="saw_vent", tick=7, subject="p-3", room="ENGINEERING"
+        )
+        vent = VentWitnessRecord(
+            subject="p-3",
+            room="ENGINEERING",
+            tick=7,
+            observation_id="p-2:7:0",
+        )
+        true_result, true_rows = _scripted_meeting(
+            accuser="p-2",
+            subject="p-3",
+            observation=spoken,
+            private_vents={"p-2": (vent,)},
+        )
+        made_up_result, made_up_rows = _scripted_meeting(
+            accuser="p-2", subject="p-3", observation=spoken
+        )
+
+        # The public flag channel separates them -- that is the detector, and it
+        # is the same bytes for everyone.
+        assert [flag.kind for flag in true_result.contradictions] == ["vent_sighting"]
+        assert made_up_result.contradictions == ()
+
+        for voter_id in ("p-1", "p-4"):
+            true_row = _testimony_rows(true_rows[voter_id])
+            made_up_row = _testimony_rows(made_up_rows[voter_id])
+            assert true_row and true_row == made_up_row, voter_id
+            clause = "p-2 says they saw it themselves"
+            assert clause in _served_ballot(voter_id=voter_id, evidence_rows=true_row)
+            assert clause in _served_ballot(
+                voter_id=voter_id, evidence_rows=made_up_row
+            )
+
+    def test_a_companion_named_in_a_sighting_is_a_player_the_speaker_saw(
+        self,
+    ) -> None:
+        """``co_present`` names perceived players too, and the row says so.
+
+        "I saw p-4 in MEDBAY, with p-3" is a first-hand claim about p-3 exactly
+        as much as about p-4 -- the speaker says they were looking at both. The
+        companions were unenforced at review round 3's first pass (dropping them
+        from the stated set left the suite green), so a voice that placed its
+        target only as a companion read as a bare name.
+        """
+
+        spoken = SawPlayerObservation(
+            type="saw_player",
+            tick=6,
+            subject="p-4",
+            room="MEDBAY",
+            co_present=("p-3",),
+        )
+        _, rows = _scripted_meeting(accuser="p-2", subject="p-3", observation=spoken)
+        assert [
+            (row.speaker, row.first_hand) for row in _testimony_rows(rows["p-1"])
+        ] == [("p-2", True)]
+
+    def test_an_accuser_who_describes_no_sighting_reads_differently(self) -> None:
+        """The other half of the named example: the block still SAYS something.
+
+        Provenance-as-stated is not provenance-as-nothing. A speaker who named
+        a player without describing any perception of their own is marked that
+        way, which is a fact about the transcript and about nothing private.
+        """
+
+        _, rows = _scripted_meeting(accuser="p-2", subject="p-3", observation=None)
+        spoken = _testimony_rows(rows["p-1"])
+        assert [(row.speaker, row.first_hand) for row in spoken] == [("p-2", False)]
+        assert (
+            "p-2 named them without describing a sighting of their own"
+            in _served_ballot(voter_id="p-1", evidence_rows=spoken)
+        )
+
+
+class TestTheAssemblerCannotReachTheLedger:
+    """Static: the evidence-row assembler's call graph never meets engine truth.
+
+    The property tests above are about VALUES and could in principle be
+    satisfied by an assembler that reads a ledger and happens to agree today.
+    This is the structural half, in the idiom
+    ``tests/meetings/test_grounding_label.py`` already uses for the tally: parse
+    ``meetings/manager.py``, take the five functions that build the rows, and
+    show that none of them takes a ledger parameter or so much as NAMES one.
+    """
+
+    _ASSEMBLER: Final[tuple[str, ...]] = (
+        "build_evidence_rows",
+        "_own_channel_evidence_rows",
+        "_contradiction_evidence_rows",
+        "_testimony_evidence_rows",
+        "_stated_sighting_subjects",
+    )
+    #: Every name that would carry another player's record grounding into a
+    #: row. Matched case-INSENSITIVELY, so a constant spelled ``_LEDGER`` is
+    #: caught as readily as a parameter spelled ``ledger``.
+    _FORBIDDEN: Final[tuple[str, ...]] = (
+        "ledger",
+        "corroboration",
+        "testimonysupport",
+        "first_hand_places",
+    )
+
+    @staticmethod
+    def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
+        source = ast.parse((_REPO_ROOT / "meetings" / "manager.py").read_text())
+        return next(
+            node
+            for node in ast.walk(source)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and node.name == name
+        )
+
+    @classmethod
+    def _body_without_docstring(cls, name: str) -> str:
+        function = cls._function(name)
+        return ast.unparse(ast.Module(body=function.body[1:], type_ignores=[]))
+
+    @pytest.mark.parametrize("name", _ASSEMBLER)
+    def test_it_takes_no_ledger_parameter(self, name: str) -> None:
+        arguments = self._function(name).args
+        parameters = [
+            argument.arg
+            for argument in (
+                *arguments.args,
+                *arguments.kwonlyargs,
+                *arguments.posonlyargs,
+            )
+        ]
+        assert not [
+            parameter for parameter in parameters if "ledger" in parameter.lower()
+        ], (name, parameters)
+
+    @pytest.mark.parametrize("name", _ASSEMBLER)
+    def test_it_names_no_ledger(self, name: str) -> None:
+        body = self._body_without_docstring(name).lower()
+        for forbidden in self._FORBIDDEN:
+            assert forbidden not in body, (name, forbidden)
+
+    def test_the_scan_finds_a_function_that_does_reach_the_ledger(self) -> None:
+        # Non-vacuity: the lever's own build site still names it, so an empty
+        # result above is a fact about the assembler and not about the scanner.
+        run = ast.unparse(ast.Module(body=self._function("run").body, type_ignores=[]))
+        assert "build_testimony_ledger" in run
 
 
 # --------------------------------------------------------------------------- #
@@ -1386,41 +1820,56 @@ class TestTheServedBody:
         return line[line.index("(") + 1 : line.rindex(";")], rendered
 
     def test_a_row_the_voter_perceived_says_it_saw_it_itself(self) -> None:
-        """Branch 1 of 4: first-hand AND spoken by this voter."""
+        """Branch 1 of 5: an OWN-channel row, which is this voter's perception."""
 
         clause, _ = self._provenance_clause(
             kind="own_sighting", first_hand=True, speaker="p-1"
         )
         assert clause == "first-hand: you saw this yourself"
 
-    def test_a_grounded_voice_names_the_speaker_who_saw_it(self) -> None:
-        """Branch 2 of 4: first-hand, spoken by somebody else."""
+    def test_a_describing_voice_is_quoted_as_saying_so(self) -> None:
+        """Branch 2 of 5: another speaker who described a sighting of their own.
 
-        clause, _ = self._provenance_clause(
+        The clause attributes the perception to the SPEAKER and to nothing else
+        ("says they saw"). It may not read as a finding: the meeting layer never
+        checked it, and after review round 3 it never could -- the bit behind
+        this leaf is what the speaker said here, not what their record holds.
+        """
+
+        clause, rendered = self._provenance_clause(
             kind="testimony", first_hand=True, speaker="p-3"
         )
-        assert clause == "first-hand: p-3 saw it themselves"
+        assert clause == "p-3 says they saw it themselves"
+        for confirming in ("confirm", "bears out", "borne out", "verified", "grounded"):
+            assert confirming not in rendered.lower(), confirming
 
     def test_what_the_voter_merely_said_here_is_not_rendered_as_perception(
         self,
     ) -> None:
-        """Branch 3 of 4, and the defect it exists to stop.
+        """Branch 3 of 5, and the defect it exists to stop.
 
-        ``first_hand`` is read BEFORE the speaker. The voter's own accusations
-        and the flags resolving to its own turn carry ``speaker`` = this voter
-        with ``first_hand=False`` (``_testimony_evidence_rows`` /
-        ``_contradiction_evidence_rows``), so testing the speaker first told the
+        An OWN-channel kind is read BEFORE anything else. The voter's own
+        accusations and the flags resolving to its own turn carry ``speaker`` =
+        this voter (``_testimony_evidence_rows`` /
+        ``_contradiction_evidence_rows``), so testing the speaker alone told the
         voter it had PERCEIVED its own rhetoric -- the one thing a provenance
-        clause may never invent. Both kinds that can reach this pair are
-        asserted.
+        clause may never invent. Round 3 made the leaf unconditional in the
+        bit: whatever ``first_hand`` says, a row the voter merely SPOKE is a
+        statement it made, never a perception -- which matters most for an
+        impostor, whose own fabricated sighting would otherwise be handed back
+        to it as something it saw. Both kinds and both bits are asserted.
         """
 
         for kind in ("testimony", "contradiction"):
-            clause, rendered = self._provenance_clause(
-                kind=kind, first_hand=False, speaker="p-1"
-            )
-            assert clause == "not first-hand: you stated it at this table", kind
-            assert "first-hand: you saw this yourself" not in rendered, kind
+            for first_hand in (False, True):
+                clause, rendered = self._provenance_clause(
+                    kind=kind, first_hand=first_hand, speaker="p-1"
+                )
+                assert clause == "not first-hand: you stated it at this table", (
+                    kind,
+                    first_hand,
+                )
+                assert "first-hand: you saw this yourself" not in rendered, kind
 
     def test_planted_the_old_branch_order_is_detected(self) -> None:
         """PLANTED: the predicate above fails on bytes rendered speaker-first.
@@ -1439,11 +1888,67 @@ class TestTheServedBody:
         assert speaker_first != rendered
         assert "first-hand: you saw this yourself" in speaker_first
 
-    def test_another_voice_at_this_table_names_that_speaker(self) -> None:
-        """Branch 4 of 4: not first-hand, spoken by somebody else."""
+    def test_another_voice_that_described_nothing_is_marked_that_way(self) -> None:
+        """Branch 4 of 5: a voice that named the player and described no sighting.
+
+        The wording says exactly that and claims nothing further: not that they
+        lied, not that they have nothing -- only that no account of their own
+        reached this table.
+        """
 
         clause, _ = self._provenance_clause(
             kind="testimony", first_hand=False, speaker="p-3"
+        )
+        assert clause == "p-3 named them without describing a sighting of their own"
+
+    def test_the_block_tells_the_voter_nothing_was_checked(self) -> None:
+        """The standing sentence, and what it may not become.
+
+        The block's own header carries the whole round-3 correction in words:
+        a spoken account is what that speaker said and no more. Pinned as a
+        literal because a header that quietly re-acquires "confirmed" would put
+        the truth oracle back without touching a line of Python.
+        """
+
+        rendered = _served_ballot(
+            evidence_rows=(
+                EvidenceRow(
+                    subject="p-2",
+                    description="p-3 spoke against them in turn 1",
+                    kind="testimony",
+                    first_hand=True,
+                    speaker="p-3",
+                    citation_id="m-1:turn-1",
+                ),
+            )
+        )
+        assert "no one has checked it" in rendered
+        assert "an invented sighting reads exactly like a real one" in rendered
+        # The order rule the header states is about the ROW'S SPEAKER, not about
+        # the voter: `_sort_key`'s second term is `row.first_hand`, which a
+        # testimony row carries whenever its speaker described a sighting, so a
+        # described voice sorts above a contradiction about the same player.
+        # The header said "what you perceived yourself before anything you are
+        # repeating", which named the wrong subject and would have told the
+        # voter its own lines always came first.
+        assert (
+            "lines whose speaker describes a perception of their own before "
+            "lines whose speaker does not" in rendered
+        )
+        assert "what you perceived yourself before anything you are repeating" not in (
+            rendered
+        )
+
+    def test_a_flag_somebody_else_spoke_into_is_a_statement_here(self) -> None:
+        """Branch 5 of 5: a contradiction row citing another speaker's turn.
+
+        A flag is the detector's cross-check of two statements, never one
+        speaker's account of a perception, so it keeps the "stated it at this
+        table" wording the testimony leaves no longer share.
+        """
+
+        clause, _ = self._provenance_clause(
+            kind="contradiction", first_hand=False, speaker="p-3"
         )
         assert clause == "not first-hand: p-3 stated it at this table"
 

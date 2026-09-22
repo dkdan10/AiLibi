@@ -14,9 +14,15 @@ the difference is the voter's call and the tally is untouched.
 The grounding predicates are the detector's own
 (:func:`meetings.transcript.sighting_observation_matches_record`,
 :func:`~meetings.transcript.move_observation_matches_record`, and the
-``vent_sighting`` flag channel), so "first-hand" means here exactly what it
-means everywhere else in the meeting layer -- an invented sighting matches no
-record and earns no account. What is tested is the PLACEMENT
+``vent_sighting`` flag channel), so "first-hand" means HERE, inside this
+lever's block and nowhere else, that the speaker's own record bore their
+account out -- an invented sighting matches no record and earns no account.
+That is engine truth about another player's honesty, which is why this module
+is reached only while the lever is ON; the DEFAULT ballot's weighing channel
+means something different and weaker by the same words -- what a speaker
+DESCRIBED at the table, checked against nothing
+(:func:`meetings.manager._stated_sighting_subjects`). What is tested here is
+the PLACEMENT
 (:func:`~meetings.transcript.sighting_placement`), not the shape it was spoken
 in: a sighting and a transition that put the subject in one room at one tick are
 one placement, so either of the speaker's own record channels can bear it out.
@@ -96,8 +102,12 @@ def corroboration_discipline_enabled(env: Mapping[str, str] | None = None) -> bo
 
     Reads :data:`ENV_CORROBORATION_DISCIPLINE` from ``env`` (defaulting to the
     real process environment). Default OFF: an unset / empty / unrecognised
-    value is ``False``, so the manager threads no ledger and every rendered byte
-    matches the committed registry. Accepts ``1/true/yes/on``
+    value is ``False``, so the manager BUILDS no ledger, threads none, and
+    every rendered byte matches the committed registry. Nothing else reaches
+    this module from the ballot path: the v8 weighing channel's testimony rows
+    read their provenance off the public transcript and never open a record
+    (:func:`meetings.manager._stated_sighting_subjects`, review round 3).
+    Accepts ``1/true/yes/on``
     (case-insensitive). The ``env`` argument lets tests toggle the lever
     deterministically without mutating ``os.environ``.
 

@@ -39,6 +39,7 @@ from agents.memory.store import (
     AgentMemory,
     render_for_prompt,
 )
+from agents.perception import EVENT_SAW_PLAYER_MOVE, PROVENANCE_OBSERVED
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from engine.entities import BodyState, PlayerId, PlayerState, Role
 from engine.world import Map, WorldState, load_canonical_map
@@ -63,6 +64,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     ModelAuthoredVoteBallot,
+    MoveWitnessRecord,
     ObservationClaim,
     ObservationId,
     SawPlayerObservation,
@@ -75,6 +77,7 @@ from observation.action_intent import ActionIntent
 from observation.packet import (
     AudibleEvent,
     GlobalView,
+    MovedPlayerView,
     ObservationPacket,
     PlayerView,
     SelfView,
@@ -2923,6 +2926,141 @@ class TestVentWitnessRecordsAccessor:
 
         assert not isinstance(_PreVentDouble(), MeetingAwareAgent)
         assert isinstance(self._crew_agent(), MeetingAwareAgent)
+
+
+def _transit_packet(
+    *,
+    agent_id: str,
+    tick: int,
+    subject: str = "p-5",
+    from_room: str = "ADMIN",
+    to_room: str = "MEDBAY",
+) -> ObservationPacket:
+    """A packet whose ``moved_players`` carries one witnessed transition.
+
+    The ``_witness_packet`` shape above with the transition channel filled
+    instead of ``visible_players``, so the two accessors are exercised through
+    the same perception seam.
+    """
+
+    return ObservationPacket(
+        tick=tick,
+        agent_id=agent_id,
+        self_state=SelfView(room=to_room, role="CREWMATE", pending_task_id=None),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        moved_players=(
+            MovedPlayerView(id=subject, from_room=from_room, to_room=to_room),
+        ),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+
+
+class TestMoveWitnessRecordsAccessor:
+    """``TacticalAgent.move_witness_records_for_meeting`` carries the stamp.
+
+    The third of the three typed own-channel accessors ruling D5 of 2026-09-19
+    taught to carry ``observation_id``, and the one review round 3 found had no
+    test of its own: setting ``observation_id=event.observation_id`` to ``None``
+    at ``orchestrator/game.py`` left the whole suite green, so a released build
+    could have rendered every ``own_transit`` evidence row as "nothing here you
+    could cite" without a single probe going red. Pinned in the shape the
+    sighting and vent channels already use
+    (``TestVentWitnessRecordsAccessor`` above,
+    ``tests/orchestrator/test_sighting_accessor.py``): the stamp is the episodic
+    id the row was projected from, and an unstamped row carries ``None``.
+    """
+
+    def _crew_agent(self, agent_id: str = "p-2") -> TacticalAgent:
+        return TacticalAgent(
+            agent_id=agent_id,
+            role="CREWMATE",
+            policy=CrewmatePolicy(agent_id=agent_id),
+        )
+
+    def test_each_row_carries_the_episodic_stamp_it_was_projected_from(
+        self,
+    ) -> None:
+        from agents.perception import ingest_packet
+
+        agent = self._crew_agent()
+        ingest_packet(
+            packet=_transit_packet(agent_id="p-2", tick=5),
+            memory=agent.memory.episodic,
+        )
+        ingest_packet(
+            packet=_transit_packet(
+                agent_id="p-2",
+                tick=9,
+                subject="p-6",
+                from_room="MEDBAY",
+                to_room="REACTOR",
+            ),
+            memory=agent.memory.episodic,
+        )
+
+        records = agent.move_witness_records_for_meeting()
+        assert records == (
+            MoveWitnessRecord(
+                subject="p-5",
+                from_room="ADMIN",
+                to_room="MEDBAY",
+                tick=5,
+                observation_id="p-2:5:1",
+            ),
+            MoveWitnessRecord(
+                subject="p-6",
+                from_room="MEDBAY",
+                to_room="REACTOR",
+                tick=9,
+                observation_id="p-2:9:1",
+            ),
+        )
+        # The stamp is the one the episodic row itself carries, not a shape the
+        # accessor re-derives: read it back off the log and compare.
+        stamped = [
+            event.observation_id
+            for event in agent.memory.episodic.recent(since_tick=0)
+            if event.type == EVENT_SAW_PLAYER_MOVE
+        ]
+        assert [record.observation_id for record in records] == stamped
+
+    def test_a_row_appended_without_a_stamp_renders_none(self) -> None:
+        # The other half of the guarantee, the sighting accessor's
+        # `test_malformed_payload_contributes_nothing` sibling: a row written
+        # straight to the log never went through perception, so it carries no
+        # stamp and the projected record says so rather than inventing one.
+        agent = self._crew_agent()
+        agent.memory.episodic.append(
+            EpisodicEvent(
+                tick=4,
+                type=EVENT_SAW_PLAYER_MOVE,
+                payload={
+                    "player_id": "p-5",
+                    "from_room": "ADMIN",
+                    "to_room": "MEDBAY",
+                },
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
+
+        assert agent.move_witness_records_for_meeting() == (
+            MoveWitnessRecord(
+                subject="p-5",
+                from_room="ADMIN",
+                to_room="MEDBAY",
+                tick=4,
+                observation_id=None,
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------

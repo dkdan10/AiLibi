@@ -106,11 +106,16 @@
    ``<evidence>`` renders the typed rows this voter holds about the players it
    may vote for -- its own sightings, vents, transits and body discoveries, the
    contradictions raised here, and who spoke against whom -- each row naming its
-   speaker, whether that speaker perceived it first-hand, and the id a ballot may
-   cite for it. That provenance clause reads ``first_hand`` BEFORE it reads the
-   speaker, so a name the voter itself spoke at this table renders as a statement
-   made here and never as something the voter perceived; only a row the speaker's
-   own record bears out may say it was seen first-hand. The block is what is
+   speaker, whether that speaker DESCRIBED A SIGHTING of their own at this table,
+   and the id a ballot may cite for it. That provenance clause is a pure function
+   of what is PUBLIC (review round 3 of 2026-09-21): the voter's own record
+   channels render as its own perception; anything the voter merely SAID here
+   renders as a statement it made, never as a perception; and another speaker's
+   line says only whether they described seeing the player themselves or named
+   them without describing one. Nothing in the block says an account is
+   confirmed, borne out or true -- the meeting layer never hands a voter a
+   verdict on which of the claims against a player are honest, because weighing
+   claims that may be lies is the voter's whole job. The block is what is
    behind the numbers that the meeting layer can NAME, not a complete
    decomposition of them: a witnessed KILL and the BODY-PROXIMITY
    lift move a number with no row of their own, which is why the block below
@@ -251,9 +256,9 @@ Two accounts that name rooms one door apart at nearby ticks can BOTH be honest �
 {% if evidence_rows %}
 
 <evidence>
-What you actually hold on each of them, and where each piece came from. Every line is either something you perceived yourself, a conflict raised at this table, or a name someone here spoke; nothing below is a conclusion. They are grouped by the player they concern, your own first-hand lines before anything you are repeating, then by the channel they came through and in the order they arrived — that order says nothing about who did it. A line marked first-hand was perceived by the speaker it names; one that is not is a statement made at this table, which may still be true. Where one player's lines run long the oldest are left in your memory above rather than repeated here. Weigh them yourself, including the ones that point away from whoever you are leaning towards.
+What you actually hold on each of them, and where each piece came from. Every line is either something you perceived yourself, a conflict raised at this table, or a name someone here spoke; nothing below is a conclusion. They are grouped by the player they concern, lines whose speaker describes a perception of their own before lines whose speaker does not, then by the channel they came through and in the order they arrived — that order says nothing about who did it, and a described sighting sorts there whether or not it happened. Where a line says someone saw it themselves, that is what THEY said here and nothing more: no one has checked it, an invented sighting reads exactly like a real one, and a voice that named a player without describing a sighting of their own is marked that way. Your own perceptions are the exception — those you hold directly. Where one player's lines run long the oldest are left in your memory above rather than repeated here. Weigh them yourself, including the ones that point away from whoever you are leaning towards.
 {% for row in evidence_rows %}
-- `{{ row.subject }}` — {{ row.description }} ({% if row.first_hand %}{% if row.speaker == voter_id %}first-hand: you saw this yourself{% else %}first-hand: {{ row.speaker }} saw it themselves{% endif %}{% else %}{% if row.speaker == voter_id %}not first-hand: you stated it at this table{% else %}not first-hand: {{ row.speaker }} stated it at this table{% endif %}{% endif %}{% if row.citation_id %}; cite `{{ row.citation_id }}`{% else %}; nothing here you could cite{% endif %})
+- `{{ row.subject }}` — {{ row.description }} ({% if row.speaker == voter_id %}{% if row.kind.startswith("own_") %}first-hand: you saw this yourself{% else %}not first-hand: you stated it at this table{% endif %}{% elif row.first_hand %}{{ row.speaker }} says they saw it themselves{% elif row.kind == "testimony" %}{{ row.speaker }} named them without describing a sighting of their own{% else %}not first-hand: {{ row.speaker }} stated it at this table{% endif %}{% if row.citation_id %}; cite `{{ row.citation_id }}`{% else %}; nothing here you could cite{% endif %})
 {% endfor %}
 </evidence>
 {% endif %}

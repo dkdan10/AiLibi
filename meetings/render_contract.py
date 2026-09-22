@@ -174,12 +174,18 @@ class EvidenceRow:
       fields (ids, rooms, ticks, the detector's own sentence). It never quotes a
       model's free text.
     * ``kind`` -- see :data:`EvidenceRowKind`.
-    * ``first_hand`` -- ``True`` only when this row's ``speaker`` reports
-      something they perceived THEMSELVES: every own-channel row, and a
-      ``testimony`` row whose speaker's own typed record bore their account of
-      the subject out (the testimony ledger's first-hand set). A
-      ``contradiction`` row is the meeting layer's cross-check of two
-      statements rather than one speaker's perception, so it is ``False``.
+    * ``first_hand`` -- provenance AS STATED, never as checked. ``True`` for
+      every own-channel row (the voter's own perception, which the engine
+      witness-gated into its packet) and for a ``testimony`` row whose speaker
+      DESCRIBED seeing that subject somewhere in this meeting's public
+      transcript. Whether their own private record bears that description out
+      is deliberately NOT read: a fabricated sighting and a true one carry the
+      same bit, because the meeting layer may not hand a voter a verdict on
+      which claims are honest (review round 3 of 2026-09-21;
+      :func:`meetings.manager._stated_sighting_subjects` is the whole
+      definition). A ``contradiction`` row is the meeting layer's cross-check
+      of two statements rather than one speaker's account of a perception, so
+      it is ``False``.
     * ``speaker`` -- who perceived or said it: the voter for an own-channel row,
       the accusing speaker for a ``testimony`` row, and for a ``contradiction``
       the speaker of the turn the row CITES -- the subject's own account where
@@ -467,10 +473,12 @@ class VotePromptRenderer(Protocol):
     template must render the figure as a PARTIAL summary of the rows and never
     as their total. :func:`meetings.manager.build_evidence_rows` states the same
     limit and hands the rows over already grouped and ordered, so a template
-    only loops. It is the same additive, defaulted widening ``reporter_id`` /
-    ``persona`` / ``testimony_ledger`` use: the default ``()`` renders nothing,
-    and the six non-serving prompt sets reference no such variable, so their
-    bytes are unchanged whatever the manager threads.
+    only loops. The rows carry provenance AS STATED and no engine verdict on
+    anyone's account (``first_hand`` above), so a template must not render one
+    as confirmed, borne out or true. It is the same additive, defaulted widening
+    ``reporter_id`` / ``persona`` / ``testimony_ledger`` use: the default ``()``
+    renders nothing, and the six non-serving prompt sets reference no such
+    variable, so their bytes are unchanged whatever the manager threads.
     """
 
     def __call__(

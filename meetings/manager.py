@@ -814,10 +814,10 @@ class MeetingParticipant:
     :func:`derive_belief_evidence`, which routes the same rows through
     :func:`meetings.transcript.grounded_vouch_subjects` into the
     relevance-gated ``corroborated`` set -- stays fixture-pinned and unfed,
-    because feeding it moves committed ballot-prompt bytes at rest. The same
-    mapping also reaches :func:`meetings.corroboration.build_testimony_ledger`,
-    which tests each spoken placement against it; the LEVER decides whether the
-    ballot's guarded source-count block renders those accounts. Since ruling D5
+    because feeding it moves committed ballot-prompt bytes at rest. While the
+    corroboration LEVER is ON -- and only then -- the same mapping also reaches
+    :func:`meetings.corroboration.build_testimony_ledger`, which tests each
+    spoken placement against it for that lever's guarded source-count block. Since ruling D5
     of 2026-09-19 the VOTER's own rows also become ``own_sighting`` evidence
     rows on that voter's ballot (:func:`_own_channel_evidence_rows`), which is
     the one surface where this channel reaches a prompt on the default path --
@@ -834,11 +834,10 @@ class MeetingParticipant:
     ``MoveWitnessAgent.move_witness_records_for_meeting()`` (episodic memory,
     self-channel only, so it is firewall-clean); the manager threads the
     per-speaker mapping into every
-    :func:`meetings.transcript.detect_contradictions` call and into
+    :func:`meetings.transcript.detect_contradictions` call and, while the
+    corroboration LEVER is ON, into
     :func:`meetings.corroboration.build_testimony_ledger`, which grounds spoken
-    placements against it and shapes the transit clause's reconstruction with
-    it; the LEVER decides whether the ballot's guarded source-count block
-    renders those rows. Since ruling D5 of 2026-09-19 the VOTER's own rows also
+    placements against it and shapes that lever's transit clause with it. Since ruling D5 of 2026-09-19 the VOTER's own rows also
     become ``own_transit`` evidence rows on that voter's ballot
     (:func:`_own_channel_evidence_rows`), which is the one surface where this
     channel reaches a prompt on the default path -- only ever the holder's own
@@ -1613,25 +1612,28 @@ class MeetingManager:
         # How many voices carry each charge, and how many of them are accounts
         # the speaker's own record confirms. Built ONCE, from the final
         # transcript and the final flags, over the SAME firewall-filtered
-        # sighting mapping the detector read.
-        # Built UNCONDITIONALLY since ruling D5 of 2026-09-19: it is the one
-        # thing that knows which accusing speakers' own records bore their
-        # accounts out, which is the ``first_hand`` bit every testimony evidence
-        # row carries, and it is a pure derivation of bytes this meeting already
-        # holds -- no new input, no provider call. The LEVER still decides
-        # whether the ``<testimony_sources>`` BLOCK renders, which is what
-        # ``testimony_ledger`` below carries, so an OFF meeting's prompt bytes
-        # are unchanged by this line.
-        evidence_ledger = build_testimony_ledger(
-            transcript,
-            contradictions=contradictions,
-            sighting_records=sighting_records,
-            move_witness_records=move_witness_records,
-            opener=trigger.triggered_by,
-            roster=roster,
-            trigger_kind=meeting_trigger_kind,
+        # sighting mapping the detector read -- and ONLY while the corroboration
+        # lever is ON, which is the gate ``corroboration_discipline_enabled``
+        # documents and review round 3 restored. Engine truth about whose
+        # account was borne out reaches the ballot through the lever's
+        # ``<testimony_sources>`` block or not at all; the DEFAULT path threads
+        # no ledger, so an OFF meeting renders exactly the bytes it rendered
+        # before the lever existed. The weighing channel's testimony rows take
+        # their provenance from the PUBLIC transcript instead
+        # (:func:`_stated_sighting_subjects`).
+        testimony_ledger = (
+            build_testimony_ledger(
+                transcript,
+                contradictions=contradictions,
+                sighting_records=sighting_records,
+                move_witness_records=move_witness_records,
+                opener=trigger.triggered_by,
+                roster=roster,
+                trigger_kind=meeting_trigger_kind,
+            )
+            if corroboration_discipline
+            else None
         )
-        testimony_ledger = evidence_ledger if corroboration_discipline else None
         ballots = await self._collect_ballots(
             trigger=trigger,
             participants=ordered_participants,
@@ -1640,7 +1642,6 @@ class MeetingManager:
             evidence=evidence,
             render_inputs=render_inputs,
             testimony_ledger=testimony_ledger,
-            evidence_ledger=evidence_ledger,
         )
 
         # Phase 5: resolution.
@@ -2154,7 +2155,6 @@ class MeetingManager:
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
-        evidence_ledger: MeetingTestimonyLedger | None = None,
     ) -> tuple[VoteBallot, ...]:
         # Sequential collection: concurrent ballots on a single local GPU
         # inflate each call's wall-clock past vote_seconds (measured 0.71x
@@ -2176,7 +2176,6 @@ class MeetingManager:
                     evidence=evidence,
                     render_inputs=render_inputs,
                     testimony_ledger=testimony_ledger,
-                    evidence_ledger=evidence_ledger,
                 )
             )
         return tuple(ballots)
@@ -2192,7 +2191,6 @@ class MeetingManager:
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
-        evidence_ledger: MeetingTestimonyLedger | None = None,
     ) -> VoteBallot:
         # Confirm the candidate set over the FINAL transcript: every living
         # participant except the voter is an eligible eject target (the same
@@ -2259,20 +2257,16 @@ class MeetingManager:
         # The weighing channel (ruling D5 of 2026-09-19): the typed pieces THIS
         # voter holds about the players it may vote for, assembled here -- the one
         # scope that holds this voter's own channels, the meeting's final flags
-        # and the final transcript together -- so the template only loops.
-        # ``evidence_ledger`` is the SAME per-subject ledger the corroboration
-        # lever renders when it is ON, built unconditionally for this one use:
-        # it is what decides which accusing speakers were borne out first-hand,
-        # and it is a pure derivation of bytes the meeting already holds. It is
-        # NOT threaded into the template -- ``testimony_ledger`` below still
-        # carries the lever's own gate -- so an OFF meeting renders no
-        # ``<testimony_sources>`` block exactly as before.
+        # and the final transcript together -- so the template only loops. No
+        # ledger is threaded and none is reachable: a testimony row's provenance
+        # is read off the PUBLIC transcript, so the block can never tell this
+        # voter which of the accounts against a player the engine bears out
+        # (review round 3).
         evidence_rows = build_evidence_rows(
             voter=participant,
             candidate_targets=candidate_targets,
             contradictions=contradictions,
             transcript=transcript,
-            testimony_ledger=evidence_ledger,
         )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
@@ -3401,10 +3395,10 @@ def _normalize_ballot_target(
 #   same player -- the failure a single per-subject budget would have;
 # * where it bites, the rows dropped are the EARLIEST of that (subject, class)
 #   group, ranked on ARRIVAL TIME rather than on the render order
-#   :func:`build_evidence_rows` states -- that order puts first-hand rows first
-#   inside a class, so dropping by render position would drop the grounded
-#   voices first. Nothing is dropped for what it says, so an exculpatory line is
-#   exactly as likely to survive as an incriminating one;
+#   :func:`build_evidence_rows` states -- that order puts the rows whose speaker
+#   described a sighting first inside a class, so dropping by render position
+#   would drop those voices first. Nothing is dropped for what it says, so an
+#   exculpatory line is exactly as likely to survive as an incriminating one;
 # * every dropped line is still in the rendered memory block above, and the
 #   template says so in one standing sentence.
 #
@@ -3643,11 +3637,52 @@ def _contradiction_evidence_rows(
     return rows
 
 
+def _stated_sighting_subjects(
+    turns: Sequence[MeetingTurn],
+) -> dict[PlayerId, set[PlayerId]]:
+    """Per speaker, the players they DESCRIBED SEEING in this transcript.
+
+    The whole of a testimony row's provenance, and a pure function of the PUBLIC
+    transcript: a speaker is in ``result[speaker]`` for every player named by a
+    typed observation claim they spoke here. Nothing checks whether it happened
+    -- an invented sighting reads exactly as a true one, which is the point
+    (review round 3).
+
+    The four shapes read are the ones whose fields NAME ANOTHER PLAYER as
+    perceived: :class:`~meetings.schemas.SawPlayerObservation` (its ``subject``
+    AND its ``co_present`` companions, who are equally players the speaker says
+    they saw), :class:`~meetings.schemas.SawVentObservation`,
+    :class:`~meetings.schemas.SawKillObservation` and
+    :class:`~meetings.schemas.SawMoveObservation`. The other four shapes of
+    :data:`~meetings.schemas.ObservationClaim` name no living other player:
+    ``CompletedTaskObservation`` and ``TaskActivityAccount`` are the speaker's
+    own task activity, ``WhereaboutsClaim`` is the speaker's own placement (its
+    subject IS the speaker, and a self-accusation builds no row anyway), and
+    ``FoundBodyObservation`` names a DEAD victim, who is never among the living
+    ejection targets a testimony row may be about.
+    """
+
+    stated: dict[PlayerId, set[PlayerId]] = {}
+    for turn in turns:
+        for observation in turn.observations:
+            named: tuple[PlayerId, ...]
+            if isinstance(observation, SawPlayerObservation):
+                named = (observation.subject, *observation.co_present)
+            elif isinstance(
+                observation,
+                SawVentObservation | SawKillObservation | SawMoveObservation,
+            ):
+                named = (observation.subject,)
+            else:
+                continue
+            stated.setdefault(turn.speaker, set()).update(named)
+    return stated
+
+
 def _testimony_evidence_rows(
     *,
     turns: Sequence[MeetingTurn],
     subjects_of_interest: frozenset[PlayerId],
-    testimony_ledger: MeetingTestimonyLedger | None,
 ) -> list[tuple[int, EvidenceRow]]:
     """Who spoke against whom at this table, as ``(turn index, row)`` pairs.
 
@@ -3658,23 +3693,20 @@ def _testimony_evidence_rows(
     dropped: a speaker is not a voice against themselves, the same rule
     :mod:`meetings.corroboration` counts voices under.
 
-    ``first_hand`` is ``True`` only where the testimony ledger put this speaker
-    in that subject's first-hand set -- meaning the speaker's OWN typed record
-    bore their account of the subject out, the meeting layer's one definition of
-    first-hand. Since ruling D5 of 2026-09-19 the ledger is built
-    UNCONDITIONALLY (``MeetingManager.run``), so a grounded voice is marked
-    first-hand on the DEFAULT path too; the corroboration lever now decides only
-    whether the ``<testimony_sources>`` block renders. A ``None`` ledger -- a
-    caller that passes none, the fixture path -- means no first-hand set is
-    known, every testimony row reads "stated it at this table", and that is
-    exactly what is known.
+    ``first_hand`` is PROVENANCE AS STATED and nothing else: ``True`` where this
+    speaker described seeing this subject somewhere in THIS meeting's public
+    transcript (:func:`_stated_sighting_subjects`), ``False`` where they named
+    the subject without describing a sighting of their own. Whether the
+    speaker's own private record bears the account out is NEVER read here --
+    that is engine truth, and handing a voter a per-accuser verdict on it would
+    be a lie detector, not evidence to weigh (review round 3, superseding the
+    Acceptance clause that named ``testimony_ledger`` as an input). A fabricated
+    sighting and a true one are indistinguishable on this surface BY
+    CONSTRUCTION, which is what the voter's job requires: it must price claims
+    that may be lies, not be told which are true.
     """
 
-    first_hand_by_subject: dict[PlayerId, frozenset[PlayerId]] = {}
-    if testimony_ledger is not None:
-        first_hand_by_subject = {
-            row.subject: frozenset(row.first_hand) for row in testimony_ledger.rows
-        }
+    stated_sightings = _stated_sighting_subjects(turns)
     seen: set[tuple[PlayerId, PlayerId]] = set()
     rows: list[tuple[int, EvidenceRow]] = []
     for turn in turns:
@@ -3697,8 +3729,8 @@ def _testimony_evidence_rows(
                             f"{turn.turn_index}"
                         ),
                         kind="testimony",
-                        first_hand=turn.speaker
-                        in first_hand_by_subject.get(subject, frozenset()),
+                        first_hand=subject
+                        in stated_sightings.get(turn.speaker, frozenset()),
                         speaker=turn.speaker,
                         citation_id=turn.turn_id,
                     ),
@@ -3713,7 +3745,6 @@ def build_evidence_rows(
     candidate_targets: tuple[PlayerId, ...],
     contradictions: Sequence[ContradictionRef],
     transcript: MeetingTranscript,
-    testimony_ledger: MeetingTestimonyLedger | None = None,
 ) -> tuple[EvidenceRow, ...]:
     """The typed pieces THIS voter holds about the players it may vote for.
 
@@ -3721,11 +3752,17 @@ def build_evidence_rows(
     and instruct it to follow that number; these are the typed pieces behind
     that number, assembled from TYPED inputs only -- the participant's four own
     record channels, the meeting's :class:`~meetings.schemas.ContradictionRef`
-    flags, and the transcript's typed accusation claims (with the testimony
-    ledger deciding which of those speakers were borne out first-hand).
+    flags, and the transcript's typed accusation claims.
     ``rendered_memory`` is never read: it is prose, and the standing rule is that
     the grounding chokepoint never parses rendered prose
     (:class:`~meetings.schemas.VentWitnessRecord`).
+
+    NOTHING here reads engine truth about another speaker's account. A testimony
+    row's provenance is decided by :func:`_stated_sighting_subjects` from the
+    PUBLIC transcript alone, and neither this function nor its three builders
+    touches :mod:`meetings.corroboration` (review round 3, pinned by a static
+    call-graph test): the voter is given claims to weigh, some of which may be
+    lies, and is never told which of them the engine confirms.
 
     NOT a complete decomposition of the scalar, and the template says so at the
     same strength. Two of the eight provenance channels
@@ -3760,7 +3797,9 @@ def build_evidence_rows(
 
     1. by subject -- the ``candidate_targets`` roster order first, then any
        other subject (a victim) by id;
-    2. first-hand rows before rows that are not;
+    2. rows whose speaker described a perception of their own before rows whose
+       speaker did not -- provenance as STATED, so a fabricated account sorts
+       exactly where a true one does;
     3. by provenance CLASS (:data:`_EVIDENCE_KIND_CLASS`): what the voter
        perceived, then what the detector raised, then what was said here. A
        witnessed vent and an ordinary sighting share a class, so no row is
@@ -3774,9 +3813,9 @@ def build_evidence_rows(
     :data:`MAX_EVIDENCE_ROWS_PER_SUBJECT` per (subject, provenance class)
     applied last. The budget is decided on ARRIVAL TIME, not on the render order
     above -- the EARLIEST rows of an over-budget group go -- because the render
-    order puts first-hand rows first inside a class, and dropping by render
-    position would drop the grounded voices first. Nothing is ever dropped for
-    what it says.
+    order puts the rows whose speaker described a sighting first inside a class,
+    and dropping by render position would drop those voices first. Nothing is
+    ever dropped for what it says.
     """
 
     targets = frozenset(candidate_targets)
@@ -3791,7 +3830,6 @@ def build_evidence_rows(
         + _testimony_evidence_rows(
             turns=turns,
             subjects_of_interest=targets,
-            testimony_ledger=testimony_ledger,
         )
     )
     target_rank = {subject: index for index, subject in enumerate(candidate_targets)}
@@ -3814,9 +3852,9 @@ def build_evidence_rows(
 
     # The per-(subject, class) budget, decided on ARRIVAL TIME alone and never
     # on the render order. The two differ, and the difference matters: inside
-    # the testimony class the render puts first-hand voices first, so dropping
-    # by render position would drop the GROUNDED voices first -- a budget
-    # deciding by what a row says, which is exactly what this bound must not do.
+    # the testimony class the render puts the voices who described a sighting
+    # first, so dropping by render position would drop THOSE voices first -- a
+    # budget deciding by what a row says, which this bound must never do.
     # Ranking each over-budget group by its own arrival key instead drops the
     # EARLIEST rows of that group, by position in time and by nothing else.
     by_group: dict[tuple[PlayerId, int], list[int]] = {}
