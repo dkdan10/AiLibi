@@ -7,7 +7,7 @@ body and added the loader dependency.
 
 ``GET /tournament-report`` (Task 5.7, DESIGN.md §11.3) mirrors the
 ``/cost-summary`` thin-adapter pattern: it serves the latest
-``tournament-eval-report.json`` from the configured eval dir. It deliberately
+``tournament-eval-report.json.gz`` from the configured eval dir. It deliberately
 exposes the report's ``roles`` ground truth for the dashboard — the spectator
 API is a privileged GM surface (DESIGN.md §1.3), consistent with the replay
 viewer already exposing role.
@@ -252,6 +252,6 @@ def get_tournament_report(loader: _LoaderDep) -> _TournamentEvalReportView:
     except FileNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail="no tournament-eval-report.json in the configured eval dir",
+            detail="no tournament-eval-report.json.gz in the configured eval dir",
         )
     return _redact_failed_calls(report)

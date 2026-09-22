@@ -582,6 +582,59 @@ assumed.
 
 *(written as each leg completes)*
 
+## 3.5 The delivery path: four gzipped reports, and the proof they moved nothing
+
+**What happened.** The push carrying leg 2 was refused by a pre-receive hook:
+`replays/ml_corpus/9p2i/tournament-eval-report.json` had reached **102.70 MB**
+against GitHub's hard **100 MB** per-file limit. That file is a derived view,
+and it grew **+29.5%** (from 79.29 MB) because it embeds the prompts and
+transcripts the wave's larger ballot body inflated — the same ~27% the token
+counts show. The repo configures no Git LFS. The owner decided on 2026-09-22 to
+deliver all four reports gzipped.
+
+| set | uncompressed | gzipped | ratio |
+|---|---|---|---|
+| `replays/ml_corpus/9p2i` | 102.70 MB | **8.92 MB** | 11.51x |
+| `replays/samples/9p2i` | 33.86 MB | **2.89 MB** | 11.73x |
+| `replays/ml_corpus/4p1i` | 3.71 MB | **0.50 MB** | 7.48x |
+| `replays/samples/4p1i` | 3.37 MB | **0.46 MB** | 6.91x |
+
+**The proof that no measured value moved.** For each set, three digests of the
+same bytes: the uncompressed file held out of tree BEFORE the change, the
+decompressed archive AFTER it, and a fresh in-memory rebuild from the replays
+(`build_sample_report.py --check`, which was consistent on all four).
+
+| set | sha256 of the pre-change bytes = sha256 of the decompressed archive |
+|---|---|
+| `samples/9p2i` | `ca7e190b3405e89efc19cb0bb7e0b68b9252157c43a5af4a8bfff6ce223ea29a` |
+| `ml_corpus/9p2i` | `9b17bf9c5ed7a61ed624cf159ede1103b53cdf210947816b71b57bb105f28848` |
+| `samples/4p1i` | `0e91743f60e7a078ced12725717d64c57b483f7f221a5a3d293db13bb39951ce` |
+| `ml_corpus/4p1i` | `ebf03641ff18e32ddc14d23e6ecd8479d21e1a8477338be8ecee510dde8f5146` |
+
+The archive is a pure function of its contents: `mtime=0` and no embedded
+filename, so compressing the same report twice is byte-identical and `--check`
+stays a real gate instead of noise.
+
+**One home, not ten.** `eval/report_io.py` owns the name, the writer, the
+reader and a line-iterable opener — the last so `check_doc_facts.py` keeps
+decoding ONE block by streaming rather than loading a hundred megabytes to read
+a few lines. Every reader listed in the delivery survey now goes through it.
+
+**Two bounds, stated rather than buried.** `meetings/schemas.py:1171` is the
+only mention inside a frozen directory and it is a DOCSTRING, not a reader — the
+freeze forbids touching it, so that one prose reference still reads `.json`.
+And `scripts/run_tournament.py`'s STAGED per-run sidecar is deliberately not
+converted: nothing reads it, it is per-seed and never committed, and converting
+it would reach into `atomic_write_report` and the progress digest — the staging
+and resume machinery the recording depends on — for no delivery benefit.
+
+**Why the committed rubric's staleness matters here too.** §2.1a found a
+committed derived view that had silently stopped describing its own bytes. A
+gzipped report is exactly as exposed to that failure, which is why the planted
+test in `tests/eval/test_report_io.py` asserts the distinction directly: a
+well-formed archive of the WRONG payload reads back cleanly and is still wrong.
+Readability is not correctness, and only `--check` gates the second.
+
 ## 4. The AFTER column
 
 *(written once the four legs are in)*

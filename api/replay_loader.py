@@ -131,6 +131,7 @@ from engine.events import (
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
+from eval.report_io import REPORT_FILENAME, read_report_text
 from eval.report_schema import GameReport, build_provenance_groups
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
@@ -245,7 +246,7 @@ _DEFAULT_METADATA_CACHE_SIZE: Final[int] = 1024
 # Filename of the tournament eval report that ``scripts/run_tournament.py``
 # writes into the tournament output dir. The loader serves it read-only from
 # the same configured replay/eval directory it scans for replays (Task 5.7).
-_TOURNAMENT_REPORT_FILENAME: Final[str] = "tournament-eval-report.json"
+_TOURNAMENT_REPORT_FILENAME: Final[str] = REPORT_FILENAME
 
 # Per-set rubric surface (Task 12.2; DESIGN.md §3.1, §7). The interestingness
 # scorer (``experiments/lab/rubric_score.py``) co-locates its
@@ -1101,7 +1102,7 @@ class ReplayLoader:
     def tournament_report(self) -> TournamentEvalReport:
         """Load + validate the latest tournament eval report from the replay dir.
 
-        Reads ``<replay_dir>/tournament-eval-report.json`` (the file
+        Reads ``<replay_dir>/tournament-eval-report.json.gz`` (the file
         :mod:`scripts.run_tournament` writes) and validates it against
         :class:`eval.meeting_quality.TournamentEvalReport`. Mirrors
         :meth:`cost_summary` in reading the same configured directory — there is
@@ -1115,9 +1116,7 @@ class ReplayLoader:
         path = self._replay_dir / _TOURNAMENT_REPORT_FILENAME
         if not path.is_file():
             raise FileNotFoundError(path)
-        report = TournamentEvalReport.model_validate_json(
-            path.read_text(encoding="utf-8")
-        )
+        report = TournamentEvalReport.model_validate_json(read_report_text(path))
         # Rebind outcomes and behavior identity to the served source. Historical
         # metric and cost cells remain report values, without certification.
         games = report.report.games

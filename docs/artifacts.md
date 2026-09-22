@@ -94,8 +94,8 @@ than its output preserved.
 
 | artifact | class | where | size |
 |---|---|---|---|
-| `replays/samples/` — the baseline-8 maintenance re-record (100 replays + per-set `MANIFEST.md`); it published no bars and adopted nothing, and the later lever-ON candidate returned FINDING, so these stay the canonical bytes | (a) + (b) | in git | 61 MB / 107 files |
-| `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
+| `replays/samples/` — the baseline-8 maintenance re-record (100 replays + per-set `MANIFEST.md`); it published no bars and adopted nothing, and the later lever-ON candidate returned FINDING, so these stay the canonical bytes | (a) + (b) | in git | 40 MB / 107 files |
+| `replays/ml_corpus/` — the committed ML corpus; its `tournament-eval-report.json.gz` is gzipped, as all four sets' are, because the uncompressed report reached 102.70 MB against GitHub's hard 100 MB per-file limit (the owner's delivery decision of 2026-09-22) | (a) | in git | 114 MB / 209 files |
 | `replays/records/phase-21-wave2-finding/` — the pin and the per-file digests for a 300-game recording that is NOT one of the canonical replay sets, plus a README saying why it is not | (b) | in git | 2 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
 | `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; one frozen format-3 recording and its README for the cross-tree policy check; the bump-in-flight prompt archive holds the six `qwen3_6_27b` v5 bodies, because every committed replay stamps v5 while the live set reads v6 — the alibi-as-route bump — with `vote_ballot` alone at v7 since the grounded-SKIP bump and at v8 since the weighing-channel bump, and the re-record that closes that window retires them) | (a) | in git | 2,196,250 tracked bytes / 35 files |
@@ -106,7 +106,7 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,535,502 tracked bytes / 328 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,571,844 tracked bytes / 329 files |
 | `docs/media/` — the README captures, their provenance, and the as-built architecture picture | (a) | in git | 1.4 MB / 7 files |
 | `docs/process-scorecard.md` + `docs/process-scorecard.json` — the nine-row process scorecard, folded from the committed recordings with no model call: the flattened measurement rows a spectator surface's cells will be read from, and the markdown that publishes them. `scripts/publish_process_scorecard.py --check` pins both against a recomputation, so the size states files and not bytes — a re-record rewrites the numbers without touching this row | (b) | in git | 2 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild a sample set's ``tournament-eval-report.json`` offline from its replays.
+"""Rebuild a sample set's ``tournament-eval-report.json.gz`` offline from its replays.
 
 ``scripts/refresh_samples.sh`` regenerates the replay JSONL + ``MANIFEST.md`` but
 NOT the derived eval report. A stale report otherwise survives
@@ -63,6 +63,11 @@ from engine.world import load_canonical_map  # noqa: E402
 from eval.balance_eval import load_tournament_report  # noqa: E402
 from eval.action_ingest import tally_actions_by_role  # noqa: E402
 from eval.kill_craft import compute_kill_craft_report  # noqa: E402
+from eval.report_io import (  # noqa: E402
+    REPORT_FILENAME,
+    read_report_text,
+    write_report_text,
+)
 from eval.meeting_quality import (  # noqa: E402
     TournamentEvalReport,
     build_tournament_eval_report,
@@ -81,7 +86,11 @@ from orchestrator.replay import (  # noqa: E402
     fsm_default_tactical_policy_stamp,
 )
 
-_REPORT_FILENAME = "tournament-eval-report.json"
+# The committed report is gzipped; ``eval.report_io`` is the ONE home for the
+# name, the deterministic writer and the reader. The bytes inside the archive
+# are what this module has always serialized, so no measured value moves with
+# the delivery path (the owner's decision of 2026-09-22).
+_REPORT_FILENAME = REPORT_FILENAME
 
 # The flat 4p/1i MVP baseline is the ONLY committed set without a roster.json
 # (api.replay_loader: a directory with no roster.json is the single path that
@@ -465,7 +474,7 @@ def write_report(sample_dir: Path) -> TournamentEvalReport:
     """
 
     report = build_report(sample_dir)
-    (sample_dir / _REPORT_FILENAME).write_text(_serialize(report), encoding="utf-8")
+    write_report_text(sample_dir / _REPORT_FILENAME, _serialize(report))
     return report
 
 
@@ -530,7 +539,9 @@ def check_report(sample_dir: Path) -> int:
         return 1
     report = build_report(sample_dir)
     rebuilt = report.model_dump(mode="json")
-    committed = json.loads(report_path.read_text(encoding="utf-8"))
+    # The DECOMPRESSED bytes are what is compared, exactly as before the report
+    # became an archive: the gzip layer is delivery, never content.
+    committed = json.loads(read_report_text(report_path))
     if (
         rebuilt != committed
         and _can_project_historical(report)

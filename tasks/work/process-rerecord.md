@@ -366,6 +366,43 @@ its history and loses only its claim to be current.
    guard binds the blurb's claim to the rendered evidence count). The rubric
    feeds only the separate `/eval/rubric` highlights surface.
 
+4. **The four eval reports are delivered GZIPPED — the delivery path, the
+   owner's decision of 2026-09-22.** This record is the first whose
+   `replays/ml_corpus/9p2i/tournament-eval-report.json` exceeded GitHub's hard
+   100 MB per-file limit (102.70 MB against 79.29 MB before, +29.5%, tracking
+   the larger ballot body), and the push carrying it was refused by a
+   pre-receive hook. The owner chose gzip for all four sets. Every set now
+   stores `tournament-eval-report.json.gz` and the uncompressed `.json` is
+   tracked nowhere; `eval/report_io.py` is the ONE home for the name, the
+   deterministic writer (`mtime=0`, no embedded filename, so two archives of
+   the same bytes are identical) and the readers, including a line-iterable
+   opener so `check_doc_facts.py` keeps STREAMING one block rather than loading
+   a hundred megabytes. Sizes: 102.70 → 8.92 MB, 33.86 → 2.89, 3.71 → 0.50,
+   3.37 → 0.46.
+
+   **Nothing measured moved, and that is proven rather than asserted.** For
+   each of the four sets the sha256 of the decompressed archive equals the
+   sha256 of the uncompressed bytes held out of tree before the change, and
+   `build_sample_report.py --check` — a fresh in-memory rebuild from the
+   replays — is consistent with all four. The digests are in the record.
+   `tests/eval/test_report_io.py` pins determinism (including the RFC-1952
+   header bytes), the exact round trip, the streaming property, the strict
+   refusal to read an unconverted legacy file, and the planted failure: a
+   well-formed archive of the WRONG payload is readable and still wrong, so
+   readability is never mistaken for correctness.
+
+   Two bounds worth stating. `meetings/schemas.py:1171` names the file in a
+   DOCSTRING and is the only mention inside a frozen directory; it is not a
+   reader and the freeze forbids touching it, so that one prose reference still
+   says `.json`. And `scripts/run_tournament.py`'s STAGED per-run sidecar is
+   deliberately NOT converted: nothing reads it (not `_manifest_writer.py`, not
+   `_tournament_progress.py`, not either recorder — the recorders mention the
+   report only in dry-run echo strings), it is per-seed, tiny and never
+   committed, and converting it would reach into `_report_output.atomic_write_report`
+   and the progress file's digest — the staging and resume machinery the
+   recording itself depends on — for no delivery benefit. It is reported rather
+   than done silently.
+
 ## Validation
 
 `scripts/validity_gate.py <set-dir> --expected-model Qwen/Qwen3.6-27B

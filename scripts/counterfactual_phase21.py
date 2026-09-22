@@ -22,7 +22,7 @@ first two agree:
 
 * **RECORDED-OFF** -- a committed instrument (``eval.reporter_justice``,
   ``eval.evidence_honesty``, ``eval.deduction_metrics`` read off each set's
-  ``tournament-eval-report.json``) reading the recorded bytes. This IS the
+  ``tournament-eval-report.json.gz``) reading the recorded bytes. This IS the
   record's own substrate.
 * **RECONSTRUCTED-OFF** -- the same cell folded from the re-derived inputs of one
   reconstruction walk with the whole slate OFF. A cell whose two OFF readings
@@ -138,6 +138,7 @@ from eval.evidence_honesty import (  # noqa: E402
 )
 from eval.deduction_metrics import ScaffoldLeakageCells, classify_flag  # noqa: E402
 from eval.meeting_quality import TournamentEvalReport  # noqa: E402
+from eval.report_io import read_set_report_text  # noqa: E402
 from eval.reporter_justice import (  # noqa: E402
     ReporterJusticeCells,
     _meeting_trigger,
@@ -4393,7 +4394,7 @@ def run(
         evidence = compute_evidence_honesty(sample_dir)
         solvability = compute_solvability_report(sample_dir)
         committed = TournamentEvalReport.model_validate_json(
-            (sample_dir / "tournament-eval-report.json").read_text(encoding="utf-8")
+            read_set_report_text(sample_dir)
         )
         _assert_ledger_matches_the_instruments(
             walk=walk, reporter=reporter, committed=committed

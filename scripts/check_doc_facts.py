@@ -221,6 +221,7 @@ from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
 from paired_stats import compute_paired_stats  # noqa: E402
 
+from eval.report_io import REPORT_FILENAME, open_report_text  # noqa: E402
 from meetings.evidence_profile import (  # noqa: E402
     EXPERIMENT_ENV_NAMES,
     MeetingEvidenceProfile,
@@ -301,7 +302,7 @@ _RECORDED_SETS: Final[tuple[str, ...]] = (
     "replays/ml_corpus/4p1i",
     "replays/ml_corpus/9p2i",
 )
-_EVAL_REPORT_PATH: Final = "{set_dir}/tournament-eval-report.json"
+_EVAL_REPORT_PATH: Final = "{set_dir}/" + REPORT_FILENAME
 _SET_MANIFEST_PATH: Final = "{set_dir}/MANIFEST.md"
 _VOTE_CORRECTNESS_KEY: Final = '"vote_correctness":'
 # The stamp a set with no impostor ejections carries: the rate is undefined
@@ -874,7 +875,7 @@ _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
 
 # The committed report the README hands a reader instead of the empty one a
 # fake-provider run produces, and the phrase that anchors its paragraph.
-_POPULATED_REPORT: Final = "replays/samples/9p2i/tournament-eval-report.json"
+_POPULATED_REPORT: Final = "replays/samples/9p2i/" + REPORT_FILENAME
 _EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
 
 # One word budget per front-door page, as ``(document, floor, ceiling)`` —
@@ -2269,7 +2270,10 @@ def read_report_block(
     path = repo_root / relative_path
     block: list[str] = []
     try:
-        with path.open(encoding="utf-8") as handle:
+        # Gzipped since 2026-09-22, and still STREAMED: the archive iterates
+        # line by line exactly as the plain file did, so the whole document is
+        # never loaded to read one block.
+        with open_report_text(path) as handle:
             depth = 0
             for line in handle:
                 if not block:

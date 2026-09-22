@@ -104,10 +104,10 @@ _COPIED = (
     # existed, which the adopting record's copies of them are held to.
     "audits/audit-phase-21-preregistration.md",
     "eval/vote_correctness.py",
-    "replays/samples/4p1i/tournament-eval-report.json",
-    "replays/samples/9p2i/tournament-eval-report.json",
-    "replays/ml_corpus/4p1i/tournament-eval-report.json",
-    "replays/ml_corpus/9p2i/tournament-eval-report.json",
+    "replays/samples/4p1i/tournament-eval-report.json.gz",
+    "replays/samples/9p2i/tournament-eval-report.json.gz",
+    "replays/ml_corpus/4p1i/tournament-eval-report.json.gz",
+    "replays/ml_corpus/9p2i/tournament-eval-report.json.gz",
     "replays/ml_corpus/4p1i/MANIFEST.md",
     "replays/ml_corpus/9p2i/MANIFEST.md",
     "docs/glossary.md",
@@ -164,8 +164,8 @@ _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _MANIFEST_9P2I = "replays/samples/9p2i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
 _VOTE_CORRECTNESS = "eval/vote_correctness.py"
-_EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json"
-_EVAL_REPORT_4P1I = "replays/samples/4p1i/tournament-eval-report.json"
+_EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json.gz"
+_EVAL_REPORT_4P1I = "replays/samples/4p1i/tournament-eval-report.json.gz"
 _ML_CORPUS_MANIFEST_9P2I = "replays/ml_corpus/9p2i/MANIFEST.md"
 _GLOSSARY = "docs/glossary.md"
 _HISTORY = "docs/history.md"

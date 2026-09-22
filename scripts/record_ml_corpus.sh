@@ -1254,7 +1254,7 @@ if [[ "$dry_run" -eq 1 ]]; then
       echo "[dry-run]   finalize: would STOP at check_replay_provenance — fake rows are stamped $DEFAULT_FAKE_MODEL, not the locked $DEFAULT_FEATHERLESS_MODEL, so the set fails baseline provenance"
       echo "[dry-run]   eval report / splits / freeze: NONE — a fake run records replays + MANIFEST rows and is refused before any set-level artifact is written"
     else
-      echo "[dry-run]   eval report: would rebuild $set_dir/tournament-eval-report.json (scripts/build_sample_report.py; \$0, no provider)"
+      echo "[dry-run]   eval report: would rebuild $set_dir/tournament-eval-report.json.gz (scripts/build_sample_report.py; \$0, no provider)"
       echo "[dry-run]   splits: would write $set_dir/splits.json ($SPLIT_RULE_DESC)"
       echo "[dry-run]   freeze: would append a FROZEN line naming the git_sha to $set_dir/MANIFEST.md"
     fi

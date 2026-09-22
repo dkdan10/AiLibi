@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from eval.report_io import read_set_report_text
+
 if TYPE_CHECKING:
     from api.replay_loader import ReplayLoader
     from eval.funnel import InformationFunnelReport
@@ -3494,9 +3496,7 @@ class TestEvidenceQualityLiftOnCommittedBytes:
 
     @pytest.fixture(scope="class")
     def roles_by_seed(self) -> dict[int, dict[str, str]]:
-        report = json.loads(
-            (self._SET_DIR / "tournament-eval-report.json").read_text(encoding="utf-8")
-        )
+        report = json.loads(read_set_report_text(self._SET_DIR))
         return {game["seed"]: game["roles"] for game in report["report"]["games"]}
 
     def _meeting_entry(self, seed: int, meeting_id: str) -> MeetingReplayEntry:
@@ -3731,9 +3731,7 @@ class TestReporterExculpationOnCommittedBytes:
 
     @pytest.fixture(scope="class")
     def roles_by_seed(self) -> dict[int, dict[str, str]]:
-        report = json.loads(
-            (self._SET_DIR / "tournament-eval-report.json").read_text(encoding="utf-8")
-        )
+        report = json.loads(read_set_report_text(self._SET_DIR))
         return {game["seed"]: game["roles"] for game in report["report"]["games"]}
 
     def _entry(self, seed: int, meeting_id: str) -> MeetingReplayEntry:
