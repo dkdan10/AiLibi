@@ -134,7 +134,7 @@ the direction memo's section 12). Provider `featherless`, model
 | limit | measured on the committed bytes | authorized | actual |
 |---|---|---|---|
 | model calls | 7,271 | 9,500 | (§2) |
-| input tokens | 31,756,112 | 43,000,000 | (§2) |
+| input tokens | 31,756,112 | 43,000,000 → **46,000,000** (§0.4a) | (§2) |
 | output tokens | 1,598,475 | 2,200,000 | (§2) |
 | recording wall | about 12h05m | 16 h | (§2) |
 | elapsed window | about 15h48m | 24 h | (§2) |
@@ -143,6 +143,60 @@ the direction memo's section 12). Provider `featherless`, model
 The cost is `$0.00` **marginal** against the flat-rate Featherless
 subscription, whose standing fee is already paid and is not incurred by this
 run.
+
+### 0.4a The input ceiling, raised mid-leg-1 — 2026-09-22
+
+The owner, on 2026-09-22, relayed verbatim by the orchestrator:
+
+> Raise the input ceiling to 46M
+
+So the authorized input-token ceiling is **46,000,000** from that point on. The
+original `43,000,000` stays in the table above as recorded; it is annotated,
+not rewritten.
+
+**The projection that prompted it.** The first ten seeds of leg 1 measured
+**210,195 input tokens per game**, read as 1.357x the previous record's
+per-game input and projected to **43.09 M** over all 300 games — over the
+original ceiling by a margin too thin to record against. That is the reading
+the decision was taken on, and it is recorded here as the reason given.
+
+**The operator's own re-derivation, which lands lower, and why the two differ.**
+This record re-measured the ratio MATCHED SEED BY SEED — the same ten seeds,
+the same roster, the new bytes against the preserved old ones — rather than
+against the previous record's whole-run per-game average:
+
+| | calls | input | output | input per game |
+|---|---|---|---|---|
+| NEW, seeds 0-9 of `samples/9p2i` | 352 | 2,101,949 | 90,732 | 210,194 |
+| OLD, the same ten seeds | 370 | 1,677,230 | 81,750 | 167,723 |
+| ratio new/old | **0.9514** | **1.2532** | **1.1099** | |
+
+The 210,195 figure reproduces to the digit. The **1.357x** does not: it divides
+that 9p2i per-game figure by the previous record's average over all four sets,
+and a 4p1i game costs about a ninth of a 9p2i game, so the pooled average is a
+lighter denominator than the population being measured. Matched seed by seed
+the input ratio is **1.2532**, and scaling the previous record's whole-run
+totals by the matched ratios projects:
+
+| | projection | against the ceiling |
+|---|---|---|
+| input tokens | 39,797,600 | 86.5% of 46,000,000 (92.6% of the original 43,000,000) |
+| model calls | 6,917 | 72.8% of 9,500 |
+| output tokens | 1,774,102 | 80.6% of 2,200,000 |
+
+So on this record's own arithmetic the run fits inside the ORIGINAL ceiling,
+and the raise is headroom rather than a requirement. Both readings are stated
+because the decision was taken on the first and the record is kept on the
+second; §2 publishes the ACTUAL against 46,000,000, which is what settles it.
+The calls ratio is worth its own line: the wave's bytes make **fewer** model
+calls per game, not more (0.9514), so the input growth is prompt size — the
+larger ballot body — and not extra traffic.
+
+**Every other ceiling is unchanged**: 9,500 model calls, 2,200,000 output
+tokens, a 16 h recording wall inside a 24 h window, `$0.00` marginal. The stop
+rule of §0.5 and the per-leg budget accounting of §2 read 46,000,000 from here
+on. The running leg was not interrupted: the amendment was folded in at the
+next boundary at which this record already touched the card and the audit.
 
 ### 0.5 The stop rule, pre-committed
 

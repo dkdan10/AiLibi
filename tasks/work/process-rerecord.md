@@ -188,7 +188,7 @@ larger ballot prompt and the re-recorded seeds:
 | limit | measured today | authorized |
 |---|---|---|
 | model calls | 7,271 | 9,500 |
-| input tokens | 31,756,112 | 43,000,000 |
+| input tokens | 31,756,112 | 43,000,000 [raised, 2026-09-22 — see below] |
 | output tokens | 1,598,475 | 2,200,000 |
 | recording wall | about 12h05m | 16 h |
 | elapsed window | about 15h48m | 24 h |
@@ -197,6 +197,26 @@ larger ballot prompt and the re-recorded seeds:
 The cost is `$0.00` marginal against the flat-rate Featherless subscription,
 whose standing fee is already paid and is not incurred by this run;
 `AGENTS.md:89-92` requires the statement even on flat-rate service.
+
+**Amendment, 2026-09-22 — the input ceiling.** The owner, relayed verbatim by
+the orchestrator: *"Raise the input ceiling to 46M"*. The authorized input-token
+ceiling is therefore **46,000,000**, and the `43,000,000` above is left as
+recorded rather than rewritten. What prompted it: the first ten seeds of leg 1
+measured **210,195 input tokens per game**, read as 1.357x the previous
+record's per-game input and projected to **43.09 M** over all 300 games — over
+the original ceiling by a margin too thin to record against. **Every other
+ceiling is unchanged**: 9,500 model calls, 2,200,000 output tokens, a 16 h
+recording wall inside a 24 h window, `$0.00` marginal. The stop rule and the
+per-leg budget accounting read 46,000,000 from here on.
+
+The record's own re-derivation lands lower and is published beside it
+(`audits/audit-2026-09-22-process-rerecord.md` section 0.4a): matched seed by
+seed against the preserved old bytes the input ratio is **1.2532**, not 1.357 —
+the larger figure divides a 9p2i per-game cost by the previous record's average
+over all four sets, and a 4p1i game costs about a ninth of a 9p2i one. On the
+matched ratio the run projects 39.8 M input, 6,917 calls and 1.77 M output,
+inside every ceiling including the original. The raise stands as authorized
+headroom; the actual is published against 46,000,000.
 
 **The stop rule.** Stop and report to the owner, before the next leg, on: any
 recorded `cost_usd` other than `0.0000`; a leg past 1.5x its projected wall; a
