@@ -370,6 +370,20 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   narration the previous close had already caught once, re-staled by the
   intervening re-record.
 
+## The process direction of 2026-09-19
+
+- [audit-2026-09-22-process-rerecord.md](audit-2026-09-22-process-rerecord.md) —
+  the substrate wave's adopting record: the ONE combined re-record of all four
+  committed sets on the bytes of the route claim, the grounded SKIP with the
+  labelling guards, and the ballot weighing channel. It carries the preflight
+  and the four dry-runs, the before column computed and committed before the
+  first seed, the four legs with their spend against the owner's ceilings, the
+  per-leg validity gates and byte-verifications, the re-record log, the
+  before/after table over the nine process rows, and the re-pointed tour. It
+  publishes cells only: no pre-registration, no bar, no verdict, and no
+  attribution of a cell to one card of the wave. Role-correct ejection is
+  reported beside every cell and gates nothing.
+
 ## Cleanup measurements
 
 - [reasoning-evidence/](reasoning-evidence/) — source-bound offline engineering
