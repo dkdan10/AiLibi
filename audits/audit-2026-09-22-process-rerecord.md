@@ -394,7 +394,63 @@ meetings is exactly `eval/watchability.py`'s baseline-8 `flags_per_meeting` pin.
 
 ## 2. The legs, as recorded
 
-*(written as each leg completes)*
+Each leg is fully gated before the next begins, and its range checkpoint-pushed.
+Every recorded `cost_usd` on every leg is `0.0000`.
+
+| leg | set | games | wall | calls | input | output | previous record's wall |
+|---|---|---|---|---|---|---|---|
+| 1 | `replays/samples/9p2i` | 50/50 | **2h25m19s** | 1,694 | 9,850,930 | 422,941 | 3h07m00s |
+| 2 | `replays/ml_corpus/9p2i` | *(recording)* | | | | | 7h59m32s |
+| 3 | `replays/samples/4p1i` | | | | | | 23m15s |
+| 4 | `replays/ml_corpus/4p1i` | | | | | | 24m41s (incomplete) |
+
+**Leg 1** opened 2026-09-22 04:21:56Z and closed 06:47:15Z. The honesty probe
+ran on the first completed seed before the rest queued: seed 0, three meetings
+so not vacuous, every instrument folding with no raise and no unfoldable cell
+family. The remaining 49 seeds then recorded on two workers.
+
+### 2.2 The budget, against the ceilings
+
+Re-derived matched seed by seed over the WHOLE leg rather than projected from a
+handful — the same seeds, the same roster, the new bytes against the preserved
+old ones:
+
+| | calls | input | output |
+|---|---|---|---|
+| NEW, `samples/9p2i` 50 seeds | 1,694 | 9,850,930 | 422,941 |
+| OLD, the same 50 seeds | 1,740 | 7,751,883 | 382,977 |
+| ratio new/old | **0.9736** | **1.2708** | **1.1044** |
+
+Scaling the previous record's whole-run totals by those ratios projects
+**40,355,000** input tokens (87.7% of the authorised 46,000,000, and 93.9% of
+the original 43,000,000), **7,079** model calls (74.5%) and **1,765,277** output
+tokens (80.2%) — inside every ceiling, so leg 2 opened with no stop. This is the
+figure §0.4a's ten-seed reading is settled against: 1.2708 over fifty matched
+seeds against 1.357 over ten unmatched ones.
+
+**The calls ratio is below 1.** The wave's bytes make FEWER model calls per game,
+so the input growth is prompt size — the larger ballot body — and not extra
+traffic.
+
+## 2.3 What leg 1's bytes already show
+
+Not a verdict and not a bar; the cells are published in §4. These are the
+movements that are legible on the first leg alone, `samples/9p2i` before against
+after:
+
+| cell | before | after leg 1 |
+|---|---|---|
+| grounded SKIP | **0 / 342** (by instruction) | **79 / 349** |
+| guard-redirected ballots | 23 | **0** |
+| grounded EJECT | 507/527 = 0.9620 | 494/496 = 0.9960 |
+| ballots with no rendered suspicion row | 0 | **0** |
+
+The SKIP row moves off zero for the first time, which is what the grounded-SKIP
+card was for. The redirect census reaching zero is the labelling guards: they
+label rather than re-aim, which is why §4's agent-authored share reads 1.0 **by
+construction** rather than as a measured gain. The last row is the control that
+separates a stale reader from a substrate regression, and it is why §2.1a is a
+parser finding and not a missing channel.
 
 ## 2.1 A reader this record repaired, and one it deliberately did not
 
@@ -489,15 +545,71 @@ to the rendered evidence count). The rubric feeds only the separate
 
 ## 3. The gates, per leg
 
+Every gate runs in a BARE shell with no `AILIBI_*` export, verified by printing
+the environment's `AILIBI_*` count (0) before each run.
+
+### Leg 1 — `replays/samples/9p2i`
+
+`scripts/validity_gate.py replays/samples/9p2i --expected-model Qwen/Qwen3.6-27B
+--require-zero-cost --expected-prompt-versions <the four KEY=VER pairs>`
+**PASSED**, all ten checks green and named individually:
+
+```
+[PASS] all_games_reach_game_over: 50/50 games reached a reconstructed game_over
+[PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 145 resolved; 0 unresolved
+[PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 145 (want 0)
+[PASS] no_tick_1_kills: 0 kills at tick <= 1 (want 0)
+[PASS] no_friendly_fire_kills: 0 impostor-on-impostor kills (want 0)
+[PASS] no_betrayal_ballots_or_accusations: 0 over 845 multi-impostor ballots (want 0)
+[PASS] no_railroaded_crew_ejections: 0 railroaded crew rows over 2588 rendered crew suspicions
+[PASS] no_dangling_primary_reason_id: 0 dangling over 845 ballots (want 0)
+[PASS] cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions,
+       substrate stamped exact on 50 games
+[PASS] byte_identical_reconstruction: 0 samples drifted (want 0)
+```
+
+`bash scripts/verify_samples.sh replays/samples/9p2i`: **all 50 samples verified
+clean**.
+
+**Canonicality**, the explicit check that stands in for `--full`'s
+`canonicalize` sweep (deviation 1 of the card): exactly the seeds `0..49`, no
+zero-padded alias, no out-of-range replay, and 50 MANIFEST data rows. The sweep
+itself is a no-op here because the set dir was emptied before the leg and
+exactly 0-49 recorded, but the property it guarantees is checked rather than
+assumed.
+
+### Legs 2 to 4
+
 *(written as each leg completes)*
 
 ## 4. The AFTER column
 
 *(written once the four legs are in)*
 
-## 5. The re-record log
+## 5. The re-record log, and the operating events
 
-*(every `(deadline_default)` row, with its cause, as it happened)*
+**No seed on disk re-recorded, on any leg, for any reason.** No
+`(deadline_default)` row was produced on leg 1. The events below are logged as
+they happened rather than smoothed away.
+
+1. **Leg 1, seed 25 — one handled transient.** Attempt 1 of 8 failed with
+   `RuntimeError: Featherless response carried no choices (model=
+   'Qwen/Qwen3.6-27B'); refusing to record an empty completion.` The recorder
+   retried after 15 s and the seed landed on the retry. Measured against the
+   stop rule it trips nothing: the cost stayed `0.0000`, it was attempt 1 of 8
+   rather than a refusal surviving the budget, and it was not a stall — the
+   other worker completed seeds throughout, including one 12 s later. The
+   client refusing to record an empty completion is the guard working.
+
+2. **Leg 2's probe phase exited non-zero, by design.** Recording the first seed
+   alone (`--seeds 1000`) leaves a 1-of-150 set, and the corpus recorder's
+   freeze guard refused it: `check_seed_count: ... is not the exact locked set
+   1000..1149 (150 games) — 149 MISSING seed(s) ... Refusing to freeze a
+   short/dirty corpus`. That is the documented resume path, not a failure: seed
+   1000 recorded cleanly in 227 s at `$0.0000`, its MANIFEST row was written,
+   the honesty probe folded it (two meetings, so not vacuous), and the leg's
+   main phase then reported `Resume: 1/150 selected seed(s) already recorded;
+   149 remaining` and re-proved that replay's provenance before trusting it.
 
 ## 6. The tour, and the ladder
 
