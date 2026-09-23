@@ -544,29 +544,35 @@ def test_the_ranking_channel_is_untouched_by_the_tie_break() -> None:
     assert old.brier == new.brier
     assert old.ece == new.ece
     # ...and the tie-break really did select a different tau, so the control is not
-    # vacuous. (The corpus TEST side decides identically across the tied plateau;
-    # the samples set below is where the census actually moves.)
+    # vacuous. (The corpus TEST side decides differently across the tied plateau,
+    # 5 ejections against 0, and the tuned head scores better there: the record's
+    # §6.4. The test below pins the census move on samples/4p1i.)
     assert old.decision_head is None  # the plain factory publishes no head
     assert new.decision_head is not None
     assert new.decision_head.scans[0].tuned_tau == 0.95  # was 0.25
 
 
 def test_the_tie_break_moves_the_decision_census_but_not_the_ranking() -> None:
-    """The asymmetry, on the set where the census actually moves.
+    """The asymmetry, on a set where the census actually moves.
 
-    On ``replays/samples/9p2i`` the two poles decide 10 meetings differently — the
-    low tau ejects on 10 and is right on 5, the high tau ejects on none — while
-    every ranking and calibration channel is bit-identical. That is the whole
-    content of "the tuned head enters no axis of the bar".
+    RE-ANCHORED from ``replays/samples/9p2i`` at the baseline-9 re-record: there
+    the two poles now both eject on 7 meetings, so the census no longer moves.
+    On ``replays/samples/4p1i`` the low tau ejects on 18 meetings and the high
+    tau on 16, while every ranking and calibration channel is bit-identical.
+    That is the whole content of "the tuned head enters no axis of the bar".
 
-    Their binary accuracies come out EQUAL here (the 5 true ejections the low tau
-    catches cost it exactly 5 correct skips), which is what a tied plateau means
+    Their binary accuracies come out EQUAL here (the 1 true ejection the low tau
+    catches costs it exactly 1 correct skip), which is what a tied plateau means
     and is why the tie-break has to be decided by a stated rule rather than by
-    score. The load-bearing assertion is therefore that the tuned head never
-    scores BETTER, not that it scores worse.
+    score. The assertion is that the tuned head does not score BETTER on this
+    set, not that it scores worse. It is not true of every set: on the
+    ``replays/ml_corpus/9p2i`` test side the tuned head ejects on 0 meetings
+    against the low tau's 5 and scores better, 0.4468 against 0.4362. The
+    record reports that reversal for the owner's ruling
+    (audits/audit-2026-09-22-process-rerecord.md §6.4).
     """
 
-    table = build_meeting_table(_NINE)
+    table = build_meeting_table(_FOUR)  # was _NINE
     new = fo6_rebaseline(table)
     old = run_surrogate_fidelity(
         table, _LowestTiedTauFo6, model_name="fo6-physical-logistic"
@@ -577,10 +583,11 @@ def test_the_tie_break_moves_the_decision_census_but_not_the_ranking() -> None:
     assert old.brier == new.brier
     assert old.ece == new.ece
 
-    # The census moves: the low tau ejects on 10 meetings, the high tau on none.
-    assert (old.predicted_ejections, new.predicted_ejections) == (10, 0)
-    assert old.ejection_predicted_skips == 90  # was 94
-    assert new.ejection_predicted_skips == 95  # was 97
+    # The census moves: the low tau ejects on 18 meetings, the high tau on 16.
+    # was (10, 0) on samples/9p2i
+    assert (old.predicted_ejections, new.predicted_ejections) == (18, 16)
+    assert old.ejection_predicted_skips == 9  # was 90 on samples/9p2i
+    assert new.ejection_predicted_skips == 10  # was 95 on samples/9p2i
     assert new.skip_vs_eject_accuracy <= old.skip_vs_eject_accuracy
 
 
