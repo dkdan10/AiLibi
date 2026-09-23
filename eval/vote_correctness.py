@@ -49,13 +49,13 @@ verdict, its record having missed two of its own pre-registered bars
 reports and the model and prompt-set tokens from the four manifests, and fails
 when a stamp or the provenance drifts, or when this module claims a structural
 pin the data contradicts -- so a re-record re-stamps these lines rather than
-rotting them. The seven samples/9p2i ejections behind the shortfall are censused
+rotting them. The five samples/9p2i ejections behind the shortfall are censused
 seed by seed -- and classified -- in ``tests/eval/test_vote_correctness.py``.
-Mind the two populations: **16** of those 85 ejections carry no naming
-``ContradictionRef`` at all, and 9 of the 16 are evidence-backed anyway through
+Mind the two populations: **10** of those 81 impostor ejections carry no naming
+``ContradictionRef`` at all, and 5 of the 10 are evidence-backed anyway through
 the kill-witness disjunct, so "zero-flag" is a strictly wider set than "not
-evidence-backed" -- 16 zero-flag against 7 unbacked. (Baseline 6 read 8 of 78,
-2 rescued, 6 unbacked.)
+evidence-backed" -- 10 zero-flag against 5 unbacked. (Baseline 8 read 13 of 82,
+6 rescued, 7 unbacked; baseline 6 read 8 of 78, 2 rescued, 6 unbacked.)
 
 The module reads only :mod:`eval.report_schema` data (composed of
 :mod:`meetings.schemas` leaf types) and the post-game ``roles`` ground truth on

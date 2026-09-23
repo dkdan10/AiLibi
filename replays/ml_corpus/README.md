@@ -30,17 +30,19 @@ canonical 0–49 game.
 > does not.** This record re-recorded all four committed sets in one window, so
 > nothing downstream trains across a substrate seam *inside* `replays/`.
 > Everything fitted, selected, or pinned on an earlier corpus — the surrogate,
-> the conviction model, the bake-off rankings and finalist rows — is
-> prior-substrate-anchored, and by two rungs now rather than one:
+> the conviction model, the composed runner, the bake-off rankings and finalist
+> rows — was ground on the baseline-8 corpus this record replaced:
 > `uv run python scripts/verify_ml_evidence.py` reconstructs 300/300 and
-> **exits 0 with 12 rows reporting STALE**, each naming the gap;
-> `BAKEOFF_BASELINE_ID` reads `baseline-6`, which is correct — it names the
-> baseline the bake-off is GROUNDED on, not the substrate baseline. Read the
-> command's `ML grounding` row first: it carries the two corpus fingerprints and
-> decides whether a disagreement below it is a defect (FAIL) or this declared
-> gap (STALE). Re-grounding those artifacts on these bytes is a NAMED
-> FOLLOW-UP, not part of this record. Until it lands, treat every published fit
-> metric as anchored to bytes that are no longer committed.
+> **exits 1**. Read its `ML grounding` row first: it names the corpus the fits
+> were made on (`cc54d3c0…`) against the corpus on disk (`6536c68c…`), and every
+> corpus-dependent recompute row under it FAILS, because the declared-gap status
+> an earlier record leaned on was deleted when the fits were last re-ground.
+> `BAKEOFF_BASELINE_ID` reads `baseline-8`, which is correct — it names the
+> baseline the ML fits are ground on, not the substrate baseline. Re-grounding
+> those artifacts on these bytes is a NAMED FOLLOW-UP, not part of this record
+> ([the record](../../audits/audit-2026-09-22-process-rerecord.md) §7.1). Until
+> it lands, treat every published fit metric as anchored to bytes that are no
+> longer committed.
 
 > **Canary denominator — the pairing, unbroken again.** The standing rule (the
 > ML corpus is the canary denominator; the canonical `replays/samples/`

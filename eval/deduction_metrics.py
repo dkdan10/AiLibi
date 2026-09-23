@@ -69,7 +69,7 @@ report. Denominator: all of them (``flags_total``). Weakness comes from
 re-implemented, so the marker predicate stays single-sourced beside the marker
 writer. ``meetings_with_any_flag`` counts meetings carrying >= 1 flag of ANY
 category — deliberately a different name from partition A's ``flagged_meetings``
-(role proof only), because on ``replays/samples/9p2i`` the two differ (100 vs
+(role proof only), because on ``replays/samples/9p2i`` the two differ (76 vs
 70) and one name for two predicates is how a cross-tab gets mis-cited.
 *Does NOT measure*: whether anybody READ a flag, whether a flag was true, or
 whether the two sides of a cross-statement conflict are equally credible.
