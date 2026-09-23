@@ -764,3 +764,41 @@ both rulings stay the owner's.
   `ml_corpus/4p1i` 5/5, 1/1, 0.75/0.75; ranking and calibration identical on all four. FO-6 is
   fitted fresh on the table, so the re-fit cannot move the reversal (0.4468 against 0.4362 on
   the corpus test side); it is re-measured, not settled, and stays the owner's ruling.
+
+### 3. The conviction model on baseline 9 (acceptance item 2, conviction half)
+
+Run in the work tree at `ebc43d59`, [Mac], in the recipe's order.
+
+1. **Walk re-validation, weights, sidecar and cap**, one call (`fit_corpus_conviction_model`
+   runs `require_clean_walk` before any fit):
+   ```
+   uv run python -c "from pathlib import Path; from training.conviction.model import fit_corpus_conviction_model, write_conviction_model_artifact, derive_conviction_max_uses; m,t,p=fit_corpus_conviction_model(Path('replays/ml_corpus/9p2i')); fit=set(t.splits.train)|set(t.splits.val); n=sum(1 for r in t.rows if r.seed in fit); assert n == 355, n; print(p.raw_mismatches, n, derive_conviction_max_uses(n), write_conviction_model_artifact(m, Path('training/artifacts/conviction'), max_uses=derive_conviction_max_uses(355)))"
+   ```
+   printed `0 355 50765 3a6fe4ca18cb0597d8df4e155be190f4601d8bfc5dae25490e9a3f3b821d762e`
+   (11.4 s) [Mac]: `raw_mismatches` 0, and the weights equal the investigation's same-host
+   expectation `3a6fe4ca…`. `derive_max_uses(355) == derive_conviction_max_uses(355) == 50765`.
+2. **The version-one record**, the Validation line with `a=Path('training/artifacts/conviction')`
+   and the sidecar `conviction-model.json.sha256`: `corpus_sha256` `6536c68c…`,
+   `fit_side_meetings` 355, keyed to `3a6fe4ca…`, no version key.
+3. **The verdict**, first held-out evaluation, from the frozen weights just written:
+   ```
+   uv run python -c "from pathlib import Path; from training.conviction.model import load_conviction_model_artifact; from training.conviction.dataset import build_conviction_table; from training.conviction.fidelity import run_conviction_fidelity, decide_conviction_go, write_conviction_verdict_artifact; a=Path('training/artifacts/conviction'); m, d = load_conviction_model_artifact(a); r, _ = run_conviction_fidelity(build_conviction_table(Path('replays/ml_corpus/9p2i')), model=m); v=decide_conviction_go(r, weights_sha256=d); write_conviction_verdict_artifact(v, a); print(v.verdict, v.flag_spearman, v.conversion_accuracy, v.conversion_recall)"
+   ```
+   printed `GO 0.8394835297890146 0.925531914893617 0.9545454545454546` (5.6 s): **no flip**.
+   `verdict.json` sha256 `8eb85e3b17d61211cf4b7f093cf920612372b98179ddcfd961f2c9d17b742eab`.
+
+| conviction axis (94 held-out meetings, 44 conversions) | baseline 9 | bar | baseline 8 (history) |
+|---|---|---|---|
+| 1. flag-count Spearman | 0.8395 PASS | 0.5 | 0.6670 PASS |
+| 2. conversion recall | 42/44 = 0.9545 PASS | 0.5913 | 49/51 = 0.9608 PASS |
+| 3. conversion accuracy | 87/94 = 0.9255 PASS | 0.5319 | 86/91 = 0.9451 PASS |
+
+Confusion 42/5/2/45, the same cells the frozen baseline-8 weights read on these bytes (the
+finding the record left: GO at 87/94). After the report refresh the verifier's `ML grounding`
+row reads OK, naming `6536c68c…` for both records, and both conviction recompute rows and its
+`verdict.json` row read OK (`--only recompute`, [Mac]); the seven composed rows (the three
+composed channels, its `verdict.json` and `manifest.json`, and the two weight-hash rows, which
+read `training/artifacts/composed/manifest.json`) stay FAIL until the composed step, which is
+the next operator's. `training/reports/report-conviction-model.md` header, §2.1, §3, §4, §5
+and §7 are refreshed from its §9 one-liners, the baseline-8 figures kept in a new erratum, and
+§8 step 4 corrected to `historical_fit_corpus_fingerprint`.
