@@ -1690,15 +1690,23 @@ class ReplayLoader:
                         or _meeting_id_for(game_id, meeting_index)
                     )
                     trigger_kind_by_meeting_id[meeting_id] = trigger_kind
+                elif state.phase == "GAME_OVER" and any(
+                    isinstance(event, MeetingTriggeredEvent) for event in events
+                ):
+                    # A trigger tick that decided the game convenes no meeting,
+                    # so there is no meeting id or trigger chip; a reported body
+                    # was still found on this frame and stays in the fog.
+                    _, body_id = _meeting_trigger_from_events(events)
 
                 # Capture each living agent's field of view from the POST-advance
                 # state + this tick's events — the frame the spectator sees at
                 # ``entry.tick`` (Task 12.3). Computed once here; LRU-cached by
                 # ``_load_replay`` so it is never recomputed per request.
                 # ``reopened_body_id`` keeps a just-reported body in the fog on its
-                # meeting frame (``_apply_report`` already flagged it discovered);
+                # report frame, including a game-deciding report that convenes no
+                # meeting (``_apply_report`` already flagged it discovered);
                 # ``body_id`` is the trigger body for a body report, ``None`` for a
-                # play tick or an emergency meeting.
+                # play tick or an emergency trigger.
                 tick_visibility = (
                     self._agent_visibility_map(
                         service, state, events, reopened_body_id=body_id
@@ -2024,8 +2032,9 @@ class ReplayLoader:
         agents are skipped — a dead agent has no field of view — so the per-agent
         map holds only living agents and the dead get ``visibility=None``.
 
-        ``reopened_body_id`` keeps a JUST-reported body in the fog on its meeting
-        frame: on a body-report tick ``engine.tick._apply_report`` has already
+        ``reopened_body_id`` keeps a JUST-reported body in the fog on its report
+        frame, including a game-deciding report that convenes no meeting: on a
+        body-report tick ``engine.tick._apply_report`` has already
         marked the trigger body ``discovered_by``, and ``compute_visibility_for_player``
         excludes discovered bodies — so without this the reporter (and every
         co-located agent) would lose the body from their field of view on the
