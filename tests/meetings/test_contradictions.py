@@ -22,8 +22,9 @@ from __future__ import annotations
 import functools
 import itertools
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 
 import pytest
@@ -48,6 +49,7 @@ from meetings.schemas import (
     MeetingTurn,
     MoveWitnessRecord,
     ObservationClaim,
+    PlayerId,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
@@ -81,11 +83,18 @@ from meetings.transcript import (
     reconstruct_stated_paths,
     self_refuted_alibi_claim_ids,
 )
+from agents.memory.episodic import MemoryStore
 from meetings.public_accounts import detect_public_account_conflicts
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from tests._helpers.committed import (
+    CORPUS_9P2I,
+    MOVEMENT_DECIDED_MEETINGS,
+    all_committed_meetings,
+    committed_meetings,
     frozen_meetings,
+    move_witness_records_for_meeting,
     sighting_records_from_recorded_flags,
+    walk_committed_meetings,
 )
 
 # --- Builders --------------------------------------------------------------
@@ -3238,10 +3247,14 @@ class TestGroundedProsecutionRuleSingleTickEndpoint:
 
 # --- The live detector re-derives the committed bytes -----------------------
 #
-# The graduated detector re-derives the recorded flags over ALL FOUR committed
-# sets -- 668 meetings at baseline 7. Two of the private per-speaker channels the
-# graduated rules read are rebuilt from the recorded verdicts (vents, sightings);
-# the MOVEMENT channel cannot be, so the walk pins how many meetings that costs.
+# The graduated rules read three private per-speaker channels the transcript
+# does not carry: witnessed vents, witnessed moves and first-hand sightings.
+# ``tests._helpers.committed`` rebuilds all three from the replay walk, projects
+# them as the live accessors do and threads them as the meeting manager does,
+# with the living roster and the trigger kind. The gate below holds the detector
+# to the recording on every committed meeting through that one home, and the
+# censuses after it read the same channels. The records-free harness further
+# down serves the frozen baseline-8 exhibits, whose lines no walk can rebuild.
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _COMMITTED_SETS = (
@@ -3252,23 +3265,14 @@ _COMMITTED_SETS = (
 )
 _COMMITTED_MEETINGS = 676  # was 672
 
-# Meetings whose recorded flags a records-free re-derivation CANNOT reproduce.
-# The movement channel re-reads a spoken placement at the destination the
-# speaker's own ``MoveWitnessRecord`` names, and those private rows are not
-# persisted in the replay -- so a re-read pair is provably unrecoverable, the way
-# the vent record's TICK is (see ``_VENT_STRUCT`` below). Pinned by count so the
-# number cannot drift silently; every diverging meeting is named on failure.
-_MOVEMENT_CHANNEL_DIVERGENCES = 69  # was 78
-
 
 @functools.cache
 def _committed_meeting_entries() -> tuple[tuple[str, int, MeetingReplayEntry], ...]:
     """Every committed meeting entry across all four sets (set, seed, entry).
 
-    Cached so the byte-identity pin AND the live-detector census below read the
-    676-meeting corpus off ONE walk (the "do not walk twice" rule): the file read
-    happens once per session, and each consumer runs its own detector
-    re-derivations over the shared, already-parsed entries.
+    The recorded bytes only, read once per worker, for the readers of the
+    recorded flags. A re-derivation reads :func:`all_committed_meetings`
+    instead, which carries the channels production threaded.
     """
 
     collected: list[tuple[str, int, MeetingReplayEntry]] = []
@@ -3283,25 +3287,27 @@ def _committed_meeting_entries() -> tuple[tuple[str, int, MeetingReplayEntry], .
 
 
 def _living_roster(entry: MeetingReplayEntry) -> frozenset[str]:
-    # Every recorded ballot was cast by a living participant, so the ballot
-    # voters ARE the roster the recording-time detector received.
+    # A frozen exhibit line carries no world state, so its roster is read off the
+    # ballots: every living participant cast one (equal to the living roster on
+    # all 676 committed meetings).
     return frozenset(ballot.voter for ballot in entry.ballots)
 
 
 def _vent_records_from_recorded_flags(
     entry: MeetingReplayEntry,
 ) -> dict[str, tuple[VentWitnessRecord, ...]]:
-    """Rebuild each speaker's groundable vent channel from the RECORDED flags.
+    """Invert each speaker's vent channel out of the RECORDED flags.
 
-    The replay persists no private :class:`VentWitnessRecord`s, but a recorded
-    ``vent_sighting`` flag IS the record-time grounding verdict: its
+    Records-free by design, for the frozen baseline-8 exhibits only: their lines
+    carry no tick rows, so no replay walk can rebuild the speakers' memories. A
+    recorded ``vent_sighting`` flag IS the record-time grounding verdict: its
     ``event_a_id`` names the spoken :class:`SawVentObservation` that matched the
-    speaker's own channel. Minting a record from that observation's TYPED fields
-    (grounding at record time guarantees the label is spatial and the tick
-    in-window, so the rebuilt record re-grounds the same observation by
-    construction) lets the OFF-path pin re-derive the vent flags too -- ids and
-    typed fields only, never a text parse (clone of
+    speaker's own channel, so a record minted from that observation's typed
+    fields re-grounds it (clone of
     :meth:`tests.agents.test_absence_prior` `_vent_records_from_recorded_flags`).
+    The inverted record carries the SPOKEN tick where the true one carries the
+    witnessed tick, so a description quoting it can differ; a committed meeting
+    reads its true channel from :func:`all_committed_meetings`.
     """
 
     flagged = {
@@ -3318,66 +3324,6 @@ def _vent_records_from_recorded_flags(
                 VentWitnessRecord(
                     subject=observation.subject,
                     room=observation.room,
-                    tick=observation.tick,
-                )
-            )
-    return {speaker: tuple(rows) for speaker, rows in records.items()}
-
-
-# The vent-record TICK is provably unrecoverable from replay bytes: the flag
-# description embeds ``VentWitnessRecord.tick`` (the real observed vent tick),
-# which the replay does not persist, while the rebuild above uses the SPOKEN
-# observation's tick. Grounding still fires (they agree within
-# VENT_GROUNDING_TICK_TOLERANCE), so every STRUCTURAL field re-derives
-# byte-identically; only that one description tick can differ -- ml_corpus/9p2i
-# seed 1075 is the one known case, and it is inside this walk. The comparison
-# therefore pins full equality for every non-vent kind and structural equality
-# (all fields but ``description``) for ``vent_sighting``.
-_VENT_STRUCT = ("contradiction_id", "kind", "event_a_id", "event_b_id", "subjects")
-
-
-def _flags_match(
-    rederived: tuple[ContradictionRef, ...],
-    recorded: tuple[ContradictionRef, ...],
-) -> bool:
-    if len(rederived) != len(recorded):
-        return False
-    for got, exp in zip(rederived, recorded, strict=True):
-        if exp.kind == "vent_sighting":
-            if any(getattr(got, name) != getattr(exp, name) for name in _VENT_STRUCT):
-                return False
-        elif got != exp:
-            return False
-    return True
-
-
-def _planted_move_channel(
-    entry: MeetingReplayEntry,
-) -> dict[str, tuple[MoveWitnessRecord, ...]]:
-    """A movement channel that WOULD re-read every spoken placement, if read.
-
-    Each speaker gets one record per sighting they spoke, moving that subject out
-    of the room they named at the tick they named into a room they did not: the
-    exact conjunction :func:`_movement_destination` resolves on. It is the
-    planted case behind the OFF pin -- with the lever OFF this channel must move
-    nothing, and the companion test proves the plant is live by turning the lever
-    on and watching the corpus change.
-    """
-
-    records: dict[str, list[MoveWitnessRecord]] = {}
-    for turn in entry.transcript.turns:
-        for observation in turn.observations:
-            if not isinstance(observation, SawPlayerObservation):
-                continue
-            spoken = canonical_rooms(observation.room)
-            if not spoken:
-                continue
-            elsewhere = sorted(CANONICAL_ROOMS - spoken)[0]
-            records.setdefault(turn.speaker, []).append(
-                MoveWitnessRecord(
-                    subject=observation.subject,
-                    from_room=observation.room,
-                    to_room=elsewhere,
                     tick=observation.tick,
                 )
             )
@@ -3428,7 +3374,13 @@ def _ungroundable_sighting_channel(
 def _rederive(
     entry: MeetingReplayEntry, **kwargs: object
 ) -> tuple[ContradictionRef, ...]:
-    """The detector, over one recorded meeting, with both rebuildable channels."""
+    """Records-free by design: the detector over a frozen exhibit line.
+
+    A frozen baseline-8 line carries no tick rows, so no walk can rebuild its
+    speakers' channels; the vent and sighting channels are inverted from its
+    recorded flags and the movement channel is absent. A committed meeting is
+    re-derived through :meth:`CommittedMeeting.rederive` instead.
+    """
 
     return detect_contradictions(
         entry.transcript,
@@ -3439,174 +3391,98 @@ def _rederive(
     )
 
 
-#: The committed meetings whose re-derivation the movement channel decides.
-#: Named individually rather than counted: see the walk below for why.
-#: (Re-derived wholesale on the baseline-9 record; baseline 8 named 78 meetings,
-#: this one names 69 — the whole membership moved with the bytes.)
-_MOVEMENT_CHANNEL_DIVERGING_MEETINGS: frozenset[str] = frozenset(
-    {
-        "ml_corpus/9p2i:1000:headless-seed-1000:meeting-0",
-        "ml_corpus/9p2i:1001:headless-seed-1001:meeting-1",
-        "ml_corpus/9p2i:1003:headless-seed-1003:meeting-1",
-        "ml_corpus/9p2i:1005:headless-seed-1005:meeting-0",
-        "ml_corpus/9p2i:1010:headless-seed-1010:meeting-1",
-        "ml_corpus/9p2i:1012:headless-seed-1012:meeting-0",
-        "ml_corpus/9p2i:1013:headless-seed-1013:meeting-0",
-        "ml_corpus/9p2i:1015:headless-seed-1015:meeting-1",
-        "ml_corpus/9p2i:1016:headless-seed-1016:meeting-1",
-        "ml_corpus/9p2i:1021:headless-seed-1021:meeting-0",
-        "ml_corpus/9p2i:1023:headless-seed-1023:meeting-0",
-        "ml_corpus/9p2i:1026:headless-seed-1026:meeting-0",
-        "ml_corpus/9p2i:1035:headless-seed-1035:meeting-3",
-        "ml_corpus/9p2i:1038:headless-seed-1038:meeting-1",
-        "ml_corpus/9p2i:1038:headless-seed-1038:meeting-2",
-        "ml_corpus/9p2i:1040:headless-seed-1040:meeting-0",
-        "ml_corpus/9p2i:1040:headless-seed-1040:meeting-2",
-        "ml_corpus/9p2i:1041:headless-seed-1041:meeting-1",
-        "ml_corpus/9p2i:1042:headless-seed-1042:meeting-0",
-        "ml_corpus/9p2i:1046:headless-seed-1046:meeting-0",
-        "ml_corpus/9p2i:1046:headless-seed-1046:meeting-1",
-        "ml_corpus/9p2i:1055:headless-seed-1055:meeting-0",
-        "ml_corpus/9p2i:1078:headless-seed-1078:meeting-0",
-        "ml_corpus/9p2i:1079:headless-seed-1079:meeting-0",
-        "ml_corpus/9p2i:1079:headless-seed-1079:meeting-2",
-        "ml_corpus/9p2i:1080:headless-seed-1080:meeting-0",
-        "ml_corpus/9p2i:1083:headless-seed-1083:meeting-1",
-        "ml_corpus/9p2i:1093:headless-seed-1093:meeting-0",
-        "ml_corpus/9p2i:1096:headless-seed-1096:meeting-0",
-        "ml_corpus/9p2i:1100:headless-seed-1100:meeting-0",
-        "ml_corpus/9p2i:1101:headless-seed-1101:meeting-1",
-        "ml_corpus/9p2i:1103:headless-seed-1103:meeting-0",
-        "ml_corpus/9p2i:1104:headless-seed-1104:meeting-0",
-        "ml_corpus/9p2i:1104:headless-seed-1104:meeting-1",
-        "ml_corpus/9p2i:1112:headless-seed-1112:meeting-0",
-        "ml_corpus/9p2i:1114:headless-seed-1114:meeting-0",
-        "ml_corpus/9p2i:1119:headless-seed-1119:meeting-0",
-        "ml_corpus/9p2i:1120:headless-seed-1120:meeting-1",
-        "ml_corpus/9p2i:1123:headless-seed-1123:meeting-0",
-        "ml_corpus/9p2i:1124:headless-seed-1124:meeting-0",
-        "ml_corpus/9p2i:1126:headless-seed-1126:meeting-0",
-        "ml_corpus/9p2i:1127:headless-seed-1127:meeting-1",
-        "ml_corpus/9p2i:1131:headless-seed-1131:meeting-0",
-        "ml_corpus/9p2i:1133:headless-seed-1133:meeting-1",
-        "ml_corpus/9p2i:1134:headless-seed-1134:meeting-0",
-        "ml_corpus/9p2i:1134:headless-seed-1134:meeting-3",
-        "ml_corpus/9p2i:1138:headless-seed-1138:meeting-1",
-        "ml_corpus/9p2i:1139:headless-seed-1139:meeting-0",
-        "ml_corpus/9p2i:1144:headless-seed-1144:meeting-2",
-        "ml_corpus/9p2i:1146:headless-seed-1146:meeting-0",
-        "ml_corpus/9p2i:1147:headless-seed-1147:meeting-0",
-        "ml_corpus/9p2i:1149:headless-seed-1149:meeting-1",
-        "samples/9p2i:11:headless-seed-11:meeting-0",
-        "samples/9p2i:17:headless-seed-17:meeting-0",
-        "samples/9p2i:20:headless-seed-20:meeting-0",
-        "samples/9p2i:20:headless-seed-20:meeting-1",
-        "samples/9p2i:22:headless-seed-22:meeting-1",
-        "samples/9p2i:23:headless-seed-23:meeting-0",
-        "samples/9p2i:23:headless-seed-23:meeting-1",
-        "samples/9p2i:24:headless-seed-24:meeting-2",
-        "samples/9p2i:26:headless-seed-26:meeting-1",
-        "samples/9p2i:27:headless-seed-27:meeting-0",
-        "samples/9p2i:2:headless-seed-2:meeting-0",
-        "samples/9p2i:30:headless-seed-30:meeting-2",
-        "samples/9p2i:32:headless-seed-32:meeting-0",
-        "samples/9p2i:34:headless-seed-34:meeting-1",
-        "samples/9p2i:38:headless-seed-38:meeting-1",
-        "samples/9p2i:40:headless-seed-40:meeting-0",
-        "samples/9p2i:7:headless-seed-7:meeting-0",
-    }
-)
+def _keeping_the_holders_own_rows(
+    memory: MemoryStore, *, holder: PlayerId, roles: Mapping[PlayerId, str]
+) -> tuple[MoveWitnessRecord, ...]:
+    """The live move accessor without its self-row guard: the drift the helper fixed."""
+
+    return move_witness_records_for_meeting(
+        memory, holder=holder, roles=roles, keep_holder_rows=True
+    )
 
 
 class TestLiveDetectorCommittedBytesByteIdentity:
     """The graduated ``detect_contradictions`` against every committed meeting.
 
-    Coverage beyond the ``test_transcript.py`` re-derivation pin: this walk
-    includes ``vent_sighting`` across all four sets exhaustively (676 meetings).
-    Every lever is UNCONDITIONAL, so the detector ignores its ``env`` -- env
-    absent and env={} must agree -- and the two private channels a recorded flag
-    can be inverted back into (vents, sightings) are rebuilt from the recorded
-    verdicts. The movement channel cannot be inverted, so the meetings it
-    re-paired are pinned by IDENTITY and by mechanism rather than reproduced.
+    Every meeting is re-derived with the arguments production passed: the
+    living roster, the trigger kind and all three private channels, rebuilt by
+    the replay walk in ``tests._helpers.committed``. The comparison is full model
+    equality, descriptions included, so any drift between the live accessors and
+    the rebuild fails here, loud and by name. The controls prove the gate bites:
+    each drops or perturbs one channel and names what diverges.
     """
 
-    def test_re_derivation_equals_recorded_on_every_committed_meeting(self) -> None:
-        entries = _committed_meeting_entries()
+    def test_the_true_channels_re_derive_every_committed_meeting(self) -> None:
+        # was 69 records-free divergences pinned by name; the harness had no move channel
+        meetings = all_committed_meetings()
         # Guard: a thinned checkout or a glob typo fails here, not vacuously.
-        assert len(entries) == _COMMITTED_MEETINGS
-        problems: list[str] = []
-        diverged: list[str] = []
-        for set_name, seed, entry in entries:
-            rederived = _rederive(entry)
-            # Determinism: a second call reproduces the first exactly.
-            if rederived != _rederive(entry):
-                problems.append(f"{set_name} seed {seed} {entry.meeting_id}: nondet")
-            if not _flags_match(rederived, entry.contradictions):
-                diverged.append(f"{set_name}:{seed}:{entry.meeting_id}")
-        assert problems == []
-        # WHICH meetings, not how many. A count alone lets one movement
-        # divergence disappear and an unrelated detector defect take its place
-        # without failing anything; the identities close that substitution.
-        assert set(diverged) == _MOVEMENT_CHANNEL_DIVERGING_MEETINGS
-        assert len(diverged) == _MOVEMENT_CHANNEL_DIVERGENCES
+        assert len(meetings) == _COMMITTED_MEETINGS
+        diverged = [
+            meeting.name
+            for meeting in meetings
+            if meeting.rederive() != meeting.entry.contradictions
+        ]
+        assert diverged == []
+        # Determinism: a second call reproduces the first exactly.
+        assert [
+            meeting.name
+            for meeting in meetings
+            if meeting.rederive() != meeting.rederive()
+        ] == []
 
-    def test_the_divergences_are_the_movement_channel_and_nothing_else(self) -> None:
-        # The identities above name WHERE; this names WHY, at the mechanism.
-        #
-        # Every diverging meeting must be one the movement channel can actually
-        # move: supplying a channel changes what the detector emits there. The
-        # predicate cuts the set — 451 of the 676 committed meetings are
-        # movement-sensitive, 225 are not — so a divergence in a meeting the
-        # channel cannot touch is a different defect and fails here rather than
-        # inheriting this pin's number.
-        #
-        # ``_planted_move_channel`` is the probe, not a reconstruction: it moves
-        # every spoken placement somewhere it was not, which is the only channel
-        # recoverable from replay bytes (the real MoveWitnessRecords are private
-        # and unpersisted — audits/audit-phase-20-baseline-7.md §10.3). It
-        # answers "could movement have decided this meeting", never "what did".
-        sensitive = 0
-        for set_name, seed, entry in _committed_meeting_entries():
-            plain = _rederive(entry)
-            moved = (
-                _rederive(entry, move_witness_records=_planted_move_channel(entry))
-                != plain
-            )
-            sensitive += moved
-            if _flags_match(plain, entry.contradictions):
-                continue
-            assert moved, (
-                f"{set_name} seed {seed} {entry.meeting_id} diverges but no "
-                "movement channel can move it — not this pin's class"
-            )
-        # Non-vacuous in BOTH directions: the predicate holds for the diverging
-        # meetings and is false for a third of the set.
-        assert sensitive == 451  # was 462
-        assert sensitive < _COMMITTED_MEETINGS
+    def test_dropping_the_movement_channel_diverges_the_named_meetings(self) -> None:
+        # was a records-free predicate (451 of 676 meetings a PLANTED move channel
+        # could move); this control drops the true channel instead
+        empty: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] = MappingProxyType({})
+        diverged = {
+            meeting.name
+            for meeting in all_committed_meetings()
+            if replace(meeting, move_witness_records=empty).rederive()
+            != meeting.entry.contradictions
+        }
+        assert diverged == MOVEMENT_DECIDED_MEETINGS
+        assert len(diverged) == 68
 
-    def test_the_planted_movement_channel_is_live(self) -> None:
-        # The pin above would be untethered if the movement channel could not move
-        # a committed meeting at all.
-        moved = 0
-        for _set_name, _seed, entry in _committed_meeting_entries():
-            if _rederive(entry) != _rederive(
-                entry, move_witness_records=_planted_move_channel(entry)
-            ):
-                moved += 1
-        assert moved > 0
+    def test_dropping_the_sighting_channel_diverges_31_meetings(self) -> None:
+        # With no sighting mapping the detector keeps its pre-grounding rules,
+        # so every meeting whose recorded bands grounding decided diverges.
+        empty: Mapping[PlayerId, tuple[SightingRecord, ...]] = MappingProxyType({})
+        diverged = [
+            meeting.name
+            for meeting in all_committed_meetings()
+            if replace(meeting, sighting_records=empty).rederive()
+            != meeting.entry.contradictions
+        ]
+        assert len(diverged) == 31
+
+    def test_keeping_the_holders_own_move_rows_diverges_at_one_meeting(self) -> None:
+        # The live move accessor drops the holder's own transitions
+        # (``orchestrator.game.TacticalAgent.move_witness_records_for_meeting``).
+        # Rebuilt without that guard, one committed meeting re-derives
+        # differently, so the gate above sees the self-row drift. One game is
+        # walked, with the planted builder, outside the cache.
+        meetings = walk_committed_meetings(
+            CORPUS_9P2I, seeds=(1035,), move_records=_keeping_the_holders_own_rows
+        )
+        diverged = [
+            meeting.name
+            for meeting in meetings
+            if meeting.rederive() != meeting.entry.contradictions
+        ]
+        assert diverged == ["ml_corpus/9p2i:1035:headless-seed-1035:meeting-3"]
 
     def test_an_ungroundable_sighting_channel_bands_the_class_weak(self) -> None:
-        # The other half of the rebuild: a channel that grounds NOTHING must band
-        # every ``alibi_vs_sighting`` flag WEAK, so the rebuilt channel above is
-        # load-bearing rather than decorative.
+        # The grounding rules are load-bearing: a channel that grounds NOTHING
+        # must band every ``alibi_vs_sighting`` flag WEAK.
         banded = 0
-        for _set_name, _seed, entry in _committed_meeting_entries():
-            for flag in detect_contradictions(
-                entry.transcript,
-                roster=_living_roster(entry),
-                vent_witness_records=_vent_records_from_recorded_flags(entry),
-                sighting_records=_ungroundable_sighting_channel(entry),
-            ):
+        for meeting in all_committed_meetings():
+            ungroundable = replace(
+                meeting,
+                sighting_records=MappingProxyType(
+                    _ungroundable_sighting_channel(meeting.entry)
+                ),
+            )
+            for flag in ungroundable.rederive():
                 if flag.kind == "alibi_vs_sighting":
                     assert is_weak_contradiction(flag) is True
                     banded += 1
@@ -3628,11 +3504,9 @@ class TestLiveDetectorCommittedBytesByteIdentity:
 # (the 25/20-5 funnel, the 5 grounded vents, the 16-claim exemption) lives in
 # ``audits/audit-phase-18-baseline-6.md`` and the 18.11 planning audit.
 #
-# ``trigger_kind`` is threaded as ``None`` (RECON R1: not load-bearing on
-# committed bytes -- the two lever paths never read it, lever 1 inside
-# :func:`_detect_alibi_vs_sightings`, lever 2 inside
-# :func:`_detect_vent_placement_contradictions`, neither of which calls
-# ``reconstruct_stated_paths``).
+# The census re-derives each meeting through the channels production threaded
+# (:meth:`CommittedMeeting.rederive`), which the gate above holds equal to the
+# recording, so these cells describe the recorded flags.
 
 
 @functools.cache
@@ -3712,23 +3586,19 @@ class _SetCensus:
     vent_flag_count: int
     vent_subjects_by_role: dict[str, int]
     vent_new_ids_all_physical: bool
-    # --- how many meetings the re-derivation reproduces byte-identically -----
-    # Short of ``meetings`` only by the movement-channel divergences the replay
-    # cannot persist (``_MOVEMENT_CHANNEL_DIVERGENCES``).
-    off_matches_recorded: int
 
 
 @functools.cache
 def _committed_lever_census() -> dict[str, _SetCensus]:
-    """One shared re-derivation walk of the SAMPLE corpus computing every cell.
+    """One shared re-derivation pass over the committed meetings, every cell.
 
-    For every committed sample meeting: reconstruct the roster (ballot voters)
-    and the rebuilt vent channel, then re-derive :func:`detect_contradictions`
-    THREE ways -- default (env absent), ``_L1_ENV``, ``_L2_ENV``. Since the levers
-    graduated (baseline 6) all three legs are byte-identical (env is ignored), so
-    the exemption census pins the LIVE flag substrate (all STRONG) and the vent
-    diff collapses to zero. Cached, so the whole census is one pass over the
-    (already cached, samples-only) entries.
+    For every committed meeting: the living roster, the trigger kind and the
+    three private channels production threaded, then :func:`detect_contradictions`
+    once. The lever era compared THREE legs -- default (env absent), ``_L1_ENV``,
+    ``_L2_ENV`` -- and since the levers graduated (baseline 6) all three are the
+    same call, so the exemption census pins the recorded flag substrate and the
+    vent diff collapses to zero. Cached, so the whole census is one pass over
+    the walk's cached meetings.
     """
 
     from collections import Counter
@@ -3749,25 +3619,19 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
         vent_flags = 0
         vent_subjects: dict[str, set[tuple[int, str]]] = {}
         vent_new_all_physical = True
-        off_matches = 0
         meetings = 0
 
-        for entry_set, seed, entry in _committed_meeting_entries():
-            if entry_set != set_name:
-                continue
+        for meeting in committed_meetings(set_dir):
+            seed, entry = meeting.seed, meeting.entry
             meetings += 1
             role_map = roles[seed]
-            roster = _living_roster(entry)
-            degenerate = _degenerate_self_alibi_ids(entry, roster)
+            degenerate = _degenerate_self_alibi_ids(entry, meeting.roster)
 
-            off = _rederive(entry)
+            off = meeting.rederive()
             # The exemption and vent-variant rules are unconditional, so the
             # three legs the lever era compared are ONE re-derivation. The names
             # survive because the cells below are keyed by which rule they read.
             on1 = on2 = off
-
-            if _flags_match(off, entry.contradictions):
-                off_matches += 1
 
             # (a) default leg: distinct degenerate ids carrying an
             #     alibi_vs_sighting flag -- all STRONG since the graduation.
@@ -3832,18 +3696,18 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
             vent_flag_count=vent_flags,
             vent_subjects_by_role={r: len(s) for r, s in vent_subjects.items()},
             vent_new_ids_all_physical=vent_new_all_physical,
-            off_matches_recorded=off_matches,
         )
     return per_set
 
 
-# The exemption census, re-measured on the baseline-9 bytes. Baseline 6 read
-# {CREWMATE: 37, IMPOSTOR: 3} / {whereabouts: 38, alibi: 2} / 48 flags on 9p2i and
-# a single CREWMATE whereabouts claim on 4p1i, every one of them STRONG. The class
-# survives on 9p2i and is now entirely WEAK-banded; on 4p1i it is empty.
-_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 21}  # was CREWMATE 15, IMPOSTOR 1
-_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"whereabouts": 21}  # was alibi 2/where 14
-_SAMPLES_9P2I_EXEMPT_FLAGS = 22  # was 17
+# The exemption census, re-measured on the baseline-9 bytes through the channels
+# production threaded. Baseline 6 read {CREWMATE: 37, IMPOSTOR: 3} /
+# {whereabouts: 38, alibi: 2} / 48 flags on 9p2i and a single CREWMATE
+# whereabouts claim on 4p1i, every one of them STRONG. The class survives on
+# 9p2i and is now entirely WEAK-banded; on 4p1i it is empty.
+_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 7}  # was CREWMATE 21, records-free
+_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"whereabouts": 7}  # was where 21, records-free
+_SAMPLES_9P2I_EXEMPT_FLAGS = 7  # was 22, records-free
 _SAMPLES_9P2I_EXEMPT_STRONG: dict[str, int] = {}
 _SAMPLES_9P2I_EXEMPT_STRONG_FLAGS = 0
 _SAMPLES_4P1I_EXEMPT_BY_ROLE: dict[str, int] = {}
@@ -3851,9 +3715,7 @@ _SAMPLES_4P1I_EXEMPT_BY_CLASS: dict[str, int] = {}
 _SAMPLES_4P1I_EXEMPT_FLAGS = 0
 _SAMPLES_4P1I_EXEMPT_STRONG: dict[str, int] = {}
 _SAMPLES_4P1I_EXEMPT_STRONG_FLAGS = 0
-# Meetings the records-free re-derivation reproduces byte-identically, per set.
-_SAMPLES_9P2I_REDERIVED = 128  # was 131
-_SAMPLES_4P1I_REDERIVED = 39  # was 40
+# was _SAMPLES_*_REDERIVED (128, 39), records-free; the gate now holds every meeting
 
 
 class TestExemptionCensus:
@@ -3913,15 +3775,6 @@ class TestExemptionCensus:
         assert cell.exempt_on_strong_distinct_by_role == _SAMPLES_4P1I_EXEMPT_STRONG
         assert cell.exempt_on_strong_flag_count == _SAMPLES_4P1I_EXEMPT_STRONG_FLAGS
 
-    def test_live_census_reproduces_all_but_the_movement_divergences(
-        self, census: dict[str, _SetCensus]
-    ) -> None:
-        # The census leg is the same re-derivation the byte-identity walk makes,
-        # so it reproduces every committed meeting except the ones whose flags the
-        # unpersistable movement channel re-paired.
-        assert census["samples/9p2i"].off_matches_recorded == _SAMPLES_9P2I_REDERIVED
-        assert census["samples/4p1i"].off_matches_recorded == _SAMPLES_4P1I_REDERIVED
-
 
 class TestVentPlacementCensus:
     """Lever 2 (grounded vent-placement variant) -- the graduated substrate
@@ -3964,17 +3817,20 @@ class TestVentPlacementCensus:
 
 # --- Task 20.26: the grounded-prosecution census over the committed bytes ---
 #
-# The committed replays persist no private ``SightingRecord``s, so the census
-# reads the lever through two PLANTED channels that bracket the truth: one that
-# grounds every spoken sighting (the lever's most generous reading -- whatever
-# it still demotes, rules (b) and (c) did) and one that grounds none of them
-# (rule (a) alone). The reconstructed-memory reading, which needs the replay
-# walk, lives in ``tests/eval/test_evidence_honesty.py``.
+# The census reads the grounding lever through two PLANTED sighting channels,
+# each over the true vent and movement channels, the living roster and the
+# trigger kind: one grounds every spoken sighting (the lever's most generous
+# reading -- whatever it still demotes, rules (b) and (c) did) and one grounds
+# none of them (rule (a) alone). The recorded flags, which the gate above holds
+# equal to production's own sighting channel, sit between the two, and the
+# census asserts that bracket. Re-scoped under the owner's 2026-09-23 ruling
+# (Q5 of tasks/work/ml-reground-baseline-9.md), not repaired.
 
 
 @dataclass(frozen=True)
 class _GroundedSetCensus:
     meetings: int
+    bands_recorded: dict[str, int]
     bands_off: dict[str, int]
     bands_grounded: dict[str, int]
     bands_ungrounded: dict[str, int]
@@ -3990,49 +3846,56 @@ def _band_census(flags: tuple[ContradictionRef, ...]) -> dict[str, int]:
 
 
 @functools.cache
-def _grounded_prosecution_census() -> dict[str, _GroundedSetCensus]:
-    """One shared walk of the 676 committed meetings, three detector legs each."""
+def _grounded_prosecution_census(
+    *, with_movement: bool = True
+) -> dict[str, _GroundedSetCensus]:
+    """One pass over the 676 committed meetings, three detector legs each.
 
+    ``with_movement=False`` is the perturbed control: the same legs with the
+    movement channel dropped, which is what the records-free harness read.
+    """
+
+    no_moves: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] = MappingProxyType({})
+    no_sightings: Mapping[PlayerId, tuple[SightingRecord, ...]] = MappingProxyType({})
     per_set: dict[str, _GroundedSetCensus] = {}
     for set_dir in _COMMITTED_SETS:
         set_name = f"{set_dir.parent.name}/{set_dir.name}"
         meetings = 0
         drift = 0
         bands: dict[str, dict[str, int]] = {
+            "recorded": {},
             "off": {},
             "grounded": {},
             "ungrounded": {},
         }
-        for entry_set, _seed, entry in _committed_meeting_entries():
-            if entry_set != set_name:
-                continue
-            meetings += 1
-            roster = _living_roster(entry)
-            vents = _vent_records_from_recorded_flags(entry)
-            grounding = _planted_sighting_channel(entry)
-            off = detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=vents
+        for committed in committed_meetings(set_dir):
+            meeting = (
+                committed
+                if with_movement
+                else replace(committed, move_witness_records=no_moves)
             )
+            entry = meeting.entry
+            meetings += 1
+            off = replace(meeting, sighting_records=no_sightings).rederive()
             legs = {
+                "recorded": entry.contradictions,
                 "off": off,
-                "grounded": detect_contradictions(
-                    entry.transcript,
-                    roster=roster,
-                    vent_witness_records=vents,
-                    sighting_records=grounding,
-                ),
-                "ungrounded": detect_contradictions(
-                    entry.transcript,
-                    roster=roster,
-                    vent_witness_records=vents,
-                    sighting_records=_ungroundable_sighting_channel(entry),
-                ),
+                "grounded": replace(
+                    meeting,
+                    sighting_records=MappingProxyType(_planted_sighting_channel(entry)),
+                ).rederive(),
+                "ungrounded": replace(
+                    meeting,
+                    sighting_records=MappingProxyType(
+                        _ungroundable_sighting_channel(entry)
+                    ),
+                ).rederive(),
             }
             off_by_id = {flag.contradiction_id: flag for flag in off}
             for leg, flags in legs.items():
                 for key, count in _band_census(flags).items():
                     bands[leg][key] = bands[leg].get(key, 0) + count
-                if leg == "off":
+                if leg in ("recorded", "off"):
                     continue
                 if len(flags) != len(off):
                     drift += 1
@@ -4053,12 +3916,29 @@ def _grounded_prosecution_census() -> dict[str, _GroundedSetCensus]:
                         drift += 1
         per_set[set_name] = _GroundedSetCensus(
             meetings=meetings,
+            bands_recorded=bands["recorded"],
             bands_off=bands["off"],
             bands_grounded=bands["grounded"],
             bands_ungrounded=bands["ungrounded"],
             structural_drift=drift,
         )
     return per_set
+
+
+def _sighting_bands(
+    census: Mapping[str, _GroundedSetCensus], leg: str
+) -> tuple[int, int]:
+    """``(STRONG, weak)`` ``alibi_vs_sighting`` flags on one leg, pooled."""
+
+    bands = [getattr(cell, f"bands_{leg}") for cell in census.values()]
+    return (
+        sum(band.get("alibi_vs_sighting:strong", 0) for band in bands),
+        sum(band.get("alibi_vs_sighting:weak", 0) for band in bands),
+    )
+
+
+#: MEASURED: the fully grounded leg's ``(STRONG, weak)`` sighting class.
+_FULLY_GROUNDED_SIGHTING_BANDS: Final[tuple[int, int]] = (2, 44)
 
 
 class TestGroundedProsecutionCommittedCensus:
@@ -4099,15 +3979,13 @@ class TestGroundedProsecutionCommittedCensus:
         for cell in census.values():
             for band, count in cell.bands_off.items():
                 totals[band] = totals.get(band, 0) + count
-        # Baseline 6 read 234/79/37/5/35/440. The STRONG sighting class is the
-        # cell the record closed: 234 -> 42 even before any grounding channel.
-        # was {alibi_vs_sighting:strong 21, alibi_vs_sighting:weak 99,
-        # alibi_vs_physical:strong 13, alibi_conflict:weak 62,
-        # vent_sighting:strong 453} — the ``alibi_vs_physical:weak`` cell, empty
-        # on baseline 8, returns on this record.
+        # Baseline 6 read 234/79/37/5/35/440. The lever-OFF leg: the true vent
+        # and movement channels with no sighting channel, so the pre-grounding
+        # rules decide the sighting class.
+        # was {alibi_vs_sighting:strong 42, weak 79}, records-free (no move channel)
         assert totals == {
-            "alibi_vs_sighting:strong": 42,
-            "alibi_vs_sighting:weak": 79,
+            "alibi_vs_sighting:strong": 19,
+            "alibi_vs_sighting:weak": 27,
             "alibi_vs_physical:strong": 18,
             "alibi_vs_physical:weak": 7,
             "alibi_conflict:weak": 3,
@@ -4119,39 +3997,37 @@ class TestGroundedProsecutionCommittedCensus:
     ) -> None:
         # Rule (a) alone, at its limit: no speaker's record supports anything
         # they said, so the whole class is weak and none convicts. The class is
-        # 121 flags on these bytes (baseline 8: 120; baseline 6: 313).
-        strong = sum(
-            cell.bands_ungrounded.get("alibi_vs_sighting:strong", 0)
-            for cell in census.values()
-        )
-        weak = sum(
-            cell.bands_ungrounded.get("alibi_vs_sighting:weak", 0)
-            for cell in census.values()
-        )
-        assert (strong, weak) == (0, 121)  # was (0, 120)
+        # 46 flags on these bytes (baseline 6: 313).
+        assert _sighting_bands(census, "ungrounded") == (0, 46)  # was (0, 121)
 
-    def test_the_fully_grounded_leg_drops_the_whole_class(
+    def test_the_fully_grounded_leg_keeps_two_strong_on_these_bytes(
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
-        # Ground EVERY spoken sighting -- the most generous reading the rules can
-        # be given -- and the class comes out entirely WEAK on these
-        # bytes. On baseline 6 this leg still left 22 STRONG of 234; here the 21
-        # that survive a records-free read fall to rule (b) (one speaker is the
-        # whole prosecution) or rule (c) (the one-tick self-placement is an edge
-        # again), and nothing in the class convicts.
-        strong = sum(
-            cell.bands_grounded.get("alibi_vs_sighting:strong", 0)
-            for cell in census.values()
+        # Ground EVERY spoken sighting -- the most generous reading the rules
+        # can be given. Rule (b) keeps a STRONG sighting flag that two carriers
+        # stand behind (GROUNDED_PROSECUTION_MIN_SOURCES), and two survive here,
+        # both in ml_corpus/9p2i seed 1041 meeting 1. On baseline 6 this leg
+        # left 22 STRONG of 234.
+        # was (0, 120), records-free, while the baseline-8 recording held 2 STRONG
+        assert _sighting_bands(census, "grounded") == _FULLY_GROUNDED_SIGHTING_BANDS
+        # The bracket the two planted channels exist to give: the recording
+        # grounds some spoken sightings and not others, so its STRONG class sits
+        # between grounding none and grounding all.
+        ungrounded, _ = _sighting_bands(census, "ungrounded")
+        recorded, _ = _sighting_bands(census, "recorded")
+        grounded, _ = _sighting_bands(census, "grounded")
+        assert (ungrounded, recorded, grounded) == (0, 1, 2)
+        assert ungrounded <= recorded <= grounded
+
+    def test_without_the_movement_channel_the_pin_fails(self) -> None:
+        # The perturbed control: the same census with the movement channel
+        # dropped reads what the records-free harness read, and the pin above
+        # does not hold on it.
+        perturbed = _sighting_bands(
+            _grounded_prosecution_census(with_movement=False), "grounded"
         )
-        weak = sum(
-            cell.bands_grounded.get("alibi_vs_sighting:weak", 0)
-            for cell in census.values()
-        )
-        assert (strong, weak) == (0, 120)  # was (0, 105)
-        for set_name in census:
-            assert (
-                census[set_name].bands_grounded.get("alibi_vs_sighting:strong", 0) == 0
-            )
+        assert perturbed == (8, 113)
+        assert perturbed != _FULLY_GROUNDED_SIGHTING_BANDS
 
 
 def _committed_meeting(set_name: str, seed: int, meeting_id: str) -> MeetingReplayEntry:
@@ -4161,32 +4037,61 @@ def _committed_meeting(set_name: str, seed: int, meeting_id: str) -> MeetingRepl
     raise AssertionError(f"{set_name} seed {seed} {meeting_id} is not committed")
 
 
+#: The committed ejections whose ejectee carries a STRONG ``alibi_vs_sighting``
+#: flag in the recording, as ``set:seed:meeting_id``. Frozen by NAME: a meeting
+#: outside this set fails, and so does one that leaves it.
+# was frozenset(), records-free; the baseline-8 recording held samples/9p2i 41 m2
+_STRONG_SIGHTING_CONVICTIONS: Final[frozenset[str]] = frozenset(
+    {"ml_corpus/9p2i:1041:headless-seed-1041:meeting-1"}
+)
+
+
 class TestGroundedProsecutionInjusticeShapes:
-    """The injustice class the review named, re-read on the baseline-7 bytes.
+    """The injustice class the review named, read on the recorded flags.
 
     The three exemplars 20.26 pinned by seed (samples/9p2i 17 M0, 23 M1 and 8 M4)
     were baseline-6 meetings and do not exist in this record, so they are RETIRED
-    rather than re-anchored -- the class they exemplified is what this asserts,
-    and the record's own reading of it is in
-    ``audits/audit-phase-20-baseline-7.md`` §3 bar 4.
+    rather than re-anchored -- the class they exemplified is what this asserts.
+    Re-scoped under the owner's 2026-09-23 ruling (Q5 of
+    tasks/work/ml-reground-baseline-9.md): the class was once read as empty
+    through a records-free re-derivation, and is now read off the recorded
+    flags, which the gate above holds equal to production.
     """
 
-    def test_no_committed_ejection_rides_a_strong_sighting_flag(self) -> None:
-        # The class is EMPTY on the recorded bytes: not one committed meeting
-        # ejected a player who carried a STRONG ``alibi_vs_sighting`` flag. That
-        # is the cell bar 4 reads at 0/0.
-        convicting = [
-            f"{set_name} seed {seed} {entry.meeting_id}"
+    def test_the_committed_strong_sighting_convictions_are_the_named_set(
+        self,
+    ) -> None:
+        """The named set, with no role read and nothing said about the verdict.
+
+        Baseline 8's member was samples/9p2i seed 41 meeting 2, whose two
+        STRONG flags a records-free harness never saw. This record's member is
+        ml_corpus/9p2i seed 1041 meeting 1. Its ejectee's only STRONG flag is the
+        sighting flag, and that sighting is false at its own tick and true one
+        tick later: the witness spoke a one-tick interior stay one tick early,
+        grounding accepted it within ``SIGHTING_GROUNDING_TICK_TOLERANCE``, and
+        the map band did not fire, because by design it measures the gap from
+        the route's outer ends (the S-1 question in
+        tasks/decision-2026-09-23-reground-keying-environment-tests.md).
+
+        This is not I-3's sole-flag cell
+        (``test_i3_sole_flag_precision_pins`` in
+        tests/eval/test_evidence_honesty.py): an ejectee holding a STRONG
+        sighting flag PLUS a STRONG flag of another kind is inside this set and
+        outside that cell.
+        """
+
+        convicting = {
+            f"{set_name}:{seed}:{entry.meeting_id}"
             for set_name, seed, entry in _committed_meeting_entries()
             if entry.ejected_player_id is not None
             and any(
                 flag.kind == "alibi_vs_sighting"
                 and entry.ejected_player_id in flag.subjects
                 and not is_weak_contradiction(flag)
-                for flag in _rederive(entry)
+                for flag in entry.contradictions
             )
-        ]
-        assert convicting == []
+        }
+        assert convicting == _STRONG_SIGHTING_CONVICTIONS
 
     def test_the_search_finds_a_planted_conviction(self) -> None:
         # The emptiness above would be vacuous if the predicate could not fire.
@@ -4451,7 +4356,12 @@ class _MapAwareSetCensus:
 
 @functools.cache
 def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
-    """One shared walk of the 676 committed meetings, three detector legs each."""
+    """One pass over the 676 committed meetings, three detector legs each.
+
+    Every leg passes the channels production threaded
+    (:meth:`CommittedMeeting.rederive`); the lever key is no longer read, so the
+    three legs the lever era compared are one call made three times.
+    """
 
     per_set: dict[str, _MapAwareSetCensus] = {}
     for set_dir in _COMMITTED_SETS:
@@ -4459,33 +4369,18 @@ def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
         counts: dict[str, int] = {}
         bands: dict[str, dict[str, int]] = {"off": {}, "on": {}}
         moved_kinds: set[str] = set()
-        for entry_set, _seed, entry in _committed_meeting_entries():
-            if entry_set != set_name:
-                continue
+        for meeting in committed_meetings(set_dir):
+            entry = meeting.entry
             counts["meetings"] = counts.get("meetings", 0) + 1
-            roster = _living_roster(entry)
-            vents = _vent_records_from_recorded_flags(entry)
-            off = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-            )
-            falsey = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-            )
-            on = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-            )
+            off = meeting.rederive()
+            falsey = meeting.rederive()
+            on = meeting.rederive()
             counts["off_matches_recorded"] = counts.get(
                 "off_matches_recorded", 0
-            ) + int(_flags_match(off, entry.contradictions))
+            ) + int(off == entry.contradictions)
             counts["falsey_matches_recorded"] = counts.get(
                 "falsey_matches_recorded", 0
-            ) + int(_flags_match(falsey, entry.contradictions))
+            ) + int(falsey == entry.contradictions)
             counts["ids_identical"] = counts.get("ids_identical", 0) + int(
                 [flag.contradiction_id for flag in off]
                 == [flag.contradiction_id for flag in on]
@@ -4537,17 +4432,15 @@ class TestMapAwareArbitrationCommittedCensus:
         self, census: dict[str, _MapAwareSetCensus]
     ) -> None:
         # The key is no longer read, so the absent-key leg and the explicit
-        # falsey leg reproduce the SAME meetings -- and both reproduce every
-        # committed meeting except the movement-channel divergences this walk
-        # cannot rebuild (it supplies vents only).
+        # falsey leg reproduce the SAME meetings -- and, with the channels
+        # production threaded, both reproduce every committed meeting.
         for cell in census.values():
             assert cell.off_matches_recorded == cell.falsey_matches_recorded
-        # was {samples/9p2i 126, samples/4p1i 39, ml_corpus/9p2i 369,
-        # ml_corpus/4p1i 43}
+        # was {samples/9p2i 123, samples/4p1i 39, ml_corpus/9p2i 382, ...}, vents only
         assert {name: cell.off_matches_recorded for name, cell in census.items()} == {
-            "samples/9p2i": 123,
+            "samples/9p2i": 145,
             "samples/4p1i": 39,
-            "ml_corpus/9p2i": 382,
+            "ml_corpus/9p2i": 449,
             "ml_corpus/4p1i": 43,
         }
         assert sum(cell.meetings for cell in census.values()) == _COMMITTED_MEETINGS
@@ -4579,9 +4472,10 @@ class TestMapAwareArbitrationCommittedCensus:
     ) -> None:
         # Baseline 6 priced the corridor at 140 demotions of 234 STRONG flags.
         # The arbitration is UNCONDITIONAL here, so both legs already carry it and
-        # the env differential is zero: 42 STRONG and 79 WEAK on both sides, and
-        # nothing moves BETWEEN the legs. The corridor's price on these bytes is
-        # in the record audit, not in an env diff that no longer exists.
+        # the env differential is zero: the recorded class, 1 STRONG and 45 WEAK
+        # on both sides, and nothing moves BETWEEN the legs. The corridor's price
+        # on these bytes is in the record audit, not in an env diff that no
+        # longer exists.
         strong_off = sum(
             cell.bands_off.get("alibi_vs_sighting:strong", 0)
             for cell in census.values()
@@ -4595,8 +4489,8 @@ class TestMapAwareArbitrationCommittedCensus:
         weak_on = sum(
             cell.bands_on.get("alibi_vs_sighting:weak", 0) for cell in census.values()
         )
-        assert (strong_off, strong_on) == (42, 42)  # was (21, 21)
-        assert (weak_off, weak_on) == (79, 79)  # was (99, 99)
+        assert (strong_off, strong_on) == (1, 1)  # was (42, 42), vents only
+        assert (weak_off, weak_on) == (45, 45)  # was (79, 79), vents only
         assert sum(cell.demoted for cell in census.values()) == 0
         # The rule still bites -- on a transcript, where a corridor pair exists.
         corridor = detect_contradictions(_corridor_transcript(), roster=_ROSTER_MAP)
@@ -4607,13 +4501,13 @@ class TestMapAwareArbitrationCommittedCensus:
         # The review's exemplar (samples/9p2i seed 17 meeting 0, p-1 ejected on a
         # STRONG ENGINEERING/EAST_HALL pair) was a baseline-6 meeting and does not
         # exist in this record, so it is RETIRED rather than re-anchored. What
-        # replaces it is the class-wide statement: on the recorded bytes no
+        # replaces it is the class-wide statement: on the recorded flags no
         # committed STRONG ``alibi_vs_sighting`` flag names two rooms one doorway
         # apart -- the corridor no longer convicts anywhere.
         survivors = [
             f"{set_name} seed {seed} {entry.meeting_id}"
             for set_name, seed, entry in _committed_meeting_entries()
-            for flag in _rederive(entry)
+            for flag in entry.contradictions
             if flag.kind == "alibi_vs_sighting"
             and not is_weak_contradiction(flag)
             and WEAK_REASON_ADJACENT_ONE_TICK in flag.description
@@ -4699,11 +4593,11 @@ class TestTheAlibiIsARoute:
         )
 
     def test_the_envelope_still_mints_its_flags(self) -> None:
-        # Four of the five, not all five: on baseline 8 this meeting was one of
-        # the movement-channel diverging meetings, whose fifth flag rests on the
-        # private movement channel a replay cannot rebuild. What matters here is
-        # the direction -- the envelope prosecutes p-9 -- and the corpus-wide
-        # byte identity is pinned by the walk above, not here.
+        # Four of the five, not all five: the fifth flag rests on the speakers'
+        # private movement channel, and this frozen line carries no tick rows, so
+        # no walk can rebuild it; the records-free harness re-derives the other
+        # four. What matters here is the direction -- the envelope prosecutes
+        # p-9 -- and the corpus-wide byte identity is gated above, not here.
         entry = _seed_41_entry()
         rederived = _rederive(entry)
 
