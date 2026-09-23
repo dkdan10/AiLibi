@@ -876,6 +876,17 @@ rows.
     `tests/scripts/test_verify_ml_evidence.py` (6),
     `tests/eval/test_balance_eval_meeting_runner.py` (1) and
     `tests/experiments/test_torch_probe_excluded.py` (1).
+- A second whole run, at `d0191db8`, which adds only this card's Results:
+  - It ran under a load average near 70 from concurrent sessions and took 1662.99 s
+    against 390.12 s. It read `36 failed, 8263 passed, 9 errors`, exit=1.
+  - The one id beyond the 44 was
+    `tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`.
+    That test sets a 0.25 s wall deadline, and the deadline expired before the provider
+    was reached (`assert 0 == 2` on `attempts`).
+  - Re-run alone it passes (`2 passed in 0.84s`). It also passed in the run at
+    `beeaedd8` and at `ff4c6bb8`, and this card changes no `orchestrator/`, `llm/` or
+    `tests/orchestrator/` byte. It is a timing flake of the loaded host, reported rather
+    than hidden.
 - Frontend legs, run separately (`npm run lint`, `tsc:check`, `test`, `build`): all exit
   0, 558 vitest tests. No served change, so no e2e.
 - Other steps:
