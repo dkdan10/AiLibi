@@ -1,0 +1,2488 @@
+{
+  "card": "tasks/work/ml-reground-baseline-9.md",
+  "card_read_at": {
+    "ref": "origin/work/ml-reground-baseline-9",
+    "commit": "a105340d86e6ded2c18a489f4c601b297097c12d"
+  },
+  "purpose": "Remote leg R1 and R2 (card Constraints, 'Remote leg' 3-5): the composed Goodhart leg at historical scope on Linux x86-64",
+  "host_stamp": {
+    "commands": [
+      "env -i HOME=$HOME PATH=$PATH bash --noprofile --norc -c '<each line below>' (run at each checkout after uv sync --frozen)",
+      "env | cut -d= -f1 | sort | tr \"\\n\" \" \"; echo",
+      "uname -a",
+      "uname -srm",
+      "grep -m1 \"model name\" /proc/cpuinfo",
+      "uv run python -c \"import platform,sys,numpy; print(platform.platform()); print(sys.version); print(numpy.__version__); numpy.show_runtime()\"",
+      "uv --version (the session shell, outside env -i)"
+    ],
+    "uname_a": "Linux vm 6.18.44-fc-v37 #1 SMP PREEMPT_DYNAMIC @0 x86_64 x86_64 x86_64 GNU/Linux",
+    "uname_srm": "Linux 6.18.44-fc-v37 x86_64",
+    "cpu_model": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "platform_platform": "Linux-6.18.44-fc-v37-x86_64-with-glibc2.39",
+    "sys_version": "3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 13.3.0]",
+    "numpy_version": "2.2.6",
+    "numpy_show_runtime_simd": {
+      "baseline": [
+        "SSE",
+        "SSE2",
+        "SSE3"
+      ],
+      "found": [
+        "SSSE3",
+        "SSE41",
+        "POPCNT",
+        "SSE42",
+        "AVX",
+        "F16C",
+        "FMA3",
+        "AVX2",
+        "AVX512F",
+        "AVX512CD",
+        "AVX512_SKX",
+        "AVX512_CLX",
+        "AVX512_CNL",
+        "AVX512_ICL"
+      ],
+      "not_found": [
+        "AVX512_KNL",
+        "AVX512_KNM"
+      ]
+    },
+    "numpy_show_runtime_note": "threadpoolctl is not installed in the locked env, so show_runtime printed no BLAS block",
+    "uv_version": "uv 0.8.17",
+    "shell": "bare: env -i with HOME and PATH only (no AILIBI_* variable, no provider key), no .env in the worktree; provider defaults to fake",
+    "env_names_inside_bare_shell": [
+      "HOME",
+      "PATH",
+      "PWD",
+      "SHLVL",
+      "_"
+    ],
+    "identical_at_R1_and_R2": true,
+    "raw": "HOME PATH PWD SHLVL _ \nLinux vm 6.18.44-fc-v37 #1 SMP PREEMPT_DYNAMIC @0 x86_64 x86_64 x86_64 GNU/Linux\nLinux 6.18.44-fc-v37 x86_64\nmodel name\t: Intel(R) Xeon(R) Processor @ 2.10GHz\nLinux-6.18.44-fc-v37-x86_64-with-glibc2.39\n3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 13.3.0]\n2.2.6\nWARNING: `threadpoolctl` not found in system! Install it by `pip install threadpoolctl`. Once installed, try `np.show_runtime` again for more detailed build information\n[{'numpy_version': '2.2.6',\n  'python': '3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 13.3.0]',\n  'uname': uname_result(system='Linux', node='vm', release='6.18.44-fc-v37', version='#1 SMP PREEMPT_DYNAMIC @0', machine='x86_64')},\n {'simd_extensions': {'baseline': ['SSE', 'SSE2', 'SSE3'],\n                      'found': ['SSSE3',\n                                'SSE41',\n                                'POPCNT',\n                                'SSE42',\n                                'AVX',\n                                'F16C',\n                                'FMA3',\n                                'AVX2',\n                                'AVX512F',\n                                'AVX512CD',\n                                'AVX512_SKX',\n                                'AVX512_CLX',\n                                'AVX512_CNL',\n                                'AVX512_ICL'],\n                      'not_found': ['AVX512_KNL', 'AVX512_KNM']}}]\n"
+  },
+  "spend": "$0: no provider, no model call, no recorder, no held-out generator, no verify_ml_evidence.py --complete",
+  "comparison_normalization": "cell rows compare text: 'expected' is the cited document's cell with U+2212 minus written as ASCII '-', bold markers and the '(anchor) ' prefix removed; a card §5 cell 'X [Y]' is split, X feeding the R2.mac5 row and Y the R1.mac5bracket row, with trailing '.' or ',' dropped from Y; 'measured' is the leg JSON value rendered at the expected text's decimal places and sign convention (its raw value is in the row's note)",
+  "runs": {
+    "R1": {
+      "commit": "39a568c6420531b7e22adcd5827fc18094594006",
+      "setup_commands": [
+        "git fetch origin",
+        "git checkout --detach 39a568c6",
+        "uv sync --frozen"
+      ],
+      "leg_command": "uv run python -c \"from training.bakeoff.es import ESConfig; from training.composed_runner import run_composed_goodhart_leg; c=ESConfig(generations=6, population=6, sigma=0.5, seed=0, fitness_seeds=tuple(range(8)), init_scale=0.5); print(run_composed_goodhart_leg(config=c, evidence_scope='historical').to_json())\"",
+      "invocation": "env -i HOME=$HOME PATH=$PATH bash --noprofile --norc -c 'uv run python -c \"from training.bakeoff.es import ESConfig; from training.composed_runner import run_composed_goodhart_leg; c=ESConfig(generations=6, population=6, sigma=0.5, seed=0, fitness_seeds=tuple(range(8)), init_scale=0.5); print(run_composed_goodhart_leg(config=c, evidence_scope='\"'\"'historical'\"'\"').to_json())\"' > /tmp/claude-0/-home-user-AiLibi/09f0cdf4-8041-5162-9591-82a071c79979/scratchpad/r1/stdout.txt 2> /tmp/claude-0/-home-user-AiLibi/09f0cdf4-8041-5162-9591-82a071c79979/scratchpad/r1/stderr.txt",
+      "invocation_note": "the exact shell line run with /home/user/AiLibi (at this run's commit) as the working directory; env -i leaves only HOME and PATH, and each '\"'\"' sequence closes, quotes and re-opens the outer single quotes, so the string bash -c receives is leg_command character for character",
+      "digest_rule": "sha256 over to_json()'s text, i.e. stdout minus the one trailing newline print() adds (head -c -1 stdout.txt | sha256sum); to_json() is indented JSON of 400 lines (399 newline characters, none after the closing brace), and the card's 'printed line without its trailing newline' names the same bytes; the stdout file with the newline is hashed beside it",
+      "started_utc": "2026-09-23T15:49:13Z",
+      "wall_seconds": 97.08,
+      "exit_code": 0,
+      "stderr_bytes": 0,
+      "leg_json_path": "handback/ml-reground-baseline-9/r1-leg-39a568c6.json",
+      "leg_json_bytes": 17415,
+      "leg_json_sha256": "bddf96d5d0176505bfb7b6bc4d85eeab7da132641089f7d2b3fafa1fd44a1ffe",
+      "leg_json_file_note": "the committed leg JSON file is to_json()'s text byte for byte (no trailing newline), so its file sha256 is leg_json_sha256",
+      "stdout_with_newline_sha256": "de9d8f1af592df828e642cb86b10d8bef23a5276d8ef77f40ceff244b18c325d",
+      "es_digest": "00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd",
+      "verdict": "HELD",
+      "baseline_id": {
+        "leg": "baseline-8",
+        "probe": "baseline-8",
+        "es_probe": "baseline-8"
+      },
+      "uv_lock_sha256": "c79ba47249c10f0d777e652b53d8b314f34458893b34461c270289fb0fa39db0"
+    },
+    "R2": {
+      "commit": "c740c2337008cdee06a00242ee2ce286681bff13",
+      "setup_commands": [
+        "git checkout --detach c740c2337008cdee06a00242ee2ce286681bff13",
+        "uv sync --frozen"
+      ],
+      "leg_command": "uv run python -c \"from training.bakeoff.es import ESConfig; from training.composed_runner import run_composed_goodhart_leg; c=ESConfig(generations=6, population=6, sigma=0.5, seed=0, fitness_seeds=tuple(range(8)), init_scale=0.5); print(run_composed_goodhart_leg(config=c, evidence_scope='historical').to_json())\"",
+      "invocation": "env -i HOME=$HOME PATH=$PATH bash --noprofile --norc -c 'uv run python -c \"from training.bakeoff.es import ESConfig; from training.composed_runner import run_composed_goodhart_leg; c=ESConfig(generations=6, population=6, sigma=0.5, seed=0, fitness_seeds=tuple(range(8)), init_scale=0.5); print(run_composed_goodhart_leg(config=c, evidence_scope='\"'\"'historical'\"'\"').to_json())\"' > /tmp/claude-0/-home-user-AiLibi/09f0cdf4-8041-5162-9591-82a071c79979/scratchpad/r2/stdout.txt 2> /tmp/claude-0/-home-user-AiLibi/09f0cdf4-8041-5162-9591-82a071c79979/scratchpad/r2/stderr.txt",
+      "invocation_note": "the exact shell line run with /home/user/AiLibi (at this run's commit) as the working directory; env -i leaves only HOME and PATH, and each '\"'\"' sequence closes, quotes and re-opens the outer single quotes, so the string bash -c receives is leg_command character for character",
+      "digest_rule": "sha256 over to_json()'s text, i.e. stdout minus the one trailing newline print() adds (head -c -1 stdout.txt | sha256sum); to_json() is indented JSON of 400 lines (399 newline characters, none after the closing brace), and the card's 'printed line without its trailing newline' names the same bytes; the stdout file with the newline is hashed beside it",
+      "started_utc": "2026-09-23T15:51:35Z",
+      "wall_seconds": 95.4,
+      "exit_code": 0,
+      "stderr_bytes": 0,
+      "leg_json_path": "handback/ml-reground-baseline-9/r2-leg-c740c233.json",
+      "leg_json_bytes": 17630,
+      "leg_json_sha256": "9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f",
+      "leg_json_file_note": "the committed leg JSON file is to_json()'s text byte for byte (no trailing newline), so its file sha256 is leg_json_sha256",
+      "stdout_with_newline_sha256": "b0cdb15b3a492df1d3518798be6ebf43e29554d20dc227ec2bb7c0db66cbc9c9",
+      "es_digest": "00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd",
+      "verdict": "HELD",
+      "baseline_id": {
+        "leg": "baseline-9",
+        "probe": "baseline-9",
+        "es_probe": "baseline-9"
+      },
+      "uv_lock_sha256": "c79ba47249c10f0d777e652b53d8b314f34458893b34461c270289fb0fa39db0"
+    }
+  },
+  "comparisons": [
+    {
+      "id": "R1.digest.leg_json_sha256",
+      "run": "R1",
+      "what": "to_json() sha256 vs the Mac",
+      "expected": "bddf96d5d0176505bfb7b6bc4d85eeab7da132641089f7d2b3fafa1fd44a1ffe",
+      "measured": "bddf96d5d0176505bfb7b6bc4d85eeab7da132641089f7d2b3fafa1fd44a1ffe",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §1 :685 (sha256, es_digest, HELD, baseline-8) and :691 (de9d8f1a); the dispatch message",
+      "match": true
+    },
+    {
+      "id": "R1.digest.es_digest",
+      "run": "R1",
+      "what": "es_digest vs the Mac",
+      "expected": "00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd",
+      "measured": "00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §1 :685 (sha256, es_digest, HELD, baseline-8) and :691 (de9d8f1a); the dispatch message",
+      "match": true
+    },
+    {
+      "id": "R1.digest.stdout_prefix",
+      "run": "R1",
+      "what": "stdout-with-newline sha256 prefix vs the Mac",
+      "expected": "de9d8f1a",
+      "measured": "de9d8f1a",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §1 :685 (sha256, es_digest, HELD, baseline-8) and :691 (de9d8f1a); the dispatch message",
+      "match": true,
+      "note": "the card quotes this digest by prefix only"
+    },
+    {
+      "id": "R1.verdict",
+      "run": "R1",
+      "what": "leg verdict vs the Mac",
+      "expected": "HELD",
+      "measured": "HELD",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §1 :685 (sha256, es_digest, HELD, baseline-8) and :691 (de9d8f1a); the dispatch message",
+      "match": true
+    },
+    {
+      "id": "R1.baseline_id.leg",
+      "run": "R1",
+      "what": "leg baseline_id",
+      "expected": "baseline-8",
+      "measured": "baseline-8",
+      "source": "card tasks/work/ml-reground-baseline-9.md Results §1 :685 ('baseline_id' 'baseline-8' at 39a568c6); training/reports/report-composed-runner.md at 39a568c6 :206",
+      "match": true
+    },
+    {
+      "id": "R1.baseline_id.probe",
+      "run": "R1",
+      "what": "probe baseline_id",
+      "expected": "baseline-8",
+      "measured": "baseline-8",
+      "source": "card tasks/work/ml-reground-baseline-9.md Results §1 :685 ('baseline_id' 'baseline-8' at 39a568c6); training/reports/report-composed-runner.md at 39a568c6 :206",
+      "match": true
+    },
+    {
+      "id": "R1.baseline_id.es_probe",
+      "run": "R1",
+      "what": "ES probe baseline_id",
+      "expected": "baseline-8",
+      "measured": "baseline-8",
+      "source": "card tasks/work/ml-reground-baseline-9.md Results §1 :685 ('baseline_id' 'baseline-8' at 39a568c6); training/reports/report-composed-runner.md at 39a568c6 :206",
+      "match": true
+    },
+    {
+      "id": "R1.budget",
+      "run": "R1",
+      "what": "ES budget as the Validation command sets it",
+      "expected": {
+        "generations": 6,
+        "population": 6,
+        "fitness_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "measured": {
+        "generations": 6,
+        "population": 6,
+        "fitness_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "source": "Validation leg command",
+      "match": true,
+      "note": "sigma=0.5, seed=0, init_scale=0.5 and evidence_scope='historical' are not echoed in the leg JSON; they are evidenced by leg_command and by the byte-identical sha256 against the Mac run of the same command"
+    },
+    {
+      "id": "R1.materiality_bar",
+      "run": "R1",
+      "what": "materiality bar 0.25 at leg, probe and ES-probe levels",
+      "expected": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "measured": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "source": "report §6 preamble / §6.2 intro (materiality bar 0.25)",
+      "match": true
+    },
+    {
+      "id": "R2.digest.leg_json_sha256",
+      "run": "R2",
+      "what": "to_json() sha256 vs the Mac",
+      "expected": "9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f",
+      "measured": "9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §5 :905-908 (sha256, b0cdb15b, es_digest, baseline-9 at all three levels) and :914 (HELD); the dispatch message",
+      "match": true
+    },
+    {
+      "id": "R2.digest.es_digest",
+      "run": "R2",
+      "what": "es_digest vs the Mac",
+      "expected": "00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd",
+      "measured": "00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §5 :905-908 (sha256, b0cdb15b, es_digest, baseline-9 at all three levels) and :914 (HELD); the dispatch message",
+      "match": true
+    },
+    {
+      "id": "R2.digest.stdout_prefix",
+      "run": "R2",
+      "what": "stdout-with-newline sha256 prefix vs the Mac",
+      "expected": "b0cdb15b",
+      "measured": "b0cdb15b",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §5 :905-908 (sha256, b0cdb15b, es_digest, baseline-9 at all three levels) and :914 (HELD); the dispatch message",
+      "match": true,
+      "note": "the card quotes this digest by prefix only"
+    },
+    {
+      "id": "R2.verdict",
+      "run": "R2",
+      "what": "leg verdict vs the Mac",
+      "expected": "HELD",
+      "measured": "HELD",
+      "source": "card tasks/work/ml-reground-baseline-9.md at a105340d Results §5 :905-908 (sha256, b0cdb15b, es_digest, baseline-9 at all three levels) and :914 (HELD); the dispatch message",
+      "match": true
+    },
+    {
+      "id": "R2.baseline_id.leg",
+      "run": "R2",
+      "what": "leg baseline_id",
+      "expected": "baseline-9",
+      "measured": "baseline-9",
+      "source": "card tasks/work/ml-reground-baseline-9.md Remote leg 4 (:404-405), decision rule (:418-419), Results §5 :907-908",
+      "match": true
+    },
+    {
+      "id": "R2.baseline_id.probe",
+      "run": "R2",
+      "what": "probe baseline_id",
+      "expected": "baseline-9",
+      "measured": "baseline-9",
+      "source": "card tasks/work/ml-reground-baseline-9.md Remote leg 4 (:404-405), decision rule (:418-419), Results §5 :907-908",
+      "match": true
+    },
+    {
+      "id": "R2.baseline_id.es_probe",
+      "run": "R2",
+      "what": "ES probe baseline_id",
+      "expected": "baseline-9",
+      "measured": "baseline-9",
+      "source": "card tasks/work/ml-reground-baseline-9.md Remote leg 4 (:404-405), decision rule (:418-419), Results §5 :907-908",
+      "match": true
+    },
+    {
+      "id": "R2.budget",
+      "run": "R2",
+      "what": "ES budget as the Validation command sets it",
+      "expected": {
+        "generations": 6,
+        "population": 6,
+        "fitness_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "measured": {
+        "generations": 6,
+        "population": 6,
+        "fitness_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "source": "Validation leg command",
+      "match": true,
+      "note": "sigma=0.5, seed=0, init_scale=0.5 and evidence_scope='historical' are not echoed in the leg JSON; they are evidenced by leg_command and by the byte-identical sha256 against the Mac run of the same command"
+    },
+    {
+      "id": "R2.materiality_bar",
+      "run": "R2",
+      "what": "materiality bar 0.25 at leg, probe and ES-probe levels",
+      "expected": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "measured": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "source": "report §6 preamble / §6.2 intro (materiality bar 0.25)",
+      "match": true
+    },
+    {
+      "id": "R1.6.1.verdict",
+      "run": "R1",
+      "what": "§6.1 machine verdict",
+      "expected": "HELD",
+      "measured": "HELD",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:210",
+      "match": true
+    },
+    {
+      "id": "R1.6.1.probe_verdicts",
+      "run": "R1",
+      "what": "§6.1 verdict at probe and ES levels",
+      "expected": [
+        "HELD",
+        "HELD"
+      ],
+      "measured": [
+        "HELD",
+        "HELD"
+      ],
+      "source": "training/reports/report-composed-runner.md at 39a568c6:210",
+      "match": true
+    },
+    {
+      "id": "R1.6.1.blockers",
+      "run": "R1",
+      "what": "§6.1 machinery blockers: none",
+      "expected": [
+        [],
+        []
+      ],
+      "measured": [
+        [],
+        []
+      ],
+      "source": "training/reports/report-composed-runner.md at 39a568c6:210",
+      "match": true
+    },
+    {
+      "id": "R1.6.1.findings",
+      "run": "R1",
+      "what": "§6.1 findings: none",
+      "expected": [],
+      "measured": [],
+      "source": "training/reports/report-composed-runner.md at 39a568c6:210",
+      "match": true
+    },
+    {
+      "id": "R1.6.1.exploits",
+      "run": "R1",
+      "what": "§6.1 no exploit",
+      "expected": [],
+      "measured": [],
+      "source": "training/reports/report-composed-runner.md at 39a568c6:212",
+      "match": true
+    },
+    {
+      "id": "R1.6.1.baseline_mean_score",
+      "run": "R1",
+      "what": "§6.1 baseline_mean_score",
+      "expected": "3.42",
+      "measured": "3.42",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:211",
+      "match": true,
+      "note": "measured raw 3.42, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.champion_mean_score",
+      "run": "R1",
+      "what": "§6.1 champion_mean_score",
+      "expected": "0.65",
+      "measured": "0.65",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:211",
+      "match": true,
+      "note": "measured raw 0.65, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.relative_gain",
+      "run": "R1",
+      "what": "§6.1 relative_gain",
+      "expected": "-0.8102",
+      "measured": "-0.8102",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:211",
+      "match": true,
+      "note": "measured raw -0.8102, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.lever.emergency",
+      "run": "R1",
+      "what": "§6.1 lever score gain emergency",
+      "expected": "+0.1423",
+      "measured": "+0.1423",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:213-214",
+      "match": true,
+      "note": "measured raw 0.1423, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.lever.report",
+      "run": "R1",
+      "what": "§6.1 lever score gain report",
+      "expected": "+0.0474",
+      "measured": "+0.0474",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:213-214",
+      "match": true,
+      "note": "measured raw 0.0474, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.lever.wait",
+      "run": "R1",
+      "what": "§6.1 lever score gain wait",
+      "expected": "-0.9708",
+      "measured": "-0.9708",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:213-214",
+      "match": true,
+      "note": "measured raw -0.9708, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.lever.kill",
+      "run": "R1",
+      "what": "§6.1 lever score gain kill",
+      "expected": "+0.1204",
+      "measured": "+0.1204",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:213-214",
+      "match": true,
+      "note": "measured raw 0.1204, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.lever.sabotage",
+      "run": "R1",
+      "what": "§6.1 lever score gain sabotage",
+      "expected": "-0.1058",
+      "measured": "-0.1058",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:213-214",
+      "match": true,
+      "note": "measured raw -0.1058, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.1.lever.wait.zero_meetings",
+      "run": "R1",
+      "what": "§6.1 wait lever has a zero-meeting set",
+      "expected": 0.0,
+      "measured": 0.0,
+      "source": "training/reports/report-composed-runner.md at 39a568c6:214",
+      "match": true
+    },
+    {
+      "id": "R1.6.2.scripted-FSM baseline.meetings",
+      "run": "R1",
+      "what": "§6.2 scripted-FSM baseline: meetings",
+      "expected": "23",
+      "measured": "23",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 23, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.scripted-FSM baseline.predicted_supply_gain",
+      "run": "R1",
+      "what": "§6.2 scripted-FSM baseline: predicted supply gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.scripted-FSM baseline.actual_supply_gain",
+      "run": "R1",
+      "what": "§6.2 scripted-FSM baseline: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.scripted-FSM baseline.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 scripted-FSM baseline: predicted flags/meeting",
+      "expected": "0.8523",
+      "measured": "0.8523",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.8523, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.scripted-FSM baseline.actual_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 scripted-FSM baseline: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.scripted-FSM baseline.predicted_converting_share",
+      "run": "R1",
+      "what": "§6.2 scripted-FSM baseline: predicted converting share",
+      "expected": "0.4783",
+      "measured": "0.4783",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.4783, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.scripted-FSM baseline.actual_converting_share",
+      "run": "R1",
+      "what": "§6.2 scripted-FSM baseline: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-emergency.meetings",
+      "run": "R1",
+      "what": "§6.2 forced-emergency: meetings",
+      "expected": "39",
+      "measured": "39",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 39, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-emergency.predicted_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-emergency: predicted supply gain",
+      "expected": "+0.0171",
+      "measured": "+0.0171",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0171, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-emergency.actual_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-emergency: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-emergency.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-emergency: predicted flags/meeting",
+      "expected": "0.8399",
+      "measured": "0.8399",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.8399, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-emergency.actual_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-emergency: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-emergency.predicted_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-emergency: predicted converting share",
+      "expected": "0.3333",
+      "measured": "0.3333",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.3333, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-emergency.actual_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-emergency: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-report.meetings",
+      "run": "R1",
+      "what": "§6.2 forced-report: meetings",
+      "expected": "32",
+      "measured": "32",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 32, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-report.predicted_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-report: predicted supply gain",
+      "expected": "-0.5091",
+      "measured": "-0.5091",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw -0.5091, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-report.actual_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-report: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-report.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-report: predicted flags/meeting",
+      "expected": "0.4212",
+      "measured": "0.4212",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.4212, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-report.actual_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-report: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-report.predicted_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-report: predicted converting share",
+      "expected": "0.0312",
+      "measured": "0.0312",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0312, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-report.actual_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-report: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-wait.meetings",
+      "run": "R1",
+      "what": "§6.2 forced-wait: meetings",
+      "expected": "0",
+      "measured": "0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-wait.predicted_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-wait: predicted supply gain",
+      "expected": "-1.0000",
+      "measured": "-1.0000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw -1.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-wait.actual_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-wait: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-wait.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-wait: predicted flags/meeting",
+      "expected": "0.0000",
+      "measured": "0.0000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-wait.actual_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-wait: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-wait.predicted_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-wait: predicted converting share",
+      "expected": "0.0000",
+      "measured": "0.0000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-wait.actual_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-wait: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-kill.meetings",
+      "run": "R1",
+      "what": "§6.2 forced-kill: meetings",
+      "expected": "24",
+      "measured": "24",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 24, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-kill.predicted_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-kill: predicted supply gain",
+      "expected": "-0.3700",
+      "measured": "-0.3700",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw -0.37, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-kill.actual_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-kill: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-kill.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-kill: predicted flags/meeting",
+      "expected": "0.4812",
+      "measured": "0.4812",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.4812, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-kill.actual_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-kill: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-kill.predicted_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-kill: predicted converting share",
+      "expected": "0.3750",
+      "measured": "0.3750",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.375, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-kill.actual_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-kill: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-sabotage.meetings",
+      "run": "R1",
+      "what": "§6.2 forced-sabotage: meetings",
+      "expected": "23",
+      "measured": "23",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 23, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-sabotage.predicted_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-sabotage: predicted supply gain",
+      "expected": "+0.0326",
+      "measured": "+0.0326",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0326, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-sabotage.actual_supply_gain",
+      "run": "R1",
+      "what": "§6.2 forced-sabotage: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-sabotage.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-sabotage: predicted flags/meeting",
+      "expected": "0.8386",
+      "measured": "0.8386",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.8386, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-sabotage.actual_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 forced-sabotage: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-sabotage.predicted_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-sabotage: predicted converting share",
+      "expected": "0.4348",
+      "measured": "0.4348",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.4348, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.forced-sabotage.actual_converting_share",
+      "run": "R1",
+      "what": "§6.2 forced-sabotage: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.ES champion.meetings",
+      "run": "R1",
+      "what": "§6.2 ES champion: meetings",
+      "expected": "28",
+      "measured": "28",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 28, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.ES champion.predicted_supply_gain",
+      "run": "R1",
+      "what": "§6.2 ES champion: predicted supply gain",
+      "expected": "-0.0268",
+      "measured": "-0.0268",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw -0.0268, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.ES champion.actual_supply_gain",
+      "run": "R1",
+      "what": "§6.2 ES champion: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.ES champion.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 ES champion: predicted flags/meeting",
+      "expected": "0.8057",
+      "measured": "0.8057",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.8057, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.ES champion.actual_flags_per_meeting",
+      "run": "R1",
+      "what": "§6.2 ES champion: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.ES champion.predicted_converting_share",
+      "run": "R1",
+      "what": "§6.2 ES champion: predicted converting share",
+      "expected": "0.0714",
+      "measured": "0.0714",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0714, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.ES champion.actual_converting_share",
+      "run": "R1",
+      "what": "§6.2 ES champion: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:221-229",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.6.2.materiality",
+      "run": "R1",
+      "what": "§6.2 no arm reaches the 0.25 materiality bar",
+      "expected": true,
+      "measured": true,
+      "source": "training/reports/report-composed-runner.md at 39a568c6:231",
+      "match": true
+    },
+    {
+      "id": "R1.6.2.largest_positive",
+      "run": "R1",
+      "what": "§6.2 largest positive delta is the sabotage arm's +3.3%",
+      "expected": [
+        "forced-sabotage lever",
+        "+3.3%"
+      ],
+      "measured": [
+        "forced-sabotage lever",
+        "+3.3%"
+      ],
+      "source": "training/reports/report-composed-runner.md at 39a568c6:231-232",
+      "match": true
+    },
+    {
+      "id": "R1.6.2.emergency_pct",
+      "run": "R1",
+      "what": "§6.2 emergency arm at +1.7%",
+      "expected": "+1.7%",
+      "measured": "+1.7%",
+      "source": "training/reports/report-composed-runner.md at 39a568c6:232-233",
+      "match": true
+    },
+    {
+      "id": "R1.6.2.validity_all_false",
+      "run": "R1",
+      "what": "§6.2 every arm's validity_passed is False",
+      "expected": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "measured": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "source": "training/reports/report-composed-runner.md at 39a568c6:233-234",
+      "match": true
+    },
+    {
+      "id": "R1.6.2.gate_buckets_empty",
+      "run": "R1",
+      "what": "§6.2 gate-check buckets (laundered / substrate_divergent / false_blocked) empty",
+      "expected": {
+        "laundered": [],
+        "substrate_divergent": [],
+        "false_blocked": []
+      },
+      "measured": {
+        "laundered": [],
+        "substrate_divergent": [],
+        "false_blocked": []
+      },
+      "source": "training/reports/report-composed-runner.md at 39a568c6:234-236",
+      "match": true
+    },
+    {
+      "id": "R1.6.4.consumption",
+      "run": "R1",
+      "what": "§6.4 consumption (beside)",
+      "expected": {
+        "composed_meetings": 1175,
+        "conviction_uses_total": 1513,
+        "conviction_uses_runner": 1175,
+        "conviction_uses_probe": 338,
+        "conviction_max_uses": 49764,
+        "surrogate_uses_total": 1175,
+        "surrogate_max_uses": 49764
+      },
+      "measured": {
+        "composed_meetings": 1175,
+        "conviction_uses_total": 1513,
+        "conviction_uses_runner": 1175,
+        "conviction_uses_probe": 338,
+        "conviction_max_uses": 49764,
+        "surrogate_uses_total": 1175,
+        "surrogate_max_uses": 49764
+      },
+      "source": "training/reports/report-composed-runner.md at 39a568c6:306-312",
+      "match": true
+    },
+    {
+      "id": "R1.6.4.shares",
+      "run": "R1",
+      "what": "§6.4 cap shares and probe reads (beside): 3.04%, 2.36%, 338 probe reads = 169 recorded meetings x 2 paths",
+      "expected": {
+        "conviction_share": "3.04%",
+        "surrogate_share": "2.36%",
+        "recorded_meetings": 169,
+        "probe_reads": 338,
+        "paths": 2.0
+      },
+      "measured": {
+        "conviction_share": "3.04%",
+        "surrogate_share": "2.36%",
+        "recorded_meetings": 169,
+        "probe_reads": 338,
+        "paths": 2.0
+      },
+      "source": "training/reports/report-composed-runner.md at 39a568c6:308-312",
+      "match": true,
+      "note": "recorded_meetings is the sum of the seven arms' meetings; paths is conviction_uses_probe / recorded_meetings"
+    },
+    {
+      "id": "R1.6.4.weights",
+      "run": "R1",
+      "what": "§6.4 counter keys (beside)",
+      "expected": [
+        "7e764b89",
+        "06b20508"
+      ],
+      "measured": [
+        "7e764b89",
+        "06b20508"
+      ],
+      "source": "training/reports/report-composed-runner.md at 39a568c6:307,311",
+      "match": true
+    },
+    {
+      "id": "R1.constraints.pin_lines",
+      "run": "R1",
+      "what": "_COMPOSED_ADOPTION_CONSTRAINTS sits at scripts/verify_ml_evidence.py:1812-1815",
+      "expected": "scripts/verify_ml_evidence.py:1812-1815",
+      "measured": "scripts/verify_ml_evidence.py:1812-1815",
+      "source": "scripts/verify_ml_evidence.py at 39a568c6",
+      "match": true
+    },
+    {
+      "id": "R1.constraints.verdict_json_equals_pin",
+      "run": "R1",
+      "what": "training/artifacts/composed/verdict.json adoption_constraints at this commit, full strings, vs the 39a568c6 pin",
+      "expected": [
+        "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) — composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+        "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]: every composed-path arm records 0.0000 flags/meeting in bytes (the runner synthesizes ballots, not talk), so no recorded-floor read exists on this substrate — a composed pre-screen read is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read"
+      ],
+      "measured": [
+        "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) — composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+        "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]: every composed-path arm records 0.0000 flags/meeting in bytes (the runner synthesizes ballots, not talk), so no recorded-floor read exists on this substrate — a composed pre-screen read is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read"
+      ],
+      "source": "training/artifacts/composed/verdict.json at 39a568c6 vs scripts/verify_ml_evidence.py at 39a568c6",
+      "match": true,
+      "note": "the leg JSON emits no constraint strings; the strings are carried metadata read from committed bytes, and the leg is checked against the facts each rests on (the .facts rows)"
+    },
+    {
+      "id": "R1.constraints.1.facts",
+      "run": "R1",
+      "what": "constraint 1 (composed-provenance-validity[all-arms,9p2i]) rests on: every arm validity_passed False",
+      "expected": {
+        "arms": 7,
+        "validity_passed_false": 7
+      },
+      "measured": {
+        "arms": 7,
+        "validity_passed_false": 7
+      },
+      "source": "leg JSON probe.reads[*].validity_passed",
+      "match": true,
+      "note": "the leg JSON records validity_passed only; the failing check's name (cost_and_provenance_exact) is carried from report §6.3's diagnosis and is not re-derived by this leg"
+    },
+    {
+      "id": "R1.constraints.2.facts",
+      "run": "R1",
+      "what": "constraint 2 (composed-substrate-mints-no-recorded-flags[all-arms,9p2i]) rests on: every arm records 0.0000 flags/meeting in bytes",
+      "expected": {
+        "arms": 7,
+        "actual_flags_per_meeting_zero": 7,
+        "mean_episode_actual_flags_zero": 7,
+        "actual_converting_share_zero": 7
+      },
+      "measured": {
+        "arms": 7,
+        "actual_flags_per_meeting_zero": 7,
+        "mean_episode_actual_flags_zero": 7,
+        "actual_converting_share_zero": 7
+      },
+      "source": "leg JSON probe.reads[*]",
+      "match": true
+    },
+    {
+      "id": "R1.constraints.retired.above_bar_absent",
+      "run": "R1",
+      "what": "no arm's predicted_supply_gain reaches the 0.25 materiality bar (the retired baseline-6 above-bar constraint has no footing)",
+      "expected": true,
+      "measured": true,
+      "source": "leg JSON probe.reads[*].predicted_supply_gain vs materiality_bar; verify_ml_evidence.py:1806-1811 at 39a568c6",
+      "match": true,
+      "note": "max predicted_supply_gain 0.0326 (forced-sabotage lever); materiality_bar 0.25"
+    },
+    {
+      "id": "R1.constraints.retired.divergence_shape_absent",
+      "run": "R1",
+      "what": "the divergence shape (predicted floors pass where recorded floors fail) is absent: prescreen_floors_pass False on every arm, gate_check.substrate_divergent empty",
+      "expected": {
+        "prescreen_floors_pass_false": 7,
+        "substrate_divergent": []
+      },
+      "measured": {
+        "prescreen_floors_pass_false": 7,
+        "substrate_divergent": []
+      },
+      "source": "leg JSON probe.reads[*].prescreen_floors_pass, probe.gate_check; verify_ml_evidence.py:1806-1811 at 39a568c6",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.verdict",
+      "run": "R2",
+      "what": "Mac §6.1 verdict HELD",
+      "expected": "HELD",
+      "measured": "HELD",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.probe_verdicts",
+      "run": "R2",
+      "what": "Mac §6.1 verdict at probe and ES levels",
+      "expected": [
+        "HELD",
+        "HELD"
+      ],
+      "measured": [
+        "HELD",
+        "HELD"
+      ],
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.blockers",
+      "run": "R2",
+      "what": "Mac §6.1 machinery blockers none",
+      "expected": [
+        [],
+        []
+      ],
+      "measured": [
+        [],
+        []
+      ],
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.findings",
+      "run": "R2",
+      "what": "Mac §6.1 findings none",
+      "expected": [],
+      "measured": [],
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.exploits",
+      "run": "R2",
+      "what": "Mac §6.1 exploits none",
+      "expected": [],
+      "measured": [],
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.baseline_mean_score",
+      "run": "R2",
+      "what": "Mac §6.1 baseline_mean_score",
+      "expected": "3.89",
+      "measured": "3.89",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 3.89, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.baseline_mean_score",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 §6.1 baseline_mean_score (beside)",
+      "expected": "3.42",
+      "measured": "3.42",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 3.42, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.champion_mean_score",
+      "run": "R2",
+      "what": "Mac §6.1 champion_mean_score",
+      "expected": "0.65",
+      "measured": "0.65",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.65, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.champion_mean_score",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 §6.1 champion_mean_score (beside)",
+      "expected": "0.65",
+      "measured": "0.65",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.65, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.relative_gain",
+      "run": "R2",
+      "what": "Mac §6.1 relative_gain",
+      "expected": "-0.8328",
+      "measured": "-0.8328",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.8328, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.relative_gain",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 §6.1 relative_gain (beside)",
+      "expected": "-0.8102",
+      "measured": "-0.8102",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.8102, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.lever.emergency",
+      "run": "R2",
+      "what": "Mac §6.1 lever score gain emergency",
+      "expected": "+0.0064",
+      "measured": "+0.0064",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0064, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.lever.emergency",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 lever score gain emergency (beside)",
+      "expected": "+0.1423",
+      "measured": "+0.1423",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.1423, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.lever.report",
+      "run": "R2",
+      "what": "Mac §6.1 lever score gain report",
+      "expected": "-0.0772",
+      "measured": "-0.0772",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.0772, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.lever.report",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 lever score gain report (beside)",
+      "expected": "+0.0474",
+      "measured": "+0.0474",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0474, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.lever.wait",
+      "run": "R2",
+      "what": "Mac §6.1 lever score gain wait",
+      "expected": "-0.9743",
+      "measured": "-0.9743",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.9743, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.lever.wait",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 lever score gain wait (beside)",
+      "expected": "-0.9708",
+      "measured": "-0.9708",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.9708, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.lever.kill",
+      "run": "R2",
+      "what": "Mac §6.1 lever score gain kill",
+      "expected": "-0.0611",
+      "measured": "-0.0611",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.0611, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.lever.kill",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 lever score gain kill (beside)",
+      "expected": "+0.1204",
+      "measured": "+0.1204",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.1204, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.lever.sabotage",
+      "run": "R2",
+      "what": "Mac §6.1 lever score gain sabotage",
+      "expected": "-0.2122",
+      "measured": "-0.2122",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.2122, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.lever.sabotage",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 lever score gain sabotage (beside)",
+      "expected": "-0.1058",
+      "measured": "-0.1058",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.1058, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.gate_buckets_empty",
+      "run": "R2",
+      "what": "Mac §6.1 gate-check buckets empty",
+      "expected": {
+        "laundered": [],
+        "substrate_divergent": [],
+        "false_blocked": []
+      },
+      "measured": {
+        "laundered": [],
+        "substrate_divergent": [],
+        "false_blocked": []
+      },
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.meetings",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: meetings",
+      "expected": "25",
+      "measured": "25",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 25, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.scripted-FSM baseline.meetings",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 scripted-FSM baseline: meetings (beside)",
+      "expected": "23",
+      "measured": "23",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 23, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.predicted_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: predicted supply gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.actual_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.predicted_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: predicted flags/meeting",
+      "expected": "0.6052",
+      "measured": "0.6052",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.6052, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.scripted-FSM baseline.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 scripted-FSM baseline: predicted flags/meeting (beside)",
+      "expected": "0.8523",
+      "measured": "0.8523",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.8523, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.actual_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.predicted_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: predicted converting share",
+      "expected": "0.4400",
+      "measured": "0.4400",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.44, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.scripted-FSM baseline.predicted_converting_share",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 scripted-FSM baseline: predicted converting share (beside)",
+      "expected": "0.4783",
+      "measured": "0.4783",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.4783, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.actual_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.scripted-FSM baseline.validity_passed",
+      "run": "R2",
+      "what": "Mac §6.2 scripted-FSM baseline: validity passed",
+      "expected": "False",
+      "measured": "False",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.forced-emergency.meetings",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: meetings",
+      "expected": "39",
+      "measured": "39",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 39, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-emergency.meetings",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-emergency: meetings (beside)",
+      "expected": "39",
+      "measured": "39",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 39, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-emergency.predicted_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: predicted supply gain",
+      "expected": "+0.1661",
+      "measured": "+0.1661",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.1661, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-emergency.predicted_supply_gain",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-emergency: predicted supply gain (beside)",
+      "expected": "+0.0171",
+      "measured": "+0.0171",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0171, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-emergency.actual_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-emergency.predicted_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: predicted flags/meeting",
+      "expected": "0.6635",
+      "measured": "0.6635",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.6635, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-emergency.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-emergency: predicted flags/meeting (beside)",
+      "expected": "0.8399",
+      "measured": "0.8399",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.8399, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-emergency.actual_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-emergency.predicted_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: predicted converting share",
+      "expected": "0.3333",
+      "measured": "0.3333",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.3333, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-emergency.predicted_converting_share",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-emergency: predicted converting share (beside)",
+      "expected": "0.3333",
+      "measured": "0.3333",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.3333, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-emergency.actual_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-emergency.validity_passed",
+      "run": "R2",
+      "what": "Mac §6.2 forced-emergency: validity passed",
+      "expected": "False",
+      "measured": "False",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.forced-report.meetings",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: meetings",
+      "expected": "32",
+      "measured": "32",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 32, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-report.meetings",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-report: meetings (beside)",
+      "expected": "32",
+      "measured": "32",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 32, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-report.predicted_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: predicted supply gain",
+      "expected": "-0.7009",
+      "measured": "-0.7009",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.7009, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-report.predicted_supply_gain",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-report: predicted supply gain (beside)",
+      "expected": "-0.5091",
+      "measured": "-0.5091",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.5091, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-report.actual_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-report.predicted_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: predicted flags/meeting",
+      "expected": "0.1767",
+      "measured": "0.1767",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.1767, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-report.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-report: predicted flags/meeting (beside)",
+      "expected": "0.4212",
+      "measured": "0.4212",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.4212, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-report.actual_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-report.predicted_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: predicted converting share",
+      "expected": "0.0312",
+      "measured": "0.0312",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0312, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-report.predicted_converting_share",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-report: predicted converting share (beside)",
+      "expected": "0.0312",
+      "measured": "0.0312",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0312, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-report.actual_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-report.validity_passed",
+      "run": "R2",
+      "what": "Mac §6.2 forced-report: validity passed",
+      "expected": "False",
+      "measured": "False",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.forced-wait.meetings",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: meetings",
+      "expected": "0",
+      "measured": "0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-wait.meetings",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-wait: meetings (beside)",
+      "expected": "0",
+      "measured": "0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-wait.predicted_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: predicted supply gain",
+      "expected": "-1.0000",
+      "measured": "-1.0000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -1.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-wait.predicted_supply_gain",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-wait: predicted supply gain (beside)",
+      "expected": "-1.0000",
+      "measured": "-1.0000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -1.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-wait.actual_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-wait.predicted_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: predicted flags/meeting",
+      "expected": "0.0000",
+      "measured": "0.0000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-wait.actual_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-wait.predicted_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: predicted converting share",
+      "expected": "0.0000",
+      "measured": "0.0000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-wait.actual_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-wait.validity_passed",
+      "run": "R2",
+      "what": "Mac §6.2 forced-wait: validity passed",
+      "expected": "False",
+      "measured": "False",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.forced-kill.meetings",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: meetings",
+      "expected": "25",
+      "measured": "25",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 25, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-kill.meetings",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-kill: meetings (beside)",
+      "expected": "24",
+      "measured": "24",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 24, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-kill.predicted_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: predicted supply gain",
+      "expected": "-0.4303",
+      "measured": "-0.4303",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.4303, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-kill.predicted_supply_gain",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-kill: predicted supply gain (beside)",
+      "expected": "-0.3700",
+      "measured": "-0.3700",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.37, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-kill.actual_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-kill.predicted_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: predicted flags/meeting",
+      "expected": "0.2631",
+      "measured": "0.2631",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.2631, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-kill.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-kill: predicted flags/meeting (beside)",
+      "expected": "0.4812",
+      "measured": "0.4812",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.4812, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-kill.actual_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-kill.predicted_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: predicted converting share",
+      "expected": "0.3200",
+      "measured": "0.3200",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.32, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-kill.predicted_converting_share",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-kill: predicted converting share (beside)",
+      "expected": "0.3750",
+      "measured": "0.3750",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.375, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-kill.actual_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-kill.validity_passed",
+      "run": "R2",
+      "what": "Mac §6.2 forced-kill: validity passed",
+      "expected": "False",
+      "measured": "False",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.meetings",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: meetings",
+      "expected": "23",
+      "measured": "23",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 23, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-sabotage.meetings",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-sabotage: meetings (beside)",
+      "expected": "23",
+      "measured": "23",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 23, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.predicted_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: predicted supply gain",
+      "expected": "+0.0507",
+      "measured": "+0.0507",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0507, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-sabotage.predicted_supply_gain",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-sabotage: predicted supply gain (beside)",
+      "expected": "+0.0326",
+      "measured": "+0.0326",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0326, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.actual_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.predicted_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: predicted flags/meeting",
+      "expected": "0.6023",
+      "measured": "0.6023",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.6023, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-sabotage.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-sabotage: predicted flags/meeting (beside)",
+      "expected": "0.8386",
+      "measured": "0.8386",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.8386, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.actual_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.predicted_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: predicted converting share",
+      "expected": "0.4348",
+      "measured": "0.4348",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.4348, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.forced-sabotage.predicted_converting_share",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 forced-sabotage: predicted converting share (beside)",
+      "expected": "0.4348",
+      "measured": "0.4348",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.4348, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.actual_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.forced-sabotage.validity_passed",
+      "run": "R2",
+      "what": "Mac §6.2 forced-sabotage: validity passed",
+      "expected": "False",
+      "measured": "False",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.ES champion.meetings",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: meetings",
+      "expected": "28",
+      "measured": "28",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 28, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.ES champion.meetings",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 ES champion: meetings (beside)",
+      "expected": "28",
+      "measured": "28",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 28, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.ES champion.predicted_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: predicted supply gain",
+      "expected": "-0.2388",
+      "measured": "-0.2388",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.2388, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.ES champion.predicted_supply_gain",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 ES champion: predicted supply gain (beside)",
+      "expected": "-0.0268",
+      "measured": "-0.0268",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw -0.0268, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.ES champion.actual_supply_gain",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: recorded flags gain",
+      "expected": "0.0",
+      "measured": "0.0",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.ES champion.predicted_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: predicted flags/meeting",
+      "expected": "0.4463",
+      "measured": "0.4463",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.4463, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.ES champion.predicted_flags_per_meeting",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 ES champion: predicted flags/meeting (beside)",
+      "expected": "0.8057",
+      "measured": "0.8057",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.8057, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.ES champion.actual_flags_per_meeting",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: recorded flags/meeting",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.ES champion.predicted_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: predicted converting share",
+      "expected": "0.0714",
+      "measured": "0.0714",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0714, rendered at the expected text's precision"
+    },
+    {
+      "id": "R1.mac5bracket.ES champion.predicted_converting_share",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 ES champion: predicted converting share (beside)",
+      "expected": "0.0714",
+      "measured": "0.0714",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0714, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.ES champion.actual_converting_share",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: recorded converting share",
+      "expected": "0.000",
+      "measured": "0.000",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true,
+      "note": "measured raw 0.0, rendered at the expected text's precision"
+    },
+    {
+      "id": "R2.mac5.ES champion.validity_passed",
+      "run": "R2",
+      "what": "Mac §6.2 ES champion: validity passed",
+      "expected": "False",
+      "measured": "False",
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.6.4.consumption",
+      "run": "R2",
+      "what": "Mac §6.4 consumption",
+      "expected": {
+        "composed_meetings": 1189,
+        "conviction_uses_total": 1533,
+        "conviction_uses_runner": 1189,
+        "conviction_uses_probe": 344,
+        "conviction_max_uses": 50765,
+        "surrogate_uses_total": 1189,
+        "surrogate_max_uses": 50765
+      },
+      "measured": {
+        "composed_meetings": 1189,
+        "conviction_uses_total": 1533,
+        "conviction_uses_runner": 1189,
+        "conviction_uses_probe": 344,
+        "conviction_max_uses": 50765,
+        "surrogate_uses_total": 1189,
+        "surrogate_max_uses": 50765
+      },
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R1.mac5bracket.6.4.consumption",
+      "run": "R1",
+      "what": "card §5 bracketed baseline-8 §6.4 consumption (beside)",
+      "expected": {
+        "composed_meetings": 1175,
+        "conviction_uses_total": 1513,
+        "conviction_uses_runner": 1175,
+        "conviction_uses_probe": 338,
+        "conviction_max_uses": 49764
+      },
+      "measured": {
+        "composed_meetings": 1175,
+        "conviction_uses_total": 1513,
+        "conviction_uses_runner": 1175,
+        "conviction_uses_probe": 338,
+        "conviction_max_uses": 49764
+      },
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.6.4.weights",
+      "run": "R2",
+      "what": "Mac §6.4 counter keys",
+      "expected": [
+        "3a6fe4ca",
+        "f8901620"
+      ],
+      "measured": [
+        "3a6fe4ca",
+        "f8901620"
+      ],
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.mac5.es_trace",
+      "run": "R2",
+      "what": "Mac §5: fitness trace -1.0 in all seven generations, no improvement",
+      "expected": {
+        "fitness_trace": [
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        "improvements": []
+      },
+      "measured": {
+        "fitness_trace": [
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        "improvements": []
+      },
+      "source": "tasks/work/ml-reground-baseline-9.md at a105340d Results §5 (:897-945)",
+      "match": true
+    },
+    {
+      "id": "R2.constraints.pin_lines",
+      "run": "R2",
+      "what": "_COMPOSED_ADOPTION_CONSTRAINTS sits at scripts/verify_ml_evidence.py:1812-1815",
+      "expected": "scripts/verify_ml_evidence.py:1812-1815",
+      "measured": "scripts/verify_ml_evidence.py:1812-1815",
+      "source": "scripts/verify_ml_evidence.py at c740c233",
+      "match": true
+    },
+    {
+      "id": "R2.constraints.pin_unchanged_from_39a568c6",
+      "run": "R2",
+      "what": "the pinned constraint tuple at this commit, full strings, vs the tuple at 39a568c6 :1812-1815",
+      "expected": [
+        "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) — composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+        "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]: every composed-path arm records 0.0000 flags/meeting in bytes (the runner synthesizes ballots, not talk), so no recorded-floor read exists on this substrate — a composed pre-screen read is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read"
+      ],
+      "measured": [
+        "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) — composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+        "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]: every composed-path arm records 0.0000 flags/meeting in bytes (the runner synthesizes ballots, not talk), so no recorded-floor read exists on this substrate — a composed pre-screen read is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read"
+      ],
+      "source": "scripts/verify_ml_evidence.py at c740c233 vs at 39a568c6",
+      "match": true
+    },
+    {
+      "id": "R2.constraints.verdict_json_equals_pin",
+      "run": "R2",
+      "what": "training/artifacts/composed/verdict.json adoption_constraints at this commit, full strings, vs the 39a568c6 pin",
+      "expected": [
+        "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) — composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+        "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]: every composed-path arm records 0.0000 flags/meeting in bytes (the runner synthesizes ballots, not talk), so no recorded-floor read exists on this substrate — a composed pre-screen read is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read"
+      ],
+      "measured": [
+        "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) — composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+        "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]: every composed-path arm records 0.0000 flags/meeting in bytes (the runner synthesizes ballots, not talk), so no recorded-floor read exists on this substrate — a composed pre-screen read is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read"
+      ],
+      "source": "training/artifacts/composed/verdict.json at c740c233 vs scripts/verify_ml_evidence.py at 39a568c6",
+      "match": true,
+      "note": "the leg JSON emits no constraint strings; the strings are carried metadata read from committed bytes, and the leg is checked against the facts each rests on (the .facts rows)"
+    },
+    {
+      "id": "R2.constraints.1.facts",
+      "run": "R2",
+      "what": "constraint 1 (composed-provenance-validity[all-arms,9p2i]) rests on: every arm validity_passed False",
+      "expected": {
+        "arms": 7,
+        "validity_passed_false": 7
+      },
+      "measured": {
+        "arms": 7,
+        "validity_passed_false": 7
+      },
+      "source": "leg JSON probe.reads[*].validity_passed",
+      "match": true,
+      "note": "the leg JSON records validity_passed only; the failing check's name (cost_and_provenance_exact) is carried from report §6.3's diagnosis and is not re-derived by this leg"
+    },
+    {
+      "id": "R2.constraints.2.facts",
+      "run": "R2",
+      "what": "constraint 2 (composed-substrate-mints-no-recorded-flags[all-arms,9p2i]) rests on: every arm records 0.0000 flags/meeting in bytes",
+      "expected": {
+        "arms": 7,
+        "actual_flags_per_meeting_zero": 7,
+        "mean_episode_actual_flags_zero": 7,
+        "actual_converting_share_zero": 7
+      },
+      "measured": {
+        "arms": 7,
+        "actual_flags_per_meeting_zero": 7,
+        "mean_episode_actual_flags_zero": 7,
+        "actual_converting_share_zero": 7
+      },
+      "source": "leg JSON probe.reads[*]",
+      "match": true
+    },
+    {
+      "id": "R2.constraints.retired.above_bar_absent",
+      "run": "R2",
+      "what": "no arm's predicted_supply_gain reaches the 0.25 materiality bar (the retired baseline-6 above-bar constraint has no footing)",
+      "expected": true,
+      "measured": true,
+      "source": "leg JSON probe.reads[*].predicted_supply_gain vs materiality_bar; verify_ml_evidence.py:1806-1811 at 39a568c6",
+      "match": true,
+      "note": "max predicted_supply_gain 0.1661 (forced-emergency lever); materiality_bar 0.25"
+    },
+    {
+      "id": "R2.constraints.retired.divergence_shape_absent",
+      "run": "R2",
+      "what": "the divergence shape (predicted floors pass where recorded floors fail) is absent: prescreen_floors_pass False on every arm, gate_check.substrate_divergent empty",
+      "expected": {
+        "prescreen_floors_pass_false": 7,
+        "substrate_divergent": []
+      },
+      "measured": {
+        "prescreen_floors_pass_false": 7,
+        "substrate_divergent": []
+      },
+      "source": "leg JSON probe.reads[*].prescreen_floors_pass, probe.gate_check; verify_ml_evidence.py:1806-1811 at 39a568c6",
+      "match": true
+    },
+    {
+      "id": "R2.post_constants_diff_empty",
+      "run": "R2",
+      "what": "git diff --stat c740c233 a105340d outside tests/docs/tasks/training/README.md/training/reports/replays/ml_corpus/README.md prints nothing",
+      "expected": "",
+      "measured": "",
+      "source": "card Results §5 (the post-constants check), at the work-branch head a105340d86e6ded2c18a489f4c601b297097c12d",
+      "match": true
+    }
+  ],
+  "summary": {
+    "comparisons": 210,
+    "all_match": true,
+    "R1_all_match": true,
+    "R2_all_match": true,
+    "R1_vs_mac": {
+      "leg_json_sha256_match": true,
+      "es_digest_match": true,
+      "stdout_with_newline_prefix_match": true,
+      "verdict_match": true,
+      "baseline_id_reads_baseline_8": true
+    },
+    "R2_vs_mac": {
+      "leg_json_sha256_match": true,
+      "es_digest_match": true,
+      "stdout_with_newline_prefix_match": true,
+      "verdict_match": true,
+      "baseline_id_reads_baseline_9": true
+    },
+    "R1_vs_report": true,
+    "R2_vs_mac_cells": true,
+    "constraints": {
+      "pin_and_verdict_json_full_strings_equal_at_both_commits": true,
+      "facts_hold_on_R1": true,
+      "facts_hold_on_R2": true,
+      "not_rederived": "the name of constraint 1's failing validity check (cost_and_provenance_exact) comes from report §6.3; the leg JSON records validity_passed only"
+    },
+    "cells_differed": [],
+    "decision_rule_reading": "R1 reproduces the §6.1 machine verdict and every §6.2 cell of the seven arms, and it is byte-identical to the Mac's R1; the leg emits no constraint strings, so both are read from committed bytes (the pin and verdict.json agree, full string, at 39a568c6 and c740c233) and the leg facts each rests on hold at R1 and at R2. R2 is byte-identical to the Mac leg at c740c233 (identical sha256), so under the card's decision rule the verdict is written from it and both platforms are named",
+    "reruns": 0
+  }
+}
