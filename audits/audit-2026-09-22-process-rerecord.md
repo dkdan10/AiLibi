@@ -1142,7 +1142,8 @@ below were NOT: each asserts a property that is no longer true of the committed
 bytes, and re-pinning it would have meant deleting or weakening an assertion.
 They stay red; `bash scripts/check.sh` fails on them, and on the ML tests of
 §7.3, and on nothing else. None was caused by an edit here: the re-record moved
-the world under them.
+the world under them. One more belongs with them from the campaign tier, which
+`check.sh` excludes; it follows the table.
 
 | test | what the bytes now say |
 |---|---|
@@ -1154,6 +1155,15 @@ the world under them.
 | `…::test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage` | With the old reported band restored, the fold now renders 32,123 rows against 32,037 recorded — slightly more, not fewer — though it still covers more first-hand ticks (28,359 against 20,629). |
 | `tests/api/test_view_model.py::test_report_tick_fog_keeps_the_reported_body` | **A real viewer gap the new bytes exposed.** At seed 13 tick 13 a body report and the game-ending kill share a tick; `api/replay_loader.py` restores the reported body only in MEETING phase, so the reporter's fogged view drops it (1 of 136 body reports). A product fix, out of this record's scope. |
 | `tests/scripts/test_counterfactual_phase21.py::test_the_memo_table_equals_a_live_four_set_run`, `::test_the_memo_marks_every_advisory_cell` | They hold `audits/audit-phase-21-counterfactual.md`, a baseline-8 memo, to a live run on the committed bytes: 42 of 43 pooled cells differ. A new table or erratum, or a re-scoped drift gate, is the owner's call. |
+
+**The campaign tier's falsified property.** `uv run pytest -m campaign` runs
+the frozen campaign families that `check.sh` leaves out (§7.1 and §7.3 give the
+whole tier). One of its red tests fails on a property of the bytes, not on a
+fit:
+
+| test | what the bytes now say |
+|---|---|
+| `tests/training/test_surrogate_fidelity.py::test_the_tie_break_moves_the_decision_census_but_not_the_ranking` | "The set where the census actually moves" is false. On `samples/9p2i` the lowest and the highest tied tau now both eject on 7 meetings and both skip 86 of the 90 true ejections, so the tie-break moves nothing here. On baseline 8 the low tau ejected on 10 and skipped 90 of 95, and the high tau ejected on none. Every ranking and calibration channel is still identical under both. Re-pinning it to (7, 7) would leave a test that shows no move at all. A set where the census moves, or a re-scoped test, is the owner's call, routed with the re-ground (§7.1). |
 
 
 **Frozen rather than re-pinned: four exhibits the new bytes no longer carry.**
@@ -1212,6 +1222,21 @@ as **the first card after this pull request merges**, on the SAME baseline-9
 bytes — re-fit by each instrument's committed recipe, re-derive the verdicts and
 reports, move `BAKEOFF_BASELINE_ID` with the fits, exactly as 21.17 did for
 baseline 8. It is a re-fit, not a re-record, and spends no model call.
+
+**The campaign tier goes with the re-ground, and this record does not
+discharge it.** `bash scripts/check.sh` runs the default tier only. The frozen
+campaign families run under `uv run pytest -m campaign`, which
+`.github/workflows/campaign-tier.yml` runs weekly on `main` and on demand. On
+the base `39a568c6` the tier reads 335 passed. At this record's head it reads
+304 passed, 29 failed and 2 errors, all 31 in `tests/training`. So the first
+scheduled run on `main` after the merge fails on them unless the re-ground
+lands first. 30 of the 31 are the fits' corpus (§7.3), and the re-ground owns
+them. The 31st is the tie-break census the bytes falsified (§6.4), which needs
+the owner's ruling beside it. Two more were FO-6 pins that fit fresh on the
+committed table and load no artifact; they were re-derived from these bytes, and
+the card lists them. The previous re-record named the same tier as not
+discharged (`audits/audit-phase-21-rerecord.md` §7 item 1), and it was green
+again at this record's base.
 
 **Second: the genuine-class integrity disagreement that floors the rubric.**
 §2.1b names it in full. One of the gameplay extractor's self-checks reports that
@@ -1300,7 +1325,9 @@ denominator is zero.
 - **Nine tests outside the ML set stay red** because the new bytes
   falsified what they assert (§6.4); `check.sh` fails on them and on the ML
   tests below, and on nothing else. Eight more now read frozen baseline-8
-  exhibits or a re-pinned empty set (§6.4).
+  exhibits or a re-pinned empty set (§6.4). In the campaign tier, which
+  `check.sh` does not run, one more fails on a falsified property: the
+  tie-break census (§6.4).
 - **The ML fits are not grounded on these bytes** (§7.1 first item), and the
   gate says so rather than hiding it: the rows and tests below stay red.
 
@@ -1362,6 +1389,34 @@ denominator is zero.
     real corpus and now read FAIL on rows 1-2 or the recompute rows (the other
     2 of its 8 were the registry row 13, cleared by the recompute). Every status
     assertion was left at OK: moving one to FAIL would be asserting the defect.
+
+  **And 30 more in the campaign tier** (`uv run pytest -m campaign`, which
+  `check.sh` does not run; §7.1), for the same cause, all in `tests/training`:
+  - 24 refused by the fit-corpus fence. 16 go through the surrogate's fence,
+    all in `test_composed_runner.py`; two of those fail at setup
+    (`test_full_composed_game_meetings_are_real_tallies` and
+    `test_composed_goodhart_leg_runs_and_meters_both_counters`). 8 go through
+    the conviction fence: `test_crew_scorer.py` 3, `test_crew_owned_tasks.py` 2,
+    `test_coevo_driver.py` 2 and `test_anchor_study.py::test_run_anchor_study_ci_budget`.
+    Six of the 24 test a different refusal, such as a corrupt weights file, a
+    NO-GO verdict or a foreign policy, and fail because the fence refuses first;
+  - 6 that hold a frozen artifact or a committed verdict to the live corpus.
+    Each reads a committed fit or artifact under `training/artifacts/`, so it
+    stays red until the re-ground. Four are in `test_composed_runner.py`. Two
+    hold the frozen surrogate's composed fidelity to the old split, which now
+    has 94 test meetings and 52 ejections against the pinned 91 and 57. One is
+    the live-exclusion GO check, whose (decision hits, ejections) are now
+    (79, 52) against (82, 57). The fourth is the committed composed
+    `verdict.json`: its
+    re-derivation differs on corpus-derived fields, among them decision
+    accuracy, 0.8404 against 0.9011 (row 9 above). The other two are
+    `test_anchor_study.py::test_committed_study_artifacts_are_the_baseline8_fit`
+    (the study stamps substrate `c845602d…`, live `894f4daf…`) and
+    `test_hall_of_fame.py::test_committed_pool_restores_only_with_explicit_historical_identity`
+    (the map-elites pool stamps `4a25ccdf…`, live `8b174cab…`, the same stamp
+    as the default tier's map-elites test).
+
+  The tier's 31st red is the falsified tie-break census (§6.4).
 
 - **Row 3 is not evaluable on these bytes** (§4.3): 74 of 74 alibi-class flags,
   42 of them because the route claim made the accused's account multi-stay.
