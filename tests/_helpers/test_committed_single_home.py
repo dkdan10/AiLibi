@@ -1,6 +1,6 @@
 """Pin ``tests/_helpers/committed.py`` as the only home for committed-set walks.
 
-A second copy of one of the five instrument walks is invisible: it passes, it
+A second copy of one of the six committed-set walks is invisible: it passes, it
 asserts the same numbers, and it silently doubles the most expensive fixture in
 the suite. This module reads every test file, finds each call to a walk whose set
 argument is a committed directory, and fails on any that does not go through the
@@ -15,30 +15,40 @@ through a directory built in a local variable) and that it leaves a ``tmp_path``
 walk alone. It resolves names per lexical scope, so a helper that reads committed
 bytes to BUILD a corrupted temp set does not taint its caller's argument. A corrupted copy of a
 committed set proves the second property — the cache is keyed by directory and
-cannot answer for bytes it never walked — and a walk of the five report graphs
+cannot answer for bytes it never walked — and a walk of the cached value graphs
 proves the third: sharing one instance cannot couple its readers, because every
-report is frozen and every collection on it is typed ``Mapping``/``Sequence``,
-which ``mypy --strict`` will not let a caller mutate.
+report and meeting record is frozen and every collection on it is typed
+``Mapping``/``Sequence``, which ``mypy --strict`` will not let a caller mutate.
 """
 
 from __future__ import annotations
 
 import ast
+import dataclasses
 import json
+import sys
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, get_args, get_origin
+from types import MappingProxyType
+from typing import Any, Final, get_args, get_origin, get_type_hints
 
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from tests._helpers.committed import SAMPLES_4P1I, kill_craft_report, repo_root
+from tests._helpers.committed import (
+    SAMPLES_4P1I,
+    CommittedMeeting,
+    committed_meetings,
+    kill_craft_report,
+    repo_root,
+)
 
 #: The instrument entry points whose cost the shared cache exists to pay once,
 #: plus ``check_report`` — a wrapper whose first act is ``build_report(sample_dir)``
 #: (scripts/build_sample_report.py:423), so a call to it walks the set just as
-#: surely as a direct one.
+#: surely as a direct one — and the uncached channel walk behind
+#: :func:`tests._helpers.committed.committed_meetings`.
 WALKERS: Final[frozenset[str]] = frozenset(
     {
         "build_report",
@@ -47,6 +57,7 @@ WALKERS: Final[frozenset[str]] = frozenset(
         "compute_information_funnel",
         "compute_kill_craft_report",
         "compute_solvability_report",
+        "walk_committed_meetings",
     }
 )
 
@@ -75,9 +86,15 @@ UNCACHED_BY_DESIGN: Final[Mapping[str, Mapping[str, str]]] = {
             "and its whole job is to rebuild and diff"
         ),
     },
+    "tests/meetings/test_contradictions.py": {
+        "test_keeping_the_holders_own_move_rows_diverges_at_one_meeting": (
+            "the planted control walks ONE game with a move builder production "
+            "does not use; the cache holds production's builder only"
+        ),
+    },
 }
 
-#: Keyword names the five walkers accept for the set directory.
+#: Keyword names the walkers accept for the set directory.
 _SET_KEYWORDS: Final[frozenset[str]] = frozenset({"sample_dir", "replay_dir"})
 
 #: Importing a set constant from here is the other way a module names committed
@@ -276,22 +293,60 @@ def _annotation_parts(annotation: Any) -> Iterator[Any]:
         yield from _annotation_parts(argument)
 
 
-def _shared_value_offenders(
-    model: type[BaseModel], seen: set[type[BaseModel]]
-) -> list[str]:
+def _annotation_namespace(model: type) -> dict[str, Any]:
+    """The names a dataclass's string annotations resolve against.
+
+    The helper imports its annotation types under ``TYPE_CHECKING`` so its own
+    import stays cheap, which leaves them out of its module namespace; the
+    modules that define them are merged in here, then the model's own module.
+    """
+
+    from meetings import schemas, transcript
+    from orchestrator import replay
+
+    namespace: dict[str, Any] = {}
+    for module in (schemas, transcript, replay, sys.modules[model.__module__]):
+        namespace.update(vars(module))
+    return namespace
+
+
+def _field_annotations(model: type) -> Mapping[str, Any]:
+    """Each field's resolved annotation, for a pydantic model or a dataclass."""
+
+    if issubclass(model, BaseModel):
+        return {name: field.annotation for name, field in model.model_fields.items()}
+    return get_type_hints(model, globalns=_annotation_namespace(model))
+
+
+def _is_frozen(model: type) -> bool:
+    if issubclass(model, BaseModel):
+        return bool(model.model_config.get("frozen", False))
+    params = getattr(model, "__dataclass_params__", None)
+    return params is not None and bool(params.frozen)
+
+
+def _is_record(part: object) -> bool:
+    """A field type the walk descends into: a pydantic model or a dataclass."""
+
+    return isinstance(part, type) and (
+        issubclass(part, BaseModel) or dataclasses.is_dataclass(part)
+    )
+
+
+def _shared_value_offenders(model: type, seen: set[type]) -> list[str]:
     """Reasons ``model`` is unsafe to share: not frozen, or mutably typed."""
 
     if model in seen:
         return []
     seen.add(model)
     offenders: list[str] = []
-    if not model.model_config.get("frozen", False):
+    if not _is_frozen(model):
         offenders.append(f"{model.__name__} is not frozen")
-    for name, field in model.model_fields.items():
-        for part in _annotation_parts(field.annotation):
+    for name, annotation in _field_annotations(model).items():
+        for part in _annotation_parts(annotation):
             if (get_origin(part) or part) in _MUTABLE_CONTAINERS:
                 offenders.append(f"{model.__name__}.{name}: {part}")
-            if isinstance(part, type) and issubclass(part, BaseModel):
+            if _is_record(part):
                 offenders.extend(_shared_value_offenders(part, seen))
     return offenders
 
@@ -399,6 +454,19 @@ def test_the_scanner_flags_a_planted_committed_walk() -> None:
     )
     assert committed_walk_calls(planted) == (
         WalkCall("compute_kill_craft_report", "test_planted", 4),
+    )
+
+
+def test_the_scanner_flags_a_planted_channel_walk() -> None:
+    """The channel walk outside the cache is a second walk like any other."""
+
+    planted = (
+        "from tests._helpers.committed import CORPUS_9P2I, walk_committed_meetings\n"
+        "def test_planted() -> None:\n"
+        "    walk_committed_meetings(CORPUS_9P2I)\n"
+    )
+    assert committed_walk_calls(planted) == (
+        WalkCall("walk_committed_meetings", "test_planted", 3),
     )
 
 
@@ -614,3 +682,40 @@ def test_the_immutability_gate_bites_on_a_planted_unfrozen_model() -> None:
         count: int
 
     assert _shared_value_offenders(Thawed, set()) == ["Thawed is not frozen"]
+
+
+def test_the_cached_meeting_channels_carry_no_mutable_collection() -> None:
+    """The channel walk's cached records are shared the same way, so held the same.
+
+    The annotation walk covers the record, its replay entry and every channel
+    record type. The runtime half reads one cached set: every channel mapping is
+    a read-only proxy, so even a caller outside ``mypy`` cannot write through it.
+    """
+
+    assert _shared_value_offenders(CommittedMeeting, set()) == []
+    meetings = committed_meetings(SAMPLES_4P1I)
+    assert meetings
+    for meeting in meetings:
+        for channel in (
+            meeting.vent_witness_records,
+            meeting.move_witness_records,
+            meeting.sighting_records,
+        ):
+            assert isinstance(channel, MappingProxyType)
+
+
+def test_the_immutability_gate_bites_on_a_planted_dataclass() -> None:
+    @dataclass(frozen=True)
+    class PlantedRecord:
+        rows: list[int]
+
+    @dataclass
+    class ThawedRecord:
+        rows: tuple[int, ...]
+
+    assert _shared_value_offenders(PlantedRecord, set()) == [
+        "PlantedRecord.rows: list[int]"
+    ]
+    assert _shared_value_offenders(ThawedRecord, set()) == [
+        "ThawedRecord is not frozen"
+    ]

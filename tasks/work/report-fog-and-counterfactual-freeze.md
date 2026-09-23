@@ -1,6 +1,6 @@
 # Keep the reported body in view on a game-deciding tick, and freeze the Phase-21 counterfactual memo
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
