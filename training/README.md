@@ -45,8 +45,15 @@ supports a separately authorized fit. Synthetic unit-test weights use
 fabricated fit sidecar. `scripts/verify_ml_evidence.py` checks historical
 identities under their original definition, not as current fit certificates.
 
-A future fit must write `SurrogateFitCorpus(fingerprint_version=2, ...)` with
-`fit_corpus_fingerprint(corpus_dir)` and the actual weights digest. Current
+Re-grounds of the historical raw flag-count instrument (the ballot surrogate and
+the conviction model; ruled 2026-09-23) keep version-one records: their derivation
+is checked by measurement, not a source digest, by
+`test_surrogate_runner.py::test_committed_artifact_round_trips_and_the_refit_no_longer_matches`,
+`test_conviction_model.py::test_committed_artifact_round_trips_and_the_refit_no_longer_matches`
+and `test_verify_ml_evidence.py::test_recompute_reads_every_committed_verdict_against_the_live_corpus`;
+the filtered-BC anchor has no refit pin. A fit a current consumer installs writes
+`SurrogateFitCorpus(fingerprint_version=2, ...)` with `fit_corpus_fingerprint(corpus_dir)` at
+the commit that installs it. Current
 campaigns recompute their named `compute_substrate_sha.v2` or
 `bakeoff_substrate_sha.v2` identity before work; founder loading checks both the
 definition and its source bytes. Historical readers have separately named

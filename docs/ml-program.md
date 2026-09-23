@@ -195,8 +195,8 @@ historical, as the erratum records; both follow-ups need owner decisions.
 
 Keep the paired campaign comparison and its failed adoption bars as the main result.
 The committed ballot surrogate is a useful negative: on its held-out split it ranks
-47 of 57 ejected targets correctly but gets only 36 of 91 eject/skip decisions right;
-always eject gets 57 of 91. Those counts are in its
+46 of 52 ejected targets correctly but gets only 44 of 94 eject/skip decisions right;
+always eject gets 52 of 94. Those counts are in its
 [verdict](../training/artifacts/surrogate/verdict.json). The conviction model's GO is
 historical qualification, not evidence that the later fit improved its predecessor;
 the [model report's erratum](../training/reports/report-conviction-model.md) records

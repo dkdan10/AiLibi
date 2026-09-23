@@ -1057,3 +1057,28 @@ step rewrites from the agreed leg (the composed verdict and manifest still name
   `::test_historical_composed_weights_cannot_be_installed[historical]` (each meets "the verdict and
   the artifacts drifted apart" before the refusal it tests); the second of the four is green on
   `main` and red here, the other three were red on `main` too.
+
+### 7. Documents that do not depend on the Linux leg (acceptance items 10 and 11, local half)
+
+- `training/README.md:48-49` ("A future fit must write …") is replaced by the card's sentence
+  verbatim, the rest of the paragraph kept. It names the two refit pins by their unchanged ids
+  and `test_verify_ml_evidence.py::test_recompute_reads_every_committed_verdict_against_the_live_corpus`;
+  the first two are green at this head, the third waits for the composed step (step 6). This
+  dated ruling overrides the sentence's earlier plain reading; the documents did not already
+  agree.
+- The two `historical_*` docstrings changed in the constants commit (step 4), comment-only.
+- `docs/ml-program.md`'s disposition paragraph re-derives the surrogate's counts from its new
+  `verdict.json`: 47 of 57 → 46 of 52 ranked first, 36 of 91 → 44 of 94 decisions, always eject
+  57 of 91 → 52 of 94. `uv run python scripts/check_doc_facts.py` passes [Mac] (arms recompute,
+  budgets hold).
+- The reports: surrogate (step 2), conviction (step 3) and anchor study (step 4) refreshed in
+  the commits that moved their artifacts; their new prose carries no task or audit id and
+  phrases the version-one identity plainly ("replay, split and manifest bytes"), so
+  `docs/glossary.md` gains nothing.
+
+Left for the next operator, because each states the composed verdict or the verifier's final
+exit status: `docs/ml-program.md:170-192` (the "What the instruments now stand on" paragraph
+and table, which still name `cc54d3c0…` and `--complete`), `training/reports/report-composed-runner.md`,
+the `replays/ml_corpus/README.md:29-45` blockquote (which still says the fits are baseline-8
+and `BAKEOFF_BASELINE_ID` reads `baseline-8`, both false since steps 2-4), and
+`docs/artifacts.md` rows `:103`-`:104`, recomputed last after merging `main`.
