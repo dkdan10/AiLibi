@@ -1,6 +1,6 @@
 # Re-derive the committed meetings through their true private channels
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
