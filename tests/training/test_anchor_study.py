@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import math
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -740,8 +741,65 @@ def test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte() -> 
     assert sweep == committed
 
 
-def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
-    """The committed anchor-study artifacts ARE the baseline-8 re-run (Task 21.17).
+def _historical_stamp_violations(stamp: Mapping[str, object]) -> list[str]:
+    """Why ``stamp`` is not the historical, kind-free shape the committed study uses.
+
+    A committed stamp carries ``historical_compute_substrate_sha()`` and neither a
+    ``substrate_sha_kind`` nor an ``evaluation_evidence_scope`` key: the
+    re-ground of the historical instrument stamps the original definition, and a
+    version-two kind in a committed stamp would claim a current identity nothing
+    certified. An empty list means the stamp reads historical.
+    """
+
+    violations = [
+        f"carries {key}={stamp[key]!r}"
+        for key in ("substrate_sha_kind", "evaluation_evidence_scope")
+        if key in stamp
+    ]
+    if stamp.get("substrate_sha") != historical_compute_substrate_sha():
+        violations.append(
+            f"substrate_sha {stamp.get('substrate_sha')!r} is not "
+            f"historical_compute_substrate_sha() {historical_compute_substrate_sha()!r}"
+        )
+    return violations
+
+
+def test_the_writers_own_config_fails_the_historical_stamp_predicate(
+    tmp_path: Path,
+) -> None:
+    """The planted half of the committed-stamp pin: the writer stamps version two.
+
+    ``run_anchor_study`` writes a current, version-two stamp (its kind names
+    ``compute_substrate_sha.v2``), which is what a fresh campaign needs and what
+    the committed historical artifacts must not carry. A fit-only run on one
+    game is the writer's own output at seconds' cost; its config fails the
+    predicate the committed pin applies, while the committed filtered-BC config
+    passes it.
+    """
+
+    run_anchor_study(
+        budget="ci",
+        lambda_grid=(),
+        corpus_seed_subset=(1000,),
+        artifact_root=tmp_path / "artifacts",
+        protocol=BakeoffProtocolConfig(eval_seeds=(1004,), surrogate_artifact_dir=None),
+    )
+    written = json.loads(
+        (tmp_path / "artifacts" / FILTERED_BC_ENTRANT / "config.json").read_text()
+    )
+    violations = _historical_stamp_violations(written)
+    assert any("substrate_sha_kind" in item for item in violations)
+    assert any(
+        "is not historical_compute_substrate_sha()" in item for item in violations
+    )
+    committed = json.loads(
+        (ANCHOR_STUDY_ARTIFACT_ROOT / FILTERED_BC_ENTRANT / "config.json").read_text()
+    )
+    assert _historical_stamp_violations(committed) == []
+
+
+def test_committed_study_artifacts_are_the_baseline9_fit() -> None:
+    """The committed anchor-study artifacts ARE the baseline-9 re-ground.
 
     The utility-es λ sweep is SUBSTRATE-INDEPENDENT (deterministic fake-provider
     rollouts off ``seed`` + the canonical map, no corpus read), so the λ cell
@@ -750,7 +808,9 @@ def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
     the live replay bytes, and every cell's ``config.json`` substrate sha plus the
     study index's ``substrate_sha`` are re-stamped to the live substrate. So the
     committed artifact's recorded substrate MATCHES ``historical_compute_substrate_sha()``
-    and reads the adopted baseline id.
+    and reads the adopted baseline id, in the historical shape: no stamp carries a
+    definition kind or an evidence scope. (Task 21.17 made the baseline-8 re-run;
+    the 2026-09-23 re-ground repeated it on the baseline-9 corpus.)
 
     The λ grid itself is deliberately NOT re-searched: those rows are a recording
     of a search made under the pre-Task-21.16 fitness objective, and
@@ -764,9 +824,10 @@ def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
     assert report.evaluation_evidence_scope is None
     assert "evaluation_evidence_scope" not in json.loads(report.to_json())
     # Re-grounded: the recorded substrate MATCHES the live substrate and reads
-    # the adopted baseline id.
+    # the adopted baseline id, with no kind or scope key in the index.
+    assert _historical_stamp_violations(index) == []
     assert report.substrate_sha == historical_compute_substrate_sha()
-    assert report.baseline_id == BAKEOFF_BASELINE_ID == "baseline-8"
+    assert report.baseline_id == BAKEOFF_BASELINE_ID == "baseline-9"
     # The substrate-independent structure holds (not what the re-ground moved): the
     # full λ grid and the λ=1.0 champion byte-identity cross-check.
     assert report.lambda_grid == LAMBDA_GRID
@@ -780,8 +841,10 @@ def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
         weights = load_candidate_weights(entrant_dir)  # sha-verified reload
         assert len(weights) == utility_genome_length()
         config = json.loads((entrant_dir / "config.json").read_text())
-        # Every cell agrees with the study index's (historical) substrate sha.
+        # Every cell agrees with the study index's (historical) substrate sha,
+        # in the kind-free historical shape.
         assert config["substrate_sha"] == report.substrate_sha
+        assert _historical_stamp_violations(config) == []
         assert config["entrant"] == entrant
         if entrant != FILTERED_BC_ENTRANT:
             assert config["base_entrant"] == "utility-es"

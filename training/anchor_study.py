@@ -160,8 +160,8 @@ REPORT_PATH: Final[Path] = Path("training/reports/report-anchor-study.md")
 COMMITTED_CHAMPION_DIR: Final[Path] = Path("training/artifacts/impostor/utility-es")
 
 # The high-flag game filter threshold: the ``flags_per_meeting`` supply floor of
-# the baseline ``BAKEOFF_BASELINE_ID`` names — 147/151 on baseline-8's 9p2i block
-# (57 re-derived transcript flags + 90 persisted vent sightings,
+# the baseline ``BAKEOFF_BASELINE_ID`` names — 107/145 on baseline-9's 9p2i block
+# (17 recorded transcript flags + 90 persisted vent flags,
 # eval/watchability.py). It moves WITH that id, so a default-substrate re-run
 # always filters against the supply bar the artifact stamps; otherwise the
 # artifact stamps one baseline while filtering on another's gauge (Codex review
@@ -169,7 +169,7 @@ COMMITTED_CHAMPION_DIR: Final[Path] = Path("training/artifacts/impostor/utility-
 # ``eval.watchability`` into a training module: the bake-off entrant firewall
 # keeps training-side modules eval-free, and this study consumes the floor as a
 # NUMBER, not the gauge.
-HIGH_FLAG_FLOOR: Final[float] = 147 / 151
+HIGH_FLAG_FLOOR: Final[float] = 107 / 145
 
 # The filtered-BC fit hyperparameters — the Fo6Logistic / BallotPredictor
 # deterministic recipe verbatim (training/surrogate/fidelity.py:319,
@@ -219,11 +219,13 @@ def historical_compute_substrate_sha(
     baseline_id: str = BAKEOFF_BASELINE_ID,
     high_flag_floor: float = HIGH_FLAG_FLOOR,
 ) -> str:
-    """Reproduce the original anchor identity for historical artifact restoration.
+    """The original anchor identity, for historical artifacts and their re-grounds.
 
     This definition binds replay, manifest, split, baseline and flag floor bytes.
-    It predates roster and derivation binding and cannot authorize a current
-    campaign. The current compute_substrate_sha uses the version-two identity.
+    It restores old artifacts and also stamps a re-ground of the historical
+    instrument onto a newly recorded corpus. It predates roster and derivation
+    binding and cannot authorize a current campaign. The current
+    compute_substrate_sha uses the version-two identity.
     """
 
     payload = {

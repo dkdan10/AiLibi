@@ -845,7 +845,7 @@ def run_goodhart_probe(
     num_players: int,
     num_impostors: int,
     tasks_per_crewmate: int,
-    baseline_id: str = "baseline-8",
+    baseline_id: str = "baseline-9",
     materiality_bar: float = 0.25,
     meeting_runner_factory: MeetingRunnerFactory | None = None,
 ) -> GoodhartProbeReport:
@@ -1986,7 +1986,7 @@ def run_conviction_path_probe(
     num_players: int,
     num_impostors: int,
     tasks_per_crewmate: int,
-    baseline_id: str = "baseline-8",
+    baseline_id: str = "baseline-9",
     materiality_bar: float = 0.25,
     conviction_artifact_dir: Path | None = None,
     conviction_weight: float | None = None,

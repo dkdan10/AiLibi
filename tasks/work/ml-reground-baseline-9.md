@@ -802,3 +802,94 @@ read `training/artifacts/composed/manifest.json`) stay FAIL until the composed s
 the next operator's. `training/reports/report-conviction-model.md` header, §2.1, §3, §4, §5
 and §7 are refreshed from its §9 one-liners, the baseline-8 figures kept in a new erratum, and
 §8 step 4 corrected to `historical_fit_corpus_fingerprint`.
+
+### 4. The constants, with the anchor, study and pool stamps, in one commit (acceptance items 4 and 5)
+
+**Constants.** `BAKEOFF_BASELINE_ID` `"baseline-8"` → `"baseline-9"` (`training/bakeoff/harness.py:188`,
+its comment re-dated); `HIGH_FLAG_FLOOR` `147 / 151` → `107 / 145`
+(`training/anchor_study.py:172`, comment restated as 17 recorded transcript + 90 persisted
+vent flags, read from `eval/watchability.py:1050-1052`); the three coupled defaults
+`run_goodhart_probe` (`training/bakeoff/goodhart.py:848`), `run_conviction_path_probe`
+(`:1989`) and `run_composed_goodhart_leg` (`training/composed_runner.py:1247`) →
+`"baseline-9"`. `eval/watchability.py` is untouched. Blast radius
+(`grep -rln 'BAKEOFF_BASELINE_ID\|HIGH_FLAG_FLOOR' --include='*.py' --include='*.md' .`): the
+code consumers are the four modules above plus `training/crew/scorer.py` (reads the constant,
+no edit); the tests are the four re-pinned below; the rest are dated records (tasks,
+audits, agent prompts, `training/reports/report-{crew-track,finalist-eval}.md`,
+`replays/ml_corpus/README.md`, `eval/watchability.py` prose), none edited here.
+
+**Mechanism for item 4.** `test_selection_bar_pins_the_baseline_8_floors` is renamed
+`test_selection_bar_and_the_three_probe_defaults_pin_one_baseline` and asserts
+`BAKEOFF_BASELINE_ID == "baseline-9"`, `HIGH_FLAG_FLOOR == 107 / 145` and, by
+`inspect.signature`, that each of the three defaults equals the constant. Planted proof
+(`$SCR/plant_literals.py`: each literal in turn set back to `"baseline-8"` with the other two
+at `"baseline-9"`, the pin run, the file's bytes restored), [Mac]:
+
+| literal reverted | pin |
+|---|---|
+| `run_goodhart_probe` | 1 failed, `AssertionError: run_goodhart_probe` |
+| `run_conviction_path_probe` | 1 failed, `AssertionError: run_conviction_path_probe` |
+| `run_composed_goodhart_leg` | 1 failed, `AssertionError: run_composed_goodhart_leg` |
+
+**The anchor, re-fit into scratch after the constants moved** (the Validation line):
+```
+uv run python -c "from pathlib import Path; from training.anchor_study import run_anchor_study; run_anchor_study(lambda_grid=(), artifact_root=Path('$SCR/anchor-b9'), verify_committed_champion=False)"
+```
+walked all 150 games with no `CorpusWalkError` (5748 decisions; 111 qualifying games:
+crew-winning 105, high-flag 71, both 65; 3798 fit decisions) and wrote weights
+`6268ea3d7027a78c3300494b11fa89d2ee42247530d95078b95a34b928b69a6e` (5.3 s) [Mac]. Its
+`weights.json`, `weights.json.sha256` and `config.json` were copied into
+`training/artifacts/anchor_study/filtered-bc-anchor/`, and the config then stamped by the
+Validation block's `config.json` line verbatim, run twice (both runs `20b7dd8e…`, idempotent):
+the file loses `substrate_sha_kind` (the writer's `compute_substrate_sha.v2`) and takes
+`historical_compute_substrate_sha()` = `b1fca5d43b2461a5110c0690a413ac96691e0eedaf910918d68793fc0d073413`,
+the value the keying memo computed with the parameters passed explicitly.
+
+**The five λ configs**, only `substrate_sha` changed, in the same idempotent form:
+```
+uv run python -c "import json; from pathlib import Path; from training.anchor_study import historical_compute_substrate_sha as h; s=h(); [p.write_text(json.dumps({**json.loads(p.read_text()), 'substrate_sha': s}, indent=2, sort_keys=True)+'\n') for p in sorted(Path('training/artifacts/anchor_study').glob('lambda-*/config.json'))]"
+```
+Each λ `weights.json` and sidecar hashes as before (`shasum` list compared before and after).
+
+**`study.json`**, run twice (both `836c60551455f677…`):
+```
+uv run python -c "import json; from pathlib import Path; from training.anchor_study import historical_compute_substrate_sha as h; from training.bakeoff.harness import BAKEOFF_BASELINE_ID as b; p=Path('training/artifacts/anchor_study/study.json'); d=json.loads(p.read_text()); f=json.loads(Path('$SCR/anchor-b9/study.json').read_text())['filtered_bc']; f['artifact_path']='training/artifacts/anchor_study/filtered-bc-anchor'; d.pop('substrate_sha_kind', None); d.pop('evaluation_evidence_scope', None); d.update(baseline_id=b, substrate_sha=h(), filtered_bc=f); p.write_text(json.dumps(d, indent=2, sort_keys=True)+'\n')"
+```
+Only `baseline_id`, `substrate_sha` and `filtered_bc` changed; `sweep_rows`, `lambda_grid`,
+`determinism_cross_check`, `eval_seeds` and `recommended_campaign_seeds` are byte-for-byte the
+committed values, and no kind or scope key is present.
+
+**The pool**, the Validation block's `index.json` line verbatim, run twice (both
+`fcb8a0f6bbb0deddb93565cf258f85a4b05d5f701e2619311ce4544f2717e7cc`): `baseline_id`
+`baseline-9` and `substrate.substrate_sha256` `8b174cab…`, the sha256 of
+`replays/ml_corpus/9p2i/MANIFEST.md`; no kind key; `git diff --stat` on
+`training/artifacts/impostor/map-elites/` shows the one file, two lines, so the 30 cell genomes
+and `filled_cells` are untouched. No ES byte moved; the runner-up stamp naming the anchor, the
+coevo tree, the campaign rows and the other genomes are untouched.
+
+**Pins moved with this commit** (the rest wait for the tests commit):
+- `test_bakeoff_harness.py::test_selection_bar_pins_the_baseline_8_floors` → renamed as above.
+  FROZEN: `"baseline-8"` → `"baseline-9"`, `147 / 151` → `107 / 145` (the constants this
+  record moves); extended to the two further defaults.
+- `test_anchor_study.py::test_committed_study_artifacts_are_the_baseline8_fit` → renamed
+  `test_committed_study_artifacts_are_the_baseline9_fit`. FROZEN: `baseline_id`
+  `"baseline-8"` → `"baseline-9"`; extended with `_historical_stamp_violations`, applied to
+  the index and every entrant config (historical sha, no kind or scope key). Its planted half is
+  the new `test_the_writers_own_config_fails_the_historical_stamp_predicate`: a fit-only
+  `run_anchor_study` on seed 1000 writes the version-two kind, which the predicate refuses
+  (kind present and sha not historical), while the committed filtered-BC config passes.
+- `test_bakeoff_methods.py::test_the_committed_map_elites_pool_is_historical_and_structurally_untouched`:
+  FROZEN `"baseline-8"` → `"baseline-9"`; the champion `(5, 0, 3)` at 18.8641 and the 30 cells
+  still hold unchanged.
+- `test_goodhart_probe.py::test_probe_reruns_end_to_end_on_the_regrounded_surrogate`:
+  MEASURED `report.baseline_id` `"baseline-8"` → `"baseline-9"`, the moved default read back
+  through `run_goodhart_probe`.
+
+`training/reports/report-anchor-study.md` is re-rendered by `training.anchor_study.render_report`
+from the new `study.json` (recorded wall-clock arguments 1693 s and 1790 s), with its hand-kept
+header command line and §1.1 restored and extended to both re-grounds, the baseline-8 figures
+kept as history. Targeted run, [Mac]: `test_anchor_study.py`, `test_bakeoff_methods.py`,
+`test_hall_of_fame.py`, `test_bakeoff_harness.py` and `test_goodhart_probe.py` across both tiers
+read 206 passed, 1 failed; the one is `test_evaluate_candidate_full_row`, whose frozen conviction
+sha moves in the tests commit. `test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte`,
+the walk-fence tests and `test_founder_ingestion_substrate_mismatch_refused` pass unchanged.
