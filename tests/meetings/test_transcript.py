@@ -1652,6 +1652,7 @@ from meetings.transcript import (  # noqa: E402
 )
 from orchestrator.replay import MeetingReplayEntry, read_all_entries  # noqa: E402
 from tests._helpers.committed import (  # noqa: E402
+    frozen_meetings,
     sighting_records_from_recorded_flags,
 )
 
@@ -3215,18 +3216,21 @@ class TestCommittedBytes1010Pins:
         # future re-record makes the guard FIRE on one of these (a proxy-intra-turn
         # marker appears), STOP: the guard would be over-reaching onto a two-author
         # disagreement.
+        #
+        # FROZEN at baseline 8: the baseline-9 samples/9p2i set carries no
+        # alibi_conflict at all, so the tripwire reads the 17 baseline-8 meetings
+        # that carried the 21 flags, frozen with their model calls emptied
+        # (tests/fixtures/baseline8_exhibits/README.md). The detector re-derives
+        # from the transcript, so what it is run against is still recorded speech.
         recorded_conflicts: list[ContradictionRef] = []
         rederived_conflicts: list[ContradictionRef] = []
-        for seed in range(50):
-            for entry in _committed_meetings(seed):
-                recorded_conflicts.extend(
-                    flag
-                    for flag in entry.contradictions
-                    if flag.kind == "alibi_conflict"
-                )
-                rederived_conflicts.extend(
-                    flag for flag in _rederive(entry) if flag.kind == "alibi_conflict"
-                )
+        for entry in frozen_meetings("alibi-conflict-meetings.jsonl"):
+            recorded_conflicts.extend(
+                flag for flag in entry.contradictions if flag.kind == "alibi_conflict"
+            )
+            rederived_conflicts.extend(
+                flag for flag in _rederive(entry) if flag.kind == "alibi_conflict"
+            )
         assert len(recorded_conflicts) == 21  # was 8
         assert len(rederived_conflicts) == 21  # was 8
         # The same-speaker guard re-targets NONE of the two-author conflicts.

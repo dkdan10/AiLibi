@@ -20,7 +20,6 @@ from meetings.manager import derive_reported_testimony
 from orchestrator.replay import (
     MeetingReplayEntry,
     _stable_json,
-    read_all_entries,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -41,6 +40,7 @@ from meetings.schemas import (
     VoteBallot,
     WhereaboutsClaim,
 )
+from tests._helpers.committed import BASELINE8_EXHIBITS, frozen_meetings
 
 _ROSTER = ("p-1", "p-2", "p-3", "p-4", "p-5")
 
@@ -511,49 +511,49 @@ class TestTestimonyShapesLever:
 # --------------------------------------------------------------------------- #
 
 
-def _committed_meetings() -> tuple[MeetingReplayEntry, ...]:
-    """Every recorded meeting of both committed sample sets."""
-
-    collected: list[MeetingReplayEntry] = []
-    for set_dir in _SAMPLE_SETS:
-        for replay in sorted(set_dir.glob("replay-seed-*.jsonl")):
-            collected.extend(
-                entry
-                for entry in read_all_entries(replay)
-                if isinstance(entry, MeetingReplayEntry)
-            )
-    return tuple(collected)
+#: Both sample sets' meetings as recorded at baseline 8, every alibi a one-room
+#: envelope, frozen with their model calls emptied. The baseline-9 re-record
+#: states every alibi as a route (claim_format 2), so no committed set carries a
+#: legacy claim any more (tests/fixtures/baseline8_exhibits/README.md).
+_LEGACY_MEETINGS: Final[str] = "legacy-one-room-alibi-meetings.jsonl"
 
 
-def _recorded_alibi_payloads() -> tuple[tuple[str, int, dict[str, object]], ...]:
-    """Every alibi claim payload as it sits in the committed JSONL bytes."""
+def _legacy_meetings() -> tuple[MeetingReplayEntry, ...]:
+    """Every frozen baseline-8 meeting of both sample sets."""
+
+    return frozen_meetings(_LEGACY_MEETINGS)
+
+
+def _legacy_alibi_payloads() -> tuple[tuple[str, int, dict[str, object]], ...]:
+    """Every legacy alibi claim payload as it sits in the frozen JSONL bytes."""
 
     collected: list[tuple[str, int, dict[str, object]]] = []
-    for set_dir in _SAMPLE_SETS:
-        for replay in sorted(set_dir.glob("replay-seed-*.jsonl")):
-            for line in replay.read_text(encoding="utf-8").splitlines():
-                record = json.loads(line)
-                if record.get("kind") != "meeting":
-                    continue
-                for turn in record["transcript"]["turns"]:
-                    for index, claim in enumerate(turn["claims"]):
-                        if claim.get("type") == "alibi":
-                            collected.append((turn["turn_id"], index, claim))
+    frozen = BASELINE8_EXHIBITS / _LEGACY_MEETINGS
+    for line in frozen.read_text(encoding="utf-8").splitlines():
+        record = json.loads(line)
+        if record.get("kind") != "meeting":
+            continue
+        for turn in record["transcript"]["turns"]:
+            for index, claim in enumerate(turn["claims"]):
+                if claim.get("type") == "alibi":
+                    collected.append((turn["turn_id"], index, claim))
     return tuple(collected)
 
 
 class TestRoutesOverTheCommittedRecord:
-    """The card's byte-identity planted set, over both committed sample sets.
+    """The card's byte-identity planted set: legacy one-room alibis still read.
 
-    Every committed alibi is a one-room envelope -- a legal one-segment route --
-    so the three surfaces that read it must be unchanged: the recorded payload
-    round-trips through the schema, the testimony reduction emits the same one
-    statement per claim it always did, and the served spectator view is the
-    recorded payload byte for byte.
+    Every baseline-8 alibi is a one-room envelope -- a legal one-segment route
+    -- so the three surfaces that read it must be unchanged: the recorded
+    payload round-trips through the schema, the testimony reduction emits the
+    same one statement per claim it always did, and the served spectator view is
+    the recorded payload byte for byte. Those three read the frozen baseline-8
+    meetings (``_legacy_meetings``); the whole-line round trip below reads the
+    committed sample sets as they stand.
     """
 
     def test_every_recorded_alibi_round_trips_byte_identically(self) -> None:
-        payloads = _recorded_alibi_payloads()
+        payloads = _legacy_alibi_payloads()
         assert len(payloads) > 100, "a thinned checkout, not a passing gate"
         for turn_id, index, payload in payloads:
             claim = AlibiClaim.model_validate(payload)
@@ -586,13 +586,13 @@ class TestRoutesOverTheCommittedRecord:
         assert lines > 100, "a thinned checkout, not a passing gate"
 
     def test_the_served_view_is_the_recorded_payload(self) -> None:
-        for turn_id, index, payload in _recorded_alibi_payloads():
+        for turn_id, index, payload in _legacy_alibi_payloads():
             claim = AlibiClaim.model_validate(payload)
             view = _statement_claim_view(claim)
             assert view.model_dump(mode="json") == payload, (turn_id, index)
 
     def test_the_reduction_emits_one_statement_per_recorded_alibi(self) -> None:
-        meetings = _committed_meetings()
+        meetings = _legacy_meetings()
         assert len(meetings) > 100, "a thinned checkout, not a passing gate"
         alibis = 0
         for entry in meetings:

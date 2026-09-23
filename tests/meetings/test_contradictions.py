@@ -83,7 +83,10 @@ from meetings.transcript import (
 )
 from meetings.public_accounts import detect_public_account_conflicts
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
-from tests._helpers.committed import sighting_records_from_recorded_flags
+from tests._helpers.committed import (
+    frozen_meetings,
+    sighting_records_from_recorded_flags,
+)
 
 # --- Builders --------------------------------------------------------------
 
@@ -4635,13 +4638,17 @@ _SEED_41_ROUTE: Final[tuple[AlibiSegment, ...]] = (
 
 
 def _seed_41_entry() -> MeetingReplayEntry:
-    """The committed seed-41 meeting the direction memo makes its exhibit."""
+    """The seed-41 meeting the direction memo makes its exhibit, as recorded.
 
-    for set_name, seed, entry in _committed_meeting_entries():
-        if seed == 41 and entry.meeting_id == _SEED_41_MEETING:
-            assert set_name == "samples/9p2i"
-            return entry
-    raise AssertionError(f"{_SEED_41_MEETING} is not in the committed corpus")
+    Frozen rather than read from the corpus: re-recorded on the route-claim
+    substrate, this meeting carries no flag, and no other committed meeting has
+    the shape. The line is the baseline-8 recording, byte for byte
+    (``tests/fixtures/baseline8_exhibits/README.md``).
+    """
+
+    (entry,) = frozen_meetings("seed-41-meeting-2.jsonl")
+    assert entry.meeting_id == _SEED_41_MEETING
+    return entry
 
 
 def _with_p9_route(
@@ -4668,6 +4675,9 @@ def _with_p9_route(
 class TestTheAlibiIsARoute:
     """Seed 41: the honest mover, the envelope that convicted them, and a liar.
 
+    Read from the frozen baseline-8 line (``_seed_41_entry``), because the
+    re-recorded meeting no longer carries the shape.
+
     The direction memo of 2026-09-19 §5 makes this meeting the exhibit: p-9
     (crew) states ENGINEERING ticks 12-15 whose OWN evidence rows read "moved to
     EAST_HALL @ 13 / ADMIN @ 14 / WEST_HALL @ 15", every one of them true, and
@@ -4689,11 +4699,11 @@ class TestTheAlibiIsARoute:
         )
 
     def test_the_envelope_still_mints_its_flags(self) -> None:
-        # Four of the five, not all five: this meeting is one of the
-        # ``_MOVEMENT_CHANNEL_DIVERGING_MEETINGS`` above, whose fifth flag rests
-        # on the private movement channel a replay cannot rebuild. What matters
-        # here is the direction -- the envelope prosecutes p-9 -- and the
-        # corpus-wide byte identity is pinned by the walk above, not here.
+        # Four of the five, not all five: on baseline 8 this meeting was one of
+        # the movement-channel diverging meetings, whose fifth flag rests on the
+        # private movement channel a replay cannot rebuild. What matters here is
+        # the direction -- the envelope prosecutes p-9 -- and the corpus-wide
+        # byte identity is pinned by the walk above, not here.
         entry = _seed_41_entry()
         rederived = _rederive(entry)
 

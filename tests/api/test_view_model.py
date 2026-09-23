@@ -69,6 +69,7 @@ from tests.api.fixtures.sample_replay import (
     write_partial_replay,
     write_sample_replay,
 )
+from tests._helpers.committed import BASELINE8_EXHIBITS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE_P_TWO_I = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -132,6 +133,20 @@ def nine_p_two_i_loader(monkeypatch: pytest.MonkeyPatch) -> ReplayLoader:
     # refuses the mismatch).
     monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
     return ReplayLoader(replay_dir=_NINE_P_TWO_I)
+
+
+@pytest.fixture
+def rewritten_ballot_loader() -> ReplayLoader:
+    """The baseline-8 samples/9p2i seed-11 game, frozen with its roster.
+
+    Its last meeting holds a ballot the meeting layer re-aimed at a player. On
+    baseline 9 all 21 target-rewriting ballots tally SKIP, so no committed game
+    ends on a rewritten ballot naming anyone, and the finale recap's
+    rewritten-ballot branch reads this frozen recording instead
+    (``tests/fixtures/baseline8_exhibits/README.md``).
+    """
+
+    return ReplayLoader(replay_dir=BASELINE8_EXHIBITS / "rewritten-ballot-9p2i")
 
 
 # ---------------------------------------------------------------------------
@@ -934,7 +949,7 @@ def test_finale_pins_committed_wrong_ejection_game(
 
 
 def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(
-    nine_p_two_i_loader: ReplayLoader,
+    rewritten_ballot_loader: ReplayLoader,
 ) -> None:
     """A REWRITTEN ballot is flagged and never judged as belief (Task 19.10
     review).
@@ -950,10 +965,12 @@ def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(
     target intact and stays unflagged.
 
     RE-ANCHORED from seed-8 (whose last-meeting p-5 ballot is no longer
-    redirected on this record) to the same shape at seed-11.
+    redirected on this record) to the same shape at seed-11, and FROZEN there:
+    the loader reads the baseline-8 recording of seed 11 (the fixture's docstring
+    says why), since no baseline-9 game carries the shape.
     """
 
-    replay = nine_p_two_i_loader.load_replay("headless-seed-11")
+    replay = rewritten_ballot_loader.load_replay("headless-seed-11")
     marked = replay.meetings[-1]
     redirected = next(b for b in marked.ballots if b.voter == "p-6")
     assert "under_gate_redirect" in redirected.rewrite_reasons

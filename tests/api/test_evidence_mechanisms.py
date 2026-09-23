@@ -34,7 +34,7 @@ from typing import Final
 
 import pytest
 
-from api.replay_loader import ReplayLoader
+from api.replay_loader import ReplayLoader, _contradiction_view
 from api.schemas import MeetingView, ReplayView
 from tests.api.fixtures.evidence_mechanisms import (
     CONTENT_VS_OWN_MEMORY_MISS,
@@ -45,6 +45,7 @@ from tests.api.fixtures.evidence_mechanisms import (
     EvidenceMechanism,
     MechanismAnchor,
 )
+from tests._helpers.committed import frozen_meetings
 
 _SAMPLES: Final[Path] = Path(__file__).resolve().parents[2] / "replays" / "samples"
 
@@ -295,15 +296,14 @@ def test_equal_weight_conflict_has_nothing_left_to_weigh() -> None:
 #: meeting outside this set fails, and so does one that leaves it.
 #:
 #: This class held at ZERO on baseline 7, RE-OPENED at one meeting carrying two
-#: such flags on baseline 8 (convicting the CREWMATE p-9), and is CLOSED again on
-#: baseline 9: the walk finds no meeting. The baseline-8 name is kept rather than
-#: deleted, so the assertion below fails until the owner rules on re-pinning the
-#: class to empty. Same family as the sole-flag wrongful-conviction class
-#: (audits/audit-phase-21-rerecord.md §5.1.1). Pinning it here neither excuses it
-#: nor deletes the property.
-_STATEMENT_PAIR_CONVICTIONS: Final[frozenset[str]] = frozenset(
-    {"headless-seed-41:meeting-2"}
-)
+#: such flags on baseline 8 (seed 41 meeting 2, convicting the CREWMATE p-9), and
+#: is CLOSED again on baseline 9: the walk finds no meeting. Empty is the
+#: strictest form of the growth tripwire, since any meeting convicting this way
+#: now fails it; the baseline-8 loss is still stated below, on that meeting's
+#: frozen line. Same family as the sole-flag wrongful-conviction class
+#: (audits/audit-phase-21-rerecord.md §5.1.1).
+# was frozenset({"headless-seed-41:meeting-2"}) on baseline 8
+_STATEMENT_PAIR_CONVICTIONS: Final[frozenset[str]] = frozenset()
 
 #: The recorded flag the planted case promotes, as (seed, meeting index, flag
 #: index) on samples/9p2i: seed 9 M0's only flag, a weak-banded
@@ -319,8 +319,8 @@ def test_the_flip_search_finds_exactly_the_named_meetings() -> None:
     The exhibits above assert absences -- no flag, no innocent ejection -- so the
     predicate behind them must be shown to fire. Walk the whole 9p2i set for a
     STRONG statement-pair flag naming the ejected player, and hold the result to
-    the named set above rather than to zero, which is what these bytes carry.
-    The planted case proves the predicate still fires on a shape nothing recorded.
+    the named set above, which is empty on these bytes. The planted case proves
+    the predicate still fires on a shape nothing recorded.
 
     ``alibi_vs_physical`` is deliberately outside the search: it is grounded on
     an engine-certified body or vent, not on two accounts of the same tick, and
@@ -372,17 +372,12 @@ def test_the_flip_search_finds_exactly_the_named_meetings() -> None:
     assert convicting(planted) == ["alibi_vs_sighting"]
 
     found: dict[str, list[str]] = {}
-    ejected_roles: dict[str, str | None] = {}
     for seed in range(50):
         replay = loader.load_replay(f"headless-seed-{seed}")
-        roles = {player.agent_id: player.role for player in replay.players}
         for meeting in replay.meetings:
             hits = convicting(meeting)
             if hits:
                 found[meeting.meeting_id] = hits
-                ejected_roles[meeting.meeting_id] = roles.get(
-                    meeting.ejected_player_id or ""
-                )
 
     # Exactly the named set: a NEW meeting convicting this way fails here, and so
     # does one dropping out (which would mean the class closed and this pin, not
@@ -390,9 +385,19 @@ def test_the_flip_search_finds_exactly_the_named_meetings() -> None:
     assert set(found) == _STATEMENT_PAIR_CONVICTIONS
 
     # And the loss is stated, not merely tolerated: on baseline 8 the one meeting
-    # convicted a CREWMATE on two STRONG alibi-versus-sighting flags.
-    assert found["headless-seed-41:meeting-2"] == [
-        "alibi_vs_sighting",
-        "alibi_vs_sighting",
+    # convicted p-9 on two STRONG alibi-versus-sighting flags. Read off that
+    # meeting's frozen line through the loader's own flag projection, since the
+    # re-recorded meeting carries no flag. The line holds no role map: p-9 was a
+    # CREWMATE in that baseline-8 game, which this test asserted there.
+    (frozen,) = frozen_meetings("seed-41-meeting-2.jsonl")
+    assert frozen.meeting_id == "headless-seed-41:meeting-2"
+    assert frozen.ejected_player_id == "p-9"
+    frozen_hits = [
+        view.kind
+        for view in (_contradiction_view(flag) for flag in frozen.contradictions)
+        if view.category == "cross_statement"
+        and view.kind in statement_pair
+        and not view.weak
+        and frozen.ejected_player_id in view.subjects
     ]
-    assert ejected_roles["headless-seed-41:meeting-2"] == "CREWMATE"
+    assert frozen_hits == ["alibi_vs_sighting", "alibi_vs_sighting"]
