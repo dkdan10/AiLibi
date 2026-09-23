@@ -133,12 +133,12 @@ the direction memo's section 12). Provider `featherless`, model
 
 | limit | measured on the committed bytes | authorized | actual |
 |---|---|---|---|
-| model calls | 7,271 | 9,500 | (§2) |
-| input tokens | 31,756,112 | 43,000,000 → **46,000,000** (§0.4a) | (§2) |
-| output tokens | 1,598,475 | 2,200,000 | (§2) |
-| recording wall | about 12h05m | 16 h | (§2) |
-| elapsed window | about 15h48m | 24 h | (§2) |
-| marginal cost | `$0.0000` | `$0.00` | (§2) |
+| model calls | 7,271 | 9,500 | **7,270** (§2) |
+| input tokens | 31,756,112 | 43,000,000 → **46,000,000** (§0.4a) | **41,556,280** (§2) |
+| output tokens | 1,598,475 | 2,200,000 | **1,827,165** (§2) |
+| recording wall | about 12h05m | 16 h | **10h53m28s** (§2) |
+| elapsed window | about 15h48m | 24 h | **11h05m48s** (§2) |
+| marginal cost | `$0.0000` | `$0.00` | **`$0.0000`** on every recorded call (§2) |
 
 The cost is `$0.00` **marginal** against the flat-rate Featherless
 subscription, whose standing fee is already paid and is not incurred by this
@@ -184,10 +184,17 @@ totals by the matched ratios projects:
 | model calls | 6,917 | 72.8% of 9,500 |
 | output tokens | 1,774,102 | 80.6% of 2,200,000 |
 
-So on this record's own arithmetic the run fits inside the ORIGINAL ceiling,
-and the raise is headroom rather than a requirement. Both readings are stated
-because the decision was taken on the first and the record is kept on the
-second; §2 publishes the ACTUAL against 46,000,000, which is what settles it.
+On that ten-seed arithmetic the run looked to fit inside the ORIGINAL ceiling,
+and this section first called the raise headroom rather than a requirement.
+**That reading was too strong, and is corrected here against the measured
+run.** A 9p2i corpus game costs more input than a sample one (about 204K
+against 197K), so the projection re-derived per set at 111 of 300 games came to
+about **42.2 M** input — **98.1%** of the original 43,000,000 — and the actual,
+§2.2, landed at **41,556,280**, 96.6% of it: a margin of about 3%, far too thin
+to record against with re-records still possible. **The raise was needed.** The
+1.357x figure behind it was still derived the wrong way (it divides a 9p2i
+per-game cost by an all-four-set average); the decision was right for a reason
+its own arithmetic did not show.
 The calls ratio is worth its own line: the wave's bytes make **fewer** model
 calls per game, not more (0.9514), so the input growth is prompt size — the
 larger ballot body — and not extra traffic.
@@ -397,17 +404,58 @@ meetings is exactly `eval/watchability.py`'s baseline-8 `flags_per_meeting` pin.
 Each leg is fully gated before the next begins, and its range checkpoint-pushed.
 Every recorded `cost_usd` on every leg is `0.0000`.
 
-| leg | set | games | wall | calls | input | output | previous record's wall |
-|---|---|---|---|---|---|---|---|
-| 1 | `replays/samples/9p2i` | 50/50 | **2h25m19s** | 1,694 | 9,850,930 | 422,941 | 3h07m00s |
-| 2 | `replays/ml_corpus/9p2i` | *(recording)* | | | | | 7h59m32s |
-| 3 | `replays/samples/4p1i` | | | | | | 23m15s |
-| 4 | `replays/ml_corpus/4p1i` | | | | | | 24m41s (incomplete) |
+| leg | set | games | recording wall (elapsed) | calls | input | output | cost | previous record's wall |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `replays/samples/9p2i` | 50/50 | **2h24m55s** (2h25m19s) | 1,694 | 9,850,930 | 422,941 | `$0.0000` | 3h07m00s |
+| 2 | `replays/ml_corpus/9p2i` | 150/150 | **7h45m05s** (7h47m25s) | 5,084 | 30,053,852 | 1,298,156 | `$0.0000` | 7h59m32s |
+| 3 | `replays/samples/4p1i` | 50/50 | **20m44s** (21m51s) | 234 | 782,265 | 51,657 | `$0.0000` | 23m15s |
+| 4 | `replays/ml_corpus/4p1i` | 50/50 | **22m44s** (23m01s) | 258 | 869,233 | 54,411 | `$0.0000` | 24m41s (incomplete) |
+| **total** | **four sets** | **300/300** | **10h53m28s** (window 11h05m48s) | **7,270** | **41,556,280** | **1,827,165** | **`$0.0000`** | |
+
+**The record is complete at 300 of 300 games**, every seed in one window
+(2026-09-22 04:21:56Z to 15:27:44Z). The recording wall sums each leg's
+recording phases from the operator's own start and end stamps (probe seed, the
+rest of the leg, any seed repair, the finalize); elapsed adds the gaps between
+them. The spend is counted from the committed bytes' own `llm_calls` rows with
+the tally command the card's Evidence quotes, so it covers every call that
+reached a committed replay and **not** the three discarded first attempts of
+§5's seed repairs, whose husks were removed before any tally; those were
+`$0.0000` like every other call and their token count is not recoverable.
 
 **Leg 1** opened 2026-09-22 04:21:56Z and closed 06:47:15Z. The honesty probe
 ran on the first completed seed before the rest queued: seed 0, three meetings
 so not vacuous, every instrument folding with no raise and no unfoldable cell
 family. The remaining 49 seeds then recorded on two workers.
+
+**Leg 2** opened 06:52:03Z with the probe seed 1000 (227 s, two meetings, not
+vacuous; the honesty probe folded clean), ran its main phase 06:57:00Z to
+14:24:33Z, repaired three seeds (§5) and froze at 14:39:28Z: `splits.json` 90
+train / 30 val / 30 test, the FROZEN line at `git_sha` 820704be.
+
+**Leg 3** opened 14:41:58Z. Its first probe seed was VACUOUS — seed 0 an
+impostor win with zero meetings — so seeds 1-3 recorded next and the probe
+re-ran on that fold (four games, two meetings), clean (§5). The rest recorded
+14:43:58Z to 15:03:49Z.
+
+**Leg 4** opened 15:04:43Z with probe seed 1000 (a meeting, so not vacuous;
+clean), recorded the rest and froze at 15:27:44Z: `splits.json` 30 / 10 / 10,
+the FROZEN line at `git_sha` 9bae2b03.
+
+### 2.0 The spend, against the ceilings
+
+| limit | authorized | actual | share |
+|---|---|---|---|
+| model calls | 9,500 | 7,270 | 76.5% |
+| input tokens | 46,000,000 (43,000,000 before the raise) | 41,556,280 | 90.3% (96.6% of the original) |
+| output tokens | 2,200,000 | 1,827,165 | 83.1% |
+| recording wall | 16 h | 10h53m28s | 68.1% |
+| elapsed window | 24 h | 11h05m48s | 46.2% |
+| marginal cost | `$0.00` | `$0.0000` on every recorded call | — |
+
+No ceiling was reached and no stop condition fired. The calls land within one
+of the previous record's 7,271 while input rises 31% (31,756,112 →
+41,556,280): the wave's bytes make no more model calls, they make larger ones —
+the ballot body the weighing channel enlarged.
 
 ### 2.2 The budget, against the ceilings
 
@@ -516,6 +564,16 @@ re-derived genuine-class == shipped compute_genuine_class_conversion
   (supplied 1/0, converted 0/0): FAIL
 ```
 
+That is the leg-1 run. On the final bytes, with the widened pattern, the step
+was re-run ALONE at the close (the extractor, then
+`experiments/lab/rubric_score.py <facts> --set-dir replays/samples/9p2i`, both
+exit 0) and the same check reads
+`(supplied 1/0, converted 1/0): FAIL` — the re-derivation counts one supplied
+and one converted genuine-class meeting where the shipped function counts none.
+The other sixteen self-checks pass, including the win split (39/11) and the
+eject-decided wins (38/38). The committed rubric is that run's output: 50
+games, 0.0 each.
+
 `experiments/lab/rubric_score.py::_facts_integrity_ok` reads that list, any
 `FAIL` sets the floor multiplier to 0, and every game's score becomes 0
 regardless of its dimensions. **It is independent of the pattern**, provably:
@@ -580,7 +638,26 @@ assumed.
 
 ### Legs 2 to 4
 
-*(written as each leg completes)*
+The same gate, the same bare shell, each leg before the next began. Every
+check PASSED on every leg; the lines that carry a count:
+
+| check | leg 2 `ml_corpus/9p2i` | leg 3 `samples/4p1i` | leg 4 `ml_corpus/4p1i` |
+|---|---|---|---|
+| `all_games_reach_game_over` | 150/150 | 50/50 | 50/50 |
+| `meeting_rate_and_resolution` | 1.0 (floor 0.60); 449 resolved, 0 unresolved | 0.78; 39 resolved, 0 unresolved | 0.86; 43 resolved, 0 unresolved |
+| `no_duplicate_meeting_rows` | 0 over 449 | 0 over 39 | 0 over 43 |
+| `no_tick_1_kills` | 0 | 0 | 0 |
+| `no_friendly_fire_kills` | 0 | 0 | 0 |
+| `no_betrayal_ballots_or_accusations` | 0 over 2,539 multi-impostor ballots | 0 over 0 | 0 over 0 |
+| `no_railroaded_crew_ejections` | 0 over 7,584 rendered crew suspicions | 0 over 63 | 0 over 65 |
+| `no_dangling_primary_reason_id` | 0 over 2,539 ballots | 0 over 117 | 0 over 129 |
+| `cost_and_provenance_exact` | the model, 4 prompt versions, substrate exact on 150 games | on 50 games | on 50 games |
+| `byte_identical_reconstruction` | 0 drifted | 0 drifted | 0 drifted |
+
+`bash scripts/verify_samples.sh <set>` verified all 150, 50 and 50 clean.
+Canonicality for leg 3 (the other sample leg): exactly seeds `0..49`, 50
+MANIFEST rows, no alias. The corpus legs' canonicality is the recorder's own
+freeze guard, which refuses anything but the exact locked seed set.
 
 ## 3.5 The delivery path: four gzipped reports, and the proof they moved nothing
 
@@ -637,13 +714,155 @@ Readability is not correctness, and only `--check` gates the second.
 
 ## 4. The AFTER column
 
-*(written once the four legs are in)*
+Computed on the re-recorded bytes with the same shipped tool as §1, nothing
+redefined:
+
+```
+$ uv run python scripts/publish_process_scorecard.py
+Wrote docs/process-scorecard.md and docs/process-scorecard.json: 3630 ballots over
+676 meetings; grounded 2434/3630; deviating EJECTs 178/1775; manufactured flags
+0/74; role-correctness is reported and gates nothing.
+$ uv run python scripts/publish_process_scorecard.py --check
+--check: docs/process-scorecard.md and docs/process-scorecard.json are consistent
+with the committed recordings.
+```
+
+Every cell below is copied from `docs/process-scorecard.md` (after) and §1.2 /
+§1.3 (before); none is computed here. 300 games in both columns; 672 → 676
+meetings; 3,631 → 3,630 ballots (2,146 → 2,098 EJECT, 1,485 → 1,532 SKIP).
+
+### 4.1 The before/after table
+
+Each cell reads **before → after**. `s9` is `samples/9p2i`, `c9`
+`ml_corpus/9p2i`, `s4` `samples/4p1i`, `c4` `ml_corpus/4p1i`.
+
+| # | row | pooled | `s9` | `c9` | `s4` | `c4` |
+|---|---|---|---|---|---|---|
+| 1 | grounded, EJECT | 2078/2146 = 0.9683 → **2083/2098 = 0.9929** | 507/527 = 0.9620 → 494/496 = 0.9960 | 1455/1499 = 0.9706 → 1476/1487 = 0.9926 | 50/51 = 0.9804 → 49/49 = 1.0000 | 66/69 = 0.9565 → 64/66 = 0.9697 |
+| 1 | grounded, SKIP | 0/1485 **by instruction** → **351/1532 = 0.2291** | 0/342 → 79/349 = 0.2264 | 0/1017 → 230/1052 = 0.2186 | 0/66 → 23/68 = 0.3382 | 0/60 → 19/63 = 0.3016 |
+| 1 | grounded, all ballots | 2078/3631 = 0.5723 → **2434/3630 = 0.6705** | 507/869 = 0.5834 → 573/845 = 0.6781 | 1455/2516 = 0.5783 → 1706/2539 = 0.6719 | 50/117 = 0.4274 → 72/117 = 0.6154 | 66/129 = 0.5116 → 83/129 = 0.6434 |
+| 2 | argmax-independence: deviating share of crew EJECTs | 116/1811 = 6.4% → **178/1775 = 10.0%** | 31/434 = 7.1% → 31/413 = 7.5% | 81/1270 = 6.4% → 147/1264 = 11.6% | 3/47 = 6.4% → 0/43 = 0.0% | 1/60 = 1.7% → 0/55 = 0.0% |
+| 2 | argmax-independence: role-correct, followers vs deviators (chance) | 94.5% vs 7.8% (31.6%) → **1537/1597 = 96.2% vs 17/178 = 9.6% (31.5%)** | 88.8% vs 6.5% → 359/382 = 94.0% vs 3/31 = 9.7% (29.8%) | 96.1% vs 8.6% → 1081/1117 = 96.8% vs 14/147 = 9.5% (30.6%) | 95.5% vs 0/3 → 42/43 = 97.7% vs 0/0 n/a | 100.0% vs 0/1 → 55/55 = 100.0% vs 0/0 n/a |
+| 3 | manufactured-contradiction rate (numerator/denominator; not evaluable) | 159/192 = 0.8281; 32 → **0/74; 74 — measured nothing** | 53/57; 4 → 0/17; 17 | 105/134; 28 → 0/57; 57 | 0/0; 0 → 0/0; 0 | 1/1; 0 → 0/0; 0 |
+| 4 | unexplained-decision rate | 20/3631 = 0.0055 → **17/3630 = 0.0047** | 4/869 → 5/845 | 15/2516 → 12/2539 | 1/117 → 0/117 | 0/129 → 0/129 |
+| 5 | evidence-quality mix (vent / contradiction / first-hand / hearsay / unevidenced, over ejections) | 333 / 10 / 75 / 8 / 3 of 429 → **326 / 5 / 70 / 10 / 0 of 411** | 68/7/17/3/0 of 95 → 70/2/16/2/0 of 90 | 220/3/52/4/2 of 281 → 211/3/51/8/0 of 273 | 19/0/4/1/0 of 24 → 19/0/1/0/0 of 20 | 26/0/2/0/1 of 29 → 26/0/2/0/0 of 28 |
+| 6 | rationale faithfulness (TOKENS; not evaluable) | 2874/2874 = 1.0000; 757 → **3015/3017 = 0.9993; 613** | 705/705; 164 → 708/708; 137 | 2014/2014; 502 → 2135/2136; 403 | 72/72; 45 → 80/81; 36 | 83/83; 46 → 92/92; 37 |
+| 7 | agent-authored share | 3531/3631 = 0.9725 → **3609/3630 = 0.9942** (see 4.2) | 842/869 → 841/845 | 2446/2516 → 2522/2539 | 116/117 → 117/117 | 127/129 → 129/129 |
+| 8 | wrong-but-believable rate — reported, never penalised | 383/2146 = 0.1785 → **462/2098 = 0.2202** | 113/527 → 119/496 | 251/1499 → 327/1487 | 9/51 → 7/49 | 10/69 → 9/66 |
+| 9 | role-correct ejection rate — **reported beside, gating nothing** | 383/429 = 0.8928 → **369/411 = 0.8978** | 82/95 → 81/90 | 252/281 → 241/273 | 20/24 → 20/20 | 29/29 → 27/28 |
+
+### 4.2 The two cells that carry their reading
+
+**Row 1, SKIP, before: `0` BY INSTRUCTION.** The pre-wave ballot template told
+the voter to leave a SKIP's basis empty, so no committed SKIP could carry one
+(§1.2). The after cell, 351 of 1,532, is the first measurement of what the
+agents do once the instruction asks for a basis. It is not a measured gain
+over zero; the zero was never a measurement.
+
+**Row 7, after: `1.0` BY CONSTRUCTION — for the rewrites the wave retired, and
+not for the whole row.** The card anticipated an after cell of 1.0 once the
+guards label rather than re-aim. The bytes say **0.9942**, and the difference is
+stated rather than rounded away. The two rewrite classes that made an evidence
+judgement — `under_gate_redirect` (83 before) and `uncited_coerced` (6 before)
+— read **0 after, by construction**: the grounded-SKIP card deleted both paths,
+and the redirect-marker census reads 0 on every set. What remains is the two
+rewrites that card KEPT on purpose and named as the only target-rewriting paths
+(`TestTheOnlyTargetRewrites`): `invalid_target` **8** (an illegal target cannot
+be tallied, so it records SKIP, labelled) and `teammate_coerced` **13** (the
+teammate firewall, a role rule the voter was told in its own prompt, not an
+evidence judgement). Before, those two read 4 and 7. So the guarantee is exactly
+this strong: **no ballot on these bytes was re-aimed on an evidence judgement**;
+21 were re-aimed by the two rules that are not about evidence. Citation-only
+rewrites, which never count against the share, fell 13 → 5.
+
+### 4.3 Row 3: a rate over nothing, and the census that carries the reading
+
+**Row 3 measured nothing on these bytes, and it must not read as a fall from
+0.8281 to 0.0000.** Every one of the 74 alibi-class flags is NOT EVALUABLE, so
+the evaluable denominator is **zero**. The basis test that owns the split is
+`eval.process_scorecard._flag_scored_claim_truth` (§1.4): a claim whose route
+carries more than one maximal stay is refused, because a recorded flag names the
+claim's event id and not the stay it rests on. The not-evaluable flags, split by
+cause with the shipped helpers (count-only, out of tree, no instrument changed):
+
+| set | alibi-class flags | rest on a multi-stay route | name no self-alibi speaker | evaluable |
+|---|---|---|---|---|
+| `samples/9p2i` | 17 | 13 | 4 | 0 |
+| `ml_corpus/9p2i` | 57 | 29 | 28 | 0 |
+| `samples/4p1i` | 0 | 0 | 0 | 0 |
+| `ml_corpus/4p1i` | 0 | 0 | 0 | 0 |
+| **pooled** | **74** | **42** | **32** | **0** |
+
+The same split over the preserved pre-record bytes reads 160 evaluable and 32
+naming no self-alibi speaker (4 in `samples/9p2i`, 28 in `ml_corpus/9p2i`) —
+the same class and, set by set, the same count as after. So the whole collapse
+of the evaluable denominator, 160 → 0, is the 42 multi-stay refusals plus the
+flags that stopped being minted at all; the refusals are new with the route
+claim, exactly as §1.4 and §7.1 anticipated.
+
+**The absolute census, after**, beside the before census of §1.4 (the same
+count-only reader, the same shipped `maximal_stays`):
+
+| set | meetings | alibi_conflict | alibi_vs_sighting | alibi_vs_physical | vent_sighting | alibi-class | all flags | flags/meeting | alibi/meeting |
+|---|---|---|---|---|---|---|---|---|---|
+| `samples/9p2i` | 151 → 145 | 21 → 0 | 31 → 11 | 5 → 6 | 90 → 90 | 57 → **17** | 147 → 107 | 0.9735 → 0.7379 | 0.3775 → **0.1172** |
+| `ml_corpus/9p2i` | 439 → 449 | 40 → 3 | 86 → 35 | 8 → 19 | 315 → 317 | 134 → **57** | 449 → 374 | 1.0228 → 0.8330 | 0.3052 → **0.1269** |
+| `samples/4p1i` | 39 → 39 | 0 → 0 | 0 → 0 | 0 → 0 | 20 → 20 | 0 → 0 | 20 → 20 | 0.5128 → 0.5128 | 0 → 0 |
+| `ml_corpus/4p1i` | 43 → 43 | 1 → 0 | 0 → 0 | 0 → 0 | 28 → 28 | 1 → **0** | 29 → 28 | 0.6744 → 0.6512 | 0.0233 → 0 |
+| **pooled** | **672 → 676** | **62 → 3** | **117 → 46** | **13 → 25** | **453 → 455** | **192 → 74** | **645 → 529** | **0.9598 → 0.7825** | **0.2857 → 0.1095** |
+
+**Self-alibi claim census**: 1,003 claims with **0** multi-stay before; **1,021
+claims, 959 multi-stay (0.9393)** after (`samples/9p2i` 231 of 240,
+`ml_corpus/9p2i` 675 of 715, `samples/4p1i` 28 of 35, `ml_corpus/4p1i` 25 of
+31). The scorecard's own claim census beside it: claims false under the envelope
+test 106 → 11, false under the strict test (in that room at no tick the claim
+covers) 2 → 0, and alibi claims naming another player 13 → 0.
+
+**What this census can and cannot say.** At a comparable meeting count (672 →
+676) the alibi-class flags fell from 192 to 74 and their rate per meeting from
+0.2857 to 0.1095, while the vent flags — which the route claim does not touch —
+held at 453 → 455. The `alibi_conflict` kind nearly vanished (62 → 3). That is
+the route claim's thesis, that an honest multi-room mover stops minting flags,
+read off absolute counts rather than a rate, and §6.1 shows it on a single
+featured game. It is NOT a measurement of how many of the remaining 74 flags
+are manufactured: row 3 cannot say, and no number here stands in for it. The
+`alibi_vs_physical` kind rose, 13 → 25; this record publishes that and does
+not explain it away.
+
+### 4.4 The other rows, read without a verdict
+
+- **Row 1**: grounded EJECT rose to 0.9929 pooled; the all-ballots cell rose
+  0.5723 → 0.6705 almost entirely through the SKIP half.
+- **Row 2**: deviations from the rendered suspicion argmax rose, 6.4% → 10.0%
+  pooled, with most of the rise in `ml_corpus/9p2i` (6.4% → 11.6%). The
+  direction memo asks that deviations be **at least as accurate** as follows;
+  they are not — 9.6% role-correct against 96.2%, and below the 31.5% chance
+  line computed over the same ballots. Reported, not ruled on. The 4p1i sets
+  carry no deviator at all after.
+- **Row 4**: 17 unexplained decisions, all SKIPs naming no player; no EJECT
+  with an unresolving citation (2 before).
+- **Row 5**: the unevidenced band emptied (3 → 0); vent flags carry 326 of 411
+  ejections (79%), against 333 of 429 (78%) before.
+- **Row 6**: two extracted tokens of 7,458 are absent from what their voters
+  held, against 0 of 6,796 before — two ballots. Row 6 tests tokens, not
+  propositions (§1).
+- **Row 8**: 0.1785 → 0.2202; the owner's preferred wrong case, reported and
+  never penalised.
+- **Row 9**: 0.8928 → 0.8978, **reported beside, gating nothing**.
 
 ## 5. The re-record log, and the operating events
 
-**No seed on disk re-recorded, on any leg, for any reason.** No
-`(deadline_default)` row was produced on leg 1. The events below are logged as
-they happened rather than smoothed away.
+**Three seeds re-recorded, all on leg 2 and all for the one reason the card
+sanctions** — a `(deadline_default)` row (event 3). No seed re-recorded for any
+other reason, and none to recover from a stall; there was no stall. The events
+below are logged as they happened rather than smoothed away.
+
+| leg | transients (handled retries) | `(deadline_default)` re-records | vacuous probe |
+|---|---|---|---|
+| 1 `samples/9p2i` | 1 — seed 25, attempt 1 of 8 | 0 | no |
+| 2 `ml_corpus/9p2i` | 1 — seed 1104, attempt 1 of 8 | 3 — seeds 1030, 1059, 1142 | no |
+| 3 `samples/4p1i` | 0 | 0 | **yes** — seed 0, re-run on seeds 0-3 |
+| 4 `ml_corpus/4p1i` | 0 | 0 | no |
 
 1. **Leg 1, seed 25 — one handled transient.** Attempt 1 of 8 failed with
    `RuntimeError: Featherless response carried no choices (model=
@@ -664,17 +883,290 @@ they happened rather than smoothed away.
    main phase then reported `Resume: 1/150 selected seed(s) already recorded;
    149 remaining` and re-proved that replay's provenance before trusting it.
 
+3. **Leg 2, seeds 1030, 1059 and 1142 — three `(deadline_default)` re-records,
+   cause logged as it happened.** The main phase recorded 149 of 149 and then
+   REFUSED TO FREEZE at 14:24:33Z: `check_replay_provenance: 6 violation(s)`,
+   two per seed — each replay carried one `deadline_default` failed-call row
+   and, with it, the `(deadline_default)` sentinel recorded as a non-baseline
+   model. A defaulted turn leaves a fallback husk in the transcript instead of
+   model output, so the guard's own words apply: presence alone must not make it
+   a corpus game. The three husks were removed and those three seeds alone
+   re-recorded (`--seeds 1030,1059,1142`, 505 s, 585 s and 302 s, every one
+   meeting-bearing, 14:25:27Z to 14:38:58Z); the plain `--set 9p2i` run then
+   skipped all 150 present replays, re-proved each one's provenance and froze.
+   Against the previous record's 5 over 250 games, this one carried 3 over 150.
+   Nothing about them tripped the stop rule: cost stayed `0.0000`, no refusal
+   survived the retry budget, and the leg never stalled.
+
+4. **Leg 2, seed 1104 — the leg's one handled transient.** Attempt 1 of 8,
+   `Featherless response carried no choices`, landed on the retry; the provider
+   was otherwise clean for 447 minutes.
+
+5. **Leg 2's push was refused, and the delivery path changed (§3.5).** The
+   derived eval report of `ml_corpus/9p2i` reached 102.70 MB against GitHub's
+   100 MB per-file limit. The leg's commit was re-made without the report
+   (never pushed with it, so no published history was rewritten) and pushed as
+   `7fd7040f`; the owner then chose gzip for all four reports.
+
+6. **Leg 3's first probe was VACUOUS and re-ran.** Seed 0 of `samples/4p1i`
+   recorded an impostor win with zero meetings, so folding the honesty
+   instruments on it would have certified nothing. Per the previous record's
+   §0.2 rule 5 a meeting-free probe is recorded VACUOUS and never counted as a
+   pass: seeds 1-3 recorded next (seeds 1 and 2 bore meetings) and the probe
+   re-ran on that four-game fold (two meetings), clean — no raise, no
+   unfoldable cell family. Seed 0 was kept, not re-recorded: it is a valid game
+   that happens to hold no meeting. The previous record hit the same thing on
+   the same leg; small 4p1i games often hold none (39 meetings over 50 games
+   here).
+
+7. **Legs 3 and 4 made zero provider retries.** Leg 4's probe phase exited 1 by
+   design, exactly as leg 2's did (the freeze guard refusing a 1-of-50 set), and
+   its probe seed bore a meeting.
+
 ## 6. The tour, and the ladder
 
-*(written after the legs)*
+### 6.1 The tour
+
+Re-pointed by [the spectator card](../tasks/work/spectator-tour-and-alternatives.md)'s
+measured criterion, re-run on the new bytes of both sample sets:
+
+```
+$ uv run python scripts/measure_featured_criterion.py
+replays/samples/4p1i — 50 games
+    role_proof flag   19 ejections  19 role-correct
+    other flag         0 ejections   0 role-correct
+    no flag            1 ejections   1 role-correct
+  first meeting ejects on a role_proof flag: 19 of 50 games
+replays/samples/9p2i — 50 games
+    role_proof flag   70 ejections  70 role-correct
+    other flag         2 ejections   1 role-correct
+    no flag           18 ejections  10 role-correct
+  first meeting ejects on a role_proof flag: 32 of 50 games
+  no flag and no ejection anywhere: seeds [2, 4, 10, 46]
+```
+
+The eligible openers, derived with the same predicate `tests/api/test_sets.py`
+re-implements: 9p2i seeds 0 1 3 5 6 8 11 15 16 17 18 19 20 21 22 23 24 25 27
+28 29 31 32 33 34 35 37 41 43 45 48 49; 4p1i seeds 1 2 4 6 13 14 18 19 20 26
+32 33 40 41 42 46 47 48 49. **Both heads stay eligible** (9p2i 23, 4p1i 2).
+
+Each featured game, measured on the served replay (turns per meeting; flags;
+the ejection per meeting):
+
+| game | baseline 8 | baseline 9 | label |
+|---|---|---|---|
+| 9p2i 23 (head) | 4 meetings, 8/7/6/5; m0 vent, EJECT; m1 two weak alibi flags, SKIP; m2 none, SKIP; m3 vent, EJECT | 4 meetings, 8/7/6/5; m0 vent, EJECT; **m1 no flag**, SKIP; m2 none, SKIP; m3 vent, EJECT | kept, **second clause dropped** |
+| 9p2i 13 | 3 meetings, 7/6/5 | **1 meeting, 7 turns**, no flag | **falsified; replaced by seed 0** |
+| 9p2i 46 | 4 meetings, 6/5/5/4; one weak flag; two ejections | 4 meetings, 6/5/5/5; **no flag, all four SKIP** | **replaced by seed 29** |
+| 9p2i 2 | 1 meeting, 7 turns, no flag | unchanged | true, kept |
+| 9p2i 0 (new) | — | 3 meetings, 8/7/6; m0 vent, EJECT; m1 three weak alibi-vs-sighting flags, SKIP; m2 vent, EJECT | eligible opener |
+| 9p2i 29 (new) | — | 4 meetings, 7/6/4/3; m0 vent, EJECT; m1 two cross-statement contradictions, EJECT; m2 none, SKIP; m3 vent, EJECT | eligible opener |
+| 4p1i 2 (head), 11, 29 | one meeting each, three turns | unchanged (29 now skips its meeting, which its label never claimed) | true, kept |
+
+**Seed 23's lost clause is game-level corroboration of §4.3.** The label read
+"...and the meeting files that apart from one account merely contradicting
+another", contrasting meeting 0's vent sighting with meeting 1's
+`alibi_conflict` and `alibi_vs_sighting` flags. On the same seed, re-recorded,
+meeting 1 carries no flag at all. Those two flags were the single-room envelope
+artifacts the route claim exists to stop minting against honest movers; here
+they stopped, on a game the tour leads with. The clause went because it was
+false, and the census in §4.3 is the same movement counted across all 676
+meetings.
+
+**Labels, all spoiler-free** (no ending, ejection, winner or tally; no task or
+audit IDs):
+
+- 9p2i 23: "Four meetings, twenty-six spoken turns. A player reports seeing
+  someone use a vent. Read which each ballot cites, and who else its voter
+  weighed."
+- 9p2i 0: "Three meetings, twenty-one spoken turns. A player reports seeing
+  someone use a vent, and a later meeting's only flags are weak signals.
+  Compare what each ballot cites in the two."
+- 9p2i 29: "Four meetings, twenty spoken turns. Reported vent sightings, and a
+  meeting whose flags are contradictions instead. Follow how the table turns
+  sightings and statements into accusations."
+- 9p2i 2 and the three 4p1i labels are unchanged.
+
+Every countable claim in a label (meetings, turns, "vent", "only flags are weak
+signals", "flags are contradictions", "no flagged contradictions") is read back
+from the served replay by `tests/api/test_sets.py`, each clause with its own
+planted failure.
+
+**The head-card guard, proven in both directions** (`cd frontend && npm run
+e2e`, `frontend/e2e/journey.spec.ts`): green on the re-pointed strip; with the
+head label's promise planted as "No flagged contradictions." the guard fails
+(1 failed / 7 passed, `journey.spec.ts:477`, expected 0, received 1); restored
+byte-identically (`cmp`) it passes (8 passed). The opposite direction, a
+flag-free game promoted to the head with a promise of flags, fails too
+(2 failed / 6 passed) and was restored the same way.
+
+**What the criterion could no longer isolate.** The planted rejections behind
+the head pin were re-derived by measurement: seed 7 is the new isolating case
+for the `role_proof` clause (its first meeting ejects an impostor two
+cross-statement flags name, and no flag in it is role proof; weakening the
+clause turns exactly that case green, 1 failed / 51 passed). No game in either
+set now has a first meeting that ejects a crewmate on any flag, so the role
+clause has no bracketing case of its own on these bytes; that gap is stated in
+the test rather than papered over.
+
+### 6.2 The ladder, and the cells the front door quotes
+
+**The ladder tip stands at baseline 9.** It moves with this record rather than
+with a relabel: the four sets above are the recording, and
+`scripts/check_doc_facts.py`'s `_LADDER_TIP_AUDIT` names this document in the
+same pull request. The owner's merge is what makes it the shown baseline.
+
+**These are PUBLISHED CELLS, not bars.** This record pre-registered nothing, so
+nothing below carries a verdict, a target or a pass/fail. They are published in
+the shape the front door's fact checker reads, so the front door quotes a
+committed source rather than a remembered one. Each is read off the four
+rebuilt eval reports' `deduction.ejectee_proof_cross_tab` block (the partition
+`scripts/build_sample_report.py` prints as "EJECTEE-proof partition"); the
+before column is the baseline-8 record's own published cells
+([`audit-phase-21-rerecord.md`](audit-phase-21-rerecord.md) §5.1). Intervals are
+Wilson 95%.
+
+#### Published cell 1 — non-direct conviction accuracy
+
+The ejections the crew reached WITHOUT engine-certified proof of the ejectee's
+role.
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 14/27 = 0.5185 | **11/20 = 0.5500** [0.3421, 0.7418] |
+| `ml_corpus/9p2i` | 32/61 = 0.5246 | **30/62 = 0.4839** [0.3641, 0.6055] |
+| `samples/4p1i` | 1/5 = 0.2000 | **1/1 = 1.0000** [0.2065, 1.0] — ADVISORY |
+| `ml_corpus/4p1i` | 3/3 = 1.0000 | **1/2 = 0.5000** [0.0945, 0.9055] — ADVISORY |
+| **pooled** | **50/96 = 0.5208** | **43/85 = 0.5059** [0.4017, 0.6096] |
+
+The pooled cell moved 0.5208 → 0.5059, inside overlapping intervals, and this
+record has no power to call that movement real in either direction. It is
+published unchanged.
+
+The direct-proof cell stays perfect: **326/326 = 1.0000** pooled (70 + 211 +
+19 + 26), against 333/333 before.
+
+#### Published cell 2 — innocent ejections
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 13 | **9** |
+| `ml_corpus/9p2i` | 29 | **32** |
+| `samples/4p1i` | 4 | **0** |
+| `ml_corpus/4p1i` | 0 | **1** |
+| **pooled** | **46** | **42** |
+
+Every innocent ejection still sits in the non-direct cell: the proof-present
+cell is innocent-free on both records, 0 of 326 here and 0 of 333 before. The
+two cells agree with each other by construction, and the arithmetic checks:
+85 − 43 = 42.
+
+#### The win split
+
+| set | baseline-8 impostor rate | baseline-9 impostor rate |
+|---|---|---|
+| `samples/9p2i` | 30% (15/50) | **22% (11/50)** |
+| `samples/4p1i` | 36% (18/50) | **36% (18/50)** |
+| `ml_corpus/9p2i` | 24% (36/150) | **30% (45/150)** |
+| `ml_corpus/4p1i` | 26% (13/50) | **28% (14/50)** |
+
+Read from each set's `MANIFEST.md` `winner` column. Win split is not a gate and
+is published only because the front door quotes it.
+
+### 6.3 Pins this record re-derived and publishes as their source
+
+`scripts/counterfactual_phase21.py` asserts four corroboration cells over the
+pooled four-set walk, which the counterfactual audit's Errata E.2 published for
+baseline 8. Re-derived by the script's own walk over these bytes, under the same
+Errata E.2 rule; this section is now their committed source:
+
+| cell | baseline 8 | baseline 9 |
+|---|---|---|
+| accused without a first-hand source | 460 / 1,525 | **529 / 1,516** |
+| ejected without a first-hand source | 10 / 425 | **16 / 409** |
+| ejected on an answering turn | 33 / 429 | **36 / 411** |
+| ejected with a walkable pair | 79 / 429 | **69 / 411** |
+
+Its `COMMITTED_INNOCENT_EJECTIONS` pin now cites published cell 2 above (9, 32,
+0, 1), which the script's own enumeration reproduces exactly.
+
+### 6.4 What the new bytes falsified, left red and reported
+
+Every test value that moved was re-derived from the new bytes through the
+production computation and is listed old → new in the card's Results. The tests
+below were NOT: each asserts a property that is no longer true of the committed
+bytes, and re-pinning it would have meant deleting or weakening an assertion.
+They stay red; `bash scripts/check.sh` fails on them, and on the ML tests of
+§7.3, and on nothing else. None was caused by an edit here: the re-record moved
+the world under them.
+
+| test | what the bytes now say |
+|---|---|
+| `tests/meetings/test_contradictions.py::TestTheAlibiIsARoute` (3 tests) | The seed-41 exhibit is gone: meeting 2 carries 0 recorded flags and p-9 now states a six-leg route. Searched over all 676 meetings, no recorded flag rests on a sole self-alibi that is one stay spanning more than a tick, so no successor exists. This is the route claim's own exhibit disappearing, and §4.3's census says the same across the corpus. |
+| `…::TestGroundedProsecutionCommittedCensus::test_the_fully_grounded_leg_drops_the_whole_class` | "Entirely weak" is false: the fully grounded re-derivation now keeps 8 STRONG flags beside 113 weak (was 0 and 120), all 8 on impostor subjects, all in meetings where movement diverges. |
+| `…::TestGroundedProsecutionInjusticeShapes::test_no_committed_ejection_rides_a_strong_sighting_flag` | "The class is empty" is false: 5 ejections ride a strong sighting flag, every ejectee an impostor; 4 exist only in the records-free re-derivation, 1 (`ml_corpus/9p2i` seed 1041 meeting 1) in the recording. |
+| `tests/meetings/test_transcript.py::TestCommittedBytesArtifactCollapse::test_rederivation_diverges_only_at_the_repaired_sites` | 4 new re-derived pairings are neither a weak proxy re-target nor the corridor band (seed 7 meeting 0 twice, one of them STRONG; seed 32 meeting 0; seed 38 meeting 1). |
+| `…::TestCommittedBytes1010Pins::test_seed25_m0_weak_cross_speaker_conflict_not_retargeted` | The shape is gone: `samples/9p2i` carries 0 `alibi_conflict` flags (21 before), and the only 3 in the four sets are single-author. |
+| `tests/meetings/test_reported_testimony_derive.py::TestRoutesOverTheCommittedRecord` (2 tests) | Premised on the legacy one-room alibi: every one of the 1,021 committed alibis is now a route. The byte round trip itself holds (0 of 275 mismatch); one test expects a statement per route LEG where production emits one per maximal STAY, which differ in 3 of 184 meetings. |
+| `tests/agents/test_reported_testimony.py::test_reported_rows_survive_in_every_candidate_bucket` | The render keeps 5,927 of 7,539 offered testimony rows = 0.786 in the >150-candidate bucket, under the 0.80 floor (0.962 before; the rows offered in that bucket doubled). A render-budget question for the owner. |
+| `tests/eval/test_evidence_honesty.py::test_the_instrument_and_the_detector_read_one_adjacency_rule` | The detector and the adjacency instrument measure a multi-leg route from different points: all 29 adjacent flags the detector keeps STRONG sit on multi-leg routes, and for 26 the sighting is within one tick of an INNER leg boundary but more than one tick from the route's outer ends, which the detector measures from. Single-leg routes never exposed the difference. |
+| `…::test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage` | With the old reported band restored, the fold now renders 32,123 rows against 32,037 recorded — slightly more, not fewer — though it still covers more first-hand ticks (28,359 against 20,629). |
+| `tests/api/test_evidence_mechanisms.py::test_the_flip_search_finds_exactly_the_named_meetings` | The statement-pair wrongful-conviction class it names is EMPTY on these bytes (baseline 8 had seed 41 meeting 2). The test's own comment says a closed class means the pin needs revisiting; the planted positive control still fires. |
+| `tests/api/test_view_model.py::test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment` | No last meeting in `samples/9p2i` carries a target-rewritten ballot; the one in any set (`ml_corpus/9p2i` seed 1056) was rewritten to SKIP and so shows no judgement. |
+| `…::test_report_tick_fog_keeps_the_reported_body` | **A real viewer gap the new bytes exposed.** At seed 13 tick 13 a body report and the game-ending kill share a tick; `api/replay_loader.py` restores the reported body only in MEETING phase, so the reporter's fogged view drops it (1 of 136 body reports). A product fix, out of this record's scope. |
+| `tests/scripts/test_counterfactual_phase21.py::test_the_memo_table_equals_a_live_four_set_run`, `::test_the_memo_marks_every_advisory_cell` | They hold `audits/audit-phase-21-counterfactual.md`, a baseline-8 memo, to a live run on the committed bytes: 42 of 43 pooled cells differ. A new table or erratum, or a re-scoped drift gate, is the owner's call. |
+
+**Restated rather than re-pinned, for the owner to confirm.** Where a pinned
+example seed no longer carried its shape, the same property was re-stated on a
+game that does, found by measurement: the wrong-ejection finale (seed 47 → 5),
+the weak-only innocent ejection (samples seed 47 → `ml_corpus/9p2i` seed 1135),
+the role-proof isolating case (seed 10 → 7), the gate-marker chip (a
+redirect chip, retired by ruling D6, → seed 7's invalid-target chip), the
+reporter-justice risk cases (swapped between the two 4p1i sets), the guard-drop
+reconciliation (now non-empty on one set, `ml_corpus/9p2i`, where it was
+non-empty on all four), and the legacy-projection tests of
+`build_sample_report` (every committed report is now stamped, so they run on a
+committed game with its stamps cleared). The card's Results lists each.
 
 ## 7. What this record does not discharge
 
-*(written at the close)*
+### 7.1 For the owner — three follow-ups this record exposes, and does not take
 
-### 7.1 For the owner — one follow-up this record exposes, and does not take
+**First: re-ground the ML fits on the baseline-9 corpus — the successor of Task
+21.17.** The committed surrogate, conviction and composed fits were ground by
+Task 21.17 on the baseline-8 `replays/ml_corpus/9p2i`. This record replaced
+that corpus, and its card forbids touching a fit, an artifact or
+`BAKEOFF_BASELINE_ID`, so the fits now describe games that are no longer in the
+tree. §7.3 quantifies every consequence: the offline
+`scripts/verify_ml_evidence.py` rows that FAIL, and the tests that load a fit
+through its corpus fence and are refused. **Task 21.17 deleted the STALE amnesty
+the previous re-record leaned on** ("so no future re-record can reach for a
+row-scoped downgrade again"), so there is no honest way to mark these rows as a
+declared gap here: they FAIL, and they stay red until the re-ground. Recommended
+as **the first card after this pull request merges**, on the SAME baseline-9
+bytes — re-fit by each instrument's committed recipe, re-derive the verdicts and
+reports, move `BAKEOFF_BASELINE_ID` with the fits, exactly as 21.17 did for
+baseline 8. It is a re-fit, not a re-record, and spends no model call.
 
-**A per-STAY basis test for row 3, so a multi-stay route becomes evaluable.**
+**Second: the genuine-class integrity disagreement that floors the rubric.**
+§2.1b names it in full. One of the gameplay extractor's self-checks reports that
+its re-derived genuine-class census disagrees with the shipped
+`compute_genuine_class_conversion` (`supplied 1/0, converted 1/0` on the final
+bytes), and `experiments/lab/rubric_score.py::_facts_integrity_ok` turns any
+such `FAIL` into a floor of 0 on **every** game's rubric score. Two production
+computations disagree about the same quantity; this record does not decide
+which is right, because that is instrument work and the instruments stay frozen
+during a measurement.
+
+Recommended as **a small card immediately after this pull request merges**: fix
+the disagreement, then regenerate `results-rubric-score.json` on the SAME
+baseline-9 bytes. It is a derived view, so that is a regeneration and **not a
+re-record** — the highlights surface is restored without reopening this record
+or spending a model call. Until then the committed rubric states what the
+shipped tool computes on these bytes, which is a record; the file it replaced
+described no bytes at all.
+
+**Third: a per-STAY basis test for row 3, so a multi-stay route becomes evaluable.**
 Today a recorded contradiction flag names the claim's event id, not the stay it
 rests on, so `_flag_scored_claim_truth` refuses any claim with more than one
 maximal stay rather than risk filing a caught lie as manufactured (§1.4). That
@@ -688,26 +1180,200 @@ per stay. That is **a new card after this one**, and it is **never a re-score of
 this record**: this record reads each recording as recorded, and a later
 instrument reads later bytes. Nothing here builds it, and nothing here is
 blocked on it — the absolute counts in §1.4 and §4 carry the reading in the
-meantime.
+meantime. §4.3 shows why it matters: on these bytes row 3's evaluable
+denominator is zero.
 
-**Second: the genuine-class integrity disagreement that floors the rubric.**
-§2.1b names it in full. One of the gameplay extractor's self-checks reports that
-its re-derived genuine-class census disagrees with the shipped
-`compute_genuine_class_conversion` (`supplied 1/0, converted 0/0`), and
-`experiments/lab/rubric_score.py::_facts_integrity_ok` turns any such `FAIL`
-into a floor of 0 on **every** game's rubric score. Two production computations
-disagree about the same quantity; this record does not decide which is right,
-because that is instrument work and the instruments stay frozen during a
-measurement.
+### 7.2 Deliberate staleness, named rather than hidden
 
-Recommended as **a small card immediately after this pull request merges**: fix
-the disagreement, then regenerate `results-rubric-score.json` on the SAME
-baseline-9 bytes. It is a derived view, so that is a regeneration and **not a
-re-record** — the highlights surface is restored without reopening this record
-or spending a model call. Until then the committed rubric states what the
-shipped tool computes on these bytes, which is a record; the file it replaced
-described no bytes at all.
+- **`meetings/schemas.py:1171`** is a docstring naming
+  `tournament-eval-report.json`, the one mention of the report inside a frozen
+  directory. It is not a reader, and the freeze forbids the edit, so it still
+  says `.json` until the freeze lifts.
+- **`scripts/run_tournament.py`'s staged per-run sidecar** stays uncompressed:
+  nothing reads it, it is per-seed and never committed, and converting it would
+  reach into the staging and resume machinery the recording depends on (§3.5).
+- **The lab probes under `experiments/lab/`** that open
+  `tournament-eval-report.json` by name (`forward_redesign_*`,
+  `inference_feasibility_probe.py`, `visibility_probe.py`) are historical lab
+  scripts no gate runs; they would need the `eval/report_io.py` reader to run
+  on today's tree, and are left as they stand.
+- **The corpus FROZEN lines carry a stale label.**
+  `scripts/record_ml_corpus.sh:1066` hard-codes "Task 15.12, baseline-8
+  re-record per Task 21.15" into the line it appends at the freeze, so both
+  committed corpus MANIFESTs say that of baseline-9 bytes. The line is the
+  recorder's output and the MANIFEST is fingerprinted: relabelling it by hand
+  would re-fingerprint the corpus, and editing the recorder's string is outside
+  the one edit this card allows the recorders. Routed to the owner as a
+  one-line recorder fix before the next corpus recording.
+- **Frozen prose that now describes history.** `meetings/manager.py` (about
+  lines 330 and 425) cites 83 and 6 committed ballots carrying the markers
+  ruling D6 retired; these bytes carry none. `orchestrator/game.py:423` still
+  says there is no separate archived v4 set, true and dated. The freeze forbids
+  both edits.
+- **Mechanisms with no committed consumer left.** `scripts/build_sample_report.py`'s
+  historical-projection branch (every committed report is now stamped, so none
+  is legacy-shaped; its tests run on a committed game with the stamps cleared),
+  and the ruling-D6 reconstruction accommodation in
+  `tests/meetings/test_prompt_byte_golden.py` (no committed ballot carries a
+  retired marker). Retiring either is a decision, not a re-pin; they are named
+  here and left.
+- **Historical records keep their baseline-8 fingerprints**:
+  `audits/tactical-gameplay/held-out.json` and
+  `tasks/work/portfolio-evidence-experience.md` describe the bytes of their own
+  day and were not edited.
+
+### 7.3 Limitations, stated at the strength the code delivers
+
+- **The rubric is zeros, and the viewer shows them.** Complete by the card's
+  letter, degraded by the pre-existing self-check failure (§2.1b, §7.1 second
+  item). Because the regenerated rubric now matches its recording, the served
+  view is fresh rather than stale, so every `samples/9p2i` card — in the local
+  viewer and in the published demo bundle — shows a "0/100" pacing badge where
+  the stale rubric showed "score unavailable". The badge is labelled an
+  internal heuristic; it is still a visible consequence of shipping the zeros,
+  and the owner's merge publishes it.
+- **Seventeen tests outside the ML set stay red** because the new bytes
+  falsified what they assert (§6.4); `check.sh` fails on them and on the ML
+  tests below, and on nothing else.
+- **The ML fits are not grounded on these bytes** (§7.1 first item), and the
+  gate says so rather than hiding it: the rows and tests below stay red.
+
+  **Why no row reads STALE.** The previous re-record re-derived only the
+  measured side of each pinned pair and moved a status to STALE where the
+  verifier itself returned it, through a declared grounding gap keyed to the
+  two corpus digests. Task 21.17 deleted that mechanism outright when it
+  re-ground the fits, "so no future re-record can reach for a row-scoped
+  downgrade again": the status vocabulary is OK / FAIL / ABSENT / INFO, and
+  `git log -S` shows nothing has re-added a declaration since. So nothing here
+  is marked STALE, and nothing was invented to mark it.
+
+  `uv run python scripts/verify_ml_evidence.py`, offline (never `--complete`):
+  61 checks, 36 OK, 13 FAIL, 7 ABSENT, 5 INFO, exit 1, measured before the
+  close recomputed the registry rows. The corpus on disk fingerprints to
+  `6536c68c…`; both committed fits record `cc54d3c0…`, the baseline-8 corpus.
+  Every drifted verdict field is corpus-derived, none corpus-independent, and
+  the weight-hash rows, the composed manifest (8/8) and the adoption
+  constraints all read OK.
+
+  | # | row | measured on baseline 9 | frozen committed figure | why the replaced corpus explains it |
+  |---|---|---|---|---|
+  | 1 | fit-corpus identity fingerprint | `6536c68c…` | `cc54d3c0…` | the record replaced the 150 replays and the MANIFEST of `ml_corpus/9p2i`; only the corpus digest differs, no weights, set or version keying |
+  | 2 | ML grounding | `6536c68c…` on disk | surrogate and conviction both fitted on `cc54d3c0…` | both fits were made on the baseline-8 corpus |
+  | 3 | surrogate top-1 (ranking) | 0.8846 (46/52) | 0.8246 (47/57) | the frozen weights scored on the re-recorded held-out split |
+  | 4 | surrogate SKIP-vs-eject | 0.4894 (46/94) | 0.3956 (36/91) | the same, over 94 re-recorded test meetings |
+  | 5 | surrogate verdict.json reproduces | 15 of 31 fields | 31 | the 16 differing fields are all corpus-derived |
+  | 6 | conviction flag-count Spearman | 0.8191 | 0.6670 | frozen conviction weights on the new test meetings |
+  | 7 | conviction conversion accuracy | 0.9255 (87/94) | 0.9451 (86/91) | the same |
+  | 8 | conviction verdict.json reproduces | 11 of 21 fields | 21 | the 10 differing fields are all corpus-derived |
+  | 9 | composed decision accuracy | 0.8404 | 0.9011 | the composed runner over both frozen fits on the new meetings |
+  | 10 | composed exact-outcome match | 0.8298 | 0.8352 | the same |
+  | 11 | composed convicting top-1 | 0.8846 | 0.8246 | the same |
+  | 12 | composed verdict.json reproduces | 9 of 17 fields | 17 | the 8 differing fields are all corpus-derived |
+  | 13 | in-tree family inventory | fixtures 2,196,053 B; audits growing | 2,196,250 B; 26,571,844 B | NOT an ML row: `docs/artifacts.md` lagged this branch (the regenerated W2 baseline fixture, the growing audit); recomputed at the close, after which the row reads OK |
+
+  **A finding that belongs with the re-ground.** Re-fitting the ballot
+  surrogate fresh on these bytes (as its own tests do) gives a held-out top-1 of
+  46/52, ABOVE the "honest ceiling" of 41/52 that
+  `training/surrogate/fidelity.py` documents as the most any surrogate of its
+  kind could reach, so `top1_ceiling_gap` reads −0.0962. No test asserts that
+  bound for the ballot surrogate; the measured gap is pinned, and whether the
+  ceiling still means what its docstring says is a question for the re-ground.
+
+  **The ML tests that stay red**, 45 before the registry recompute and 43 after
+  it, all for one cause, the fits' corpus:
+  - 28 where the product's fit-corpus fence refuses the replaced corpus ("fit
+    corpus or derivation drifted", recorded `cc54d3c0…`, measured `6536c68c…`):
+    26 in `tests/training` — `test_surrogate_runner.py` (11, two at setup),
+    `test_goodhart_probe.py` (9, seven at setup), `test_bakeoff_harness.py` (5),
+    `test_model_evidence_provenance.py` (1) — and 2 outside it,
+    `tests/eval/test_balance_eval_meeting_runner.py` and
+    `tests/experiments/test_torch_probe_excluded.py`;
+  - 9 that assert a frozen fit or a committed training artifact equals the live
+    corpus (`test_surrogate_runner.py` 5, `test_conviction_model.py` 3,
+    `test_bakeoff_methods.py`'s map-elites stamp 1, which could only be fixed
+    under `training/artifacts/`);
+  - 6 in `tests/scripts/test_verify_ml_evidence.py` whose OK controls run on the
+    real corpus and now read FAIL on rows 1-2 or the recompute rows (the other
+    2 of its 8 were the registry row 13, cleared by the recompute). Every status
+    assertion was left at OK: moving one to FAIL would be asserting the defect.
+
+- **Row 3 is not evaluable on these bytes** (§4.3): 74 of 74 alibi-class flags,
+  42 of them because the route claim made the accused's account multi-stay.
+  The absolute census is the reading until a per-stay basis test exists.
+- **A legibility residual the weighing card left for this record.** A
+  contradiction evidence row renders as `not first-hand: <subject> stated it at
+  this table`, and the sentence beside it is the DETECTOR's
+  (`flag.description`), not the subject's: accurate about provenance, misleading
+  about authorship. It is pinned
+  (`test_a_flag_somebody_else_spoke_into_is_a_statement_here`), changing it is a
+  prompt-byte change, and the prompt set is frozen under this record, so it
+  ships in these bytes as the weighing card left it.
+- **A pre-existing leak the wave recorded for the owner, not a wave item.** A
+  contradiction flag's description carries the weak-reason vocabulary
+  (`[weak signal: ungrounded sighting]` and its sibling), chosen by the
+  SPEAKER's own private record and rendered to every voter in the ballot's
+  contradictions block — measured by the weighing card's round 4 as moving in
+  23 of 60 generated meetings when only other participants' private records
+  change. Nothing in this record caused, widened or fixes it; whether a public
+  detector may price a private record is the owner's to route.
+- **The spend is counted from the committed bytes** (§2): it omits the three
+  discarded first attempts of leg 2's seed repairs, whose token counts were not
+  recoverable after the husks were removed. They were `$0.0000`.
 
 ## 8. The freeze, shown rather than asserted
 
-*(the window's `git log`, written at the close)*
+`main` did not move during the window: `git log --oneline 39a568c6..origin/main`
+prints nothing. The branch's own log, from the base to the close's last commit
+before this section:
+
+```
+f4961ad1 fix: keep the ML page inside its word budget and follow the moved citation
+c8c950fd frontend: re-derive the ballot-alternatives counts and regenerate the corpus fixtures
+b064bcff publish: re-curate the three public cases on baseline 9, every sentence checked against its recording
+8aac0d49 test: re-anchor the view-model, taxonomy and evidence-mechanism exhibits by measurement
+f21b2c6e docs: make four stale passages true of baseline 9
+f549f9e7 test: re-pin the corpus-only training values; the fenced fits stay red
+948abae1 test: re-pin the api, scripts and orchestrator suites on baseline 9
+d1b21e60 test: re-pin the eval, meeting and agent suites on baseline 9
+1bf839da tour: re-point the featured strip by the measured criterion on the new bytes
+07605e67 docs: re-derive the front door on baseline 9
+5d3b7a60 check_doc_facts: read the gzipped reports, follow the new record, compare prompt stamps per row
+a4bbee7f test: close the v5 prompt window — every committed recording stamps v6 and v8
+3eba9495 style: format the suspicion-row pin the parser commit left unformatted
+b3b007bf eval: the baseline-9 supply floors, measured on the new bytes, become the default
+946ab7ba docs: publish the process scorecard's after column on baseline 9
+83148aa6 derive: the rubric and the corrected W2 baseline, rebuilt on the new bytes
+134b10de build: deliver the four eval reports gzipped, proving no measured value moves
+ac2023ab record: leg 4 of 4 — replays/ml_corpus/4p1i, 50 of 50, FROZEN and gated
+9bae2b03 record: leg 3 of 4 — replays/samples/4p1i, 50 of 50, gated
+7fd7040f record: leg 2 of 4 — replays/ml_corpus/9p2i, 150 of 150, FROZEN and gated
+820704be docs: write leg 1 into the record while leg 2 records
+ee9c8dcf fix: let the gameplay extractor read a suspicion row without a trust column
+c1990957 record: leg 1 of 4 — replays/samples/9p2i, 50 of 50, gated
+50fe1526 docs: record the absolute flag census before the old bytes are gone
+1395b19d docs: record the owner's input-ceiling raise, and re-derive the projection
+27646d67 docs: commit the re-record's before column before the first seed stages
+```
+
+And the same log restricted to the frozen directories —
+`git log --oneline 39a568c6..HEAD -- engine agents meetings observation orchestrator`,
+which covers the prompt set under `agents/strategic/prompts/` — prints
+**nothing**. The card re-runs that command at the pull request's head.
+
+**The key scan, count-only, over every new byte.** Every file this branch adds or
+changes (`git diff --name-only --diff-filter=AM 39a568c6..HEAD`, the gzipped
+reports decompressed), matched against five key shapes — a Featherless `rc_`
+key, an `sk-` key, a bearer token, a `FEATHERLESS_API_KEY=` assignment, an
+`api_key` assignment — printing counts only:
+
+```
+$ uv run python <out-of-tree>/keyscan.py 39a568c6
+files scanned: 337; bytes scanned (gz decompressed): 300,846,527
+TOTAL matches: 0
+```
+
+Each pattern fires on a planted key (one match each), so the zero is a
+measurement and not a pattern that cannot match. Run during the close;
+the card re-runs it at the pull request's head. The key file the recording used
+was deleted from the operator's scratch directory, and no step of the close
+read the repository's `.env`.
