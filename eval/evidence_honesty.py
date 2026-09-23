@@ -2292,11 +2292,13 @@ def _leg_under_sighting(alibi: AlibiClaim, tick: int) -> AlibiSegment | None:
     the window this module reports for a flag the detector minted from the
     whole stay.
 
-    A ONE-stay account answers with that stay whatever the tick. That is the
-    shape every committed recording carries, and reading it unconditionally
-    keeps every recorded cell byte-identical to the pre-route module --
-    including a recorded flag whose sighting sits outside the stated window,
-    which earlier detector revisions could mint. A multi-stay account whose
+    A ONE-stay account answers with that stay whatever the tick. That was the
+    only shape recorded before accounts became routes, and reading it
+    unconditionally keeps every one-stay cell byte-identical to the pre-route
+    module -- including a recorded flag whose sighting sits outside the stated
+    window, which earlier detector revisions could mint. Recordings made since
+    carry multi-stay accounts too, and those answer with the covering stay
+    below. A multi-stay account whose
     stays all miss the sighting's tick is a pair this module cannot
     reconstruct, and it returns ``None`` exactly like the resolver's other
     unresolvable shapes, which the caller raises on rather than silently
