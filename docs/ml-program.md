@@ -173,10 +173,9 @@ The two models were re-fit, and their composed runner re-evaluated, on the corpu
 second re-recording left behind — `replays/ml_corpus/9p2i`, historical fingerprint
 `cc54d3c0…`. The original fingerprint omits roster and derivation code, so it describes
 historical evidence and cannot certify a fit against current inputs. Every row below re-derived under
-`scripts/verify_ml_evidence.py --complete` on that corpus. The 2026-09-22 re-recording then
-replaced it, so until the fits are re-fit on the new corpus the verifier reports those rows as
-FAIL against the bytes on disk, and says why
-([the re-recording's record](../audits/audit-2026-09-22-process-rerecord.md) §7).
+`scripts/verify_ml_evidence.py --complete` on that corpus; the
+[2026-09-22 re-recording](../audits/audit-2026-09-22-process-rerecord.md) replaced it, so they
+FAIL until the fits are re-fit.
 
 | instrument | verdict | the axes it was judged on |
 |---|---|---|

@@ -356,7 +356,7 @@ def test_a_reconstruction_that_misses_the_record_refuses(
         cf.run([_FAST_SET])
     message = str(excinfo.value)
     assert "DEFECT IN THIS SCRIPT" in message
-    assert "audits/audit-phase-21-rerecord.md" in message
+    assert "audits/audit-2026-09-22-process-rerecord.md" in message
 
 
 def test_the_impossible_transit_net_is_committed_and_labelled() -> None:
