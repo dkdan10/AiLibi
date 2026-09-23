@@ -480,7 +480,22 @@ ceiling, so the owner's raise was needed (the Amendment above is corrected).
     the owner is the re-ground, successor of Task 21.17, on the same bytes.
 16. **Attribution.** This close's commits carry `Co-Authored-By: Claude Opus
     5.5`, the model that wrote them; the recording commits before it carry the
-    earlier operator's trailer.
+    earlier operator's trailer. The review-fix round's commits after `e89509e1`
+    carry the trailer the coordinator set for that round,
+    `Co-Authored-By: Claude Fable 5.1`.
+17. **`replays/samples/4p1i/MANIFEST.md` stamps a commit no clone can
+    resolve.** All 50 rows stamp `git_sha` `5c75028e`. That is leg 2's first
+    commit, which carried the 102.70 MB report. The push refused it, and it
+    was re-made without the report as `7fd7040f`. It was never pushed and no
+    ref holds it. Leg 3's recorder runs all started between the two commits,
+    and `scripts/refresh_samples.sh:693` reads `HEAD` once per run. The two
+    commits share the parent `820704be`, and
+    `git diff --stat 5c75028e 7fd7040f` shows one difference only:
+    `replays/ml_corpus/9p2i/tournament-eval-report.json`, 235,845 lines
+    deleted. The deleted report's sha256 is `9b17bf9c…`, the bytes the gzipped
+    report delivers. So the recording code state is `7fd7040f`. The MANIFEST is
+    left as recorded, not hand-edited. The record discloses this in §5 event 5,
+    with the commands.
 
 ### Verification
 

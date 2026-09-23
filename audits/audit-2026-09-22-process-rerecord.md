@@ -924,6 +924,34 @@ below are logged as they happened rather than smoothed away.
    (never pushed with it, so no published history was rewritten) and pushed as
    `7fd7040f`; the owner then chose gzip for all four reports.
 
+   **One consequence was missed at the time: `samples/4p1i` stamps the
+   refused commit.** The refused commit was `5c75028e` (made 14:40:29Z). Leg 3
+   opened at 14:41:58Z, before the re-made `7fd7040f` (14:46:18Z), and every
+   leg-3 recorder run started in that gap. `scripts/refresh_samples.sh:693`
+   reads `HEAD` once when a run starts. So all 50 rows of
+   `replays/samples/4p1i/MANIFEST.md` stamp `git_sha` `5c75028e`. That commit
+   was never pushed, is not an ancestor of this branch and is held by no remote
+   ref, so a clone cannot resolve it. Its tree is `7fd7040f`'s plus the one
+   untracked report, so **the recording code state of `samples/4p1i` is
+   `7fd7040f`**. Measured in the recording checkout, where the commit still
+   exists as an unreachable object:
+
+   ```
+   $ git log -1 --format='%h %p' 5c75028e ; git log -1 --format='%h %p' 7fd7040f
+   5c75028e 820704be
+   7fd7040f 820704be
+   $ git diff --stat 5c75028e 7fd7040f
+    replays/ml_corpus/9p2i/tournament-eval-report.json | 235845 ------------------
+    1 file changed, 235845 deletions(-)
+   $ git show 5c75028e:replays/ml_corpus/9p2i/tournament-eval-report.json | shasum -a 256
+   9b17bf9c5ed7a61ed624cf159ede1103b53cdf210947816b71b57bb105f28848  -
+   ```
+
+   Both commits share the parent `820704be`, and the only difference is that
+   report. Its bytes are the `ml_corpus/9p2i` report that §3.5 delivers gzipped
+   (the same sha256). The MANIFEST is left as recorded and not hand-edited,
+   like the corpus FROZEN lines of §7.2.
+
 6. **Leg 3's first probe was VACUOUS and re-ran.** Seed 0 of `samples/4p1i`
    recorded an impostor win with zero meetings, so folding the honesty
    instruments on it would have certified nothing. Per the previous record's
