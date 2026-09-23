@@ -244,6 +244,21 @@ These stay:
 
 ## Acceptance
 
+- [x] Review correction: the delivery state is Implemented, not Verified. The acceptance checks
+  pass and the scoped gate holds (the red set at the head is main's minus this card's three ids),
+  but `bash scripts/check.sh` exits 1 on card A's 41 ids and card B's 6, and `docs/workflow.md`
+  defines Verified as the acceptance checks and the combined project gate passing. Proved by
+  `bash scripts/check.sh` at the head, with its exit code captured directly, and the `comm` of the
+  head's and main's red sets (Results, review corrections round 1).
+- [x] Review correction: the demo-bundle tree digest is per-checkout, not a pin. It folds each baked
+  replay's `created_at`, which the loader reads from the replay file's mtime
+  (`api/replay_loader.py:2481`, `created_at=_iso_mtime(path)`), so two checkouts of one commit bake
+  two digests on one host. The evidence is the file counts, the byte totals, a same-checkout
+  `diff -r`, and a digest with every `created_at` value blanked that reads the same in two
+  checkouts. Proved by `bake.py` and `digest.py` in two checkouts, and by `strip_diff.py`, which
+  finds that the 9 files differing between the checkouts differ only in `created_at` (Results, the
+  demo bundle).
+
 **Item 1: the report-tick fog** (one commit).
 
 - [x] **The loader re-opens a body reported on a game-deciding tick.**
@@ -593,12 +608,20 @@ platform.
 
 ## Results
 
-**Implemented and verified on the branch `work/report-fog-and-counterfactual-freeze`, not merged.**
-Delivery states (`docs/workflow.md`): Implemented (`1bd2180f` item 1, `31b0a82b` items 3 and 4, and
-this Results commit); Verified (every acceptance item below, and a gate whose red set is main's
-minus this card's three ids); Independently reviewed, Owner reviewed and Merged: not yet; Adopted:
-not applicable (a viewer repair and a test retirement, no experimental behaviour). The Status line
-stays `ready` for the orchestrator to flip with the task-index sentence.
+**Implemented on the branch `work/report-fog-and-counterfactual-freeze`, not merged.** Delivery
+states (`docs/workflow.md`):
+- Implemented: `1bd2180f` (item 1), `31b0a82b` (items 3 and 4), the Results commit `869526ac` and
+  the round-1 review-correction commit.
+- Verified: **no.** Every acceptance check below passes, and the scoped gate holds: the red set at
+  the head is main's minus this card's three ids. But `docs/workflow.md` defines Verified as the
+  acceptance checks *and* the combined project gate passing, and `bash scripts/check.sh` exits 1
+  here on card A's 41 ids and card B's 6 (the gate section below).
+- Independently reviewed: round 1 returned two blocking findings, both repaired (Review
+  corrections, round 1, below); a re-review is pending.
+- Owner reviewed and Merged: not yet.
+- Adopted: not applicable (a viewer repair and a test retirement, no experimental behaviour).
+
+The Status line stays `ready` for the orchestrator to flip with the task-index sentence.
 
 Host for every figure below: `Darwin 24.6.0 arm64`, a bare shell with no `AILIBI_*` export
 (`env | grep -c '^AILIBI_'` prints `0`). Base: `main` at `ff4c6bb8`, whose code, tests and
@@ -860,7 +883,20 @@ that case red with `Failed: DID NOT RAISE <class 'AssertionError'>`, and restori
 green again.
 
 **The demo bundle** (bake with the card's Validation one-liner, as `bake.py`; digest with its
-one-liner, as `digest.py`):
+one-liner plus a second, `created_at`-blanked digest, as `digest.py`; compare two trees with
+`strip_diff.py`).
+
+The raw tree digest is **per-checkout, not a pin**:
+- It folds each baked replay's `metadata.created_at` and each `replays.json` row's `created_at`.
+- The loader sets that field from the replay file's mtime (`api/replay_loader.py:2481`,
+  `created_at=_iso_mtime(path)`).
+- A fresh checkout of one commit writes new mtimes, so it bakes a different raw digest on the
+  same host.
+
+The evidence is therefore:
+- the file counts and the byte totals;
+- a `diff -r` of the before and after bakes made in one checkout;
+- a second digest with every `created_at` value blanked, which reads the same in two checkouts.
 
 ```python
 """Bake the demo bundle's data/ tree offline (the card's Validation command).
@@ -893,43 +929,142 @@ print("files:", summary.files, "bytes_written:", summary.bytes_written)
 ```
 
 ```python
-"""The card's tree digest: file count, byte total and a sha256 over the tree."""
+"""The card's tree digest, plus the same digest with every created_at value blanked.
+
+usage: python digest.py <data-dir>
+
+``created_at`` is the replay file's mtime (``api/replay_loader.py`` sets it from
+``_iso_mtime(path)``), so it differs between two checkouts of the same commit.
+The second digest replaces the value of each ``"created_at":`` (or
+``"created_at": ``) key with ``null`` before hashing; every other byte is hashed
+as written. Prints: files, bytes, raw digest, created_at values blanked, and the
+created_at-blanked digest.
+"""
 
 import hashlib
+import re
 import sys
 from pathlib import Path
 
+CREATED_AT = re.compile(rb'("created_at": ?)(?:"[^"]*"|null)')
+
 r = Path(sys.argv[1])
 fs = sorted(p for p in r.rglob("*") if p.is_file())
-h = hashlib.sha256()
+raw = hashlib.sha256()
+blanked = hashlib.sha256()
+hits = 0
 for p in fs:
-    h.update(
-        str(p.relative_to(r)).encode()
-        + b"\0"
-        + hashlib.sha256(p.read_bytes()).hexdigest().encode()
-        + b"\n"
-    )
-print(len(fs), sum(p.stat().st_size for p in fs), h.hexdigest())
+    data = p.read_bytes()
+    name = str(p.relative_to(r)).encode() + b"\0"
+    raw.update(name + hashlib.sha256(data).hexdigest().encode() + b"\n")
+    stripped, n = CREATED_AT.subn(rb"\1null", data)
+    hits += n
+    blanked.update(name + hashlib.sha256(stripped).hexdigest().encode() + b"\n")
+print(
+    len(fs),
+    sum(p.stat().st_size for p in fs),
+    raw.hexdigest(),
+    hits,
+    blanked.hexdigest(),
+)
 ```
 
-| bake | files | bytes | tree digest |
-|---|---|---|---|
-| featured list, base loader | 156 | 4,808,974 | `d8e619ea637cf855df5071dc08d56677a2c2b817e6f6fdf4ef68ba5ad5cb744a` |
-| featured list, a second base bake | 156 | 4,808,974 | `d8e619ea637cf855df5071dc08d56677a2c2b817e6f6fdf4ef68ba5ad5cb744a` |
-| featured list, `1bd2180f` loader | 156 | 4,808,974 | `d8e619ea637cf855df5071dc08d56677a2c2b817e6f6fdf4ef68ba5ad5cb744a` |
-| perturbed: `FeaturedGame("9p2i", 13)` alone, base loader | 16 | 389,688 | `68928ac5ff817e074abc1c2e98158aefec349f451ae4761c15fa413d17bd679c` |
-| perturbed: `FeaturedGame("9p2i", 13)` alone, `1bd2180f` loader | 16 | 389,857 | `db7e0e7827b1bebee0972e21f0078668adf978bea35f9531d230458c62ad29d7` |
+```python
+"""Name the files that differ between two data/ trees, raw and with created_at blanked.
 
-- `diff -r` of the two featured trees printed nothing and exited 0: **the baked bundle is
-  byte-identical**.
-- `diff -rq` of the seed-13 trees exited 1, naming exactly one file,
-  `9p2i/replays/headless-seed-13.json` (+169 bytes). So the diff would catch a featured frame that
-  changed.
-- The "after" bake ran from the working tree before the commit; `cmp` shows that loader
-  byte-identical to `1bd2180f:api/replay_loader.py`.
-- The card's file count and byte total reproduce. Its digest prefix `37afc888dd22ecc4…` does not
-  reproduce on this host: two base bakes read `d8e619ea…`. The before/after comparison ran on one
-  host and is unaffected. I pin what I measured.
+usage: python strip_diff.py <data-a> <data-b>
+Prints the count of files present in only one tree, the count of files whose raw
+bytes differ, and the files that still differ once every created_at value is
+blanked (the substitution digest.py makes). Exit 1 if any file differs after
+blanking or the file sets differ.
+"""
+
+import re
+import sys
+from pathlib import Path
+
+CREATED_AT = re.compile(rb'("created_at": ?)(?:"[^"]*"|null)')
+
+
+def blank(data: bytes) -> bytes:
+    return CREATED_AT.sub(rb"\1null", data)
+
+
+a = Path(sys.argv[1])
+b = Path(sys.argv[2])
+fa = {str(p.relative_to(a)) for p in a.rglob("*") if p.is_file()}
+fb = {str(p.relative_to(b)) for p in b.rglob("*") if p.is_file()}
+only = sorted(fa ^ fb)
+raw_diff = []
+blank_diff = []
+for name in sorted(fa & fb):
+    da = (a / name).read_bytes()
+    db = (b / name).read_bytes()
+    if da != db:
+        raw_diff.append(name)
+        if blank(da) != blank(db):
+            blank_diff.append(name)
+print(f"in one tree only: {len(only)}")
+print(f"raw differing files: {len(raw_diff)}")
+print(f"differing once created_at is blanked: {len(blank_diff)}")
+for name in blank_diff:
+    print(f"  {name}")
+sys.exit(1 if only or blank_diff else 0)
+```
+
+**Where and how it was measured** (round 1, 2026-09-23, `Darwin 24.6.0 arm64`), in two checkouts:
+- **Checkout 1:** this worktree at `869526ac`.
+- **Checkout 2:** a fresh detached scratch worktree at `ff4c6bb8`, removed afterwards.
+
+In each checkout the base loader (`ff4c6bb8:api/replay_loader.py`, which is `1bd2180f^`'s) and the
+fixed loader (`1bd2180f`'s, byte-identical at `869526ac`) were written in turn over the checkout's
+own `api/replay_loader.py` for a bake, and restored after it. No replay byte or mtime was touched.
+The raw digest is given in full once, because it is not a pin.
+
+| bake | checkout | files | bytes | raw digest (per-checkout) | `created_at` values | blanked digest |
+|---|---|---|---|---|---|---|
+| featured list, base loader | 1 | 156 | 4,808,974 | `015546b7…` | 14 | `dc2fcae1…` |
+| featured list, fixed loader | 1 | 156 | 4,808,974 | `015546b7…` | 14 | `dc2fcae1…` |
+| featured list, base loader | 2 | 156 | 4,808,974 | `3ebdb092…` | 14 | `dc2fcae1…` |
+| featured list, fixed loader | 2 | 156 | 4,808,974 | `3ebdb092…` | 14 | `dc2fcae1…` |
+| perturbed: `FeaturedGame("9p2i", 13)` alone, base loader | 1 | 16 | 389,688 | `d1c30b2e…` | 2 | `2e95cbbb…` |
+| perturbed: `FeaturedGame("9p2i", 13)` alone, fixed loader | 1 | 16 | 389,857 | `f03c7b2d…` | 2 | `45146872…` |
+| perturbed: `FeaturedGame("9p2i", 13)` alone, base loader | 2 | 16 | 389,688 | `24d165e2…` | 2 | `2e95cbbb…` |
+| perturbed: `FeaturedGame("9p2i", 13)` alone, fixed loader | 2 | 16 | 389,857 | `d091e4c4…` | 2 | `45146872…` |
+
+The full blanked digests:
+- featured list, both loaders, both checkouts:
+  `dc2fcae1df296338bbf54bbf042f3b0fb4a9e35d9bdf49f2bee6a88cbf7aeb66`;
+- seed 13 alone, base loader: `2e95cbbb59b17a191d06abc5fa1c0fbdb345af893754a04043e19cb2e4ca5457`;
+- seed 13 alone, fixed loader: `451468727f8ca2927e43982a14b70f39cc6286a7e1bd1b5e624a41599c6b3c3c`.
+
+What the measurements show:
+- **Same checkout, before and after.** In each checkout, `diff -r` of the base-loader and
+  fixed-loader featured trees printed nothing and exited 0. **The featured bake is byte-identical
+  before and after the fix**, in both checkouts.
+- **Across checkouts, the raw digest moves on `created_at` alone.** `strip_diff.py` over the two
+  checkouts' featured trees (fixed loader, and again for the base loader) printed:
+  - `in one tree only: 0`;
+  - `raw differing files: 9`;
+  - `differing once created_at is blanked: 0`;
+  - exit 0.
+
+  The 9 files are exactly the 9 that carry `created_at`: the seven featured replays
+  (`<set>/replays/headless-seed-<n>.json`) and the two `replays.json` listings.
+- **The perturbed proof.** In checkout 1, `diff -rq` of the two seed-13 trees exited 1 and named
+  exactly one file, `9p2i/replays/headless-seed-13.json` (+169 bytes). `strip_diff.py` names the
+  same file after blanking, in both checkouts, and the blanked digests differ (`2e95cbbb…` vs
+  `45146872…`) identically in both. So both the same-checkout diff and the blanked digest would
+  catch a featured frame that changed.
+- **The earlier digests were other checkouts' raw digests.** Round 0's `d8e619ea…` (featured) and
+  `68928ac5…` / `db7e0e78…` (seed 13) are withdrawn as figures, and so is its explanation that the
+  card's `37afc888dd22ecc4…` failed "on this host". Each of those was a raw digest read in another
+  checkout, and they differ from these for the same reason. Neither is a host effect, and none of
+  them is a pin. The card's file count and byte total do reproduce.
+- **The Pages rebuild.** It bakes in a fresh `actions/checkout` of each push
+  (`.github/workflows/pages.yml:46`, `:77`), so its served `created_at` values are its own
+  checkout's and move on every rebuild, whether or not this card merges. The same-checkout
+  comparison above shows that this card changes no byte of the featured payload.
 
 **Firewall and derived views, unchanged:**
 - `pytest -n auto tests/api tests/scripts/test_build_demo_bundle.py`: `476 passed, 2 skipped` (the
@@ -1184,7 +1319,9 @@ remain; after B merges the red set is card A's 41 alone):
 3. **One shared loader builder.** It keeps the no-op `AILIBI_EVIDENCE_QUALITY_LIFT` export in one
    place rather than copying it into a second fixture, and does not remove it: that is out of scope.
 4. **Figures are pinned as measured.**
-   - The bundle digest: see above.
+   - The bundle: the counts, the bytes, the same-checkout `diff -r` and the `created_at`-blanked
+     digest are the evidence. The raw tree digest folds replay mtimes, so it is per-checkout and
+     is not pinned (see above).
    - The decision memo's "233,746,908 bytes with the tournament reports" is every tracked file
      under `replays/samples` and `replays/ml_corpus` at `39a568c6` (316 files). The 300 replay files
      plus the 4 tournament reports come to 233,481,619 bytes. The docstring cites only the replay
@@ -1196,8 +1333,17 @@ remain; after B merges the red set is card A's 41 alone):
 
 ### Limitations
 
-- **Host.** The bundle measurements and the e2e run are Darwin arm64 only; the Pages rebuild runs on
-  Linux. The byte-identity claim is a same-host before/after comparison.
+- **`bash scripts/check.sh` does not pass, so this card is not Verified.** It exits 1 on 47 ids,
+  card A's 41 and card B's 6, which this card inherits from `main` and does not touch. By
+  `AGENTS.md` a card is done only when `check.sh` passes, and `docs/workflow.md` defines Verified as
+  the combined gate passing. What this card shows instead is the scoped gate the Constraints
+  define: its three ids are green, the red set at its head is main's minus those three, and every
+  other gate step is green. The last-merging card owes the fully green `main`.
+- **Host and checkout.** The bundle measurements and the e2e run are Darwin arm64 only; the Pages
+  rebuild runs on Linux. The byte-identity claim is a same-checkout before/after comparison, plus a
+  `created_at`-blanked digest that is equal across two checkouts on one host. The raw tree digest
+  is per-checkout (it folds replay mtimes through `created_at`) and is not a pin; no Linux digest
+  was taken.
 - **What is no longer pinned.**
   - Whole-run drift in the instrument's census and ledger output is caught only by the retained
     readings (tripwires, block-level cells, corroboration cells, OFF-equals-record, the refusals).
@@ -1210,3 +1356,82 @@ remain; after B merges the red set is card A's 41 alone):
 - **`docs/artifacts.md` has two writers.** This card changed row 109 and card A writes rows 103-104.
   Whichever merges second merges `main` first and re-runs
   `test_every_counted_registry_row_matches_the_index`.
+
+### Review corrections, round 1 (2026-09-23)
+
+Two review lenses each returned one blocking finding over the head `869526ac`. Both are valid.
+Both are repaired in this card's prose and in the PR body alone:
+- no code, test, `audits/`, recorded or generated byte moved in this round;
+- so registry row 109 stays at `26,635,440 tracked bytes / 329 files`;
+- every figure above that this round does not name stands as measured.
+
+**1. Results claimed the delivery state Verified while the combined gate exits 1** (the scope,
+policy and record-integrity lens).
+- *What was true at `869526ac`.* The Results head read "Verified (every acceptance item below, and a
+  gate whose red set is main's minus this card's three ids)". `docs/workflow.md:64` defines Verified
+  as the acceptance checks and the combined project gate passing, and `bash scripts/check.sh` exits
+  1 at that head. `c4deaa43` withdrew the same claim from `tasks/work/rubric-genuine-class-selfcheck.md`
+  for the same reason.
+- *Repaired.* The Results head now states Implemented, with Verified answered "no" and the reason.
+  A new first Limitations item states the rule and the scoped gate that holds instead. The Status
+  line stays `ready`, as the Constraints require.
+- *Proof.* The gate re-run below: `bash scripts/check.sh` still exits 1, and the red set at the
+  head is main's minus exactly this card's three ids.
+
+**2. The demo-bundle digests did not reproduce, and the stated cause (the host) was wrong** (the
+documentation lens).
+- *What was true at `869526ac`.* Results and the PR quoted digests as if they were pins: `d8e619ea…`
+  for the featured tree (three times), and `68928ac5…` / `db7e0e78…` for seed 13. They also said the
+  card's `37afc888dd22ecc4…` did not reproduce "on this host". On the same Darwin arm64 host, with
+  the same scripts, the reviewer read other digests in other checkouts, with the same counts and
+  bytes. The reviewer traced the difference to `api/replay_loader.py:2481`.
+- *Confirmed.* The loader sets `created_at=_iso_mtime(path)`, the replay file's mtime. Nine baked
+  files carry it: the seven featured replays and the two `replays.json` listings. The re-measurement
+  in two checkouts (the demo-bundle block above) found:
+  - the raw digests differ by checkout: `015546b7…` in one, `3ebdb092…` in the other;
+  - the 9 differing files differ only in `created_at` (`strip_diff.py`: 0 after blanking);
+  - the `created_at`-blanked digest is equal across the two: `dc2fcae1…`.
+
+  The reviewer's own digests (`9ad2b6d2…`, `6498ce41…`, `39cca46a…` / `2ade25a9…`) are per-checkout
+  in the same way, and are not re-cited as figures.
+- *Repaired.* The demo-bundle block, Decision 4 and Limitations now say that the raw digest is
+  per-checkout and is not a pin. They also withdraw the host explanation. The PR's Summary,
+  Definition of done and Decisions say the same.
+- *What still stands, now shown in two checkouts:*
+  - the featured bake is byte-identical before and after the fix within one checkout;
+  - the perturbed seed-13 bake differs in exactly one file, `9p2i/replays/headless-seed-13.json`
+    (+169 bytes).
+
+**The gate, re-run after these edits** (card prose only; `Darwin 24.6.0 arm64`, bare shell):
+
+- **`bash scripts/check.sh`**, run whole in this worktree with this round's card edits in place
+  (the only change against `869526ac`), **exited 1**, captured directly:
+  - these steps passed: ruff check ("All checks passed!"), ruff format (522 files), lint-imports (4
+    kept, 0 broken), `validate_task_docs.py` (390 phase tasks, 390 prompts, 77 work cards),
+    `generate_prompts.py --check` (390 in sync) and mypy (493 source files);
+  - pytest read `38 failed, 8244 passed, 20 skipped, 3 xfailed, 9 errors`, which is 47 red ids;
+  - `set -e` then stopped the script before the frontend legs.
+- **Main, re-measured.** The same pytest leg (`-n auto --dist loadfile`) ran in a fresh detached
+  scratch worktree at `ff4c6bb8`. That is `origin/main`, unchanged since the branch was cut. It read
+  `41 failed, 8246 passed, 20 skipped, 3 xfailed, 9 errors`, which is 50 red ids.
+- **The red sets.** `comm` of the two sorted id lists:
+  - main minus head is exactly this card's three ids:
+    - `tests/api/test_view_model.py::test_report_tick_fog_keeps_the_reported_body`;
+    - `tests/scripts/test_counterfactual_phase21.py::test_the_memo_marks_every_advisory_cell`;
+    - `tests/scripts/test_counterfactual_phase21.py::test_the_memo_table_equals_a_live_four_set_run`;
+  - head minus main is empty;
+  - the head's 47 are the ids listed with their owners in the gate section above: 41 in card A's
+    files and 6 in card B's.
+- **The other legs, run separately:**
+  - the frontend: `npm run lint`, `npm run tsc:check`, `npm run test` (20 files, `558 passed`) and
+    `npm run build`, each exit 0;
+  - `CI=1 npm run e2e`: `13 passed, 3 skipped` (the opt-in README media capture), exit 0;
+  - `scripts/verify_samples.sh`: exit 0, 50 and 50 clean;
+  - the four `build_sample_report.py --sample-dir <set> --check` runs, `publish_process_scorecard.py
+    --check`, `gen_frontend_types.py --check` and `check_doc_facts.py`: each exit 0;
+  - the offline `verify_ml_evidence.py` (never `--complete`): exit 1. `audits/ [(b)]` and the
+    in-tree family inventory are OK, and the same 12 FAIL rows remain, all card A's ML rows;
+  - the two registry-row tests: `2 passed`.
+- **After the commit.** This subsection was filled in afterwards (prose only). At the commit,
+  `validate_task_docs.py`, `generate_prompts.py --check` and `check_doc_facts.py` were re-run and
+  passed. The tree was clean after every leg, and the scratch worktree was removed.
