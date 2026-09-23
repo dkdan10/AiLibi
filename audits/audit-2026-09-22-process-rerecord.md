@@ -160,10 +160,10 @@ per-game input and projected to **43.09 M** over all 300 games — over the
 original ceiling by a margin too thin to record against. That is the reading
 the decision was taken on, and it is recorded here as the reason given.
 
-**The operator's own re-derivation, which lands lower, and why the two differ.**
+**The operator's own re-derivation, which lands lower, and what the 1.357x is.**
 This record re-measured the ratio MATCHED SEED BY SEED — the same ten seeds,
 the same roster, the new bytes against the preserved old ones — rather than
-against the previous record's whole-run per-game average:
+against the previous record's whole run:
 
 | | calls | input | output | input per game |
 |---|---|---|---|---|
@@ -171,10 +171,13 @@ against the previous record's whole-run per-game average:
 | OLD, the same ten seeds | 370 | 1,677,230 | 81,750 | 167,723 |
 | ratio new/old | **0.9514** | **1.2532** | **1.1099** | |
 
-The 210,195 figure reproduces to the digit. The **1.357x** does not: it divides
-that 9p2i per-game figure by the previous record's average over all four sets,
-and a 4p1i game costs about a ninth of a 9p2i game, so the pooled average is a
-lighter denominator than the population being measured. Matched seed by seed
+The 210,195 figure reproduces to the digit. The **1.357x** is not a per-game
+ratio. It reproduces only as the projection over the previous record's total
+input: 43.09 M / 31,756,112 = 1.357, where 43.09 M = 210,195 x 205. The record
+does not show how the 205 was derived, and this close could not reproduce it.
+This section first said the 1.357x divides the 9p2i per-game figure by the
+previous record's average over all four sets. That is false: the average is
+31,756,112 / 300 = 105,854, and 210,195 / 105,854 = 1.986. Matched seed by seed
 the input ratio is **1.2532**, and scaling the previous record's whole-run
 totals by the matched ratios projects:
 
@@ -191,10 +194,13 @@ run.** A 9p2i corpus game costs more input than a sample one (about 204K
 against 197K), so the projection re-derived per set at 111 of 300 games came to
 about **42.2 M** input — **98.1%** of the original 43,000,000 — and the actual,
 §2.2, landed at **41,556,280**, 96.6% of it: a margin of about 3%, far too thin
-to record against with re-records still possible. **The raise was needed.** The
-1.357x figure behind it was still derived the wrong way (it divides a 9p2i
-per-game cost by an all-four-set average); the decision was right for a reason
-its own arithmetic did not show.
+to record against with re-records still possible. **The raise was needed.**
+Against the actual 41,556,280, the owner's 43.09 M projection overshot by
+1.53 M. The matched-ratio projections undershot: the ten-seed 39.80 M above by
+1.76 M, and the fifty-seed 40.36 M of §2.2 by 1.20 M. Both matched projections
+scale the whole previous run by a ratio measured on `samples/9p2i` alone, and
+`ml_corpus/9p2i` grew more than that set did: 1.3251 against 1.2708 (22,680,439
+to 30,053,852 input, and 7,751,883 to 9,850,930).
 The calls ratio is worth its own line: the wave's bytes make **fewer** model
 calls per game, not more (0.9514), so the input growth is prompt size — the
 larger ballot body — and not extra traffic.
@@ -474,7 +480,8 @@ Scaling the previous record's whole-run totals by those ratios projects
 the original 43,000,000), **7,079** model calls (74.5%) and **1,765,277** output
 tokens (80.2%) — inside every ceiling, so leg 2 opened with no stop. This is the
 figure §0.4a's ten-seed reading is settled against: 1.2708 over fifty matched
-seeds against 1.357 over ten unmatched ones.
+seeds against 1.2532 over the first ten. The 1.357 the raise was taken on is
+not a matched ratio at all (§0.4a gives the arithmetic that reproduces it).
 
 **The calls ratio is below 1.** The wave's bytes make FEWER model calls per game,
 so the input growth is prompt size — the larger ballot body — and not extra
@@ -495,8 +502,12 @@ after:
 
 The SKIP row moves off zero for the first time, which is what the grounded-SKIP
 card was for. The redirect census reaching zero is the labelling guards: they
-label rather than re-aim, which is why §4's agent-authored share reads 1.0 **by
-construction** rather than as a measured gain. The last row is the control that
+label rather than re-aim, which is why the retired evidence-judgement rewrites
+(`under_gate_redirect` and `uncited_coerced`) read 0 **by construction** rather
+than as a measured gain. The agent-authored share itself is not 1.0: §4.2 reads
+it at 3609/3630 = 0.9942, because the two rewrites the wave kept
+(`invalid_target` and `teammate_coerced`) remain; `samples/9p2i` alone reads
+841/845. The last row is the control that
 separates a stale reader from a substrate regression, and it is why §2.1a is a
 parser finding and not a missing channel.
 
@@ -673,8 +684,13 @@ deliver all four reports gzipped.
 |---|---|---|---|
 | `replays/ml_corpus/9p2i` | 102.70 MB | **8.92 MB** | 11.51x |
 | `replays/samples/9p2i` | 33.86 MB | **2.89 MB** | 11.73x |
-| `replays/ml_corpus/4p1i` | 3.71 MB | **0.50 MB** | 7.48x |
-| `replays/samples/4p1i` | 3.37 MB | **0.46 MB** | 6.91x |
+| `replays/ml_corpus/4p1i` | 3.71 MB | **0.50 MB** | 7.35x |
+| `replays/samples/4p1i` | 3.37 MB | **0.46 MB** | 7.35x |
+
+The ratios are measured on the committed archives: 3,886,666 / 528,633 and
+3,535,583 / 480,717 bytes for the two 4p1i reports. The 7.48x and 6.91x in
+commit `134b10de`'s message are superseded. They were the old `ml_corpus/4p1i`
+report and a four-game partial of `samples/4p1i`.
 
 **The proof that no measured value moved.** For each set, three digests of the
 same bytes: the uncompressed file held out of tree BEFORE the change, the

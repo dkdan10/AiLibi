@@ -7,7 +7,7 @@ choice and nothing else: the bytes inside the archive are the identical bytes
 moves with it. The owner took the decision on 2026-09-22, at the re-record that
 first pushed a report over GitHub's hard 100 MB per-file limit
 (``replays/ml_corpus/9p2i`` reached 102.70 MB, and gzip ``-9`` takes it to
-8.92 MB — the four sets compress 6.9x to 11.7x).
+8.92 MB — the four sets compress 7.35x to 11.73x).
 
 Everything that resolves, reads or writes that file goes through THIS module, so
 a later format change is one edit rather than ten. The readers it serves are the

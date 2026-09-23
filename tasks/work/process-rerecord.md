@@ -211,9 +211,12 @@ per-leg budget accounting read 46,000,000 from here on.
 
 The record's own re-derivation lands lower and is published beside it
 (`audits/audit-2026-09-22-process-rerecord.md` section 0.4a): matched seed by
-seed against the preserved old bytes the input ratio is **1.2532**, not 1.357 —
-the larger figure divides a 9p2i per-game cost by the previous record's average
-over all four sets, and a 4p1i game costs about a ninth of a 9p2i one. On the
+seed against the preserved old bytes the input ratio is **1.2532**, not 1.357.
+The 1.357 is not a per-game ratio: it reproduces only as 43.09 M / 31,756,112,
+where 43.09 M = 210,195 x 205, and how the 205 was derived could not be
+reproduced. [Corrected in review: this paragraph first said the 1.357
+divides a 9p2i per-game cost by the previous record's all-four-set average,
+which gives 210,195 / 105,854 = 1.986, not 1.357.] On the
 matched ratio the run projects 39.8 M input, 6,917 calls and 1.77 M output,
 inside every ceiling including the original. [Corrected at the close: that
 ten-seed projection was too optimistic. A corpus game costs more input than a
