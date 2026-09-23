@@ -28,18 +28,22 @@ PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
 conversion rate (the RECALL lead).
 
 What the recorded sets read (evidence-backed / impostor ejections). All four were
-recorded at the ``baseline-8`` substrate -- model ``Qwen/Qwen3.6-27B``, every
-template at ``qwen3_6_27b.v5``, the twenty-one retired levers unconditional and
-``impostor_roll_call`` OFF -- as each set's ``MANIFEST.md`` records. Baseline 8
-is a maintenance record: it re-recorded the same sets on repaired code and
-decided nothing. It inherits baseline 7's substrate, and baseline 7 was adopted
-by explicit owner override of a FINDING verdict, its record having missed two of
-its own pre-registered bars (``audits/audit-phase-20-baseline-7.md`` §6.1).
+recorded at the ``baseline-9`` substrate -- model ``Qwen/Qwen3.6-27B``, the
+``accusation_round``, ``crewmate_report`` and ``impostor_report`` templates at
+``qwen3_6_27b.v6`` and ``vote_ballot`` at ``qwen3_6_27b.v8``, the twenty-one
+retired levers unconditional and ``impostor_roll_call`` OFF -- as each set's
+``MANIFEST.md`` records. Baseline 9 is the one combined re-record after the
+2026-09-19 substrate wave: it re-recorded the same sets at the same seeds on the
+wave's code, registered no bars and decided nothing
+(``audits/audit-2026-09-22-process-rerecord.md``). The settings under it trace
+back to baseline 7, which was adopted by explicit owner override of a FINDING
+verdict, its record having missed two of its own pre-registered bars
+(``audits/audit-phase-20-baseline-7.md`` §6.1).
 
-* ``replays/samples/9p2i``: 75/82 = 0.9146
+* ``replays/samples/9p2i``: 76/81 = 0.9383
 * ``replays/samples/4p1i``: 19/20 = 0.9500
-* ``replays/ml_corpus/9p2i``: 227/252 = 0.9008
-* ``replays/ml_corpus/4p1i``: 27/29 = 0.9310
+* ``replays/ml_corpus/9p2i``: 219/241 = 0.9087
+* ``replays/ml_corpus/4p1i``: 26/27 = 0.9630
 
 ``scripts/check_doc_facts.py`` re-derives all four rates from the committed
 reports and the model and prompt-set tokens from the four manifests, and fails

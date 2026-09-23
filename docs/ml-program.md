@@ -157,8 +157,8 @@ campaign requires an owner decision; documentation cannot re-price these edges.
 ## What the next recording changed under all of this
 
 The social layer these policies were searched against was rebuilt after the campaign closed,
-and the committed sets re-recorded twice, most recently at impostor win rates
-36% (4p1i) and 30% (9p2i).
+and the committed sets re-recorded three times, most recently at impostor win rates
+36% (4p1i) and 22% (9p2i).
 [`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3
 read the first: two met, two missed — **a FINDING, not an adoption; canon by an owner
 override dated 2026-08-26 (§6.1)**. A later recording met three of four: innocent

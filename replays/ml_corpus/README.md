@@ -1,23 +1,25 @@
-# ML-calibration corpus, re-recorded at baseline 8
+# ML-calibration corpus, re-recorded at baseline 9
 
 The frozen training/calibration corpus the ballot surrogate and the impostor
-bake-off consume, recorded at **exact baseline-8 config** — `Qwen/Qwen3.6-27B`
+bake-off consume, recorded at **exact baseline-9 config** — `Qwen/Qwen3.6-27B`
 on Featherless (non-thinking, `fail_loud`, `json_object`), the `qwen3_6_27b`
-prompt set (all four templates — `accusation_round`, `crewmate_report`,
-`impostor_report`, `vote_ballot` — at **v5**), the **baseline-8 lever slate**
+prompt set (`accusation_round`, `crewmate_report` and `impostor_report` at
+**v6**, `vote_ballot` at **v8**), the **baseline-9 lever slate**
 (the twenty-one retired levers, unconditional in code, with `impostor_roll_call`
 the **sole live toggle** and its recorded state **OFF**), `$0` flat-rate — with
 the FSM-default tactical-policy stamp on every game. The model has been locked
 since 2026-07-12.
 
-Two repair gates that guarded behavioural fixes were graduated before this
-recording opened and **deleted outright** rather than retired, so the stamp on
-every recorded game carries exactly twenty-two keys — the twenty-one retired
-levers plus the one live toggle — byte-identical to the previous recording's
-stamp. That equality is the cheapest available proof that the lever substrate
-did not move while the bytes did. The v5 prompt map is the bump that took the
-oracle voice out of the templates, and item 7 below is where that shows up in
-the recorded text.
+The stamp on every recorded game carries twenty-six keys: the twenty-one
+retired levers ON, the one live toggle OFF, and the four independently
+versioned meeting experiments — `reporter_reasoning`,
+`corroboration_discipline`, `testimony_shapes` and `temporal_observations` —
+all OFF. Its first twenty-two keys are identical, key for key and value for
+value, to the previous recording's whole stamp, which is the cheapest available
+proof that the lever substrate did not move while the bytes did; the four
+experiment keys are new to the stamp and record that none of those experiments
+ran. What did move is the code under the meeting layer and the prompt set: the
+three bespoke templates are at `v6` and the ballot at `v8`.
 
 Nothing trains against a meeting layer scheduled to change, so this corpus is a
 **separate release artifact** from the canonical `replays/samples/` baseline. It
@@ -49,14 +51,15 @@ canonical 0–49 game.
 > lapses across it. The corpus is the canary denominator, these samples are the
 > continuity anchor, and future phase closes re-adopt the pairing.
 
-> **These bytes are the baseline-8 record.** Both sets under `9p2i/` and
-> `4p1i/` were re-recorded at baseline 8 by a local operator session and pass
-> the acceptance gate: `validity_gate.py --expected-model Qwen/Qwen3.6-27B
-> --require-zero-cost` is green on each, reconstruction is byte-identical, every
-> recorded `game_over` stamp carries the baseline-8 lever slate + the locked
-> model + `$0` cost, and the `FROZEN` line in each `MANIFEST.md` names the
-> recording commit. The recorder's freeze-path guards (`check_replay_provenance`
-> — the model, the `$0` cost, and the **baseline-8 lever slate** on every
+> **These bytes are the baseline-9 record.** Both sets under `9p2i/` and
+> `4p1i/` were re-recorded at baseline 9 by a local operator session on
+> 2026-09-22 and pass the acceptance gate: `validity_gate.py --expected-model
+> Qwen/Qwen3.6-27B --require-zero-cost`, with the four expected prompt versions,
+> is green on each, reconstruction is byte-identical, every recorded `game_over`
+> stamp carries the baseline-9 lever slate + the locked model + `$0` cost, and
+> the `FROZEN` line in each `MANIFEST.md` names the recording commit. The
+> recorder's freeze-path guards (`check_replay_provenance`
+> — the model, the `$0` cost, and the **baseline-9 lever slate** on every
 > recorded stamp) PASS over the committed bytes by construction; they refuse
 > anything off-substrate (an earlier recording whose stamp carries a retired
 > lever OFF; a phantom seed) from being resumed-over and frozen.
@@ -71,8 +74,8 @@ replays/ml_corpus/
 
 Each set carries: `replay-seed-*.jsonl`, `MANIFEST.md` (with the `policy`
 column stamping `fsm-default`, plus the explicit `FROZEN` line naming the
-`git_sha`), `roster.json`, `tournament-eval-report.json` (the roles ground
-truth), and a committed by-game `splits.json` (train/val/test — **data only**;
+`git_sha`), `roster.json`, `tournament-eval-report.json.gz` (the gzipped
+eval report, which carries the roles ground truth), and a committed by-game `splits.json` (train/val/test — **data only**;
 the loader lives in the training package). The corpus keeps its original shape
 across the re-record — same 150-game 9p2i + 50-game 4p1i scale, same seed ranges, same split
 rule — so `CORPUS_SPLITS_PATH` stays structurally identical.
@@ -104,20 +107,23 @@ For 4p1i (50 games):  30 train / 10 val / 10 test.
 
 The corpus is honest about what it contains; this section is honest about what
 that implies. Four surfaces are measured: this corpus's two sets and the
-canonical `replays/samples/` twins, all four recorded at the same baseline-8
+canonical `replays/samples/` twins, all four recorded at the same baseline-9
 substrate — **S9** (`replays/samples/9p2i`, 50 games), **S4**
 (`replays/samples/4p1i`, 50 games), **C9** (`replays/ml_corpus/9p2i`, 150
-games), **C4** (`replays/ml_corpus/4p1i`, 50 games). Together: 300 games, 672
-meetings, 3,631 transcript turns and 3,631 ballots.
+games), **C4** (`replays/ml_corpus/4p1i`, 50 games). Together: 300 games, 676
+meetings, 3,630 transcript turns and 3,630 ballots.
 
-**Every figure below is current, and every one is re-derivable.** All nine items
-were recomputed from these committed bytes at this recording; nothing is carried
-forward from a previous one. Before trusting any of it, prove the bytes:
+**Which figures below are current.** The totals above, item 1 and the first two
+sentences of item 8 were re-derived on these baseline-9 bytes, and the gate
+re-derives their headline cells on every run. Every other figure in items 2 to 9
+was measured on the baseline-8 bytes this recording replaced and has not yet
+been re-derived on these: read it as that recording's reading until the same
+three folds are run again. Before trusting any of it, prove the bytes:
 `uv run python scripts/verify_ml_evidence.py` reconstructs all 300 games. Three
 folds then produce every figure, each of them offline and at `$0`:
 
 ```bash
-# (a) the REPORT fold — each set's own tournament-eval-report.json
+# (a) the REPORT fold — each set's own tournament-eval-report.json.gz
 uv run python scripts/check_doc_facts.py
 
 # (b) the REPLAY fold — re-seed the engine, walk every recorded tick, verify
@@ -162,8 +168,8 @@ section does not currently publish one.
    impostor never files a body report and never calls a meeting — the COVER
    branch is explicit: "after the kill the body is in the room and the impostor
    must not file a report" (`agents/tactical/impostor_policy.py:39-40`).
-   Measured across all four sets: meetings crew-triggered **672/672**, opening
-   turns crew-spoken **672/672**, and the tick streams carry **718/718**
+   Measured across all four sets: meetings crew-triggered **676/676**, opening
+   turns crew-spoken **676/676**, and the tick streams carry **722/722**
    `report` and **69/69** `emergency` submissions by crew — zero
    impostor-originated, anywhere. 100% of training examples therefore embed
    "the reporter is innocent" as an absolute prior. A crew model fitted here
@@ -307,12 +313,12 @@ section does not currently publish one.
 
 8. **Role-correlated public response shape.** The share of a role's transcript
    turns carrying a structured `whereabouts` observation (the roll-call
-   answer), pooled over turns: crew S9 **651/651 = 100.0%**, crew C9
-   **1,880/1,880 = 100.0%**, crew S4 **78/78 = 100.0%** and crew C4 **86/86 =
-   100.0%**, versus impostor S9 **106/218 = 48.6%**, impostor C9 **292/636 =
-   45.9%**, impostor S4 **6/39 = 15.4%** and impostor C4 **3/43 = 7.0%**. The
+   answer), pooled over turns: crew S9 **635/635 = 100.0%**, crew C9
+   **1,888/1,888 = 100.0%**, crew S4 **78/78 = 100.0%** and crew C4 **86/86 =
+   100.0%**, versus impostor S9 **104/210 = 49.5%**, impostor C9 **298/651 =
+   45.8%**, impostor S4 **2/39 = 5.1%** and impostor C4 **1/43 = 2.3%**. The
    estimator matters and is named: the *unweighted per-meeting macro-average*
-   of the same bytes reads 45.4% (S9) and 42.0% (C9) for the impostor side
+   of the same bytes reads 46.6% (S9) and 41.6% (C9) for the impostor side
    (`deduction.public_response_coverage`); the pooled turn-level figures above
    are the headline here. The mechanism is the templates' role-differentiated
    output contract, not model choice: the role-blind info-share/roll-call
@@ -355,11 +361,10 @@ section does not currently publish one.
    instead, and a crew stack trained here has effectively never seen a
    contested kill scene.
 
-Every cell in this section was re-derived on the committed bytes at this
-recording. The next re-record of all four sets moves every one of them again,
+The next re-record of all four sets moves every cell in this section again,
 and the same three commands re-derive them.
 
-## Recording (operator, `$0`, ~12h MEASURED)
+## Recording (operator, `$0`, ~11h MEASURED)
 
 This is an operator-run step gated on `FEATHERLESS_API_KEY`; it is **not** run in
 CI or by an agent session (the fake CI provider is refused — the corpus records
@@ -368,22 +373,21 @@ the committed bytes, not estimates — all four sets in one window:
 
 | leg | games | wall clock |
 |---|---|---|
-| `replays/samples/9p2i` | 50 | 3h 07m 00s |
-| `replays/ml_corpus/9p2i` | 150 | 7h 59m 32s |
-| `replays/samples/4p1i` | 50 | 0h 23m 15s |
-| `replays/ml_corpus/4p1i` | 50 | 0h 27m 48s |
-| **four legs, one window** | **300** | **12h 21m 01s** at **`$0.0000`** |
+| `replays/samples/9p2i` | 50 | 2h 24m 55s |
+| `replays/ml_corpus/9p2i` | 150 | 7h 45m 05s |
+| `replays/samples/4p1i` | 50 | 0h 20m 44s |
+| `replays/ml_corpus/4p1i` | 50 | 0h 22m 44s |
+| **four legs, one window** | **300** | **11h 05m 48s** at **`$0.0000`** |
 
-The four leg walls sum to 11h 57m 35s; the window total is 23m 26s longer
-because the last leg did not run straight through — a hard provider
-account-balance refusal stopped it at 49 of its 50 seeds, and it was completed
-on a resume. That is the resumable path below working as designed, and it is
+The four leg walls sum to 10h 53m 28s; the window total is 12m 20s longer
+because it also holds the gaps between recording phases — between the legs, and
+inside a leg between its probe seed, the rest of it, the re-record of three
+`ml_corpus/9p2i` seeds that carried a defaulted turn, and the finalize. Those
+re-records are the refused freeze below working as designed, and they are
 recorded here rather than smoothed into the leg row.
 
-Treat the previous recording's figures as history — it took roughly twice as
-long for the same 300 games, and the corpus legs alone (0h 47m 01s at 4p1i,
-16h 00m 16s at 9p2i, plus a 12m 33s repair pass) took more than the whole
-window does now. The prompt set is shorter per meeting call than it was.
+The previous recording's window was 12h 21m 01s for the same 300 games; the
+leg-by-leg comparison is in the record that adopted these bytes.
 Note the wall clock includes any time the machine spends asleep — a
 suspend pauses the run rather than corrupting it. Apply the accumulated
 operator notes (staggered worker starts, jittered backoff, per-seed atomic
@@ -402,8 +406,8 @@ to validate the pipeline end to end, then the long 9p2i leg:
 
 ```bash
 export FEATHERLESS_API_KEY=...          # hosted flat-rate; recorded as $0
-export AILIBI_LLM_PROVIDER=featherless  # the locked baseline-8 provider
-export AILIBI_PROMPT_SET=qwen3_6_27b    # the locked baseline-8 prompt set
+export AILIBI_LLM_PROVIDER=featherless  # the locked baseline-9 provider
+export AILIBI_PROMPT_SET=qwen3_6_27b    # the locked baseline-9 prompt set
 export AILIBI_SEED_MAX_ATTEMPTS=8       # raised transport retry budget for the long run
 bash scripts/record_ml_corpus.sh --set 4p1i    # short leg first
 bash scripts/record_ml_corpus.sh --set 9p2i    # then the long leg
@@ -413,10 +417,10 @@ Those four exports are the **whole** recording environment. The twenty-one retir
 levers are unconditional in code and need no env at all; `AILIBI_IMPOSTOR_ROLL_CALL`
 must stay **UNSET** (see below).
 
-The preflight locks the full baseline-8 substrate, not just the provider:
+The preflight locks the full baseline-9 substrate, not just the provider:
 
 - **the lever slate.** The preflight POSITIVELY checks the live substrate
-  snapshot equals the ruled baseline-8 state — the twenty-one retired levers ON and
+  snapshot equals the ruled baseline-9 state — the twenty-one retired levers ON and
   `impostor_roll_call` OFF — and refuses before any seed stages. A leftover
   `AILIBI_IMPOSTOR_ROLL_CALL` export would ship the **unshipped** impostor-answer
   arm into the record while the echo claimed the ruled substrate, and an
@@ -435,7 +439,8 @@ The preflight locks the full baseline-8 substrate, not just the provider:
 All three knobs are then exported pinned so the recorded substrate can never
 drift from the one the `MANIFEST` stamps. The prompt **versions** are locked too,
 not just the set name: the preflight asserts the registry still resolves
-`qwen3_6_27b` to the baseline-8 map (all four templates at v5), and the finalize
+`qwen3_6_27b` to the baseline-9 map (the three bespoke templates at v6 and
+`vote_ballot` at v8), and the finalize
 refuses to freeze a set unless every meeting-bearing `MANIFEST` row carries
 **exactly** that map (a foreign version string AND a stripped/partial row both
 refuse — the manager stamps the full set map on every meeting, so anything short
@@ -450,7 +455,7 @@ The wrapper composes the same tooling `scripts/refresh_samples.sh` drives
 (`scripts/run_tournament.py --tactical-policy-stamp fsm-default`,
 `scripts/_manifest_writer.py`, `scripts/build_sample_report.py`); it never edits
 them. Per set it stages each seed, moves only the replay JSONL into place,
-maintains `MANIFEST.md`, rebuilds `tournament-eval-report.json`, writes
+maintains `MANIFEST.md`, rebuilds `tournament-eval-report.json.gz`, writes
 `splits.json`, and appends the `FROZEN` line.
 
 `splits.json` can be regenerated from the recorded replays alone (no network):
@@ -471,7 +476,7 @@ written) — rows recorded by an earlier session keep that session's `git_sha`,
 so a resume never rewrites the provenance of bytes it did not record. File
 presence alone is not provenance: before a present replay is skipped as
 "already recorded" (and again before the freeze), the recorder proves its
-**bytes** carry the full baseline-8 provenance —
+**bytes** carry the full baseline-9 provenance —
 
 - the canonical **five-field** `fsm-default` tactical-policy stamp (not just
   its id: a hand-crafted stamp with non-canonical method/encoder/weights/anchor
@@ -480,7 +485,7 @@ presence alone is not provenance: before a present replay is skipped as
   and failed-call rows alike, so a wall-clock-miss phantom or a foreign-model
   recording is refused);
 - exactly `$0` recorded cost;
-- the **baseline-8 lever slate** stamped **positively** on the `game_over` record
+- the **baseline-9 lever slate** stamped **positively** on the `game_over` record
   (the same tolerant per-lever match the validity gate and the loader enforce:
   every one of the twenty-one retired levers present and True — including the
   meeting-layer graduations `roll_call_round` / `whereabouts_interior_flags` /
@@ -517,8 +522,8 @@ no `deadline_default` check at all; it rejects the sentinel shape only
 incidentally, via the model column. The corpus recorder is deliberately stricter
 than the gate here, because the corpus is a training artifact.)
 
-**Expect to iterate.** Two records ago the repair pass ran to 10 of 150 seeds
-and cost 2h43m; the one before these bytes paid 2 of 150 in 12m33s. The
+**Expect to iterate.** Earlier records' repair passes ran to 10 of 150 seeds
+(2h43m) and to 2 of 150 (12m33s); these bytes needed 3 of 150. The
 committed bytes carry **zero** `deadline_default` rows on all four sets, which
 is what a clean freeze means — but budget a repair pass anyway: the rate is a
 property of meeting length, and a re-recorded seed can pick up a fresh default.
@@ -534,9 +539,9 @@ bash scripts/record_ml_corpus.sh --set 9p2i     # records ONLY the dropped seeds
 Re-recorded seeds have come back clean on the first retry at every record so
 far. **A refused freeze costs only the bad seeds**, never the good ones:
 provenance is checked separately from presence, so hours of recorded work
-survive the refusal untouched. The same separation is what let the interrupted
-4p1i leg of this record resume over its 49 completed seeds rather than re-run
-them.
+survive the refusal untouched. The same separation is what let this record's
+9p2i corpus leg re-record its three defaulted seeds and resume over the other
+147 rather than re-run them.
 
 > **Dropping phantoms while the leg still runs is safe — the finalize refuses a
 > short set.** `check_seed_count` asserts the exact contiguous locked set
@@ -565,7 +570,7 @@ For a long, flaky hosted run, raise the per-seed transport retry budget:
 directory that carries `replay-seed-*.jsonl` but no `FROZEN` line in its
 `MANIFEST.md` is a **partial** (not-yet-finished) recording — re-run to complete
 and freeze it before running the acceptance gate. A session spanning a UTC
-midnight is expected at the measured **~12h** for all four sets (see the section
+midnight is expected at the measured **~11h** for all four sets (see the section
 header for the per-leg breakdown); `MANIFEST` dates are honest per-seed, so
 mixed dates across a set are correct rather than suspect — the gate checks
 coherence, not uniformity.
@@ -583,8 +588,8 @@ The pointer to the bytes is an **annotated tag** cut after the record lands.
 Dispatch environments refuse tag pushes, so this is an operator-session step:
 
 ```bash
-git tag -a "baseline-8-corpus-$(git rev-parse --short HEAD)" -m "…substrate + acceptance…"
-git push origin "baseline-8-corpus-$(git rev-parse --short HEAD)"
+git tag -a "baseline-9-corpus-$(git rev-parse --short HEAD)" -m "…substrate + acceptance…"
+git push origin "baseline-9-corpus-$(git rev-parse --short HEAD)"
 ```
 
 Both halves are provenance: the freeze line answers "what code made this?", the

@@ -346,8 +346,8 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   0.5208 → 0.6970, the wrongful-ejection total more than halved, the reporter's
   own count 34 → 11) and bar 4 is MISSED, the reporter's share of that much
   smaller total reading 0.5500 against a target of < 0.40. So the three Wave-2 levers
-  stay toggles, the ladder tip stays at baseline 8, and the canonical sets keep
-  their baseline-8 bytes; the recording is preserved as named non-canonical
+  stay toggles, the reference recording stays at baseline 8, and the canonical
+  sets keep their baseline-8 bytes; the recording is preserved as named non-canonical
   evidence on a pinned commit. It also carries the per-leg gates and tripwire
   readings, the five non-opening `deadline_default` re-records, the duration
   against the pre-committed projection, and a secondary section — observed,
@@ -364,7 +364,7 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   of a wrongful-ejection total that fell from 46 to 20 reading
   11 of 20 = 0.5500 against a registered 0.40, so the rule returns a finding.
   Nothing graduated, no override was made, the three Wave-2 levers stay live
-  toggles, and the ladder tip stands at baseline 8. The close files five
+  toggles, and the reference recording stays at baseline 8. The close files five
   defects of its own and carries a sixth from the phase before it; the sharpest
   is that this document is itself held by no gate, and one of the five is a
   narration the previous close had already caught once, re-staled by the
@@ -382,7 +382,8 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   before/after table over the nine process rows, and the re-pointed tour. It
   publishes cells only: no pre-registration, no bar, no verdict, and no
   attribution of a cell to one card of the wave. Role-correct ejection is
-  reported beside every cell and gates nothing.
+  reported beside every cell and gates nothing. It mints baseline 9, and the
+  ladder tip stands at baseline 9.
 
 ## Cleanup measurements
 
