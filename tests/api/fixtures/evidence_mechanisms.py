@@ -20,10 +20,11 @@ the pipeline actually does on the committed bytes, so a future phase can tell at
 a glance whether its change moved the mechanism — and so a change that moves it
 by accident fails loudly here.
 
-The baseline-7 record is that future phase. All four mechanisms are FLIPPED on
-its bytes: each anchor now records the baseline-7 reading, and each carries the
-baseline-6 reading it replaced as one frozen line, so the flip is legible here
-rather than only in the audit (audits/audit-phase-20-baseline-7.md §4).
+The baseline-7 record is that future phase. All four mechanisms FLIPPED on its
+bytes (audits/audit-phase-20-baseline-7.md §4). Each anchor records the reading
+on the current committed bytes (baseline 9), and each carries the baseline-6
+reading it replaced as one frozen line, so the flip is legible here rather than
+only in the audit.
 """
 
 from __future__ import annotations
@@ -130,32 +131,11 @@ PROVENANCE_IMPOSSIBLE_SIGHTING: Final[EvidenceMechanism] = EvidenceMechanism(
             ejected_player_id=None,
             ejected_role=None,
             impostors=("p-6", "p-7"),
-            # On baseline 8 the mechanism's flag is DEMOTED rather than absent:
-            # two survive, both weak-banded and both naming p-4, and the table
-            # still skips. The conviction this exhibit is about — a STRONG
-            # alibi_vs_sighting carrying a crewmate out — does not happen.
-            flags=(
-                MechanismFlag(
-                    kind="alibi_conflict",
-                    category="weak_signal",
-                    subjects=("p-4",),
-                    speaker_a="p-4",
-                    speaker_b="p-4",
-                    self_linked=False,
-                    weak=True,
-                    description_contains="[weak signal: self-stated",
-                ),
-                MechanismFlag(
-                    kind="alibi_vs_sighting",
-                    category="weak_signal",
-                    subjects=("p-4",),
-                    speaker_a="p-4",
-                    speaker_b="p-7",
-                    self_linked=False,
-                    weak=True,
-                    description_contains="[weak signal: narrow alibi",
-                ),
-            ),
+            # The mechanism's flag is GONE, not demoted: the meeting carries no
+            # contradiction at all, and the table skips. The conviction this
+            # exhibit is about — a STRONG alibi_vs_sighting carrying a crewmate
+            # out — does not happen. (Baseline 8 carried two weak flags on p-4.)
+            flags=(),
             baseline6=(
                 "EJECTED p-4 (CREWMATE) on one STRONG alibi_vs_sighting whose "
                 "sighting side was authored by impostor p-7"
@@ -183,14 +163,15 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
         "restated observation passes as evidence against a third party."
     ),
     audit_ref="audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 12 M0)",
-    # PARTLY FLIPPED on baseline 8, and the halves are stated separately because
-    # they moved in opposite directions. The EVIDENCE half held: the fatal STRONG
-    # flag is still gone and both survivors are weak-banded. The OUTCOME half did
-    # not: this meeting ejects the crewmate p-5, where the previous recording
-    # skipped. So the mechanism's own claim — "no longer ejects an innocent" — is
-    # false on these bytes, and the exhibit says so rather than keeping a status
-    # its anchor contradicts. Same family as the sole-flag class re-opening
-    # (audits/audit-phase-21-rerecord.md §5.1.1); the Wave-2 record rules on it.
+    # PARTLY FLIPPED on baselines 8 and 9, and the halves are stated separately
+    # because they moved in opposite directions. The EVIDENCE half held: the
+    # fatal STRONG flag is still gone, and on baseline 9 the meeting carries no
+    # flag at all. The OUTCOME half did not: this meeting ejects a crewmate (p-2
+    # on baseline 9, p-5 on baseline 8), where the baseline-7 recording skipped.
+    # So the mechanism's own claim — "no longer ejects an innocent" — is false on
+    # these bytes, and the exhibit says so rather than keeping a status its
+    # anchor contradicts. Same family as the sole-flag class re-opening
+    # (audits/audit-phase-21-rerecord.md §5.1.1).
     status="PARTLY FLIPPED",
     anchors=(
         MechanismAnchor(
@@ -199,34 +180,13 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
             meeting_index=0,
             tick=7,
             outcome="EJECTED",
-            ejected_player_id="p-5",
+            ejected_player_id="p-2",
             ejected_role="CREWMATE",
             impostors=("p-1", "p-7"),
-            # The fatal STRONG flag against p-3 is gone. What survives names
-            # p-5, and BOTH survivors are weak-banded — but the ejection landed
-            # on p-5 anyway, which is the half that regressed.
-            flags=(
-                MechanismFlag(
-                    kind="alibi_conflict",
-                    category="weak_signal",
-                    subjects=("p-5",),
-                    speaker_a="p-5",
-                    speaker_b="p-5",
-                    self_linked=False,
-                    weak=True,
-                    description_contains="[weak signal: self-stated",
-                ),
-                MechanismFlag(
-                    kind="alibi_vs_sighting",
-                    category="weak_signal",
-                    subjects=("p-5",),
-                    speaker_a="p-4",
-                    speaker_b="p-5",
-                    self_linked=False,
-                    weak=True,
-                    description_contains=("[weak signal: endpoint-tick si"),
-                ),
-            ),
+            # The fatal STRONG flag against p-3 is gone, and no flag replaced it —
+            # but the table ejected the crewmate p-2 anyway, which is the half
+            # that regressed. (Baseline 8 ejected p-5 on two weak flags naming it.)
+            flags=(),
             baseline6=(
                 "EJECTED p-3 (CREWMATE) on a STRONG alibi_vs_sighting built "
                 "from two innocents' statements (p-3's alibi, p-9's sighting)"

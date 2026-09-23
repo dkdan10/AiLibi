@@ -881,49 +881,56 @@ def test_finale_pins_committed_wrong_ejection_game(
 ) -> None:
     """The contrast case: an impostor win decided by a WRONG ejection.
 
-    seed-47 loses the crewmate p-8 to a kill at tick 22 and hands the impostors
-    parity at tick 42, with only ONE ejection all game (the impostor p-9 at tick
-    25) across five meetings. It is the exhibit that makes the recap's "what they
-    knew vs the truth" split legible — a SKIP names nobody
-    (``final_vote_named_impostor`` is ``None``) while the surviving crewmate's
-    ballot is judged ``True`` — and the reason the finale must be reveal-gated on
-    the frontend at all.
+    seed-5 ejects the impostor p-3 at tick 8, skips at tick 13, and at its LAST
+    meeting (tick 14) ejects the crewmate p-1 while the impostor p-4 stays — had
+    that table ejected p-4 instead, both impostors would have been out. p-4's
+    kills at ticks 20 and 25 then hand the impostors parity. It is the exhibit
+    that makes the recap's "what they knew vs the truth" split legible — every
+    ballot that named p-1 named a crewmate, so ``final_vote_named_impostor`` is
+    ``False``, while p-1's own SKIP names nobody (``None``, not ``False``) — and
+    the reason the finale must be reveal-gated on the frontend at all.
+    RE-ANCHORED from seed-47 at the baseline-9 re-record (now a crew task win).
     """
 
-    replay = nine_p_two_i_loader.load_replay("headless-seed-47")
+    replay = nine_p_two_i_loader.load_replay("headless-seed-5")
     finale = replay.finale
     assert finale is not None
     assert finale.winner == "IMPOSTORS"
     assert finale.winner_reason == "IMPOSTOR_PARITY"
-    assert finale.final_tick == 42  # was 28
+    assert finale.final_tick == 25  # was 42 at the seed-47 anchor
 
     ejections = [e for e in finale.decisive_events if e.kind == "ejection"]
-    # was [(25, "p-9"), (26, "p-4")]
-    assert [(e.tick, e.subject_id) for e in ejections] == [(25, "p-9")]
-    # The other four meetings resolved without an ejection and are recorded as
-    # such — a skipped meeting is a decisive beat too (it is why nobody left).
-    assert [e.tick for e in finale.decisive_events if e.kind == "meeting_skipped"] == [
-        7,
-        14,
-        26,  # was absent
-        32,  # was absent
-    ]
+    # was [(25, "p-9")] at the seed-47 anchor
+    assert [(e.tick, e.subject_id) for e in ejections] == [(8, "p-3"), (14, "p-1")]
+    # The middle meeting resolved without an ejection and is recorded as such —
+    # a skipped meeting is a decisive beat too (it is why nobody left).
+    # was [7, 14, 26, 32] at the seed-47 anchor
+    skipped = [e.tick for e in finale.decisive_events if e.kind == "meeting_skipped"]
+    assert skipped == [13]
 
     recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
-    assert recaps["p-8"].role == "CREWMATE"
-    assert recaps["p-8"].alive_at_end is False
+    # The wrongly ejected crewmate (was p-8, lost to a kill, at the seed-47 anchor).
+    assert recaps["p-1"].role == "CREWMATE"
+    assert recaps["p-1"].alive_at_end is False
     # p-1 SKIPPED the final meeting, which names nobody (None, not False); the
-    # surviving crewmate p-7 named p-1, a real impostor. was "p-4" / False.
+    # surviving crewmate p-5 named p-1, a crewmate, and is judged False. was p-7
+    # naming the impostor p-1 (True) at the seed-47 anchor.
     assert recaps["p-1"].final_vote_target == "SKIP"
     assert recaps["p-1"].final_vote_named_impostor is None
-    assert recaps["p-7"].final_vote_target == "p-1"
-    assert recaps["p-7"].final_vote_named_impostor is True
+    assert recaps["p-5"].final_vote_target == "p-1"
+    assert recaps["p-5"].final_vote_named_impostor is False
+    named_p1 = {
+        pid for pid, recap in recaps.items() if recap.final_vote_target == "p-1"
+    }
+    assert named_p1 == {"p-2", "p-4", "p-5", "p-9"}
+    assert all(recaps[pid].final_vote_named_impostor is False for pid in named_p1)
     # An authored ballot: the meeting layer rewrote nothing on this one.
     assert recaps["p-1"].final_vote_rewritten is False
-    # One impostor was ejected (p-9 at tick 25) and the other (p-1) survives to
-    # the end; baseline 6 ejected neither.
-    assert recaps["p-1"].alive_at_end is True
-    assert recaps["p-9"].alive_at_end is False
+    # One impostor was ejected (p-3 at tick 8) and the other (p-4) survives to
+    # the end (was p-9 ejected, p-1 surviving, at the seed-47 anchor).
+    assert recaps["p-3"].role == recaps["p-4"].role == "IMPOSTOR"
+    assert recaps["p-4"].alive_at_end is True
+    assert recaps["p-3"].alive_at_end is False
 
 
 def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(

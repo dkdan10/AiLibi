@@ -440,15 +440,28 @@ def test_endpoint_render_classes() -> None:
     assert counts["unresolvable"] == 0
 
 
-def test_seed_47_is_entirely_weak_signal() -> None:
-    """Seed 47 M2 (§8 row 14): an innocent ejected on weak-stamped flags only.
+def test_corpus_seed_1135_innocent_ejection_is_entirely_weak_signal() -> None:
+    """ml_corpus seed 1135 M0 (§8 row 14's shape): an innocent ejected on
+    weak-stamped flags only.
 
-    All three flags subordinate, so the surface can show at a glance that
-    nothing above the weak band supported the ejection.
+    Every flag subordinates, so the surface can show at a glance that nothing
+    above the weak band supported the ejection. The shape has no instance on
+    samples/9p2i at baseline 9; on ml_corpus/9p2i it has three (seeds 1080 M2,
+    1095 M0, 1135 M0), and 1135 M0 is the one whose weak flag names the
+    ejected crewmate. The loader and ``_contradiction_view`` read that set
+    exactly as they read the samples (the same ``roster.json``).
+    RESTATED from samples seed 47 M2 at the baseline-9 re-record (now one meeting).
     """
 
-    replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-47")
-    meeting = replay.meetings[2]
+    replay = ReplayLoader(_REPLAYS / "ml_corpus" / "9p2i").load_replay(
+        "headless-seed-1135"
+    )
+    roles = {player.agent_id: player.role for player in replay.players}
+    meeting = replay.meetings[0]
     assert meeting.outcome == "EJECTED"
-    assert {flag.category for flag in meeting.contradictions} == {"role_proof"}
+    assert roles[str(meeting.ejected_player_id)] == "CREWMATE"
+    assert {flag.category for flag in meeting.contradictions} == {"weak_signal"}
+    # was 3 weak (baseline 6), then 1 role_proof (baselines 7-8), at samples seed 47
     assert len(meeting.contradictions) == 1
+    (flag,) = meeting.contradictions
+    assert meeting.ejected_player_id in flag.subjects
