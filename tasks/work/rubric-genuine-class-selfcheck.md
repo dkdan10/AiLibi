@@ -346,6 +346,24 @@ floored state were green at the base and are green, moved, here. The three new
 tests are the +3 in the passed count (8,243 at the record, 8,246 here).
 
 **Limitations.**
+- **`bash scripts/check.sh` does not pass.** It exits 1 on exactly the 50
+  default-tier tests (41 failed + 9 errors) that the stacked base card
+  `tasks/work/process-rerecord.md` lists under "Left red". This card inherits
+  them, adds none and turns none green. None of them reads the rubric. Their
+  causes, the fits' corpus and assertions the new bytes falsified, wait on the
+  ML re-ground or an owner ruling, which the record's freeze keeps out of this
+  card. By AGENTS.md a card is done only when
+  `check.sh` passes, and `docs/workflow.md` defines Verified as the combined
+  gate passing, so this card is not Verified. It is marked done under the same
+  exception as its base card (its Limitations): on the coordinator's
+  instruction, with every red named there. The owner's delegation of
+  2026-09-23 covers when to merge, not this rule. So the owner decides whether
+  this card stays done until the re-ground turns those 50 green, or goes back
+  to active. After this item was added (card prose only), `check.sh` was
+  re-run: EXIT 1, 8,246 passed, the same 41 failed + 9 errors, `comm -3`
+  empty. The Gate block's script, frontend, e2e and bundle checks were re-run
+  with the same results, and the rubric step, run once more, changed no
+  committed byte.
 - The planted historical case pins the baseline-9 line
   `(supplied 1/0, converted 1/0)`. A re-record that removes the replica's
   divergence has to re-anchor that exhibit on its own bytes. The one-pair
@@ -357,5 +375,7 @@ tests are the +3 in the passed count (8,243 at the record, 8,246 here).
   routed (b)) is untouched. One failing self-check still zeroes a whole set
   with no partial signal in the served file. That remains a routed scorer bug
   in its own right.
-- Delivery states: Implemented and Verified. Independent review, owner review
-  and merge are pending. Adoption does not apply.
+- Delivery states: Implemented. It is not Verified: the acceptance checks
+  pass, but the combined gate is red on the inherited 50 alone (first item).
+  Independent review, owner review and merge are pending. Adoption does not
+  apply.
