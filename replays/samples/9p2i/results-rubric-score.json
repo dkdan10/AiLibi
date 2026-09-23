@@ -37,7 +37,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.67,
         "score": 0.0
       },
@@ -107,7 +107,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.25,
         "score": 0.0
       },
@@ -121,7 +121,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 1.0,
         "score": 0.0
       },
@@ -149,7 +149,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
@@ -247,7 +247,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.67,
         "score": 0.0
       },
@@ -261,7 +261,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.25,
         "score": 0.0
       },
@@ -317,7 +317,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
@@ -345,7 +345,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
@@ -359,7 +359,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.67,
         "score": 0.0
       },
@@ -387,7 +387,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
@@ -429,7 +429,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
@@ -443,7 +443,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
@@ -457,7 +457,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.67,
         "score": 0.0
       },
@@ -499,7 +499,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.67,
         "score": 0.0
       },
@@ -513,7 +513,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.67,
         "score": 0.0
       },
@@ -527,7 +527,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
@@ -541,7 +541,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.67,
         "score": 0.0
       },
@@ -555,7 +555,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.25,
         "score": 0.0
       },
@@ -583,7 +583,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.33,
         "score": 0.0
       },
@@ -639,7 +639,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 1.0,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.33,
         "score": 0.0
       },
@@ -695,7 +695,7 @@
         "survived_accused": 0,
         "r1_decisive": 1.0,
         "r2_deception": 0.2,
-        "r3_arcs": 0.0,
+        "r3_arcs": 1.0,
         "r7_legible": 0.5,
         "score": 0.0
       },
