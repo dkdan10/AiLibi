@@ -893,3 +893,52 @@ kept as history. Targeted run, [Mac]: `test_anchor_study.py`, `test_bakeoff_meth
 read 206 passed, 1 failed; the one is `test_evaluate_candidate_full_row`, whose frozen conviction
 sha moves in the tests commit. `test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte`,
 the walk-fence tests and `test_founder_ingestion_substrate_mismatch_refused` pass unchanged.
+
+### 5. The Mac Goodhart leg at the constants commit (the R2 comparand; beside, not gating)
+
+At `c740c2337008cdee06a00242ee2ce286681bff13` (the constants commit), [Mac], the Validation
+block's leg command verbatim, stdout to a scratch file, run twice (47.5 s and 47.8 s):
+```
+uv run python -c "from training.bakeoff.es import ESConfig; from training.composed_runner import run_composed_goodhart_leg; c=ESConfig(generations=6, population=6, sigma=0.5, seed=0, fitness_seeds=tuple(range(8)), init_scale=0.5); print(run_composed_goodhart_leg(config=c, evidence_scope='historical').to_json())"
+```
+Both runs wrote identical bytes. **The R2 comparand:** `to_json()` sha256
+**`9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f`** (the printed line
+without its trailing newline; the stdout file with it hashes `b0cdb15b…`), `es_digest`
+**`00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd`**, `baseline_id`
+`baseline-9` at all three levels. The `es_digest` equals the baseline-8 leg's: the fitness trace
+is −1.0 in all seven generations and no improvement is recorded, so the champion stays the
+seed-0 initial genome, as the investigation found at `39a568c6`.
+
+Cells, for R2 to compare (the report's §6.1, §6.2 and §6.4 shapes; baseline-8 leg at
+`39a568c6` in brackets):
+- **§6.1:** HELD; machinery blockers none; findings none; exploits none. Baseline mean score
+  3.89 [3.42], ES champion 0.65 [0.65], relative gain −0.8328 [−0.8102]. Lever score gains:
+  emergency +0.0064 [+0.1423], report −0.0772 [+0.0474], wait −0.9743 [−0.9708], kill
+  −0.0611 [+0.1204], sabotage −0.2122 [−0.1058]. Gate-check buckets empty.
+
+| arm | meetings | predicted supply gain | recorded flags gain | predicted flags/meeting | recorded flags/meeting | predicted converting share | recorded converting share | validity passed |
+|---|---|---|---|---|---|---|---|---|
+| scripted-FSM baseline | 25 [23] | (anchor) 0.0 | 0.0 | 0.6052 [0.8523] | 0.000 | 0.4400 [0.4783] | 0.000 | False |
+| forced-emergency | 39 [39] | +0.1661 [+0.0171] | 0.0 | 0.6635 [0.8399] | 0.000 | 0.3333 [0.3333] | 0.000 | False |
+| forced-report | 32 [32] | −0.7009 [−0.5091] | 0.0 | 0.1767 [0.4212] | 0.000 | 0.0312 [0.0312] | 0.000 | False |
+| forced-wait | 0 [0] | −1.0000 [−1.0000] | 0.0 | 0.0000 | 0.000 | 0.0000 | 0.000 | False |
+| forced-kill | 25 [24] | −0.4303 [−0.3700] | 0.0 | 0.2631 [0.4812] | 0.000 | 0.3200 [0.3750] | 0.000 | False |
+| forced-sabotage | 23 [23] | +0.0507 [+0.0326] | 0.0 | 0.6023 [0.8386] | 0.000 | 0.4348 [0.4348] | 0.000 | False |
+| ES champion | 28 [28] | −0.2388 [−0.0268] | 0.0 | 0.4463 [0.8057] | 0.000 | 0.0714 [0.0714] | 0.000 | False |
+
+- **§6.4:** 1189 composed meetings [1175]; the shared conviction counter (`3a6fe4ca…`) charged
+  1533 = 1189 + 344 of the cap 50 765 [1513 = 1175 + 338 of 49 764]; the surrogate counter
+  (`f8901620…`) 1189 of 50 765.
+
+Read against the two committed adoption constraints (`scripts/verify_ml_evidence.py:1812-1815`),
+the facts each rests on hold on this leg: every arm's `validity_passed` is False, and every arm
+records 0.000 flags per meeting in bytes; no arm reaches the 0.25 materiality bar (the largest
+positive predicted-supply delta is the emergency arm's +16.6%). That is a reading for the next
+operator, not the composed verdict: the verdict and its constraint set are written from the
+agreed leg under the decision rule, after R1 and R2.
+
+**The exact SHA the web session uses for R2: `c740c2337008cdee06a00242ee2ce286681bff13`.**
+Every later commit on this branch touches only tests, documents and this card (checked at the
+pushed head with `git diff --stat c740c233 HEAD -- ':!tests' ':!docs' ':!tasks' ':!training/README.md' ':!training/reports' ':!replays/ml_corpus/README.md'`,
+which must print nothing), so R2 at the pushed head computes the same leg; R2 at `c740c233` is
+the like-for-like comparison.
