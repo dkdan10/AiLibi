@@ -33,31 +33,32 @@ def test_current_summary_is_bounded_and_source_checked(
     canonical_summary: PublicResultsView,
 ) -> None:
     r = canonical_summary
+    # was (50, 50, 35, 15, 0) / (151, 95, 82, 13) / (68, 68, 27, 14) on baseline 8.
     assert (r.games, r.completed, r.crew_wins, r.impostor_wins, r.task_wins) == (
         50,
         50,
-        35,
-        15,
-        0,
+        39,
+        11,
+        1,
     )
     assert (r.meetings, r.ejections, r.impostor_ejections, r.innocent_ejections) == (
-        151,
-        95,
-        82,
-        13,
+        145,
+        90,
+        81,
+        9,
     )
     assert (
         r.proof_backed_ejections,
         r.proof_backed_correct,
         r.proof_free_ejections,
         r.proof_free_correct,
-    ) == (68, 68, 27, 14)
+    ) == (70, 70, 20, 11)
     assert [c.classification for c in r.cases] == [
         "supported",
         "unsupported",
         "unresolved",
     ]
-    assert (r.recorded_from, r.recorded_until) == ("2026-08-30", "2026-08-30")
+    assert (r.recorded_from, r.recorded_until) == ("2026-09-22", "2026-09-22")
     assert r.source_url and "5006a32f" in r.source_url
     assert len(r.model_dump_json().encode()) < public.MAX_PUBLIC_RESULTS_BYTES
     assert r.reported_cost_usd == 0 and r.input_tokens > 0
@@ -408,17 +409,46 @@ def test_public_summary_keeps_actual_candidate_identity(tmp_path: Path) -> None:
 
 
 def test_historical_summary_never_invents_a_default_factory(
-    canonical_summary: PublicResultsView,
+    canonical_summary: PublicResultsView, tmp_path: Path
 ) -> None:
+    # The committed set records its factory since the baseline-9 re-record, and
+    # the summary reports exactly that recorded identity; it still predates the
+    # clock stamp, and reading it does not relabel it as v1.
     assert canonical_summary.provenance_groups
     assert all(
-        group.agent_factory_kind is None
-        # Absent is unknown: the committed sets predate the clock stamp, and
-        # reading them does not relabel them as v1.
+        group.agent_factory_kind == "scripted"
         and group.temporal_observation_version is None
         for group in canonical_summary.provenance_groups
     )
     assert (
         sum(len(group.game_ids) for group in canonical_summary.provenance_groups)
         == canonical_summary.games
+    )
+
+    # The historical shape is a committed recording with its factory stamp
+    # removed: absent is unknown, and reading it must not invent the default.
+    destination = tmp_path / "9p2i"
+    destination.mkdir()
+    shutil.copyfile(SAMPLES / "9p2i/roster.json", destination / "roster.json")
+    source = SAMPLES / "9p2i/replay-seed-0.jsonl"
+    rows = [json.loads(line) for line in source.read_text().splitlines() if line]
+    assert any("agent_factory_kind" in row for row in rows)
+    for row in rows:
+        row.pop("agent_factory_kind", None)
+    (destination / source.name).write_text(
+        "\n".join(
+            json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows
+        )
+        + "\n"
+    )
+    historical = public.build_public_results(ReplayLoader(destination))
+    assert historical.provenance_groups
+    assert all(
+        group.agent_factory_kind is None and group.temporal_observation_version is None
+        for group in historical.provenance_groups
+    )
+    assert (
+        sum(len(group.game_ids) for group in historical.provenance_groups)
+        == historical.games
+        == 1
     )

@@ -36,6 +36,7 @@ from eval.report_schema import (
     GameReport,
     TournamentReport,
 )
+from eval.report_io import report_path, write_report_text
 from orchestrator.replay import FailedCallReplayEntry
 
 # A raw failed-call record carrying every field the eval route must redact: a
@@ -100,9 +101,7 @@ def served_failed_call(tmp_path: Path) -> Iterator[dict[str, object]]:
     """Serve a report with one failed call; yield the served failed-call dict."""
 
     report = _eval_report_with_failed_call()
-    (tmp_path / "tournament-eval-report.json").write_text(
-        report.model_dump_json(), encoding="utf-8"
-    )
+    write_report_text(report_path(tmp_path), report.model_dump_json())
     with _client(tmp_path) as client:
         response = client.get("/eval/tournament-report")
     assert response.status_code == 200
@@ -166,9 +165,7 @@ def test_served_payload_no_longer_validates_as_raw_report(tmp_path: Path) -> Non
     # FailedCallReplayEntry requires raw_response/prompt_length, which the served
     # surface drops, so it must NOT round-trip back into TournamentEvalReport.
     report = _eval_report_with_failed_call()
-    (tmp_path / "tournament-eval-report.json").write_text(
-        report.model_dump_json(), encoding="utf-8"
-    )
+    write_report_text(report_path(tmp_path), report.model_dump_json())
     with _client(tmp_path) as client:
         body = client.get("/eval/tournament-report").json()
     with pytest.raises(ValueError):
@@ -180,9 +177,7 @@ def test_served_report_includes_meeting_rate(tmp_path: Path) -> None:
     # served. The fixture game carries no meetings, so the rate is a defined 0.0
     # (a game ran), not None.
     report = _eval_report_with_failed_call()
-    (tmp_path / "tournament-eval-report.json").write_text(
-        report.model_dump_json(), encoding="utf-8"
-    )
+    write_report_text(report_path(tmp_path), report.model_dump_json())
     with _client(tmp_path) as client:
         body = client.get("/eval/tournament-report").json()
 
@@ -234,9 +229,7 @@ def test_served_payload_exposes_no_engine_state_field(tmp_path: Path) -> None:
     # engine/determinism field name appears anywhere in the served JSON tree.
     forbidden = {"state_hash", "state_hash_before", "state_hash_after", "rng_state"}
     report = _eval_report_with_failed_call()
-    (tmp_path / "tournament-eval-report.json").write_text(
-        report.model_dump_json(), encoding="utf-8"
-    )
+    write_report_text(report_path(tmp_path), report.model_dump_json())
     with _client(tmp_path) as client:
         body = client.get("/eval/tournament-report").json()
 

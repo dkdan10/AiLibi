@@ -12,6 +12,7 @@ from api.replay_loader import ReplayLoader
 from engine.world import load_canonical_map
 from eval.balance_eval import load_tournament_report
 from eval.meeting_quality import build_tournament_eval_report
+from eval.report_io import report_path, write_report_text
 from llm.budget import GameBudget
 from orchestrator.game import build_default_meeting_runner
 from orchestrator.replay import compute_cost_usd
@@ -167,7 +168,7 @@ def test_api_rebinds_serialized_verification_to_actual_recording(
             raw["report"]["provenance_groups"][0]["game_ids"].append(game["game_id"])
     elif mutation == "missing_source":
         replay.unlink()
-    (tmp_path / "tournament-eval-report.json").write_text(json.dumps(raw))
+    write_report_text(report_path(tmp_path), json.dumps(raw))
     if mutation == "duplicate_groups_mismatch":
         with pytest.raises(ValidationError, match="provenance groups disagree"):
             ReplayLoader(tmp_path).tournament_report()

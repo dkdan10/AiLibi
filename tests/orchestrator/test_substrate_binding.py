@@ -102,7 +102,12 @@ def test_api_profile_mismatch_is_a_controlled_integrity_refusal(
         if defect == "experiment":
             rows[0]["experiment_config"] = {"evidence_reasoning_version": 1}
         else:
-            rows[-1]["substrate_flags"]["testimony_shapes"] = True
+            # The recording stamps its substrate on the first tick row AND the
+            # game_over footer, and refuses the two disagreeing, so the ON stamp
+            # is written on both to reach the substrate check itself.
+            for row in rows:
+                if "substrate_flags" in row:
+                    row["substrate_flags"]["testimony_shapes"] = True
         path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
         response = client.get("/replays/headless-seed-23")
     assert response.status_code == 500

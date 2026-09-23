@@ -251,33 +251,35 @@ _TURN_KINDS: Final[tuple[str, ...]] = (
 # The committed OFF pins the table is proven against.                          #
 # --------------------------------------------------------------------------- #
 
-# audits/audit-phase-21-rerecord.md §5.1, published cell 2, plus the direct-proof
-# and non-direct cells of published cell 1. Keyed by set directory under
-# ``replays/``. A disagreement is a DEFECT IN THIS SCRIPT's join, not a finding
-# about the bytes.
+# audits/audit-2026-09-22-process-rerecord.md §6.2, published cell 2 (the
+# baseline-9 record's innocent ejections), which that section cross-checks
+# against the direct-proof and non-direct cells of its published cell 1. Keyed by
+# set directory under ``replays/``. A disagreement is a DEFECT IN THIS SCRIPT's
+# join, not a finding about the bytes.
 COMMITTED_INNOCENT_EJECTIONS: Final[Mapping[str, int]] = MappingProxyType(
     {
-        "samples/9p2i": 13,
-        "ml_corpus/9p2i": 29,
-        "samples/4p1i": 4,
-        "ml_corpus/4p1i": 0,
+        "samples/9p2i": 9,  # was 13
+        "ml_corpus/9p2i": 32,  # was 29
+        "samples/4p1i": 0,  # was 4
+        "ml_corpus/4p1i": 1,  # was 0
     }
 )
 
-# The four corroboration cells over the pooled four-set walk, as the
-# counterfactual audit's Errata section republishes them. Task 21.19 shipped a
-# walk that PRINTS them and deliberately asserts no figure; this script is where
-# they first become an assertion. Three moved when the ledger's grounding
-# semantics were amended before the record: a placement is now tested against
-# BOTH of the speaker's own record channels, and the walkable-transit clause
-# reads movement-shaped placements (#415 merge-reality, #417 amendment, then
-# audits/audit-phase-21-counterfactual.md Errata E.2).
+# The four corroboration cells over the pooled four-set walk. Task 21.19 shipped
+# a walk that PRINTS them and deliberately asserts no figure; this script is where
+# they first become an assertion. The ledger's grounding semantics are the ones
+# audits/audit-phase-21-counterfactual.md Errata E.2 republished: a placement is
+# tested against BOTH of the speaker's own record channels, and the
+# walkable-transit clause reads movement-shaped placements. Re-derived by this
+# script's own walk over the baseline-9 bytes and published in
+# audits/audit-2026-09-22-process-rerecord.md §6.3; the baseline-8 cells were
+# (460, 1525), (10, 425), (33, 429) and (79, 429).
 COMMITTED_CORROBORATION_CELLS: Final[Mapping[str, tuple[int, int]]] = MappingProxyType(
     {
-        "accused_without_a_first_hand_source": (460, 1525),
-        "ejected_without_a_first_hand_source": (10, 425),
-        "ejected_on_an_answering_turn": (33, 429),
-        "ejected_with_a_walkable_pair": (79, 429),
+        "accused_without_a_first_hand_source": (529, 1516),
+        "ejected_without_a_first_hand_source": (16, 409),
+        "ejected_on_an_answering_turn": (36, 411),
+        "ejected_with_a_walkable_pair": (69, 411),
     }
 )
 
@@ -4385,7 +4387,7 @@ def run(
             raise SystemExit(
                 f"{set_name}: the innocent-ejection enumeration reproduced "
                 f"{walk.innocent_ejections}, not the committed record cell "
-                f"{expected} (audits/audit-phase-21-rerecord.md §5.1, published "
+                f"{expected} (audits/audit-2026-09-22-process-rerecord.md §6.2, published "
                 "cell 2) — this is a DEFECT IN THIS SCRIPT's join, not a finding "
                 "about the committed bytes; fix the enumeration before reading "
                 "any ON number"
@@ -5025,9 +5027,9 @@ def _corroboration_pin_check(walks: Sequence[_SetWalk]) -> dict[str, object]:
     }
     if disagreeing:
         raise SystemExit(
-            "the corroboration ledger cells disagree with the records that "
-            "published them (#415 merge-reality, #417 amendment, the "
-            f"counterfactual audit's Errata E.2): {disagreeing}. "
+            "the corroboration ledger cells disagree with the pins re-derived on "
+            "the baseline-9 bytes (audits/audit-2026-09-22-process-rerecord.md "
+            f"§6.3, under the counterfactual audit's Errata E.2 rule): {disagreeing}. "
             "This is a DEFECT IN THIS SCRIPT's walk, not a finding about the "
             "committed bytes; this script is where those four cells FIRST become "
             "a pin, so fix the walk before reading any ON number"

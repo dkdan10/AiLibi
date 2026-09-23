@@ -61,7 +61,7 @@ def _delete_ailibi_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _mixed_substrate_set(tmp_path: Path, *, seed: int) -> Path:
-    """The WHOLE committed 9p2i set with ONE game_over restamped off-substrate.
+    """The WHOLE committed 9p2i set with ONE replay restamped off-substrate.
 
     The whole set, not one file: a directory holding a single replay fails its
     own tick-0 state hash, so a one-file fixture would 500 for an unrelated
@@ -76,7 +76,10 @@ def _mixed_substrate_set(tmp_path: Path, *, seed: int) -> Path:
         if not line.strip():
             continue
         record = json.loads(line)
-        if record.get("kind") == "game_over":
+        # A current recording carries its substrate stamp twice -- as the first
+        # tick row's prefix stamp and on the game_over footer -- and refuses the
+        # two disagreeing, so both are restamped.
+        if record.get("kind") == "game_over" or "substrate_flags" in record:
             record["substrate_flags"] = dict(_UNKNOWN_LEVER_STAMP)
             line = json.dumps(record, sort_keys=True, separators=(",", ":"))
         out.append(line)

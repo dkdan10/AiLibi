@@ -549,19 +549,18 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
     nine_p_two_i_loader: ReplayLoader,
 ) -> None:
     """Task 18.12: the gate-rewrite markers surface as spectator chips on the live
-    cases the committed BASELINE-6 9p2i set carries, re-anchored after the vent
-    widening re-record cascaded the trajectories.
+    cases the committed 9p2i set carries, re-anchored at the baseline-9 re-record.
 
-    Census over the 869 committed ballots of this record: invalid_observation_id
-    (16.5) x3, uncited_coerced (16.6) back to an honest zero, and the gate chip
-    under_gate_redirect x23. The chip with real bytes behind it is the under-gate
-    eject REDIRECT (the owner-principle guard: an under-gate eject target WAS
-    redirected rather than left to a random innocent -- ruling D6 of 2026-09-19
-    retired that guard, so these 23 are history and no new recording adds one);
-    it is anchored here as the real-bytes chip pin so a future substrate cannot
-    silently drop the chips. The
-    DTO/chip rendering mechanism itself stays covered synthetically by
-    tests/api/test_schemas.
+    Census over the 845 committed ballots of this record: invalid_observation_id
+    (16.5) and uncited_coerced (16.6) at an honest zero, and the under-gate eject
+    REDIRECT chip at zero too -- ruling D6 of 2026-09-19 retired that guard, so
+    the 23 the baseline-8 bytes carried are history and this record adds none,
+    exactly as that ruling said. The rewrite chip with real bytes behind it on
+    this record is the invalid vote target (a ballot naming a player outside the
+    voter's candidate set is normalized to SKIP), x3; it is anchored here as the
+    real-bytes chip pin so a future substrate cannot silently drop the chips. The
+    DTO/chip rendering mechanism itself, the redirect chip included, stays
+    covered synthetically by tests/api/test_schemas.
     """
 
     ballots = [
@@ -571,38 +570,41 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
         for b in meeting.ballots
     ]
 
-    # The 16.5 observation-null class RE-OPENED on the baseline-7 bytes: eight
-    # ballots carry it (baseline 6 read zero, which is why the chip needed a
-    # live anchor at all).
+    assert len(ballots) == 845  # was 869
+    # The 16.5 observation-null class: back to an honest zero on the baseline-9
+    # bytes (baseline 7 read eight, baseline 8 three).
     nulled = [b for b in ballots if "invalid_observation_id" in b.rewrite_reasons]
-    assert len(nulled) == 3  # was 8
-    # The 16.6 coercion: back to an honest zero (the prior record carried one).
+    assert len(nulled) == 0  # was 3
+    # The 16.6 coercion: still an honest zero.
     coerced = [b for b in ballots if "uncited_coerced" in b.rewrite_reasons]
-    assert len(coerced) == 0  # was 1
+    assert len(coerced) == 0
 
-    # The gate-marker chip with recorded bytes behind it: the under-gate eject
-    # redirect, retired by ruling D6. 23 ballots carry it (prior record: 36;
-    # baseline 6: 13), and no later recording will.
+    # The under-gate eject redirect, retired by ruling D6: zero on the first
+    # record made after it (baseline 8: 23; baseline 6: 13).
     redirected = [b for b in ballots if "under_gate_redirect" in b.rewrite_reasons]
-    assert len(redirected) == 23  # was 36
+    assert len(redirected) == 0  # was 23
 
-    # Anchor seed 22 m0: one under-gate eject redirected off the sub-gate target,
+    # The rewrite chip with recorded bytes behind it on this record.
+    invalid = [b for b in ballots if "invalid_target" in b.rewrite_reasons]
+    assert len(invalid) == 3
+
+    # Anchor seed 7 m0: one ballot whose invalid target was normalized to SKIP,
     # the marker stripped from the served render (the chip is NOT a fabricated
-    # addition -- the clean prose is a suffix of the raw text).
-    replay_22 = nine_p_two_i_loader.load_replay("headless-seed-22")
+    # addition -- the clean prose is a suffix of the raw text). The anchor was
+    # seed 22 m0's under-gate redirect, which ruling D6 retired.
+    replay_7 = nine_p_two_i_loader.load_replay("headless-seed-7")
     anchored = [
-        b
-        for b in replay_22.meetings[0].ballots
-        if "under_gate_redirect" in b.rewrite_reasons
+        b for b in replay_7.meetings[0].ballots if "invalid_target" in b.rewrite_reasons
     ]
-    assert len(anchored) == 1  # was 2
-    for ballot_22 in anchored:
-        assert ballot_22.rewrite_reasons == ("under_gate_redirect",)
-        assert ballot_22.rationale_text_clean
-        assert BALLOT_TARGET_REDIRECT_MARKER.partition("{")[0] not in (
-            ballot_22.rationale_text_clean
+    assert len(anchored) == 1
+    for ballot_7 in anchored:
+        assert ballot_7.rewrite_reasons == ("invalid_target",)
+        assert ballot_7.target == SKIP_TARGET
+        assert ballot_7.rationale_text_clean
+        assert INVALID_VOTE_TARGET_MARKER.partition("{")[0] not in (
+            ballot_7.rationale_text_clean
         )
-        assert ballot_22.rationale_text.endswith(ballot_22.rationale_text_clean)
+        assert ballot_7.rationale_text.endswith(ballot_7.rationale_text_clean)
 
 
 # ---------------------------------------------------------------------------
@@ -813,37 +815,39 @@ def test_finale_pins_committed_eject_decided_game(
 ) -> None:
     """The finale is built from the recorded bytes of an eject-decided game.
 
-    seed-18 is a cheap CREWMATE_EJECT game in the committed 9p2i set (14
+    seed-7 is a cheap CREWMATE_EJECT game in the committed 9p2i set (14
     recorded ticks, two meetings, both ejecting a real impostor) and it ends ON
     its decisive meeting — so one load pins the winner, the recorded end tick,
     the decisive-beat ordering, and the alive-at-end correction across the
     labeled pre/post mix at the same time (Task 19.10;
-    audits/audit-phase-19-triage.md §7 item 11). RE-ANCHORED from seed-1, whose
-    outcome moved to an IMPOSTORS win on this record; seed-18 carries the same
-    shape (p-3 killed at tick 5, p-1 naming the ejected impostor, an impostor
-    ejected ON the final frame) and the same final_tick/total_ticks off-by-one.
+    audits/audit-phase-19-triage.md §7 item 11). RE-ANCHORED from seed-18 at the
+    baseline-9 re-record, whose ejected impostor now SKIPs its last ballot and
+    so no longer shows a judgment of False; seed-7 carries the whole shape (p-4
+    killed at tick 6, p-1 naming the ejected impostor, an impostor ejected ON the
+    final frame that voted for a crewmate) and the same final_tick/total_ticks
+    off-by-one.
 
     ``final_tick`` is the recorded ``game_over`` tick (13), NOT
     ``metadata.total_ticks`` (14, a count of recorded ROWS) — the two differ by
     one here, which is exactly why 19.10 had to start retaining it.
     """
 
-    replay = nine_p_two_i_loader.load_replay("headless-seed-18")
+    replay = nine_p_two_i_loader.load_replay("headless-seed-7")
     finale = replay.finale
     assert finale is not None
     assert finale.winner == "CREWMATES"
     assert finale.winner_reason == "CREWMATE_EJECT"
-    assert finale.final_tick == 13  # was 19 at the seed-1 anchor
+    assert finale.final_tick == 13
     assert replay.metadata.total_ticks == 14, "the row count is a different number"
 
     # Ascending tick; within tick 13 the ejection precedes the terminal beat.
     assert [
         (e.tick, e.kind, e.actor_id, e.subject_id) for e in finale.decisive_events
     ] == [
-        (5, "kill", "p-5", "p-3"),
-        (8, "kill", "p-7", "p-2"),
-        (11, "ejection", "p-6", "p-5"),
-        (13, "ejection", "p-8", "p-7"),
+        (6, "kill", "p-2", "p-4"),
+        (10, "ejection", "p-3", "p-2"),
+        (11, "kill", "p-7", "p-9"),
+        (13, "ejection", "p-6", "p-7"),
         (13, "game_end", None, None),
     ]
 
@@ -853,7 +857,7 @@ def test_finale_pins_committed_eject_decided_game(
     # Ground truth: both impostors were ejected, which is how the crew won. p-7's
     # row is the one that proves the alive-at-end correction — it is ejected ON
     # the final frame, whose agent_states (pre-resolution) still show it alive.
-    for impostor in ("p-5", "p-7"):  # was ("p-6", "p-7") at the seed-1 anchor
+    for impostor in ("p-2", "p-7"):  # was ("p-5", "p-7") at the seed-18 anchor
         assert recaps[impostor].role == "IMPOSTOR"
         assert recaps[impostor].alive_at_end is False
     assert any(
@@ -861,15 +865,15 @@ def test_finale_pins_committed_eject_decided_game(
     )
 
     # Belief side: the last meeting's ballots. Every crewmate who voted named
-    # p-7, a real impostor; p-7 itself named the crewmate p-8, which is a
+    # p-7, a real impostor; p-7 itself named the crewmate p-6, which is a
     # judgment of False — not None, the way a SKIP would be.
     assert recaps["p-1"].final_vote_target == "p-7"
     assert recaps["p-1"].final_vote_named_impostor is True
-    assert recaps["p-7"].final_vote_target == "p-8"  # was "SKIP" at the seed-1 anchor
-    assert recaps["p-7"].final_vote_named_impostor is False  # was None
-    # p-3 died at tick 5, long before the last meeting — no ballot to recap.
-    assert recaps["p-3"].final_vote_target is None
-    assert recaps["p-3"].final_vote_named_impostor is None
+    assert recaps["p-7"].final_vote_target == "p-6"  # was "p-8" at the seed-18 anchor
+    assert recaps["p-7"].final_vote_named_impostor is False
+    # p-4 died at tick 6, long before the last meeting — no ballot to recap.
+    assert recaps["p-4"].final_vote_target is None
+    assert recaps["p-4"].final_vote_named_impostor is None
 
 
 def test_finale_pins_committed_wrong_ejection_game(

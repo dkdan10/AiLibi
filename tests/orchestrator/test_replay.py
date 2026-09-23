@@ -2022,8 +2022,9 @@ class TestReplayEntryDispositionField:
         # STRICTLY STRONGER. It used to assert the field parsed to None on every
         # row, because the committed corpus predated it and the additive default
         # was what let the sets load. The baseline-8 record is the first that
-        # WRITES the field, so every row now carries one — and a disposition per
-        # submitted action is exactly what A-14 was about.
+        # WRITES the field, and the baseline-9 record writes it too, so every row
+        # now carries one — and a disposition per submitted action is exactly what
+        # A-14 was about.
         rows = 0
         for set_dir in _COMMITTED_SET_DIRS:
             for replay_path in sorted(set_dir.glob("replay-seed-*.jsonl")):
@@ -2033,7 +2034,7 @@ class TestReplayEntryDispositionField:
                     assert all(
                         isinstance(d, str) and d for d in entry.action_dispositions
                     )
-        assert rows == 6064  # was 5960
+        assert rows == 6110  # was 6064
 
 
 class TestRecordTickEventsKeyword:

@@ -35,8 +35,10 @@ def loader() -> ReplayLoader:
     ),
     [
         (23, 0, "p-5", "p-5:8:1", "saw_vent", "p-6", 8, 7),
-        (46, 3, "p-9", "p-9:29:3", "saw_player_move", "p-1", 29, 28),
-        (46, 3, "p-3", "p-3:29:1", "saw_player", "p-4", 29, 28),
+        # Seed 4 M0 carries a move and a co-present sighting, the pair seed 46 M3
+        # carried on baseline 8 (its meeting cites neither on baseline 9).
+        (4, 0, "p-5", "p-5:7:1", "saw_player_move", "p-1", 7, 6),
+        (4, 0, "p-1", "p-1:7:1", "saw_player", "p-3", 7, 6),
     ],
 )
 def test_genuine_citations_keep_source_identity_and_separate_scene_time(
@@ -63,11 +65,11 @@ def test_genuine_citations_keep_source_identity_and_separate_scene_time(
     assert reference.observation_tick == observed
     assert reference.scene_tick == scene
     assert reference.provenance == "observed"
-    if subject == "p-4":
-        assert reference.text == "p-3 saw p-4 in CAFETERIA with p-9."
+    if kind == "saw_player":
+        assert reference.text == "p-1 saw p-3 in EAST_HALL with p-9."
         assert reference.from_room is reference.to_room is None
     elif kind == "saw_player_move":
-        assert (reference.from_room, reference.to_room) == ("CAFETERIA", "EAST_HALL")
+        assert (reference.from_room, reference.to_room) == ("ENGINEERING", "EAST_HALL")
     else:
         assert reference.room == "ENGINEERING"
     replay = loader.load_replay(f"headless-seed-{seed}")

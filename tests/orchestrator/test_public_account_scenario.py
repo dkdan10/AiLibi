@@ -13,6 +13,7 @@ from api.replay_loader import ReplayLoader
 from eval.balance_eval import load_tournament_report
 from eval.meeting_quality import build_tournament_eval_report
 from eval.report_schema import build_provenance_groups
+from eval.report_io import report_path, write_report_text
 from experiments.deduction_scenarios import (
     ScenarioCapture,
     ScriptedDeductionProvider,
@@ -313,7 +314,7 @@ def test_served_report_identity_is_bound_to_actual_recording(
     for row in (*report["report"]["games"], *report["report"]["provenance_groups"]):
         row["agent_factory_kind"] = "scripted"
         row["experiment_config"] = None
-    (tmp_path / "tournament-eval-report.json").write_text(json.dumps(report))
+    write_report_text(report_path(tmp_path), json.dumps(report))
     if source == "missing":
         capture.replay_path.unlink()
     elif source == "invalid":

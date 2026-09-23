@@ -967,8 +967,9 @@ def test_the_impostor_half_bites_on_a_breached_firewall(
         row["cell"]: row
         for row in _set_block(cf.run([_FAST_SET]), _FAST_SET)["tripwire_rows"]
     }
-    # Six of the 39 impostor speech prompts on this set are opt-in turns, which
-    # is where the role-blind guard now reaches; the crew half is unmoved.
+    # Two of the 39 impostor speech prompts on this set are opt-in turns (six on
+    # the baseline-8 bytes), which is where the role-blind guard now reaches; the
+    # crew half is unmoved.
     assert rows["T-9b"]["on"][0] > 0
     assert rows["T-9a"]["on"] == [39, 39]
 
@@ -1038,7 +1039,7 @@ def _conviction(
 
 
 def test_the_spoken_kill_split_counts_a_planted_conviction() -> None:
-    # Baseline 8 holds no spoken kill at all, so the split is empty there and an
+    # Baselines 8 and 9 hold no spoken kill at all, so the split is empty there and an
     # empty cell proves nothing about the reader. Plant the meeting the record
     # may produce: a kill spoken against the player the table then ejects.
     spoken = MeetingTranscript(turns=(_KILL_TURN,))
@@ -1093,7 +1094,7 @@ def test_a_split_over_the_wrong_population_refuses(
 ) -> None:
     # The planted case for the denominator: the split is bar 1's own cell, so a
     # partition that stops agreeing with the committed cross-tab must refuse
-    # rather than publish "n of 96" over a different n.
+    # rather than publish "n of 85" over a different n.
     monkeypatch.setattr(cf, "is_non_direct_ejection", lambda *args, **kwargs: True)
     with pytest.raises(SystemExit) as excinfo:
         cf.run([_FAST_SET])
@@ -1102,20 +1103,20 @@ def test_a_split_over_the_wrong_population_refuses(
 
 
 @pytest.mark.slow
-def test_the_baseline_8_tripwire_readings(full_run: Mapping[str, object]) -> None:
+def test_the_baseline_9_tripwire_readings(full_run: Mapping[str, object]) -> None:
     """The three readings the pre-registration's §8.1 and §5 will be read on."""
 
     rows = {row["cell"]: row for row in _rows(full_run, "pooled_tripwire_rows")}
     published = {row["cell"]: row for row in _rows(full_run, "pooled")}
     # T5, both halves. No `saw_kill` was ever spoken on these bytes.
-    assert rows["T-9a"]["on"] == [2023, 2023]
-    assert rows["T-9b"]["on"] == [0, 936]
+    assert rows["T-9a"]["on"] == [2011, 2011]  # was [2023, 2023]
+    assert rows["T-9b"]["on"] == [0, 943]  # was [0, 936]
     # The split partitions T-9's own population exactly, which is what makes it
     # a decomposition of that row rather than a second measurement.
     assert (
         rows["T-9a"]["on"][1] + rows["T-9b"]["on"][1]
         == published["T-9"]["on"][1]
-        == 2959
+        == 2954  # was 2959
     )
     # On THESE bytes the elicitation reading and the byte diff coincide. That is
     # a property of a corpus holding no spoken kill, not an invariant: the first
@@ -1126,11 +1127,11 @@ def test_the_baseline_8_tripwire_readings(full_run: Mapping[str, object]) -> Non
         rows["B-1m1"]["recorded_off"]
         == rows["B-1m1"]["reconstructed_off"]
         == rows["B-1m1"]["on"]
-        == [68288, 3368]
+        == [68305, 3369]  # was [68288, 3368]
     )
     # Bar 1's cell split by a spoken kill: empty, over bar 1's own denominator.
-    assert rows["P-1k"]["recorded_off"] == [0, 96]
-    assert published["P-1"]["recorded_off"][1] == 96
+    assert rows["P-1k"]["recorded_off"] == [0, 85]  # was [0, 96]
+    assert published["P-1"]["recorded_off"][1] == 85  # was 96
     assert rows["P-1ka"]["recorded_off"] == [0, 0]
 
 
@@ -2919,16 +2920,18 @@ def test_the_block_level_column_is_the_marker_scan_not_the_byte_count(
 def test_the_block_level_cells_equal_the_byte_cells_on_the_committed_bytes(
     full_run: Mapping[str, object],
 ) -> None:
-    """Baseline 8 re-derives identically under the stronger reading.
+    """The committed bytes re-derive identically under the stronger reading.
 
-    This is the whole warrant for re-reading these three cells without
-    re-pinning anything: no published figure moves, on any set or pooled.
+    This is the whole warrant for reading these three cells at block level: on
+    the baseline-9 bytes, as on baseline 8's, the block-level column equals the
+    byte column on every set and pooled.
     """
 
     pooled = {row["cell"]: row for row in _rows(full_run, "pooled")}
-    assert pooled["R-13"]["on"] == pooled["R-13"]["byte_diff"] == [620, 620]
-    assert pooled["R-14"]["on"] == pooled["R-14"]["byte_diff"] == [2715, 2715]
-    assert pooled["C-9"]["on"] == pooled["C-9"]["byte_diff"] == [3614, 3631]
+    # was [620, 620], [2715, 2715] and [3614, 3631] on the baseline-8 bytes
+    assert pooled["R-13"]["on"] == pooled["R-13"]["byte_diff"] == [623, 623]
+    assert pooled["R-14"]["on"] == pooled["R-14"]["byte_diff"] == [2704, 2704]
+    assert pooled["C-9"]["on"] == pooled["C-9"]["byte_diff"] == [3628, 3630]
     sets = full_run["sets"]
     assert isinstance(sets, dict)
     for block in sets.values():
