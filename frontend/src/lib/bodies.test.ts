@@ -6,7 +6,7 @@
 // forward-accumulated `report_body` set. `retiredAccumulateRule` below is the
 // NEGATIVE CONTROL: a derivation that accumulates `kill` events instead of
 // reading the served rows. Both run the same census on both committed sample
-// sets, and the control has to fail it (0 phantom frames vs 740 of 1,289 on
+// sets, and the control has to fail it (0 phantom frames vs 659 of 1,208 on
 // `9p2i`) — a zero-phantom assertion nothing can fail would be prose, since the
 // shipped rule satisfies it by construction.
 //
@@ -447,7 +447,7 @@ describe("the Omniscient body layer over the committed served payloads", () => {
   it("9p2i: reads engine truth on every frame", () => {
     expect(census(set("9p2i").games, bodyStatesByTick)).toEqual({
       games: 50,
-      frames: 1289, // was 1217
+      frames: 1208, // was 1289
       phantomFrames: 0,
       missingFrames: 0,
       phantomBodies: 0,
@@ -455,35 +455,33 @@ describe("the Omniscient body layer over the committed served payloads", () => {
       roomCountMismatchFrames: 0,
       capOverflowFrames: 0,
       // One frame per report_body event, each on the report frame itself.
-      discoveredFrames: 141, // was 144
+      discoveredFrames: 136, // was 141
       discoveredAfterReportFrame: 0,
       attributionMismatches: 0,
     });
-    expect(reportBodyEvents(set("9p2i").games)).toBe(141); // was 144
+    expect(reportBodyEvents(set("9p2i").games)).toBe(136); // was 141
   });
 
   it("9p2i: the retired accumulate rule fails the same walk", () => {
     expect(census(set("9p2i").games, retiredAccumulateRule)).toEqual({
       games: 50,
-      frames: 1289, // was 1217
+      frames: 1208, // was 1289
       // Over half the frames painted a corpse the engine had consumed.
-      phantomFrames: 740, // was 668
+      phantomFrames: 659, // was 740
       missingFrames: 0,
-      phantomBodies: 1512, // was 1371
+      phantomBodies: 1291, // was 1512
       gamesWithPhantom: 48,
       // Every phantom frame also inflates that room's body count …
-      roomCountMismatchFrames: 740, // was 668
-      // … and on the baseline-7 bytes 7 of them crossed BODY_CAP, firing a
-      // spurious "✕ ×N" collapse marker over a room the engine had emptied. On
-      // these bytes no room's phantom pile reaches the cap, so the marker never
-      // fires: the retired rule is still wrong on 740 frames, just never wrong
-      // in THAT particular way here.
-      capOverflowFrames: 0, // was 7
-      discoveredFrames: 790, // was 718
+      roomCountMismatchFrames: 659, // was 740
+      // … and on one of them the phantom pile crosses BODY_CAP, firing a
+      // spurious "✕ ×N" collapse marker the served bodies never call for (7
+      // such frames on the baseline-7 bytes, none on baseline 8).
+      capOverflowFrames: 1, // was 0
+      discoveredFrames: 709, // was 790
       // Exactly the phantom count: every phantom IS a consumed corpse, so every
       // one of them still wears the "freshly reported" kill ring on a frame long
       // after its report. The shipped rule reads 0 here.
-      discoveredAfterReportFrame: 1512, // was 1371
+      discoveredAfterReportFrame: 1291, // was 1512
       attributionMismatches: 0,
     });
   });
@@ -491,7 +489,7 @@ describe("the Omniscient body layer over the committed served payloads", () => {
   it("4p1i: reads engine truth on every frame", () => {
     expect(census(set("4p1i").games, bodyStatesByTick)).toEqual({
       games: 50,
-      frames: 586, // was 601
+      frames: 608, // was 586
       phantomFrames: 0,
       missingFrames: 0,
       phantomBodies: 0,
@@ -507,10 +505,10 @@ describe("the Omniscient body layer over the committed served payloads", () => {
 
   it("4p1i: the retired accumulate rule fails the same walk", () => {
     const retired = census(set("4p1i").games, retiredAccumulateRule);
-    expect(retired.phantomFrames).toBe(51); // was 66
-    expect(retired.phantomBodies).toBe(51); // was 66
-    expect(retired.gamesWithPhantom).toBe(15); // was 18
-    expect(retired.roomCountMismatchFrames).toBe(51); // was 66
+    expect(retired.phantomFrames).toBe(73); // was 51
+    expect(retired.phantomBodies).toBe(73); // was 51
+    expect(retired.gamesWithPhantom).toBe(19); // was 15
+    expect(retired.roomCountMismatchFrames).toBe(73); // was 51
     expect(retired.missingFrames).toBe(0);
   });
 
