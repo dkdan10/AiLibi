@@ -34,7 +34,7 @@ together, so one run names every drifted fact rather than the first.
    docs/history.md, docs/glossary.md, audits/README.md,
    docs/reading-guide.md and docs/ml-program.md — because a figure the front
    door states twice rots in the copy nobody re-reads. The results tables'
-   ``At baseline 7`` column is the one span held to a different source: its
+   ``At baseline 8`` column is the one span held to a different source: its
    cells state what the previous recording read, and that recording's own
    record owns them.
 2. **Ladder tip.** The audit that adopted the current recording owns which
@@ -59,7 +59,7 @@ together, so one run names every drifted fact rather than the first.
    never-registered knob is as much a no-op as a graduated one.
 4. **Vote-correctness stamps vs the committed reports.**
    ``eval/vote_correctness.py`` documents what ``vote_correctness_rate`` reads
-   on each recorded set. Every ``<set>/tournament-eval-report.json`` owns those
+   on each recorded set. Every ``<set>/tournament-eval-report.json.gz`` owns those
    numbers: the rate is re-derived here as
    ``evidence_backed_impostor_ejections / impostor_ejections`` — never a
    literal in this file, so a re-record only re-stamps the module — and the
@@ -94,7 +94,7 @@ together, so one run names every drifted fact rather than the first.
 8. **The results table agrees with the reading guide.** The numbers are stated
    once: every row of README.md's results table must appear in
    docs/reading-guide.md's numbers table with the SAME figure and the same
-   ``At baseline 7`` cell, so a later edit cannot drift one from the other, and
+   ``At baseline 8`` cell, so a later edit cannot drift one from the other, and
    neither table may state one claim twice.
 9. **The results figures are re-derived from their sources.** Agreement between
    two documents cannot catch a figure edited identically in both, so every row
@@ -104,7 +104,7 @@ together, so one run names every drifted fact rather than the first.
    reading guide's cross-tab cells, and the proof-vs-inference conviction pair
    from BOTH recordings that measured it — the current one's published read
    for the figure, and the read published by the recording it REPLACED for the
-   ``At baseline 7`` cell. Each is checked against itself first
+   ``At baseline 8`` cell. Each is checked against itself first
    (an accuracy cell fixes its own injustice count), and the published row must
    still say every innocent ejection sits in the no-proof cell, with the count
    the record read. The win rates are re-derived in check 1.
@@ -168,7 +168,7 @@ together, so one run names every drifted fact rather than the first.
 20. **The ML corpus's headline disclosures are re-derived from the reports.**
     ``replays/ml_corpus/README.md``'s capability-disclosures section states a
     meeting total and eight roll-call coverage pairs; each is recomputed from
-    the recorded sets' own ``tournament-eval-report.json``, so the section
+    the recorded sets' own ``tournament-eval-report.json.gz``, so the section
     cannot be relabelled onto a new substrate with the previous substrate's
     arithmetic still in it.
 21. **Experiment registry vs .env.example.** ``meetings.evidence_profile``
@@ -198,7 +198,7 @@ import json
 import posixpath
 import re
 import sys
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence, Sized
 from datetime import date
 from pathlib import Path
 from typing import Final, NamedTuple, cast
@@ -221,6 +221,7 @@ from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
 from paired_stats import compute_paired_stats  # noqa: E402
 
+from eval.report_io import REPORT_FILENAME, open_report_text  # noqa: E402
 from meetings.evidence_profile import (  # noqa: E402
     EXPERIMENT_ENV_NAMES,
     MeetingEvidenceProfile,
@@ -233,7 +234,7 @@ from orchestrator.replay import (  # noqa: E402
 
 _README: Final = "README.md"
 _ENV_EXAMPLE: Final = ".env.example"
-_LADDER_TIP_AUDIT: Final = "audits/audit-phase-21-rerecord.md"
+_LADDER_TIP_AUDIT: Final = "audits/audit-2026-09-22-process-rerecord.md"
 _GLOSSARY: Final = "docs/glossary.md"
 _HISTORY: Final = "docs/history.md"
 _READING_GUIDE: Final = "docs/reading-guide.md"
@@ -301,7 +302,7 @@ _RECORDED_SETS: Final[tuple[str, ...]] = (
     "replays/ml_corpus/4p1i",
     "replays/ml_corpus/9p2i",
 )
-_EVAL_REPORT_PATH: Final = "{set_dir}/tournament-eval-report.json"
+_EVAL_REPORT_PATH: Final = "{set_dir}/" + REPORT_FILENAME
 _SET_MANIFEST_PATH: Final = "{set_dir}/MANIFEST.md"
 _VOTE_CORRECTNESS_KEY: Final = '"vote_correctness":'
 # The stamp a set with no impostor ejections carries: the rate is undefined
@@ -503,7 +504,7 @@ _RESULTS_TABLE_HEADER: Final[tuple[str, str]] = ("What", "Figure")
 # The column carrying each row's value at the recording this one replaced. Its
 # cells are HISTORY: the claim-shaped scans hold them to what the record itself
 # says the old value was, never to today's committed bytes.
-_BEFORE_COLUMN_HEADER: Final = "At baseline 7"
+_BEFORE_COLUMN_HEADER: Final = "At baseline 8"
 # A markdown link reduced to its text, so a column header may carry its glossary
 # link and still be matched by name.
 _LINK_TEXT: Final = re.compile(r"\[([^\]]*)\]\([^)\s]+\)")
@@ -592,7 +593,7 @@ _MIN_EXHIBIT_SEEDS: Final = 2
 # which is the only recording a history column can honestly be about. Both are
 # parsed by :func:`record_partition`, so the two columns are the same cells
 # measured on two recordings rather than two differently-shaped tables.
-_PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-20-baseline-7.md"
+_PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-21-rerecord.md"
 # Each cell of the record's read is its own section, and the pooled row of the
 # table inside it is the cell the front door quotes. Located by the heading, so
 # the four ``| set | before | after |`` tables cannot be confused for each other.
@@ -618,8 +619,8 @@ _DIRECT_PROOF_POOLED: Final = re.compile(
 )
 # The record's win-split table: the PREVIOUS baseline's rate each set carried,
 # which is what a before-column win-rate claim is held to. The literal tracks the
-# record being read — baseline 8's history column is baseline 7's rate.
-_WIN_SPLIT_HEADER: Final[tuple[str, str]] = ("set", "baseline-7 impostor rate")
+# record being read — baseline 9's history column is baseline 8's rate.
+_WIN_SPLIT_HEADER: Final[tuple[str, str]] = ("set", "baseline-8 impostor rate")
 _WIN_SPLIT_ROW: Final = "samples/{name}"
 _PROOF_CLAIM: Final = (
     "Ejection accuracy with engine-certified proof of the ejectee's role, "
@@ -675,6 +676,11 @@ _RATE_CLAIM: Final = re.compile(r"(\d+)\s*(?:of|/)\s*(\d+)\s*=\s*(0\.\d+|1\.0+)"
 # nothing at all, and its four bar cells would be the only headline figures on
 # the front door no check could hold to a source.
 _FINDING_RECORD_AUDIT: Final = "audits/audit-phase-21-adopting-record.md"
+# The recording that record was read against: baseline 8, whose own cells its
+# history column restates and whose tip its close records. Fixed, unlike
+# :data:`_LADDER_TIP_AUDIT`: a later recording moves the tip, never what an
+# earlier decision was measured against.
+_FINDING_BASE_AUDIT: Final = "audits/audit-phase-21-rerecord.md"
 # Its verdict table, located by its first two header cells. Six columns exactly:
 # bar, cell, target, the previous recording's value, this record's value, the
 # verdict. The width is required so a column added or dropped fails loud instead
@@ -874,7 +880,7 @@ _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
 
 # The committed report the README hands a reader instead of the empty one a
 # fake-provider run produces, and the phrase that anchors its paragraph.
-_POPULATED_REPORT: Final = "replays/samples/9p2i/tournament-eval-report.json"
+_POPULATED_REPORT: Final = "replays/samples/9p2i/" + REPORT_FILENAME
 _EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
 
 # One word budget per front-door page, as ``(document, floor, ceiling)`` —
@@ -1071,7 +1077,7 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
     ``replays/ml_corpus/README.md``'s capability-disclosures section may not
     state a headline cell the recorded bytes do not give: the crew-triggered
     meeting cell and the eight roll-call coverage pairs. Every side of every
-    cell is re-derived from the recorded sets' ``tournament-eval-report.json``,
+    cell is re-derived from the recorded sets' ``tournament-eval-report.json.gz``,
     never from a literal here, so a re-record only re-states the section. The
     meeting cell's NUMERATOR is counted from the meeting rows' own
     ``triggered_by`` against each game's role map — the claim is that no meeting
@@ -1245,7 +1251,9 @@ def read_disclosure_facts(
     reading_coverage = False
     depth = 0
     try:
-        with path.open(encoding="utf-8") as handle:
+        # Gzipped since 2026-09-22 and streamed like read_report_block: the
+        # archive iterates line by line, so the document is never loaded whole.
+        with open_report_text(path) as handle:
             for line in handle:
                 if block is not None:
                     depth += line.count("{") - line.count("}")
@@ -1740,29 +1748,33 @@ def check_ladder_tip(repo_root: Path, errors: list[str]) -> None:
                 )
 
 
-def recorded_ladder_tip(repo_root: Path, errors: list[str]) -> str | None:
-    """The baseline the substrate ladder stands at, per the close audit.
+def recorded_ladder_tip(
+    repo_root: Path, errors: list[str], source: str = _LADDER_TIP_AUDIT
+) -> str | None:
+    """The baseline the substrate ladder stands at, per the record ``source``.
 
-    The one committed source for "which baseline is this". ``None`` with an
-    error recorded when the audit names none or names several — both are drift
-    the callers report rather than guess through. Whitespace is collapsed
-    first because the audit wraps its prose mid-sentence.
+    The one committed source for "which baseline is this": the ladder-tip
+    audit by default, or an earlier record for the tip it stood at in its own
+    day. ``None`` with an error recorded when the audit names none or names
+    several — both are drift the callers report rather than guess through.
+    Whitespace is collapsed first because the audit wraps its prose
+    mid-sentence.
     """
 
-    audit = read_document(repo_root, _LADDER_TIP_AUDIT, errors)
+    audit = read_document(repo_root, source, errors)
     if audit is None:
         return None
     recorded = _AUDIT_LADDER_TIP.findall(re.sub(r"\s+", " ", audit))
     if not recorded:
         errors.append(
-            f"{_LADDER_TIP_AUDIT}: no 'the ladder tip stands at baseline N' "
+            f"{source}: no 'the ladder tip stands at baseline N' "
             "sentence — the ladder tip has no committed source to check against."
         )
         return None
     if len(set(recorded)) > 1:
         named = ", ".join(f"baseline {tip}" for tip in sorted(set(recorded)))
         errors.append(
-            f"{_LADDER_TIP_AUDIT}: disagreeing ladder-tip records ({named}); "
+            f"{source}: disagreeing ladder-tip records ({named}); "
             "the audit must record one tip."
         )
         return None
@@ -2144,17 +2156,21 @@ def check_vote_correctness_provenance(
     one provenance line cannot describe two substrates. The baseline comes from
     the ladder-tip audit.
 
-    The baseline, the model and the prompt-set token (``<family>.<version>``)
-    are short enough to be named in the module and are required there — inside
-    the provenance lead-in that introduces the stamps
-    (:func:`provenance_lead_in`), never merely somewhere in the file, so a
-    correct token in an unrelated comment cannot alibi a wrong lead-in. The
-    flags stamp is tens of keys wide, so it is held to agreement only: naming
-    it in prose would be a second copy to rot.
+    A recording may run its templates at different versions, so a row's prompt
+    set is the SET of ``<family>.<version>`` tokens its templates carry, and it
+    is that set which every row of every set must repeat: a lone row, or a
+    whole set, carrying one different token is a second substrate.
+
+    The baseline, the model and every prompt-set token are short enough to be
+    named in the module and are required there — inside the provenance lead-in
+    that introduces the stamps (:func:`provenance_lead_in`), never merely
+    somewhere in the file, so a correct token in an unrelated comment cannot
+    alibi a wrong lead-in. The flags stamp is tens of keys wide, so it is held
+    to agreement only: naming it in prose would be a second copy to rot.
     """
 
     models: set[str] = set()
-    prompt_tokens: set[str] = set()
+    prompt_stamps: set[frozenset[str]] = set()
     flag_stamps: set[str] = set()
     for set_dir in _RECORDED_SETS:
         relative_path = _SET_MANIFEST_PATH.format(set_dir=set_dir)
@@ -2169,15 +2185,21 @@ def check_vote_correctness_provenance(
             )
             continue
         set_models = {row.model.strip() for row in rows if row.model.strip()}
-        set_prompt_tokens: set[str] = set()
+        set_prompt_stamps: set[frozenset[str]] = set()
         set_flag_stamps: set[str] = set()
         for row in rows:
             # Entries are ``template.family.version``; the no-meetings sentinel
-            # and empty cells have no dotted shape and are skipped.
-            for entry in row.prompt_versions.split(","):
-                segments = entry.strip().split(".")
-                if len(segments) >= 3:
-                    set_prompt_tokens.add(f"{segments[-2]}.{segments[-1]}")
+            # and empty cells have no dotted shape, and a row carrying nothing
+            # else states no prompt set and is skipped.
+            row_tokens = frozenset(
+                f"{segments[-2]}.{segments[-1]}"
+                for segments in (
+                    entry.strip().split(".") for entry in row.prompt_versions.split(",")
+                )
+                if len(segments) >= 3
+            )
+            if row_tokens:
+                set_prompt_stamps.add(row_tokens)
             # Order-insensitive: the stamp is the SET of flags a row was
             # recorded under, not the order the writer happened to render.
             set_flag_stamps.add(
@@ -2187,11 +2209,12 @@ def check_vote_correctness_provenance(
                     )
                 )
             )
-        for label, supplied in (
+        supplies: tuple[tuple[str, Sized], ...] = (
             ("recording model", set_models),
-            ("prompt set", set_prompt_tokens),
+            ("prompt set", set_prompt_stamps),
             ("substrate flags", set_flag_stamps),
-        ):
+        )
+        for label, supplied in supplies:
             if not supplied:
                 errors.append(
                     f"{relative_path}: records no {label} on any row, so this "
@@ -2200,7 +2223,7 @@ def check_vote_correctness_provenance(
                     "sibling manifest must not vouch for it."
                 )
         models |= set_models
-        prompt_tokens |= set_prompt_tokens
+        prompt_stamps |= set_prompt_stamps
         flag_stamps |= set_flag_stamps
 
     lead_in = provenance_lead_in(module)
@@ -2222,22 +2245,27 @@ def check_vote_correctness_provenance(
             "checks out."
         )
 
-    for label, tokens, name_in_lead_in in (
-        ("recording model", models, True),
-        ("prompt set", prompt_tokens, True),
-        ("substrate flags", flag_stamps, False),
-    ):
-        if len(tokens) > 1:
+    # Each column as its distinct stamps, a stamp being the tokens one row
+    # carries: one token for the model and the flags, the whole token set for
+    # the prompts. Agreement means exactly one stamp across every row.
+    substrates: tuple[tuple[str, set[frozenset[str]], bool], ...] = (
+        ("recording model", {frozenset({model}) for model in models}, True),
+        ("prompt set", prompt_stamps, True),
+        ("substrate flags", {frozenset({stamp}) for stamp in flag_stamps}, False),
+    )
+    for label, stamps, name_in_lead_in in substrates:
+        if len(stamps) > 1:
+            rendered = sorted(" + ".join(sorted(stamp)) for stamp in stamps)
             errors.append(
                 f"{_VOTE_CORRECTNESS_MODULE}: the recorded sets disagree on the "
-                f"{label} ({' | '.join(sorted(tokens))}) — one provenance line "
+                f"{label} ({' | '.join(rendered)}) — one provenance line "
                 f"cannot describe them; {', '.join(_RECORDED_SETS)} should share "
                 "one substrate."
             )
             continue
         if not name_in_lead_in:
             continue
-        for token in tokens:
+        for token in sorted(token for stamp in stamps for token in stamp):
             if token not in lead_in:
                 errors.append(
                     f"{_VOTE_CORRECTNESS_MODULE}: the stamps' provenance lead-in "
@@ -2269,7 +2297,10 @@ def read_report_block(
     path = repo_root / relative_path
     block: list[str] = []
     try:
-        with path.open(encoding="utf-8") as handle:
+        # Gzipped since 2026-09-22, and still STREAMED: the archive iterates
+        # line by line exactly as the plain file did, so the whole document is
+        # never loaded to read one block.
+        with open_report_text(path) as handle:
             depth = 0
             for line in handle:
                 if not block:
@@ -3895,7 +3926,9 @@ def check_close_claims(repo_root: Path, errors: list[str]) -> None:
             errors.append(
                 f"{_PHASE_21_CLOSE}: opening misstates bar {number} as {value}"
             )
-    tip = recorded_ladder_tip(repo_root, errors)
+    # The close records the tip of ITS day — the recording its rule was read
+    # against — which a later recording does not rewrite.
+    tip = recorded_ladder_tip(repo_root, errors, _FINDING_BASE_AUDIT)
     stated_tips = _AUDIT_LADDER_TIP.findall(prose)
     if tip is not None and (not stated_tips or any(n != tip for n in stated_tips)):
         errors.append(
@@ -4556,16 +4589,23 @@ def check_finding_history(
 ) -> None:
     """The verdict table's history column, against the recording that owns it.
 
-    Two of the four bars re-read cells the ladder-tip recording published, so
-    the deciding record's account of what it moved FROM is checkable against
-    that recording's own audit rather than taken on trust. The other two
-    measure cells no earlier record published; the bar sections above hold
-    those.
+    Two of the four bars re-read cells the recording they were measured
+    against published (:data:`_FINDING_BASE_AUDIT`), so the deciding record's
+    account of what it moved FROM is checkable against that recording's own
+    audit rather than taken on trust. The other two measure cells no earlier
+    record published; the bar sections above hold those.
     """
 
-    partition = audit_partition(repo_root, _LADDER_TIP_AUDIT, record_partition, [])
+    partition = audit_partition(repo_root, _FINDING_BASE_AUDIT, record_partition, [])
     if partition is None:
-        return  # check_conviction_partition reports a record it cannot read
+        # check_conviction_partition already reports either record it reads
+        # itself; a base record it does not read is reported here instead.
+        if _FINDING_BASE_AUDIT not in (_LADDER_TIP_AUDIT, _PROOF_PARTITION_AUDIT):
+            errors.append(
+                f"{_FINDING_BASE_AUDIT}: its published cells cannot be read, so "
+                f"{_FINDING_RECORD_AUDIT}'s history column has no source."
+            )
+        return
     for number, expected in (
         (_ACCURACY_BAR, partition[1]),
         (_INNOCENT_BAR, partition[2]),
@@ -4575,7 +4615,7 @@ def check_finding_history(
             errors.append(
                 f"{_FINDING_RECORD_AUDIT}: bar {number}'s history cell reads "
                 f"{_EMPHASIS.sub('', bars[number].before).strip()!r}, but "
-                f"{_LADDER_TIP_AUDIT} — the recording it is read against — "
+                f"{_FINDING_BASE_AUDIT} — the recording it is read against — "
                 f"published {expected}."
             )
 

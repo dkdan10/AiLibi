@@ -18,7 +18,7 @@
 // genuinely reaches, so a slow CI runner makes the suite slower, never redder.
 // The one time-shaped wait is the autoplay→pause assertion, expressed as a
 // generous assertion timeout (the transport advances one frame per 500 ms at
-// 1×, and the curated head's first meeting is ~8 frames in).
+// 1×, and the curated head's first meeting is ~11 frames in).
 //
 // The guided tour is suppressed via `localStorage` before the first paint —
 // see `openFeaturedReplay`.

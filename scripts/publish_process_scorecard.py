@@ -249,11 +249,14 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
         "",
         "## Recording provenance",
         "",
-        "These four sets are one era — the committed bytes at publication, before "
-        "the substrate wave. They are labelled, never averaged across a boundary: "
-        "once the grounded-SKIP card and the weighing channel land and the "
-        "re-record runs, the SKIP rows move off zero and rows 2 and 9 stop being "
-        "comparable across that line.",
+        "These four sets are one era — baseline 9, recorded after the substrate "
+        "wave (the route claim, the grounded SKIP with its labelling guards, and "
+        "the weighing channel) by "
+        "[the process re-record](../audits/audit-2026-09-22-process-rerecord.md). "
+        "They are labelled, never averaged across a boundary: the column on the "
+        "recordings made before that wave is committed in that record's section "
+        "1, the SKIP row read 0 there by instruction, and row 3's claims became "
+        "routes across the same line, so no row pools with that column.",
         "",
     ]
     lines.extend(f"* `{source}`" for source in scorecard.recording_provenance)

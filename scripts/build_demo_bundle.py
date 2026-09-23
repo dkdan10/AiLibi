@@ -25,8 +25,10 @@ not a cut-down copy of it.
 **What is baked, and what is not.** Only the hand-curated FEATURED games —
 read straight out of ``frontend/src/components/ReplayPicker.tsx`` so the demo can
 never drift from the editorial list — plus the picker metadata and the rubric rows
-those games need. Deliberately absent: ``tournament-eval-report.json`` (the 9p2i
-one is 29 MB — that is the corpus, not a demo), the per-tick endpoint and the cost
+those games need. Deliberately absent: ``tournament-eval-report.json.gz`` (the
+9p2i one is 33.86 MB uncompressed, 2.89 MB gzipped, and the ML corpus one is
+102.70 MB uncompressed — that is the corpus, not a demo), the per-tick endpoint
+and the cost
 summary (no caller), and every set the featured list does not name. The dashboard
 tab in a bundle therefore renders a "No tournament report" card written for this
 artifact — what the demo ships, and where the eval report lives, in app-authored

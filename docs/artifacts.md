@@ -94,11 +94,11 @@ than its output preserved.
 
 | artifact | class | where | size |
 |---|---|---|---|
-| `replays/samples/` — the baseline-8 maintenance re-record (100 replays + per-set `MANIFEST.md`); it published no bars and adopted nothing, and the later lever-ON candidate returned FINDING, so these stay the canonical bytes | (a) + (b) | in git | 61 MB / 107 files |
-| `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
+| `replays/samples/` — the baseline-9 process re-record (100 replays + per-set `MANIFEST.md`), the substrate wave's adopting record; it published cells and no bars, and these are the canonical bytes | (a) + (b) | in git | 40 MB / 107 files |
+| `replays/ml_corpus/` — the committed ML corpus; its `tournament-eval-report.json.gz` is gzipped, as all four sets' are, because the uncompressed report reached 102.70 MB against GitHub's hard 100 MB per-file limit (the owner's delivery decision of 2026-09-22) | (a) | in git | 114 MB / 209 files |
 | `replays/records/phase-21-wave2-finding/` — the pin and the per-file digests for a 300-game recording that is NOT one of the canonical replay sets, plus a README saying why it is not | (b) | in git | 2 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
-| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; one frozen format-3 recording and its README for the cross-tree policy check; the bump-in-flight prompt archive holds the six `qwen3_6_27b` v5 bodies, because every committed replay stamps v5 while the live set reads v6 — the alibi-as-route bump — with `vote_ballot` alone at v7 since the grounded-SKIP bump and at v8 since the weighing-channel bump, and the re-record that closes that window retires them) | (a) | in git | 2,196,250 tracked bytes / 35 files |
+| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; one frozen format-3 recording and its README for the cross-tree policy check; frozen baseline-8 meetings and their README, for tests whose exhibit the baseline-9 bytes no longer carry; no prompt archive, since every committed replay stamps the live `qwen3_6_27b` set — v6, with `vote_ballot` at v8 — and the baseline-9 re-record retired the v5 bodies) | (a) | in git | 4,064,349 tracked bytes / 35 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
 | `training/artifacts/impostor/`, `crew/`, `anchor_study/` — the **canonical learned genomes** (`weights.json` + `config.json` + `stamp.json` + `weights.json.sha256`) | (a) + (b) | in git | 1.5 MB / 105 files |
 | `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed runner, each with its sidecars and its own committed GO/NO-GO verdict; the two FITTED models additionally carry `fit-corpus.json` provenance, which the composed runner has no weights to need | (a) + (b) | in git | 8.1 KB / 15 files |
@@ -106,11 +106,11 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,535,502 tracked bytes / 328 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,632,967 tracked bytes / 329 files |
 | `docs/media/` — the README captures, their provenance, and the as-built architecture picture | (a) | in git | 1.4 MB / 7 files |
 | `docs/process-scorecard.md` + `docs/process-scorecard.json` — the nine-row process scorecard, folded from the committed recordings with no model call: the flattened measurement rows a spectator surface's cells will be read from, and the markdown that publishes them. `scripts/publish_process_scorecard.py --check` pins both against a recomputation, so the size states files and not bytes — a re-record rewrites the numbers without touching this row | (b) | in git | 2 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
-| `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
+| `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 6.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
 | **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate: recovered, folded onto the pinned commit and hash-verified, with one owner step still open (below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
 | **`wave2-finding/` on `evidence/phase-21-wave2-finding`** — a 300-game recording that is not one of the canonical replay sets: it reads only with the three Wave-2 levers switched on, so it is pinned rather than committed | **(c)** | pinned sha | **248.063 MiB / 315 restored files** (316 on the commit: its own README is hashed against the manifest but never restored, because the destination already holds the committed one) |

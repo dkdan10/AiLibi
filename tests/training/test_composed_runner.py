@@ -1314,27 +1314,31 @@ def test_decide_composed_go_cross_checks_shas_and_round_trips(
 def test_composed_fidelity_scores_the_committed_test_split(
     composed_fidelity: ComposedFidelityReport,
 ) -> None:
-    """Exactly 91 test meetings / 57 ejections; the standing top-1 recipe holds."""
+    """Exactly 94 test meetings / 52 ejections; the standing top-1 recipe holds."""
 
     report = composed_fidelity
-    assert report.test_meetings == 91  # was 96 on the baseline-6 fit
-    assert report.test_ejections == 57  # was 60
-    assert report.always_eject_baseline == pytest.approx(57 / 91, abs=1e-12)
-    # The convicting top-1 is the SAME recipe the surrogate reports: 47/57.
-    assert report.convicting_top1 == pytest.approx(47 / 57, abs=1e-12)
-    assert report.top1_ceiling == pytest.approx(47 / 57, abs=1e-12)
+    assert report.test_meetings == 94  # was 91
+    assert report.test_ejections == 52  # was 57
+    assert report.always_eject_baseline == pytest.approx(
+        52 / 94, abs=1e-12
+    )  # was 57 / 91
+    # The convicting top-1 is the SAME recipe the surrogate reports: 46/52.
+    assert report.convicting_top1 == pytest.approx(46 / 52, abs=1e-12)  # was 47 / 57
+    # The frozen surrogate's top-1 now sits ABOVE this ceiling (46/52 against
+    # 41/52); the record routes that reading to the ML re-ground.
+    assert report.top1_ceiling == pytest.approx(41 / 52, abs=1e-12)  # was 47 / 57
     # The surrogate tally's near-total SKIP degeneracy is the NO-GO fact composed
-    # around: the tally reaches an ejection on two of the 91 test meetings.
-    assert report.surrogate_tally_ejections == 2
-    assert report.surrogate_tally_skips == 89
-    # Gate confusion partitions the 91 test meetings.
+    # around: the tally reaches an ejection on four of the 94 test meetings.
+    assert report.surrogate_tally_ejections == 4  # was 2
+    assert report.surrogate_tally_skips == 90  # was 89
+    # Gate confusion partitions the 94 test meetings.
     total = (
         report.gate_true_positives
         + report.gate_false_positives
         + report.gate_false_negatives
         + report.gate_true_negatives
     )
-    assert total == 91
+    assert total == 94  # was 91
     assert 0.0 <= report.decision_accuracy <= 1.0
 
 
@@ -1366,7 +1370,7 @@ def test_composed_fidelity_top1_matches_an_independent_recompute(
         ejections += 1
         if model.predict(view).ranking[0] == view.ejected:
             hits += 1
-    assert ejections == 57  # was 60 on the baseline-6 fit
+    assert ejections == 52  # was 57
     assert composed_fidelity.convicting_top1 == pytest.approx(
         hits / ejections, abs=1e-12
     )
@@ -1384,7 +1388,7 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
     firewall), which shifts the softmax denominator on multi-impostor meetings.
     Measured, never assumed away (Codex review on PR #310; the surrogate's own
     live-parity idiom): re-scoring the whole held-out split through the LIVE
-    views moves the top-1 to 45/57 and the decision channel to 82/91 — and every
+    views gives a top-1 of 46/52 and a decision channel of 79/94 — and every
     gating cell still clears its bar, so the composed verdict reads GO under the
     live channel too.
     """
@@ -1487,11 +1491,12 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
             if ranking[0] == view.ejected:
                 top1_hits += 1
 
-    # The measured live-exclusion cells, re-derived at the Task-21.17 re-ground.
-    assert (decision_hits, ejections) == (82, 57)  # was (83, 60)
-    assert top1_hits == 45
-    assert exact_hits == 74  # was 75
-    assert tally_ejections == 2  # was 0
+    # The measured live-exclusion cells, re-derived through both frozen fits on
+    # the baseline-9 corpus.
+    assert (decision_hits, ejections) == (79, 52)  # was (82, 57)
+    assert top1_hits == 46  # was 45
+    assert exact_hits == 78  # was 74
+    assert tally_ejections == 2  # was 2
     assert gate_convictions == composed_fidelity.predicted_convictions
 
     # The verdict is invariant: re-deciding on the live-channel cells reads GO.
@@ -1514,7 +1519,7 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
     )
     assert verdict.verdict == "GO"
     assert verdict.meets_decision_bar and verdict.meets_top1_bar
-    assert verdict.convicting_top1 == pytest.approx(45 / 57)
+    assert verdict.convicting_top1 == pytest.approx(46 / 52)  # was 45 / 57
 
 
 # --------------------------------------------------------------------------- #

@@ -56,6 +56,31 @@ SAMPLES_4P1I: Final[Path] = repo_root / "replays" / "samples" / "4p1i"
 CORPUS_9P2I: Final[Path] = repo_root / "replays" / "ml_corpus" / "9p2i"
 CORPUS_4P1I: Final[Path] = repo_root / "replays" / "ml_corpus" / "4p1i"
 
+#: Recorded meetings frozen out of the baseline-8 sets the baseline-9 re-record
+#: replaced, for tests whose exhibit shape no committed set carries any more.
+#: Each file's source, transform and sha256 are in the README beside them.
+BASELINE8_EXHIBITS: Final[Path] = (
+    repo_root / "tests" / "fixtures" / "baseline8_exhibits"
+)
+
+
+def frozen_meetings(name: str) -> tuple[MeetingReplayEntry, ...]:
+    """Every meeting line of the frozen exhibit file ``name``, in file order.
+
+    Raises when the file holds anything but meeting lines, so an exhibit cannot
+    quietly grow a row the tests reading it never looked at.
+    """
+
+    from orchestrator.replay import MeetingReplayEntry, read_all_entries
+
+    entries = read_all_entries(BASELINE8_EXHIBITS / name)
+    meetings = tuple(
+        entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+    )
+    if len(meetings) != len(entries):
+        raise ValueError(f"{name}: a frozen exhibit holds meeting lines only")
+    return meetings
+
 
 @cache
 def report_9p2i() -> TournamentEvalReport:

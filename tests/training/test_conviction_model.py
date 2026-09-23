@@ -290,7 +290,7 @@ def test_flag_labels_reproduce_the_referee_census(sample_dir: Path) -> None:
 def test_sample_conversion_census_pins(
     nine_conviction: ConvictionTable, four_conviction: ConvictionTable
 ) -> None:
-    """The mirrored conversion census on the committed baseline-8 samples.
+    """The mirrored conversion census on the committed baseline-9 samples.
 
     Regression pins (re-derived from bytes, re-pinned at any re-record):
     the observation-backed conversion economy the 18.11 gate shipped stays
@@ -298,11 +298,11 @@ def test_sample_conversion_census_pins(
     §3.1 census measured at baseline 5.
     """
 
-    assert nine_conviction.meetings_total == 151  # was 152
-    assert nine_conviction.conversion_attempts_total == 128  # was 132
-    assert nine_conviction.conversions_total == 81  # was 84
-    assert four_conviction.meetings_total == 39  # was 40
-    assert four_conviction.conversion_attempts_total == 33  # was 34
+    assert nine_conviction.meetings_total == 145  # was 151
+    assert nine_conviction.conversion_attempts_total == 112  # was 128
+    assert nine_conviction.conversions_total == 79  # was 81
+    assert four_conviction.meetings_total == 39  # was 39
+    assert four_conviction.conversion_attempts_total == 37  # was 33
     assert four_conviction.conversions_total == 20  # was 20
 
 
@@ -779,24 +779,25 @@ def test_verdict_consequence_mapping_is_pre_committed() -> None:
 
 
 def test_corpus_census_pins(corpus_conviction: ConvictionTable) -> None:
-    """The baseline-8 corpus economy, pinned (re-derived at any re-record)."""
+    """The baseline-9 corpus economy, pinned (re-derived at any re-record)."""
 
     assert corpus_conviction.games_total == 150
-    assert corpus_conviction.meetings_total == 439  # was 432
-    assert corpus_conviction.ejections_total == 281  # was 280
+    assert corpus_conviction.meetings_total == 449  # was 439
+    assert corpus_conviction.ejections_total == 273  # was 281
     # Every recorded contradiction on the set, vents included: the label is
-    # exactly len(entry.contradictions) per meeting (315 persisted vent + 134
-    # re-derived). The retired transcript re-derivation reached 431 by losing 43
-    # recorded flags and minting 46 the record never carried.
-    assert corpus_conviction.flags_minted_total == 449  # was 428
-    assert corpus_conviction.conversion_attempts_total == 386  # was 373
-    assert corpus_conviction.conversions_total == 249  # was 249
+    # exactly len(entry.contradictions) per meeting (317 persisted vent + 57
+    # re-derived). On the baseline-8 bytes the retired transcript re-derivation
+    # reached 431 by losing 43 recorded flags and minting 46 the record never
+    # carried.
+    assert corpus_conviction.flags_minted_total == 374  # was 449
+    assert corpus_conviction.conversion_attempts_total == 375  # was 386
+    assert corpus_conviction.conversions_total == 234  # was 249
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
     assert (
-        sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 348
-    )  # was 345
+        sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 355
+    )  # was 348
 
 
 def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
@@ -980,34 +981,38 @@ def test_axis_three_refuses_a_degenerate_head_the_recall_bar_waves_through(
 def test_axis_three_is_a_floor_the_live_model_clears_on_all_three(
     corpus_conviction: ConvictionTable,
 ) -> None:
-    """The frozen re-derivation still passes every axis, axis 3 by a wide margin.
+    """The frozen weights, read out of sample, still pass every axis, axis 3 by a
+    wide margin.
 
     Recomputed from the committed weights against the corpus now on disk, never
-    copied from the contract: held-out confusion (TP, FP, FN, TN) = (49, 3, 2,
-    37) over 91 test meetings with 51 conversions, so recall is 49/51, accuracy
-    86/91, and the population's own best constant answer is 51/91. The axis is a
-    floor the real model clears, not a re-verdict on it.
+    copied from the contract. The weights were fitted on the baseline-8 corpus,
+    and the baseline-9 re-record replaced every game under them, so this is a
+    fully out-of-sample read: the model has never seen a meeting it is scored on
+    here. Held-out confusion (TP, FP, FN, TN) = (42, 5, 2, 45) over 94 test
+    meetings with 44 conversions, so recall is 42/44, accuracy 87/94, and the
+    population's own best constant answer is 50/94. The axis is a floor the real
+    model clears, not a re-verdict on it, and not a substitute for the re-ground.
     """
 
     model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)
     report, _ = run_conviction_fidelity(corpus_conviction, model=model)
     verdict = decide_conviction_go(report, weights_sha256=digest)
 
-    assert (report.test_meetings, report.conversions_test) == (91, 51)  # was (87, 51)
+    assert (report.test_meetings, report.conversions_test) == (94, 44)  # was (91, 51)
     assert (
         report.true_positives,
         report.false_positives,
         report.false_negatives,
         report.true_negatives,
-    ) == (49, 3, 2, 37)  # was (45, 2, 6, 34)
-    assert report.conversion_recall == pytest.approx(49 / 51)  # was 45 / 51
-    assert report.conversion_precision == pytest.approx(49 / 52)  # was 45 / 47
-    assert report.conversion_accuracy == pytest.approx(86 / 91)  # was 79 / 87
-    assert verdict.conversion_trivial_baseline == pytest.approx(51 / 91)  # was 51 / 87
-    assert verdict.conversion_accuracy == pytest.approx(86 / 91)  # was 79 / 87
+    ) == (42, 5, 2, 45)  # was (49, 3, 2, 37)
+    assert report.conversion_recall == pytest.approx(42 / 44)  # was 49 / 51
+    assert report.conversion_precision == pytest.approx(42 / 47)  # was 49 / 52
+    assert report.conversion_accuracy == pytest.approx(87 / 94)  # was 86 / 91
+    assert verdict.conversion_trivial_baseline == pytest.approx(50 / 94)  # was 51 / 91
+    assert verdict.conversion_accuracy == pytest.approx(87 / 94)  # was 86 / 91
     assert verdict.beats_trivial_conversion is True
-    # the margin the axis clears by  # was 79 / 87 - 51 / 87
-    assert 86 / 91 - 51 / 91 > 0.3
+    # the margin the axis clears by  # was 86 / 91 - 51 / 91
+    assert 87 / 94 - 50 / 94 > 0.3
     assert (
         verdict.meets_spearman_bar,
         verdict.meets_conversion_bar,

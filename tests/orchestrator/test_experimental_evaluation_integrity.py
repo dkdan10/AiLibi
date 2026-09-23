@@ -22,6 +22,7 @@ from eval.balance_eval import build_tournament_report, load_tournament_report
 from eval.meeting_quality import build_tournament_eval_report
 from eval.report_schema import TournamentReport
 from eval.replay_walk import ReplayWalkConfig, WalkViolation, walk_replay
+from eval.report_io import report_path, write_report_text
 from meetings.manager import MeetingTrigger
 from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from meetings.voting import tally_ballots
@@ -167,8 +168,8 @@ def test_candidate_partial_identity_reaches_current_report_and_api(
     assert game.outcome_verified is False
     assert report.provenance_groups is not None
     assert report.provenance_groups[0].experiment_config == config
-    (tmp_path / "tournament-eval-report.json").write_text(
-        build_tournament_eval_report(report).model_dump_json(), encoding="utf-8"
+    write_report_text(
+        report_path(tmp_path), build_tournament_eval_report(report).model_dump_json()
     )
     loader = ReplayLoader(tmp_path)
     metadata = loader.load_replay("headless-seed-1").metadata

@@ -62,7 +62,7 @@ the feedback path replays exactly.
 Coverage (GOLDEN-ARCH.md §3): the four template kinds are ``crewmate_report`` /
 ``impostor_report`` (the opening, split by opener role) and ``accusation_round``
 (reply + opt_in) / ``vote_ballot``. In the committed sets EVERY meeting opener is
-a CREWMATE (0 of 199 openers is an impostor — the FSM impostor presses no button;
+a CREWMATE (0 of 184 openers is an impostor — the FSM impostor presses no button;
 DESIGN.md §12, AGENTS.md), so ``impostor_report`` has NO committed coverage. The
 per-set counters therefore assert every kind that OCCURS in the recorded data was
 reproduced (a kind silently skipped fails the gate), and
@@ -80,15 +80,16 @@ bodies under ``tests/fixtures/prompt_archive/`` — so the walk renders each
 recorded meeting through the templates its own stamps name and every byte
 assertion keeps its meaning across the window.
 
-The window is OPEN: all 300 committed games stamp ``*.qwen3_6_27b.v6`` and the
-live registry reads v6 (the alibi-as-route bump), so every recorded meeting of
-both sample sets resolves through ``qwen3_6_27b_v5/``. An archived set is pinned
-on BOTH halves of what it rendered: the template bytes (``root=_ARCHIVE_ROOT``)
-and the render inputs that moved with it (:data:`ARCHIVED_MAP_CARDS`). The v6
-bump moves template bytes only — the ``<map>`` card's format is untouched — so
-the archived card is the live one, stated rather than assumed. The re-record
-that follows the substrate wave closes the window and retires the entry with its
-fixture bytes, leaving the seam for the next bump.
+The window is CLOSED: the baseline-9 record wrote all 300 committed games at
+the stamps the live registry serves — ``*.qwen3_6_27b.v6`` for the three turn
+templates and ``vote_ballot.qwen3_6_27b.v8`` — so every recorded meeting
+resolves through the LIVE bodies and the archive is EMPTY. That is the healthy
+state — an archive holds bytes only while a committed set names a prompt-set the
+registry has moved past. The seam itself stays for the next bump, and an
+archived set is pinned on BOTH halves of what it rendered: the template bytes
+(``root=_ARCHIVE_ROOT``) and the render inputs that moved with it
+(:data:`ARCHIVED_MAP_CARDS` — a bump that rewrites the ``<map>`` card's format
+is not reproduced by archived ``.j2`` bytes alone).
 """
 
 from __future__ import annotations
@@ -115,7 +116,6 @@ from agents.memory.store import DEFAULT_TOKEN_BUDGET, AgentMemory
 from agents.perception import ingest_packet
 from agents.strategic.prompts.loader import (
     _PROMPTS_ROOT,
-    CANONICAL_MAP_CARD,
     PromptRenderers,
     build_prompt_renderers,
 )
@@ -185,30 +185,20 @@ _SAMPLE_SETS: tuple[Path, ...] = (
 # a bump-in-flight window. Retire an entry when no committed set stamps it any
 # longer (the adopting re-record).
 #
-# OPEN: every committed set stamps ``*.qwen3_6_27b.v6`` while the live registry
-# has advanced to v6 (the alibi-as-route prompt bump), so all 192 recorded
-# meetings of the two sample sets resolve through the archived v5 bodies. The
-# re-record that follows the substrate wave retires this entry with its fixture
-# bytes.
+# EMPTY at this HEAD, and that is the healthy state: the baseline-9 record wrote
+# every committed set at the stamps the live registry serves
+# (``*.qwen3_6_27b.v6``, ``vote_ballot.qwen3_6_27b.v8``), so all 676 recorded
+# meetings resolve through the LIVE bodies alone and the archive has nothing to
+# hold. The v5 entry and its six fixture bodies retired with that record. The
+# mechanism stays for the next bump-in-flight window.
 _ARCHIVE_ROOT: Path = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive"
-ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {
-    "qwen3_6_27b_v5": {
-        "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
-        "impostor_report": "impostor_report.qwen3_6_27b.v5",
-        "accusation_round": "accusation_round.qwen3_6_27b.v5",
-        "vote_ballot": "vote_ballot.qwen3_6_27b.v5",
-    }
-}
+ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {}
 
 # The ``<map>`` card an archived set rendered through. A card is a RENDER INPUT,
 # not a template, so archived ``.j2`` bytes alone do not reproduce a prompt once
 # the card's own format moves — which is why an archive entry pairs each recorded
-# stamp with BOTH halves. The v5 → v6 bump moves template bytes only, so the v5
-# bodies rendered the card the live registry still serves; binding
-# :data:`CANONICAL_MAP_CARD` by name says that out loud, and a card edit made
-# without re-opening this pairing fails all 192 recorded meetings rather than
-# passing quietly.
-ARCHIVED_MAP_CARDS: Mapping[str, str] = {"qwen3_6_27b_v5": CANONICAL_MAP_CARD}
+# stamp with BOTH halves. Empty alongside the registry above.
+ARCHIVED_MAP_CARDS: Mapping[str, str] = {}
 
 # The four render kinds, labelled by the manager seam that emits each. The
 # opening is split crewmate/impostor (both are ``ReportPromptRenderer``s); the
@@ -287,13 +277,14 @@ class ReconstructedMeeting:
     from ``entry``, read as recorded rather than re-derived. That is what lets
     this walk keep reconstructing committed bytes across a deliberate change to
     the ballot chain -- ruling D6 of 2026-09-19 retired two target-rewriting
-    guards, which moves 24 of the 986 committed sample ballots across 15 of the
-    190 meetings this walk covers -- instead of making every recording
-    unwalkable until the re-record. Those four figures are not prose: they are
-    the census :func:`test_every_reconstruction_divergence_is_a_retired_guard`
-    pins per set, ``(151, 869, 23, 14)`` for 9p2i and ``(39, 117, 1, 1)`` for
-    4p1i. Every consumer of this walk therefore reads the decision the recording
-    actually made, which is what each of them was already asserting about.
+    guards, which moved 24 of the 986 baseline-8 sample ballots across 15 of its
+    190 meetings -- instead of making every recording unwalkable until the
+    re-record. The baseline-9 record was written after D6, so no committed
+    ballot carries either retired reason and nothing moves: the census
+    :func:`test_every_reconstruction_divergence_is_a_retired_guard` pins per set
+    reads ``(145, 845, 0, 0)`` for 9p2i and ``(39, 117, 0, 0)`` for 4p1i. Every
+    consumer of this walk therefore reads the decision the recording actually
+    made, which is what each of them was already asserting about.
 
     ``rebuilt_ballots`` is the other half, kept rather than discarded: the
     ballots TODAY's chain produced from the same recorded completions. Nothing
@@ -1113,7 +1104,7 @@ def test_present_template_kinds_are_each_reproduced(set_walk: _SetWalk) -> None:
 
     ``crewmate_report`` / ``accusation_round`` / ``vote_ballot`` all occur in
     both committed sets and must each be reproduced. ``impostor_report`` does
-    NOT occur — every one of the 199 committed meeting openers is a crewmate
+    NOT occur — every one of the 184 committed meeting openers is a crewmate
     (the FSM impostor presses no button; DESIGN.md §12) — so it is covered by
     :func:`test_impostor_report_opening_kind_is_exercised` instead, not asserted
     per-set here (asserting it would make the golden RED on unmodified code,
@@ -1247,15 +1238,14 @@ def test_every_reconstruction_divergence_is_a_retired_guard(
 
     # Pinned at this head, through the production path, as
     # ``(meetings, ballots, ballots whose target moved, meetings holding one)``.
-    # The third figure is the card's own ``under_gate_redirect`` census for
-    # these two sets -- 23 and 1 -- which is the arithmetic statement that the
-    # reconstruction restores every redirect and moves nothing else. The
-    # ``uncited_coerced`` count is 0 in both sample sets (it is 6 in
-    # ``ml_corpus/9p2i``, which this walk does not cover), so no ballot here
-    # moves for that reason and the assertions above are untested on it.
+    # The baseline-9 record was written after D6, so ``under_gate_redirect`` and
+    # ``uncited_coerced`` are 0 in all four committed sets and no target moves:
+    # today's chain re-decides every recorded ballot to its recorded target. The
+    # moved-ballot branch above is therefore unexercised on these bytes; it held
+    # on baseline 8's 23 and 1 redirects.
     expected = {
-        "9p2i": (151, 869, 23, 14),
-        "4p1i": (39, 117, 1, 1),
+        "9p2i": (145, 845, 0, 0),  # was (151, 869, 23, 14)
+        "4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
     }[set_walk.set_dir.name]
     assert (
         meetings,
@@ -1452,34 +1442,29 @@ def _first_meeting_prompt_set() -> Mapping[str, str]:
     raise AssertionError(f"{path.name}: no recorded meeting to read a stamp from")
 
 
-def test_the_bump_in_flight_window_is_open_on_the_archived_v5_bodies() -> None:
-    """The alibi-as-route bump moved the DEFAULT entry, so the archive carries it.
+def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
+    """The baseline-9 record closed the alibi-as-route window; nothing is archived.
 
-    The counterpart of the retired "no archive is needed" assertion: that one
-    held while only default-OFF arms moved bytes. This card moves the shipped
-    bodies, so every committed stamp now resolves through
-    :data:`ARCHIVED_PROMPT_VERSION_SETS` instead of the live registry, and the
-    walk above re-renders each recorded meeting through the v5 bytes it was
-    written with. Asserted in both directions -- the archive is non-empty and
-    its fixture bodies exist, and no committed stamp matches the live registry
-    -- so a re-record that closes the window fails HERE and is made to retire
-    the entry rather than leaving stale bytes behind.
+    The counterpart of the retired open-window assertion, which held while every
+    committed stamp named v5 bodies the live registry had moved past, and which
+    was written to fail at the re-record that closed the window. Asserted in both
+    directions -- the archive registry and its card pairing are empty and no
+    fixture directory remains, and every committed stamp resolves through the
+    LIVE registry to exactly that set's live mapping -- so a later bump that
+    moves the default entry without re-opening the archive fails HERE.
     """
 
-    assert set(ARCHIVED_PROMPT_VERSION_SETS) == {"qwen3_6_27b_v5"}
-    assert set(ARCHIVED_MAP_CARDS) == set(ARCHIVED_PROMPT_VERSION_SETS)
-    for name in ARCHIVED_PROMPT_VERSION_SETS:
-        assert (_ARCHIVE_ROOT / name).is_dir(), name
-    live = {
-        tuple(sorted(versions.items())) for versions in PROMPT_VERSION_SETS.values()
-    }
+    assert ARCHIVED_PROMPT_VERSION_SETS == {}
+    assert ARCHIVED_MAP_CARDS == {}
+    assert not _ARCHIVE_ROOT.exists()
     for path in _SAMPLE_SETS:
         for replay in _seed_paths(path):
             for entry in read_all_entries(replay):
                 if not isinstance(entry, MeetingReplayEntry):
                     continue
-                assert resolve_prompt_set(entry.prompt_versions) == "qwen3_6_27b_v5"
-                assert tuple(sorted(entry.prompt_versions.items())) not in live
+                assert dict(entry.prompt_versions) == dict(
+                    PROMPT_VERSION_SETS[resolve_prompt_set(entry.prompt_versions)]
+                )
 
 
 def test_a_lever_on_recording_can_never_wear_a_default_stamp() -> None:
@@ -1707,41 +1692,31 @@ def test_one_byte_template_perturbation_breaks_the_golden(
 ) -> None:
     """Flip one committed template byte; the byte golden must then FAIL.
 
-    The victim is the ARCHIVED ``qwen3_6_27b_v5/crewmate_report.j2``, re-aimed
-    there by the alibi-as-route bump: every committed set stamps
-    ``*.qwen3_6_27b.v6`` while the live registry serves v6, so the walk renders
-    all 192 recorded meetings through the archived bodies and perturbing a LIVE
-    v6 body would be a no-op the leg could not detect. The aim follows the
-    window — back to the live body at the re-record that closes it.
+    The victim is the LIVE ``qwen3_6_27b/crewmate_report.j2``. It was the
+    ARCHIVED v5 body while the committed sets stamped ``*.qwen3_6_27b.v5`` and
+    the live registry had already moved to v6 — then, perturbing the live body
+    would have been a no-op and the leg would have asserted nothing. The
+    baseline-9 record wrote every set at the live stamps, so the live body IS
+    what every recorded meeting re-renders through, and the archive is empty.
 
-    Copy the live template dirs AND the archive under a scratch root, append one
-    byte to that victim, build renderers against the perturbed root, and re-run
-    ONE recorded meeting. At least one recorded prompt must no longer reproduce
-    byte-for-byte — proving the gate can fail. Kept cheap: the first
-    meeting-bearing seed of 9p2i, one meeting.
+    Copy the template dirs under a scratch root, append one byte to that victim,
+    build renderers against the perturbed root, and re-run ONE recorded meeting.
+    At least one recorded prompt must no longer reproduce byte-for-byte —
+    proving the gate can fail. Kept cheap: the first meeting-bearing seed of
+    9p2i, one meeting.
     """
 
     set_dir = _SAMPLE_SETS[0]
     perturbed_root = tmp_path / "prompts"
     for name in PROMPT_VERSION_SETS:
         shutil.copytree(_PROMPTS_ROOT / name, perturbed_root / name)
-    for name in ARCHIVED_PROMPT_VERSION_SETS:
-        shutil.copytree(_ARCHIVE_ROOT / name, perturbed_root / name)
-    victim = perturbed_root / "qwen3_6_27b_v5" / "crewmate_report.j2"
+    victim = perturbed_root / "qwen3_6_27b" / "crewmate_report.j2"
     victim.write_bytes(victim.read_bytes() + b"\n")  # one-byte perturbation
 
     perturbed_renderers = {
         name: build_prompt_renderers(name, root=perturbed_root)
         for name in PROMPT_VERSION_SETS
     }
-    perturbed_renderers.update(
-        {
-            name: build_prompt_renderers(
-                name, root=perturbed_root, map_card=ARCHIVED_MAP_CARDS[name]
-            )
-            for name in ARCHIVED_PROMPT_VERSION_SETS
-        }
-    )
     game_map = load_canonical_map()
     reproduced_all = True
     walked_a_meeting = False

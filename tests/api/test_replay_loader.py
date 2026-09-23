@@ -1404,9 +1404,9 @@ def test_assert_substrate_matches_raises_on_legacy_evidence_quality_lift_off_sta
 
 
 def _stamp_committed_9p2i_seed(dst: Path, seed: int, flags: dict[str, bool]) -> str:
-    """Copy a committed 9p2i replay into ``dst`` with ``flags`` stamped on its
-    game_over record (tick/meeting bytes verbatim, so the state_hash chain is
-    unchanged). Returns the replay's game_id."""
+    """Copy a committed 9p2i replay into ``dst`` with ``flags`` as its substrate
+    stamp (every other byte verbatim, so the state_hash chain is unchanged).
+    Returns the replay's game_id."""
 
     dst.mkdir(parents=True, exist_ok=True)
     (dst / "roster.json").write_text(
@@ -1419,7 +1419,10 @@ def _stamp_committed_9p2i_seed(dst: Path, seed: int, flags: dict[str, bool]) -> 
         if not line.strip():
             continue
         record = json.loads(line)
-        if record.get("kind") == "game_over":
+        # A current recording carries its substrate stamp twice -- as the first
+        # tick row's prefix stamp and on the game_over footer -- and refuses the
+        # two disagreeing, so both are restamped.
+        if record.get("kind") == "game_over" or "substrate_flags" in record:
             record["substrate_flags"] = flags
             line = json.dumps(record, sort_keys=True, separators=(",", ":"))
         out.append(line)
@@ -1903,21 +1906,21 @@ def test_committed_9p2i_fake_tasks_emergencies_and_repairs_are_named() -> None:
     census = _committed_9p2i_action_census()
 
     fake_tasks = census.by_intent["impostor_do_task"]
-    assert sum(fake_tasks.values()) == 373  # was 370
+    assert sum(fake_tasks.values()) == 365  # was 373
     # Not one of them still renders as a stale label.
     assert fake_tasks.get("IDLE", 0) == 0
     assert fake_tasks.get("MOVING", 0) == 0
     assert fake_tasks.get("TASK", 0) == 0
-    # The 8 that read BLOCKED share a tick with an earlier meeting trigger, so
+    # The 11 that read BLOCKED share a tick with an earlier meeting trigger, so
     # the engine never attempted them at all.
-    assert fake_tasks["PRETEND_TASK"] == 365  # was 360
-    assert fake_tasks["BLOCKED"] == 8  # was 10
+    assert fake_tasks["PRETEND_TASK"] == 354  # was 365
+    assert fake_tasks["BLOCKED"] == 11  # was 8
 
     # 12 emergency intents: 10 pressed the button, 2 were foreclosed or refused.
-    assert census.by_intent["emergency"] == {"EMERGENCY": 10, "BLOCKED": 2}  # was 8/2
-    # 38 repair intents: 26 landed.
-    # was {"REPAIR": 16, "BLOCKED": 8}
-    assert census.by_intent["repair_sabotage"] == {"REPAIR": 26, "BLOCKED": 12}
+    assert census.by_intent["emergency"] == {"EMERGENCY": 10, "BLOCKED": 2}
+    # 34 repair intents: 22 landed.
+    # was {"REPAIR": 26, "BLOCKED": 12}
+    assert census.by_intent["repair_sabotage"] == {"REPAIR": 22, "BLOCKED": 12}
 
 
 def test_committed_9p2i_labels_never_outlive_their_tick() -> None:
@@ -2138,12 +2141,13 @@ def test_committed_turn_marker_census_and_zero_served_leak() -> None:
     """
 
     # Baseline 6 read (971, 53, {invalid_accusation_target: 53}) and (117, 0, {}).
-    # The marked count collapsed to TWO: the structured-turn-marker channel is
+    # The marked count collapsed to ONE: the structured-turn-marker channel is
     # unconditional now, so the guards record annotations instead of splicing
-    # prose, and the accusation guard itself fires far less on the v4 openings.
-    # was (871, 1, {invalid_accusation_target: 1}) and (120, 0, {}).
+    # prose, and the accusation guard itself fires far less on the bespoke
+    # openings.
+    # was (869, 2, {invalid_accusation_target: 2}) and (117, 0, {}).
     expected = {
-        _COMMITTED_9P2I_DIR: (869, 2, {"invalid_accusation_target": 2}),
+        _COMMITTED_9P2I_DIR: (845, 1, {"invalid_accusation_target": 1}),
         _COMMITTED_4P1I_DIR: (117, 0, {}),
     }
     for directory, (
@@ -2343,7 +2347,7 @@ def test_the_paired_known_lever_flip_still_raises(
 
 
 def _mixed_substrate_set(tmp_path: Path, *, seed: int) -> Path:
-    """The WHOLE committed 9p2i set, with ONE game_over restamped off-substrate.
+    """The WHOLE committed 9p2i set, with ONE replay restamped off-substrate.
 
     The whole set, not one file: a directory holding a single replay fails its
     own tick-0 state hash, so a one-file fixture would prove nothing about the
@@ -2360,7 +2364,10 @@ def _mixed_substrate_set(tmp_path: Path, *, seed: int) -> Path:
         if not line.strip():
             continue
         record = json.loads(line)
-        if record.get("kind") == "game_over":
+        # A current recording carries its substrate stamp twice -- as the first
+        # tick row's prefix stamp and on the game_over footer -- and refuses the
+        # two disagreeing, so both are restamped.
+        if record.get("kind") == "game_over" or "substrate_flags" in record:
             record["substrate_flags"] = dict(_UNKNOWN_LEVER_STAMP)
             line = json.dumps(record, sort_keys=True, separators=(",", ":"))
         out.append(line)

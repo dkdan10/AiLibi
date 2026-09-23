@@ -156,7 +156,7 @@ def test_a_missing_published_file_is_red_rather_than_absent(
         # Existing recordings: file identity refuses these.
         "replays/samples/4p1i/replay-seed-0.jsonl",
         "replays/samples/9p2i/roster.json",
-        "replays/ml_corpus/9p2i/tournament-eval-report.json",
+        "replays/ml_corpus/9p2i/tournament-eval-report.json.gz",
         "audits/deduction-candidate/run-2026-09-16/RESULTS.md",
         # Destinations that do NOT exist yet, inside a recording location.
         # Nothing on a files-only protected list matches them, so containment —

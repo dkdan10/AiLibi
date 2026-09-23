@@ -102,7 +102,7 @@ from meetings.voting import (
 
 _REPLAYS: Final[Path] = Path(__file__).resolve().parents[2] / "replays"
 
-# Every committed replay set: the samples (the baseline-6 adopting record) AND
+# Every committed replay set: the samples (the baseline-9 record) AND
 # the ML corpus. "All four sets" is the contract's scope, not a sample of it.
 _CORPUS_SETS: Final[tuple[str, ...]] = (
     "samples/9p2i",
@@ -124,27 +124,27 @@ _EXPECTED_REPLAY_FILES: Final[dict[str, int]] = {
 # Baseline 6 read 165 / 39 / 463 / 40 meetings and 971 / 117 / 2726 / 120
 # ballots, 707 and 3,934 pooled.
 _EXPECTED_MEETINGS: Final[dict[str, int]] = {
-    "samples/9p2i": 151,  # was 152
-    "samples/4p1i": 39,  # was 40
-    "ml_corpus/9p2i": 439,  # was 432
-    "ml_corpus/4p1i": 43,  # was 44
+    "samples/9p2i": 145,  # was 151
+    "samples/4p1i": 39,
+    "ml_corpus/9p2i": 449,  # was 439
+    "ml_corpus/4p1i": 43,
 }
 _EXPECTED_BALLOTS: Final[dict[str, int]] = {
-    "samples/9p2i": 869,  # was 871
-    "samples/4p1i": 117,  # was 120
-    "ml_corpus/9p2i": 2516,  # was 2479
-    "ml_corpus/4p1i": 129,  # was 132
+    "samples/9p2i": 845,  # was 869
+    "samples/4p1i": 117,
+    "ml_corpus/9p2i": 2539,  # was 2516
+    "ml_corpus/4p1i": 129,
 }
-_TOTAL_MEETINGS: Final[int] = 672  # was 668
-_TOTAL_BALLOTS: Final[int] = 3631  # was 3602
+_TOTAL_MEETINGS: Final[int] = 676  # was 672
+_TOTAL_BALLOTS: Final[int] = 3630  # was 3631
 
-# The recorded outcome split over those 672 meetings. Pinned so the sweep
+# The recorded outcome split over those 676 meetings. Pinned so the sweep
 # provably exercises BOTH branches of the rule (an all-SKIPPED corpus would
 # leave the eject path — the one that removes a player from the game — proven
 # by synthetic fixtures alone).
 _EXPECTED_RECORDED_OUTCOMES: Final[dict[MeetingOutcome, int]] = {
-    "EJECTED": 429,  # baseline 6: 435
-    "SKIPPED": 243,  # was 239
+    "EJECTED": 411,  # was 429
+    "SKIPPED": 265,  # was 243
 }
 
 # The ballot-guard marker families, keyed by the stable label
@@ -152,8 +152,8 @@ _EXPECTED_RECORDED_OUTCOMES: Final[dict[MeetingOutcome, int]] = {
 # PREFIX (everything before the ``{...}`` interpolation) and by ``in`` rather
 # than ``startswith`` because the guards stack on recorded bytes: 16.5 nulled a
 # citation, 16.6 then coerced the now-uncited ballot, so the second marker sits
-# behind the first. Ruling D6 of 2026-09-19 retired the coercion; the recordings
-# that carry the pair are still read here.
+# behind the first. Ruling D6 of 2026-09-19 retired the coercion, and no
+# baseline-9 ballot carries the pair; ``in`` still counts a stacked marker.
 _MARKER_TEMPLATES: Final[dict[str, str]] = {
     "invalid_target": MANAGER_INVALID_VOTE_TARGET_MARKER,
     "teammate_coerced": TEAMMATE_VOTE_TARGET_MARKER,
@@ -169,42 +169,43 @@ _MARKER_TEMPLATES: Final[dict[str, str]] = {
 # exercised". Zeros are written out rather than omitted so the sweep states
 # what it does NOT cover: ``vote_parse_default`` never fired on committed
 # bytes, so it is carried by a synthetic fixture instead (see ``_EDGE_CASES``).
-# The 4p1i sets are unchanged from baseline 6 (0/0/0/0/0/0/0 and 0/0/1/0/0/0/0);
-# every 9p2i family the record moved came DOWN off baseline 7 — the guards fire
-# less often — while ``invalid_observation_id`` stays off zero on both 9p2i sets
-# and ``uncited_zero_flag`` returns to zero on samples/9p2i.
+# On baseline 9 the 4p1i sets carry no marker at all, and three families that
+# fired on baseline 8 — ``under_gate_redirect`` and ``uncited_zero_flag`` (both
+# retired by ruling D6, nothing mints them) and ``invalid_reason_id`` — read zero
+# on all four sets, so their synthetic fixtures carry them too;
+# ``teammate_coerced`` and ``invalid_target`` rose on ml_corpus/9p2i.
 _EXPECTED_MARKERS: Final[dict[str, dict[str, int]]] = {
     "samples/9p2i": {
-        "invalid_target": 2,  # was 3
-        "teammate_coerced": 2,  # was 5
-        "under_gate_redirect": 23,  # was 36
-        "invalid_reason_id": 1,  # was 2
-        "invalid_observation_id": 3,  # was 8
-        "uncited_zero_flag": 0,  # was 1
+        "invalid_target": 3,  # was 2
+        "teammate_coerced": 1,  # was 2
+        "under_gate_redirect": 0,  # was 23
+        "invalid_reason_id": 0,  # was 1
+        "invalid_observation_id": 0,  # was 3
+        "uncited_zero_flag": 0,
         "vote_parse_default": 0,
     },
     "samples/4p1i": {
         "invalid_target": 0,
         "teammate_coerced": 0,
-        "under_gate_redirect": 1,
+        "under_gate_redirect": 0,  # was 1
         "invalid_reason_id": 0,
         "invalid_observation_id": 0,
         "uncited_zero_flag": 0,
         "vote_parse_default": 0,
     },
     "ml_corpus/9p2i": {
-        "invalid_target": 2,  # was 1
-        "teammate_coerced": 5,  # was 13
-        "under_gate_redirect": 57,  # was 81
-        "invalid_reason_id": 4,  # was 7
-        "invalid_observation_id": 12,  # was 19
-        "uncited_zero_flag": 6,  # was 7
+        "invalid_target": 5,  # was 2
+        "teammate_coerced": 12,  # was 5
+        "under_gate_redirect": 0,  # was 57
+        "invalid_reason_id": 0,  # was 4
+        "invalid_observation_id": 1,  # was 12
+        "uncited_zero_flag": 0,  # was 6
         "vote_parse_default": 0,
     },
     "ml_corpus/4p1i": {
         "invalid_target": 0,
         "teammate_coerced": 0,
-        "under_gate_redirect": 2,
+        "under_gate_redirect": 0,  # was 2
         "invalid_reason_id": 0,
         "invalid_observation_id": 0,
         "uncited_zero_flag": 0,
@@ -226,19 +227,19 @@ _SWEEP_THRESHOLDS: Final[tuple[float, ...]] = (
     1.0,
 )
 
-# How many of the 672 committed meetings eject at each swept threshold. The
-# first four rows are all 429 — the recorded count — which is the corpus fact
+# How many of the 676 committed meetings eject at each swept threshold. The
+# first four rows are all 411 — the recorded count — which is the corpus fact
 # :func:`test_the_threshold_sweep_actually_moves_outcomes` documents: no
 # committed meeting was decided by the confidence gate at its recorded cutoff.
 # Baseline 6 read 435 / 435 / 435 / 435 / 424 / 331 / 65.
 _EXPECTED_EJECTIONS_BY_THRESHOLD: Final[dict[float, int]] = {
-    0.0: 429,
-    0.25: 429,
-    0.5: 429,
-    DEFAULT_SKIP_CONFIDENCE_THRESHOLD: 429,
-    0.75: 421,  # was 422
-    0.9: 351,  # was 342
-    1.0: 181,  # was 150
+    0.0: 411,  # was 429
+    0.25: 411,  # was 429
+    0.5: 411,  # was 429
+    DEFAULT_SKIP_CONFIDENCE_THRESHOLD: 411,  # was 429
+    0.75: 405,  # was 421
+    0.9: 357,  # was 351
+    1.0: 214,  # was 181
 }
 
 
@@ -501,9 +502,11 @@ def test_committed_guard_marker_counts_are_pinned(set_name: str) -> None:
     """Which ballot coercions production actually exercised, per set.
 
     This is the coverage statement behind the contract's "coerced ballots and
-    redirects are greppable via their markers": the sweep runs over ballots
-    that really were normalised, teammate-coerced, citation-coerced, and
-    under-gate redirected, not only over clean ones.
+    redirects are greppable via their markers": on baseline 9 the sweep runs
+    over ballots that really were normalised, teammate-coerced and
+    citation-nulled, not only over clean ones. The under-gate redirect and the
+    citation coercion are retired and no baseline-9 ballot carries either, so
+    the zeros say the synthetic edges alone cover them.
     """
 
     counts = dict.fromkeys(_MARKER_TEMPLATES, 0)
@@ -590,7 +593,7 @@ def test_the_threshold_sweep_actually_moves_outcomes() -> None:
     was recorded, so no committed meeting was ever decided by the confidence
     gate — the "strict plurality but no confident ballot -> SKIPPED" branch is
     not exercised by the corpus at its own threshold. Raising the cutoff turns
-    429 recorded ejections into 421 / 351 / 181, which is what makes the sweep
+    411 recorded ejections into 405 / 357 / 214, which is what makes the sweep
     real coverage of that branch over real ballots rather than a re-run; the
     ``plurality_strictly_under_threshold`` edge fixture covers it directly.
     """
@@ -923,7 +926,7 @@ _EDGE_CASES: Final[tuple[_EdgeCase, ...]] = (
         ("EJECTED", "p-6"),
     ),
     (
-        # The one guard family the committed corpus never exercised (see
+        # A guard family the committed corpus never exercised (see
         # ``_EXPECTED_MARKERS``): a ballot whose completion never parsed.
         "vote_parse_default_marker",
         (
@@ -1049,7 +1052,7 @@ def test_the_tally_ignores_who_cast_each_ballot(set_name: str) -> None:
     from living participants only), so the dead-voter edge fixtures are
     necessarily synthetic. This is the corpus-scale statement of the same
     property: rewriting EVERY recorded ballot's ``voter`` to an id that never
-    played leaves all 707 resolutions byte-identical, so a future rule that
+    played leaves all 676 resolutions byte-identical, so a future rule that
     started reading ``voter`` — deduping by it, weighting it, dropping ballots
     from non-participants — would fail here rather than pass unnoticed.
 

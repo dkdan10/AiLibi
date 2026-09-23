@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from eval.report_io import report_path, write_report_text
 from training.provenance import (
     DEFAULT_CORPUS,
     SOURCE_ROOT,
@@ -80,7 +81,7 @@ def test_actual_derivation_change_moves_identity(corpus: Path, tmp_path: Path) -
 
 def test_inert_report_is_not_a_fit_input(corpus: Path) -> None:
     before = fit_corpus_fingerprint(corpus)
-    (corpus / "tournament-eval-report.json").write_text('{"invented":123}')
+    write_report_text(report_path(corpus), '{"invented":123}')
     assert fit_corpus_fingerprint(corpus) == before
 
 

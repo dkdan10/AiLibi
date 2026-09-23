@@ -290,11 +290,12 @@ const CHAIN_BALLOTS: BallotView[] = [
   // Task 16.7.1: a firsthand vote — the voter cites its own episodic
   // observation, giving the "cites" chip visual story coverage.
   // The third shape, and the one the copy had to stop mis-describing: a
-  // recorded list can hold the voter ITSELF and the target the vote applied to.
-  // 27 of 869 `samples/9p2i` ballots carry the first and 22 the second
-  // (`scripts/measure_featured_criterion.py --alternatives`) — 9p2i seed 2's
-  // first meeting for the self entry, seed 13's for the target one — so this
-  // ballot carries both and the story shows how each is named.
+  // recorded list can hold the voter ITSELF, and the ballot schema admits the
+  // target the vote applied to as well. 24 of 845 `samples/9p2i` ballots carry
+  // the first — 9p2i seed 2's first meeting among them — and none the second
+  // (`scripts/measure_featured_criterion.py --alternatives`), so the target
+  // entry here is a constructed example. This ballot carries both and the story
+  // shows how each is named.
   ballot("p-3", "p-5", 0.81, "I saw them go to Reactor myself.", [], "p-3:312:0", [
     "p-5",
     "p-3",

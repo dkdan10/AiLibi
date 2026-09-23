@@ -536,14 +536,13 @@ def test_json_failure_names_failing_checks(
 def _locked_pin() -> str:
     """The committed sets' own recorded versions, as the CLI takes them.
 
-    Sourced from the byte golden's archive of RECORDED stamps, which is where
-    the corpus's own versions live during a bump-in-flight window: the
-    committed ``9p2i`` corpus stamps ``*.qwen3_6_27b.v5`` while the live
-    registry has moved to v6 (the alibi-as-route prompt bump), so reading the
-    registry would make the passing case expect a version the corpus does not
-    carry. The window closes at the re-record, which retires the archive entry
-    and re-aligns the two; this helper follows whichever holds the recorded
-    stamps rather than being re-pointed by hand each time.
+    Sourced from the byte golden's archive of RECORDED stamps when one is
+    open, which is where the corpus's own versions live during a bump-in-flight
+    window, and otherwise from the live registry. The baseline-9 re-record
+    closed the last window: the committed ``9p2i`` corpus stamps the live
+    registry's versions (three templates at ``.qwen3_6_27b.v6``, the ballot at
+    ``.v8``) and the archive is empty. This helper follows whichever holds the
+    recorded stamps rather than being re-pointed by hand each time.
     """
 
     from orchestrator.game import PROMPT_VERSION_SETS
@@ -570,7 +569,8 @@ def test_expected_prompt_versions_fails_a_homogeneous_wrong_pin(
 ) -> None:
     # The case the coherence check alone cannot see: the set is internally
     # consistent, every game agrees, and every game is at the wrong version.
-    wrong = _locked_pin().replace(".v5", ".v4")  # the version below the record
+    # Every template one version below the record (was .v5 -> .v4).
+    wrong = _locked_pin().replace(".v6", ".v5").replace(".v8", ".v7")
     assert wrong != _locked_pin(), "the substitution must actually change the pin"
 
     assert validity_gate.main([str(_NINE), "--expected-prompt-versions", wrong]) == 1

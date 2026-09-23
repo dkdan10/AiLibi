@@ -1036,18 +1036,97 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             ),
         ),
     },
+    "baseline-9": {
+        # Measured on replays/samples/9p2i at the substrate wave's slate: the
+        # locked model + qwen3_6_27b at v6 (accusation_round, crewmate_report,
+        # impostor_report) and v8 (vote_ballot) + the twenty-one retired levers,
+        # impostor_roll_call OFF; the route claim, the grounded SKIP with its
+        # labelling guards and the weighing channel ship unconditional.
+        #   witnessed_event_rate        = 3/175 = 0.017142857142857144
+        #                                 (numerator 3: a rare count the 15.19
+        #                                 rule does not mark advisory, but one
+        #                                 witnessed kill still moves it by a
+        #                                 third of itself — read it that way)
+        #   flags_per_meeting           = 107/145 = 0.7379310344827587 (90
+        #                                 recorded vent flags + 17 recorded
+        #                                 transcript flags)
+        #     transcript component      = 17/145 = 0.11724137931034483
+        #     persisted-vent component  = 90/145 = 0.6206896551724138
+        #   testimony_backed_conversion = 79/112 = 0.7053571428571429
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (population_relative_conversion=True): the
+        # evaluated floor per scored population is
+        #   floor = 0.7053571428571429 * (0.7379310344827587 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # The baseline itself: flags 107/145 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.7053571428571429; measured 79/112 -> PASS at exact
+        # equality (self-consistency).
+        # Against baseline 8 the TRANSCRIPT component falls 57/151 -> 17/145
+        # while the persisted-vent half holds at 90: the route claim stops the
+        # single-room alibi envelope minting flags against honest movers, which
+        # is the alibi-class census the record publishes beside it
+        # (audits/audit-2026-09-22-process-rerecord.md section 4). Conversion
+        # rises 81/128 -> 79/112 on a smaller denominator. A baseline-8 floor
+        # scored against these bytes therefore FAILS flags_per_meeting and its
+        # transcript component, which is the referee reading the supply it was
+        # pinned to and not a defect.
+        "9p2i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.017142857142857144, numerator=3),
+            flags_per_meeting=FloorPin(value=0.7379310344827587, numerator=107),
+            testimony_backed_conversion=FloorPin(
+                value=0.7053571428571429, numerator=79
+            ),
+            population_relative_conversion=True,
+            transcript_flags_per_meeting=FloorPin(
+                value=0.11724137931034483, numerator=17
+            ),
+            persisted_vent_flags_per_meeting=FloorPin(
+                value=0.6206896551724138, numerator=90
+            ),
+        ),
+        # Measured on replays/samples/4p1i at the same slate:
+        #   witnessed_event_rate        = 1/66 = 0.015151515151515152
+        #                                 (numerator 1 -> ADVISORY, as on
+        #                                 baselines 6 to 8)
+        #   flags_per_meeting           = 20/39 = 0.5128205128205128 (20 recorded
+        #                                 vent flags + 0 recorded transcript flags)
+        #     transcript component      = 0/39 = 0.0 (numerator 0 -> ADVISORY)
+        #     persisted-vent component  = 20/39 = 0.5128205128205128
+        #   testimony_backed_conversion = 20/37 = 0.5405405405405406
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (same shape, this roster's pins):
+        #   floor = 0.5405405405405406 * (0.5128205128205128 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # The baseline itself: flags 20/39 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.5405405405405406; measured 20/37 -> PASS at exact
+        # equality (self-consistency). The flag census is unchanged from
+        # baseline 8 to the meeting; the conversion denominator grows by four
+        # backed attempts with no further conversion.
+        "4p1i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.015151515151515152, numerator=1),
+            flags_per_meeting=FloorPin(value=0.5128205128205128, numerator=20),
+            testimony_backed_conversion=FloorPin(
+                value=0.5405405405405406, numerator=20
+            ),
+            population_relative_conversion=True,
+            transcript_flags_per_meeting=FloorPin(value=0.0, numerator=0),
+            persisted_vent_flags_per_meeting=FloorPin(
+                value=0.5128205128205128, numerator=20
+            ),
+        ),
+    },
 }
 
-# baseline 8 is the committed canonical SAMPLES set, so a bare
-# ``measure_baseline.py --watchability`` reads baseline 8's own floors — the
-# referee accepts the committed bytes at equality. (Baselines 3-7 moved here from
-# Tasks 15.7, 16.14, 16.17, 18.12 and the baseline-7 record the same way; their
-# blocks above stay scoreable via an explicit --baseline-id, and baseline 7's
-# stays as history.) The training-side selection floors are keyed separately, by
-# ``training.bakeoff.harness.BAKEOFF_BASELINE_ID``: that id names the baseline
-# the ML fits are ground on, and it moves at a re-ground rather than with this
-# default.
-_DEFAULT_BASELINE_ID: Final[str] = "baseline-8"
+# baseline 9 is the committed canonical SAMPLES set, so a bare
+# ``measure_baseline.py --watchability`` reads baseline 9's own floors — the
+# referee accepts the committed bytes at equality. (Baselines 3-8 moved here from
+# Tasks 15.7, 16.14, 16.17, 18.12 and the baseline-7 and baseline-8 records the
+# same way; their blocks above stay scoreable via an explicit --baseline-id, and
+# baseline 8's stays as history.) The training-side selection floors are keyed
+# separately, by ``training.bakeoff.harness.BAKEOFF_BASELINE_ID``: that id names
+# the baseline the ML fits are ground on, and it moves at a re-ground rather than
+# with this default.
+_DEFAULT_BASELINE_ID: Final[str] = "baseline-9"
 
 
 @dataclass(frozen=True)

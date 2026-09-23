@@ -715,17 +715,20 @@ def test_v3_encode_is_inert_to_the_announcement_fields() -> None:
 #: not a gap: a 4p/1i game ends at its first ejection, so no meeting ever follows
 #: one.
 #:
-#: Re-measured on the current bytes (the baseline-7 rows were
-#: 120/0/0/0/0, 871/415/410/31/14, 132/0/0/0/0 and 2479/1196/1148/106/45; the
-#: baseline-6 rows were 117/0/0/0/0, 971/475/409/139/68, 120/0/0/0/0 and
-#: 2726/1324/1187/282/232). The ``saw_vent`` columns keep falling — 14 -> 8 and
-#: 45 -> 44 — because the meeting-outcome channel renders the ejection, so a
-#: witness has far less occasion to name an already-ejected player.
+#: Re-measured on the current baseline-9 bytes (the baseline-8 rows were
+#: 117/0/0/0/0, 869/411/406/24/8, 129/0/0/0/0 and 2516/1186/1160/78/44; the
+#: baseline-7 rows were 120/0/0/0/0, 871/415/410/31/14, 132/0/0/0/0 and
+#: 2479/1196/1148/106/45; the baseline-6 rows were 117/0/0/0/0,
+#: 971/475/409/139/68, 120/0/0/0/0 and 2726/1324/1187/282/232). The
+#: ``saw_vent`` columns fell from baseline 6 to 8 (68 -> 14 -> 8 and
+#: 232 -> 45 -> 44) because the meeting-outcome channel renders the ejection, so
+#: a witness has far less occasion to name an already-ejected player; baseline 9
+#: reads 11 and 42.
 _COUNTERFACTUAL_CENSUS: Final[dict[str, tuple[int, int, int, int, int]]] = {
     "samples/4p1i": (117, 0, 0, 0, 0),  # was (120, 0, 0, 0, 0)
-    "samples/9p2i": (869, 411, 406, 24, 8),  # was (871, 415, 410, 31, 14)
+    "samples/9p2i": (845, 401, 396, 24, 11),  # was (869, 411, 406, 24, 8)
     "ml_corpus/4p1i": (129, 0, 0, 0, 0),  # was (132, 0, 0, 0, 0)
-    "ml_corpus/9p2i": (2516, 1186, 1160, 78, 44),  # was (2479, 1196, 1148, 106, 45)
+    "ml_corpus/9p2i": (2539, 1247, 1163, 183, 42),  # was (2516, 1186, 1160, 78, 44)
 }
 
 
@@ -797,8 +800,8 @@ def test_the_census_totals_reproduce_the_review_counts() -> None:
     renders = sum(row[0] for row in _COUNTERFACTUAL_CENSUS.values())
     gained = sum(row[1] for row in _COUNTERFACTUAL_CENSUS.values())
     stale_vents = sum(row[4] for row in _COUNTERFACTUAL_CENSUS.values())
-    assert (renders, gained) == (3631, 1597)  # was (3602, 1611)
-    # The re-litigation denominator, re-measured on the baseline-7 bytes: the
+    assert (renders, gained) == (3630, 1648)  # was (3631, 1597)
+    # The re-litigation denominator, re-measured on the baseline-9 bytes: the
     # meeting-outcome channel renders the ejection, so a witness has far less
     # occasion to name an already-ejected player (baseline 6: 300).
-    assert stale_vents == 52  # was 59
+    assert stale_vents == 53  # was 52

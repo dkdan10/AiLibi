@@ -4,7 +4,7 @@ Covers each of the ten gate checks with a PASS input and a synthetic VIOLATION
 that flips ``passed`` to ``False`` (a gate that cannot fail is not a gate), the
 reconstruction cross-check against the tested win-condition home, the
 truncated-replay rejection (a recorded ``game_over`` row the walk never earns),
-and the baseline-4 reproduction of ``run_validity_gate`` over the committed sets.
+and the baseline-9 reproduction of ``run_validity_gate`` over the committed sets.
 """
 
 from __future__ import annotations
@@ -248,7 +248,7 @@ def test_meeting_rate_passes_on_committed(nine_report: TournamentReport) -> None
     check = check_meeting_rate_and_resolution(nine_report)
     assert check.passed
     assert check.facts["meeting_rate"] == 1.0
-    assert check.facts["resolved_meetings"] == 151  # was 152
+    assert check.facts["resolved_meetings"] == 145  # was 151
 
 
 def test_meeting_rate_fails_below_floor(nine_report: TournamentReport) -> None:
@@ -292,7 +292,7 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
 def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
     check = check_no_duplicate_meeting_rows(nine_report)
     assert check.passed
-    assert int(check.facts["meetings_total"]) == 151  # type: ignore[arg-type]  # was 152
+    assert int(check.facts["meetings_total"]) == 145  # type: ignore[arg-type]  # was 151
 
 
 def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
@@ -936,7 +936,7 @@ def test_run_validity_gate_reproduces_9p2i_close() -> None:
     assert report.failing_checks() == ()
     facts = {c.name: c.facts for c in report.checks}
     assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 1.0
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 151  # was 152
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 145  # was 151
 
 
 def test_run_validity_gate_reproduces_4p1i_close() -> None:

@@ -224,14 +224,23 @@ The phase closed on 2026-09-05 behind that finding.
 
 ## Where the sample sets came from
 
-The 100 committed replays under `replays/samples/` are reference recording 8,
-made 2026-08-31. It is a **maintenance** record: it re-recorded the same four
-sets on repaired code at a bumped prompt set, published every instrument cell
-before and after, and **decided nothing** — no bars, no verdict, nothing adopted.
-It inherits reference recording 7's settings exactly: the same twenty-one
-graduated settings, the impostor-answer arm still unshipped and recorded off, and
-two repair gates that were flipped on for good and deleted rather than graduated,
-which is why the recorded settings list is unchanged between the two.
+The 100 committed replays under `replays/samples/` are reference recording 9,
+made 2026-09-22. It re-recorded the same four sets at the same seeds after three
+repairs the owner accepted as a set on 2026-09-19: an alibi is stated as a route
+rather than one room, an abstention names what it weighed, and a ballot sees the
+evidence rows behind each suspicion rather than the number alone. Those ship as
+the default, not as settings under test, so the recorded settings list is the
+same twenty-one graduated settings as before, with the impostor-answer arm still
+recorded off; what moved is the prompt set (three templates at `v6`, the ballot
+at `v8`). It published the process measures before and after and **decided
+nothing** — no bars, no verdict
+([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)).
+
+Reference recording 8 (2026-08-31) keeps its history and loses only its claim to
+be the current one
+([`audits/audit-phase-21-rerecord.md`](../audits/audit-phase-21-rerecord.md)). It
+was a **maintenance** record: the same four sets on repaired code at a bumped
+prompt set, nothing adopted, inheriting reference recording 7's settings exactly.
 
 **Read reference recording 7's own §6.1 before citing either.** Recording 8
 succeeded recording 7 as the newest, but it adopted nothing of its own and

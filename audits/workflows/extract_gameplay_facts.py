@@ -26,10 +26,10 @@ condition, accusations with re-seeded roles, opt-in substance, ballots with
 dangling primary_reason_id / dead speakers-voters).
 
 v3 (Phase-10 W0+ baseline, 2026-06-11 @ 9p2i post-10.5):
-* Every weak/strong + genuine-class classification is now IMPORTED from the
-  one-home repaired sources (``meetings.transcript.is_weak_contradiction`` /
-  ``detect_contradictions``; ``eval.vote_correctness.compute_genuine_class_
-  conversion``) — never an era-frozen replica — and the re-derived genuine
+* Every weak/strong + genuine-class classification is IMPORTED from its
+  one-home source (``meetings.transcript.is_weak_contradiction``;
+  ``eval.vote_correctness.genuine_class_subjects`` over each meeting's
+  RECORDED flags) — never an era-frozen replica — and the extractor's genuine
   pair is CROSS-CHECKED against the shipped 10.4 metric on the same bytes
   (mismatch -> blocking finding; one classifier would be wrong).
 * Point-6c Wave-1 contract-input aggregates: per-(meeting, accused-subject)
@@ -126,8 +126,6 @@ from meetings.schemas import (
 from meetings.transcript import (
     MeetingTriggerKind,
     WEAK_REASON_ENDPOINT_TICK,
-    WEAK_REASON_RETARGETED_PROXY,
-    WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_STATED,
     turn_observation_id,
@@ -143,7 +141,11 @@ from agents.memory.beliefs import (
     WEAK_CONTRADICTION_SUSPICION_DELTA,
 )
 from eval.action_ingest import tally_actions_by_role
-from eval.balance_eval import load_tournament_report
+from eval.balance_eval import (
+    _meeting_report_from_entry,
+    _trigger_kind_index,
+    load_tournament_report,
+)
 from orchestrator.recording_fingerprint import recording_fingerprint
 from eval.meeting_quality import (
     CHANNEL_SINGLE_WITNESS_INFORM,
@@ -157,6 +159,7 @@ from eval.meeting_quality import (
 from eval.vote_correctness import (
     compute_genuine_class_conversion,
     compute_vote_correctness,
+    genuine_class_subjects,
 )
 from experiments.lab.rubric_score import score as _rubric_score
 from orchestrator.game import apply_meeting_result
@@ -268,9 +271,27 @@ _SUSPICION_GRAPH_HEADERS = (
     "## Your suspicion of each player",
     "## Your suspicion graph",
 )
+# The trust suffix is OPTIONAL. The weighing channel (ruling D5 of 2026-09-19)
+# deleted the trust column from the rendered row rather than keep displaying a
+# constant, so a pre-card row reads "`p-4`: suspicion 0.60, trust 0.50" and a
+# post-card row reads "`p-4`: suspicion 0.60". Both shapes must parse through
+# ONE pattern, the same widening
+# ``eval.meeting_quality._SUSPICION_GRAPH_ROW_RE`` and
+# ``eval.validity._SUSPICION_GRAPH_ROW_RE`` took in that card; this third reader
+# was left narrowed there because the card could not move ``audits/`` bytes, and
+# its deviation 5 routed it here by name. A NARROWED pattern does not fail
+# loudly — it returns NO rows, which empties ``rendered_suspicion_by_target``,
+# builds no accumulator trajectory, and silently scores ``r3_arcs`` 0 on every
+# game, sinking the geomean rubric to 0.0 across a whole set. Making the suffix
+# optional is the whole change: the player id and the suspicion figure are
+# matched exactly as before, so every committed pre-record row parses to the
+# identical number — proven exhaustively at the re-record over the preserved
+# pre-record bytes (0 mismatches, 6,779 prompts, 14,599 parsed rows). Both
+# shapes, and the narrowed pattern's silent emptiness on the new one, are pinned
+# in ``tests/experiments/test_gameplay_facts_suspicion_row.py``.
 _SUSPICION_GRAPH_ROW_RE: re.Pattern[str] = re.compile(
-    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
-    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+)"
+    r"(?:, trust (?P<trust>[0-9]*\.?[0-9]+))?"
 )
 
 
@@ -353,56 +374,6 @@ def _testimony_vehicle(turn: Any, subject: str) -> tuple[str | None, bool]:
     if subject in (turn.free_text or ""):
         return "free_text_only", has_observation
     return None, has_observation
-
-
-def _genuine_subjects(
-    transcript: Any,
-    roster: frozenset[str],
-) -> frozenset[str]:
-    """Re-derive the genuine CANON-interior subjects (one-home, Task 10.4).
-
-    Re-runs the imported repaired detector
-    (:func:`meetings.transcript.detect_contradictions`) over the recorded
-    transcript under the ballot-voter roster — exactly the
-    :func:`eval.vote_correctness.compute_genuine_class_conversion` definition —
-    and returns every subject named by an ``alibi_vs_sighting`` flag WITHOUT the
-    endpoint band (non-endpoint == interior-tick == the audit's genuinely-
-    diagnostic class). Imported, never re-implemented: on post-repair
-    recordings the re-run equals the recorded flags byte-for-byte (verified by
-    the genuine-class cross-check invariant).
-
-    """
-
-    genuine: set[str] = set()
-    for flag in detect_contradictions(
-        transcript,
-        roster=roster,
-    ):
-        if flag.kind != "alibi_vs_sighting":
-            continue
-        if WEAK_REASON_ENDPOINT_TICK in flag.description:
-            continue
-        # 10.6 retarget exclusion (mirrors eval.vote_correctness
-        # .genuine_class_subjects): a re-targeted proxy flag names the proxy
-        # SPEAKER, not a player whose own location a sighting contradicted,
-        # so it never supplies the alibi-lie gate. First bites on W1 bytes
-        # (seeds 16/49 impostor-named retargets — PR #147 F3).
-        if WEAK_REASON_RETARGETED_PROXY in flag.description:
-            continue
-        # 10.10 proxy-intra-turn exclusion (mirrors the SAME third band in
-        # eval.vote_correctness.genuine_class_subjects): a SAME-speaker proxy
-        # flag likewise names the proxy SPEAKER, not a contradicted-own-location
-        # subject, so it is not the alibi-lie class. This replica had drifted
-        # from the shipped one-home classifier since 10.10 (it was never updated
-        # for this band); the redistribute re-record is the first set whose bytes
-        # carry a non-endpoint proxy-intra-turn flag naming a true impostor
-        # (seed-40:meeting-1, p-6), which exposed the drift the
-        # genuine_class_subjects docstring anticipated ("pins the DEFINITION, not
-        # these bytes"). Restoring the exclusion realigns the cross-check.
-        if WEAK_REASON_PROXY_INTRA_TURN in flag.description:
-            continue
-        genuine.update(flag.subjects)
-    return frozenset(genuine)
 
 
 # The vent_sighting flag's minted description (meetings/transcript.py, the
@@ -536,19 +507,24 @@ def _rederive_meeting_contradictions(
     (one home, so every downstream consumer reads the same re-run) makes a
     detector change -- 13.3's genuinely-independent cross-speaker promotion,
     13.4's ``alibi_vs_physical`` -- light up on a pure re-extraction with no
-    re-record (cadence doctrine). For a detector unchanged since the recording
-    this is a byte-for-byte no-op (recorded == re-derived under the ballot-voter
-    roster, verified across the committed 9p2i set); it diverges ONLY when the
-    detector itself changes, which is exactly the signal re-extraction surfaces.
+    re-record (cadence doctrine).
+
+    It is a counterfactual, not the record, even for an unchanged detector: the
+    replay persists no move-witness or per-speaker sighting records, so the
+    re-run grounds nothing through them. On the baseline-9 ``9p2i`` bytes it
+    differs from the recorded non-vent flags on 22 of 145 meetings (41 flags
+    against the record's 17). The genuine class the shipped gate counts is
+    therefore read off the record (:func:`eval.vote_correctness.
+    genuine_class_subjects`), never off this re-run.
 
     The vent channel is rebuilt from the recorded grounding verdicts
     (:func:`_vent_records_from_recorded_flags`) so a recording's
     ``alibi_vs_physical`` mints reproduce — the replay persists no private
     records (the 15.4 boundary).
 
-    The roster mirrors :func:`_genuine_subjects`: the recorded ballot voters are
-    the living participants the meeting ran with, so the re-run applies the same
-    subject filter the recording used.
+    The roster is the recorded ballot voters: the living participants the
+    meeting ran with, so the re-run applies the same subject filter the
+    recording used.
     """
 
     roster = frozenset(b.voter for b in entry.ballots)
@@ -819,6 +795,7 @@ def _analyze_meeting(
     seed: int,
     meeting_index: int,
     meeting_entry: MeetingReplayEntry,
+    genuine_subjects: frozenset[str],
     trigger_kind: str | None,
     trigger_body_id: str | None,
     roles: Mapping[str, str],
@@ -838,6 +815,13 @@ def _analyze_meeting(
     reconstructed state at the meeting tick (== the participant roster the
     manager ran with: ``orchestrator.game._build_participants`` builds one
     participant per living player).
+
+    ``meeting_entry`` carries the spine re-run's flags
+    (:func:`_rederive_meeting_contradictions`), so the meeting's genuine-class
+    subjects arrive separately in ``genuine_subjects``: the caller reads them off
+    the RECORDED flags with the one-home
+    :func:`eval.vote_correctness.genuine_class_subjects`, the census the shipped
+    ``compute_genuine_class_conversion`` counts.
 
     ``roll_call_round_recorded`` (Task 18.11) relaxes the PHASE-3 eligibility
     re-derivation for a recording whose ``game_over`` stamp carries the Task-18.8
@@ -1635,16 +1619,10 @@ def _analyze_meeting(
     # that names it (by any vehicle), the structured flags naming it (with
     # weak/strong class), each living voter's rendered suspicion OF that subject
     # (per-target, not just the max), the ballots cast for it, the plurality
-    # winner + margin, and the witnesses' own ballot follow-through.
-    #
-    # Genuine CANON-interior subjects (Task 10.4, imported detector re-run) —
-    # the per-meeting set so the genuine-class records can be assembled with
-    # cross-meeting context in the per-game loop.
+    # winner + margin, and the witnesses' own ballot follow-through. A
+    # record's ``is_genuine_class`` reads ``genuine_subjects`` (the recorded
+    # census), while its flag facts read the spine re-run.
     ballot_voter_roster = frozenset(b.voter for b in meeting_entry.ballots)
-    genuine_subjects = _genuine_subjects(
-        meeting_entry.transcript,
-        ballot_voter_roster,
-    )
 
     # Ballot tallies (non-skip) for plurality + margin, and the set of accusers
     # who followed through on their own target.
@@ -2142,6 +2120,7 @@ def main() -> int:
 
         # 2) Reconstruct resolved events by re-running the engine.
         entries = read_all_entries(path)
+        trigger_index = _trigger_kind_index(entries)
         replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
         meeting_entries = [e for e in entries if isinstance(e, MeetingReplayEntry)]
         failed_call_entries = [
@@ -2448,6 +2427,13 @@ def main() -> int:
                 raw_meeting_entry,
                 trigger_kind=meeting_trigger_kind,
             )
+            # The genuine class comes off the RECORDED flags, never the spine
+            # re-run above: the one-home rule over the loader's own view of this
+            # row is the census the shipped compute_genuine_class_conversion
+            # counts, so the cross-check below compares like with like.
+            genuine_subjects = genuine_class_subjects(
+                _meeting_report_from_entry(raw_meeting_entry, trigger_index)
+            )
 
             # Schema-verified against meetings/schemas.py::MeetingResult
             # (Task 8.7 shape): meeting_id, triggered_by,
@@ -2482,6 +2468,7 @@ def main() -> int:
                 seed=seed,
                 meeting_index=meeting_index,
                 meeting_entry=meeting_entry,
+                genuine_subjects=genuine_subjects,
                 trigger_kind=trigger_kind,
                 trigger_body_id=body_id,
                 roles=roles,
@@ -2712,12 +2699,11 @@ def main() -> int:
                     )
 
             # ---- 10.4 GENUINE-CLASS records + cross-check (point 6b/6c) ----
-            # m_facts["genuine_subjects"] is the imported-detector re-run over
-            # this meeting's transcript (non-endpoint alibi_vs_sighting). Keep
-            # the true-impostor subset as SUPPLIED, CONVERTED when this meeting
-            # ejected that impostor — byte-equal to the shipped
-            # compute_genuine_class_conversion (asserted as an invariant after
-            # the walk).
+            # m_facts["genuine_subjects"] is this meeting's recorded genuine
+            # class (the one-home genuine_class_subjects). Keep the true-impostor
+            # subset as SUPPLIED, CONVERTED when this meeting ejected that
+            # impostor — equal to the shipped compute_genuine_class_conversion
+            # (asserted as an invariant after the walk).
             for subject in m_facts["genuine_subjects"]:
                 if roles.get(subject) != "IMPOSTOR":
                     continue
@@ -3315,12 +3301,13 @@ def main() -> int:
     # Build the SHIPPED tournament report over the SAME bytes (re-seeding the
     # firewalled roles) and fold it through the owning eval helpers, then assert
     # the extractor's RE-DERIVED genuine-class supplied/converted equals the
-    # shipped compute_genuine_class_conversion to the unit. A mismatch means one
-    # of the two classifiers is wrong (a divergent replica would poison the
-    # whole decomposition) -> BLOCKING mechanical finding. On a post-repair
-    # recording (10.5+) the imported detector re-run equals the recorded flags,
-    # so the two must agree exactly; the assertion is the trust anchor that they
-    # do. ejection_accuracy / contradictions-flagged-but-ignored are folded for
+    # shipped compute_genuine_class_conversion to the unit. Both read each
+    # meeting's recorded flags by the one-home rule, so a mismatch means the
+    # extractor's classifier or its walk (meeting set, re-seeded roles, eject
+    # outcome) has drifted from the shipped metric -> BLOCKING mechanical
+    # finding; a transcript re-run standing in for the record is the planted
+    # case in tests/experiments/test_gameplay_facts_genuine_class.py.
+    # ejection_accuracy / contradictions-flagged-but-ignored are folded for
     # the summary and a sanity cross-check against the extractor's own tallies.
     roles_by_seed = {g["seed"]: dict(g["roles"]) for g in games}
     shipped_report = load_tournament_report(
@@ -3344,7 +3331,7 @@ def main() -> int:
                     "Re-derived genuine-class diverges from the shipped 10.4 metric"
                 ),
                 "claim": (
-                    "The extractor's imported-detector genuine-class re-run and "
+                    "The extractor's genuine-class fold and "
                     "eval.vote_correctness.compute_genuine_class_conversion over "
                     "the same bytes must agree to the unit; they do not, so one "
                     "of the two classifiers is wrong and the whole decomposition "
@@ -3357,10 +3344,11 @@ def main() -> int:
                     f"converted={shipped_genuine.converted}"
                 ),
                 "repair_hint": (
-                    "Re-sync the extractor's _genuine_subjects to the imported "
-                    "meetings.transcript.detect_contradictions + the 10.4 "
-                    "non-endpoint alibi_vs_sighting definition; a drift means an "
-                    "era-frozen replica crept back in."
+                    "Read each meeting's genuine class off its RECORDED flags "
+                    "with the imported eval.vote_correctness."
+                    "genuine_class_subjects; a drift means a replica or a "
+                    "transcript re-derivation crept back in, or the walk's "
+                    "meetings, roles or outcomes left the loader's."
                 ),
             }
         )
@@ -3994,7 +3982,8 @@ def main() -> int:
                     shipped_vc.contradictions_flagged_but_ignored
                 ),
                 "note": (
-                    "The extractor's imported-detector genuine-class re-run vs "
+                    "The extractor's genuine-class fold (recorded flags, "
+                    "one-home rule, the walk's roles and outcomes) vs "
                     "the shipped eval.vote_correctness.compute_genuine_class_"
                     "conversion over the same bytes. match=False is a BLOCKING "
                     "finding (one classifier is wrong)."
@@ -4067,9 +4056,10 @@ def main() -> int:
                     1 for r in genuine_class_records if r["verbally_accused"]
                 ),
                 "note": (
-                    "Every (meeting, true impostor) the imported 10.4 detector "
-                    "re-run flags genuine (non-endpoint alibi_vs_sighting). "
-                    "converted == ejected that impostor that meeting."
+                    "Every (meeting, true impostor) whose RECORDED flags carry "
+                    "the imported 10.4 genuine class (non-endpoint, non-proxy "
+                    "alibi_vs_sighting). converted == ejected that impostor "
+                    "that meeting."
                 ),
                 "records": genuine_class_records,
             },

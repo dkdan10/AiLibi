@@ -18,15 +18,13 @@ Three layers, mirroring the module split:
   sheltered / unevidenced) over the rendered §6.6 suspicion-graph rows.
 
 * **Committed regression pins** — the regenerated reports for BOTH committed
-  sets carry the audited values exactly. These pin the e750b40 set (the Task
-  9.11 re-record the 2026-06-10 close audit measured) and are NOT immutable:
-  Task 10.5's combined re-record regenerates the reports and updates these
-  pins, the standard re-record pattern.
+  sets carry the audited values exactly. These pin the baseline-9 re-record
+  and are NOT immutable: each re-record regenerates the reports and updates
+  these pins, the standard re-record pattern.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -41,6 +39,7 @@ from eval.meeting_quality import (
     compute_gate_metrics,
     recorded_contradiction_flags,
 )
+from eval.report_io import load_report, read_report_text, report_path
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -888,39 +887,38 @@ def test_wrapper_packs_gate_metrics_from_the_owning_analyzers() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Committed regression pins — the e750b40 set; Task 10.5's re-record updates
+# Committed regression pins — the baseline-9 set; each re-record updates
 # ---------------------------------------------------------------------------
 
 _SAMPLES_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples"
 # The flat 4p1i report now lives under replays/samples/4p1i/ (Task 12.12).
-_COMMITTED_FLAT_REPORT = _SAMPLES_DIR / "4p1i" / "tournament-eval-report.json"
-_COMMITTED_9P2I_REPORT = _SAMPLES_DIR / "9p2i" / "tournament-eval-report.json"
+_COMMITTED_FLAT_REPORT = report_path(_SAMPLES_DIR / "4p1i")
+_COMMITTED_9P2I_REPORT = report_path(_SAMPLES_DIR / "9p2i")
 
 
 def _load_committed(path: Path) -> TournamentEvalReport:
-    return TournamentEvalReport.model_validate_json(path.read_text(encoding="utf-8"))
+    return TournamentEvalReport.model_validate_json(read_report_text(path))
 
 
 def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     """The shipped 9p/2i report carries the recorded gp-7 gate values exactly.
 
-    These pin the baseline-6 Qwen/Qwen3.6-27B (prompt set qwen3_6_27b.v3, all
-    four templates, the substrate levers ON) re-record and are NOT
-    immutable — the next re-record regenerates the report and updates these
-    pins, the standard re-record pattern.
+    These pin the baseline-9 Qwen/Qwen3.6-27B (prompt set qwen3_6_27b: three
+    templates at v6, vote_ballot at v8) re-record and are NOT immutable — the
+    next re-record regenerates the report and updates these pins, the standard
+    re-record pattern.
 
-    Recorded values: genuine-class 3 converted / 4 supplied — on the baseline-6
-    model/set the genuine (interior, non-proxy) impostor-subject flag class has
-    instances again (the transcript contradiction channel is live), so the
-    PRIMARY gate reads 0.75; lost openings 0 against 0 cap-defaulted turns;
-    accused-impostor survival 70/148 with the partition 34 rendered-met + 0
-    sheltered + 36 unevidenced.
+    Recorded values: genuine-class 0 converted / 0 supplied — on the recorded
+    census the genuine (interior, non-proxy) impostor-subject flag class has no
+    instance, so the PRIMARY gate reads no rate; lost openings 0 against 0
+    cap-defaulted turns; accused-impostor survival 42/122 with the partition 16
+    rendered-met + 0 sheltered + 26 unevidenced.
 
     Task 19.5 wires the Task-17.6 successor onto the same surface, so this also
-    pins the CANARY cell ``supplied_channel_conversion``: 70 converted / 79
-    supplied (rate ~0.8861), the union of witnessed vents (76/68), sighting
-    contradictions (2/2) and whereabouts-lies (7/5), with the starved legacy
-    alibi-anchored column riding along at 3/4.
+    pins the CANARY cell ``supplied_channel_conversion``: 70 converted / 74
+    supplied (rate ~0.9459), the union of witnessed vents (74/70), sighting
+    contradictions (0/0) and whereabouts-lies (1/0), with the starved legacy
+    alibi-anchored column riding along at 0/0.
     """
 
     report = _load_committed(_COMMITTED_9P2I_REPORT)
@@ -934,15 +932,15 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
     supplied_channel = gate.supplied_channel_conversion
-    assert supplied_channel.supplied == 75  # was 76
-    assert supplied_channel.converted == 69  # was 70
-    assert supplied_channel.conversion_rate == pytest.approx(69 / 75)  # was 69 / 76
-    assert supplied_channel.witnessed_vent_supplied == 73  # was 74
-    assert supplied_channel.witnessed_vent_converted == 68  # was 69
+    assert supplied_channel.supplied == 74  # was 75
+    assert supplied_channel.converted == 70  # was 69
+    assert supplied_channel.conversion_rate == pytest.approx(70 / 74)  # was 69 / 75
+    assert supplied_channel.witnessed_vent_supplied == 74  # was 73
+    assert supplied_channel.witnessed_vent_converted == 70  # was 68
     assert supplied_channel.sighting_contradiction_supplied == 0  # was 2
     assert supplied_channel.sighting_contradiction_converted == 0  # was 2
-    assert supplied_channel.whereabouts_lie_supplied == 2  # was 5
-    assert supplied_channel.whereabouts_lie_converted == 1  # was 2
+    assert supplied_channel.whereabouts_lie_supplied == 1  # was 2
+    assert supplied_channel.whereabouts_lie_converted == 0  # was 1
     # The preserved legacy column mirrors the genuine-class cell above.
     assert supplied_channel.legacy_alibi_supplied == 0  # was 1
     assert supplied_channel.legacy_alibi_converted == 0
@@ -952,16 +950,16 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 132  # was 137
-    assert gate.accused_impostor_survivals == 51  # was 52
-    # The 70 accused-impostor survivals partition into rendered-met (voters saw a
+    assert gate.accused_impostor_events == 122  # was 132
+    assert gate.accused_impostor_survivals == 42  # was 51
+    # The 42 accused-impostor survivals partition into rendered-met (voters saw a
     # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
-    # and unevidenced. On the baseline-6 re-record the sheltered class is empty, so
-    # survivors split rendered-met (34), sheltered (0), and unevidenced (36), the
+    # and unevidenced. On the baseline-9 re-record the sheltered class is empty, so
+    # survivors split rendered-met (16), sheltered (0), and unevidenced (26), the
     # largest share still unevidenced.
-    assert gate.survivals_rendered_met == 18
+    assert gate.survivals_rendered_met == 16  # was 18
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 33  # was 34
+    assert gate.survivals_unevidenced == 26  # was 33
 
     # Per-seed identities RE-DERIVED from the same committed games. Task 21.9
     # rebuilt the sidecar, so the stored block above and this fold now AGREE:
@@ -998,7 +996,7 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     # JSON-level guard: the committed file itself serves the gate surface and
     # the era-invalidity note (a reader pulling the raw report sees the
     # PRIMARY gate and the warning, the gp-7 ask).
-    raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
+    raw = load_report(_COMMITTED_9P2I_REPORT)
     assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 0
     assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 0
     assert raw["gate_metrics"]["genuine_class_conversion"]["conversion_rate"] is None
@@ -1007,29 +1005,29 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     )
     assert "INVALID" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     # ... and the Task-19.5 successor beside it, carrying its canary label.
-    # was 76
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 75
+    # was 75
+    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 74
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )
 
 
 def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
-    """The flat 4p/1i set's gate block, pinned at the baseline-6 Qwen/Qwen3.6-27B
-    (prompt set qwen3_6_27b.v3, all four templates, the substrate levers ON)
+    """The flat 4p/1i set's gate block, pinned at the baseline-9 Qwen/Qwen3.6-27B
+    (prompt set qwen3_6_27b: three templates at v6, vote_ballot at v8)
     re-record.
 
     NOT immutable — the next re-record regenerates and updates these. On the
-    baseline-6 model/set the genuine (interior, non-proxy) impostor-subject flag
-    class has one instance, so the set supplies 1 genuine-class flag and
-    converts 1 (rate 1.0), loses 0 openings and defaults 0 turns, and its 22
-    accused-impostor survivals split 3 rendered-met / 0 sheltered / 19 unevidenced.
+    recorded census the genuine (interior, non-proxy) impostor-subject flag
+    class has no instance, so the set supplies 0 genuine-class flags and
+    converts 0 (no rate), loses 0 openings and defaults 0 turns, and its 17
+    accused-impostor survivals split 4 rendered-met / 0 sheltered / 13 unevidenced.
 
     Task 19.5 wires the Task-17.6 successor onto the same surface, so this also
-    pins the CANARY cell ``supplied_channel_conversion``: 10 converted / 11
-    supplied (rate ~0.9091), the union of witnessed vents (10/9) and sighting
-    contradictions (1/1) — this set supplies no whereabouts-lie (0/0) — with the
-    starved legacy alibi-anchored column riding along at 1/1.
+    pins the CANARY cell ``supplied_channel_conversion``: 19 converted / 19
+    supplied (rate 1.0), all of it witnessed vents (19/19) — this set supplies
+    no sighting contradiction (0/0) and no whereabouts-lie (0/0) — with the
+    starved legacy alibi-anchored column riding along at 0/0.
     """
 
     report = _load_committed(_COMMITTED_FLAT_REPORT)
@@ -1061,15 +1059,15 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 33  # was 35
-    assert gate.accused_impostor_survivals == 13  # was 15
-    assert gate.survivals_rendered_met == 3  # was 1
+    assert gate.accused_impostor_events == 37  # was 33
+    assert gate.accused_impostor_survivals == 17  # was 13
+    assert gate.survivals_rendered_met == 4  # was 3
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 10  # was 14
+    assert gate.survivals_unevidenced == 13  # was 10
 
     # JSON-level guard, mirroring the 9p2i pin above: the committed file itself
     # serves the successor cell with its canary label.
-    raw = json.loads(_COMMITTED_FLAT_REPORT.read_text(encoding="utf-8"))
+    raw = load_report(_COMMITTED_FLAT_REPORT)
     assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 19
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]

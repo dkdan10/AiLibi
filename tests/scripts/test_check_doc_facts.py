@@ -24,6 +24,7 @@ from xml.etree import ElementTree
 import pytest
 
 import check_doc_facts
+from eval.report_io import REPORT_FILENAME, read_report_text, write_report_text
 from meetings.evidence_profile import EXPERIMENT_ENV_NAMES, MeetingEvidenceProfile
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -95,19 +96,20 @@ _COPIED = (
     "audits/audit-phase-21-close.md",
     # The three audits the checker actually reads: the fixture stands every
     # other audits/*.md up EMPTY, so these are copied whole. The ladder tip
-    # publishes the current record's cells, the baseline-7 record the history
-    # column's, and the adopting record the four bars its verdict table decided.
+    # publishes the current record's cells, the baseline-8 record the history
+    # column's (and is what the adopting record was read against), and the
+    # adopting record the four bars its verdict table decided.
+    "audits/audit-2026-09-22-process-rerecord.md",
     "audits/audit-phase-21-rerecord.md",
-    "audits/audit-phase-20-baseline-7.md",
     "audits/audit-phase-21-adopting-record.md",
     # ...and the memo that registered the four targets before the bytes
     # existed, which the adopting record's copies of them are held to.
     "audits/audit-phase-21-preregistration.md",
     "eval/vote_correctness.py",
-    "replays/samples/4p1i/tournament-eval-report.json",
-    "replays/samples/9p2i/tournament-eval-report.json",
-    "replays/ml_corpus/4p1i/tournament-eval-report.json",
-    "replays/ml_corpus/9p2i/tournament-eval-report.json",
+    "replays/samples/4p1i/tournament-eval-report.json.gz",
+    "replays/samples/9p2i/tournament-eval-report.json.gz",
+    "replays/ml_corpus/4p1i/tournament-eval-report.json.gz",
+    "replays/ml_corpus/9p2i/tournament-eval-report.json.gz",
     "replays/ml_corpus/4p1i/MANIFEST.md",
     "replays/ml_corpus/9p2i/MANIFEST.md",
     "docs/glossary.md",
@@ -164,8 +166,8 @@ _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _MANIFEST_9P2I = "replays/samples/9p2i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
 _VOTE_CORRECTNESS = "eval/vote_correctness.py"
-_EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json"
-_EVAL_REPORT_4P1I = "replays/samples/4p1i/tournament-eval-report.json"
+_EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json.gz"
+_EVAL_REPORT_4P1I = "replays/samples/4p1i/tournament-eval-report.json.gz"
 _ML_CORPUS_MANIFEST_9P2I = "replays/ml_corpus/9p2i/MANIFEST.md"
 _GLOSSARY = "docs/glossary.md"
 _HISTORY = "docs/history.md"
@@ -194,14 +196,13 @@ _MAP_TASK_CELL = "| 20.8 |"
 _MAP_ONLY_FINDING = "`C-9`"
 # The record the history column is history OF: the recording the current one
 # replaced, read through the same bar sections as the current one.
-_PROOF_AUDIT = "audits/audit-phase-20-baseline-7.md"
-_PROOF_ACCURACY_HEADING = "### Bar 1 — I-1 non-direct conviction accuracy: **MISSED**"
+_PROOF_AUDIT = "audits/audit-phase-21-rerecord.md"
+_PROOF_ACCURACY_HEADING = "### Published cell 1 — non-direct conviction accuracy"
 _PROOF_ACCURACY_POOLED = (
-    "| **pooled** | **46/125 = 0.3680** [0.2886, 0.4553] | "
-    "**61/103 = 0.5922** [0.4957, 0.6822] |"
+    "| **pooled** | **61/103 = 0.5922** | **50/96 = 0.5208** [0.4224, 0.6178] |"
 )
-_PROOF_INNOCENT_POOLED = "| **pooled** | **79** | **42** |"
-_PROOF_DIRECT_POOLED = "**326/326 = 1.000** pooled"
+_PROOF_INNOCENT_POOLED = "| **pooled** | **42** | **46** |"
+_PROOF_DIRECT_POOLED = "**333/333 = 1.0000** pooled"
 # The record whose pre-registered rule DECIDED, and the four rows of its verdict
 # table the front door quotes. Each drifted twin moves one cell only.
 _FINDING_AUDIT = "audits/audit-phase-21-adopting-record.md"
@@ -236,7 +237,7 @@ _FINDING_POWERED_SET_ROW = (
 _FINDING_ACCURACY_SECTION_POOLED = "| pooled | 50/96 = 0.5208 | **46/66 = 0.6970** |"
 _FINDING_INNOCENT_SECTION_POOLED = "| pooled | 46 | **20** |"
 # The history cell both front-door tables carry for the conviction partition.
-_PREVIOUS_PARTITION_CELL = "326 / 326 = 1.0000 vs 61 / 103 = 0.5922"
+_PREVIOUS_PARTITION_CELL = "333 / 333 = 1.0000 vs 50 / 96 = 0.5208"
 _ML_PAGE = "docs/ml-program.md"
 _ML_ARM_ROW = "| `ea4bc955…` (put to the bar) | 26/50 = 0.52 | 13/50 = 0.26 |"
 _ML_DROPPED_ARM_ROW = (
@@ -248,18 +249,28 @@ _DEDUCTION_INSTRUMENT = "tests/eval/test_deduction_metrics.py"
 # The record that adopted the current recording: the ladder tip, the
 # pre-registered bar read the results row publishes, and the win split whose
 # before column the front door quotes.
-_LADDER_TIP_AUDIT = "audits/audit-phase-21-rerecord.md"
+_LADDER_TIP_AUDIT = "audits/audit-2026-09-22-process-rerecord.md"
+# The recording the deciding record's bars were read against. It stays baseline 8
+# when the tip moves, and happens today to be the history column's record too.
+_FINDING_BASE_AUDIT = "audits/audit-phase-21-rerecord.md"
+# The current record's own published cells, as committed.
+_TIP_ACCURACY_HEADING = "#### Published cell 1 — non-direct conviction accuracy"
+_TIP_ACCURACY_POOLED = (
+    "| **pooled** | **50/96 = 0.5208** | **43/85 = 0.5059** [0.4017, 0.6096] |"
+)
+_TIP_INNOCENT_POOLED = "| **pooled** | **46** | **42** |"
+_TIP_DIRECT_POOLED = "**326/326 = 1.0000** pooled"
 _CITATION_ROW_CLAIM = (
     "Eject ballots carrying a valid citation, a turn or an observation id (9p2i)"
 )
 # The reading guide's §3 cross-tab, as committed.
-_FLAGGED_ROW = "| yes (68 meetings) | 68 | 0 |"
-_UNFLAGGED_ROW = "| no (83 meetings) | 14 | 13 |"
+_FLAGGED_ROW = "| yes (70 meetings) | 70 | 0 |"
+_UNFLAGGED_ROW = "| no (75 meetings) | 11 | 9 |"
 # The one dialect term the front door keeps, and the link that defines it. Its
 # first use is the results table's before-column header.
-_BASELINE_LINK = "[baseline 7](docs/glossary.md#baseline-n-the-reference-recording)"
+_BASELINE_LINK = "[baseline 8](docs/glossary.md#baseline-n-the-reference-recording)"
 _BEFORE_COLUMN_LINK = (
-    "[At baseline 7](docs/glossary.md#baseline-n-the-reference-recording)"
+    "[At baseline 8](docs/glossary.md#baseline-n-the-reference-recording)"
 )
 _BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
 # "ladder tip" is private dialect too, so a planted ladder-tip sentence has to
@@ -325,6 +336,10 @@ def _stand_in_enumerated_paths(root: Path) -> None:
 
 
 def _read(root: Path, relative: str) -> str:
+    # An eval report is committed gzipped; its text is read through the one
+    # module that owns that format, exactly as the checker streams it.
+    if relative.endswith(REPORT_FILENAME):
+        return read_report_text(root / relative)
     return (root / relative).read_text(encoding="utf-8")
 
 
@@ -333,6 +348,9 @@ def _write(root: Path, relative: str, text: str) -> None:
     # checkout, and an in-place write would perturb the committed file.
     path = root / relative
     path.unlink(missing_ok=True)
+    if relative.endswith(REPORT_FILENAME):
+        write_report_text(path, text)  # the same deterministic archive
+        return
     path.write_text(text, encoding="utf-8")
 
 
@@ -366,10 +384,18 @@ def test_stale_sample_date_detected(doc_tree: Path) -> None:
     # (a) The pre-19.1 README claimed the baseline-5-era refresh date. Every
     # place the README dates the current recording is held to the manifests,
     # so a blanket rewrite is named once per claim rather than once per file.
-    _substitute(doc_tree, _README, "2026-08-31", "2026-08-19")
+    _substitute(doc_tree, _README, "2026-09-22", "2026-08-19")
+    # The current record's file name carries the date too; the blanket rewrite
+    # is about the claims, so the link is put back rather than broken.
+    _substitute(
+        doc_tree,
+        _README,
+        "audit-2026-08-19-process-rerecord.md",
+        "audit-2026-09-22-process-rerecord.md",
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert all(_README in error for error in errors)
-    paragraph = [error for error in errors if "refresh date '2026-08-31'" in error]
+    paragraph = [error for error in errors if "refresh date '2026-09-22'" in error]
     assert len(paragraph) == 1
     dated = [
         error for error in errors if "dates the current reference recording" in error
@@ -381,17 +407,17 @@ def test_paragraph_date_drift_not_alibied_elsewhere(doc_tree: Path) -> None:
     # The provenance claim is bound to its paragraph: the correct date
     # appearing somewhere else in the file must not satisfy a drifted
     # paragraph (the pre-hardening checker accepted exactly this).
-    _substitute(doc_tree, _README, "regenerated 2026-08-31", "regenerated 2026-08-19")
+    _substitute(doc_tree, _README, "regenerated 2026-09-22", "regenerated 2026-08-19")
     _write(
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + "\nAn unrelated historical note mentioning 2026-08-31.\n",
+        + "\nAn unrelated historical note mentioning 2026-09-22.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert any(
-        "'regenerated 2026-08-19'" in error and "refresh date '2026-08-31'" in error
+        "'regenerated 2026-08-19'" in error and "refresh date '2026-09-22'" in error
         for error in errors
     )
     # The same clause is a dated claim wherever it appears, so the widened
@@ -408,13 +434,13 @@ def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "regenerated 2026-08-31",
-        "regenerated 2026-08-31 (an earlier draft said regenerated 2026-08-19)",
+        "regenerated 2026-09-22",
+        "regenerated 2026-09-22 (an earlier draft said regenerated 2026-08-19)",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert any(
-        "'regenerated 2026-08-19'" in error and "refresh date '2026-08-31'" in error
+        "'regenerated 2026-08-19'" in error and "refresh date '2026-09-22'" in error
         for error in errors
     )
     assert any(
@@ -475,18 +501,18 @@ def test_wrong_prompt_set_version_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "`qwen3_6_27b` `v5` prompts",
+        "`qwen3_6_27b` `v6` prompts",
         "`qwen3_6_27b` `v2` prompts",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'v5'" in errors[0]
+    assert "'v6'" in errors[0]
     assert "`prompt_versions` column" in errors[0]
 
 
 def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
     # Losing the paragraph anchor is format drift, not a vacuous pass.
-    _substitute(doc_tree, _README, "regenerated 2026-08-31", "refreshed 2026-08-31")
+    _substitute(doc_tree, _README, "regenerated 2026-09-22", "refreshed 2026-09-22")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "exactly one sample-provenance paragraph" in errors[0]
@@ -495,17 +521,17 @@ def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
 def test_repeated_claims_survive_a_lost_provenance_paragraph(doc_tree: Path) -> None:
     # ...and it must not take the rest of the front door's gate down with it:
     # the other documents repeat these facts on their own account.
-    _substitute(doc_tree, _README, "regenerated 2026-08-31", "refreshed 2026-08-31")
+    _substitute(doc_tree, _README, "regenerated 2026-09-22", "refreshed 2026-09-22")
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 36% (4p1i), 30% (9p2i) |",
         "| 36% (4p1i), 22% (9p2i) |",
+        "| 36% (4p1i), 30% (9p2i) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("exactly one sample-provenance paragraph" in error for error in errors)
     assert any(
-        error.startswith(_READING_GUIDE) and "claim '22% (9p2i)' disagrees" in error
+        error.startswith(_READING_GUIDE) and "claim '30% (9p2i)' disagrees" in error
         for error in errors
     )
 
@@ -532,7 +558,7 @@ def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "names baseline 5" in errors[0]
-    assert "ladder tip at baseline 8" in errors[0]
+    assert "ladder tip at baseline 9" in errors[0]
 
 
 def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
@@ -547,7 +573,7 @@ def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "win-rate claim '36% (9p2i)'" in errors[0]
-    assert "15/50 = 30%" in errors[0]
+    assert "11/50 = 22%" in errors[0]
 
 
 def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
@@ -556,13 +582,13 @@ def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "36% (4p1i) and 30% (9p2i)",
-        "36% (4p1i) and 30% (9p2i) (an earlier draft misquoted 25% (9p2i))",
+        "36% (4p1i) and 22% (9p2i)",
+        "36% (4p1i) and 22% (9p2i) (an earlier draft misquoted 25% (9p2i))",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "win-rate claim '25% (9p2i)' disagrees" in errors[0]
-    assert "15/50 = 30%" in errors[0]
+    assert "11/50 = 22%" in errors[0]
 
 
 def test_long_ladder_tip_sentence_detected(doc_tree: Path) -> None:
@@ -596,7 +622,7 @@ def test_ladder_tip_sentence_without_baseline_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "names no baseline at all" in errors[0]
-    assert "baseline 8" in errors[0]
+    assert "baseline 9" in errors[0]
 
 
 def test_missing_live_toggle_example_detected(doc_tree: Path) -> None:
@@ -834,13 +860,13 @@ def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
 def test_vote_correctness_stamp_drift_detected(doc_tree: Path) -> None:
     # The module's per-set stamp is bound to that set's committed report: a
     # numerator drifting away from the recorded one is named on both sides.
-    _substitute(doc_tree, _VOTE_CORRECTNESS, "75/82 = 0.9146", "74/82 = 0.9024")
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "76/81 = 0.9383", "75/81 = 0.9259")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert _VOTE_CORRECTNESS in errors[0]
     assert "replays/samples/9p2i" in errors[0]
-    assert "74/82 = 0.9024" in errors[0]
-    assert "records 75/82 = 0.9146" in errors[0]
+    assert "75/81 = 0.9259" in errors[0]
+    assert "records 76/81 = 0.9383" in errors[0]
 
 
 def test_structural_pin_prose_detected(doc_tree: Path) -> None:
@@ -856,7 +882,7 @@ def test_structural_pin_prose_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'structurally pinned'" in errors[0]
-    assert "replays/samples/9p2i (75/82)" in errors[0]
+    assert "replays/samples/9p2i (76/81)" in errors[0]
 
 
 def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
@@ -866,7 +892,7 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _EVAL_REPORT_9P2I,
-        '"vote_correctness_rate": 0.9146341463414634',
+        '"vote_correctness_rate": 0.9382716049382716',
         '"vote_correctness_rate": 0.99',
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -875,7 +901,7 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
     # report it points a reader at.
     assert len(errors) == 2
     assert any(
-        _EVAL_REPORT_9P2I in error and "75/82 = 0.9146" in error for error in errors
+        _EVAL_REPORT_9P2I in error and "76/81 = 0.9383" in error for error in errors
     )
     assert any("vote correctness 0.990" in error for error in errors)
 
@@ -929,11 +955,11 @@ def test_vote_correctness_baseline_attribution_drift_detected(doc_tree: Path) ->
     # The baseline the stamps are attributed to has a committed source too: a
     # rate hung on the wrong baseline is a wrong claim even when its
     # arithmetic checks out.
-    _substitute(doc_tree, _VOTE_CORRECTNESS, "baseline-8", "baseline-5")
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "baseline-9", "baseline-5")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert _VOTE_CORRECTNESS in errors[0]
-    assert "'baseline-8'" in errors[0]
+    assert "'baseline-9'" in errors[0]
 
 
 def test_zero_impostor_ejection_set_wants_an_undefined_rate_stamp(
@@ -945,10 +971,10 @@ def test_zero_impostor_ejection_set_wants_an_undefined_rate_stamp(
     _substitute(
         doc_tree,
         _EVAL_REPORT_4P1I,
-        '"impostor_ejections": 20,\n    "crewmate_ejections": 4,\n'
+        '"impostor_ejections": 20,\n    "crewmate_ejections": 0,\n'
         '    "evidence_backed_impostor_ejections": 19,\n'
         '    "vote_correctness_rate": 0.95,',
-        '"impostor_ejections": 0,\n    "crewmate_ejections": 4,\n'
+        '"impostor_ejections": 0,\n    "crewmate_ejections": 0,\n'
         '    "evidence_backed_impostor_ejections": 0,\n'
         '    "vote_correctness_rate": null,',
     )
@@ -1000,6 +1026,84 @@ def test_set_supplying_no_prompt_provenance_fails_loud(doc_tree: Path) -> None:
     assert "records no prompt set on any row" in errors[0]
 
 
+# The recording runs its templates at two versions: every row carries the same
+# SET of prompt tokens, and that set is what the sets must agree on.
+_BALLOT_V8 = "vote_ballot.qwen3_6_27b.v8"
+
+
+def test_committed_two_version_prompt_set_is_one_substrate(doc_tree: Path) -> None:
+    # The committed rows name two tokens between them, on every row alike. A
+    # check that read the union of tokens would call that two substrates.
+    rows = [
+        line
+        for line in _read(doc_tree, _ML_CORPUS_MANIFEST_9P2I).splitlines()
+        if line.startswith("| 1")
+    ]
+    assert rows and all(_BALLOT_V8 in row and ".v6," in row for row in rows)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_one_set_on_a_different_prompt_stamp_fails_loud(doc_tree: Path) -> None:
+    # One set whose ballot ran at another version is a second substrate, even
+    # though its rows agree among themselves.
+    text = _read(doc_tree, _ML_CORPUS_MANIFEST_9P2I)
+    assert text.count(_BALLOT_V8) == 150
+    _write(
+        doc_tree,
+        _ML_CORPUS_MANIFEST_9P2I,
+        text.replace(_BALLOT_V8, "vote_ballot.qwen3_6_27b.v7"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _VOTE_CORRECTNESS in errors[0]
+    assert "disagree on the prompt set" in errors[0]
+    assert "qwen3_6_27b.v6 + qwen3_6_27b.v7" in errors[0]
+    assert "qwen3_6_27b.v6 + qwen3_6_27b.v8" in errors[0]
+
+
+def test_one_row_on_a_different_prompt_stamp_fails_loud(doc_tree: Path) -> None:
+    # A single row is enough: the stamp is compared row by row, not per set.
+    text = _read(doc_tree, _ML_CORPUS_MANIFEST_9P2I)
+    _write(
+        doc_tree,
+        _ML_CORPUS_MANIFEST_9P2I,
+        text.replace(_BALLOT_V8, "vote_ballot.qwen3_6_27b.v7", 1),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "disagree on the prompt set" in errors[0]
+    assert "qwen3_6_27b.v7" in errors[0]
+
+
+def test_one_row_on_a_subset_of_the_prompt_tokens_fails_loud(doc_tree: Path) -> None:
+    # The row carries only tokens the others carry, so the union of tokens is
+    # unchanged; only a row-by-row comparison of the SET sees the ballot moved.
+    text = _read(doc_tree, _ML_CORPUS_MANIFEST_9P2I)
+    _write(
+        doc_tree,
+        _ML_CORPUS_MANIFEST_9P2I,
+        text.replace(_BALLOT_V8, "vote_ballot.qwen3_6_27b.v6", 1),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "disagree on the prompt set" in errors[0]
+    assert "(qwen3_6_27b.v6 | qwen3_6_27b.v6 + qwen3_6_27b.v8)" in errors[0]
+
+
+def test_lead_in_naming_one_of_two_prompt_tokens_fails_loud(doc_tree: Path) -> None:
+    # Every token of the agreed set is a claim the lead-in has to make.
+    _substitute(
+        doc_tree,
+        _VOTE_CORRECTNESS,
+        "``vote_ballot`` at ``qwen3_6_27b.v8``",
+        "``vote_ballot`` at its own version",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "provenance lead-in" in errors[0]
+    assert "prompt set 'qwen3_6_27b.v8'" in errors[0]
+
+
 def test_evidence_count_above_its_denominator_fails_loud(doc_tree: Path) -> None:
     # More evidence-backed ejections than impostor ejections is the impossible
     # state VoteCorrectnessReport rejects; a corrupted report must fail here
@@ -1007,7 +1111,7 @@ def test_evidence_count_above_its_denominator_fails_loud(doc_tree: Path) -> None
     _substitute(
         doc_tree,
         _EVAL_REPORT_9P2I,
-        '"evidence_backed_impostor_ejections": 75,',
+        '"evidence_backed_impostor_ejections": 76,',
         '"evidence_backed_impostor_ejections": 92,',
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -1037,7 +1141,7 @@ def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
     # The one private-dialect term the front door keeps loses its glossary
     # link at its FIRST use — the results table's before-column header — so a
     # reader meets "baseline" with nowhere to look it up.
-    _substitute(doc_tree, _README, _BEFORE_COLUMN_LINK, "At baseline 7")
+    _substitute(doc_tree, _README, _BEFORE_COLUMN_LINK, "At baseline 8")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'baseline'" in errors[0]
@@ -1088,7 +1192,7 @@ def test_repeated_results_claim_detected(doc_tree: Path) -> None:
     # The stale copy is too narrow to reach the history column, so it has no
     # before cell at all — and the page then answers the history question two
     # ways as well.
-    assert any("has no 'At baseline 7' cell" in error for error in errors)
+    assert any("has no 'At baseline 8' cell" in error for error in errors)
     assert any("reads ''" in error for error in errors)
 
 
@@ -1142,18 +1246,18 @@ def test_citation_figure_derived_from_the_committed_instrument(
     _substitute(
         doc_tree,
         _README,
-        "| 526 / 527, zero dangling |",
-        "| 525 / 526, zero dangling |",
+        "| 496 / 496, zero dangling |",
+        "| 495 / 496, zero dangling |",
     )
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 526 / 527, zero dangling |",
-        "| 525 / 526, zero dangling |",
+        "| 496 / 496, zero dangling |",
+        "| 495 / 496, zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'525 / 526, zero dangling'" in errors[0]
+    assert "'495 / 496, zero dangling'" in errors[0]
     assert _CITATION_INSTRUMENT in errors[0]
 
 
@@ -1168,19 +1272,19 @@ def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'526 / 527, 3 dangling'" in errors[0]
+    assert "'496 / 496, 3 dangling'" in errors[0]
 
 
 def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
     # The headline is arithmetic over the cross-tab under it, so the two cannot
-    # drift: 68 of 68 + 14 correct ejections rode a vent flag.
+    # drift: 70 of 70 + 11 correct ejections rode a vent flag.
     _substitute(
-        doc_tree, _READING_GUIDE, _FLAGGED_ROW, "| yes (68 meetings) | 60 | 0 |"
+        doc_tree, _READING_GUIDE, _FLAGGED_ROW, "| yes (70 meetings) | 60 | 0 |"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'68 / 82 = 83%'" in errors[0]
-    assert "'60 / 74 = 81%'" in errors[0]
+    assert "'70 / 81 = 86%'" in errors[0]
+    assert "'60 / 71 = 85%'" in errors[0]
     # ...and the drifted cell is no longer the one the instrument pins.
     assert "cross-tab's 'yes' row reads 60 impostor / 0 innocent" in errors[1]
 
@@ -1194,8 +1298,8 @@ def test_non_replay_jsonl_is_not_counted(doc_tree: Path) -> None:
 
 
 def test_vent_crosstab_read_by_label_not_position(doc_tree: Path) -> None:
-    # Reading the rows by position would derive 14 / 82 from a reordered
-    # table that says those fourteen ejections had NO vent flag. Keyed on the
+    # Reading the rows by position would derive 11 / 81 from a reordered
+    # table that says those eleven ejections had NO vent flag. Keyed on the
     # labels, reordering changes nothing...
     text = _read(doc_tree, _READING_GUIDE)
     assert _FLAGGED_ROW + "\n" + _UNFLAGGED_ROW in text
@@ -1212,11 +1316,11 @@ def test_vent_crosstab_read_by_label_not_position(doc_tree: Path) -> None:
 
 def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
     # ...while swapping which population is flagged does change the
-    # headline, and is caught: 14 of 82 correct ejections would then be
+    # headline, and is caught: 11 of 81 correct ejections would then be
     # the vent-backed ones.
     text = _read(doc_tree, _READING_GUIDE)
     assert _FLAGGED_ROW + "\n" + _UNFLAGGED_ROW in text
-    swapped = "| no (68 meetings) | 68 | 0 |\n| yes (83 meetings) | 14 | 13 |"
+    swapped = "| no (70 meetings) | 70 | 0 |\n| yes (75 meetings) | 11 | 9 |"
     _write(
         doc_tree,
         _READING_GUIDE,
@@ -1224,12 +1328,12 @@ def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'68 / 82 = 83%'" in error and "'14 / 82 = 17%'" in error for error in errors
+        "'70 / 81 = 86%'" in error and "'11 / 81 = 14%'" in error for error in errors
     )
     # The pins name the same swap in their own terms: the flagged row is the
-    # one the instrument recorded 68/0 for, whichever way round it is written.
+    # one the instrument recorded 70/0 for, whichever way round it is written.
     assert any(
-        "cross-tab's 'yes' row reads 14 impostor / 13 innocent" in e for e in errors
+        "cross-tab's 'yes' row reads 11 impostor / 9 innocent" in e for e in errors
     )
 
 
@@ -1237,7 +1341,7 @@ def test_mislabelled_vent_crosstab_row_fails_loud(doc_tree: Path) -> None:
     # A row whose label is neither yes nor no leaves the two populations
     # unidentifiable, which must fail rather than derive something.
     _substitute(
-        doc_tree, _READING_GUIDE, "| yes (68 meetings) |", "| flagged (68 meetings) |"
+        doc_tree, _READING_GUIDE, "| yes (70 meetings) |", "| flagged (70 meetings) |"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1249,12 +1353,12 @@ def test_proof_partition_derived_from_the_previous_record(doc_tree: Path) -> Non
     # so a moved cell there moves the history the front door states rather than
     # being absorbed.
     _substitute(
-        doc_tree, _PROOF_AUDIT, _PROOF_DIRECT_POOLED, "**318/326 = 0.975** pooled"
+        doc_tree, _PROOF_AUDIT, _PROOF_DIRECT_POOLED, "**325/333 = 0.9760** pooled"
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    figure = [error for error in errors if "326 / 326 = 1.0000" in error]
+    figure = [error for error in errors if "333 / 333 = 1.0000" in error]
     assert len(figure) == 1
-    assert "'318 / 326 = 0.9755 vs 61 / 103 = 0.5922'" in figure[0]
+    assert "'325 / 333 = 0.9760 vs 50 / 96 = 0.5208'" in figure[0]
 
 
 def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
@@ -1263,13 +1367,13 @@ def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _LADDER_TIP_AUDIT,
-        "| **pooled** | **61/103 = 0.5922** | **50/96 = 0.5208** [0.4224, 0.6178] |",
-        "| **pooled** | **61/103 = 0.5922** | **53/96 = 0.5521** [0.4224, 0.6178] |",
+        _TIP_ACCURACY_POOLED,
+        "| **pooled** | **50/96 = 0.5208** | **46/85 = 0.5412** [0.4017, 0.6096] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'333 / 333 = 1.0000 vs 53 / 96 = 0.5521'" in error for error in errors)
-    # ...and the record's two decided bars now contradict each other.
-    assert any("its non-direct accuracy cell reads 53/96" in error for error in errors)
+    assert any("'326 / 326 = 1.0000 vs 46 / 85 = 0.5412'" in error for error in errors)
+    # ...and the record's two published cells now contradict each other.
+    assert any("its non-direct accuracy cell reads 46/85" in error for error in errors)
 
 
 def test_record_innocent_bar_reaches_the_front_door(doc_tree: Path) -> None:
@@ -1278,8 +1382,8 @@ def test_record_innocent_bar_reaches_the_front_door(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _LADDER_TIP_AUDIT,
-        "| **pooled** | **42** | **46** |",
-        "| **pooled** | **42** | **40** |",
+        _TIP_INNOCENT_POOLED,
+        "| **pooled** | **46** | **40** |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -1296,12 +1400,12 @@ def test_record_direct_proof_cell_reaches_the_front_door(doc_tree: Path) -> None
     _substitute(
         doc_tree,
         _LADDER_TIP_AUDIT,
-        "**333/333 = 1.0000** pooled",
-        "**332/333 = 0.9970** pooled",
+        _TIP_DIRECT_POOLED,
+        "**325/326 = 0.9969** pooled",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("1 proof-present innocent ejection(s)" in error for error in errors)
-    assert any("'332 / 333 = 0.9970 vs 50 / 96 = 0.5208'" in error for error in errors)
+    assert any("'325 / 326 = 0.9969 vs 43 / 85 = 0.5059'" in error for error in errors)
 
 
 def test_missing_record_bar_fails_loud(doc_tree: Path) -> None:
@@ -1309,8 +1413,8 @@ def test_missing_record_bar_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _LADDER_TIP_AUDIT,
-        "### Published cell 1 — non-direct conviction accuracy",
-        "### The first bar — I-1 non-direct conviction accuracy",
+        _TIP_ACCURACY_HEADING,
+        "#### The first cell — non-direct conviction accuracy",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1325,9 +1429,9 @@ def test_previous_record_pooled_row_read_by_label_not_position(doc_tree: Path) -
     assert _PROOF_INNOCENT_POOLED in text
     rows = text.split(_PROOF_INNOCENT_POOLED)
     assert len(rows) == 2
-    moved = text.replace("| `samples/9p2i` | 23 | **14** |\n", "", 1).replace(
+    moved = text.replace("| `samples/9p2i` | 14 | **13** |\n", "", 1).replace(
         _PROOF_INNOCENT_POOLED,
-        f"{_PROOF_INNOCENT_POOLED}\n| `samples/9p2i` | 23 | **14** |",
+        f"{_PROOF_INNOCENT_POOLED}\n| `samples/9p2i` | 14 | **13** |",
         1,
     )
     _write(doc_tree, _PROOF_AUDIT, moved)
@@ -1342,26 +1446,25 @@ def test_swapped_previous_record_columns_detected(doc_tree: Path) -> None:
         doc_tree,
         _PROOF_AUDIT,
         _PROOF_ACCURACY_POOLED,
-        "| **pooled** | **61/103 = 0.5922** [0.4957, 0.6822] | "
-        "**46/125 = 0.3680** [0.2886, 0.4553] |",
+        "| **pooled** | **50/96 = 0.5208** [0.4224, 0.6178] | **61/103 = 0.5922** |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("326 / 326 = 1.0000 vs 46 / 125 = 0.3680" in error for error in errors)
+    assert any("333 / 333 = 1.0000 vs 61 / 103 = 0.5922" in error for error in errors)
 
 
 def test_previous_record_innocent_total_drift_detected(doc_tree: Path) -> None:
-    # The before column's own arithmetic: 61/103 fixes 42 wrongful ejections, so
+    # The before column's own arithmetic: 50/96 fixes 46 wrongful ejections, so
     # the two bars of the previous record are checked against each other exactly
     # as the current record's are.
     _substitute(
         doc_tree,
         _PROOF_AUDIT,
         _PROOF_INNOCENT_POOLED,
-        "| **pooled** | **79** | **44** |",
+        "| **pooled** | **42** | **44** |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     arithmetic = [
-        error for error in errors if "non-direct accuracy cell reads 61/103" in error
+        error for error in errors if "non-direct accuracy cell reads 50/96" in error
     ]
     assert len(arithmetic) == 1
     assert _PROOF_AUDIT in arithmetic[0]
@@ -1374,7 +1477,7 @@ def test_missing_previous_record_bar_fails_loud(doc_tree: Path) -> None:
         doc_tree,
         _PROOF_AUDIT,
         _PROOF_ACCURACY_HEADING,
-        "### The first bar — I-1 non-direct conviction accuracy: **MISSED**",
+        "### The first cell — non-direct conviction accuracy",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1389,7 +1492,7 @@ def test_renamed_previous_record_pooled_row_fails_loud(doc_tree: Path) -> None:
         doc_tree,
         _PROOF_AUDIT,
         _PROOF_INNOCENT_POOLED,
-        "| **all four sets** | **79** | **42** |",
+        "| **all four sets** | **42** | **46** |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1398,18 +1501,18 @@ def test_renamed_previous_record_pooled_row_fails_loud(doc_tree: Path) -> None:
 
 
 def test_innocent_ejections_moved_to_the_wrong_cell_detected(doc_tree: Path) -> None:
-    # The count alone is not the claim. A row stating the same 46 of 46 but
+    # The count alone is not the claim. A row stating the same 42 of 42 but
     # putting them in the proof-present cell states the opposite finding, so
     # matching the number without the placement would gate shape, not meaning.
     _substitute(
         doc_tree,
         _README,
-        "46 of 46 innocent ejections sit in the no-proof cell",
-        "46 of 46 innocent ejections sit in the proof-present cell",
+        "42 of 42 innocent ejections sit in the no-proof cell",
+        "42 of 42 innocent ejections sit in the proof-present cell",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'46 of 46 innocent ejections sit in the no-proof cell'" in errors[0]
+    assert "'42 of 42 innocent ejections sit in the no-proof cell'" in errors[0]
 
 
 def test_ml_arm_win_count_derived_from_the_finalist_jsonl(doc_tree: Path) -> None:
@@ -1575,35 +1678,36 @@ def test_partition_innocent_total_contradicting_its_own_accuracy_detected(
     doc_tree: Path,
 ) -> None:
     # An ejection is either correct or it convicted an innocent, so the
-    # record's own 50/96 fixes 46. Moving the wrongful-ejection bar while
+    # record's own 43/85 fixes 42. Moving the wrongful-ejection cell while
     # updating the README to match must still fail: the record would then be
     # internally contradictory under one date.
     _substitute(
         doc_tree,
         _LADDER_TIP_AUDIT,
-        "| **pooled** | **42** | **46** |",
-        "| **pooled** | **42** | **45** |",
+        _TIP_INNOCENT_POOLED,
+        "| **pooled** | **46** | **41** |",
     )
     _substitute(
         doc_tree,
         _README,
-        "46 of 46 innocent ejections sit in the no-proof cell",
-        "45 of 45 innocent ejections sit in the no-proof cell",
+        "42 of 42 innocent ejections sit in the no-proof cell",
+        "41 of 41 innocent ejections sit in the no-proof cell",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "its non-direct accuracy cell reads 50/96" in error
-        and "wrongful-ejection cell reads 45" in error
+        "its non-direct accuracy cell reads 43/85" in error
+        and "wrongful-ejection cell reads 41" in error
         for error in errors
     )
-    # ...and every surface still narrating the record's own 46 is now naming a
-    # count the record no longer records, which is the same drift read forward.
+    # ...and every wrongful-ejection sentence still naming 42 now names a count
+    # neither this record nor the one before it carries — the record's own 42 on
+    # the README and the guide, and baseline 7's identical 42 in those two and
+    # the history. The ML page narrates only baseline 8's 46, which still holds.
     stale = [error for error in errors if "wrongful-ejection sentence" in error]
     assert {error.split(":")[0] for error in stale} == {
         _README,
         _READING_GUIDE,
         _HISTORY,
-        _ML_PAGE,
     }
 
 
@@ -1623,8 +1727,8 @@ def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
 def test_audits_index_ladder_tip_drift_detected(doc_tree: Path) -> None:
     # The index is where a reader is sent to find the record, and a "ladder
     # tip" sentence there sat outside the scan until 21.11 put it in scope. The
-    # index states no tip of its own today, so the stale sentence is planted
-    # rather than rewritten — the scan has to reach it either way.
+    # index states the tip once, in the current record's entry, so a stale
+    # sentence is planted beside it — the scan has to reach it either way.
     _write(
         doc_tree,
         _AUDITS_INDEX,
@@ -1634,7 +1738,7 @@ def test_audits_index_ladder_tip_drift_detected(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert errors[0].startswith(f"{_AUDITS_INDEX}:")
     assert "names baseline 6" in errors[0]
-    assert "ladder tip at baseline 8" in errors[0]
+    assert "ladder tip at baseline 9" in errors[0]
 
 
 def test_front_door_page_over_its_ceiling_detected(doc_tree: Path) -> None:
@@ -1668,12 +1772,12 @@ def test_lessons_under_its_floor_detected(doc_tree: Path) -> None:
 def test_corpus_disclosure_coverage_cell_drift_detected(doc_tree: Path) -> None:
     # The exact drift A-15 found: a coverage cell left as recorded on the
     # previous substrate while the section was relabelled onto this one.
-    _substitute(doc_tree, _CORPUS_README, "crew S9 **651/651", "crew S9 **723/726")
+    _substitute(doc_tree, _CORPUS_README, "crew S9 **635/635", "crew S9 **723/726")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(f"{_CORPUS_README}:")
     assert "'crew S9' cell reads 723/726" in errors[0]
-    assert "the recorded reports give 651/651" in errors[0]
+    assert "the recorded reports give 635/635" in errors[0]
 
 
 def test_corpus_disclosure_stale_duplicate_cell_detected(doc_tree: Path) -> None:
@@ -1688,7 +1792,7 @@ def test_corpus_disclosure_stale_duplicate_cell_detected(doc_tree: Path) -> None
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'impostor C9' cell reads 342/684" in errors[0]
-    assert "give 292/636" in errors[0]
+    assert "give 298/651" in errors[0]
 
 
 def test_corpus_disclosure_substrate_relabel_detected(doc_tree: Path) -> None:
@@ -1699,26 +1803,26 @@ def test_corpus_disclosure_substrate_relabel_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _CORPUS_README,
-        "the same baseline-8\nsubstrate",
         "the same baseline-9\nsubstrate",
+        "the same baseline-10\nsubstrate",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(f"{_CORPUS_README}:")
-    assert "labelled baseline-9 substrate" in errors[0]
-    assert "ladder tip at baseline 8" in errors[0]
+    assert "labelled baseline-10 substrate" in errors[0]
+    assert "ladder tip at baseline 9" in errors[0]
 
 
 def test_corpus_disclosure_without_a_substrate_label_detected(doc_tree: Path) -> None:
     # Deleting the label must not be the way to silence the check: numbers with
     # no stated substrate are not true of anything.
     text = _read(doc_tree, _CORPUS_README).replace(
-        "baseline-8\nsubstrate", "recorded\nsubstrate"
+        "baseline-9\nsubstrate", "recorded\nsubstrate"
     )
     _write(
         doc_tree,
         _CORPUS_README,
-        text.replace("baseline-8 substrate", "recorded substrate"),
+        text.replace("baseline-9 substrate", "recorded substrate"),
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1732,8 +1836,9 @@ def _trigger_report(tmp_path: Path, games: list[dict[str, object]]) -> Path:
     well-formed here; its own absence is a separate case.
     """
 
-    report = tmp_path / "tournament-eval-report.json"
-    report.write_text(
+    report = tmp_path / REPORT_FILENAME
+    write_report_text(
+        report,
         json.dumps(
             {
                 "deduction": {"public_response_coverage": _COVERAGE_BLOCK},
@@ -1741,7 +1846,6 @@ def _trigger_report(tmp_path: Path, games: list[dict[str, object]]) -> Path:
             },
             indent=2,
         ),
-        encoding="utf-8",
     )
     return report
 
@@ -1831,7 +1935,7 @@ def test_a_disclosed_set_predating_the_substrate_detected(doc_tree: Path) -> Non
     predating = [error for error in errors if error.startswith(f"{manifest}: ")]
     assert len(predating) == 1
     assert "stamps graduated lever(s) ['absence_prior'] OFF" in predating[0]
-    assert "predates the substrate baseline 8 names" in predating[0]
+    assert "predates the substrate baseline 9 names" in predating[0]
 
 
 def test_a_report_with_no_meeting_rows_fails_loud(tmp_path: Path) -> None:
@@ -1857,13 +1961,13 @@ def test_meeting_rows_without_a_role_map_fail_loud(tmp_path: Path) -> None:
 def test_a_report_without_a_coverage_block_fails_loud(tmp_path: Path) -> None:
     # The single pass collects the coverage block too, so its absence is drift
     # this reports rather than a silently missing set of cells.
-    report = tmp_path / "tournament-eval-report.json"
-    report.write_text(
+    report = tmp_path / REPORT_FILENAME
+    write_report_text(
+        report,
         json.dumps(
             {"report": {"games": [{"game_id": "g-1", "roles": {}, "meetings": []}]}},
             indent=2,
         ),
-        encoding="utf-8",
     )
     errors: list[str] = []
     assert check_doc_facts.read_disclosure_facts(tmp_path, report.name, errors) is None
@@ -1879,13 +1983,13 @@ def test_corpus_disclosure_meeting_total_drift_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _CORPUS_README,
-        "meetings crew-triggered **672/672**",
+        "meetings crew-triggered **676/676**",
         "meetings crew-triggered **707/707**",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'meetings crew-triggered' cell reads 707/707" in errors[0]
-    assert "give 672/672" in errors[0]
+    assert "give 676/676" in errors[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -1900,7 +2004,7 @@ def test_stale_guide_win_rate_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 36% (4p1i), 30% (9p2i) |",
+        "| 36% (4p1i), 22% (9p2i) |",
         "| 34% (4p1i), 24% (9p2i) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -1918,7 +2022,7 @@ def test_stale_ml_page_win_rate_detected(doc_tree: Path) -> None:
     # The ML page dates and rates the recording its comparator now sits
     # against, so it is scanned with the rest of the front door.
     _substitute(
-        doc_tree, _ML_PAGE, "36% (4p1i) and 30% (9p2i)", "30% (4p1i) and 30% (9p2i)"
+        doc_tree, _ML_PAGE, "36% (4p1i) and 22% (9p2i)", "30% (4p1i) and 22% (9p2i)"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1932,14 +2036,14 @@ def test_stale_guide_record_date_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "reference recording 8, 2026-08-31 — [instrument]",
-        "reference recording 8, 2026-07-20 — [instrument]",
+        "reference recording 9, 2026-09-22 — [instrument]",
+        "reference recording 9, 2026-07-20 — [instrument]",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
-    assert "'reference recording 8, 2026-07-20'" in errors[0]
-    assert "'2026-08-31'" in errors[0]
+    assert "'reference recording 9, 2026-07-20'" in errors[0]
+    assert "'2026-09-22'" in errors[0]
 
 
 def test_unnumbered_guide_record_date_detected(doc_tree: Path) -> None:
@@ -1949,14 +2053,14 @@ def test_unnumbered_guide_record_date_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "current reference recording, made 2026-08-31",
+        "current reference recording, made 2026-09-22",
         "current reference recording, made 2026-07-20",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
     assert "'reference recording, made 2026-07-20'" in errors[0]
-    assert "'2026-08-31'" in errors[0]
+    assert "'2026-09-22'" in errors[0]
 
 
 def test_older_recording_date_is_left_alone(doc_tree: Path) -> None:
@@ -1981,13 +2085,13 @@ def test_moved_figure_quoted_without_its_baseline_stamp_detected(
     _substitute(
         doc_tree,
         _README,
-        "| 526 / 527, zero dangling | 538 / 538, zero dangling |",
-        "| 526 / 527, zero dangling |",
+        "| 496 / 496, zero dangling | 526 / 527, zero dangling |",
+        "| 496 / 496, zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
         error.startswith(_README)
-        and "has no 'At baseline 7' cell" in error
+        and "has no 'At baseline 8' cell" in error
         and _CITATION_ROW_CLAIM in error
         for error in errors
     )
@@ -1999,12 +2103,12 @@ def test_dropped_before_column_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| What | Figure | At baseline 7 |",
+        "| What | Figure | At baseline 8 |",
         "| What | Figure |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        f"{_READING_GUIDE}: its results table has no 'At baseline 7' column" in error
+        f"{_READING_GUIDE}: its results table has no 'At baseline 8' column" in error
         for error in errors
     )
 
@@ -2015,12 +2119,12 @@ def test_before_column_drift_between_the_two_tables_detected(doc_tree: Path) -> 
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 526 / 527, zero dangling | 538 / 538, zero dangling |",
-        "| 526 / 527, zero dangling | 512 / 512, zero dangling |",
+        "| 496 / 496, zero dangling | 526 / 527, zero dangling |",
+        "| 496 / 496, zero dangling | 512 / 512, zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'538 / 538, zero dangling'" in errors[0]
+    assert "'526 / 527, zero dangling'" in errors[0]
     assert "'512 / 512, zero dangling'" in errors[0]
 
 
@@ -2030,8 +2134,8 @@ def test_before_column_win_rate_held_to_the_record(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "| 36% (4p1i), 30% (9p2i) | 36% (4p1i), 24% (9p2i) |",
-        "| 36% (4p1i), 30% (9p2i) | 12% (4p1i), 24% (9p2i) |",
+        "| 36% (4p1i), 22% (9p2i) | 36% (4p1i), 30% (9p2i) |",
+        "| 36% (4p1i), 22% (9p2i) | 12% (4p1i), 30% (9p2i) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -2047,8 +2151,8 @@ def test_missing_win_split_table_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _LADDER_TIP_AUDIT,
-        "| set | baseline-7 impostor rate |",
-        "| leg | baseline-7 impostor rate |",
+        "| set | baseline-8 impostor rate |",
+        "| leg | baseline-8 impostor rate |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2061,9 +2165,9 @@ def test_missing_win_split_table_fails_loud(doc_tree: Path) -> None:
 
 
 def test_stale_guide_ballot_prose_detected(doc_tree: Path) -> None:
-    # The exact drift the last recording left behind: the table moved to
-    # 526 / 527 and the paragraph under it kept saying 520.
-    _substitute(doc_tree, _READING_GUIDE, "all 527 eject", "all 520 eject")
+    # The exact drift an earlier recording left behind: the table moved and
+    # the paragraph under it kept saying 520.
+    _substitute(doc_tree, _READING_GUIDE, "all 496 eject", "all 520 eject")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -2074,7 +2178,7 @@ def test_stale_guide_ballot_prose_detected(doc_tree: Path) -> None:
 def test_stale_guide_crosstab_prose_detected(doc_tree: Path) -> None:
     # ...and the same class one paragraph down: the cross-tab re-quoted, the
     # sentence introducing it left at the previous recording's total.
-    _substitute(doc_tree, _READING_GUIDE, "all 151\ncommitted", "all 165\ncommitted")
+    _substitute(doc_tree, _READING_GUIDE, "all 145\ncommitted", "all 165\ncommitted")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'all 165 committed 9p2i meetings'" in errors[0]
@@ -2084,7 +2188,7 @@ def test_stale_guide_crosstab_prose_detected(doc_tree: Path) -> None:
 def test_deleted_guide_narrative_fails_loud(doc_tree: Path) -> None:
     # A paragraph that quietly loses its figure must fail rather than leave
     # the pin bound to nothing.
-    _substitute(doc_tree, _READING_GUIDE, "all 527 eject ballots", "every eject ballot")
+    _substitute(doc_tree, _READING_GUIDE, "all 496 eject ballots", "every eject ballot")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "no longer narrated anywhere" in errors[0]
@@ -2095,12 +2199,12 @@ def test_guide_crosstab_row_label_held_to_the_pins(doc_tree: Path) -> None:
     # table whose cells are right and whose populations are wrong is still
     # describing a recording that is not this one.
     _substitute(
-        doc_tree, _READING_GUIDE, _FLAGGED_ROW, "| yes (70 meetings) | 68 | 0 |"
+        doc_tree, _READING_GUIDE, _FLAGGED_ROW, "| yes (72 meetings) | 70 | 0 |"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "row is labelled 70 meetings" in errors[0]
-    assert "pins 68" in errors[0]
+    assert "row is labelled 72 meetings" in errors[0]
+    assert "pins 70" in errors[0]
 
 
 def test_unpinned_crosstab_fails_loud(doc_tree: Path) -> None:
@@ -2108,8 +2212,8 @@ def test_unpinned_crosstab_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _DEDUCTION_INSTRUMENT,
-        "assert cross_tab.meetings_total == 151",
-        "assert cross_tab.meeting_count == 151",
+        "assert cross_tab.meetings_total == 145",
+        "assert cross_tab.meeting_count == 145",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2122,30 +2226,30 @@ def test_contradicting_crosstab_pins_fail_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _DEDUCTION_INSTRUMENT,
-        "    assert cross_tab.meetings_total == 151",
-        "    assert cross_tab.meetings_total == 151\n"
+        "    assert cross_tab.meetings_total == 145",
+        "    assert cross_tab.meetings_total == 145\n"
         "    assert cross_tab.meetings_total == 150",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("pins meetings_total at both 151 and 150" in error for error in errors)
+    assert any("pins meetings_total at both 145 and 150" in error for error in errors)
 
 
 def test_stale_guide_no_proof_ratio_detected(doc_tree: Path) -> None:
     # The most-quoted sentence on the page is the unflagged half read as a
     # ratio, and it is read off the cross-tab's own cells.
     _substitute(
-        doc_tree, _READING_GUIDE, "coin flip — 14 of 27", "coin flip — 15 of 27"
+        doc_tree, _READING_GUIDE, "coin flip — 11 of 20", "coin flip — 12 of 20"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "narrated ratio 15 of 27" in errors[0]
-    assert "pins at 14 of 27" in errors[0]
+    assert "narrated ratio 12 of 20" in errors[0]
+    assert "pins at 11 of 20" in errors[0]
 
 
 def test_deleted_guide_no_proof_ratio_fails_loud(doc_tree: Path) -> None:
     # Dropping the sentence must fail rather than leave the reading unbound.
     _substitute(
-        doc_tree, _READING_GUIDE, "close to a coin flip — 14 of 27", "close to chance"
+        doc_tree, _READING_GUIDE, "close to a coin flip — 11 of 20", "close to chance"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2155,11 +2259,11 @@ def test_deleted_guide_no_proof_ratio_fails_loud(doc_tree: Path) -> None:
 def test_stale_partner_ballot_denominator_detected(doc_tree: Path) -> None:
     # The teammate-firewall row lives only in the guide, so README agreement
     # cannot reach it; the instrument that counts those ballots owns it.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 218 |", "| 0 of 217 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 210 |", "| 0 of 209 |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'0 of 217'" in errors[0]
-    assert "pins '0 of 218'" in errors[0]
+    assert "'0 of 209'" in errors[0]
+    assert "pins '0 of 210'" in errors[0]
 
 
 def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
@@ -2177,19 +2281,19 @@ def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
 
 def test_guide_only_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # The guide carries rows the README does not, and they state history too.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 218 | 0 of 219 |", "| 0 of 218 |  |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 210 | 0 of 218 |", "| 0 of 210 |  |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
     assert "'Impostor ballots cast against a partner (9p2i)'" in errors[0]
-    assert "has no 'At baseline 7' cell" in errors[0]
+    assert "has no 'At baseline 8' cell" in errors[0]
 
 
 def test_truncated_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # Removing the cell AND its delimiter must fail like an emptied one: a row
     # narrower than the header has no history cell, and reading whatever cell
     # happens to sit at the index would check it against the wrong column.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 218 | 0 of 219 |", "| 0 of 218 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 210 | 0 of 218 |", "| 0 of 210 |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -2273,7 +2377,7 @@ def test_wrongful_ejection_count_inside_a_longer_number_detected(
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "names neither the count the record read (46)" in errors[0]
+    assert "names neither the count the record read (42)" in errors[0]
 
 
 def test_wrongful_ejection_sentence_may_state_the_previous_count(
@@ -2512,12 +2616,12 @@ def test_verdict_cell_drifting_from_its_bar_section_detected(doc_tree: Path) -> 
     )
 
 
-def test_finding_history_cell_disagreeing_with_the_ladder_tip_detected(
+def test_finding_history_cell_disagreeing_with_its_base_record_detected(
     doc_tree: Path,
 ) -> None:
-    # The deciding record's account of what it moved FROM is the ladder-tip
-    # recording's own published cell, so the two are held together rather than
-    # the summary being taken on trust.
+    # The deciding record's account of what it moved FROM is the published
+    # cell of the recording it was read against, so the two are held together
+    # rather than the summary being taken on trust.
     drifted = _FINDING_ACCURACY_ROW.replace("50/96 = 0.5208", "49/96 = 0.5104")
     _substitute(doc_tree, _FINDING_AUDIT, _FINDING_ACCURACY_ROW, drifted)
     _substitute(
@@ -2538,7 +2642,7 @@ def test_finding_history_cell_disagreeing_with_the_ladder_tip_detected(
     check_doc_facts.check_finding_figures(doc_tree, errors)
     assert len(errors) == 1
     assert "bar 1's history cell reads '49/96 = 0.5104'" in errors[0]
-    assert f"{_LADDER_TIP_AUDIT} — the recording it is read against" in errors[0]
+    assert f"{_FINDING_BASE_AUDIT} — the recording it is read against" in errors[0]
     assert "published (50, 96)" in errors[0]
 
 
@@ -3274,19 +3378,19 @@ def test_history_cell_naming_the_recording_before_the_previous_one_detected(
     # The header names the recording this one replaced, so a history cell
     # holding the value from the recording BEFORE that — correct once, and
     # still internally consistent between the two tables — has to fail.
-    stale = "310 / 310 = 1.0000 vs 46 / 125 = 0.3680"
+    stale = "326 / 326 = 1.0000 vs 61 / 103 = 0.5922"
     for document in (_README, _READING_GUIDE):
         _substitute(doc_tree, document, _PREVIOUS_PARTITION_CELL, stale)
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "the 'At baseline 7' cell of results row" in errors[0]
-    assert "recomputes to '326 / 326 = 1.0000 vs 61 / 103 = 0.5922'" in errors[0]
+    assert "the 'At baseline 8' cell of results row" in errors[0]
+    assert "recomputes to '333 / 333 = 1.0000 vs 50 / 96 = 0.5208'" in errors[0]
 
 
 def test_vent_row_without_its_population_fails_loud(doc_tree: Path) -> None:
     # A row that drops its "(N meetings)" label still reads as a table but is
     # no longer checked against the pin, so the label itself is required.
-    _substitute(doc_tree, _READING_GUIDE, "| yes (68 meetings) |", "| yes |")
+    _substitute(doc_tree, _READING_GUIDE, "| yes (70 meetings) |", "| yes |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "the cross-tab's 'yes' row carries no '(N meetings)' population" in errors[0]
@@ -3304,7 +3408,7 @@ def test_unbolded_guide_exhibit_the_picker_dropped_detected(doc_tree: Path) -> N
 def test_guide_exhibit_the_picker_no_longer_carries_detected(doc_tree: Path) -> None:
     # The curated strip is committed data. A guide naming a game it dropped
     # points a reader at a card the spectator never opens.
-    _substitute(doc_tree, _READING_GUIDE, "**9p2i seed 46**", "**9p2i seed 17**")
+    _substitute(doc_tree, _READING_GUIDE, "**9p2i seed 29**", "**9p2i seed 17**")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -3317,20 +3421,19 @@ def test_guide_exhibits_follow_a_recurated_picker(doc_tree: Path) -> None:
     # guide that still names it, which is what forces the two to be curated
     # together.
     text = _read(doc_tree, _PICKER)
-    entry = '    set: "9p2i",\n    seed: 46,\n'
+    entry = '    set: "9p2i",\n    seed: 29,\n'
     assert entry in text
     _write(doc_tree, _PICKER, text.replace(entry, '    set: "9p2i",\n    seed: 47,\n'))
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "names 9p2i seed 46 as an exhibit" in errors[0]
+    assert "names 9p2i seed 29 as an exhibit" in errors[0]
 
 
 def test_guide_with_too_few_exhibits_fails_loud(doc_tree: Path) -> None:
     # A paragraph that lost its exhibits would otherwise pass vacuously.
-    _substitute(
-        doc_tree, _READING_GUIDE, "**9p2i seed 46**", "that other nine-player game"
-    )
-    _substitute(doc_tree, _READING_GUIDE, "**4p1i seed 11**", "the smallest table here")
+    _substitute(doc_tree, _READING_GUIDE, "**9p2i seed 0**", "a second game")
+    _substitute(doc_tree, _READING_GUIDE, "**9p2i seed 29**", "a third")
+    _substitute(doc_tree, _READING_GUIDE, "**4p1i seed 11**", "the smallest table")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "names 1 featured games, fewer than the 2" in errors[0]
@@ -3352,25 +3455,25 @@ def test_missing_featured_list_fails_loud(doc_tree: Path) -> None:
 def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
     # The example exists because the fake provider's report is empty; its
     # scalars come from the committed report, not from prose.
-    _substitute(doc_tree, _README, "records 95 ejections", "records 97 ejections")
+    _substitute(doc_tree, _README, "records 90 ejections", "records 92 ejections")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'95 ejections'" in errors[0]
+    assert "'90 ejections'" in errors[0]
     assert "total_ejections" in errors[0]
 
 
 def test_report_example_rate_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "vote correctness 0.915", "vote correctness 0.950")
+    _substitute(doc_tree, _README, "vote correctness 0.938", "vote correctness 0.950")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'vote correctness 0.915'" in errors[0]
+    assert "'vote correctness 0.938'" in errors[0]
 
 
 def test_report_example_accuracy_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "ejection accuracy 0.863", "ejection accuracy 0.800")
+    _substitute(doc_tree, _README, "ejection accuracy 0.900", "ejection accuracy 0.800")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'ejection accuracy 0.863'" in errors[0]
+    assert "'ejection accuracy 0.900'" in errors[0]
 
 
 def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:
@@ -3403,7 +3506,7 @@ def test_glossary_ladder_tip_drift_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _GLOSSARY,
-        "the newest — the ladder tip — is baseline 8",
+        "the newest — the ladder tip — is baseline 9",
         "the newest — the ladder tip — is baseline 5",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -3718,13 +3821,13 @@ def test_missing_document_reported(doc_tree: Path) -> None:
 def test_main_reports_every_failure_at_once(
     doc_tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _substitute(doc_tree, _README, "2026-08-31", "2026-08-19")
+    _substitute(doc_tree, _README, "2026-09-22", "2026-08-19")
     _substitute(doc_tree, _README, "36% (4p1i)", "30% (4p1i)")
     assert check_doc_facts.main(["--repo-root", str(doc_tree)]) == 1
     err = capsys.readouterr().err
     assert "Doc-fact check failed:" in err
     assert "'36% (4p1i)'" in err
-    assert "'2026-08-31'" in err
+    assert "'2026-09-22'" in err
 
 
 def test_main_clean_repo_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:

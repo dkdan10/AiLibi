@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -33,32 +34,35 @@ def test_current_summary_is_bounded_and_source_checked(
     canonical_summary: PublicResultsView,
 ) -> None:
     r = canonical_summary
+    # was (50, 50, 35, 15, 0) / (151, 95, 82, 13) / (68, 68, 27, 14) on baseline 8.
     assert (r.games, r.completed, r.crew_wins, r.impostor_wins, r.task_wins) == (
         50,
         50,
-        35,
-        15,
-        0,
+        39,
+        11,
+        1,
     )
     assert (r.meetings, r.ejections, r.impostor_ejections, r.innocent_ejections) == (
-        151,
-        95,
-        82,
-        13,
+        145,
+        90,
+        81,
+        9,
     )
     assert (
         r.proof_backed_ejections,
         r.proof_backed_correct,
         r.proof_free_ejections,
         r.proof_free_correct,
-    ) == (68, 68, 27, 14)
-    assert [c.classification for c in r.cases] == [
-        "supported",
-        "unsupported",
-        "unresolved",
+    ) == (70, 70, 20, 11)
+    # Re-curated on the baseline-9 bytes: seeds 29 and 0 replace seed 46 m3 and
+    # seed 23 m1, whose exhibits the re-record removed.
+    assert [(c.classification, c.meeting_id) for c in r.cases] == [
+        ("supported", "headless-seed-23:meeting-0"),
+        ("unsupported", "headless-seed-29:meeting-1"),
+        ("unresolved", "headless-seed-0:meeting-1"),
     ]
-    assert (r.recorded_from, r.recorded_until) == ("2026-08-30", "2026-08-30")
-    assert r.source_url and "5006a32f" in r.source_url
+    assert (r.recorded_from, r.recorded_until) == ("2026-09-22", "2026-09-22")
+    assert r.source_url and "9bae2b03" in r.source_url
     assert len(r.model_dump_json().encode()) < public.MAX_PUBLIC_RESULTS_BYTES
     assert r.reported_cost_usd == 0 and r.input_tokens > 0
 
@@ -147,14 +151,100 @@ def test_a_changed_case_projection_cannot_keep_its_prose(
     def altered(game_id: str, meeting_id: str, agent_id: str) -> AgentMemoryView:
         memory = original(game_id, meeting_id, agent_id)
         if (game_id, meeting_id, agent_id) == (
-            "headless-seed-46",
-            "headless-seed-46:meeting-3",
-            "p-3",
+            "headless-seed-29",
+            "headless-seed-29:meeting-1",
+            "p-7",
         ):
             return memory.model_copy(update={"observation_references": ()})
         return memory
 
     monkeypatch.setattr(loader, "get_meeting_memory", altered)
+    with pytest.raises(ValueError, match="Curated case"):
+        public.build_public_results(loader)
+
+
+def _edit_meeting(replay: ReplayView, meeting_id: str, **update: Any) -> ReplayView:
+    meetings = tuple(
+        m.model_copy(update=update) if m.meeting_id == meeting_id else m
+        for m in replay.meetings
+    )
+    return replay.model_copy(update={"meetings": meetings})
+
+
+def _emergency_becomes_body(replay: ReplayView) -> ReplayView:
+    return _edit_meeting(replay, "headless-seed-23:meeting-0", trigger_kind="body")
+
+
+def _accused_stays_in_labs(replay: ReplayView) -> ReplayView:
+    # The frame the two witnesses' cited move depicts: p-1 no longer left Labs.
+    ticks = tuple(
+        frame.model_copy(
+            update={
+                "agent_states": tuple(
+                    s.model_copy(update={"room_id": "LABS"})
+                    if s.agent_id == "p-1"
+                    else s
+                    for s in frame.agent_states
+                )
+            }
+        )
+        if frame.tick == 5
+        else frame
+        for frame in replay.ticks
+    )
+    return replay.model_copy(update={"ticks": ticks})
+
+
+def _a_skip_is_rewritten(replay: ReplayView) -> ReplayView:
+    meeting = next(
+        m for m in replay.meetings if m.meeting_id == "headless-seed-0:meeting-1"
+    )
+    ballots = tuple(
+        b.model_copy(update={"rewrite_reasons": ("invalid_target",)})
+        if b.voter == "p-9"
+        else b
+        for b in meeting.ballots
+    )
+    return _edit_meeting(replay, meeting.meeting_id, ballots=ballots)
+
+
+def _a_flag_names_the_reporter(replay: ReplayView) -> ReplayView:
+    meeting = next(
+        m for m in replay.meetings if m.meeting_id == "headless-seed-0:meeting-1"
+    )
+    flags = (
+        meeting.contradictions[0].model_copy(update={"subjects": ("p-1",)}),
+        *meeting.contradictions[1:],
+    )
+    return _edit_meeting(replay, meeting.meeting_id, contradictions=flags)
+
+
+@pytest.mark.parametrize(
+    ("game_id", "perturb"),
+    [
+        ("headless-seed-23", _emergency_becomes_body),
+        ("headless-seed-29", _accused_stays_in_labs),
+        ("headless-seed-0", _a_skip_is_rewritten),
+        ("headless-seed-0", _a_flag_names_the_reporter),
+    ],
+    ids=["not-an-emergency", "route-refuted", "skip-not-chosen", "flag-names-p-1"],
+)
+def test_a_case_sentence_the_recording_no_longer_shows_withholds_publication(
+    monkeypatch: pytest.MonkeyPatch,
+    game_id: str,
+    perturb: Callable[[ReplayView], ReplayView],
+) -> None:
+    # One planted defect per case, each against a sentence its prose states: the
+    # emergency meeting, the replay backing p-1's route, the voluntary skips and
+    # the flags that do not name the reporter.
+    loader = ReplayLoader(SAMPLES / "9p2i")
+    original = loader.load_replay
+
+    def load(requested: str, *, include_llm_bodies: bool = True) -> ReplayView:
+        replay = original(requested, include_llm_bodies=include_llm_bodies)
+        return perturb(replay) if requested == game_id else replay
+
+    monkeypatch.setattr(loader, "load_replay", load)
     with pytest.raises(ValueError, match="Curated case"):
         public.build_public_results(loader)
 
@@ -408,17 +498,46 @@ def test_public_summary_keeps_actual_candidate_identity(tmp_path: Path) -> None:
 
 
 def test_historical_summary_never_invents_a_default_factory(
-    canonical_summary: PublicResultsView,
+    canonical_summary: PublicResultsView, tmp_path: Path
 ) -> None:
+    # The committed set records its factory since the baseline-9 re-record, and
+    # the summary reports exactly that recorded identity; it still predates the
+    # clock stamp, and reading it does not relabel it as v1.
     assert canonical_summary.provenance_groups
     assert all(
-        group.agent_factory_kind is None
-        # Absent is unknown: the committed sets predate the clock stamp, and
-        # reading them does not relabel them as v1.
+        group.agent_factory_kind == "scripted"
         and group.temporal_observation_version is None
         for group in canonical_summary.provenance_groups
     )
     assert (
         sum(len(group.game_ids) for group in canonical_summary.provenance_groups)
         == canonical_summary.games
+    )
+
+    # The historical shape is a committed recording with its factory stamp
+    # removed: absent is unknown, and reading it must not invent the default.
+    destination = tmp_path / "9p2i"
+    destination.mkdir()
+    shutil.copyfile(SAMPLES / "9p2i/roster.json", destination / "roster.json")
+    source = SAMPLES / "9p2i/replay-seed-0.jsonl"
+    rows = [json.loads(line) for line in source.read_text().splitlines() if line]
+    assert any("agent_factory_kind" in row for row in rows)
+    for row in rows:
+        row.pop("agent_factory_kind", None)
+    (destination / source.name).write_text(
+        "\n".join(
+            json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows
+        )
+        + "\n"
+    )
+    historical = public.build_public_results(ReplayLoader(destination))
+    assert historical.provenance_groups
+    assert all(
+        group.agent_factory_kind is None and group.temporal_observation_version is None
+        for group in historical.provenance_groups
+    )
+    assert (
+        sum(len(group.game_ids) for group in historical.provenance_groups)
+        == historical.games
+        == 1
     )

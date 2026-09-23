@@ -7,7 +7,8 @@ featured order rests on. Two of its claims are load-bearing enough to pin here:
   alternative that duplicates the card's own header (the voter itself, or the
   target the vote applied to). That render is a statement about the recordings,
   so the committed games that carry each shape are named here rather than left
-  to a reviewer's trust;
+  to a reviewer's trust — and where no committed game carries one, that is
+  said here too;
 * ``_parse_games`` — a malformed selector raises instead of quietly measuring
   fewer games than the caller asked for, which would print a number nobody
   could reproduce.
@@ -42,18 +43,26 @@ _criterion: Any = importlib.import_module("measure_featured_criterion")
     "seed,shape,why",
     [
         # (ballots, recorded entries, ballots naming the voter, naming the target)
-        (2, (7, 13, 2, 0), "two voters list THEMSELVES in the first meeting"),
-        (13, (18, 35, 1, 2), "one lists itself; two list the target they voted"),
-        (23, (26, 36, 0, 0), "the tour's landing game carries neither shape"),
+        (2, (7, 9, 1, 0), "one voter lists ITSELF in the only meeting"),
+        (13, (7, 10, 1, 0), "one voter lists itself; none lists its own target"),
+        (23, (26, 29, 0, 0), "the tour's landing game carries neither shape"),
     ],
 )
 def test_alternatives_shape_reads_the_committed_duplicates(
     seed: int, shape: tuple[int, int, int, int], why: str
 ) -> None:
     # The annotation in `frontend/src/components/BallotCard.tsx` exists because
-    # these bytes exist. Seed 2 is the case in the flesh: p-1 and p-5 each record
-    # THEMSELVES among the players they weighed, which without a note renders as
-    # a second identical pill beside the one in the ballot's header.
+    # these bytes exist. Seed 2 is the case in the flesh: one voter records
+    # ITSELF among the players it weighed, which without a note renders as a
+    # second identical pill beside the one in the ballot's header.
+    #
+    # The TARGET shape is recorded by no committed ballot on the baseline-9
+    # bytes — 0 in each of the four sets
+    # (`scripts/measure_featured_criterion.py --alternatives`, and the same count
+    # over `--parent replays/ml_corpus`) — so no game here can name it, and the
+    # "(the vote cast)" note is proved only by its constructed case in
+    # `frontend/src/components/PrivateReasoning.test.tsx`.
+    # (Was 2: (7, 13, 2, 0); 13: (18, 35, 1, 2); 23: (26, 36, 0, 0) on baseline 8.)
     replay = SetLoaderRegistry(_PARENT).get("9p2i").load_replay(f"headless-seed-{seed}")
     assert _criterion.alternatives_shape(replay) == shape
 

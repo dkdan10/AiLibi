@@ -1,7 +1,7 @@
 """Endpoint tests for the eval routes (DESIGN.md §11.3, §11.4).
 
 Covers ``/eval/cost-summary`` (Task 4.x) and ``/eval/tournament-report``
-(Task 5.7): the latter serves the latest ``tournament-eval-report.json`` from
+(Task 5.7): the latter serves the latest ``tournament-eval-report.json.gz`` from
 the configured eval dir (200), or 404 when none exists. The report fixture is
 assembled exactly as the real artifact is — via
 :func:`eval.meeting_quality.build_tournament_eval_report` over a hand-built
@@ -27,6 +27,7 @@ from eval.report_schema import (
     GameReport,
     TournamentReport,
 )
+from eval.report_io import report_path, write_report_text
 from tests.api.fixtures.sample_replay import write_meeting_replay, write_sample_replay
 
 
@@ -131,9 +132,7 @@ def _sample_eval_report() -> TournamentEvalReport:
 
 def test_tournament_report_present_returns_200(tmp_path: Path) -> None:
     eval_report = _sample_eval_report()
-    (tmp_path / "tournament-eval-report.json").write_text(
-        eval_report.model_dump_json(), encoding="utf-8"
-    )
+    write_report_text(report_path(tmp_path), eval_report.model_dump_json())
 
     with _client(tmp_path) as client:
         response = client.get("/eval/tournament-report")
@@ -200,25 +199,22 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     assert isinstance(report, TournamentEvalReport)
     # The regenerated committed report carries every Task 7.11 field.
     # ejection_accuracy is None iff the set has no ejections (the field's own
-    # validator). Re-anchored to the Task-18.12 baseline-6 re-record with the vent
-    # widening (Qwen/Qwen3.6-27B, the CREW-ONLY graduation slate). The vent widening
-    # cascaded into different trajectories: the flat 4p/1i set now ejects in 24 of
-    # its 39 meetings: 20 impostor calls + 4 crew (accuracy 20/24 ≈ 0.833; the prior
-    # record read 20/21 ≈ 0.952). With that supply the set is still not small-n
-    # (flag False). vote_correctness_rate 19/20 = 0.95 — all but one impostor
-    # ejection is transcript-evidence-backed. flagged_but_ignored is 0: no SKIPPED
-    # meeting carried a still-flagged transcript contradiction.
-    assert report.vote_correctness.total_ejections == 24  # was 21
+    # validator). Re-anchored to the baseline-9 process re-record (Qwen/Qwen3.6-27B,
+    # the same seeds on the substrate wave's prompt bytes): the flat 4p/1i set now
+    # ejects in 20 of its 39 meetings, every one an impostor (accuracy 20/20 = 1.0;
+    # baseline 8 read 20 impostor + 4 crew, 20/24). With that supply the set is
+    # still not small-n (flag False). vote_correctness_rate 19/20 = 0.95 — all but
+    # one impostor ejection is transcript-evidence-backed. flagged_but_ignored is
+    # 0: no SKIPPED meeting carried a still-flagged transcript contradiction.
+    assert report.vote_correctness.total_ejections == 20  # was 24
     assert report.vote_correctness.ejection_accuracy == pytest.approx(
-        20 / 24
-    )  # was 20 / 21
+        20 / 20
+    )  # was 20 / 24
     assert report.vote_correctness.impostor_ejections == 20
-    assert report.vote_correctness.crewmate_ejections == 4  # was 1
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(
-        0.95
-    )  # was 1.0
+    assert report.vote_correctness.crewmate_ejections == 0  # was 4
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(0.95)
     assert report.vote_correctness.vote_correctness_small_n is False
-    assert report.vote_correctness.contradictions_flagged_but_ignored == 0  # was 1
+    assert report.vote_correctness.contradictions_flagged_but_ignored == 0
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
     assert (
         report.meeting_rate.skipped_meetings + report.meeting_rate.ejected_meetings

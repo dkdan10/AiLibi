@@ -32,132 +32,128 @@
   "pooled": {
     "agent_authored_share": {
       "ballots": {
-        "denominator": 3631,
+        "denominator": 3630,
         "not_evaluable": 0,
-        "numerator": 3531,
-        "rate": 0.972459
+        "numerator": 3609,
+        "rate": 0.994215
       },
-      "citation_nulled_target_intact": 13,
+      "citation_nulled_target_intact": 5,
       "definition": "Numerator: ballots the meeting layer did not re-aim - neither a typed guard_rewrite_reason (any BallotTargetRewriteReason member) nor a target-rewriting marker unwound by eval.deduction_metrics._authored_target, the fallback meetings/schemas.py prescribes for recordings made before the typed fields. The marker channel reads the PROVENANCE-established marker region (eval.deduction_metrics._split_rationale) and never the whole recorded rationale, so a model body opening with marker-shaped prose is not read as a guard rewrite. Denominator: all ballots. Citation-only rewrites are NOT counted against the share and are reported separately as 'citation nulled, target intact'; a ballot carrying both is counted among the rewrites, because the target moved. The marker-only redirect census rides beside as a sub-count: it keys on the graph-redirect marker alone and is therefore smaller than the typed layer.",
       "marker_unwound_without_typed_reason": 0,
-      "redirect_marker_ballots": 83,
+      "redirect_marker_ballots": 0,
       "redirect_marker_coerced_skip_ballots": 0,
-      "redirect_marker_eject_ballots": 83,
+      "redirect_marker_eject_ballots": 0,
       "rewrite_reasons": {
-        "invalid_target": 4,
-        "teammate_coerced": 7,
-        "uncited_coerced": 6,
-        "under_gate_redirect": 83
+        "invalid_target": 8,
+        "teammate_coerced": 13
       }
     },
     "argmax_independence": {
-      "chance_baseline": 0.315503,
+      "chance_baseline": 0.315006,
       "definition": "Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the SAME unambiguous ballots that form the denominator - never over the excluded ties or the not-evaluable ballots - of the living-impostor share of each voter's own rendered valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.",
-      "deviator_role_correct": 9,
-      "deviator_role_correct_share": 0.077586,
-      "deviator_share": 0.064053,
-      "deviators": 116,
-      "follower_role_correct": 1602,
-      "follower_role_correct_share": 0.945133,
-      "follower_share": 0.935947,
-      "followers": 1695,
+      "deviator_role_correct": 17,
+      "deviator_role_correct_share": 0.095506,
+      "deviator_share": 0.100282,
+      "deviators": 178,
+      "follower_role_correct": 1537,
+      "follower_role_correct_share": 0.96243,
+      "follower_share": 0.899718,
+      "followers": 1597,
       "no_rendered_row": 0,
-      "ties_excluded": 111,
-      "unambiguous_ballots": 1811,
-      "zero_flag_deviator_role_correct": 2,
-      "zero_flag_deviators": 91,
-      "zero_flag_follower_role_correct": 233,
-      "zero_flag_followers": 286
+      "ties_excluded": 140,
+      "unambiguous_ballots": 1775,
+      "zero_flag_deviator_role_correct": 8,
+      "zero_flag_deviators": 143,
+      "zero_flag_follower_role_correct": 203,
+      "zero_flag_followers": 254
     },
-    "ballots": 3631,
+    "ballots": 3630,
     "context": {
-      "impostor_alibi_survival_rate": 0.877698,
-      "impostor_alibis": 139,
-      "impostor_alibis_survived": 122,
-      "innocent_non_reporter_ejections": 12,
-      "innocent_non_reporter_slots": 1859,
-      "reporter_ejections": 34,
-      "reporter_slots": 620
+      "impostor_alibi_survival_rate": 0.935484,
+      "impostor_alibis": 155,
+      "impostor_alibis_survived": 145,
+      "innocent_non_reporter_ejections": 4,
+      "innocent_non_reporter_slots": 1841,
+      "reporter_ejections": 37,
+      "reporter_slots": 623
     },
-    "eject_ballots": 2146,
+    "eject_ballots": 2098,
     "evidence_quality_mix": {
       "band_counts": {
-        "contradiction_flag": 10,
-        "first_hand": 75,
-        "hearsay": 8,
-        "unevidenced": 3,
-        "vent_flag": 333
+        "contradiction_flag": 5,
+        "first_hand": 70,
+        "hearsay": 10,
+        "vent_flag": 326
       },
       "band_role_correct": {
-        "contradiction_flag": 1,
-        "first_hand": 42,
-        "hearsay": 4,
-        "unevidenced": 3,
-        "vent_flag": 333
+        "contradiction_flag": 2,
+        "first_hand": 36,
+        "hearsay": 5,
+        "vent_flag": 326
       },
       "definition": "A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of the voter's own memory, or a transcript turn carrying a structured observation that NAMES them - whole-token, by meetings.citation_relevance.names_player over the observation's dumped structure, so a turn whose only observation places somebody else, and a turn merely SPOKEN by the ejected player, are not first-hand accounts of them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.",
-      "ejections": 429
+      "ejections": 411
     },
     "games": 300,
     "grounded_all": {
-      "denominator": 3631,
+      "denominator": 3630,
       "not_evaluable": 0,
-      "numerator": 2078,
-      "rate": 0.572294
+      "numerator": 2434,
+      "rate": 0.670523
     },
     "grounded_definition": "Numerator: ballots whose citation RESOLVES in the voter's own inputs (primary_reason_id in this meeting's turns, or primary_reason_observation_id carried whole-token on a line of that voter's own recorded prompts) AND bears on the decision's subject by meetings.citation_relevance.citations_bear_on - the subject being the recorded target for an EJECT and any member of considered_alternatives for a SKIP. Denominator: all ballots of that decision kind. Not-evaluable: ballots OF THAT SAME KIND whose voter has no recorded prompt in the meeting - counted per kind, so a promptless EJECT never makes the SKIP cell read as one that measured nothing; the all-ballots cell carries the sum. An UNCITED ballot is not grounded: citations_bear_on is vacuously true with nothing cited, so presence and resolution are required before aboutness is asked. It does NOT measure whether the cited line was factually true.",
     "grounded_eject": {
-      "denominator": 2146,
+      "denominator": 2098,
       "not_evaluable": 0,
-      "numerator": 2078,
-      "rate": 0.968313
+      "numerator": 2083,
+      "rate": 0.99285
     },
     "grounded_skip": {
-      "denominator": 1485,
+      "denominator": 1532,
       "not_evaluable": 0,
-      "numerator": 0,
-      "rate": 0.0
+      "numerator": 351,
+      "rate": 0.229112
     },
     "label": "pooled: all four committed sets",
     "manufactured_contradiction": {
       "definition": "Numerator: recorded contradiction flags whose kind is an alibi class (alibi_conflict, alibi_vs_sighting, alibi_vs_physical) and whose subjects name the speaker of a SELF-alibi claim in that meeting that is TRUE at at least one tick of its own span against that speaker's engine route from a state-hash-verified walk_replay. Denominator: all alibi-class flags. Not-evaluable: an alibi-class flag naming no self-alibi speaker in its meeting, one whose claim covers a tick the walk does not reach, or one resting on a multi-leg route, which a recorded flag does not attribute to a leg - scoring it across the whole route would file a flag that caught a fabricated leg as manufactured. Ticks are agent-frame and resolve against engine tick T - 1. It does NOT measure intent, and it does NOT clear a flag whose subject lied at every tick - that flag is evidence, not an artifact.",
       "flags": {
-        "denominator": 192,
-        "not_evaluable": 32,
-        "numerator": 159,
-        "rate": 0.828125
+        "denominator": 74,
+        "not_evaluable": 74,
+        "numerator": 0,
+        "rate": 0.0
       },
-      "manufactured_on_a_wholly_true_claim": 9,
-      "other_subject_alibi_claims": 13,
-      "self_alibi_claims": 1003,
-      "self_alibi_claims_envelope_false": 106,
-      "self_alibi_claims_envelope_false_multi_tick": 105,
-      "self_alibi_claims_multi_tick": 814,
-      "self_alibi_claims_strict_false": 2,
+      "manufactured_on_a_wholly_true_claim": 0,
+      "other_subject_alibi_claims": 0,
+      "self_alibi_claims": 1021,
+      "self_alibi_claims_envelope_false": 11,
+      "self_alibi_claims_envelope_false_multi_tick": 11,
+      "self_alibi_claims_multi_tick": 1020,
+      "self_alibi_claims_strict_false": 0,
       "self_alibi_claims_unresolvable": 0
     },
-    "meetings": 672,
+    "meetings": 676,
     "rationale_faithfulness": {
       "ballots": {
-        "denominator": 2874,
-        "not_evaluable": 757,
-        "numerator": 2874,
-        "rate": 1.0
+        "denominator": 3017,
+        "not_evaluable": 613,
+        "numerator": 3015,
+        "rate": 0.999337
       },
       "definition": "Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. It reads rationale_text WHOLE, guard audit markers included, and deliberately differs from row 4 there: this row asks whether every token in the RECORDED text is one the voter held, and a marker's preserved id always is, while row 4 asks the authorship question and must cut the machinery's prose off first. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.",
       "limits": "This row tests TOKENS, not propositions. An assertion and its negation score alike, and a false sentence assembled entirely from tokens the voter held scores as faithful. It cannot see an invented RELATION between present tokens. The direction memo's section 3 finding that rationales invent almost no facts is TWO-METHOD AGREEMENT between two independent graders of the fifth run's rationales; it is not this measurement, and this row neither confirms nor replaces it.",
-      "tokens_absent": 0,
-      "tokens_checked": 6796
+      "tokens_absent": 2,
+      "tokens_checked": 7458
     },
     "role_correct_ejection": {
-      "denominator": 429,
+      "denominator": 411,
       "not_evaluable": 0,
-      "numerator": 383,
-      "rate": 0.892774
+      "numerator": 369,
+      "rate": 0.89781
     },
     "role_correct_ejection_definition": "Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.",
     "role_correct_ejection_label": "reported beside, never a gate",
-    "skip_ballots": 1485,
+    "skip_ballots": 1532,
     "sources": [
       "replays/ml_corpus/9p2i",
       "replays/samples/9p2i",
@@ -166,22 +162,22 @@
     ],
     "unexplained_decision": {
       "decisions": {
-        "denominator": 3631,
+        "denominator": 3630,
         "not_evaluable": 0,
-        "numerator": 20,
-        "rate": 0.005508
+        "numerator": 17,
+        "rate": 0.004683
       },
       "definition": "Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off BY PROVENANCE: the marker region eval.deduction_metrics._split_rationale establishes from that voter's OWN pre-guard vote response, scanned by _scan_marker_chain - the same cut api.replay_loader makes for rationale_text_clean. Shape is not provenance, so the whole record is never scanned: a model body that OPENS with marker-shaped prose sits at position 0 too, and scanning the record would credit the guard with the voter's own words. A guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.",
-      "skips_naming_a_player_in_prose": 748,
-      "skips_naming_no_player": 18,
-      "skips_with_considered_alternatives": 1461,
-      "uncited_ejects": 2
+      "skips_naming_a_player_in_prose": 929,
+      "skips_naming_no_player": 17,
+      "skips_with_considered_alternatives": 1513,
+      "uncited_ejects": 0
     },
     "wrong_but_believable": {
-      "denominator": 2146,
+      "denominator": 2098,
       "not_evaluable": 0,
-      "numerator": 383,
-      "rate": 0.178472
+      "numerator": 462,
+      "rate": 0.22021
     },
     "wrong_but_believable_definition": "Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.",
     "wrong_but_believable_label": "reported, never penalised"
@@ -189,154 +185,150 @@
   "pooled_9p2i": {
     "agent_authored_share": {
       "ballots": {
-        "denominator": 3385,
+        "denominator": 3384,
         "not_evaluable": 0,
-        "numerator": 3288,
-        "rate": 0.971344
+        "numerator": 3363,
+        "rate": 0.993794
       },
-      "citation_nulled_target_intact": 13,
+      "citation_nulled_target_intact": 5,
       "definition": "Numerator: ballots the meeting layer did not re-aim - neither a typed guard_rewrite_reason (any BallotTargetRewriteReason member) nor a target-rewriting marker unwound by eval.deduction_metrics._authored_target, the fallback meetings/schemas.py prescribes for recordings made before the typed fields. The marker channel reads the PROVENANCE-established marker region (eval.deduction_metrics._split_rationale) and never the whole recorded rationale, so a model body opening with marker-shaped prose is not read as a guard rewrite. Denominator: all ballots. Citation-only rewrites are NOT counted against the share and are reported separately as 'citation nulled, target intact'; a ballot carrying both is counted among the rewrites, because the target moved. The marker-only redirect census rides beside as a sub-count: it keys on the graph-redirect marker alone and is therefore smaller than the typed layer.",
       "marker_unwound_without_typed_reason": 0,
-      "redirect_marker_ballots": 80,
+      "redirect_marker_ballots": 0,
       "redirect_marker_coerced_skip_ballots": 0,
-      "redirect_marker_eject_ballots": 80,
+      "redirect_marker_eject_ballots": 0,
       "rewrite_reasons": {
-        "invalid_target": 4,
-        "teammate_coerced": 7,
-        "uncited_coerced": 6,
-        "under_gate_redirect": 80
+        "invalid_target": 8,
+        "teammate_coerced": 13
       }
     },
     "argmax_independence": {
-      "chance_baseline": 0.303918,
+      "chance_baseline": 0.304195,
       "definition": "Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the SAME unambiguous ballots that form the denominator - never over the excluded ties or the not-evaluable ballots - of the living-impostor share of each voter's own rendered valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.",
-      "deviator_role_correct": 9,
-      "deviator_role_correct_share": 0.080357,
-      "deviator_share": 0.065728,
-      "deviators": 112,
-      "follower_role_correct": 1501,
-      "follower_role_correct_share": 0.942839,
-      "follower_share": 0.934272,
-      "followers": 1592,
+      "deviator_role_correct": 17,
+      "deviator_role_correct_share": 0.095506,
+      "deviator_share": 0.106142,
+      "deviators": 178,
+      "follower_role_correct": 1440,
+      "follower_role_correct_share": 0.96064,
+      "follower_share": 0.893858,
+      "followers": 1499,
       "no_rendered_row": 0,
-      "ties_excluded": 111,
-      "unambiguous_ballots": 1704,
-      "zero_flag_deviator_role_correct": 2,
-      "zero_flag_deviators": 87,
-      "zero_flag_follower_role_correct": 222,
-      "zero_flag_followers": 273
+      "ties_excluded": 139,
+      "unambiguous_ballots": 1677,
+      "zero_flag_deviator_role_correct": 8,
+      "zero_flag_deviators": 143,
+      "zero_flag_follower_role_correct": 196,
+      "zero_flag_followers": 246
     },
-    "ballots": 3385,
+    "ballots": 3384,
     "context": {
-      "impostor_alibi_survival_rate": 0.873134,
-      "impostor_alibis": 134,
-      "impostor_alibis_survived": 117,
-      "innocent_non_reporter_ejections": 12,
-      "innocent_non_reporter_slots": 1787,
-      "reporter_ejections": 30,
-      "reporter_slots": 548
+      "impostor_alibi_survival_rate": 0.934641,
+      "impostor_alibis": 153,
+      "impostor_alibis_survived": 143,
+      "innocent_non_reporter_ejections": 4,
+      "innocent_non_reporter_slots": 1769,
+      "reporter_ejections": 36,
+      "reporter_slots": 551
     },
-    "eject_ballots": 2026,
+    "eject_ballots": 1983,
     "evidence_quality_mix": {
       "band_counts": {
-        "contradiction_flag": 10,
-        "first_hand": 69,
-        "hearsay": 7,
-        "unevidenced": 2,
-        "vent_flag": 288
+        "contradiction_flag": 5,
+        "first_hand": 67,
+        "hearsay": 10,
+        "vent_flag": 281
       },
       "band_role_correct": {
-        "contradiction_flag": 1,
-        "first_hand": 39,
-        "hearsay": 4,
-        "unevidenced": 2,
-        "vent_flag": 288
+        "contradiction_flag": 2,
+        "first_hand": 34,
+        "hearsay": 5,
+        "vent_flag": 281
       },
       "definition": "A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of the voter's own memory, or a transcript turn carrying a structured observation that NAMES them - whole-token, by meetings.citation_relevance.names_player over the observation's dumped structure, so a turn whose only observation places somebody else, and a turn merely SPOKEN by the ejected player, are not first-hand accounts of them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.",
-      "ejections": 376
+      "ejections": 363
     },
     "games": 200,
     "grounded_all": {
-      "denominator": 3385,
+      "denominator": 3384,
       "not_evaluable": 0,
-      "numerator": 1962,
-      "rate": 0.579616
+      "numerator": 2279,
+      "rate": 0.673463
     },
     "grounded_definition": "Numerator: ballots whose citation RESOLVES in the voter's own inputs (primary_reason_id in this meeting's turns, or primary_reason_observation_id carried whole-token on a line of that voter's own recorded prompts) AND bears on the decision's subject by meetings.citation_relevance.citations_bear_on - the subject being the recorded target for an EJECT and any member of considered_alternatives for a SKIP. Denominator: all ballots of that decision kind. Not-evaluable: ballots OF THAT SAME KIND whose voter has no recorded prompt in the meeting - counted per kind, so a promptless EJECT never makes the SKIP cell read as one that measured nothing; the all-ballots cell carries the sum. An UNCITED ballot is not grounded: citations_bear_on is vacuously true with nothing cited, so presence and resolution are required before aboutness is asked. It does NOT measure whether the cited line was factually true.",
     "grounded_eject": {
-      "denominator": 2026,
+      "denominator": 1983,
       "not_evaluable": 0,
-      "numerator": 1962,
-      "rate": 0.968411
+      "numerator": 1970,
+      "rate": 0.993444
     },
     "grounded_skip": {
-      "denominator": 1359,
+      "denominator": 1401,
       "not_evaluable": 0,
-      "numerator": 0,
-      "rate": 0.0
+      "numerator": 309,
+      "rate": 0.220557
     },
     "label": "pooled: the two 9p2i sets",
     "manufactured_contradiction": {
       "definition": "Numerator: recorded contradiction flags whose kind is an alibi class (alibi_conflict, alibi_vs_sighting, alibi_vs_physical) and whose subjects name the speaker of a SELF-alibi claim in that meeting that is TRUE at at least one tick of its own span against that speaker's engine route from a state-hash-verified walk_replay. Denominator: all alibi-class flags. Not-evaluable: an alibi-class flag naming no self-alibi speaker in its meeting, one whose claim covers a tick the walk does not reach, or one resting on a multi-leg route, which a recorded flag does not attribute to a leg - scoring it across the whole route would file a flag that caught a fabricated leg as manufactured. Ticks are agent-frame and resolve against engine tick T - 1. It does NOT measure intent, and it does NOT clear a flag whose subject lied at every tick - that flag is evidence, not an artifact.",
       "flags": {
-        "denominator": 191,
-        "not_evaluable": 32,
-        "numerator": 158,
-        "rate": 0.827225
+        "denominator": 74,
+        "not_evaluable": 74,
+        "numerator": 0,
+        "rate": 0.0
       },
-      "manufactured_on_a_wholly_true_claim": 8,
-      "other_subject_alibi_claims": 13,
+      "manufactured_on_a_wholly_true_claim": 0,
+      "other_subject_alibi_claims": 0,
       "self_alibi_claims": 955,
-      "self_alibi_claims_envelope_false": 104,
-      "self_alibi_claims_envelope_false_multi_tick": 103,
-      "self_alibi_claims_multi_tick": 769,
-      "self_alibi_claims_strict_false": 2,
+      "self_alibi_claims_envelope_false": 11,
+      "self_alibi_claims_envelope_false_multi_tick": 11,
+      "self_alibi_claims_multi_tick": 954,
+      "self_alibi_claims_strict_false": 0,
       "self_alibi_claims_unresolvable": 0
     },
-    "meetings": 590,
+    "meetings": 594,
     "rationale_faithfulness": {
       "ballots": {
-        "denominator": 2719,
-        "not_evaluable": 666,
-        "numerator": 2719,
-        "rate": 1.0
+        "denominator": 2844,
+        "not_evaluable": 540,
+        "numerator": 2843,
+        "rate": 0.999648
       },
       "definition": "Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. It reads rationale_text WHOLE, guard audit markers included, and deliberately differs from row 4 there: this row asks whether every token in the RECORDED text is one the voter held, and a marker's preserved id always is, while row 4 asks the authorship question and must cut the machinery's prose off first. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.",
       "limits": "This row tests TOKENS, not propositions. An assertion and its negation score alike, and a false sentence assembled entirely from tokens the voter held scores as faithful. It cannot see an invented RELATION between present tokens. The direction memo's section 3 finding that rationales invent almost no facts is TWO-METHOD AGREEMENT between two independent graders of the fifth run's rationales; it is not this measurement, and this row neither confirms nor replaces it.",
-      "tokens_absent": 0,
-      "tokens_checked": 6473
+      "tokens_absent": 1,
+      "tokens_checked": 7068
     },
     "role_correct_ejection": {
-      "denominator": 376,
+      "denominator": 363,
       "not_evaluable": 0,
-      "numerator": 334,
-      "rate": 0.888298
+      "numerator": 322,
+      "rate": 0.887052
     },
     "role_correct_ejection_definition": "Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.",
     "role_correct_ejection_label": "reported beside, never a gate",
-    "skip_ballots": 1359,
+    "skip_ballots": 1401,
     "sources": [
       "replays/ml_corpus/9p2i",
       "replays/samples/9p2i"
     ],
     "unexplained_decision": {
       "decisions": {
-        "denominator": 3385,
+        "denominator": 3384,
         "not_evaluable": 0,
-        "numerator": 19,
-        "rate": 0.005613
+        "numerator": 17,
+        "rate": 0.005024
       },
       "definition": "Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off BY PROVENANCE: the marker region eval.deduction_metrics._split_rationale establishes from that voter's OWN pre-guard vote response, scanned by _scan_marker_chain - the same cut api.replay_loader makes for rationale_text_clean. Shape is not provenance, so the whole record is never scanned: a model body that OPENS with marker-shaped prose sits at position 0 too, and scanning the record would credit the guard with the voter's own words. A guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.",
-      "skips_naming_a_player_in_prose": 710,
+      "skips_naming_a_player_in_prose": 872,
       "skips_naming_no_player": 17,
-      "skips_with_considered_alternatives": 1336,
-      "uncited_ejects": 2
+      "skips_with_considered_alternatives": 1382,
+      "uncited_ejects": 0
     },
     "wrong_but_believable": {
-      "denominator": 2026,
+      "denominator": 1983,
       "not_evaluable": 0,
-      "numerator": 364,
-      "rate": 0.179664
+      "numerator": 446,
+      "rate": 0.224912
     },
     "wrong_but_believable_definition": "Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.",
     "wrong_but_believable_label": "reported, never penalised"
@@ -367,153 +359,149 @@
     {
       "agent_authored_share": {
         "ballots": {
-          "denominator": 2516,
+          "denominator": 2539,
           "not_evaluable": 0,
-          "numerator": 2446,
-          "rate": 0.972178
+          "numerator": 2522,
+          "rate": 0.993304
         },
-        "citation_nulled_target_intact": 10,
+        "citation_nulled_target_intact": 3,
         "definition": "Numerator: ballots the meeting layer did not re-aim - neither a typed guard_rewrite_reason (any BallotTargetRewriteReason member) nor a target-rewriting marker unwound by eval.deduction_metrics._authored_target, the fallback meetings/schemas.py prescribes for recordings made before the typed fields. The marker channel reads the PROVENANCE-established marker region (eval.deduction_metrics._split_rationale) and never the whole recorded rationale, so a model body opening with marker-shaped prose is not read as a guard rewrite. Denominator: all ballots. Citation-only rewrites are NOT counted against the share and are reported separately as 'citation nulled, target intact'; a ballot carrying both is counted among the rewrites, because the target moved. The marker-only redirect census rides beside as a sub-count: it keys on the graph-redirect marker alone and is therefore smaller than the typed layer.",
         "marker_unwound_without_typed_reason": 0,
-        "redirect_marker_ballots": 57,
+        "redirect_marker_ballots": 0,
         "redirect_marker_coerced_skip_ballots": 0,
-        "redirect_marker_eject_ballots": 57,
+        "redirect_marker_eject_ballots": 0,
         "rewrite_reasons": {
-          "invalid_target": 2,
-          "teammate_coerced": 5,
-          "uncited_coerced": 6,
-          "under_gate_redirect": 57
+          "invalid_target": 5,
+          "teammate_coerced": 12
         }
       },
       "argmax_independence": {
-        "chance_baseline": 0.303528,
+        "chance_baseline": 0.306122,
         "definition": "Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the SAME unambiguous ballots that form the denominator - never over the excluded ties or the not-evaluable ballots - of the living-impostor share of each voter's own rendered valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.",
-        "deviator_role_correct": 7,
-        "deviator_role_correct_share": 0.08642,
-        "deviator_share": 0.06378,
-        "deviators": 81,
-        "follower_role_correct": 1143,
-        "follower_role_correct_share": 0.961312,
-        "follower_share": 0.93622,
-        "followers": 1189,
+        "deviator_role_correct": 14,
+        "deviator_role_correct_share": 0.095238,
+        "deviator_share": 0.116297,
+        "deviators": 147,
+        "follower_role_correct": 1081,
+        "follower_role_correct_share": 0.967771,
+        "follower_share": 0.883703,
+        "followers": 1117,
         "no_rendered_row": 0,
-        "ties_excluded": 92,
-        "unambiguous_ballots": 1270,
-        "zero_flag_deviator_role_correct": 1,
-        "zero_flag_deviators": 64,
-        "zero_flag_follower_role_correct": 176,
-        "zero_flag_followers": 206
+        "ties_excluded": 102,
+        "unambiguous_ballots": 1264,
+        "zero_flag_deviator_role_correct": 5,
+        "zero_flag_deviators": 118,
+        "zero_flag_follower_role_correct": 144,
+        "zero_flag_followers": 175
       },
-      "ballots": 2516,
+      "ballots": 2539,
       "context": {
-        "impostor_alibi_survival_rate": 0.886598,
-        "impostor_alibis": 97,
-        "impostor_alibis_survived": 86,
-        "innocent_non_reporter_ejections": 6,
-        "innocent_non_reporter_slots": 1323,
-        "reporter_ejections": 23,
-        "reporter_slots": 407
+        "impostor_alibi_survival_rate": 0.928571,
+        "impostor_alibis": 112,
+        "impostor_alibis_survived": 104,
+        "innocent_non_reporter_ejections": 2,
+        "innocent_non_reporter_slots": 1318,
+        "reporter_ejections": 29,
+        "reporter_slots": 416
       },
-      "eject_ballots": 1499,
+      "eject_ballots": 1487,
       "evidence_quality_mix": {
         "band_counts": {
           "contradiction_flag": 3,
-          "first_hand": 52,
-          "hearsay": 4,
-          "unevidenced": 2,
-          "vent_flag": 220
+          "first_hand": 51,
+          "hearsay": 8,
+          "vent_flag": 211
         },
         "band_role_correct": {
-          "contradiction_flag": 0,
-          "first_hand": 28,
-          "hearsay": 2,
-          "unevidenced": 2,
-          "vent_flag": 220
+          "contradiction_flag": 1,
+          "first_hand": 24,
+          "hearsay": 5,
+          "vent_flag": 211
         },
         "definition": "A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of the voter's own memory, or a transcript turn carrying a structured observation that NAMES them - whole-token, by meetings.citation_relevance.names_player over the observation's dumped structure, so a turn whose only observation places somebody else, and a turn merely SPOKEN by the ejected player, are not first-hand accounts of them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.",
-        "ejections": 281
+        "ejections": 273
       },
       "games": 150,
       "grounded_all": {
-        "denominator": 2516,
+        "denominator": 2539,
         "not_evaluable": 0,
-        "numerator": 1455,
-        "rate": 0.578299
+        "numerator": 1706,
+        "rate": 0.671918
       },
       "grounded_definition": "Numerator: ballots whose citation RESOLVES in the voter's own inputs (primary_reason_id in this meeting's turns, or primary_reason_observation_id carried whole-token on a line of that voter's own recorded prompts) AND bears on the decision's subject by meetings.citation_relevance.citations_bear_on - the subject being the recorded target for an EJECT and any member of considered_alternatives for a SKIP. Denominator: all ballots of that decision kind. Not-evaluable: ballots OF THAT SAME KIND whose voter has no recorded prompt in the meeting - counted per kind, so a promptless EJECT never makes the SKIP cell read as one that measured nothing; the all-ballots cell carries the sum. An UNCITED ballot is not grounded: citations_bear_on is vacuously true with nothing cited, so presence and resolution are required before aboutness is asked. It does NOT measure whether the cited line was factually true.",
       "grounded_eject": {
-        "denominator": 1499,
+        "denominator": 1487,
         "not_evaluable": 0,
-        "numerator": 1455,
-        "rate": 0.970647
+        "numerator": 1476,
+        "rate": 0.992603
       },
       "grounded_skip": {
-        "denominator": 1017,
+        "denominator": 1052,
         "not_evaluable": 0,
-        "numerator": 0,
-        "rate": 0.0
+        "numerator": 230,
+        "rate": 0.218631
       },
       "label": "ml_corpus/9p2i",
       "manufactured_contradiction": {
         "definition": "Numerator: recorded contradiction flags whose kind is an alibi class (alibi_conflict, alibi_vs_sighting, alibi_vs_physical) and whose subjects name the speaker of a SELF-alibi claim in that meeting that is TRUE at at least one tick of its own span against that speaker's engine route from a state-hash-verified walk_replay. Denominator: all alibi-class flags. Not-evaluable: an alibi-class flag naming no self-alibi speaker in its meeting, one whose claim covers a tick the walk does not reach, or one resting on a multi-leg route, which a recorded flag does not attribute to a leg - scoring it across the whole route would file a flag that caught a fabricated leg as manufactured. Ticks are agent-frame and resolve against engine tick T - 1. It does NOT measure intent, and it does NOT clear a flag whose subject lied at every tick - that flag is evidence, not an artifact.",
         "flags": {
-          "denominator": 134,
-          "not_evaluable": 28,
-          "numerator": 105,
-          "rate": 0.783582
+          "denominator": 57,
+          "not_evaluable": 57,
+          "numerator": 0,
+          "rate": 0.0
         },
-        "manufactured_on_a_wholly_true_claim": 6,
-        "other_subject_alibi_claims": 9,
-        "self_alibi_claims": 696,
-        "self_alibi_claims_envelope_false": 68,
-        "self_alibi_claims_envelope_false_multi_tick": 68,
-        "self_alibi_claims_multi_tick": 559,
-        "self_alibi_claims_strict_false": 1,
+        "manufactured_on_a_wholly_true_claim": 0,
+        "other_subject_alibi_claims": 0,
+        "self_alibi_claims": 715,
+        "self_alibi_claims_envelope_false": 9,
+        "self_alibi_claims_envelope_false_multi_tick": 9,
+        "self_alibi_claims_multi_tick": 715,
+        "self_alibi_claims_strict_false": 0,
         "self_alibi_claims_unresolvable": 0
       },
-      "meetings": 439,
+      "meetings": 449,
       "rationale_faithfulness": {
         "ballots": {
-          "denominator": 2014,
-          "not_evaluable": 502,
-          "numerator": 2014,
-          "rate": 1.0
+          "denominator": 2136,
+          "not_evaluable": 403,
+          "numerator": 2135,
+          "rate": 0.999532
         },
         "definition": "Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. It reads rationale_text WHOLE, guard audit markers included, and deliberately differs from row 4 there: this row asks whether every token in the RECORDED text is one the voter held, and a marker's preserved id always is, while row 4 asks the authorship question and must cut the machinery's prose off first. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.",
         "limits": "This row tests TOKENS, not propositions. An assertion and its negation score alike, and a false sentence assembled entirely from tokens the voter held scores as faithful. It cannot see an invented RELATION between present tokens. The direction memo's section 3 finding that rationales invent almost no facts is TWO-METHOD AGREEMENT between two independent graders of the fifth run's rationales; it is not this measurement, and this row neither confirms nor replaces it.",
-        "tokens_absent": 0,
-        "tokens_checked": 4796
+        "tokens_absent": 1,
+        "tokens_checked": 5346
       },
       "role_correct_ejection": {
-        "denominator": 281,
+        "denominator": 273,
         "not_evaluable": 0,
-        "numerator": 252,
-        "rate": 0.896797
+        "numerator": 241,
+        "rate": 0.882784
       },
       "role_correct_ejection_definition": "Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.",
       "role_correct_ejection_label": "reported beside, never a gate",
-      "skip_ballots": 1017,
+      "skip_ballots": 1052,
       "sources": [
         "replays/ml_corpus/9p2i"
       ],
       "unexplained_decision": {
         "decisions": {
-          "denominator": 2516,
+          "denominator": 2539,
           "not_evaluable": 0,
-          "numerator": 15,
-          "rate": 0.005962
+          "numerator": 12,
+          "rate": 0.004726
         },
         "definition": "Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off BY PROVENANCE: the marker region eval.deduction_metrics._split_rationale establishes from that voter's OWN pre-guard vote response, scanned by _scan_marker_chain - the same cut api.replay_loader makes for rationale_text_clean. Shape is not provenance, so the whole record is never scanned: a model body that OPENS with marker-shaped prose sits at position 0 too, and scanning the record would credit the guard with the voter's own words. A guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.",
-        "skips_naming_a_player_in_prose": 524,
-        "skips_naming_no_player": 14,
-        "skips_with_considered_alternatives": 999,
-        "uncited_ejects": 1
+        "skips_naming_a_player_in_prose": 657,
+        "skips_naming_no_player": 12,
+        "skips_with_considered_alternatives": 1038,
+        "uncited_ejects": 0
       },
       "wrong_but_believable": {
-        "denominator": 1499,
+        "denominator": 1487,
         "not_evaluable": 0,
-        "numerator": 251,
-        "rate": 0.167445
+        "numerator": 327,
+        "rate": 0.219906
       },
       "wrong_but_believable_definition": "Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.",
       "wrong_but_believable_label": "reported, never penalised"
@@ -521,150 +509,149 @@
     {
       "agent_authored_share": {
         "ballots": {
-          "denominator": 869,
+          "denominator": 845,
           "not_evaluable": 0,
-          "numerator": 842,
-          "rate": 0.96893
+          "numerator": 841,
+          "rate": 0.995266
         },
-        "citation_nulled_target_intact": 3,
+        "citation_nulled_target_intact": 2,
         "definition": "Numerator: ballots the meeting layer did not re-aim - neither a typed guard_rewrite_reason (any BallotTargetRewriteReason member) nor a target-rewriting marker unwound by eval.deduction_metrics._authored_target, the fallback meetings/schemas.py prescribes for recordings made before the typed fields. The marker channel reads the PROVENANCE-established marker region (eval.deduction_metrics._split_rationale) and never the whole recorded rationale, so a model body opening with marker-shaped prose is not read as a guard rewrite. Denominator: all ballots. Citation-only rewrites are NOT counted against the share and are reported separately as 'citation nulled, target intact'; a ballot carrying both is counted among the rewrites, because the target moved. The marker-only redirect census rides beside as a sub-count: it keys on the graph-redirect marker alone and is therefore smaller than the typed layer.",
         "marker_unwound_without_typed_reason": 0,
-        "redirect_marker_ballots": 23,
+        "redirect_marker_ballots": 0,
         "redirect_marker_coerced_skip_ballots": 0,
-        "redirect_marker_eject_ballots": 23,
+        "redirect_marker_eject_ballots": 0,
         "rewrite_reasons": {
-          "invalid_target": 2,
-          "teammate_coerced": 2,
-          "under_gate_redirect": 23
+          "invalid_target": 3,
+          "teammate_coerced": 1
         }
       },
       "argmax_independence": {
-        "chance_baseline": 0.305058,
+        "chance_baseline": 0.298299,
         "definition": "Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the SAME unambiguous ballots that form the denominator - never over the excluded ties or the not-evaluable ballots - of the living-impostor share of each voter's own rendered valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.",
-        "deviator_role_correct": 2,
-        "deviator_role_correct_share": 0.064516,
-        "deviator_share": 0.071429,
+        "deviator_role_correct": 3,
+        "deviator_role_correct_share": 0.096774,
+        "deviator_share": 0.075061,
         "deviators": 31,
-        "follower_role_correct": 358,
-        "follower_role_correct_share": 0.888337,
-        "follower_share": 0.928571,
-        "followers": 403,
+        "follower_role_correct": 359,
+        "follower_role_correct_share": 0.939791,
+        "follower_share": 0.924939,
+        "followers": 382,
         "no_rendered_row": 0,
-        "ties_excluded": 19,
-        "unambiguous_ballots": 434,
-        "zero_flag_deviator_role_correct": 1,
-        "zero_flag_deviators": 23,
-        "zero_flag_follower_role_correct": 46,
-        "zero_flag_followers": 67
+        "ties_excluded": 37,
+        "unambiguous_ballots": 413,
+        "zero_flag_deviator_role_correct": 3,
+        "zero_flag_deviators": 25,
+        "zero_flag_follower_role_correct": 52,
+        "zero_flag_followers": 71
       },
-      "ballots": 869,
+      "ballots": 845,
       "context": {
-        "impostor_alibi_survival_rate": 0.837838,
-        "impostor_alibis": 37,
-        "impostor_alibis_survived": 31,
-        "innocent_non_reporter_ejections": 6,
-        "innocent_non_reporter_slots": 464,
+        "impostor_alibi_survival_rate": 0.95122,
+        "impostor_alibis": 41,
+        "impostor_alibis_survived": 39,
+        "innocent_non_reporter_ejections": 2,
+        "innocent_non_reporter_slots": 451,
         "reporter_ejections": 7,
-        "reporter_slots": 141
+        "reporter_slots": 135
       },
-      "eject_ballots": 527,
+      "eject_ballots": 496,
       "evidence_quality_mix": {
         "band_counts": {
-          "contradiction_flag": 7,
-          "first_hand": 17,
-          "hearsay": 3,
-          "vent_flag": 68
+          "contradiction_flag": 2,
+          "first_hand": 16,
+          "hearsay": 2,
+          "vent_flag": 70
         },
         "band_role_correct": {
           "contradiction_flag": 1,
-          "first_hand": 11,
-          "hearsay": 2,
-          "vent_flag": 68
+          "first_hand": 10,
+          "hearsay": 0,
+          "vent_flag": 70
         },
         "definition": "A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of the voter's own memory, or a transcript turn carrying a structured observation that NAMES them - whole-token, by meetings.citation_relevance.names_player over the observation's dumped structure, so a turn whose only observation places somebody else, and a turn merely SPOKEN by the ejected player, are not first-hand accounts of them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.",
-        "ejections": 95
+        "ejections": 90
       },
       "games": 50,
       "grounded_all": {
-        "denominator": 869,
+        "denominator": 845,
         "not_evaluable": 0,
-        "numerator": 507,
-        "rate": 0.583429
+        "numerator": 573,
+        "rate": 0.678107
       },
       "grounded_definition": "Numerator: ballots whose citation RESOLVES in the voter's own inputs (primary_reason_id in this meeting's turns, or primary_reason_observation_id carried whole-token on a line of that voter's own recorded prompts) AND bears on the decision's subject by meetings.citation_relevance.citations_bear_on - the subject being the recorded target for an EJECT and any member of considered_alternatives for a SKIP. Denominator: all ballots of that decision kind. Not-evaluable: ballots OF THAT SAME KIND whose voter has no recorded prompt in the meeting - counted per kind, so a promptless EJECT never makes the SKIP cell read as one that measured nothing; the all-ballots cell carries the sum. An UNCITED ballot is not grounded: citations_bear_on is vacuously true with nothing cited, so presence and resolution are required before aboutness is asked. It does NOT measure whether the cited line was factually true.",
       "grounded_eject": {
-        "denominator": 527,
+        "denominator": 496,
         "not_evaluable": 0,
-        "numerator": 507,
-        "rate": 0.962049
+        "numerator": 494,
+        "rate": 0.995968
       },
       "grounded_skip": {
-        "denominator": 342,
+        "denominator": 349,
         "not_evaluable": 0,
-        "numerator": 0,
-        "rate": 0.0
+        "numerator": 79,
+        "rate": 0.226361
       },
       "label": "samples/9p2i",
       "manufactured_contradiction": {
         "definition": "Numerator: recorded contradiction flags whose kind is an alibi class (alibi_conflict, alibi_vs_sighting, alibi_vs_physical) and whose subjects name the speaker of a SELF-alibi claim in that meeting that is TRUE at at least one tick of its own span against that speaker's engine route from a state-hash-verified walk_replay. Denominator: all alibi-class flags. Not-evaluable: an alibi-class flag naming no self-alibi speaker in its meeting, one whose claim covers a tick the walk does not reach, or one resting on a multi-leg route, which a recorded flag does not attribute to a leg - scoring it across the whole route would file a flag that caught a fabricated leg as manufactured. Ticks are agent-frame and resolve against engine tick T - 1. It does NOT measure intent, and it does NOT clear a flag whose subject lied at every tick - that flag is evidence, not an artifact.",
         "flags": {
-          "denominator": 57,
-          "not_evaluable": 4,
-          "numerator": 53,
-          "rate": 0.929825
+          "denominator": 17,
+          "not_evaluable": 17,
+          "numerator": 0,
+          "rate": 0.0
         },
-        "manufactured_on_a_wholly_true_claim": 2,
-        "other_subject_alibi_claims": 4,
-        "self_alibi_claims": 259,
-        "self_alibi_claims_envelope_false": 36,
-        "self_alibi_claims_envelope_false_multi_tick": 35,
-        "self_alibi_claims_multi_tick": 210,
-        "self_alibi_claims_strict_false": 1,
+        "manufactured_on_a_wholly_true_claim": 0,
+        "other_subject_alibi_claims": 0,
+        "self_alibi_claims": 240,
+        "self_alibi_claims_envelope_false": 2,
+        "self_alibi_claims_envelope_false_multi_tick": 2,
+        "self_alibi_claims_multi_tick": 239,
+        "self_alibi_claims_strict_false": 0,
         "self_alibi_claims_unresolvable": 0
       },
-      "meetings": 151,
+      "meetings": 145,
       "rationale_faithfulness": {
         "ballots": {
-          "denominator": 705,
-          "not_evaluable": 164,
-          "numerator": 705,
+          "denominator": 708,
+          "not_evaluable": 137,
+          "numerator": 708,
           "rate": 1.0
         },
         "definition": "Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. It reads rationale_text WHOLE, guard audit markers included, and deliberately differs from row 4 there: this row asks whether every token in the RECORDED text is one the voter held, and a marker's preserved id always is, while row 4 asks the authorship question and must cut the machinery's prose off first. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.",
         "limits": "This row tests TOKENS, not propositions. An assertion and its negation score alike, and a false sentence assembled entirely from tokens the voter held scores as faithful. It cannot see an invented RELATION between present tokens. The direction memo's section 3 finding that rationales invent almost no facts is TWO-METHOD AGREEMENT between two independent graders of the fifth run's rationales; it is not this measurement, and this row neither confirms nor replaces it.",
         "tokens_absent": 0,
-        "tokens_checked": 1677
+        "tokens_checked": 1722
       },
       "role_correct_ejection": {
-        "denominator": 95,
+        "denominator": 90,
         "not_evaluable": 0,
-        "numerator": 82,
-        "rate": 0.863158
+        "numerator": 81,
+        "rate": 0.9
       },
       "role_correct_ejection_definition": "Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.",
       "role_correct_ejection_label": "reported beside, never a gate",
-      "skip_ballots": 342,
+      "skip_ballots": 349,
       "sources": [
         "replays/samples/9p2i"
       ],
       "unexplained_decision": {
         "decisions": {
-          "denominator": 869,
+          "denominator": 845,
           "not_evaluable": 0,
-          "numerator": 4,
-          "rate": 0.004603
+          "numerator": 5,
+          "rate": 0.005917
         },
         "definition": "Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off BY PROVENANCE: the marker region eval.deduction_metrics._split_rationale establishes from that voter's OWN pre-guard vote response, scanned by _scan_marker_chain - the same cut api.replay_loader makes for rationale_text_clean. Shape is not provenance, so the whole record is never scanned: a model body that OPENS with marker-shaped prose sits at position 0 too, and scanning the record would credit the guard with the voter's own words. A guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.",
-        "skips_naming_a_player_in_prose": 186,
-        "skips_naming_no_player": 3,
-        "skips_with_considered_alternatives": 337,
-        "uncited_ejects": 1
+        "skips_naming_a_player_in_prose": 215,
+        "skips_naming_no_player": 5,
+        "skips_with_considered_alternatives": 344,
+        "uncited_ejects": 0
       },
       "wrong_but_believable": {
-        "denominator": 527,
+        "denominator": 496,
         "not_evaluable": 0,
-        "numerator": 113,
-        "rate": 0.214421
+        "numerator": 119,
+        "rate": 0.239919
       },
       "wrong_but_believable_definition": "Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.",
       "wrong_but_believable_label": "reported, never penalised"
@@ -674,37 +661,35 @@
         "ballots": {
           "denominator": 129,
           "not_evaluable": 0,
-          "numerator": 127,
-          "rate": 0.984496
+          "numerator": 129,
+          "rate": 1.0
         },
         "citation_nulled_target_intact": 0,
         "definition": "Numerator: ballots the meeting layer did not re-aim - neither a typed guard_rewrite_reason (any BallotTargetRewriteReason member) nor a target-rewriting marker unwound by eval.deduction_metrics._authored_target, the fallback meetings/schemas.py prescribes for recordings made before the typed fields. The marker channel reads the PROVENANCE-established marker region (eval.deduction_metrics._split_rationale) and never the whole recorded rationale, so a model body opening with marker-shaped prose is not read as a guard rewrite. Denominator: all ballots. Citation-only rewrites are NOT counted against the share and are reported separately as 'citation nulled, target intact'; a ballot carrying both is counted among the rewrites, because the target moved. The marker-only redirect census rides beside as a sub-count: it keys on the graph-redirect marker alone and is therefore smaller than the typed layer.",
         "marker_unwound_without_typed_reason": 0,
-        "redirect_marker_ballots": 2,
+        "redirect_marker_ballots": 0,
         "redirect_marker_coerced_skip_ballots": 0,
-        "redirect_marker_eject_ballots": 2,
-        "rewrite_reasons": {
-          "under_gate_redirect": 2
-        }
+        "redirect_marker_eject_ballots": 0,
+        "rewrite_reasons": {}
       },
       "argmax_independence": {
         "chance_baseline": 0.5,
         "definition": "Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the SAME unambiguous ballots that form the denominator - never over the excluded ties or the not-evaluable ballots - of the living-impostor share of each voter's own rendered valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.",
         "deviator_role_correct": 0,
-        "deviator_role_correct_share": 0.0,
-        "deviator_share": 0.016667,
-        "deviators": 1,
-        "follower_role_correct": 59,
+        "deviator_role_correct_share": null,
+        "deviator_share": 0.0,
+        "deviators": 0,
+        "follower_role_correct": 55,
         "follower_role_correct_share": 1.0,
-        "follower_share": 0.983333,
-        "followers": 59,
+        "follower_share": 1.0,
+        "followers": 55,
         "no_rendered_row": 0,
-        "ties_excluded": 0,
-        "unambiguous_ballots": 60,
+        "ties_excluded": 1,
+        "unambiguous_ballots": 55,
         "zero_flag_deviator_role_correct": 0,
-        "zero_flag_deviators": 1,
-        "zero_flag_follower_role_correct": 7,
-        "zero_flag_followers": 7
+        "zero_flag_deviators": 0,
+        "zero_flag_follower_role_correct": 3,
+        "zero_flag_followers": 3
       },
       "ballots": 129,
       "context": {
@@ -713,84 +698,82 @@
         "impostor_alibis_survived": 1,
         "innocent_non_reporter_ejections": 0,
         "innocent_non_reporter_slots": 36,
-        "reporter_ejections": 0,
+        "reporter_ejections": 1,
         "reporter_slots": 36
       },
-      "eject_ballots": 69,
+      "eject_ballots": 66,
       "evidence_quality_mix": {
         "band_counts": {
           "first_hand": 2,
-          "unevidenced": 1,
           "vent_flag": 26
         },
         "band_role_correct": {
-          "first_hand": 2,
-          "unevidenced": 1,
+          "first_hand": 1,
           "vent_flag": 26
         },
         "definition": "A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of the voter's own memory, or a transcript turn carrying a structured observation that NAMES them - whole-token, by meetings.citation_relevance.names_player over the observation's dumped structure, so a turn whose only observation places somebody else, and a turn merely SPOKEN by the ejected player, are not first-hand accounts of them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.",
-        "ejections": 29
+        "ejections": 28
       },
       "games": 50,
       "grounded_all": {
         "denominator": 129,
         "not_evaluable": 0,
-        "numerator": 66,
-        "rate": 0.511628
+        "numerator": 83,
+        "rate": 0.643411
       },
       "grounded_definition": "Numerator: ballots whose citation RESOLVES in the voter's own inputs (primary_reason_id in this meeting's turns, or primary_reason_observation_id carried whole-token on a line of that voter's own recorded prompts) AND bears on the decision's subject by meetings.citation_relevance.citations_bear_on - the subject being the recorded target for an EJECT and any member of considered_alternatives for a SKIP. Denominator: all ballots of that decision kind. Not-evaluable: ballots OF THAT SAME KIND whose voter has no recorded prompt in the meeting - counted per kind, so a promptless EJECT never makes the SKIP cell read as one that measured nothing; the all-ballots cell carries the sum. An UNCITED ballot is not grounded: citations_bear_on is vacuously true with nothing cited, so presence and resolution are required before aboutness is asked. It does NOT measure whether the cited line was factually true.",
       "grounded_eject": {
-        "denominator": 69,
+        "denominator": 66,
         "not_evaluable": 0,
-        "numerator": 66,
-        "rate": 0.956522
+        "numerator": 64,
+        "rate": 0.969697
       },
       "grounded_skip": {
-        "denominator": 60,
+        "denominator": 63,
         "not_evaluable": 0,
-        "numerator": 0,
-        "rate": 0.0
+        "numerator": 19,
+        "rate": 0.301587
       },
       "label": "ml_corpus/4p1i",
       "manufactured_contradiction": {
         "definition": "Numerator: recorded contradiction flags whose kind is an alibi class (alibi_conflict, alibi_vs_sighting, alibi_vs_physical) and whose subjects name the speaker of a SELF-alibi claim in that meeting that is TRUE at at least one tick of its own span against that speaker's engine route from a state-hash-verified walk_replay. Denominator: all alibi-class flags. Not-evaluable: an alibi-class flag naming no self-alibi speaker in its meeting, one whose claim covers a tick the walk does not reach, or one resting on a multi-leg route, which a recorded flag does not attribute to a leg - scoring it across the whole route would file a flag that caught a fabricated leg as manufactured. Ticks are agent-frame and resolve against engine tick T - 1. It does NOT measure intent, and it does NOT clear a flag whose subject lied at every tick - that flag is evidence, not an artifact.",
         "flags": {
-          "denominator": 1,
+          "denominator": 0,
           "not_evaluable": 0,
-          "numerator": 1,
-          "rate": 1.0
+          "numerator": 0,
+          "rate": null
         },
-        "manufactured_on_a_wholly_true_claim": 1,
+        "manufactured_on_a_wholly_true_claim": 0,
         "other_subject_alibi_claims": 0,
-        "self_alibi_claims": 19,
+        "self_alibi_claims": 31,
         "self_alibi_claims_envelope_false": 0,
         "self_alibi_claims_envelope_false_multi_tick": 0,
-        "self_alibi_claims_multi_tick": 19,
+        "self_alibi_claims_multi_tick": 31,
         "self_alibi_claims_strict_false": 0,
         "self_alibi_claims_unresolvable": 0
       },
       "meetings": 43,
       "rationale_faithfulness": {
         "ballots": {
-          "denominator": 83,
-          "not_evaluable": 46,
-          "numerator": 83,
+          "denominator": 92,
+          "not_evaluable": 37,
+          "numerator": 92,
           "rate": 1.0
         },
         "definition": "Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. It reads rationale_text WHOLE, guard audit markers included, and deliberately differs from row 4 there: this row asks whether every token in the RECORDED text is one the voter held, and a marker's preserved id always is, while row 4 asks the authorship question and must cut the machinery's prose off first. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.",
         "limits": "This row tests TOKENS, not propositions. An assertion and its negation score alike, and a false sentence assembled entirely from tokens the voter held scores as faithful. It cannot see an invented RELATION between present tokens. The direction memo's section 3 finding that rationales invent almost no facts is TWO-METHOD AGREEMENT between two independent graders of the fifth run's rationales; it is not this measurement, and this row neither confirms nor replaces it.",
         "tokens_absent": 0,
-        "tokens_checked": 176
+        "tokens_checked": 201
       },
       "role_correct_ejection": {
-        "denominator": 29,
+        "denominator": 28,
         "not_evaluable": 0,
-        "numerator": 29,
-        "rate": 1.0
+        "numerator": 27,
+        "rate": 0.964286
       },
       "role_correct_ejection_definition": "Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.",
       "role_correct_ejection_label": "reported beside, never a gate",
-      "skip_ballots": 60,
+      "skip_ballots": 63,
       "sources": [
         "replays/ml_corpus/4p1i"
       ],
@@ -802,16 +785,16 @@
           "rate": 0.0
         },
         "definition": "Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off BY PROVENANCE: the marker region eval.deduction_metrics._split_rationale establishes from that voter's OWN pre-guard vote response, scanned by _scan_marker_chain - the same cut api.replay_loader makes for rationale_text_clean. Shape is not provenance, so the whole record is never scanned: a model body that OPENS with marker-shaped prose sits at position 0 too, and scanning the record would credit the guard with the voter's own words. A guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.",
-        "skips_naming_a_player_in_prose": 17,
+        "skips_naming_a_player_in_prose": 25,
         "skips_naming_no_player": 0,
-        "skips_with_considered_alternatives": 60,
+        "skips_with_considered_alternatives": 63,
         "uncited_ejects": 0
       },
       "wrong_but_believable": {
-        "denominator": 69,
+        "denominator": 66,
         "not_evaluable": 0,
-        "numerator": 10,
-        "rate": 0.144928
+        "numerator": 9,
+        "rate": 0.136364
       },
       "wrong_but_believable_definition": "Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.",
       "wrong_but_believable_label": "reported, never penalised"
@@ -821,82 +804,78 @@
         "ballots": {
           "denominator": 117,
           "not_evaluable": 0,
-          "numerator": 116,
-          "rate": 0.991453
+          "numerator": 117,
+          "rate": 1.0
         },
         "citation_nulled_target_intact": 0,
         "definition": "Numerator: ballots the meeting layer did not re-aim - neither a typed guard_rewrite_reason (any BallotTargetRewriteReason member) nor a target-rewriting marker unwound by eval.deduction_metrics._authored_target, the fallback meetings/schemas.py prescribes for recordings made before the typed fields. The marker channel reads the PROVENANCE-established marker region (eval.deduction_metrics._split_rationale) and never the whole recorded rationale, so a model body opening with marker-shaped prose is not read as a guard rewrite. Denominator: all ballots. Citation-only rewrites are NOT counted against the share and are reported separately as 'citation nulled, target intact'; a ballot carrying both is counted among the rewrites, because the target moved. The marker-only redirect census rides beside as a sub-count: it keys on the graph-redirect marker alone and is therefore smaller than the typed layer.",
         "marker_unwound_without_typed_reason": 0,
-        "redirect_marker_ballots": 1,
+        "redirect_marker_ballots": 0,
         "redirect_marker_coerced_skip_ballots": 0,
-        "redirect_marker_eject_ballots": 1,
-        "rewrite_reasons": {
-          "under_gate_redirect": 1
-        }
+        "redirect_marker_eject_ballots": 0,
+        "rewrite_reasons": {}
       },
       "argmax_independence": {
         "chance_baseline": 0.5,
         "definition": "Over CREW EJECT ballots, comparing the RECORDED target with the argmax of that voter's own rendered suspicion rows INTERSECTED with that voter's rendered valid-ejection-target list. Numerator: the DEVIATING ballots, whose recorded target is not that argmax. Denominator: the unambiguous ballots. Ties are excluded and counted; a ballot whose voter's prompts carry no row inside the valid list is not-evaluable and counted. Roles come from the seeder, are used only to report the role-correctness of followers and deviators BESIDE the split, and gate nothing. Chance is the mean, over the SAME unambiguous ballots that form the denominator - never over the excluded ties or the not-evaluable ballots - of the living-impostor share of each voter's own rendered valid-target list. It does NOT measure whether the voter read the graph, only whether the recorded call equals the arithmetic the engine handed it.",
         "deviator_role_correct": 0,
-        "deviator_role_correct_share": 0.0,
-        "deviator_share": 0.06383,
-        "deviators": 3,
+        "deviator_role_correct_share": null,
+        "deviator_share": 0.0,
+        "deviators": 0,
         "follower_role_correct": 42,
-        "follower_role_correct_share": 0.954545,
-        "follower_share": 0.93617,
-        "followers": 44,
+        "follower_role_correct_share": 0.976744,
+        "follower_share": 1.0,
+        "followers": 43,
         "no_rendered_row": 0,
         "ties_excluded": 0,
-        "unambiguous_ballots": 47,
+        "unambiguous_ballots": 43,
         "zero_flag_deviator_role_correct": 0,
-        "zero_flag_deviators": 3,
+        "zero_flag_deviators": 0,
         "zero_flag_follower_role_correct": 4,
-        "zero_flag_followers": 6
+        "zero_flag_followers": 5
       },
       "ballots": 117,
       "context": {
         "impostor_alibi_survival_rate": 1.0,
-        "impostor_alibis": 4,
-        "impostor_alibis_survived": 4,
+        "impostor_alibis": 1,
+        "impostor_alibis_survived": 1,
         "innocent_non_reporter_ejections": 0,
         "innocent_non_reporter_slots": 36,
-        "reporter_ejections": 4,
+        "reporter_ejections": 0,
         "reporter_slots": 36
       },
-      "eject_ballots": 51,
+      "eject_ballots": 49,
       "evidence_quality_mix": {
         "band_counts": {
-          "first_hand": 4,
-          "hearsay": 1,
+          "first_hand": 1,
           "vent_flag": 19
         },
         "band_role_correct": {
           "first_hand": 1,
-          "hearsay": 0,
           "vent_flag": 19
         },
         "definition": "A mix, not a rate: one numerator per band, summing to the denominator. One row per EJECTION (a meeting whose outcome is EJECTED), classified ROLE-BLIND into the highest band the ejected player carried: vent_flag (a recorded vent_sighting flag names them), contradiction_flag (a recorded non-vent flag names them), first_hand (no flag, but an EJECT ballot against them cites a resolving observation of the voter's own memory, or a transcript turn carrying a structured observation that NAMES them - whole-token, by meetings.citation_relevance.names_player over the observation's dumped structure, so a turn whose only observation places somebody else, and a turn merely SPOKEN by the ejected player, are not first-hand accounts of them), hearsay (no flag, and the cited turn carries only an accusation), unevidenced (no flag and no resolving, on-target citation). Denominator: all ejections. Role-correctness is reported beside each band and gates nothing. eval.meeting_quality.decompose_ejection_channels is NOT used here: it returns None unless the ejected player is a true impostor, which would make the mix role-conditioned.",
-        "ejections": 24
+        "ejections": 20
       },
       "games": 50,
       "grounded_all": {
         "denominator": 117,
         "not_evaluable": 0,
-        "numerator": 50,
-        "rate": 0.42735
+        "numerator": 72,
+        "rate": 0.615385
       },
       "grounded_definition": "Numerator: ballots whose citation RESOLVES in the voter's own inputs (primary_reason_id in this meeting's turns, or primary_reason_observation_id carried whole-token on a line of that voter's own recorded prompts) AND bears on the decision's subject by meetings.citation_relevance.citations_bear_on - the subject being the recorded target for an EJECT and any member of considered_alternatives for a SKIP. Denominator: all ballots of that decision kind. Not-evaluable: ballots OF THAT SAME KIND whose voter has no recorded prompt in the meeting - counted per kind, so a promptless EJECT never makes the SKIP cell read as one that measured nothing; the all-ballots cell carries the sum. An UNCITED ballot is not grounded: citations_bear_on is vacuously true with nothing cited, so presence and resolution are required before aboutness is asked. It does NOT measure whether the cited line was factually true.",
       "grounded_eject": {
-        "denominator": 51,
+        "denominator": 49,
         "not_evaluable": 0,
-        "numerator": 50,
-        "rate": 0.980392
+        "numerator": 49,
+        "rate": 1.0
       },
       "grounded_skip": {
-        "denominator": 66,
+        "denominator": 68,
         "not_evaluable": 0,
-        "numerator": 0,
-        "rate": 0.0
+        "numerator": 23,
+        "rate": 0.338235
       },
       "label": "samples/4p1i",
       "manufactured_contradiction": {
@@ -909,35 +888,35 @@
         },
         "manufactured_on_a_wholly_true_claim": 0,
         "other_subject_alibi_claims": 0,
-        "self_alibi_claims": 29,
-        "self_alibi_claims_envelope_false": 2,
-        "self_alibi_claims_envelope_false_multi_tick": 2,
-        "self_alibi_claims_multi_tick": 26,
+        "self_alibi_claims": 35,
+        "self_alibi_claims_envelope_false": 0,
+        "self_alibi_claims_envelope_false_multi_tick": 0,
+        "self_alibi_claims_multi_tick": 35,
         "self_alibi_claims_strict_false": 0,
         "self_alibi_claims_unresolvable": 0
       },
       "meetings": 39,
       "rationale_faithfulness": {
         "ballots": {
-          "denominator": 72,
-          "not_evaluable": 45,
-          "numerator": 72,
-          "rate": 1.0
+          "denominator": 81,
+          "not_evaluable": 36,
+          "numerator": 80,
+          "rate": 0.987654
         },
         "definition": "Numerator: ballots every extracted TOKEN of whose rationale_text is present in what the voter held - whole-token player ids (matched by meetings.citation_relevance.names_player), canonical room ids (matched case-insensitively, underscore or space), and tick references - checked against this meeting's transcript and that voter's own recorded prompts. Denominator: ballots carrying at least one such token. Not-evaluable: ballots with no extractable token, and ballots whose voter has no recorded prompt. It reads rationale_text WHOLE, guard audit markers included, and deliberately differs from row 4 there: this row asks whether every token in the RECORDED text is one the voter held, and a marker's preserved id always is, while row 4 asks the authorship question and must cut the machinery's prose off first. LIMITS, stated: this tests TOKENS, not propositions - an assertion and its negation score alike, and a true sentence assembled from present tokens scores the same as a false one. The direction memo's section 3 result on invented facts is two-method agreement between two graders, NOT this measurement.",
         "limits": "This row tests TOKENS, not propositions. An assertion and its negation score alike, and a false sentence assembled entirely from tokens the voter held scores as faithful. It cannot see an invented RELATION between present tokens. The direction memo's section 3 finding that rationales invent almost no facts is TWO-METHOD AGREEMENT between two independent graders of the fifth run's rationales; it is not this measurement, and this row neither confirms nor replaces it.",
-        "tokens_absent": 0,
-        "tokens_checked": 147
+        "tokens_absent": 1,
+        "tokens_checked": 189
       },
       "role_correct_ejection": {
-        "denominator": 24,
+        "denominator": 20,
         "not_evaluable": 0,
         "numerator": 20,
-        "rate": 0.833333
+        "rate": 1.0
       },
       "role_correct_ejection_definition": "Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.",
       "role_correct_ejection_label": "reported beside, never a gate",
-      "skip_ballots": 66,
+      "skip_ballots": 68,
       "sources": [
         "replays/samples/4p1i"
       ],
@@ -945,20 +924,20 @@
         "decisions": {
           "denominator": 117,
           "not_evaluable": 0,
-          "numerator": 1,
-          "rate": 0.008547
+          "numerator": 0,
+          "rate": 0.0
         },
         "definition": "Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off BY PROVENANCE: the marker region eval.deduction_metrics._split_rationale establishes from that voter's OWN pre-guard vote response, scanned by _scan_marker_chain - the same cut api.replay_loader makes for rationale_text_clean. Shape is not provenance, so the whole record is never scanned: a model body that OPENS with marker-shaped prose sits at position 0 too, and scanning the record would credit the guard with the voter's own words. A guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.",
-        "skips_naming_a_player_in_prose": 21,
-        "skips_naming_no_player": 1,
-        "skips_with_considered_alternatives": 65,
+        "skips_naming_a_player_in_prose": 32,
+        "skips_naming_no_player": 0,
+        "skips_with_considered_alternatives": 68,
         "uncited_ejects": 0
       },
       "wrong_but_believable": {
-        "denominator": 51,
+        "denominator": 49,
         "not_evaluable": 0,
-        "numerator": 9,
-        "rate": 0.176471
+        "numerator": 7,
+        "rate": 0.142857
       },
       "wrong_but_believable_definition": "Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.",
       "wrong_but_believable_label": "reported, never penalised"

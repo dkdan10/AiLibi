@@ -518,7 +518,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49 and zero-padded aliases like replay-seed-01.jsonl) and prune their manifest rows"
   fi
   echo "[dry-run] manifest: $MANIFEST"
-  echo "[dry-run] eval report: would rebuild $SAMPLE_DIR/tournament-eval-report.json from the refreshed replays (scripts/build_sample_report.py; \$0, no provider)"
+  echo "[dry-run] eval report: would rebuild $SAMPLE_DIR/tournament-eval-report.json.gz from the refreshed replays (scripts/build_sample_report.py; \$0, no provider)"
   echo "[dry-run] no API calls made; no files written."
   if ! substrate_lever_preflight; then
     exit 1

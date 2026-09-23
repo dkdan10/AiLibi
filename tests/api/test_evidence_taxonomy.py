@@ -69,13 +69,13 @@ _CORPUS_SETS: Final[tuple[str, ...]] = (
 # classification change (which is the thing this pin exists to surface).
 # Baseline 6 read 96/64/26, 11/2/3, 313/204/90 and 20/1/0; the record that
 # followed closed the cross-statement column (64 -> 2, 204 -> 10) and it stays
-# closed here (7 and 8).
+# closed here (6 and 13, baseline 9).
 _EXPECTED_COUNTS: Final[dict[str, dict[EvidenceCategory, int]]] = {
-    # was 92/2/50, 20/0/0, 308/10/110 and 28/0/1.
-    "samples/9p2i": {"role_proof": 90, "cross_statement": 7, "weak_signal": 50},
+    # was 90/7/50, 20/0/0, 315/8/126 and 28/0/1.
+    "samples/9p2i": {"role_proof": 90, "cross_statement": 6, "weak_signal": 11},
     "samples/4p1i": {"role_proof": 20, "cross_statement": 0, "weak_signal": 0},
-    "ml_corpus/9p2i": {"role_proof": 315, "cross_statement": 8, "weak_signal": 126},
-    "ml_corpus/4p1i": {"role_proof": 28, "cross_statement": 0, "weak_signal": 1},
+    "ml_corpus/9p2i": {"role_proof": 317, "cross_statement": 13, "weak_signal": 44},
+    "ml_corpus/4p1i": {"role_proof": 28, "cross_statement": 0, "weak_signal": 0},
 }
 
 # The committed replay count per set, pinned so a thinned checkout cannot make
@@ -282,12 +282,12 @@ def test_corpus_wide_totals() -> None:
         for flag in flags:
             totals[_served(flag).category] += 1
 
-    assert dict(totals) == {  # was 448 / 161 / 12
-        "role_proof": 453,
-        "weak_signal": 177,
-        "cross_statement": 15,
+    assert dict(totals) == {  # was 453 / 177 / 15
+        "role_proof": 455,
+        "weak_signal": 55,
+        "cross_statement": 19,
     }
-    assert sum(totals.values()) == flag_count == 645  # was 621
+    assert sum(totals.values()) == flag_count == 529  # was 645
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
@@ -432,23 +432,36 @@ def test_endpoint_render_classes() -> None:
         for flag in flags:
             counts[_endpoint_class(flag)] += 1
 
-    # was {"self_linked": 448, "two_turns": 113, "same_turn": 60}
-    assert dict(counts) == {"self_linked": 453, "two_turns": 126, "same_turn": 66}
-    assert sum(counts.values()) == 645  # was 621
+    # was {"self_linked": 453, "two_turns": 126, "same_turn": 66}
+    assert dict(counts) == {"self_linked": 455, "two_turns": 70, "same_turn": 4}
+    assert sum(counts.values()) == 529  # was 645
     # Every self-linked flag is role proof; the same-turn class is the
     # self-stated pair the "within …" reading exists for.
     assert counts["unresolvable"] == 0
 
 
-def test_seed_47_is_entirely_weak_signal() -> None:
-    """Seed 47 M2 (§8 row 14): an innocent ejected on weak-stamped flags only.
+def test_corpus_seed_1135_innocent_ejection_is_entirely_weak_signal() -> None:
+    """ml_corpus seed 1135 M0 (§8 row 14's shape): an innocent ejected on
+    weak-stamped flags only.
 
-    All three flags subordinate, so the surface can show at a glance that
-    nothing above the weak band supported the ejection.
+    Every flag subordinates, so the surface can show at a glance that nothing
+    above the weak band supported the ejection. The shape has no instance on
+    samples/9p2i at baseline 9; on ml_corpus/9p2i it has three (seeds 1080 M2,
+    1095 M0, 1135 M0), and 1135 M0 is the one whose weak flag names the
+    ejected crewmate. The loader and ``_contradiction_view`` read that set
+    exactly as they read the samples (the same ``roster.json``).
+    RESTATED from samples seed 47 M2 at the baseline-9 re-record (now one meeting).
     """
 
-    replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-47")
-    meeting = replay.meetings[2]
+    replay = ReplayLoader(_REPLAYS / "ml_corpus" / "9p2i").load_replay(
+        "headless-seed-1135"
+    )
+    roles = {player.agent_id: player.role for player in replay.players}
+    meeting = replay.meetings[0]
     assert meeting.outcome == "EJECTED"
-    assert {flag.category for flag in meeting.contradictions} == {"role_proof"}
+    assert roles[str(meeting.ejected_player_id)] == "CREWMATE"
+    assert {flag.category for flag in meeting.contradictions} == {"weak_signal"}
+    # was 3 weak (baseline 6), then 1 role_proof (baselines 7-8), at samples seed 47
     assert len(meeting.contradictions) == 1
+    (flag,) = meeting.contradictions
+    assert meeting.ejected_player_id in flag.subjects

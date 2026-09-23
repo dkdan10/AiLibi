@@ -149,6 +149,25 @@ def _drop_meeting_row(lines: list[str], index: int) -> list[str]:
     return [line for i, line in enumerate(lines) if i != index]
 
 
+def _restamp(lines: list[str], key: str, value: bool) -> list[str]:
+    """Rewrite one substrate key on every row that carries the stamp.
+
+    The recorder writes the identity pair on the first tick row and on
+    ``game_over``; a footer that disagreed with row 0 is refused as a
+    contradiction before any lever check runs, so a tamper rewrites both.
+    """
+
+    rewritten: list[str] = []
+    for line in lines:
+        row = json.loads(line)
+        if "substrate_flags" in row:
+            row["substrate_flags"][key] = value
+            rewritten.append(json.dumps(row))
+        else:
+            rewritten.append(line)
+    return rewritten
+
+
 def _roles(
     seed: int, knobs: tuple[int, int, int], game_map: Map
 ) -> dict[PlayerId, Role]:
@@ -380,14 +399,7 @@ def test_retired_lever_stamp_check_is_an_option(
         for key in json.loads(lines[-1])["substrate_flags"]
         if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
     )
-    stamped_off: list[str] = []
-    for line in lines:
-        row = json.loads(line)
-        if row["kind"] == "game_over":
-            row["substrate_flags"][retired] = False
-            stamped_off.append(json.dumps(row))
-        else:
-            stamped_off.append(line)
+    stamped_off = _restamp(lines, retired, False)
     path = _write_game(tmp_path, seed, stamped_off)
 
     on = ReplayWalkConfig(
@@ -406,15 +418,8 @@ def test_retired_lever_stamp_check_is_an_option(
 
     # A live toggle recorded the other way is a substrate this build can still
     # reach, so the retired-half filter must let it through.
-    toggled: list[str] = []
-    for line in lines:
-        row = json.loads(line)
-        if row["kind"] == "game_over":
-            key = TOGGLEABLE_SUBSTRATE_FLAG_KEYS[0]
-            row["substrate_flags"][key] = not row["substrate_flags"][key]
-            toggled.append(json.dumps(row))
-        else:
-            toggled.append(line)
+    live = TOGGLEABLE_SUBSTRATE_FLAG_KEYS[0]
+    toggled = _restamp(lines, live, not json.loads(lines[-1])["substrate_flags"][live])
     toggled_path = _write_game(tmp_path / "toggled", seed, toggled)
     events = _drain(toggled_path, seed=seed, knobs=knobs, game_map=game_map, config=on)
     assert isinstance(events[-1], WalkComplete)
@@ -432,14 +437,7 @@ def test_funnel_profile_bites_a_retired_lever_stamped_off(
         for key in json.loads(lines[-1])["substrate_flags"]
         if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
     )
-    rewritten: list[str] = []
-    for line in lines:
-        row = json.loads(line)
-        if row["kind"] == "game_over":
-            row["substrate_flags"][retired] = False
-            rewritten.append(json.dumps(row))
-        else:
-            rewritten.append(line)
+    rewritten = _restamp(lines, retired, False)
     path = _write_game(tmp_path, seed, rewritten)
     num_players, num_impostors, tasks_per_crewmate = knobs
     with pytest.raises(funnel.FunnelReconstructionError, match=retired):
@@ -475,8 +473,9 @@ def test_a_prefix_stamped_with_a_retired_lever_off_is_refused(
     )
     first = json.loads(lines[0])
     assert first["kind"] == "tick"
-    assert "substrate_flags" not in first  # committed bytes stamp only the footer
-    first["agent_factory_kind"] = "scripted"
+    # The committed bytes stamp row 0 exactly as they stamp the footer.
+    assert first["agent_factory_kind"] == end["agent_factory_kind"]
+    assert first["substrate_flags"] == end["substrate_flags"]
     first["substrate_flags"] = {**end["substrate_flags"], retired: False}
     # Drop the terminal row: this is the interrupted prefix, whose only stamp
     # is the one on row 0.

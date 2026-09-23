@@ -8,34 +8,35 @@ take precedence over summaries. See the [glossary](glossary.md) for terms and
 
 ## 1. The numbers worth knowing
 
-The middle column shows the current reference recording, made 2026-08-31;
+The middle column shows the current reference recording, made 2026-09-22;
 the next shows its predecessor.
 
-| What | Figure | At baseline 7 | Recorded on, and where it lives |
+| What | Figure | At baseline 8 | Recorded on, and where it lives |
 |---|---|---|---|
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `bash scripts/verify_samples.sh` |
 | Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | bounded mechanisms, described below |
-| Impostor win rate, committed samples | 36% (4p1i), 30% (9p2i) | 36% (4p1i), 24% (9p2i) | the 2026-08-31 record — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
-| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 526 / 527, zero dangling | 538 / 538, zero dangling | reference recording 8, 2026-08-31 — [instrument](../tests/eval/test_vj_instruments.py) |
-| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 333 / 333 = 1.0000 vs 50 / 96 = 0.5208 | 326 / 326 = 1.0000 vs 61 / 103 = 0.5922 | the 2026-08-31 record, pooled over four recorded sets — [the record](../audits/audit-phase-21-rerecord.md) §5.1, against [the one before it](../audits/audit-phase-20-baseline-7.md) §3 |
-| Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 82 = 83% | 69 / 85 = 81% | reference recording 8, 2026-08-31 — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
-| Impostor ballots cast against a partner (9p2i) | 0 of 218 | 0 of 219 | enforced by the meeting layer, not shown by the model — §3 |
+| Impostor win rate, committed samples | 36% (4p1i), 22% (9p2i) | 36% (4p1i), 30% (9p2i) | the 2026-09-22 record — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 496 / 496, zero dangling | 526 / 527, zero dangling | reference recording 9, 2026-09-22 — [instrument](../tests/eval/test_vj_instruments.py) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 326 / 326 = 1.0000 vs 43 / 85 = 0.5059 | 333 / 333 = 1.0000 vs 50 / 96 = 0.5208 | the 2026-09-22 record, pooled over four recorded sets — [the record](../audits/audit-2026-09-22-process-rerecord.md) §6.2, against [the one before it](../audits/audit-phase-21-rerecord.md) §5.1 |
+| Correct 9p ejections riding an ejectee-specific vent sighting | 70 / 81 = 86% | 68 / 82 = 83% | reference recording 9, 2026-09-22 — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
+| Impostor ballots cast against a partner (9p2i) | 0 of 210 | 0 of 218 | enforced by the meeting layer, not shown by the model — §3 |
 | Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
 
-The previous recording's bars were registered before the repairs, and two
-missed: conviction accuracy without engine-certified proof reached
-61 of 103 = 0.5922 against a bar of 0.60, and wrongful ejections reached 42
-against a bar of fewer than 35; the current recording registered no bars, and
-re-measured both cells the unflattering way, to 50 of 96 = 0.5208 and 46
-innocent ejections. That read was a **finding**, not an adoption; the recording
-became the reference by an explicit owner override dated 2026-08-26 — §6.1 of
-[the phase-20 record](../audits/audit-phase-20-baseline-7.md), to read before
-citing any row above as a pass. A later recording met three of four fresh bars:
+Two of baseline 7's pre-registered bars missed: conviction accuracy without
+engine-certified proof reached 61 of 103 = 0.5922 against a bar of 0.60, and
+wrongful ejections reached 42 against a bar of fewer than 35. That read was a
+**finding**, not an adoption; the recording became the reference by an explicit
+owner override dated 2026-08-26 — read §6.1 of
+[the phase-20 record](../audits/audit-phase-20-baseline-7.md) before citing any
+row above as a pass. Baseline 8 registered no bars and read 50 of 96 = 0.5208
+and 46 innocent ejections. An experiment on it met three of four fresh bars:
 innocent ejections fell from 46 to 20, and 11 of those 20 were the meeting's own
 reporter, against 34 of 46 — a share of 0.5500 against a registered 0.40, so a
 **finding** again, and nothing was adopted
-([the record](../audits/audit-phase-21-adopting-record.md)).
+([the record](../audits/audit-phase-21-adopting-record.md)). Baseline 9, the
+current recording, registered none and reads 43 of 85 = 0.5059 and 42 innocent
+ejections.
 
 **What the boundary checks cover.** The
 [import-linter contracts](../.importlinter), the planted-leak test in
@@ -64,14 +65,14 @@ the guided tour can open is hand-picked, not scored, and spoiler-free; the
 order is measured, and leads with the evidence the tour opens on — a first
 meeting that ejects a player a reported vent sighting names.
 
-Open **Results & cases** for three source-bound examples, with analysis hidden
-until requested. **9p2i seed 23**, meeting 0: p-5's cited vent observation is
-real and the table uses direct role evidence. Its meeting 1 shows the contrasting
-case: seven voluntary skips amid two weak alibi flags. **9p2i seed 46**, meeting
-3: p-9 calls a legal three-room route impossible; three ballots cite that claim
-and eject an innocent reporter. p-3's separate cited observation describes a
-different player. **4p1i seed 11** remains a short comparison: one meeting, three
-turns, no flags.
+Open **Results & cases** for source-bound examples, with analysis hidden until
+requested, or start from these featured games. **9p2i seed 23**, meeting 0: p-5's
+cited vent observation is real and the table uses direct role evidence.
+**9p2i seed 0**, meeting 1, is the contrasting case: three weak alibi flags name
+two crewmates, and five of seven voters skip. **9p2i seed 29**, meeting 1: two
+strong contradiction flags name p-1, and five of six ballots eject that
+crewmate. **4p1i seed 11** remains a short comparison: one meeting, three turns,
+no flags.
 
 Click an exact statement, observation, or flag source to inspect it. Observation
 time and scene-frame time are labelled separately. Private memory requires the
@@ -87,8 +88,8 @@ every flag alike as verified proof, and the crew convicted on the difference.
 ## 3. What the corpus demonstrates — and what it does not
 
 **Evidence-processing: demonstrated.** Deliberation is typed, and of
-all 527 eject ballots in the 9p2i samples, 526 cite a line the voter could
-really see — the first recording where one did not.
+all 496 eject ballots in the 9p2i samples, every one cites a line the voter
+could really see.
 
 **Deception: demonstrated, and the strongest capability on display.**
 Coordinated fabricated alibis built by reading the transcript, strategic
@@ -99,23 +100,24 @@ firewall holding, not restraint the model showed.
 
 **General social deduction: NOT demonstrated.** A *flag* is a contradiction the
 meeting layer detects and shows the voters; a vent flag is the one class only an
-impostor can produce, resting on an engine-certified observation. Over all 151
+impostor can produce, resting on an engine-certified observation. Over all 145
 committed 9p2i meetings:
 
 | Meeting contains a vent flag | impostor ejected | innocent ejected |
 |---|---|---|
-| yes (68 meetings) | 68 | 0 |
-| no (83 meetings) | 14 | 13 |
+| yes (70 meetings) | 70 | 0 |
+| no (75 meetings) | 11 | 9 |
 
 With the certified evidence in front of it the table never convicted a crewmate.
-Without it, ejection accuracy is close to a coin flip — 14 of 27 — which is why
+Without it, ejection accuracy is close to a coin flip — 11 of 20 — which is why
 the pre-registered bar for exactly this cell, 0.60 pooled across the four
-recorded sets, is one of the two the previous recording missed. The worst class
-of evidence has NOT stayed closed: the flag that convicted 70 innocents on a
-single alibi-versus-sighting was empty on the previous recording
+recorded sets, is one of the two baseline 7 missed. The worst class of evidence
+did not stay closed: the flag that convicted 70 innocents on a single
+alibi-versus-sighting was empty on baseline 7
 ([the phase-20 record](../audits/audit-phase-20-baseline-7.md) §3, bars 4 and 7),
-and these bytes carry four such convictions again
-([the record](../audits/audit-phase-21-rerecord.md) §5.1.1).
+and baseline 8 carried four such convictions again
+([its record](../audits/audit-phase-21-rerecord.md) §5.1.1); baseline 9's
+record does not re-read it.
 
 ## 4. Three audits, in this order
 

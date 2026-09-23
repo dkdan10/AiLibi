@@ -4,8 +4,8 @@ Two layers, mirroring tests/eval/test_funnel_pooling.py:
 
 * committed-bytes PIN tests -- ``compute_deception_instruments`` over the
   committed corpus / sample sets, with EVERY field pinned. The corpus 9p2i pins
-  are the baseline-6 census (549 / 0 / 74 / 176 / 31 / 248 / 161 / 23 / 463 / 150,
-  Task 18.13), the primary anchor;
+  are the baseline-9 census, re-derived at each re-record since the baseline-6
+  census first anchored them — the primary anchor;
 * scripted-fixture UNIT tests over hand-built ``_VJMeeting`` carriers exercising
   each private fold and the Wilson / advisory helpers in isolation.
 
@@ -132,79 +132,79 @@ def test_corpus_nine_is_the_audit_census(
             "num_impostors": 2,
             "tasks_per_crewmate": 2,
             "games_total": 150,
-            "meetings_total": 439,  # was 432
-            # accusation census (529 frame, 0 teammate, 0 self)
-            "impostor_accusations_total": 529,  # was 517
-            "frame_attempts": 529,  # was 517
+            "meetings_total": 449,  # was 439
+            # accusation census (570 frame, 0 teammate, 0 self)
+            "impostor_accusations_total": 570,  # was 529
+            "frame_attempts": 570,  # was 529
             "impostor_self_accusations": 0,
-            "frame_attempt_meetings": 431,  # was 426
-            # eject-outcome context (29 / 252 / 158 == 439)
-            "crew_ejected_meetings": 29,  # was 26
-            "impostor_ejected_meetings": 252,  # was 254
-            "no_eject_meetings": 158,  # was 152
+            "frame_attempt_meetings": 446,  # was 431
+            # eject-outcome context (32 / 241 / 176 == 449)
+            "crew_ejected_meetings": 32,  # was 29
+            "impostor_ejected_meetings": 241,  # was 252
+            "no_eject_meetings": 176,  # was 158
             # false-vouch census. NOTE the two DISTINCT denominators below — the
             # audit-phase-18-baseline-6.md §2 row ("34 (grounded 14 / fabricated 4,
             # grounded-share 0.778)") welds them into one cell and so reads as if 34
             # split into 14+4, leaving 16 unaccounted; it does not. There are two
             # separate partitions, and on this corpus BOTH close exactly:
-            #   * OBSERVATIONS: 48 false-vouch saw_player observations, of 405
+            #   * OBSERVATIONS: 59 false-vouch saw_player observations, of 409
             #     impostor vouch observations, split by their subject's chokepoint
-            #     verdict into 37 grounded + 11 fabricated == 48.
-            #   * SUBJECT EVENTS: 43 events, split 33 grounded + 10 fabricated == 43,
-            #     and the grounded SHARE (0.7674) is over the 43, never the 48.
-            "vouch_observations_impostor": 405,  # was 373
-            "false_vouch_saw_player_observations": 48,  # was 42
-            "false_vouch_saw_player_rate": 0.11851851851851852,  # was 0.1126005361930295
-            "corroboration_claims_total": 1039,  # was 1050
-            "corroboration_claims_impostor": 157,  # was 155
-            "false_vouch_corroborations": 41,  # was 31
-            "false_vouch_corroboration_rate": 0.2611464968152866,  # was 0.2
-            "false_vouches_total": 89,  # was 73
-            # grounded split (production chokepoint, saw_player channel): 33+10 == 43
-            "false_vouch_subject_events": 43,  # was 36
-            "false_vouch_grounded": 33,  # was 30
-            "false_vouch_fabricated": 10,  # was 6
-            "false_vouch_grounded_share": 0.7674418604651163,  # was 0.8333333333333334
-            # observation-level companion join: partitions the 48 observations
-            # by their subject's chokepoint verdict (37 + 11 == 48).
-            "false_vouch_grounded_subject_observations": 37,  # was 36
-            "false_vouch_fabricated_subject_observations": 11,  # was 6
+            #     verdict into 50 grounded + 9 fabricated == 59.
+            #   * SUBJECT EVENTS: 49 events, split 40 grounded + 9 fabricated == 49,
+            #     and the grounded SHARE (0.8163) is over the 49, never the 59.
+            "vouch_observations_impostor": 409,  # was 405
+            "false_vouch_saw_player_observations": 59,  # was 48
+            "false_vouch_saw_player_rate": 0.14425427872860636,  # was 0.11851851851851852
+            "corroboration_claims_total": 1040,  # was 1039
+            "corroboration_claims_impostor": 148,  # was 157
+            "false_vouch_corroborations": 42,  # was 41
+            "false_vouch_corroboration_rate": 0.28378378378378377,  # was 0.2611464968152866
+            "false_vouches_total": 101,  # was 89
+            # grounded split (production chokepoint, saw_player channel): 40+9 == 49
+            "false_vouch_subject_events": 49,  # was 43
+            "false_vouch_grounded": 40,  # was 33
+            "false_vouch_fabricated": 9,  # was 10
+            "false_vouch_grounded_share": 0.8163265306122449,  # was 0.7674418604651163
+            # observation-level companion join: partitions the 59 observations
+            # by their subject's chokepoint verdict (50 + 9 == 59).
+            "false_vouch_grounded_subject_observations": 50,  # was 37
+            "false_vouch_fabricated_subject_observations": 9,  # was 11
         },
     )
-    # teammate-non-accusation index: 0 of 529, advisory, Wilson pinned. The
+    # teammate-non-accusation index: 0 of 570, advisory, Wilson pinned. The
     # teammate firewall holds at the largest denominator it has ever been read at.
     _check_cell(
         r.teammate_accusations,
         numerator=0,
-        denominator=529,  # was 517
+        denominator=570,  # was 529
         rate=0.0,
         wilson_low=0.0,
-        wilson_high=0.007209647294805811,  # was 0.007375754932017718
+        wilson_high=0.006694530337291683,  # was 0.007209647294805811
         advisory=True,
     )
-    # frame conversions: 26 of 431 frame-attempt meetings. The numerator clears the
+    # frame conversions: 31 of 446 frame-attempt meetings. The numerator clears the
     # rare-event advisory threshold (>7), so advisory stays False: the cell is
     # referee-eligible rather than reported-only.
     _check_cell(
         r.frame_conversions,
-        numerator=26,  # was 23
-        denominator=431,  # was 426
-        rate=0.060324825986078884,  # was 0.0539906103286385
-        wilson_low=0.04149620387568109,  # was 0.03624276090547163
-        wilson_high=0.08692205233531619,  # was 0.07971065076989901
+        numerator=31,  # was 26
+        denominator=446,  # was 431
+        rate=0.06950672645739911,  # was 0.060324825986078884
+        wilson_low=0.04939574409341837,  # was 0.04149620387568109
+        wilson_high=0.09697044347127107,  # was 0.08692205233531619
         advisory=False,
     )
     # nested adopted analyzers.
-    assert r.alibi_fabrication.total_impostor_alibis == 97  # was 103
-    assert r.alibi_fabrication.survived == 86  # was 88
-    assert r.alibi_fabrication.survival_rate == pytest.approx(86 / 97)  # was 88 / 103
-    assert r.effective_deflection.accused_impostor_events == 402  # was 397
-    assert r.effective_deflection.accused_impostor_survivals == 150  # was 143
-    assert r.effective_deflection.active_survivals == 141  # was 133
-    assert r.effective_deflection.effective_deflections == 70  # was 77
-    assert r.effective_deflection.named_target_deflections == 26  # was 36
-    assert r.effective_deflection.third_party_deflections == 44  # was 41
-    assert r.effective_deflection.skip_saved_active_survivals == 71  # was 56
+    assert r.alibi_fabrication.total_impostor_alibis == 112  # was 97
+    assert r.alibi_fabrication.survived == 104  # was 86
+    assert r.alibi_fabrication.survival_rate == pytest.approx(104 / 112)  # was 86 / 97
+    assert r.effective_deflection.accused_impostor_events == 411  # was 402
+    assert r.effective_deflection.accused_impostor_survivals == 170  # was 150
+    assert r.effective_deflection.active_survivals == 161  # was 141
+    assert r.effective_deflection.effective_deflections == 91  # was 70
+    assert r.effective_deflection.named_target_deflections == 45  # was 26
+    assert r.effective_deflection.third_party_deflections == 46  # was 44
+    assert r.effective_deflection.skip_saved_active_survivals == 70  # was 71
 
 
 # --------------------------------------------------------------------------- #
@@ -222,59 +222,59 @@ def test_sample_nine_full_pins(sample_nine: DeceptionInstrumentsReport) -> None:
             "num_impostors": 2,
             "tasks_per_crewmate": 2,
             "games_total": 50,
-            "meetings_total": 151,  # was 152
-            "impostor_accusations_total": 188,  # was 191
-            "frame_attempts": 188,  # was 191
+            "meetings_total": 145,  # was 151
+            "impostor_accusations_total": 183,  # was 188
+            "frame_attempts": 183,  # was 188
             "impostor_self_accusations": 0,
-            "frame_attempt_meetings": 150,  # was 151
-            "crew_ejected_meetings": 13,  # was 14
-            "impostor_ejected_meetings": 82,  # was 85
-            "no_eject_meetings": 56,  # was 53
-            "vouch_observations_impostor": 136,  # was 118
-            "false_vouch_saw_player_observations": 11,  # was 6
-            "false_vouch_saw_player_rate": 0.08088235294117647,  # was 0.05084745762711865
-            "corroboration_claims_total": 324,  # was 319
-            "corroboration_claims_impostor": 46,  # was 42
-            "false_vouch_corroborations": 11,  # was 9
-            "false_vouch_corroboration_rate": 0.2391304347826087,  # was 0.21428571428571427
-            "false_vouches_total": 22,  # was 15
-            "false_vouch_subject_events": 10,  # was 6
-            "false_vouch_grounded": 8,  # was 6
-            "false_vouch_fabricated": 2,  # was 0
-            "false_vouch_grounded_share": 0.8,  # was 1.0
-            # companion join partitions the 11 observations (9 + 2 == 11).
-            "false_vouch_grounded_subject_observations": 9,  # was 6
-            "false_vouch_fabricated_subject_observations": 2,  # was 0
+            "frame_attempt_meetings": 142,  # was 150
+            "crew_ejected_meetings": 9,  # was 13
+            "impostor_ejected_meetings": 81,  # was 82
+            "no_eject_meetings": 55,  # was 56
+            "vouch_observations_impostor": 123,  # was 136
+            "false_vouch_saw_player_observations": 8,  # was 11
+            "false_vouch_saw_player_rate": 0.06504065040650407,  # was 0.08088235294117647
+            "corroboration_claims_total": 347,  # was 324
+            "corroboration_claims_impostor": 42,  # was 46
+            "false_vouch_corroborations": 7,  # was 11
+            "false_vouch_corroboration_rate": 0.16666666666666666,  # was 0.2391304347826087
+            "false_vouches_total": 15,  # was 22
+            "false_vouch_subject_events": 7,  # was 10
+            "false_vouch_grounded": 6,  # was 8
+            "false_vouch_fabricated": 1,  # was 2
+            "false_vouch_grounded_share": 0.8571428571428571,  # was 0.8
+            # companion join partitions the 8 observations (7 + 1 == 8).
+            "false_vouch_grounded_subject_observations": 7,  # was 9
+            "false_vouch_fabricated_subject_observations": 1,  # was 2
         },
     )
     _check_cell(
         r.teammate_accusations,
         numerator=0,
-        denominator=188,  # was 191
+        denominator=183,  # was 188
         rate=0.0,
-        wilson_low=1.734723475976807e-18,  # was 0.0
-        wilson_high=0.020024853837749476,  # was 0.019716528708448297
+        wilson_low=1.734723475976807e-18,
+        wilson_high=0.020560731657189836,  # was 0.020024853837749476
         advisory=True,
     )
     _check_cell(
         r.frame_conversions,
-        numerator=9,  # was 12
-        denominator=150,  # was 151
-        rate=0.06,  # was 0.07947019867549669
-        wilson_low=0.031883682005327776,  # was 0.04604220934704814
-        wilson_high=0.11009092044290468,  # was 0.13376476758938236
+        numerator=8,  # was 9
+        denominator=142,  # was 150
+        rate=0.056338028169014086,  # was 0.06
+        wilson_low=0.02882037060152546,  # was 0.031883682005327776
+        wilson_high=0.1072286030795093,  # was 0.11009092044290468
         advisory=False,
     )
-    assert r.alibi_fabrication.total_impostor_alibis == 37  # was 44
-    assert r.alibi_fabrication.survived == 31  # was 40
-    assert r.alibi_fabrication.survival_rate == pytest.approx(31 / 37)  # was 40 / 44
-    assert r.effective_deflection.accused_impostor_events == 132  # was 137
-    assert r.effective_deflection.accused_impostor_survivals == 51  # was 52
-    assert r.effective_deflection.active_survivals == 50  # was 51
-    assert r.effective_deflection.effective_deflections == 38  # was 32
-    assert r.effective_deflection.named_target_deflections == 18  # was 17
-    assert r.effective_deflection.third_party_deflections == 20  # was 15
-    assert r.effective_deflection.skip_saved_active_survivals == 12  # was 19
+    assert r.alibi_fabrication.total_impostor_alibis == 41  # was 37
+    assert r.alibi_fabrication.survived == 39  # was 31
+    assert r.alibi_fabrication.survival_rate == pytest.approx(39 / 41)  # was 31 / 37
+    assert r.effective_deflection.accused_impostor_events == 122  # was 132
+    assert r.effective_deflection.accused_impostor_survivals == 42  # was 51
+    assert r.effective_deflection.active_survivals == 40  # was 50
+    assert r.effective_deflection.effective_deflections == 25  # was 38
+    assert r.effective_deflection.named_target_deflections == 15  # was 18
+    assert r.effective_deflection.third_party_deflections == 10  # was 20
+    assert r.effective_deflection.skip_saved_active_survivals == 15  # was 12
 
 
 # --------------------------------------------------------------------------- #
@@ -292,22 +292,22 @@ def test_sample_four_full_pins(sample_four: DeceptionInstrumentsReport) -> None:
             "num_impostors": 1,
             "tasks_per_crewmate": 1,
             "games_total": 50,
-            "meetings_total": 39,  # was 40
-            "impostor_accusations_total": 38,  # was 39
-            "frame_attempts": 38,  # was 39
+            "meetings_total": 39,
+            "impostor_accusations_total": 39,  # was 38
+            "frame_attempts": 39,  # was 38
             "impostor_self_accusations": 0,
-            "frame_attempt_meetings": 38,  # was 39
-            "crew_ejected_meetings": 4,  # was 1
+            "frame_attempt_meetings": 39,  # was 38
+            "crew_ejected_meetings": 0,  # was 4
             "impostor_ejected_meetings": 20,
-            "no_eject_meetings": 15,  # was 19
+            "no_eject_meetings": 19,  # was 15
             # no co-impostor exists: every false-vouch cell is structurally 0.
-            "vouch_observations_impostor": 7,  # was 4
+            "vouch_observations_impostor": 2,  # was 7
             "false_vouch_saw_player_observations": 0,
             "false_vouch_saw_player_rate": 0.0,
-            "corroboration_claims_total": 24,  # was 23
-            "corroboration_claims_impostor": 1,  # was 2
+            "corroboration_claims_total": 26,  # was 24
+            "corroboration_claims_impostor": 0,  # was 1
             "false_vouch_corroborations": 0,
-            "false_vouch_corroboration_rate": 0.0,
+            "false_vouch_corroboration_rate": None,  # was 0.0
             "false_vouches_total": 0,
             "false_vouch_subject_events": 0,
             "false_vouch_grounded": 0,
@@ -320,29 +320,29 @@ def test_sample_four_full_pins(sample_four: DeceptionInstrumentsReport) -> None:
     _check_cell(
         r.teammate_accusations,
         numerator=0,
-        denominator=38,  # was 39
+        denominator=39,  # was 38
         rate=0.0,
         wilson_low=0.0,
-        wilson_high=0.09181293258383999,  # was 0.08966985360023902
+        wilson_high=0.08966985360023902,  # was 0.09181293258383999
         advisory=True,
     )
     _check_cell(
         r.frame_conversions,
-        numerator=4,  # was 1
-        denominator=38,  # was 39
-        rate=0.10526315789473684,  # was 0.02564102564102564
-        wilson_low=0.041701897932665793,  # was 0.00454058606523737
-        wilson_high=0.24130831200194466,  # was 0.13181286478627147
+        numerator=0,  # was 4
+        denominator=39,  # was 38
+        rate=0.0,  # was 0.10526315789473684
+        wilson_low=0.0,  # was 0.041701897932665793
+        wilson_high=0.08966985360023902,  # was 0.24130831200194466
         advisory=True,
     )
-    assert r.alibi_fabrication.total_impostor_alibis == 4  # was 1
-    assert r.alibi_fabrication.survived == 4  # was 1
-    assert r.alibi_fabrication.survival_rate == pytest.approx(4 / 4)  # was 1 / 1
-    assert r.effective_deflection.accused_impostor_events == 33  # was 35
-    assert r.effective_deflection.accused_impostor_survivals == 13  # was 15
-    assert r.effective_deflection.active_survivals == 13  # was 15
-    assert r.effective_deflection.effective_deflections == 3  # was 4
-    assert r.effective_deflection.skip_saved_active_survivals == 10  # was 11
+    assert r.alibi_fabrication.total_impostor_alibis == 1  # was 4
+    assert r.alibi_fabrication.survived == 1  # was 4
+    assert r.alibi_fabrication.survival_rate == pytest.approx(1 / 1)  # was 4 / 4
+    assert r.effective_deflection.accused_impostor_events == 37  # was 33
+    assert r.effective_deflection.accused_impostor_survivals == 17  # was 13
+    assert r.effective_deflection.active_survivals == 17  # was 13
+    assert r.effective_deflection.effective_deflections == 1  # was 3
+    assert r.effective_deflection.skip_saved_active_survivals == 16  # was 10
 
 
 # --------------------------------------------------------------------------- #
@@ -360,25 +360,23 @@ def test_corpus_four_full_pins(corpus_four: DeceptionInstrumentsReport) -> None:
             "num_impostors": 1,
             "tasks_per_crewmate": 1,
             "games_total": 50,
-            "meetings_total": 43,  # was 44
-            "impostor_accusations_total": 43,  # was 44
-            "frame_attempts": 43,  # was 44
+            "meetings_total": 43,
+            "impostor_accusations_total": 43,
+            "frame_attempts": 43,
             "impostor_self_accusations": 0,
-            "frame_attempt_meetings": 43,  # was 44
-            "crew_ejected_meetings": 0,  # was 1
-            "impostor_ejected_meetings": 29,  # was 28
-            "no_eject_meetings": 14,  # was 15
-            # The baseline-6 roll-call round elicits impostor saw_player vouches
-            # and an impostor corroboration on this set for the first time (both
-            # denominators were 0 at baseline 5, so both rates read the None
-            # sentinel). Both are now POPULATED denominators with a 0 numerator:
-            # the impostor vouches, but never falsely — so the rates are honest
-            # 0.0 FLOATS, not the None sentinel. Only the grounded-share rate,
-            # whose denominator (false_vouch_subject_events) is still 0, stays None.
-            "vouch_observations_impostor": 2,  # was 1
+            "frame_attempt_meetings": 43,
+            "crew_ejected_meetings": 1,  # was 0
+            "impostor_ejected_meetings": 27,  # was 29
+            "no_eject_meetings": 15,  # was 14
+            # No impostor saw_player vouch and no impostor corroboration on this
+            # set at baseline 9 (baseline 8 carried 2 impostor vouches, none of
+            # them false), so both denominators are 0 and both rates read the
+            # None sentinel, as does the grounded-share rate, whose denominator
+            # (false_vouch_subject_events) is 0 too.
+            "vouch_observations_impostor": 0,  # was 2
             "false_vouch_saw_player_observations": 0,
-            "false_vouch_saw_player_rate": 0.0,
-            "corroboration_claims_total": 25,  # was 24
+            "false_vouch_saw_player_rate": None,  # was 0.0
+            "corroboration_claims_total": 26,  # was 25
             "corroboration_claims_impostor": 0,
             "false_vouch_corroborations": 0,
             "false_vouch_corroboration_rate": None,
@@ -394,28 +392,28 @@ def test_corpus_four_full_pins(corpus_four: DeceptionInstrumentsReport) -> None:
     _check_cell(
         r.teammate_accusations,
         numerator=0,
-        denominator=43,  # was 44
+        denominator=43,
         rate=0.0,
-        wilson_low=0.0,  # was 6.938893903907228e-18
-        wilson_high=0.08201257002322722,  # was 0.08029831778201396
+        wilson_low=0.0,
+        wilson_high=0.08201257002322722,
         advisory=True,
     )
     _check_cell(
         r.frame_conversions,
-        numerator=0,  # was 1
-        denominator=43,  # was 44
-        rate=0.0,  # was 0.022727272727272728
-        wilson_low=0.0,  # was 0.004023148385637013
-        wilson_high=0.08201257002322722,  # was 0.11807979131537633
+        numerator=1,  # was 0
+        denominator=43,
+        rate=0.023255813953488372,  # was 0.0
+        wilson_low=0.004116981177419911,  # was 0.0
+        wilson_high=0.12059267861216882,  # was 0.08201257002322722
         advisory=True,
     )
-    # One impostor alibi on this set at baseline 8 (baseline 7 had none, so the
-    # survival rate read the None sentinel); it survives, so the rate is 1.0.
-    assert r.alibi_fabrication.total_impostor_alibis == 1  # was 0
-    assert r.alibi_fabrication.survived == 1  # was 0
-    assert r.alibi_fabrication.survival_rate == pytest.approx(1.0)  # was None
-    assert r.effective_deflection.accused_impostor_events == 40  # was 43
-    assert r.effective_deflection.skip_saved_active_survivals == 9  # was 10
+    # One impostor alibi on this set, as at baseline 8 (baseline 7 had none, so
+    # the survival rate read the None sentinel); it survives, so the rate is 1.0.
+    assert r.alibi_fabrication.total_impostor_alibis == 1
+    assert r.alibi_fabrication.survived == 1
+    assert r.alibi_fabrication.survival_rate == pytest.approx(1.0)
+    assert r.effective_deflection.accused_impostor_events == 42  # was 40
+    assert r.effective_deflection.skip_saved_active_survivals == 13  # was 9
 
 
 # --------------------------------------------------------------------------- #

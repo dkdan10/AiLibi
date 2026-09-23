@@ -6,14 +6,14 @@ bucket (``citation_coerced_skip_ballots``, beside correct / missed /
 unclassified). The citation gate -- ``guard_ballot_citation``, retired outright
 by ruling D6 of 2026-09-19 and replaced by
 :func:`meetings.manager.label_ballot_grounding`, which labels and rewrites
-nothing -- rewrote an uncited zero-flag EJECT to SKIP on the 6 committed
-``ml_corpus/9p2i`` ballots this bucket counts; that gate working was never the
-voter's decision, so a marker-anchored SKIP is neither a missed skip nor a §4.6
-``threshold_inversions`` entry (audits/audit-phase-16-close.md §8 routed
-contract (b); the 17.2 designer ruling tasks/phase-17.md). The divert is role-
-and verdict-blind (the 17.10 ruling: a coerced ballot is a forced eject, not a
-decision), and marker-keyed: it fires only on the anchored production literal,
-never a re-spelled string.
+nothing -- rewrote an uncited zero-flag EJECT to SKIP on 6 baseline-8
+``ml_corpus/9p2i`` ballots (the baseline-9 bytes carry none); that gate
+working was never the voter's decision, so a marker-anchored SKIP is neither
+a missed skip nor a §4.6 ``threshold_inversions`` entry
+(audits/audit-phase-16-close.md §8 routed contract (b); the 17.2 designer
+ruling tasks/phase-17.md). The divert is role- and verdict-blind (the 17.10
+ruling: a coerced ballot is a forced eject, not a decision), and marker-keyed:
+it fires only on the anchored production literal, never a re-spelled string.
 
 Fixtures instantiate ``report_schema`` / ``meetings.schemas`` models directly
 (no tournament run), mirroring ``tests/eval/test_vote_correctness.py``; the
@@ -54,6 +54,7 @@ from eval.meeting_quality import (
     recorded_contradiction_flags,
     recount_threshold_inversions,
 )
+from eval.report_io import read_report_text, report_path
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -86,8 +87,8 @@ _CREWMATE: PlayerId = "p-1"
 
 # The committed sample reports (single-era until the 17.9 re-record).
 _SAMPLES_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples"
-_COMMITTED_9P2I_REPORT = _SAMPLES_DIR / "9p2i" / "tournament-eval-report.json"
-_COMMITTED_4P1I_REPORT = _SAMPLES_DIR / "4p1i" / "tournament-eval-report.json"
+_COMMITTED_9P2I_REPORT = report_path(_SAMPLES_DIR / "9p2i")
+_COMMITTED_4P1I_REPORT = report_path(_SAMPLES_DIR / "4p1i")
 
 
 # ---------------------------------------------------------------------------
@@ -539,49 +540,49 @@ def test_conversion_model_rejects_negative_coerced() -> None:
 
 
 def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
-    """The coerced-bucket pin: the baseline-8 re-record carries NO coerced SKIP.
+    """The coerced-bucket pin: the baseline-9 re-record carries NO coerced SKIP.
 
     The baseline-6 and baseline-7 records each produced a single uncited
-    zero-flag EJECT->SKIP coercion prefix; the baseline-8 re-record produces
-    none, so ``citation_coerced_skip_ballots`` reads 0 and no ballot carries the
-    marker head. The class going empty is a measurement, not a widening — the
-    scan below still counts the marker exactly and fails loud if one reappears
-    unpinned. The STORED conversion block was regenerated with the divert
-    already applied, so recompute agrees with it exactly.
+    zero-flag EJECT->SKIP coercion prefix; the baseline-8 and baseline-9
+    re-records produce none, so ``citation_coerced_skip_ballots`` reads 0 and
+    no ballot carries the marker head. The class going empty is a measurement,
+    not a widening — the scan below still counts the marker exactly and fails
+    loud if one reappears unpinned. The STORED conversion block was regenerated
+    with the divert already applied, so recompute agrees with it exactly.
     """
 
     report = TournamentEvalReport.model_validate_json(
-        _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
+        read_report_text(_COMMITTED_9P2I_REPORT)
     )
 
-    # STORED block: the regenerated baseline-8 partition (divert already applied).
+    # STORED block: the regenerated baseline-9 partition (divert already applied).
     assert report.conversion.citation_coerced_skip_ballots == 0  # was 1
-    assert report.conversion.missed_skip_ballots == 80  # was 96
-    assert report.conversion.threshold_inversions == 37  # was 46
-    assert report.conversion.missed_skip_impostor_voters == 42  # was 48
+    assert report.conversion.missed_skip_ballots == 77  # was 80
+    assert report.conversion.threshold_inversions == 27  # was 37
+    assert report.conversion.missed_skip_impostor_voters == 48  # was 42
 
     # RECOMPUTE: the divert populates the coerced bucket, matching the STORED block.
     result = compute_conversion_report(report.report.games)
 
-    assert result.total_ejections == 95  # was 99
-    assert result.impostor_ejections == 82  # was 85
-    assert result.ejection_accuracy == pytest.approx(82 / 95)  # was 85 / 99
-    assert result.impostor_accused_meetings == 118  # was 122
-    assert result.impostor_accused_conversions == 82  # was 85
+    assert result.total_ejections == 90  # was 95
+    assert result.impostor_ejections == 81  # was 82
+    assert result.ejection_accuracy == pytest.approx(81 / 90)  # was 82 / 95
+    assert result.impostor_accused_meetings == 111  # was 118
+    assert result.impostor_accused_conversions == 81  # was 82
     assert result.impostor_accused_conversion_rate == pytest.approx(
-        82 / 118
-    )  # was 85 / 122
-    assert result.skip_ballots == 342  # was 333
-    assert result.correct_skip_ballots == 262  # was 236
-    assert result.missed_skip_ballots == 80  # was 96
+        81 / 111
+    )  # was 82 / 118
+    assert result.skip_ballots == 349  # was 342
+    assert result.correct_skip_ballots == 272  # was 262
+    assert result.missed_skip_ballots == 77  # was 80
     assert result.unclassified_skip_ballots == 0
     assert result.citation_coerced_skip_ballots == 0  # was 1
-    assert result.missed_skip_impostor_voters == 42  # was 48
+    assert result.missed_skip_impostor_voters == 48  # was 42
     assert result.missed_skip_teammate_coerced == 1  # was 2
-    assert result.missed_skip_invalid_target == 1  # was 2
-    assert result.threshold_inversions == 37  # was 46
+    assert result.missed_skip_invalid_target == 2  # was 1
+    assert result.threshold_inversions == 27  # was 37
 
-    # No ballot carries the marker head: the baseline-8 bytes have no coerced
+    # No ballot carries the marker head: the baseline-9 bytes have no coerced
     # SKIP, so the divert scan yields nothing.
     head = UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0]
     diverted = [
@@ -598,19 +599,19 @@ def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
     """The 4p1i bytes carry no coercion marker; every bucket reads as before."""
 
     report = TournamentEvalReport.model_validate_json(
-        _COMMITTED_4P1I_REPORT.read_text(encoding="utf-8")
+        read_report_text(_COMMITTED_4P1I_REPORT)
     )
     result = compute_conversion_report(report.report.games)
 
     assert result.citation_coerced_skip_ballots == 0
-    assert result.skip_ballots == 66  # was 61
-    assert result.correct_skip_ballots == 53  # was 54
-    assert result.missed_skip_ballots == 13  # was 7
+    assert result.skip_ballots == 68  # was 66
+    assert result.correct_skip_ballots == 54  # was 53
+    assert result.missed_skip_ballots == 14  # was 13
     assert result.unclassified_skip_ballots == 0
-    assert result.missed_skip_impostor_voters == 10  # was 7
+    assert result.missed_skip_impostor_voters == 8  # was 10
     assert result.missed_skip_invalid_target == 0
-    assert result.threshold_inversions == 3  # was 0
-    assert result.total_ejections == 24  # was 21
+    assert result.threshold_inversions == 6  # was 3
+    assert result.total_ejections == 20  # was 24
     assert result.impostor_ejections == 20
 
 
@@ -629,7 +630,7 @@ def test_extended_invariant_holds_over_every_committed_meeting(
     per-meeting coerced counts accumulate to the whole-report total.
     """
 
-    report = TournamentEvalReport.model_validate_json(path.read_text(encoding="utf-8"))
+    report = TournamentEvalReport.model_validate_json(read_report_text(path))
     total_coerced = 0
     for game in report.report.games:
         for meeting in game.meetings:
@@ -650,27 +651,28 @@ def test_extended_invariant_holds_over_every_committed_meeting(
 _EXPECTED_RECOUNTS: Mapping[str, ThresholdInversionRecount] = {
     # Baseline 7 read 46 / 46 / 7 / 40 / 6 / 0 / 39 / 1 / 6 on 9p2i and an empty
     # table on 4p1i (baseline 6 read 87 / 87 / 36 / 81 / 5 / 1 / 78 / 8 / 1 and a
-    # single 4p1i inversion). At baseline 8 the 9p2i remainder shrinks again and
-    # the 4p1i class is non-empty once more.
+    # single 4p1i inversion). Baseline 8 read 37 / 37 / 5 / 30 / 7 / 0 / 28 / 1 / 8
+    # on 9p2i and 3 / 3 / 0 / 3 / 0 / 0 / 3 / 0 / 0 on 4p1i. At baseline 9 the
+    # 9p2i remainder shrinks again and the 4p1i class grows.
     "9p2i": ThresholdInversionRecount(
-        threshold_inversions=37,  # was 46
-        marker_free=37,  # was 46
-        rendered_at_threshold=5,  # was 7
-        rendered_below_0_70=30,  # was 40
-        rendered_0_70_to_0_80=7,  # was 6
+        threshold_inversions=27,  # was 37
+        marker_free=27,  # was 37
+        rendered_at_threshold=9,  # was 5
+        rendered_below_0_70=22,  # was 30
+        rendered_0_70_to_0_80=5,  # was 7
         rendered_at_or_above_0_80=0,
-        in_skipped_meetings=28,  # was 39
-        in_crew_ejected_meetings=1,
-        in_impostor_ejected_meetings=8,  # was 6
+        in_skipped_meetings=26,  # was 28
+        in_crew_ejected_meetings=0,  # was 1
+        in_impostor_ejected_meetings=1,  # was 8
     ),
     "4p1i": ThresholdInversionRecount(
-        threshold_inversions=3,  # was 0
-        marker_free=3,  # was 0
+        threshold_inversions=6,  # was 3
+        marker_free=6,  # was 3
         rendered_at_threshold=0,
-        rendered_below_0_70=3,  # was 0
-        rendered_0_70_to_0_80=0,
+        rendered_below_0_70=4,  # was 3
+        rendered_0_70_to_0_80=2,  # was 0
         rendered_at_or_above_0_80=0,
-        in_skipped_meetings=3,  # was 0
+        in_skipped_meetings=6,  # was 3
         in_crew_ejected_meetings=0,
         in_impostor_ejected_meetings=0,
     ),
@@ -698,7 +700,7 @@ def test_committed_recount_pins_the_by_cause_table(
     parse default, ballot redirect, citation gate) leaks into the remainder, so
     what is left is genuinely the voter's own decision. The rendered bands then
     say what kind of decision it was — on samples/9p2i the mass still sits below
-    the advisory line (30 of 37 below 0.70, 5 of those exactly at the 0.60
+    the advisory line (22 of 27 below 0.70, 9 of those exactly at the 0.60
     reference), which is a conservatism reading, not a disobedience reading.
     The two ml_corpus tables are recorded in the PR.
 
@@ -707,7 +709,7 @@ def test_committed_recount_pins_the_by_cause_table(
     silently unpinned one.
     """
 
-    report = TournamentEvalReport.model_validate_json(path.read_text(encoding="utf-8"))
+    report = TournamentEvalReport.model_validate_json(read_report_text(path))
 
     recount = recount_threshold_inversions(report.report.games)
 
@@ -769,8 +771,8 @@ def test_the_census_excludes_the_vent_class() -> None:
     """``vent_sighting`` rides the referee's own vent term and is filtered here.
 
     Dropping this filter double counts every vent flag at the sites that merge
-    the two terms — on ``replays/samples/9p2i`` it would add 92 flags to a
-    144-flag census and inflate the referee's evidence floor by 60%.
+    the two terms — on ``replays/samples/9p2i`` it would add 90 flags to a
+    107-flag census and inflate the referee's evidence floor by 84%.
     """
 
     alibi = _flag(kind="alibi_vs_sighting", contradiction_id="c-1")

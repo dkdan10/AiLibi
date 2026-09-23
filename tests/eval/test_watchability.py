@@ -157,46 +157,40 @@ def test_historical_15_2_geomean_parity_frozen_pin_on_9p2i() -> None:
     assert len(scores) == 50
     assert {s.seed for s in scores} == set(ref_by_seed)
 
-    # PARITY IS NOT CLAIMED AT THIS HEAD, and the reason is recorded rather than
-    # skipped past. The baseline-8 record re-recorded 9p2i, but its rubric could
-    # not be regenerated: one gameplay-facts self-check fails on these bytes and
-    # the lab scorer floors EVERY game to zero on any FAIL, so the artifact would
-    # have read mean 0.0 where this module reads 48.57. Shipping that as a
-    # measurement was refused, so the lab artifact stays at the PREVIOUS
-    # recording's content — which is what makes cross-implementation parity
-    # unavailable until the extractor is reconciled and the rubric regenerated.
-    #
-    # What is still asserted: the two sides describe DIFFERENT recordings, and
-    # the shapes still line up seed for seed. The day the rubric is regenerated
-    # this branch fails, and the parity comparison below has to be restored
-    # deliberately rather than drifting back on its own.
+    # PARITY IS RESTORED ON ALL ELEVEN COLUMNS. The lab artifact describes these
+    # same bytes...
     from experiments.lab.rubric_score import _set_manifest_sha
 
-    assert fixture["git_head"] != _set_manifest_sha(_NINE)
+    assert fixture["git_head"] == _set_manifest_sha(_NINE)
+    # ...and every component, the floor and the score it multiplies included,
+    # reproduces to 1e-6 on all 50 rows: with every gameplay-facts self-check
+    # passing, the lab floors only per game, exactly as this module does.
+    # Was: floor and score excluded while one failing self-check zeroed every lab game.
     for score in scores:
         ref = ref_by_seed[score.seed]
-        assert isinstance(ref["reason"], str)
-        assert isinstance(ref["n_meetings"], int)
+        assert score.reason == ref["reason"]
+        assert score.n_meetings == ref["n_meetings"]
         for key in _PARITY_KEYS:
-            assert isinstance(getattr(score, key), float)
-            assert isinstance(ref[key], (int, float))
+            assert getattr(score, key) == pytest.approx(ref[key], abs=1e-6), (
+                f"seed {score.seed} {key}"
+            )
 
-    # The aggregate roll-ups, computed exactly as WatchabilityReport rounds them.
-    # Pinned to THIS module's own reading of the baseline-8 bytes rather than to
-    # the stale fixture's, so the number is still asserted and still moves loudly
-    # if the scorer drifts — it simply is not a cross-implementation claim while
-    # the two sides describe different recordings.
+    # The aggregate roll-ups, computed exactly as WatchabilityReport rounds them,
+    # agree with the lab's own. Both are pinned to the baseline-9 bytes, so the
+    # number still moves loudly if either scorer drifts.
     mean = round(math.fsum(s.score for s in scores) / len(scores), 2)
     median = round(statistics.median(s.score for s in scores), 2)
-    assert mean == pytest.approx(50.18)  # was 51.7, against the lab fixture
-    assert median == pytest.approx(56.25)  # was 55.85, against the lab fixture
-    # And the floor is NOT firing wholesale: 7 of 50 games floor on these bytes.
-    # The lab scorer's own run floors all 50, which is the artifact this record
-    # refused to ship — the discrepancy is the routed finding, and this assertion
-    # is what keeps it visible rather than letting a zeroed geomean look normal.
+    assert mean == pytest.approx(50.54)  # was 50.18
+    assert median == pytest.approx(50.7)  # was 56.25
+    assert fixture["mean_score"] == pytest.approx(mean)
+    assert fixture["median_score"] == pytest.approx(median)
+    # Only the per-game floors fire, on the same five games in both scorers: a
+    # wholesale floor (all 50 games) would mean an integrity self-check failed.
     floored = {s.seed for s in scores if s.floor_multiplier == 0.0}
-    assert len(floored) == 7
-    assert len(floored) < len(scores)
+    assert floored == {6, 12, 13, 38, 39}  # was 7 games
+    assert fixture["validation"]["no_perverse_gradient"]["floored_games"] == sorted(
+        floored
+    )
 
 
 def test_referee_runs_on_both_sets_from_bytes_including_4p1i() -> None:
@@ -744,44 +738,45 @@ def test_baseline_6_sets_pass_the_hardened_referee_end_to_end() -> None:
         assert all(gauge.passed for gauge in report.supply_gauges)
 
 
-def test_baseline_8_floor_pins_equal_the_measured_bytes() -> None:
-    """EXACT ANCHOR: each baseline-8 floor equals the bytes it was pinned from.
+def test_baseline_9_floor_pins_equal_the_measured_bytes() -> None:
+    """EXACT ANCHOR: each baseline-9 floor equals the bytes it was pinned from.
 
-    Same both-sides discipline as the retired baseline-6 and baseline-7 anchors —
+    Same both-sides discipline as the retired baseline-6 to baseline-8 anchors —
     the measured gauge IS the recorded fraction and the pinned floor IS the
     measured gauge — so an under-pinned floor cannot silently weaken the block
     while the comments still claim self-consistency.
 
-    Re-anchored from baseline 7 at the baseline-8 re-record, which replaced the
-    bytes those floors were pinned from: a baseline-7 floor scored against these
-    bytes fails ``persisted_vent_flags_per_meeting``, the one-vent-one-record
-    repair having stopped minting each witnessed vent twice. That is the referee
-    reading the supply it was pinned to, not a defect, so the baseline-7 block
-    stays FROZEN as history and the anchor moves forward with the bytes.
+    Re-anchored from baseline 8 at the baseline-9 re-record, which replaced the
+    bytes those floors were pinned from: a baseline-8 floor scored against these
+    bytes fails ``flags_per_meeting`` and its transcript component (57/151 ->
+    17/145), the route claim having stopped the single-room alibi minting flags
+    against honest movers. That is the referee reading the supply it was pinned
+    to, not a defect, so the baseline-8 block stays FROZEN as history and the
+    anchor moves forward with the bytes.
 
-    Reconstruction is substrate-coupled, so this reads the Phase-21 slate the
-    bytes were recorded at; the planted case below carries the "can it fail" half
-    and needs no bytes at all.
+    Reconstruction is substrate-coupled, so this reads the slate the bytes were
+    recorded at; the planted case below carries the "can it fail" half and needs
+    no bytes at all.
     """
 
     expected = {
         _NINE: {
-            "witnessed_event_rate": 3 / 182,  # crew-witnessed kills (was 3/177)
-            "flags_per_meeting": 147 / 151,  # 90 vent + 57 transcript (was 144/152)
-            "testimony_backed_conversion": 81 / 128,  # SUBJECT-AWARE (was 84/132)
-            "transcript_flags_per_meeting": 57 / 151,  # deduction cmp (was 52/152)
-            "persisted_vent_flags_per_meeting": 90 / 151,  # vent cmp (was 92/152)
+            "witnessed_event_rate": 3 / 175,  # crew-witnessed kills (was 3/182)
+            "flags_per_meeting": 107 / 145,  # 90 vent + 17 transcript (was 147/151)
+            "testimony_backed_conversion": 79 / 112,  # SUBJECT-AWARE (was 81/128)
+            "transcript_flags_per_meeting": 17 / 145,  # deduction cmp (was 57/151)
+            "persisted_vent_flags_per_meeting": 90 / 145,  # vent cmp (was 90/151)
         },
         _FOUR: {
-            "witnessed_event_rate": 1 / 62,  # numerator 1 -> ADVISORY (was 1/65)
-            "flags_per_meeting": 20 / 39,  # 20 vent + 0 transcript (was 20/40)
-            "testimony_backed_conversion": 20 / 33,  # SUBJECT-AWARE (was 20/34)
+            "witnessed_event_rate": 1 / 66,  # numerator 1 -> ADVISORY (was 1/62)
+            "flags_per_meeting": 20 / 39,  # 20 vent + 0 transcript (unchanged)
+            "testimony_backed_conversion": 20 / 37,  # SUBJECT-AWARE (was 20/33)
             "transcript_flags_per_meeting": 0 / 39,  # numerator 0 -> ADVISORY
-            "persisted_vent_flags_per_meeting": 20 / 39,  # was 20/40
+            "persisted_vent_flags_per_meeting": 20 / 39,  # unchanged
         },
     }
     for sample_dir, fractions in expected.items():
-        report = compute_watchability(sample_dir, baseline_id="baseline-8")
+        report = compute_watchability(sample_dir, baseline_id="baseline-9")
         assert report.referee_passed is True
         assert all(gauge.passed for gauge in report.supply_gauges)
         by_name = {gauge.name: gauge for gauge in report.supply_gauges}
@@ -936,18 +931,16 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     """LIVE-PATH SNAPSHOT: the 15.19 D2 patches measured on the committed bytes.
 
     The historical parity pin guards only the FROZEN path, and the CLI aggregate
-    (mean 54.97) is a single scalar — neither shows the patches acting on any
-    real committed game. This pins the live-vs-historical per-game delta on the
-    baseline-6 9p2i bytes: the subject-aware railroad floor (patch 2) floors
-    NO committed game (the graduated slate's citation gate leaves ZERO
-    evidence-free crew railroads on the committed bytes — the mechanism stays
-    covered by the synthetic ``test_subject_aware_backing_gates_conversion_and_railroad``;
-    baseline 4 floored one, 29; baseline 3 four, 19/27/29/31), and on baseline-6
-    the conversion-coupled D2 gate (patch 1) zeroes the separation term on NO
-    committed game either — every game with live separation now carries a
-    converted backed accusation or a flag, so live separation equals the frozen
-    spec's on all 50 seeds (honest-zero census; baseline 5 zeroed 2/4/10/12/37/47,
-    the mechanism itself pinned on synthetic bytes elsewhere in this file).
+    is a single scalar — neither shows the patches acting on any real committed
+    game. This pins the live-vs-historical per-game delta on the baseline-9 9p2i
+    bytes: the subject-aware railroad floor (patch 2) adds two floored games, 5
+    and 19 (baseline 8 added 19 alone; baseline 4 floored one, 29; baseline 3
+    four, 19/27/29/31 — the mechanism stays covered by the synthetic
+    ``test_subject_aware_backing_gates_conversion_and_railroad``), and the
+    conversion-coupled D2 gate (patch 1) zeroes the separation term on four,
+    4/10/39/46, where baselines 6 to 8 read none (baseline 5 zeroed
+    2/4/10/12/37/47; the mechanism itself is pinned on synthetic bytes elsewhere
+    in this file).
     """
 
     live = {s.seed: s for s in _score_committed_set(_NINE)}
@@ -958,25 +951,23 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     # Patch 2 (subject-aware backing -> the railroad floor's backed leg): the
     # hardened floor only ever ADDS railroads on the same bytes...
     assert hist_floored <= live_floored
-    # ...and on baseline-5 9p2i it adds NONE — the graduated slate (J1/J2 citation
-    # gate) leaves zero evidence-free crew railroads on the committed bytes (the
-    # honest-zero census of a scenario class that collapsed with the substrate;
-    # the mechanism itself is pinned on synthetic bytes elsewhere in this file).
-    assert live_floored - hist_floored == {19}
+    # ...and on the baseline-9 9p2i bytes it adds two — seeds 5 and 19 carry a
+    # crew railroad the subject-aware backing refuses to count as backed (the
+    # baseline-8 bytes added 19 alone; baseline 5 added none; the mechanism itself
+    # is pinned on synthetic bytes elsewhere in this file).
+    assert live_floored - hist_floored == {5, 19}  # was {19}
 
-    # Patch 1 (conversion-coupled D2): on baseline-6 NO committed game is
-    # suspicion theater — every game with rendered-suspicion separation now
-    # carries a converted backed accusation or a contradiction flag, so the gate
-    # zeroes nothing and live separation equals the frozen spec's on every seed
-    # (honest-zero census; baseline 5 gated 2/4/10/12/37/47 to 0 live). The
-    # patch-1-zeroed set is therefore EMPTY: no seed has live separation collapsed
-    # to zero while the historical path kept it positive.
+    # Patch 1 (conversion-coupled D2): on the baseline-9 bytes four committed
+    # games are suspicion theater again — rendered-suspicion separation with no
+    # converted backed accusation and no contradiction flag — so the gate zeroes
+    # their live separation while the frozen spec keeps it positive (baselines 6
+    # to 8 read the empty set; baseline 5 gated 2/4/10/12/37/47).
     patch1_zeroed = {
         seed
         for seed in live
         if live[seed].d2_separation_norm == 0.0 and hist[seed].d2_separation_norm > 0.0
     }
-    assert patch1_zeroed == set()
+    assert patch1_zeroed == {4, 10, 39, 46}  # was set()
 
 
 def test_testimony_backed_conversion_requires_observation_backing() -> None:
@@ -1256,19 +1247,20 @@ def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
 
 
 def test_witnessed_event_rate_is_the_measured_anchor() -> None:
-    """The 9p2i witnessed-event rate is the 3/182 = 1.65% crew-witnessed anchor.
+    """The 9p2i witnessed-event rate is the 3/175 = 1.71% crew-witnessed anchor.
 
     Computed from the committed bytes (not the pinned constant), so it tracks the
-    default baseline: baseline 8 records 3 crew-witnessed of 182 kills in 9p2i
-    (baseline 7 was 3/177 = 1.69%; the vent-widening baseline 6 was 6/177 = 3.39%;
-    the pre-widening baseline 6 was 7/173 = 4.05%; baseline 5 was 7/203 = 3.45%).
+    default baseline: baseline 9 records 3 crew-witnessed of 175 kills in 9p2i
+    (baseline 8 was 3/182 = 1.65%; baseline 7 was 3/177 = 1.69%; the
+    vent-widening baseline 6 was 6/177 = 3.39%; the pre-widening baseline 6 was
+    7/173 = 4.05%; baseline 5 was 7/203 = 3.45%).
     """
 
     report = compute_watchability(_NINE)
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(3 / 182)  # was 1 / 59 (== 3/177)
+    assert witnessed.measured == pytest.approx(3 / 175)  # was 3 / 182
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -1548,9 +1540,9 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     report = payload[0]
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
-    assert report["baseline_id"] == "baseline-8"  # was baseline-7
+    assert report["baseline_id"] == "baseline-9"  # was baseline-8
     assert len(report["per_game"]) == 50
-    # Three Layer-1 gauges plus the two flags-per-meeting components baseline-8
+    # Three Layer-1 gauges plus the two flags-per-meeting components baseline-9
     # pins; the components trail the merged row, in that order.
     assert [g["name"] for g in report["supply_gauges"]] == [
         "witnessed_event_rate",
@@ -1567,8 +1559,8 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     # higher conversion lift the geomean; the conversion-coupled D2 gate still sinks
     # the suspicion-theater games). Re-derived on the same bytes when the backing
     # vocabulary gained the spoken saw_move placement: more attempts enter D2 than
-    # convert, so the mean eases.
-    assert report["mean_score"] == pytest.approx(48.57)  # was 50.05
+    # convert, so the mean eases. Re-derived on the baseline-9 bytes.
+    assert report["mean_score"] == pytest.approx(47.85)  # was 48.57
 
 
 def test_cli_watchability_human_output() -> None:

@@ -1652,6 +1652,7 @@ from meetings.transcript import (  # noqa: E402
 )
 from orchestrator.replay import MeetingReplayEntry, read_all_entries  # noqa: E402
 from tests._helpers.committed import (  # noqa: E402
+    frozen_meetings,
     sighting_records_from_recorded_flags,
 )
 
@@ -1910,30 +1911,21 @@ class TestCommittedBytesArtifactCollapse:
     # re-record ran every repair at RECORD time (10.6 allowlist/proxy + the
     # 10.10 same-speaker guard), which emptied the map.
     #
-    # It is NOT empty on the baseline-7 record, and the reason is a channel, not
-    # a repair: the graduated ``movement_claim_shape`` lever prosecutes a spoken
+    # The graduated ``movement_claim_shape`` lever prosecutes a spoken
     # transition at its DESTINATION, decided against the speaker's private
     # movement perception. That channel is not persisted and no inversion of the
-    # recorded verdicts recovers it (unlike vents and sightings), so 15 recorded
-    # flags across the 11 meetings below re-derive differently or not at all.
-    # Every one is classified ``movement`` by _classify_removed_flag; the map
-    # pins WHERE, and the per-flag assertion in the loop pins WHY. Audit:
-    # audits/audit-phase-20-baseline-7.md §10.3.
-    # was {(2,0):1, (4,0):1, (4,1):4, (5,0):1, (6,1):1, (13,0):1, (30,0):4,
-    # (38,1):1, (39,0):2, (40,0):1} — 17 flags across 10 meetings.
-    _REPAIRED_SITES: dict[tuple[int, int], int] = {
-        (5, 0): 1,
-        (10, 0): 1,
-        (12, 0): 1,
-        (13, 0): 1,
-        (23, 1): 1,
-        (29, 1): 1,
-        (31, 1): 2,
-        (38, 0): 1,
-        (39, 0): 2,
-        (41, 2): 2,
-        (44, 0): 2,
-    }
+    # recorded verdicts recovers it (unlike vents and sightings), so a recorded
+    # flag it re-paired can re-derive differently or not at all; any such
+    # removal must classify ``movement`` by _classify_removed_flag, the map pins
+    # WHERE, and the per-flag assertion in the loop pins WHY. Audit:
+    # audits/audit-phase-20-baseline-7.md §10.3. On the baseline-9 record no
+    # recorded flag is removed; every divergence is an ADDITION (a flag the
+    # re-derivation mints that the recording did not carry), all of them in the
+    # 17 samples meetings the movement-channel walk in test_contradictions.py
+    # names.
+    # was {(5,0):1, (10,0):1, (12,0):1, (13,0):1, (23,1):1, (29,1):1, (31,1):2,
+    # (38,0):1, (39,0):2, (41,2):2, (44,0):2} — 15 flags across 11 meetings.
+    _REPAIRED_SITES: dict[tuple[int, int], int] = {}
 
     def test_rederivation_diverges_only_at_the_repaired_sites(self) -> None:
         recorded_total = 0
@@ -2038,17 +2030,17 @@ class TestCommittedBytesArtifactCollapse:
 
         # The divergence is confined to the movement-channel sites above.
         assert removed_sites == self._REPAIRED_SITES
-        # The transcript-derivable flag COUNT no longer round-trips exactly: 54
-        # recorded, 60 re-derived. The recorded grounded ``vent_sighting`` and
+        # The transcript-derivable flag COUNT no longer round-trips exactly: 15
+        # recorded, 39 re-derived. The recorded grounded ``vent_sighting`` and
         # grounded vent-placement ``alibi_vs_physical`` flags are excluded above
-        # (re-derivation without the vent channel cannot mint them); of the 54
-        # that remain, 39 re-derive byte-for-byte, 15 are the movement-channel
-        # divergences pinned in _REPAIRED_SITES, and the rest are new pairings the
-        # detector mints from the rebuilt sighting channel. Baseline 6 read
-        # recorded == rederived; the record trades that exactness for the
-        # graduated channels, and §10.3 of the record audit says so in words.
-        assert recorded_total == 54  # was 50
-        assert rederived_total == 60  # was 42
+        # (re-derivation without the vent channel cannot mint them); all 15 that
+        # remain re-derive byte-for-byte, and the other 24 are pairings the
+        # recording did not carry, all in meetings the movement channel can move.
+        # Baseline 6 read recorded == rederived; the record trades that exactness
+        # for the graduated channels, and §10.3 of the record audit says so in
+        # words.
+        assert recorded_total == 15  # was 54
+        assert rederived_total == 39  # was 60
         # Task 16.14 baseline-4: the bytes are RECORDED under 13.14, so
         # the self-stated down-weight is already baked into every recorded
         # alibi_vs_sighting flag. Re-derivation is BYTE-IDENTICAL (0 promoted
@@ -2063,10 +2055,11 @@ class TestCommittedBytesArtifactCollapse:
         # weak-banded by preference over exclusion — an endpoint mismatch
         # can still convert under corroboration). The invariant is that every
         # endpoint-reason flag carries the weak marker (asserted in-loop); the
-        # count is 42 on the baseline-7 record (26 at baseline 6). The band grew
-        # because the graduated map-aware arbitration re-reads corridor-adjacent
-        # pairs and lands more of them in the endpoint/boundary weak band rather
-        # than in the strong one.
+        # count is 25 on the baseline-9 record (26 at baseline 6). The band grew
+        # at baseline 7 because the graduated map-aware arbitration re-reads
+        # corridor-adjacent pairs and lands more of them in the endpoint/boundary
+        # weak band rather than in the strong one; on baseline 9 it shrank along
+        # with the alibi-class flag count as a whole.
         endpoint_weak = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -2077,7 +2070,7 @@ class TestCommittedBytesArtifactCollapse:
                     ):
                         assert is_weak_contradiction(flag)
                         endpoint_weak += 1
-        assert endpoint_weak == 50  # was 42
+        assert endpoint_weak == 25  # was 50
 
     def test_every_surviving_flag_remains_deterministic(self) -> None:
         # Byte-identical re-derivation: running the pure detector twice
@@ -2142,12 +2135,13 @@ class TestCommittedBytesSeedPins:
 
     def test_recorded_conflict_flag_census(self) -> None:
         # On the Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate)
-        # the alibi_conflict surface carries exactly EIGHT recorded flags, ALL
-        # WEAK — so the band is non-empty but carries ZERO strong. The baseline-1
-        # lone-STRONG cross-speaker deception conflict remains GONE. The
-        # STRONG-conflict tripwire stays armed (rule 3): if a future re-record
-        # surfaces a STRONG conflict here, that is a new deception-surface signal
-        # to review.
+        # the alibi_conflict surface carried exactly EIGHT recorded flags, ALL
+        # WEAK. On the baseline-9 re-record it carries NONE here (baseline 8:
+        # 21, all weak), so the strong-site check below holds vacuously on this
+        # set. The baseline-1 lone-STRONG cross-speaker deception conflict remains
+        # GONE. The STRONG-conflict tripwire stays armed (rule 3): if a future
+        # re-record surfaces a STRONG conflict here, that is a new
+        # deception-surface signal to review.
         conflict_sites: list[tuple[int, int, tuple[str, ...]]] = []
         strong_sites: list[tuple[int, int, tuple[str, ...]]] = []
         for seed in range(50):
@@ -2158,7 +2152,7 @@ class TestCommittedBytesSeedPins:
                     conflict_sites.append((seed, index, flag.subjects))
                     if not is_weak_contradiction(flag):
                         strong_sites.append((seed, index, flag.subjects))
-        assert len(conflict_sites) == 21  # was 8
+        assert len(conflict_sites) == 0  # was 21
         assert sorted(strong_sites) == []
 
     @pytest.mark.parametrize(
@@ -3031,15 +3025,13 @@ class TestCommittedBytes106Pins:
     def test_strong_flags_surface_under_the_wave_e_substrate(self) -> None:
         # The Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate, with
         # the whereabouts-interior and vent-placement levers now UNCONDITIONAL)
-        # lights a RICHER R7 detector surface: 97 strong flags across the committed
-        # meetings. Composition is all legitimate detector kinds (vent_sighting 90,
-        # alibi_vs_physical 5, alibi_vs_sighting 2) — no forbidden leak shape, and
-        # NO strong alibi_conflict (the lone-STRONG cross-speaker conflict of
-        # baseline 1 stays gone with the railroad elimination). The graduated
-        # whereabouts-interior exemption promotes single-tick self-alibi-vs-sighting
-        # flags into the strong band, and Task 15.4's vent observability plus the
-        # grounded vent-placement variant carry the rest; the weak band holds 50
-        # flags — ALIVE (gated, not killed).
+        # lit a RICHER R7 detector surface. On the baseline-9 re-record it is 96
+        # strong flags across the committed meetings, all legitimate detector
+        # kinds (vent_sighting 90, alibi_vs_physical 6) — no forbidden leak shape,
+        # no strong alibi_vs_sighting, and NO strong alibi_conflict (the
+        # lone-STRONG cross-speaker conflict of baseline 1 stays gone with the
+        # railroad elimination). The weak band holds 11 flags — ALIVE (gated,
+        # not killed).
         weak = strong = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -3049,9 +3041,9 @@ class TestCommittedBytes106Pins:
                     else:
                         strong += 1
         assert (
-            strong == 97
-        )  # the R7 detector surface (vent + graduated levers)  # was 94
-        assert weak == 50  # the weak band stays alive (gated, not killed)  # was 26
+            strong == 96
+        )  # the R7 detector surface (vent + graduated levers)  # was 97
+        assert weak == 11  # the weak band stays alive (gated, not killed)  # was 50
 
     def test_seed2_m0_surviving_corroborations_are_interior_tick(self) -> None:
         # Audit C-C-3: at W0 a kill-scene sighting at seed 6 m1 was relevance-
@@ -3095,14 +3087,14 @@ class TestCommittedBytes106Pins:
                         f"spawn-window corroboration survived: seed {seed}, "
                         f"{pair.sighting_event_id}"
                     )
-        # 194 pairs survive the gate on the Task 18.12 baseline-6 re-record (the
-        # CREW-ONLY graduation slate). EVERY surviving pair still passes the
-        # per-pair spawn-window leak assert above (tick > SPAWN_WINDOW_LAST_TICK), so
-        # the no-spawn-window-leak firewall holds; the count moved with the
+        # 246 pairs survive the gate on the baseline-9 re-record. EVERY surviving
+        # pair still passes the per-pair spawn-window leak assert above (tick >
+        # SPAWN_WINDOW_LAST_TICK), so the no-spawn-window-leak firewall holds;
+        # the count moved with the
         # substrate's saw_player supply. The over-suppression tripwire: a future
         # change driving this to 0 means the channel died, which the audit ranks as
         # bad as the artifacts. Well above zero: gated, not killed.
-        assert surviving == 194  # was 179
+        assert surviving == 246  # was 194
 
 
 class TestCommittedBytes1010Pins:
@@ -3224,18 +3216,21 @@ class TestCommittedBytes1010Pins:
         # future re-record makes the guard FIRE on one of these (a proxy-intra-turn
         # marker appears), STOP: the guard would be over-reaching onto a two-author
         # disagreement.
+        #
+        # FROZEN at baseline 8: the baseline-9 samples/9p2i set carries no
+        # alibi_conflict at all, so the tripwire reads the 17 baseline-8 meetings
+        # that carried the 21 flags, frozen with their model calls emptied
+        # (tests/fixtures/baseline8_exhibits/README.md). The detector re-derives
+        # from the transcript, so what it is run against is still recorded speech.
         recorded_conflicts: list[ContradictionRef] = []
         rederived_conflicts: list[ContradictionRef] = []
-        for seed in range(50):
-            for entry in _committed_meetings(seed):
-                recorded_conflicts.extend(
-                    flag
-                    for flag in entry.contradictions
-                    if flag.kind == "alibi_conflict"
-                )
-                rederived_conflicts.extend(
-                    flag for flag in _rederive(entry) if flag.kind == "alibi_conflict"
-                )
+        for entry in frozen_meetings("alibi-conflict-meetings.jsonl"):
+            recorded_conflicts.extend(
+                flag for flag in entry.contradictions if flag.kind == "alibi_conflict"
+            )
+            rederived_conflicts.extend(
+                flag for flag in _rederive(entry) if flag.kind == "alibi_conflict"
+            )
         assert len(recorded_conflicts) == 21  # was 8
         assert len(rederived_conflicts) == 21  # was 8
         # The same-speaker guard re-targets NONE of the two-author conflicts.
@@ -3862,8 +3857,8 @@ class TestCommittedBytes107VoicePins:
         # two-witness fold never sees it and a bare pile-on cannot convert. On
         # baseline-3 no bare pile-on existed (every multi-accuser subject was
         # voiced); the leaner Qwen3.6-27B substrate emits fewer observation-backed
-        # accusations, so bare pile-ons RE-APPEAR (37 of them on the Task 18.12
-        # baseline-6 re-record, pinned below). The mechanism
+        # accusations, so bare pile-ons RE-APPEAR (27 of them on the baseline-9
+        # re-record, pinned below). The mechanism
         # correctly denies EVERY ONE a voice -- that is the whole list of unvoiced
         # multi-accuser subjects, and each is safe (no voice => no conversion). The
         # census is the tripwire: if a future re-record makes one of these bare
@@ -3897,51 +3892,40 @@ class TestCommittedBytes107VoicePins:
         # The STOP tripwire: these are EXACTLY the bare pile-ons (multi-accuser,
         # no observation-backed accuser), and the mechanism denies every one a
         # voice -- so none can convert via the two-witness fold.
-        # was 41 rows: (1,0,p-8) (1,2,p-7) (1,2,p-1) (4,1,p-5) (5,1,p-1) (6,3,p-7)
-        # (8,0,p-7) (8,2,p-7) (9,1,p-9) (9,2,p-9) (10,1,p-8) (11,1,p-9) (12,1,p-1)
-        # (12,2,p-2) (12,4,p-3) (13,2,p-4) (13,2,p-2) (13,4,p-9) (16,1,p-2)
-        # (18,0,p-6) (18,0,p-7) (19,2,p-7) (19,3,p-1) (22,0,p-4) (24,0,p-7)
-        # (25,1,p-4) (25,2,p-6) (27,1,p-9) (30,0,p-5) (30,2,p-1) (35,0,p-6)
-        # (35,1,p-2) (36,3,p-4) (37,0,p-1) (41,3,p-3) (41,4,p-9) (42,3,p-9)
-        # (46,2,p-9) (47,3,p-4) (48,1,p-2) (48,2,p-9)
+        # was 37 rows: (1,0,p-7) (1,3,p-8) (4,1,p-9) (4,3,p-7) (5,1,p-1) (5,2,p-4)
+        # (8,0,p-1) (8,1,p-5) (9,1,p-7) (13,1,p-2) (13,2,p-2) (14,2,p-9) (17,0,p-1)
+        # (17,3,p-4) (19,2,p-4) (19,2,p-7) (25,1,p-3) (26,1,p-1) (26,2,p-5) (27,1,p-9)
+        # (30,0,p-5) (30,1,p-1) (30,2,p-1) (32,0,p-7) (35,0,p-6) (35,0,p-1) (36,0,p-2)
+        # (38,1,p-2) (39,0,p-1) (39,1,p-2) (40,0,p-4) (40,1,p-1) (40,2,p-9) (41,2,p-8)
+        # (41,2,p-2) (44,0,p-9) (47,1,p-8)
         assert multi_accuser_unvoiced == [
             (1, 0, "p-7"),
-            (1, 3, "p-8"),
-            (4, 1, "p-9"),
-            (4, 3, "p-7"),
-            (5, 1, "p-1"),
-            (5, 2, "p-4"),
+            (1, 2, "p-8"),
+            (4, 2, "p-9"),
             (8, 0, "p-1"),
-            (8, 1, "p-5"),
-            (9, 1, "p-7"),
-            (13, 1, "p-2"),
-            (13, 2, "p-2"),
-            (14, 2, "p-9"),
+            (8, 2, "p-7"),
+            (8, 3, "p-5"),
+            (8, 4, "p-4"),
+            (10, 2, "p-3"),
+            (10, 2, "p-9"),
+            (14, 0, "p-6"),
             (17, 0, "p-1"),
-            (17, 3, "p-4"),
-            (19, 2, "p-4"),
-            (19, 2, "p-7"),
-            (25, 1, "p-3"),
-            (26, 1, "p-1"),
-            (26, 2, "p-5"),
-            (27, 1, "p-9"),
+            (17, 1, "p-8"),
+            (19, 3, "p-1"),
+            (21, 1, "p-1"),
+            (23, 2, "p-1"),
+            (24, 0, "p-1"),
+            (25, 2, "p-6"),
             (30, 0, "p-5"),
-            (30, 1, "p-1"),
             (30, 2, "p-1"),
-            (32, 0, "p-7"),
-            (35, 0, "p-6"),
-            (35, 0, "p-1"),
-            (36, 0, "p-2"),
-            (38, 1, "p-2"),
-            (39, 0, "p-1"),
-            (39, 1, "p-2"),
+            (35, 1, "p-2"),
+            (36, 1, "p-1"),
+            (37, 0, "p-1"),
+            (38, 1, "p-1"),
+            (38, 3, "p-4"),
             (40, 0, "p-4"),
-            (40, 1, "p-1"),
-            (40, 2, "p-9"),
-            (41, 2, "p-8"),
-            (41, 2, "p-2"),
-            (44, 0, "p-9"),
-            (47, 1, "p-8"),
+            (41, 4, "p-9"),
+            (44, 1, "p-1"),
         ]
         # Non-vacuous: multi-accuser subjects DO occur across the committed set.
         assert multi_accuser_total > 20
@@ -3949,11 +3933,12 @@ class TestCommittedBytes107VoicePins:
     def test_seed16_m2_derives_two_voices_for_p4(self) -> None:
         # Yield-pin (re-anchored to the Task 18.12 baseline-6 re-record -- the
         # CREW-ONLY graduation slate): seed-16 m2 p-9 takes a multi-voice pre-vote
-        # fold -- four observation-backed voices under echo-dedup.
+        # fold -- on the baseline-9 bytes three observation-backed voices under
+        # echo-dedup.
         entry = _committed_meetings(16)[2]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert voices.get("p-9") == ("p-8",)
+        assert voices.get("p-9") == ("p-2", "p-4", "p-8")  # was ("p-8",)
 
     def test_seed8_m0_derives_multiple_voices_for_p1(self) -> None:
         # The richer yield shape (re-anchored to the Task 18.12 baseline-6 re-record

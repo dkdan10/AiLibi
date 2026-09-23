@@ -141,8 +141,9 @@ describe("private reasoning perspective", () => {
   it("names an entry the header already shows rather than passing it off as another player", () => {
     // The recorded list is NOT a list of other players: measured over
     // `replays/samples/9p2i` with `scripts/measure_featured_criterion.py
-    // --alternatives`, 27 of 869 ballots list the VOTER itself and 22 list the
-    // target the vote APPLIED to. Either renders a pill identical to one in the
+    // --alternatives`, 24 of 845 ballots list the VOTER itself. None lists the
+    // target the vote APPLIED to, which the ballot schema still admits, so that
+    // entry is constructed here. Either renders a pill identical to one in the
     // card's header, so it is annotated — and kept, because the block is the
     // record and dropping an entry would make the render disagree with the
     // bytes. This is the enforcing mechanism for that claim.

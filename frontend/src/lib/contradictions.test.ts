@@ -8,7 +8,7 @@
 // that renders nowhere. `retiredTwoSegmentRule` below is the NEGATIVE CONTROL:
 // the rule the cards shipped before a roll-call self-placement got its own
 // segment, which addressed every observation as `:obs:`. Both run the same walk
-// over both committed sample sets, and the control has to fail it (31 of 328
+// over both committed sample sets, and the control has to fail it (8 of 254
 // endpoints unresolved vs 0) — a zero-unresolved assertion is true by
 // construction once the shipped rule mints the ids it also reads, so without a
 // rule that fails it the census would be prose.
@@ -495,9 +495,9 @@ describe("the contradiction event-id vocabulary over the committed served payloa
       halfLinkedFlags: shipped.halfLinkedFlags,
       unlinkedFlags: shipped.unlinkedFlags,
     }).toEqual({
-      meetings: 190, // was 192
-      flags: 167, // was 164
-      endpoints: 334, // was 328
+      meetings: 184, // was 190
+      flags: 127, // was 167
+      endpoints: 254, // was 334
       unresolved: 0,
       ambiguous: 0,
       halfLinkedFlags: 0,
@@ -505,7 +505,7 @@ describe("the contradiction event-id vocabulary over the committed served payloa
     });
     // The two sets, stated separately: the 9p2i share is what the finding
     // measured, and 4p1i proves the walk is not reading one set twice.
-    expect(walk([set("9p2i")], shippedRule).flags).toBe(147); // was 144
+    expect(walk([set("9p2i")], shippedRule).flags).toBe(107); // was 147
     expect(walk([set("4p1i")], shippedRule).flags).toBe(20);
   });
 
@@ -523,25 +523,24 @@ describe("the contradiction event-id vocabulary over the committed served payloa
       halfLinkedFlags: retired.halfLinkedFlags,
       unlinkedFlags: retired.unlinkedFlags,
     }).toEqual({
-      endpoints: 334, // was 328
-      unresolved: 26, // was 31
-      unresolvedBySet: { "9p2i": 26, "4p1i": 0 }, // was 9p2i 31
-      // was cross_statement 2, weak_signal 29: the corrected render leaves the
-      // retired rule losing only weak-signal endpoints on these bytes.
-      unresolvedByCategory: { role_proof: 0, cross_statement: 0, weak_signal: 26 },
-      halfLinkedFlags: 26, // was 31
+      endpoints: 254, // was 334
+      unresolved: 8, // was 26
+      unresolvedBySet: { "9p2i": 8, "4p1i": 0 }, // was 9p2i 26
+      // was weak_signal 26 alone on baseline 8: on these bytes the retired rule
+      // also loses one cross-statement endpoint.
+      unresolvedByCategory: { role_proof: 0, cross_statement: 1, weak_signal: 7 },
+      halfLinkedFlags: 8, // was 26
       unlinkedFlags: 0,
     });
 
-    // Four turns are the whole loss made visible: the flag pointing at them was
+    // Three turns are the whole loss made visible: the flag pointing at them was
     // their ONLY one, so under the retired rule they render with no badge at all.
-    // Was seven turns on the baseline-7 bytes — the exhibit is a property of the
-    // recording, so it moves with it.
+    // Was four turns on the baseline-8 bytes (seven on baseline 7) — the exhibit
+    // is a property of the recording, so it moves with it.
     expect(turnsThatLostEveryFlag(shipped, retired)).toEqual([
-      "headless-seed-28:meeting-0:turn-3",
-      "headless-seed-32:meeting-1:turn-4",
-      "headless-seed-46:meeting-1:turn-0",
-      "headless-seed-4:meeting-3:turn-0",
+      "headless-seed-0:meeting-1:turn-4",
+      "headless-seed-14:meeting-1:turn-4",
+      "headless-seed-21:meeting-2:turn-2",
     ]);
   });
 });

@@ -7,8 +7,12 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${origin}/?set=9p2i&view=replays`);
   const browser = page.getByRole("region", { name: "Replay browser", exact: true });
-  await expect(browser).toContainText("Earlier scores");
-  await expect(browser.getByRole("button", { name: /^Open replay seed/ }).first()).toBeVisible();
+  // The committed rubric is current for these recordings: no stale-score banner,
+  // the score legend is shown, and every card carries a score. (Every score reads
+  // 0 today, the extractor self-check floor pinned in tests/api/test_sets.py.)
+  await expect(browser).toContainText("The 0–100 score is an internal pacing/structure heuristic");
+  await expect(browser).not.toContainText("Earlier scores");
+  await expect(browser.getByRole("button", { name: /^Open replay seed \d+, interestingness score \d+ of 100$/ }).first()).toBeVisible();
   await expect(browser).not.toContainText("ships no");
   await expect(browser).not.toContainText("No score available for this recording");
   await page.goto(`${origin}/?set=4p1i&view=replays`);
@@ -22,7 +26,7 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
     await expect(page.getByRole("region", { name: "Recorded results and cases" })).toContainText("100% by construction");
     const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name: title }) });
     await expect(card.getByRole("button", { name: "Reveal case analysis (spoilers)", exact: true })).toHaveAttribute("aria-expanded", "false");
-    await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute("href", /5006a32f/);
+    await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute("href", /9bae2b03/);
     await card.getByRole("link", { name: "Inspect the meeting" }).click();
   };
   const evidence = page.getByRole("region", { name: "Selected evidence" });
@@ -71,32 +75,40 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   await expect(ballots).toContainText("Private ballot reasoning. View p-1");
   expect(new URL(page.url()).searchParams.get("reveal")).toBeNull();
 
+  // Both witnesses' own cited records show p-1 moving from Labs to Medbay, the
+  // move p-1's route states; the scene link lands on the frame that move depicts.
   await openCase("Follow an accusation across the map");
-  await expect(evidence).toContainText(/p-1/);
-  await expect(evidence).toContainText("observation tick 29");
-  await evidence.getByRole("button", { name: "View scene frame 28", exact: true }).click();
-  await expect(page).toHaveURL(/tick=28(?:&|$)/);
+  await expect(page.getByRole("dialog", { name: "Meeting at tick 9", exact: true })).toBeVisible();
+  await expect(evidence).toContainText(/p-1.*LABS.*MEDBAY/i);
+  await expect(evidence).toContainText("observation tick 6");
+  await evidence.getByRole("button", { name: "View scene frame 5", exact: true }).click();
+  await expect(page).toHaveURL(/tick=5(?:&|$)/);
   await evidence.getByRole("button", { name: "Return to meeting and ballots" }).click();
-  await page.getByRole("button", { name: "Cited observation · p-3:29:1", exact: true }).click();
-  await expect(evidence).toContainText(/p-4.*CAFETERIA/i);
-  await page.getByRole("button", { name: "Cited statement · headless-seed-46:meeting-3:turn-1", exact: true }).first().click();
-  await expect(evidence).toContainText("p-9 · public reply");
+  await page.getByRole("button", { name: "Cited observation · p-7:6:2", exact: true }).click();
+  await expect(evidence).toContainText(/p-1.*LABS.*MEDBAY/i);
+  await page.getByRole("button", { name: "Cited statement · headless-seed-29:meeting-1:turn-2", exact: true }).first().click();
+  await expect(evidence).toContainText("p-1 · public opt-in");
   await evidence.getByRole("button", { name: "Locate in transcript" }).click();
-  await expect(page.locator('[id="evidence-headless-seed-46%3Ameeting-3%3Aturn-1"]')).toBeFocused();
+  await expect(page.locator('[id="evidence-headless-seed-29%3Ameeting-1%3Aturn-2"]')).toBeFocused();
 
   // An invented ID stays missing after hydration; it must never choose nearby content.
   const missing = new URL(page.url());
   missing.searchParams.set("evidenceKind", "observation");
-  missing.searchParams.set("evidenceId", "p-3:29:missing");
-  missing.searchParams.set("evidenceObserver", "p-3");
+  missing.searchParams.set("evidenceId", "p-7:6:missing");
+  missing.searchParams.set("evidenceObserver", "p-7");
   await page.goto(missing.toString());
   await expect(evidence).toContainText("Reference unavailable");
   await expect(evidence.getByRole("button", { name: /View scene/ })).toHaveCount(0);
 
   await openCase("When accounts do not settle the question");
-  await expect(page.getByRole("dialog", { name: "Meeting at tick 12", exact: true })).toBeVisible();
+  const unresolved = page.getByRole("dialog", { name: "Meeting at tick 17", exact: true });
+  await expect(unresolved).toBeVisible();
   await expect(evidence).toContainText("p-4 · public opt-in");
-  await expect(page.getByRole("region", { name: /^Ballots/ }).getByText("skip", { exact: true })).toHaveCount(7);
+  // Five voluntary skips and two votes for p-1: no one is ejected.
+  await expect(page.getByRole("region", { name: /^Ballots/ }).getByText("skip", { exact: true })).toHaveCount(5);
+  await expect(unresolved).toContainText("skip ×5");
+  await expect(unresolved).toContainText("p-1 ×2");
+  await expect(unresolved).toContainText("Skipped — no ejection");
   await expect(page.getByRole("button", { name: /^Source 1 ·/ }).first()).toBeVisible();
   await page.getByRole("button", { name: /^Source 1 ·/ }).first().click();
   await expect(evidence).not.toContainText("Reference unavailable");

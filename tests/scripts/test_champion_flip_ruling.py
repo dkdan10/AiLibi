@@ -129,8 +129,8 @@ def _finalist_rows() -> dict[str, dict[str, Any]]:
 def _fsm_comparator_win_rate() -> float:
     """The same-seed scripted-FSM impostor win rate, from committed provenance.
 
-    Derived from the canonical 9p2i MANIFEST's ``winner`` column (15/50 =
-    0.30 on the baseline-8 record) rather than restated as a bare literal,
+    Derived from the canonical 9p2i MANIFEST's ``winner`` column (11/50 =
+    0.22 on the baseline-9 record) rather than restated as a bare literal,
     after asserting every row's
     ``policy`` cell attributes the scripted FSM — the house win-edge
     convention's comparator (report-finalist-eval.md §3.a).
@@ -169,8 +169,8 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
     fsm_rate = _fsm_comparator_win_rate()
     # The FSM comparator win rate reads the LIVE 9p2i samples, so every re-record
     # moves it: 0.36 at baseline 5, 0.30 at baseline 6, 0.24 at baseline 7, 0.30
-    # (15/50 IMPOSTORS) on the baseline-8 record. The finalist-eval rows below are
-    # frozen
+    # at baseline 8, 0.22 (11/50 IMPOSTORS) on the baseline-9 record. The
+    # finalist-eval rows below are frozen
     # (results-finalist-eval.jsonl, not re-recorded), so only this comparator and
     # the two win-edge deltas that subtract it move — the ruling's SHAPE (utility-es
     # keeps the edge and fails the referee, policy-es passes it and loses the edge)

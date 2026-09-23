@@ -11,6 +11,8 @@ import build_sample_report as bsr
 from eval.meeting_quality import TournamentEvalReport
 from eval.balance_eval import build_tournament_report
 from eval.meeting_quality import build_tournament_eval_report
+from eval.report_io import load_report, read_report_text, report_path, write_report_text
+from eval.report_schema import GameReport, build_provenance_groups
 from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.replay import (
     CrewTacticalPolicyStamp,
@@ -22,7 +24,7 @@ from tests._helpers.committed import report_9p2i
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
 _FLAT_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
-_COMMITTED_REPORT = _FLAT_4P1I / "tournament-eval-report.json"
+_COMMITTED_REPORT = report_path(_FLAT_4P1I)
 _COMMITTED_SETS = (
     "samples/4p1i",
     "samples/9p2i",
@@ -42,13 +44,55 @@ def _copy_flat_replays(dst: Path) -> None:
         (dst / jsonl.name).write_bytes(jsonl.read_bytes())
 
 
+def _legacy_shaped(game: GameReport) -> GameReport:
+    """A committed game with its recorded identity cleared: the pre-stamp shape.
+
+    Every committed set records its factory kind and each meeting's skip
+    threshold since the baseline-9 re-record, so none is projection-eligible as
+    recorded. The historical projection is exercised on a committed game with
+    exactly those recorded-identity cells cleared, and nothing else changed.
+    """
+
+    return game.model_copy(
+        update={
+            "agent_factory_kind": None,
+            "experiment_config": None,
+            "tactical_policy": None,
+            "crew_tactical_policy": None,
+            "temporal_observation_version": None,
+            "meetings": tuple(
+                meeting.model_copy(update={"skip_confidence_threshold": None})
+                for meeting in game.meetings
+            ),
+        }
+    )
+
+
+def _legacy_shaped_report(report: TournamentEvalReport) -> TournamentEvalReport:
+    """:func:`_legacy_shaped` over every game, with the groups rebuilt to match."""
+
+    games = tuple(_legacy_shaped(game) for game in report.report.games)
+    legacy = report.model_copy(
+        update={
+            "report": report.report.model_copy(
+                update={
+                    "games": games,
+                    "provenance_groups": build_provenance_groups(games),
+                }
+            )
+        }
+    )
+    assert bsr._can_project_historical(legacy)
+    return legacy
+
+
 def test_rebuild_matches_committed_flat_4p1i() -> None:
     """A rebuild from the committed 4p/1i replays equals the committed report."""
 
     rebuilt = bsr.historical_report_payload(bsr.build_report(_FLAT_4P1I))
-    committed = json.loads(_COMMITTED_REPORT.read_text(encoding="utf-8"))
+    committed = load_report(_COMMITTED_REPORT)
     assert rebuilt == committed, (
-        "The committed flat 4p/1i tournament-eval-report.json is STALE — it does "
+        "The committed flat 4p/1i tournament-eval-report.json.gz is STALE — it does "
         "not match a rebuild from its own replays. Run `uv run python "
         "scripts/build_sample_report.py --sample-dir replays/samples/4p1i` and commit it."
     )
@@ -62,7 +106,7 @@ def test_check_reports_consistent_on_committed_sets(relative_dir: str) -> None:
 
 
 def test_historical_serialization_preserves_real_attempt_ids() -> None:
-    report = report_9p2i()
+    report = _legacy_shaped_report(report_9p2i())
     original = report.report.games[0]
     legacy_call = FailedCallReplayEntry(
         game_id=original.game_id,
@@ -96,7 +140,7 @@ def test_historical_serialization_preserves_real_attempt_ids() -> None:
 def test_historical_serialization_preserves_existing_cells_and_omits_added_metadata() -> (
     None
 ):
-    report = report_9p2i()
+    report = _legacy_shaped_report(report_9p2i())
     current = report.model_dump(mode="json")
     historical = bsr.historical_report_payload(report)
     for current_game, historical_game in zip(
@@ -133,9 +177,9 @@ def test_check_flags_a_stale_report(tmp_path: Path) -> None:
     """``--check`` returns 1 when the on-disk report drifts from a rebuild."""
 
     _copy_flat_replays(tmp_path)
-    stale = json.loads(_COMMITTED_REPORT.read_text(encoding="utf-8"))
+    stale = load_report(_COMMITTED_REPORT)
     stale["meeting_rate"]["meetings_total"] += 7  # tamper: no longer matches replays
-    (tmp_path / "tournament-eval-report.json").write_text(json.dumps(stale))
+    write_report_text(report_path(tmp_path), json.dumps(stale))
     assert bsr.check_report(tmp_path) == 1
 
 
@@ -154,7 +198,14 @@ def test_check_flags_a_stale_report(tmp_path: Path) -> None:
 def test_current_serialization_cannot_hide_recorded_identity_as_legacy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, identity: str
 ) -> None:
-    game = next(game for game in report_9p2i().report.games if game.meetings)
+    game = _legacy_shaped(
+        next(game for game in report_9p2i().report.games if game.meetings)
+    )
+    assert bsr._can_project_historical(
+        build_tournament_eval_report(
+            build_tournament_report(games=(game,), seeds=(game.seed,))
+        )
+    )
     if identity == "factory":
         game = game.model_copy(update={"agent_factory_kind": "scripted"})
     elif identity == "experiment":
@@ -209,8 +260,8 @@ def test_current_serialization_cannot_hide_recorded_identity_as_legacy(
     assert bsr.historical_report_payload(candidate) == candidate.model_dump(mode="json")
     bsr.write_report(tmp_path)
     assert bsr.check_report(tmp_path) == 0
-    path = tmp_path / "tournament-eval-report.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    path = report_path(tmp_path)
+    payload = load_report(path)
     assert payload["report"]["provenance_groups"]
     assert "agent_factory_kind" in payload["report"]["games"][0]
     # Plant a historical-shaped output while the actual source remains current.
@@ -229,7 +280,7 @@ def test_current_serialization_cannot_hide_recorded_identity_as_legacy(
             del raw_game[key]
         for meeting in raw_game["meetings"]:
             del meeting["skip_confidence_threshold"]
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    write_report_text(path, json.dumps(payload))
     assert bsr.check_report(tmp_path) == 1
 
 
@@ -240,18 +291,24 @@ def test_write_report_emits_the_shape_check_compares(
     """The writer emits what ``--check`` compares, for both report shapes.
 
     ``--check``'s staleness message instructs the operator to re-run this writer
-    and commit the result. A projection-eligible legacy set must therefore come
-    back out byte-for-byte as its committed self, while a set that records a
-    candidate identity must still be written complete.
+    and commit the result. A projection-eligible legacy report must therefore
+    come back out in exactly the projected shape ``--check`` compares, while a
+    set that records a candidate identity must still be written complete. No
+    committed set is projection-eligible since the baseline-9 re-record, so the
+    legacy case is a committed game with its recorded identity cleared.
     """
 
     if shape == "legacy":
-        _copy_flat_replays(tmp_path)
-        bsr.write_report(tmp_path)
-        written = (tmp_path / "tournament-eval-report.json").read_text(encoding="utf-8")
-        assert json.loads(written) == json.loads(
-            _COMMITTED_REPORT.read_text(encoding="utf-8")
+        game = _legacy_shaped(
+            next(game for game in report_9p2i().report.games if game.meetings)
         )
+        legacy = build_tournament_eval_report(
+            build_tournament_report(games=(game,), seeds=(game.seed,))
+        )
+        monkeypatch.setattr(bsr, "build_report", lambda directory: legacy)
+        bsr.write_report(tmp_path)
+        written = read_report_text(report_path(tmp_path))
+        assert json.loads(written) == bsr.historical_report_payload(legacy)
         restored = TournamentEvalReport.model_validate_json(written)
         assert restored.report.provenance_groups is None
         assert all(game.agent_factory_kind is None for game in restored.report.games)
@@ -266,7 +323,7 @@ def test_write_report_emits_the_shape_check_compares(
     )
     monkeypatch.setattr(bsr, "build_report", lambda directory: candidate)
     bsr.write_report(tmp_path)
-    written = (tmp_path / "tournament-eval-report.json").read_text(encoding="utf-8")
+    written = read_report_text(report_path(tmp_path))
     payload = json.loads(written)
     assert payload["report"]["provenance_groups"]
     assert "agent_factory_kind" in payload["report"]["games"][0]
@@ -293,8 +350,8 @@ def test_write_report_does_not_rewrite_a_committed_legacy_report_into_the_curren
         (tmp_path / roster.name).write_bytes(roster.read_bytes())
 
     bsr.write_report(tmp_path)
-    written = (tmp_path / "tournament-eval-report.json").read_text(encoding="utf-8")
-    committed = (source / "tournament-eval-report.json").read_text(encoding="utf-8")
+    written = read_report_text(report_path(tmp_path))
+    committed = read_report_text(report_path(source))
     assert json.loads(written) == json.loads(committed)
 
 
