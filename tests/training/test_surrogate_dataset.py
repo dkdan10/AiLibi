@@ -362,11 +362,11 @@ def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
         10,
         10,
     )
-    # The fit-side drop census on this set: no J2-coerced ballot, but TWO rows
-    # whose target the meeting layer rewrote (both under-gate redirects), so the
-    # exclusion is load-bearing on committed bytes rather than fixture-only.
+    # The fit-side drop census on this set: no J2-coerced ballot and no row
+    # whose target the meeting layer rewrote, so on these bytes every committed
+    # row the exclusion drops sits on 9p2i (pinned in test_surrogate_runner.py).
     assert sum(row.ballot_coerced_skip for row in table.rows) == 0
-    assert sum(_target_was_rewritten(row) for row in table.rows) == 2  # was 0
+    assert sum(_target_was_rewritten(row) for row in table.rows) == 0  # was 2
 
 
 def test_splits_count_metadata_must_agree_with_seed_lists(tmp_path: Path) -> None:
@@ -1175,23 +1175,21 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
     """What the fit actually consumes, counted — so a re-record cannot move it.
 
     Recomputed from the recorded bytes: every ballot in every committed set, its
-    bracketed annotations counted and its rewrite labels parsed. Six of the seven
-    kinds are the prefix markers this module's table parses; the seventh, the
-    vote-guard rationale redaction, is a replacement BODY rather than a prefix,
-    so the census counts it and the parser does not claim it.
+    bracketed annotations counted and its rewrite labels parsed. Every kind but
+    one is a prefix marker this module's table parses; the vote-guard rationale
+    redaction is a replacement BODY rather than a prefix, so the census counts it
+    and the parser does not claim it.
 
-    The two totals agree at this head: 127 bracketed annotations, 127 claimed
-    labels. They did not on the baseline-8 record — 127 against 120 — because
-    every ballot in that 7-annotation gap carries a citation-nulling marker
-    (``invalid_reason_id`` / ``invalid_observation_id``) BEHIND the target-guard
-    marker named by the recorded ``guard_rewrite_reason`` field, and
-    ``ballot_rewrite_labels`` stopped as soon as it consumed that marker. Round 1
-    of the grounded-SKIP card's review (2026-09-21) bounded the stop to TARGET
-    markers, which are the only ones written after the citation validators, so
-    those 7 labels are claimed now: ``invalid_reason_id`` 1 → 5 and
-    ``invalid_observation_id`` 12 → 15. No recorded byte moved and no fit-side
-    exclusion moved with them — neither label is in ``TARGET_REWRITE_LABELS``,
-    so ``per_set_rewritten`` reads exactly what it read before.
+    The two totals agree at this head: 39 bracketed annotations, 39 claimed
+    labels on the baseline-9 bytes. On the baseline-8 bytes they once read 127
+    against 120, because every ballot in that 7-annotation gap carried a
+    citation-nulling marker (``invalid_reason_id`` / ``invalid_observation_id``)
+    BEHIND the target-guard marker named by the recorded ``guard_rewrite_reason``
+    field, and ``ballot_rewrite_labels`` stopped as soon as it consumed that
+    marker. Round 1 of the grounded-SKIP card's review (2026-09-21) bounded the
+    stop to TARGET markers, which are the only ones written after the citation
+    validators, so such labels are claimed; neither label is in
+    ``TARGET_REWRITE_LABELS``, so the bound moved no fit-side exclusion.
     """
 
     ballots: list[VoteBallot] = []
@@ -1223,29 +1221,29 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
             marked_games += int(game_marked)
         per_set_rewritten.append(rewritten)
 
-    # was (300, 3602, 204, 94)
-    assert (games, len(ballots), annotations, marked_games) == (300, 3631, 127, 70)
+    # was (300, 3631, 127, 70)
+    assert (games, len(ballots), annotations, marked_games) == (300, 3630, 39, 26)
+    # under_gate_redirect (was 83), invalid_reason_id (was 5) and uncited_coerced
+    # (was 6) no longer occur on these bytes; invalid_counter_reason_id is new.
     assert dict(kinds) == {
-        "under_gate_redirect": 83,  # was 120
-        "invalid_observation_id": 15,  # was 27, then 12 while the bound was wide
-        "teammate_coerced": 7,  # was 18
-        "rationale_redaction": 7,  # was 18
-        "invalid_reason_id": 5,  # was 9, then 1 while the bound was wide
-        "uncited_coerced": 6,  # was 8
-        "invalid_target": 4,
+        "invalid_observation_id": 1,  # was 15
+        "teammate_coerced": 13,  # was 7
+        "rationale_redaction": 13,  # was 7
+        "invalid_counter_reason_id": 4,  # was 0
+        "invalid_target": 8,  # was 4
     }
-    # Reconciled with the annotation total above: 127 == 127 (see the docstring).
-    assert sum(kinds.values()) == annotations == 127  # was 204, then 120
+    # Reconciled with the annotation total above: 39 == 39 (see the docstring).
+    assert sum(kinds.values()) == annotations == 39  # was 127
     # samples-9p2i, ml_corpus-9p2i, samples-4p1i, ml_corpus-4p1i.
-    assert per_set_rewritten == [27, 70, 1, 2]  # was [45, 102, 1, 2]
-    assert sum(per_set_rewritten) == 100  # was 150
-    # 6 of those 100 were already dropped by the J2-only rule; 94 rode into the
-    # fit as the voter's own choice before this rule widened.
-    assert kinds["uncited_coerced"] == 6  # was 8
+    assert per_set_rewritten == [4, 17, 0, 0]  # was [27, 70, 1, 2]
+    assert sum(per_set_rewritten) == 21  # was 100
+    # None of those 21 carries the J2 marker, so the J2-only rule would have let
+    # all 21 ride into the fit as the voter's own choice before this rule widened.
+    assert kinds["uncited_coerced"] == 0  # was 6
     # Task 21.2 wired the structured field, so every target rewrite now records
     # its own reason — the marker table above stays load-bearing because the
     # field holds ONE reason per ballot while the chain can carry more.
-    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 100  # was 0
+    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 21  # was 100
 
 
 @pytest.mark.slow
@@ -1272,7 +1270,7 @@ def test_the_reporter_column_is_an_exclusion_oracle_the_fit_may_not_read() -> No
                     reporter_roles[feat.role] += 1
                 features.append(float(feat.is_reporter))
                 labels.append(float(feat.is_impostor))
-    assert reporter_roles == Counter({"CREWMATE": 3631})  # was 3602
+    assert reporter_roles == Counter({"CREWMATE": 3630})  # was 3631
     assert reporter_roles["IMPOSTOR"] == 0
 
     # The fit-side vector never sees it: every built view writes the constant.
@@ -1387,15 +1385,15 @@ def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
     behind an expected failure would let the train/serve skew drift unrecorded in
     the meantime (PR #301 review). The skew moved AGAIN on the baseline-8 record:
     divergent cells 61 -> 102 of 12 772 compared, and the max divergence 0.06 ->
-    0.11.
+    0.11; on the baseline-9 record it moved to 82 of 12 760, the max unchanged.
     """
 
     parity = corpus_parity
-    assert parity.meetings_total == 439  # was 432
-    assert parity.rows_total == 2516  # was 2479
-    assert parity.cells_compared == 12772  # was 12600
-    assert parity.j1_divergent_cells == 102  # was 61
-    assert parity.j1_divergent_rows == 98  # was 57
-    assert parity.j1_divergent_fit_cells == 77  # was 42
-    assert parity.j1_divergent_test_cells == 25  # was 19
-    assert parity.j1_max_abs_divergence == pytest.approx(0.11, abs=1e-9)  # was 0.06
+    assert parity.meetings_total == 449  # was 439
+    assert parity.rows_total == 2539  # was 2516
+    assert parity.cells_compared == 12760  # was 12772
+    assert parity.j1_divergent_cells == 82  # was 102
+    assert parity.j1_divergent_rows == 80  # was 98
+    assert parity.j1_divergent_fit_cells == 61  # was 77
+    assert parity.j1_divergent_test_cells == 21  # was 25
+    assert parity.j1_max_abs_divergence == pytest.approx(0.11, abs=1e-9)  # was 0.11

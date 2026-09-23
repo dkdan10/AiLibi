@@ -290,7 +290,7 @@ def test_flag_labels_reproduce_the_referee_census(sample_dir: Path) -> None:
 def test_sample_conversion_census_pins(
     nine_conviction: ConvictionTable, four_conviction: ConvictionTable
 ) -> None:
-    """The mirrored conversion census on the committed baseline-8 samples.
+    """The mirrored conversion census on the committed baseline-9 samples.
 
     Regression pins (re-derived from bytes, re-pinned at any re-record):
     the observation-backed conversion economy the 18.11 gate shipped stays
@@ -298,11 +298,11 @@ def test_sample_conversion_census_pins(
     §3.1 census measured at baseline 5.
     """
 
-    assert nine_conviction.meetings_total == 151  # was 152
-    assert nine_conviction.conversion_attempts_total == 128  # was 132
-    assert nine_conviction.conversions_total == 81  # was 84
-    assert four_conviction.meetings_total == 39  # was 40
-    assert four_conviction.conversion_attempts_total == 33  # was 34
+    assert nine_conviction.meetings_total == 145  # was 151
+    assert nine_conviction.conversion_attempts_total == 112  # was 128
+    assert nine_conviction.conversions_total == 79  # was 81
+    assert four_conviction.meetings_total == 39  # was 39
+    assert four_conviction.conversion_attempts_total == 37  # was 33
     assert four_conviction.conversions_total == 20  # was 20
 
 
@@ -779,24 +779,25 @@ def test_verdict_consequence_mapping_is_pre_committed() -> None:
 
 
 def test_corpus_census_pins(corpus_conviction: ConvictionTable) -> None:
-    """The baseline-8 corpus economy, pinned (re-derived at any re-record)."""
+    """The baseline-9 corpus economy, pinned (re-derived at any re-record)."""
 
     assert corpus_conviction.games_total == 150
-    assert corpus_conviction.meetings_total == 439  # was 432
-    assert corpus_conviction.ejections_total == 281  # was 280
+    assert corpus_conviction.meetings_total == 449  # was 439
+    assert corpus_conviction.ejections_total == 273  # was 281
     # Every recorded contradiction on the set, vents included: the label is
-    # exactly len(entry.contradictions) per meeting (315 persisted vent + 134
-    # re-derived). The retired transcript re-derivation reached 431 by losing 43
-    # recorded flags and minting 46 the record never carried.
-    assert corpus_conviction.flags_minted_total == 449  # was 428
-    assert corpus_conviction.conversion_attempts_total == 386  # was 373
-    assert corpus_conviction.conversions_total == 249  # was 249
+    # exactly len(entry.contradictions) per meeting (317 persisted vent + 57
+    # re-derived). On the baseline-8 bytes the retired transcript re-derivation
+    # reached 431 by losing 43 recorded flags and minting 46 the record never
+    # carried.
+    assert corpus_conviction.flags_minted_total == 374  # was 449
+    assert corpus_conviction.conversion_attempts_total == 375  # was 386
+    assert corpus_conviction.conversions_total == 234  # was 249
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
     assert (
-        sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 348
-    )  # was 345
+        sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 355
+    )  # was 348
 
 
 def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
