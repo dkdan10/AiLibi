@@ -981,34 +981,38 @@ def test_axis_three_refuses_a_degenerate_head_the_recall_bar_waves_through(
 def test_axis_three_is_a_floor_the_live_model_clears_on_all_three(
     corpus_conviction: ConvictionTable,
 ) -> None:
-    """The frozen re-derivation still passes every axis, axis 3 by a wide margin.
+    """The frozen weights, read out of sample, still pass every axis, axis 3 by a
+    wide margin.
 
     Recomputed from the committed weights against the corpus now on disk, never
-    copied from the contract: held-out confusion (TP, FP, FN, TN) = (49, 3, 2,
-    37) over 91 test meetings with 51 conversions, so recall is 49/51, accuracy
-    86/91, and the population's own best constant answer is 51/91. The axis is a
-    floor the real model clears, not a re-verdict on it.
+    copied from the contract. The weights were fitted on the baseline-8 corpus,
+    and the baseline-9 re-record replaced every game under them, so this is a
+    fully out-of-sample read: the model has never seen a meeting it is scored on
+    here. Held-out confusion (TP, FP, FN, TN) = (42, 5, 2, 45) over 94 test
+    meetings with 44 conversions, so recall is 42/44, accuracy 87/94, and the
+    population's own best constant answer is 50/94. The axis is a floor the real
+    model clears, not a re-verdict on it, and not a substitute for the re-ground.
     """
 
     model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)
     report, _ = run_conviction_fidelity(corpus_conviction, model=model)
     verdict = decide_conviction_go(report, weights_sha256=digest)
 
-    assert (report.test_meetings, report.conversions_test) == (91, 51)  # was (87, 51)
+    assert (report.test_meetings, report.conversions_test) == (94, 44)  # was (91, 51)
     assert (
         report.true_positives,
         report.false_positives,
         report.false_negatives,
         report.true_negatives,
-    ) == (49, 3, 2, 37)  # was (45, 2, 6, 34)
-    assert report.conversion_recall == pytest.approx(49 / 51)  # was 45 / 51
-    assert report.conversion_precision == pytest.approx(49 / 52)  # was 45 / 47
-    assert report.conversion_accuracy == pytest.approx(86 / 91)  # was 79 / 87
-    assert verdict.conversion_trivial_baseline == pytest.approx(51 / 91)  # was 51 / 87
-    assert verdict.conversion_accuracy == pytest.approx(86 / 91)  # was 79 / 87
+    ) == (42, 5, 2, 45)  # was (49, 3, 2, 37)
+    assert report.conversion_recall == pytest.approx(42 / 44)  # was 49 / 51
+    assert report.conversion_precision == pytest.approx(42 / 47)  # was 49 / 52
+    assert report.conversion_accuracy == pytest.approx(87 / 94)  # was 86 / 91
+    assert verdict.conversion_trivial_baseline == pytest.approx(50 / 94)  # was 51 / 91
+    assert verdict.conversion_accuracy == pytest.approx(87 / 94)  # was 86 / 91
     assert verdict.beats_trivial_conversion is True
-    # the margin the axis clears by  # was 79 / 87 - 51 / 87
-    assert 86 / 91 - 51 / 91 > 0.3
+    # the margin the axis clears by  # was 86 / 91 - 51 / 91
+    assert 87 / 94 - 50 / 94 > 0.3
     assert (
         verdict.meets_spearman_bar,
         verdict.meets_conversion_bar,

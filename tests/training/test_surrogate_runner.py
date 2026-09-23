@@ -1247,14 +1247,14 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
 
     The diagnostic runner reads ``suspicion_graph_for_meeting()`` — the
     J1-CLAMPED render — while the table (and therefore the §5 verdict's
-    scoring) reads the raw stored scalar; the measured divergence is 25
-    held-out cells (the baseline-8 parity census). Codex review on PR #280: the
+    scoring) reads the raw stored scalar; the measured divergence is 21
+    held-out cells (the baseline-9 parity census). Codex review on PR #280: the
     verdict must be shown to hold on the inputs a bake-off runner actually
     serves. So: replace every held-out cell's ``belief_suspicion`` with the
     PRODUCTION-served value (the memory-augmented walk's graphs — the exact
     channel the runner reads), score the FROZEN committed artifact over the same
     test views, and assert the verdict inputs reproduce EXACTLY — same decision
-    and same top-1 target on every one of the 91 meetings, so the two passing GO
+    and same top-1 target on every one of the 94 meetings, so the two passing GO
     axes AND the failing third axis (the NO-GO) hold unchanged on live-served
     features. The only movement is a decision-irrelevant sub-top-rank reorder on
     a handful of meetings (libm/ULP-sensitive near probability ties across CPUs,
@@ -1314,7 +1314,7 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
     )
     # Exactly the parity census's held-out J1-divergent cells move — the two
     # instruments cross-validate each other.
-    assert replaced == 25  # was 19
+    assert replaced == 21  # was 25
 
     predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
     raw_model = BallotSurrogateModel(corpus_table, predictor=predictor)
@@ -1339,9 +1339,9 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
                 correct_skips += 1
         if view.is_ejection and live_pred.ranking[0] == view.ejected:
             top1_hits += 1
-    assert top1_hits == 47  # was 46 on the baseline-6 fit
-    assert predicted_skips == 89
-    assert correct_skips == 34
+    assert top1_hits == 46  # was 47
+    assert predicted_skips == 90  # was 89
+    assert correct_skips == 42  # was 34
     # Third-rank-and-below shuffles only, BOUNDED not pinned: the reorder count
     # sits on near-ties in the softmax shares, so it is libm/ULP-sensitive
     # across CPUs. The per-meeting decision/top-1 equality above is the
