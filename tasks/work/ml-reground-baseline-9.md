@@ -695,3 +695,72 @@ any artifact moved, [Mac]): surrogate `f89016200e94e1f1…`, conviction `3a6fe4c
 filtered-BC at the unmoved floor 147/151 `d6b3f3a79607992a…`; none matches its committed
 digest, and `historical_fit_corpus_fingerprint` reads `6536c68c1ad37bc8…` against the
 records' `cc54d3c0…`. The live fit side is 355 meetings against the record's 348.
+
+### 2. The surrogate on baseline 9 (acceptance item 2, surrogate half)
+
+Run in the work tree at `1127044f` on the corpus the 2026-09-22 record left, [Mac], in the
+recipe's order; each step's output is the next step's input.
+
+1. **Walk re-validation first:** `measure_belief_render_parity(Path('replays/ml_corpus/9p2i'))`
+   (the report's §9 line) reads `raw_mismatches` **0**, `trust_mismatches` 0, 449 meetings,
+   2539 rows, 12 760 cells, J1 divergence 82 cells / 80 rows (fit 61, test 21), max 0.11.
+2. **Weights, sidecar and cap**, with the fit side measured before the cap is derived:
+   ```
+   uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table; from training.surrogate.fidelity import build_meeting_views; from training.surrogate.ballots import fit_corpus_ballot_predictor, write_ballot_predictor_artifact, derive_max_uses; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); test=set(t.splits.test); n=sum(1 for v in build_meeting_views(t) if v.seed not in test); assert n == 355, n; print(n, derive_max_uses(n), write_ballot_predictor_artifact(fit_corpus_ballot_predictor(t), Path('training/artifacts/surrogate'), max_uses=derive_max_uses(355)))"
+   ```
+   printed `355 50765 f89016200e94e1f136c26ba6bc4293a7fe9ad9b1b7406ff7f973ed342ccfa1d4`
+   (3.6 s) [Mac]. The weights equal the investigation's same-host expectation `f8901620…`.
+3. **The version-one record**, the Validation block's `SurrogateFitCorpus` line verbatim: no
+   `fingerprint_version` argument, `model_dump_json(indent=2)` plus a newline, so the file
+   carries `corpus_sha256` `6536c68c1ad37bc8874186e3590788ab9fd91bc7d3eaa8d914036f704e649608`,
+   `fit_side_meetings` 355 and the new weights digest, and no version key.
+4. **The verdict**, on the first held-out evaluation, through the writer that emits the sidecar:
+   ```
+   uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table, run_surrogate_fidelity, fo6_rebaseline; from training.surrogate.fidelity import decide_go_no_go; from training.surrogate.ballots import BallotSurrogateModel; from training.surrogate.runner import write_surrogate_verdict_artifact; a=Path('training/artifacts/surrogate'); d=(a/'ballot-predictor.json.sha256').read_text().split()[0]; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); v=decide_go_no_go(run_surrogate_fidelity(t, lambda: BallotSurrogateModel(t), model_name='ballot-surrogate.v1'), fo6_rebaseline(t), weights_sha256=d); write_surrogate_verdict_artifact(v, a); print(v.verdict, v.ranking_verdict, v.decision_verdict)"
+   ```
+   printed `NO-GO GO NO-GO` (3.6 s): **no flip**, the same verdict baseline 8 published.
+   `verdict.json` sha256 `06ce819fb626093aa0c9c95c53c380f4a3c0bef20a9a8de469137dbd4fc83438`.
+
+| surrogate axis (94 held-out meetings, 52 ejections) | baseline 9 | bar | baseline 8 (history) |
+|---|---|---|---|
+| 1. top-1 ≥ 0.75 × ceiling | 0.8846 (46/52) PASS | 0.5913 | 0.8246 (47/57) PASS |
+| 2. top-1 > FO-6 | 0.8846 PASS | 0.3077 | 0.8246 PASS |
+| 3. SKIP-vs-eject > always-eject | 0.4681 (44/94) FAIL | 0.5532 | 0.3956 (36/91) FAIL |
+
+The frozen committed weights reproduce the harness's figures (verifier rows: top-1 46/52,
+decision 44/94), and the verifier's surrogate top-1, SKIP-vs-eject and `verdict.json` rows read
+OK after the report refresh (`--only recompute`, [Mac]). `training/reports/report-ballot-surrogate.md`
+§2.1-§7 and §9 are refreshed from the §9 one-liners re-run here, the baseline-8 figures kept
+in a new erratum, §8's recipe corrected to `historical_fit_corpus_fingerprint` with the verdict
+writer named, and one stale test id in §9 corrected to the pin's real name.
+
+**The two readings, settled by measurement (acceptance item 9).** Neither docstring in
+`training/surrogate/fidelity.py` or `tests/training/test_surrogate_fidelity.py` is edited;
+both rulings stay the owner's.
+
+- *The ceiling.* The census command (report §9, quoted whole there):
+  ```
+  uv run python -c "from pathlib import Path; from collections import Counter; from training.surrogate import build_meeting_table; from training.surrogate.ballots import BallotSurrogateModel, load_ballot_predictor_artifact; from training.surrogate.fidelity import build_meeting_views, _is_strict_leader; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); m=BallotSurrogateModel(t, predictor=load_ballot_predictor_artifact(Path('training/artifacts/surrogate'))[0]); c=Counter((m.predict(v).ranking[0]==v.ejected, _is_strict_leader(v, v.recon_suspicion, v.ejected)) for v in build_meeting_views(t) if v.seed in set(t.splits.test) and v.is_ejection); print(sorted(c.items()))"
+  ```
+  Known-answer control first: pointed at the frozen baseline-8 weights (the `39a568c6`
+  export's `training/artifacts/surrogate`, the same bytes as at `95fb894b`) on this corpus it
+  reads hit 46 of 52 against 41 reachable, the Evidence figure, so the command is right. On
+  the re-ground fit: (hit, reachable) 40, (hit, not reachable) 6, (miss, reachable) 1, (miss,
+  not reachable) 5; the cells sum to 52 and the hit column to the verdict's 46. The six
+  hit-but-unreachable meetings are all ties at the saturated 1.0 best-case score, the ejected
+  player carrying a witnessed vent and a flag in each: 1029 m2 (`p-1` tied with `p-8`), 1069
+  m1 (`p-8`/`p-2`), 1094 m0 (`p-5`/`p-3`), 1144 m0 (`p-3`/`p-6`) and 1149 m0 (`p-8`/`p-1`),
+  where the sum of per-voter ballots favours the ejected player (one to three voters' own rows
+  lead it), and 1084 m0 (`p-3`/`p-6`), an exact tie in the surrogate's shares broken by the
+  lowest-id rule. The ceiling's strict-leader rule counts a tie as unreachable, so it is not a
+  maximum for a ranker that breaks ties; the baseline-8 weights show the same six. (Per-meeting
+  detail from `$SCR/ceiling_census.py`, which adds the tie partner, per-voter leads and shares.)
+- *The tie-break.* The table command (report §9, quoted whole there):
+  ```
+  uv run python -c "from pathlib import Path; from tests.training.test_surrogate_fidelity import _LowestTiedTauFo6 as L; from training.surrogate import build_meeting_table, fo6_rebaseline, run_surrogate_fidelity as r; [print(s, *((x.predicted_ejections, x.ejection_predicted_skips, round(x.skip_vs_eject_accuracy, 4), (x.top1, x.top2, x.brier, x.ece) == (y.top1, y.top2, y.brier, y.ece)) for x, y in ((r(t, L, model_name='fo6-physical-logistic'), f), (f, f)))) for s in ('samples/9p2i', 'samples/4p1i', 'ml_corpus/9p2i', 'ml_corpus/4p1i') for t in [build_meeting_table(Path('replays') / s)] for f in [fo6_rebaseline(t)]]"
+  ```
+  reproduces record §6.4 to four decimals: `samples/9p2i` 7/7, 86/86, 0.3862/0.3862;
+  `samples/4p1i` 18/16, 9/10, 0.5897/0.5897; `ml_corpus/9p2i` 5/0, 50/52, 0.4362/0.4468;
+  `ml_corpus/4p1i` 5/5, 1/1, 0.75/0.75; ranking and calibration identical on all four. FO-6 is
+  fitted fresh on the table, so the re-fit cannot move the reversal (0.4468 against 0.4362 on
+  the corpus test side); it is re-measured, not settled, and stays the owner's ruling.
