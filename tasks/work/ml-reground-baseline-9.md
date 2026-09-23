@@ -645,4 +645,53 @@ commands whole; it cites `docs/architecture.md` "Determinism and the substrate l
 
 ## Results
 
-Not started.
+**What this section covers (2026-09-23).** The local legs only, filled step by step in this
+order: the reproduction, the surrogate and conviction re-fits, the constants with the anchor, study and pool stamps, the
+Mac Goodhart leg at the branch head, the tests the local legs can re-pin, and the documents
+that do not depend on the Linux leg. The web session's R1 and R2, the composed verdict and
+manifest written from the agreed leg, the composed-dependent pins, `docs/artifacts.md` rows
+`:103`-`:104`, and the gates on the pull request are the next operator's; each is listed
+under **Left for the next operator** below. Nothing here claims a Linux result.
+
+**The host stamp** (this Mac; beside every digest below unless another host is named):
+
+| field | value |
+|---|---|
+| `uname -srm` | `Darwin 24.6.0 arm64` |
+| `platform.platform()` | `macOS-15.7.3-arm64-arm-64bit` |
+| `sys.version` | `3.11.15 (main, Apr 14 2026, 14:45:51) [Clang 22.1.3 ]` |
+| numpy | `2.2.6`; `numpy.show_runtime()` SIMD baseline `NEON, NEON_FP16, NEON_VFPV4, ASIMD`, found `ASIMDHP`, not found `ASIMDFHM` (BLAS from Accelerate) |
+| CPU | `Apple M1 Pro` (`sysctl -n machdep.cpu.brand_string`; kernel `RELEASE_ARM64_T6000`) |
+| shell | bare: no `AILIBI_*` variable exported, no `.env` in the worktree |
+
+Short form used below: **[Mac]** = this stamp.
+
+### 1. Reproduction at `39a568c6` (acceptance item 1)
+
+A scratch export of `39a568c6` outside the tree (`git archive --format=tar -o
+$SCR/b8-39a568c6.tar 39a568c6`, unpacked to `$SCR/b8`, `uv sync --frozen` there), run with
+the Validation block's commands verbatim. Nothing under `training/artifacts/` in the work
+tree was touched until every line below had passed. Each comparison is a byte match
+(`sha256`), never a tolerance.
+
+| step | command (Validation block) | measured [Mac] | committed at `39a568c6` | match | wall |
+|---|---|---|---|---|---|
+| version-one corpus identity | `historical_fit_corpus_fingerprint` line | `cc54d3c02a9804d3…` | `cc54d3c0…` in both `fit-corpus.json` | yes | 1.4 s |
+| verifier subset | `verify_ml_evidence.py --only sidecars --only corpus --only recompute` | exit 0; 28 checks, OK 22, FAIL 0, ABSENT 6 | exit 0 | yes | 21.9 s |
+| surrogate refit | the `fit_corpus_ballot_predictor` line | `06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8` | `ballot-predictor.json` sha256 the same | yes | 3.5 s |
+| conviction refit | the `fit_corpus_conviction_model` line | `7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed` | `conviction-model.json` sha256 the same | yes | 11.0 s |
+| filtered-BC refit | the `run_anchor_study(lambda_grid=(), …)` line into `$SCR/repro-anchor-39a568c6` | `62595367954fe8bd19f4dc8b73e547170d0185c7fde1b00815df729de6f45a7e` | `filtered-bc-anchor/weights.json.sha256` the same | yes | 4.2 s |
+| pool re-stamp | the `index.json` stamp line, in place in the export | `e43335ba8cd0e6a59598db466bbee8dc838c795e77fa3c5fdd18dd70d44a81ad`, `cmp` identical to the file before | `e43335ba…` | yes | 0.4 s |
+| Goodhart leg (beside, not gating) | the Validation leg line, stdout to a file | HELD; `to_json()` sha256 `bddf96d5d0176505bfb7b6bc4d85eeab7da132641089f7d2b3fafa1fd44a1ffe`; `es_digest` `00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd`; `baseline_id` `baseline-8`; 1175 composed meetings; conviction uses 1513 (1175 + 338) | no committed digest; the cells are the record | the investigation's `bddf96d5…` / `00d2c414…` reproduced | 43.6 s |
+
+The six ABSENT rows are the evidence-branch rows and the git-index inventory row, which an
+archive cannot carry; every recompute row, both weight hashes and both adoption constraints
+read OK. The fallback to `1793eb23` was not needed: no refit missed. The leg's JSON digest is
+taken over `to_json()`'s text, the printed line without its trailing newline (the stdout file
+with the newline hashes `de9d8f1a…`); R1 and R2 compare the same form.
+
+**Perturbed proof** (the same three refits on the baseline-9 corpus at `ff4c6bb8`, before
+any artifact moved, [Mac]): surrogate `f89016200e94e1f1…`, conviction `3a6fe4ca18cb0597…`,
+filtered-BC at the unmoved floor 147/151 `d6b3f3a79607992a…`; none matches its committed
+digest, and `historical_fit_corpus_fingerprint` reads `6536c68c1ad37bc8…` against the
+records' `cc54d3c0…`. The live fit side is 355 meetings against the record's 348.
