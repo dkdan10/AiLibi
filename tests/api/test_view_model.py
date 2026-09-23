@@ -72,7 +72,8 @@ from tests.api.fixtures.sample_replay import (
 from tests._helpers.committed import BASELINE8_EXHIBITS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_NINE_P_TWO_I = _REPO_ROOT / "replays" / "samples" / "9p2i"
+_SAMPLES = _REPO_ROOT / "replays" / "samples"
+_NINE_P_TWO_I = _SAMPLES / "9p2i"
 
 # Import the (top-level) codegen module for the drift gate. ``scripts/`` is on
 # mypy_path and resolved as bare module names (see tests/scripts/conftest.py).
@@ -123,16 +124,35 @@ def meeting_loader(tmp_path: Path) -> ReplayLoader:
     return ReplayLoader(replay_dir=tmp_path)
 
 
-@pytest.fixture
-def nine_p_two_i_loader(monkeypatch: pytest.MonkeyPatch) -> ReplayLoader:
-    if not _NINE_P_TWO_I.is_dir():
-        pytest.skip("committed 9p2i sample set not present")
+def _committed_sample_loader(
+    set_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> ReplayLoader:
+    if not set_dir.is_dir():
+        pytest.skip(f"committed {set_dir.name} sample set not present")
     # Baseline 2 (Task 14.12) stamps the default-OFF Task-14.10
     # evidence_quality_lift lever ON, so flag-aware reconstruction of the
     # committed set requires it exported (else the loader's substrate guard
     # refuses the mismatch).
     monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
-    return ReplayLoader(replay_dir=_NINE_P_TWO_I)
+    return ReplayLoader(replay_dir=set_dir)
+
+
+@pytest.fixture
+def nine_p_two_i_loader(monkeypatch: pytest.MonkeyPatch) -> ReplayLoader:
+    return _committed_sample_loader(_NINE_P_TWO_I, monkeypatch)
+
+
+@pytest.fixture(params=["9p2i", "4p1i"])
+def report_tick_sample(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, ReplayLoader]:
+    """One committed sample set by name, with its loader built as above."""
+
+    set_name: str = request.param
+    return (
+        f"samples/{set_name}",
+        _committed_sample_loader(_SAMPLES / set_name, monkeypatch),
+    )
 
 
 @pytest.fixture
@@ -1235,8 +1255,7 @@ def test_agent_visibility_matches_observation_pipeline(
 
 
 def test_report_tick_fog_keeps_the_reported_body(
-    nine_p_two_i_loader: ReplayLoader,
-    monkeypatch: pytest.MonkeyPatch,
+    report_tick_sample: tuple[str, ReplayLoader],
 ) -> None:
     """On a body-report frame the reporter still sees the body they just found.
 
@@ -1246,17 +1265,57 @@ def test_report_tick_fog_keeps_the_reported_body(
     (``_agent_visibility_map(reopened_body_id=...)``). This pins that the
     reporter's field of view includes the reported body (which also shows in
     ``tick.bodies`` + the report event), i.e. the As-agent view matches what the
-    agent could see at the meeting frame rather than dropping it.
+    agent could see on the report frame rather than dropping it. That holds on
+    a meeting frame and on a report that decides the game, which convenes no
+    meeting and so serves ``report_body`` without ``meeting_triggered``.
+
+    Both committed sample sets are walked, and each must still carry at least
+    one report of each shape, or that shape would be unpinned. A re-record that
+    removes the game-deciding shape from a set turns this test red on the
+    guard; the remedy is a frozen exhibit of such a game (the ``70e49468``
+    precedent, ``tests/fixtures/baseline8_exhibits/``), not a deleted guard.
     """
 
-    saw_report = False
-    for meta in nine_p_two_i_loader.list_replays():
-        replay = nine_p_two_i_loader.load_replay(meta.game_id)
+    set_name, loader = report_tick_sample
+    _assert_reporters_keep_their_bodies(loader, set_name)
+
+
+def test_the_game_deciding_report_guard_fails_on_a_set_without_one(
+    meeting_loader: ReplayLoader,
+) -> None:
+    """The vacuity guard bites: a loader whose games hold no such frame fails.
+
+    The synthetic fixture holds one body report that convenes a meeting and a
+    parity win decided by a kill, so its reporter check passes and only the
+    guard can fail.
+    """
+
+    with pytest.raises(AssertionError, match="no game in synthetic is decided"):
+        _assert_reporters_keep_their_bodies(meeting_loader, "synthetic")
+
+
+def _assert_reporters_keep_their_bodies(loader: ReplayLoader, set_name: str) -> None:
+    """Every reporter sees its body, over both report-frame shapes.
+
+    A report that convenes a meeting serves ``report_body`` beside
+    ``meeting_triggered``; one that decides the game serves ``report_body``
+    alone. At least one frame of each must be walked.
+    """
+
+    meeting_report_frames = 0
+    game_deciding_report_frames = 0
+    for meta in loader.list_replays():
+        replay = loader.load_replay(meta.game_id)
         for tick in replay.ticks:
+            served = {event.type for event in tick.events}
+            if "report_body" in served:
+                if "meeting_triggered" in served:
+                    meeting_report_frames += 1
+                else:
+                    game_deciding_report_frames += 1
             for event in tick.events:
                 if event.type != "report_body":
                     continue
-                saw_report = True
                 reporter = next(
                     a for a in tick.agent_states if a.agent_id == event.reporter_id
                 )
@@ -1268,7 +1327,13 @@ def test_report_tick_fog_keeps_the_reported_body(
                     f"{event.reporter_id} does not see the body it reported "
                     f"({event.body_of}) at tick {tick.tick} of {meta.game_id}"
                 )
-    assert saw_report, "expected at least one body-report meeting in the 9p2i set"
+    assert meeting_report_frames > 0, (
+        f"expected at least one body-report meeting in {set_name}"
+    )
+    assert game_deciding_report_frames > 0, (
+        f"no game in {set_name} is decided on a body-report frame, so the "
+        "no-meeting report shape is not exercised; pin it with a frozen exhibit"
+    )
 
 
 # ---------------------------------------------------------------------------

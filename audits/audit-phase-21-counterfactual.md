@@ -1261,3 +1261,39 @@ reopened it once — for a change that moves no cell, no bar and no OFF byte. Th
 one ambiguity the `git_sha` resolves; the cost of bumping is another live-spend smoke. The
 pre-registration's §11 carries a row naming this erratum, because §8.1's reader clause and the T2 /
 T6 predicates read that stamp.
+
+### E.4 erratum 2026-09-23, after the baseline-9 record (`acf6c604`): the tables above are the baseline-8 record, frozen, and no test compares them with a live run
+
+**No figure in this memo moves.** This erratum records a PROVENANCE fact: every table above, the
+rows E.1 and E.2 republished included, is the baseline-8 record, frozen. From the commit that
+carries this erratum, no test compares them with a live run.
+
+**Why the comparison retired.** A live run of `scripts/counterfactual_phase21.py` and this memo are
+the two sides of a measured/frozen pair. The baseline-8 record (`3eebc7d5`) re-stamped only the
+half of such a pair that may move: a re-record re-derives the measured side, and the frozen side
+moves only at a step that re-issues it. The live run is the measured side and this dated memo is
+the frozen side, and no step re-issues it: the phase closed on its finding (`509e92ed`, PR #430),
+and the memo's last amendment is `608ae1f6` (PR #427). On the baseline-9 bytes the comparison
+could only read red, so `tests/scripts/test_counterfactual_phase21.py` retired it, together with
+the errata fold that served it. The script's four corroboration cells are still asserted against
+their committed record by a test of their own. What that file still reads in this memo is that its
+tables parse and that it carries no bar, no target and no decision rule.
+
+**What §10 and the Errata preamble describe.** The introduction to §10 and the preamble of this
+section name that comparison as what keeps the memo from drifting. They describe the mechanism as
+it stood through `39a568c6`; neither sentence is rewritten.
+
+**Reproduce the tables.** `39a568c6420531b7e22adcd5827fc18094594006` is the last `main` whose
+recordings are the bytes these tables describe: no committed replay under `replays/samples/` or
+`replays/ml_corpus/` changed on `main` between the baseline-8 record and that commit. Both
+comparisons passed there. In a checkout of that commit, in a shell that exports no `AILIBI_*`
+variable:
+
+```bash
+uv sync --frozen
+uv run pytest -q "tests/scripts/test_counterfactual_phase21.py::test_the_memo_table_equals_a_live_four_set_run" "tests/scripts/test_counterfactual_phase21.py::test_the_memo_marks_every_advisory_cell"
+uv run python scripts/counterfactual_phase21.py --sets all
+```
+
+The pytest run prints `2 passed`, and the script prints the tables above. The same pytest run at
+`95fb894b`, on the baseline-9 bytes and before this erratum, fails on both.
