@@ -1324,13 +1324,14 @@ def test_composed_fidelity_scores_the_committed_test_split(
     )  # was 57 / 91
     # The convicting top-1 is the SAME recipe the surrogate reports: 46/52.
     assert report.convicting_top1 == pytest.approx(46 / 52, abs=1e-12)  # was 47 / 57
-    # The frozen surrogate's top-1 now sits ABOVE this ceiling (46/52 against
-    # 41/52); the record routes that reading to the ML re-ground.
+    # The surrogate's top-1 sits ABOVE this ceiling (46/52 against 41/52), for the
+    # re-ground fit as for the baseline-8 weights before it; the surrogate report's
+    # section 3 census names the six tied meetings behind the gap.
     assert report.top1_ceiling == pytest.approx(41 / 52, abs=1e-12)  # was 47 / 57
     # The surrogate tally's near-total SKIP degeneracy is the NO-GO fact composed
-    # around: the tally reaches an ejection on four of the 94 test meetings.
-    assert report.surrogate_tally_ejections == 4  # was 2
-    assert report.surrogate_tally_skips == 90  # was 89
+    # around: the tally reaches an ejection on two of the 94 test meetings.
+    assert report.surrogate_tally_ejections == 2  # was 4 (baseline-8 weights here)
+    assert report.surrogate_tally_skips == 92  # was 90 (baseline-8 weights here)
     # Gate confusion partitions the 94 test meetings.
     total = (
         report.gate_true_positives
@@ -1390,7 +1391,9 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
     live-parity idiom): re-scoring the whole held-out split through the LIVE
     views gives a top-1 of 46/52 and a decision channel of 79/94 — and every
     gating cell still clears its bar, so the composed verdict reads GO under the
-    live channel too.
+    live channel too. Since the 2026-09-23 re-ground both fits are the ones made
+    on this corpus's fit side, so the split scored here is their own held-out
+    split (before it, the baseline-8 weights were read here out of sample).
     """
 
     from training.conviction.dataset import (
@@ -1491,12 +1494,12 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
             if ranking[0] == view.ejected:
                 top1_hits += 1
 
-    # The measured live-exclusion cells, re-derived through both frozen fits on
+    # The measured live-exclusion cells, re-derived through both re-ground fits on
     # the baseline-9 corpus.
     assert (decision_hits, ejections) == (79, 52)  # was (82, 57)
     assert top1_hits == 46  # was 45
     assert exact_hits == 78  # was 74
-    assert tally_ejections == 2  # was 2
+    assert tally_ejections == 1  # was 2
     assert gate_convictions == composed_fidelity.predicted_convictions
 
     # The verdict is invariant: re-deciding on the live-channel cells reads GO.

@@ -89,9 +89,10 @@ _MIXED_TIER_ALWAYS_ON_TESTS: Final[tuple[str, ...]] = (
     # Both renamed twice: at the baseline-7 record, when the corpus moved under a
     # frozen fit and each pin stated the gap instead of a reproduction; and again
     # at the Task-21.17 re-ground, which closed the gap and restored the strong
-    # equality. Same KEEP-row duty, same default tier throughout.
+    # equality. The verdict pin was renamed once more at the baseline-9
+    # re-ground. Same KEEP-row duty, same default tier throughout.
     "test_committed_artifact_round_trips_and_the_refit_no_longer_matches",
-    "test_the_committed_verdict_is_the_baseline8_first_evaluation",
+    "test_the_committed_verdict_is_the_baseline9_first_evaluation",
 )
 
 

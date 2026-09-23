@@ -70,6 +70,7 @@ from orchestrator.game import (
 )
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.seeder import seed_initial_state
+from tests.training._refit_equivalence import assert_refit_reproduces_committed
 from training.env import TacticalRolloutEnv
 from training.rewards import compute_shaped_reward
 from training.surrogate.ballots import (
@@ -513,7 +514,7 @@ def test_surrogate_game_is_byte_deterministic(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_committed_surrogate_is_a_baseline8_fit_on_the_baseline8_corpus(
+def test_the_committed_surrogate_is_a_baseline9_fit_on_the_baseline9_corpus(
     corpus_table: MeetingTable,
 ) -> None:
     """The EQUIVALENCE pin: the committed weights and the live corpus AGREE.
@@ -540,8 +541,8 @@ def test_the_committed_surrogate_is_a_baseline8_fit_on_the_baseline8_corpus(
     assert record.weights_sha256 == weights_sha256
     assert cap.weights_sha256 == weights_sha256
     assert record.corpus_set == "9p2i"
-    assert record.fit_side_meetings == 348  # was 367 on the baseline-6 fit
-    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 49_764
+    assert record.fit_side_meetings == 355  # was 348 on the baseline-8 fit
+    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 50_765
 
     # Externally current: the live corpus IS the corpus the fit was made on.
     views = build_meeting_views(corpus_table)
@@ -811,7 +812,8 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
 ) -> None:
     """The artifact round-trips byte-stably, and the refit reproduces it to ULP.
 
-    Two claims, both restored by the Task-21.17 re-ground.
+    Two claims, both restored by the Task-21.17 re-ground and re-established by
+    the 2026-09-23 re-ground on the baseline-9 corpus.
 
     Serialization is byte-stable: loading the committed bytes and re-serializing
     is the identity, so the sha256 sidecar pins exactly what the bake-off
@@ -822,7 +824,11 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     committed weights ARE that refit. Comparison is by ULP tolerance, not by
     bytes — the fit is numpy full-batch gradient descent, byte-identical on the
     recording platform and ULP-equivalent elsewhere — so this pin travels across
-    CPUs while still refusing a genuinely different model. During the interim
+    CPUs while still refusing a genuinely different model; the shared
+    comparison is ``tests/training/_refit_equivalence.py`` and its perturbed case
+    is ``test_a_refit_on_shifted_belief_suspicion_fails_the_refit_pin``. This pin
+    is what certifies the version-one record's derivation (training/README.md).
+    During the interim
     between the baseline-7 record and the re-ground this assertion was INVERTED,
     pinning that the refit disagreed; restoring it is what the re-ground earns.
 
@@ -839,7 +845,7 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     cap = load_staleness_cap(_ARTIFACT_DIR)
     record = load_fit_corpus_record(_ARTIFACT_DIR)
     assert cap.weights_sha256 == sha
-    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 49_764
+    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 50_765
     assert cap.unit == "meetings"
 
     # The live corpus's fit side, which the cap IS keyed to.
@@ -850,32 +856,54 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     live_fit_meetings = len(
         {(r.seed, r.meeting_id) for r in corpus_table.rows if r.seed in fit_seeds}
     )
-    assert live_fit_meetings == record.fit_side_meetings == 348
+    assert live_fit_meetings == record.fit_side_meetings == 355  # was 348
 
-    refit = json.loads(fit_corpus_ballot_predictor(corpus_table).to_artifact_json())
-    committed = json.loads(committed_json)
     # Same keys, same feature names, same format marker, same numbers to ULP.
-    assert refit.keys() == committed.keys()
-    for key, committed_value in committed.items():
-        refit_value = refit[key]
-        if (
-            isinstance(committed_value, list)
-            and committed_value
-            and isinstance(committed_value[0], str)
-            and "0x" in committed_value[0]
-        ):
-            assert [float.fromhex(item) for item in refit_value] == pytest.approx(
-                [float.fromhex(item) for item in committed_value],
-                rel=1e-9,
-                abs=1e-12,
-            ), key
-        elif isinstance(committed_value, str) and "0x" in committed_value:
-            assert float.fromhex(refit_value) == pytest.approx(
-                float.fromhex(committed_value), rel=1e-9, abs=1e-12
-            ), key
-        else:
-            # Non-float metadata (format marker, feature names, epochs) is exact.
-            assert refit_value == committed_value, key
+    assert_refit_reproduces_committed(
+        fit_corpus_ballot_predictor(corpus_table).to_artifact_json(), committed_json
+    )
+
+
+def test_a_refit_on_shifted_belief_suspicion_fails_the_refit_pin(
+    corpus_table: MeetingTable,
+) -> None:
+    """The refit pin's perturbed case: one feature moved, and the pin must refuse.
+
+    The version-one fit record binds the corpus bytes, not the code that derives
+    features from them, so a derivation change that leaves the corpus alone is
+    caught only by the refit pin. This plants the smallest such change the pin
+    exists for — ``belief_suspicion`` shifted by +0.125 on every live fit-side
+    row — and requires the shared comparison to raise, while the unperturbed
+    refit passes it in the pin above.
+    """
+
+    assert corpus_table.splits is not None
+    fit_seeds = frozenset(corpus_table.splits.train) | frozenset(
+        corpus_table.splits.val
+    )
+
+    def shifted(row: MeetingTableRow) -> MeetingTableRow:
+        if row.seed not in fit_seeds:
+            return row
+        return row.model_copy(
+            update={
+                "candidates": tuple(
+                    cand.model_copy(
+                        update={"belief_suspicion": cand.belief_suspicion + 0.125}
+                    )
+                    for cand in row.candidates
+                )
+            }
+        )
+
+    perturbed = corpus_table.model_copy(
+        update={"rows": tuple(shifted(row) for row in corpus_table.rows)}
+    )
+    committed_json = (_ARTIFACT_DIR / "ballot-predictor.json").read_text()
+    with pytest.raises(AssertionError):
+        assert_refit_reproduces_committed(
+            fit_corpus_ballot_predictor(perturbed).to_artifact_json(), committed_json
+        )
 
 
 def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
@@ -887,10 +915,11 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     committed artifact, and evaluating the FROZEN predictor (no refit — the
     ``predictor`` injection on :class:`BallotSurrogateModel`) over the held-out
     test views reproduces the report's ranking/decision census and the
-    predicted-ballot calibration channel (baseline-8: 91 test meetings, 57
+    predicted-ballot calibration channel (baseline-9: 94 test meetings, 52
     ejections; the decision head still skips all but two meetings). Since the
-    Task-21.17 re-ground these ARE the weights the report's numbers were
-    produced by, so the reproduction is exact rather than approximate.
+    re-grounds (baseline 8 at Task 21.17, baseline 9 on 2026-09-23) these ARE the
+    weights the report's numbers were produced by, so the reproduction is exact
+    rather than approximate.
     """
 
     predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
@@ -900,7 +929,7 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     test_views = [
         view for view in build_meeting_views(corpus_table) if view.seed in test_seeds
     ]
-    assert len(test_views) == 91  # was 87
+    assert len(test_views) == 94  # was 91
 
     top1_hits = 0
     predicted_ejections = 0
@@ -917,19 +946,19 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
         if view.is_ejection and prediction.ranking[0] == view.ejected:
             top1_hits += 1
     # The census the re-ground's own weights score on their own held-out split.
-    assert top1_hits == 47  # was 46 on the baseline-6 fit
+    assert top1_hits == 46  # was 47 on the baseline-8 fit
     assert predicted_ejections == 2
-    assert predicted_skips == 89
-    assert correct_skips == 34
+    assert predicted_skips == 92  # was 89
+    assert correct_skips == 42  # was 34
 
     calibration = frozen.predicted_ballot_calibration(test_views)
-    assert calibration.predicted_ballots == 110  # was 114
-    assert calibration.predicted_skips == 406  # was 402
+    assert calibration.predicted_ballots == 84  # was 110
+    assert calibration.predicted_skips == 442  # was 406
     # Inference from FIXED committed weights; tolerance covers libm exp variance
     # across platforms, nothing more.
     assert calibration.brier == pytest.approx(
-        0.3277976536219233, abs=1e-9
-    )  # was 0.3379753557131337
+        0.24907908179311566, abs=1e-9
+    )  # was 0.3277976536219233
 
 
 def test_surrogate_fidelity_reproduces_pinned_numbers(
@@ -1245,6 +1274,10 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
 ) -> None:
     """The runner-path fidelity replay: the NO-GO verdict inputs survive J1 serving.
 
+    Scored on the held-out split of the corpus the committed weights were fitted
+    on since the 2026-09-23 re-ground (before it, the baseline-8 weights were read
+    here out of sample on the re-recorded bytes).
+
     The diagnostic runner reads ``suspicion_graph_for_meeting()`` — the
     J1-CLAMPED render — while the table (and therefore the §5 verdict's
     scoring) reads the raw stored scalar; the measured divergence is 21
@@ -1256,9 +1289,10 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
     test views, and assert the verdict inputs reproduce EXACTLY — same decision
     and same top-1 target on every one of the 94 meetings, so the two passing GO
     axes AND the failing third axis (the NO-GO) hold unchanged on live-served
-    features. The only movement is a decision-irrelevant sub-top-rank reorder on
-    a handful of meetings (libm/ULP-sensitive near probability ties across CPUs,
-    the same platform variance the artifact round-trip tolerates).
+    features. The only movement allowed is a decision-irrelevant sub-top-rank
+    reorder on a handful of meetings (libm/ULP-sensitive near probability ties
+    across CPUs, the same platform variance the artifact round-trip tolerates);
+    on the baseline-9 weights none occurs on the recording host.
     """
 
     assert corpus_table.splits is not None
@@ -1325,6 +1359,7 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
     top1_hits = 0
     predicted_skips = 0
     correct_skips = 0
+    correct_ejects = 0
     rank_reorders = 0
     for view in test_views:
         raw_pred = raw_model.predict(view)
@@ -1337,11 +1372,14 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
             predicted_skips += 1
             if view.ejected is None:
                 correct_skips += 1
+        elif live_pred.ejected == view.ejected:
+            correct_ejects += 1
         if view.is_ejection and live_pred.ranking[0] == view.ejected:
             top1_hits += 1
     assert top1_hits == 46  # was 47
-    assert predicted_skips == 90  # was 89
+    assert predicted_skips == 92  # was 89 (90 with the baseline-8 weights here)
     assert correct_skips == 42  # was 34
+    assert correct_ejects == 2
     # Third-rank-and-below shuffles only, BOUNDED not pinned: the reorder count
     # sits on near-ties in the softmax shares, so it is libm/ULP-sensitive
     # across CPUs. The per-meeting decision/top-1 equality above is the
@@ -1349,11 +1387,11 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
     assert rank_reorders <= 4
 
     # The three verdict axes re-stated on the live-served scoring, against the
-    # SAME population bar the §5 verdict used (every decision is SKIP, so the
-    # decision accuracy is exactly the correct-skip share). Axes 1–2 PASS and
-    # axis 3 FAILS unchanged — the NO-GO holds on the served features.
+    # SAME population bar the §5 verdict used (the decision accuracy counts the
+    # correct skips and the correct ejections). Axes 1–2 PASS and axis 3 FAILS
+    # unchanged — the NO-GO holds on the served features.
     live_top1 = top1_hits / surrogate_report.ejection_meetings
-    live_accuracy = correct_skips / surrogate_report.meetings_scored
+    live_accuracy = (correct_skips + correct_ejects) / surrogate_report.meetings_scored
     assert live_top1 >= 0.75 * surrogate_report.honest_ceiling.max_achievable_top1
     assert live_top1 > fo6_report.top1
     assert live_accuracy < surrogate_report.always_eject_baseline

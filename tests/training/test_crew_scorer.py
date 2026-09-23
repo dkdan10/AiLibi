@@ -844,9 +844,10 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
     # triple — the term ships, the named weight, and the committed sha.
     assert result.conviction_fitness_term == "ships"
     assert result.conviction_weight == DEFAULT_CONVICTION_WEIGHT
+    # The baseline-9 re-ground's weights; 7e764b89… before it.
     assert (
         result.conviction_weights_sha256
-        == "7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed"
+        == "3a6fe4ca18cb0597d8df4e155be190f4601d8bfc5dae25490e9a3f3b821d762e"
     )
 
     # The row serializes to one jsonl line and round-trips.

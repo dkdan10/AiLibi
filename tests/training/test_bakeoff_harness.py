@@ -844,9 +844,10 @@ def test_rerun_artifacts_carry_the_15_9_provenance_stamp() -> None:
 
 # The committed conviction artifact sha (training/artifacts/conviction/), pinned
 # as a literal so a re-ground that moves the weights trips the default-protocol
-# row-stamp pins HERE (the committed GO verdict is keyed to exactly this).
+# row-stamp pins HERE (the committed GO verdict is keyed to exactly this). Was
+# 7e764b89… for the baseline-8 fit.
 _COMMITTED_CONVICTION_SHA256: str = (
-    "7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed"
+    "3a6fe4ca18cb0597d8df4e155be190f4601d8bfc5dae25490e9a3f3b821d762e"
 )
 
 

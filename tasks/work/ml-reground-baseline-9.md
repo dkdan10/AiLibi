@@ -942,3 +942,118 @@ Every later commit on this branch touches only tests, documents and this card (c
 pushed head with `git diff --stat c740c233 HEAD -- ':!tests' ':!docs' ':!tasks' ':!training/README.md' ':!training/reports' ':!replays/ml_corpus/README.md'`,
 which must print nothing), so R2 at the pushed head computes the same leg; R2 at `c740c233` is
 the like-for-like comparison.
+
+### 6. Tests: the re-pins the local legs can honestly make (acceptance items 3, 7 and 8, local half)
+
+Every value below is re-derived through the production computation the test itself calls
+(probes: `$SCR/probe_pins.py`, `$SCR/probe_plants.py`, the tests' own failure output at
+`283a87a1`). MEASURED = a live computation re-derived; FROZEN = a committed figure this card
+moved (the fit, its verdict, its report or a stamp). Nothing is deleted, skipped, xfailed or
+widened; `tests/training/test_model_evidence_provenance.py` is unchanged (`:98-116` still
+refuses the version-one records at current scope). Pins moved with the constants commit are
+listed under step 4.
+
+**The shared refit comparison and its perturbed cases (acceptance item 3).** The ULP comparison
+both `test_committed_artifact_round_trips_and_the_refit_no_longer_matches` pins inlined is now
+`tests/training/_refit_equivalence.py::assert_refit_reproduces_committed` (float-hex lists and
+scalars at `rel=1e-9, abs=1e-12`, everything else exact, key sets equal); both pins call it.
+New cases, default tier:
+- `test_surrogate_runner.py::test_a_refit_on_shifted_belief_suspicion_fails_the_refit_pin`:
+  `belief_suspicion` +0.125 on every live fit-side row, refit by `fit_corpus_ballot_predictor`,
+  must raise `AssertionError` through the helper.
+- `test_conviction_model.py::test_a_refit_on_shifted_max_suspicion_fails_the_refit_pin`: the
+  `max_suspicion` feature +0.125 on every live fit-side row, refit by
+  `ConvictionEconomyModel.fit`, must raise.
+Measured [Mac]: the unperturbed refits pass the helper; both perturbed refits raise on the
+`mean` key, where the standardization absorbs the constant shift (the weights themselves can
+match), which is still the drift the pin exists to catch.
+
+**`tests/training/test_surrogate_runner.py`**
+- `test_the_committed_surrogate_is_a_baseline8_fit_on_the_baseline8_corpus` renamed
+  `test_the_committed_surrogate_is_a_baseline9_fit_on_the_baseline9_corpus`. FROZEN:
+  `fit_side_meetings` 348 → 355; cap 49 764 → 50 765 (re-fit on the live fit side).
+- `test_committed_artifact_round_trips_and_the_refit_no_longer_matches` (name kept; the
+  `training/README.md` sentence names it): FROZEN cap 49 764 → 50 765; MEASURED live fit side
+  348 → 355; the inline comparison → the helper.
+- `test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers`: FROZEN (the new
+  weights): test views 91 → 94; top-1 47 → 46; predicted skips 89 → 92; correct skips 34 → 42;
+  predicted ballots 110 → 84; predicted SKIP ballots 406 → 442; Brier 0.3277976536219233 →
+  0.24907908179311566; predicted ejections 2 unchanged.
+- `test_no_go_verdict_holds_on_live_served_clamped_features`: FROZEN predicted skips 90 → 92
+  (90 was the baseline-8 weights on these bytes); replaced cells 21, top-1 46 and correct skips
+  42 unchanged; new count `correct_ejects == 2`, and the axis-3 accuracy now counts the correct
+  ejections as well as the correct skips (the comment claiming every decision is SKIP was false:
+  2 of 94 eject), which only tightens the `<` against always-eject. Docstring restated: the
+  split is now the held-out side of the corpus the weights were fitted on, not out of sample.
+
+**`tests/training/test_conviction_model.py`**
+- `test_committed_artifact_round_trips_and_the_refit_no_longer_matches` (name kept): FROZEN cap
+  `derive_conviction_max_uses(348) == 49_764` → `(355) == 50_765`; MEASURED live fit rows 348 →
+  355; the inline comparison → the helper.
+- `test_the_committed_verdict_is_the_baseline8_first_evaluation` renamed
+  `test_the_committed_verdict_is_the_baseline9_first_evaluation` (and its entry in
+  `tests/training/test_suite_tiers.py::_MIXED_TIER_ALWAYS_ON_TESTS`). FROZEN: test meetings
+  91 → 94; ejections 57 → 52; conversions 51 → 44; Spearman 0.667006270925879 →
+  0.8394835297890146; recall 49/51 → 42/44; voice-driven share 0.17543859649122806 →
+  0.21153846153846156; conversion bar 0.618421052631579 → 0.5913461538461539; ceiling
+  0.8245614035087719 → 0.7884615384615384; accuracy 0.945054945054945 → 0.925531914893617;
+  trivial baseline 0.5604395604395604 → 0.5319148936170213; confusion (49, 3, 2, 37) →
+  (42, 5, 2, 45). GO and the consequence mapping unchanged.
+- `test_axis_three_is_a_floor_the_live_model_clears_on_all_three`: no value moved (the re-fit
+  reads the same confusion the frozen baseline-8 weights read); docstring restated from "fully
+  out of sample" to the held-out split of the fitted corpus.
+
+**Other readers**
+- `tests/training/test_bakeoff_harness.py::_COMMITTED_CONVICTION_SHA256` (read by
+  `test_evaluate_candidate_full_row`): FROZEN `7e764b89…` → `3a6fe4ca…`.
+- `tests/training/test_crew_scorer.py::test_evaluate_crew_candidate_full_row` (campaign):
+  FROZEN conviction sha `7e764b89…` → `3a6fe4ca…`.
+- `tests/training/test_composed_runner.py::test_composed_fidelity_scores_the_committed_test_split`
+  (campaign): MEASURED surrogate tally ejections 4 → 2 and skips 90 → 92 (the old values were
+  the baseline-8 weights on these bytes); 94/52, top-1 46/52 and ceiling 41/52 unchanged;
+  comment restated.
+- `test_composed_runner.py::test_go_verdict_holds_under_the_live_teammate_exclusion_ranking`
+  (campaign): MEASURED live-exclusion tally ejections 2 → 1; (79, 52), 46 and 78 unchanged;
+  GO holds; docstring gains the in-sample sentence.
+- `test_composed_runner.py::test_composed_fidelity_top1_matches_an_independent_recompute`:
+  unchanged and green.
+- `tests/scripts/test_verify_ml_evidence.py::test_a_report_value_contradicting_its_fraction_raises`:
+  FROZEN report fractions (86, 91) → (87, 94) and (47, 57) → (46, 52), with their planted
+  strings `86/91 = 0.9451` → `87/94 = 0.9255` and `**82.5%** (47/57)` → `**88.5%** (46/52)`
+  (it went red at `283a87a1` because the refreshed reports no longer carry the old cells).
+- **The grounding plant (acceptance item 8).**
+  `test_an_undeclared_corpus_still_fails_the_grounding_row` is parametrized, not copied:
+  `added-recording` (the existing plant), `surrogate-record-back-to-b8` and
+  `conviction-record-back-to-b8`, each writing `cc54d3c0…` back into a temporary copy of one
+  `fit-corpus.json` still keyed to the new weights. Each case asserts its unperturbed control OK
+  first, then FAIL with "undeclared substrate", names exactly the drifted instrument(s) ("the fit
+  was made on cc54d3c02a9804d3…" for the planted one), and reads OK again once restored.
+  4 passed [Mac].
+
+**Turned green by the re-fit, the re-stamps or the constants alone** (no edit): the surrogate
+fence group (`test_runner_satisfies_meeting_runner_protocol`,
+`test_surrogate_game_is_byte_deterministic`, `test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift`,
+the install-gate, fallback, factory, cap, missing-artifact and impostor-ballot tests and the two
+setup errors); `test_goodhart_probe.py`'s eight conviction-fence tests plus the one re-pinned in
+step 4; `test_bakeoff_harness.py`'s three other `evaluate_candidate` tests and
+`test_goodhart_surrogate_rerun_ci_budget`; `test_model_evidence_provenance.py::test_historical_diagnostic_restores_committed_models`;
+`tests/eval/test_balance_eval_meeting_runner.py` and
+`tests/experiments/test_torch_probe_excluded.py`; five `test_verify_ml_evidence.py` controls
+(perturbed weight hash, other weights, relabelled version, perturbed replay, the undeclared
+corpus); in the campaign tier the crew, owned-tasks, coevo and anchor-study fence tests and 14
+of the 16 composed fence tests, `test_hall_of_fame.py::test_committed_pool_restores_only_with_explicit_historical_identity`,
+and the study and pool pins moved in step 4.
+
+**Left for the next operator: they read `training/artifacts/composed/`**, which the composed
+step rewrites from the agreed leg (the composed verdict and manifest still name
+`7e764b89…`/`06b20508…`):
+- default tier: `tests/scripts/test_verify_ml_evidence.py::test_recompute_reads_every_committed_verdict_against_the_live_corpus`
+  (its five composed rows plus the two weight-hash rows, which read the composed manifest);
+  `tests/scripts/test_verify_ml_evidence.py::test_the_corpus_dependent_partition_is_declared_and_is_not_the_whole_leg`,
+  green on `main` and red here for the same reason: it requires the two weight-hash rows OK;
+- campaign tier: `test_composed_runner.py::test_committed_composed_verdict_is_rederivable`,
+  `::test_committed_composed_verdict_round_trips_and_pins_the_shas`,
+  `::test_factory_adoption_gate_refuses_non_go_composed_verdicts` and
+  `::test_historical_composed_weights_cannot_be_installed[historical]` (each meets "the verdict and
+  the artifacts drifted apart" before the refusal it tests); the second of the four is green on
+  `main` and red here, the other three were red on `main` too.
