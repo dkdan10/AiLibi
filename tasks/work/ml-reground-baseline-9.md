@@ -192,7 +192,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   `39a568c6`; the baseline-9 refits then run there as well, and a miss there stops the card
   for the owner. Mechanism: each comparison, quoted with its command. Perturbed proof: the
   same refits on the baseline-9 corpus (355 fit-side meetings, not 348) must not match.
-- [ ] **Surrogate, then conviction, re-fit on baseline 9 at version one** by
+- [x] **Surrogate, then conviction, re-fit on baseline 9 at version one** by
   `report-ballot-surrogate.md` §8 steps 2-5 and `report-conviction-model.md` §8 steps 2-6:
   walk re-validation first (`raw_mismatches` ≠ 0 stops the card); weights, sidecar,
   `max-uses.json` (`derive_max_uses(355) == derive_conviction_max_uses(355) == 50765`), the
@@ -208,14 +208,14 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   scope, and `test_current_loader_refuses_historical_fit` still refuses them at current scope.
   Planted proof: `test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift` and
   `test_conviction_corpus_fence_cannot_be_omitted` still refuse their planted records.
-- [ ] **Each refit pin has a committed perturbed case.** The ULP comparison in both
+- [x] **Each refit pin has a committed perturbed case.** The ULP comparison in both
   `test_committed_artifact_round_trips_and_the_refit_no_longer_matches` pins is factored into
   one helper under `tests/training/`; each instrument gains a case feeding it a refit made on
   the live fit-side rows with one feature shifted by +0.125 (`belief_suspicion` for the
   surrogate; one conviction feature, named in the test), which must raise `AssertionError`.
   Mechanism: the helper, which both pins call. Proof: the perturbed case fails the helper while
   the unperturbed refit, through the same helper, passes.
-- [ ] **`BAKEOFF_BASELINE_ID` becomes `"baseline-9"`** at `training/bakeoff/harness.py:188`
+- [x] **`BAKEOFF_BASELINE_ID` becomes `"baseline-9"`** at `training/bakeoff/harness.py:188`
   and nowhere else, in one commit with the anchor, study and pool stamps, before the baseline-9
   leg runs; the three coupled `baseline_id` defaults move with it (`run_goodhart_probe`,
   `training/bakeoff/goodhart.py:848`; `run_conviction_path_probe`, `:1989`;
@@ -231,7 +231,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   Planted proof: a scratch edit of each of the three literals in turn, back to `"baseline-8"`
   with the other two at `"baseline-9"`, turns the test red each time; Results quotes the three
   runs.
-- [ ] **Anchor study and pool: re-ground and re-stamped in the historical shape, not
+- [x] **Anchor study and pool: re-ground and re-stamped in the historical shape, not
   re-searched.** `walk_corpus` walks all 150 games (a `CorpusWalkError` stops the card, as it
   stopped 21.17); the filtered-BC anchor is re-fit under the moved floor into a scratch root
   and its weights and `.sha256` copied in; its `config.json` loses `substrate_sha_kind` and any
@@ -284,7 +284,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   46/52 against a 41/52 ceiling). No assertion is deleted or weakened, and
   `tests/training/test_model_evidence_provenance.py:98-116` is unchanged: nothing is promoted
   to current. Mechanism: pytest, both tiers. Proof: the planted cases above.
-- [ ] **Both readings are settled by measurement**: for the ceiling, a per-meeting 2×2 census
+- [x] **Both readings are settled by measurement**: for the ceiling, a per-meeting 2×2 census
   over the re-ground fit's held-out ejections (surrogate top-1 hit × ceiling-reachable), each
   hit-but-unreachable meeting named with its mechanism; for the tie-break, record §6.4's
   four-set low/high-tau table re-run at this head. Both go into Results and the surrogate
@@ -646,9 +646,9 @@ commands whole; it cites `docs/architecture.md` "Determinism and the substrate l
 ## Results
 
 **What this section covers (2026-09-23).** The local legs only, filled step by step in this
-order: the reproduction, the surrogate and conviction re-fits, the constants with the anchor, study and pool stamps, the
-Mac Goodhart leg at the branch head, the tests the local legs can re-pin, and the documents
-that do not depend on the Linux leg. The web session's R1 and R2, the composed verdict and
+order: the reproduction, the surrogate and conviction re-fits, the constants with the anchor,
+study and pool stamps, the Mac Goodhart leg at the constants commit, the tests the local legs
+can re-pin, and the documents that do not depend on the Linux leg. The web session's R1 and R2, the composed verdict and
 manifest written from the agreed leg, the composed-dependent pins, `docs/artifacts.md` rows
 `:103`-`:104`, and the gates on the pull request are the next operator's; each is listed
 under **Left for the next operator** below. Nothing here claims a Linux result.
@@ -734,7 +734,7 @@ OK after the report refresh (`--only recompute`, [Mac]). `training/reports/repor
 in a new erratum, §8's recipe corrected to `historical_fit_corpus_fingerprint` with the verdict
 writer named, and one stale test id in §9 corrected to the pin's real name.
 
-**The two readings, settled by measurement (acceptance item 9).** Neither docstring in
+**The two readings, settled by measurement (acceptance item 10).** Neither docstring in
 `training/surrogate/fidelity.py` or `tests/training/test_surrogate_fidelity.py` is edited;
 both rulings stay the owner's.
 
@@ -943,7 +943,7 @@ pushed head with `git diff --stat c740c233 HEAD -- ':!tests' ':!docs' ':!tasks' 
 which must print nothing), so R2 at the pushed head computes the same leg; R2 at `c740c233` is
 the like-for-like comparison.
 
-### 6. Tests: the re-pins the local legs can honestly make (acceptance items 3, 7 and 8, local half)
+### 6. Tests: the re-pins the local legs can honestly make (acceptance items 3, 8 and 9, local half)
 
 Every value below is re-derived through the production computation the test itself calls
 (probes: `$SCR/probe_pins.py`, `$SCR/probe_plants.py`, the tests' own failure output at
@@ -1058,7 +1058,7 @@ step rewrites from the agreed leg (the composed verdict and manifest still name
   the artifacts drifted apart" before the refusal it tests); the second of the four is green on
   `main` and red here, the other three were red on `main` too.
 
-### 7. Documents that do not depend on the Linux leg (acceptance items 10 and 11, local half)
+### 7. Documents that do not depend on the Linux leg (acceptance items 11 and 12, local half)
 
 - `training/README.md:48-49` ("A future fit must write …") is replaced by the card's sentence
   verbatim, the rest of the paragraph kept. It names the two refit pins by their unchanged ids
@@ -1082,3 +1082,83 @@ and table, which still name `cc54d3c0…` and `--complete`), `training/reports/r
 the `replays/ml_corpus/README.md:29-45` blockquote (which still says the fits are baseline-8
 and `BAKEOFF_BASELINE_ID` reads `baseline-8`, both false since steps 2-4), and
 `docs/artifacts.md` rows `:103`-`:104`, recomputed last after merging `main`.
+
+### 8. The local gates, and where the local legs stop
+
+**Red set at `94a2b9ed` against `main`** ([Mac], `uv run pytest -p no:cacheprovider -n auto --dist loadfile -q -rfE`,
+the host shared with other sessions at a load average of 40-60, so wall times are upper bounds):
+- `main` (`ff4c6bb8`): 41 failed + 9 errors, 50 ids (8246 passed, 502 s): the 41 ML ids and the
+  nine under **Done**.
+- This head: 11 failed, 0 errors (8289 passed, 867 s): the nine under **Done** plus
+  `test_verify_ml_evidence.py::test_recompute_reads_every_committed_verdict_against_the_live_corpus`
+  (on `main`'s list) and `::test_the_corpus_dependent_partition_is_declared_and_is_not_the_whole_leg`
+  (green on `main`). Both read `training/artifacts/composed/`, which the composed step rewrites.
+  40 of `main`'s 41 ML ids are green here.
+- The campaign tier, [Mac], with every re-pin in place: 336 collected (335 at `39a568c6` plus
+  the study pin's planted case); the four composed-artifact tests listed in step 6 are red and
+  the rest pass (the composed-fidelity and crew re-pins re-run green after the full run, which read
+  7 failed / 329 passed in 1140 s under the load above). The Actions run is below.
+- Static gates at this head, [Mac]: `ruff check .`, `ruff format --check .`, `lint-imports`
+  (4 kept), `validate_task_docs.py`, `generate_prompts.py --check` and `mypy .` (494 files)
+  all pass; `check_doc_facts.py` passes. The frontend legs were not run here; no frontend file
+  changed, and the PR's `frontend-checks` job runs them.
+- Freeze, against the merge base `ff4c6bb8`: `git diff --stat ff4c6bb8 HEAD -- engine agents meetings observation orchestrator`
+  and `-- replays docs/process-scorecard.md` print nothing, and no path under `eval/` changed;
+  no utility-es, policy-es, bc-dagger, crew, coevo or runner-up byte and no `results-*.jsonl`
+  row moved.
+
+**Status of the acceptance items at this head** (numbered in the order Acceptance lists them).
+Ticked where the evidence is whole: items 2, 3, 4, 5 and 10 (the readings). Open:
+- item 1 needs R1;
+- items 6 and 7 need the composed verdict from R2;
+- item 8 (verifier FAIL 0) reads, offline at this head, OK for grounding and the surrogate and
+  conviction rows, and FAIL on the seven rows that read the composed artifacts;
+- item 9 (all 68 green): 64 of the 68 are green, the other four read the composed artifacts,
+  and two more that are green on `main` are red here for the same reason;
+- item 11 (the keying rule) is written, sentence and docstrings, and its two refit pins and
+  their perturbed cases are green; the third test the sentence names is one of the two
+  composed-artifact reds, so the box waits for the composed step;
+- item 12 needs the documents under "Left for the next operator";
+- items 13 and 14 need the Actions runs.
+
+**Left for the next operator, once the web session's `claude/<slug>` branch exists.**
+1. Read the hand-back by SHA and apply the decision rule: R1 at `39a568c6` against the
+   §6.1/§6.2 cells and both constraint strings; R2 at **`c740c2337008cdee06a00242ee2ce286681bff13`**
+   against this Mac's `to_json()` sha256 `9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f`
+   and `es_digest` `00d2c4147613d3ae33062778d3dd1c7d4509fd73c089a60c36f46dbc92c610dd` (step 5).
+2. The composed step: `run_composed_fidelity` → `decide_composed_go(..., adoption_constraints=<the agreed leg's>)`
+   → `write_composed_manifest_artifact` and `write_composed_verdict_artifact`; any change to
+   the constraint set moves `scripts/verify_ml_evidence.py:1812-1815` and is named first in the PR.
+3. The six composed-artifact tests (step 6), the verifier's seven composed rows, and the
+   composed report.
+4. `docs/ml-program.md:170-192`, the `replays/ml_corpus/README.md:29-45` blockquote, then after
+   merging `main`, `docs/artifacts.md` rows `:103`-`:104`, last.
+5. The gates: the PR's CI and the Actions campaign run below (or its re-run at the final head).
+
+**The deferred cost of the version-one choice** (Constraints, **Deferred cost**). The first
+current install of either fit mints version two at its own commit, and inherits:
+- the identity row (`scripts/verify_ml_evidence.py:1716-1781`) and the grounding row
+  (`:1966-2061`) switching to `fit_corpus_fingerprint`;
+- the inversions of `test_historical_verifier_refuses_relabeled_fit_version`,
+  `test_current_loader_refuses_historical_fit` (onto a planted version-one copy), the pool
+  ingest and the anchor pin's scope check;
+- the function switches at `test_surrogate_runner.py:553`, `:599` and
+  `test_composed_runner.py:966`;
+- the closure churn: `PYTHONPATH=. uv run python $SCR/churn.py ff4c6bb8` (the bound set is
+  `derivation_files()` plus the map, `pyproject.toml` and `uv.lock`, 112 files; first-parent
+  merges since 2026-09-06 diffed against their first parent) reads **15 of 39** merges
+  touching it.
+
+Which code closure version two binds, for the fits and for each stamp, is the owner's before
+that install.
+
+**Decisions, recorded.**
+- Tests that the constants commit itself moved (the selection bar, the study pin with its
+  planted case, the pool pin, the Goodhart probe's baseline literal) landed in that commit so
+  it is verified on its own; the rest landed in the tests commit.
+- The composed manifest is left to the composed step with the verdict, as the card orders,
+  although it does not read the leg; the two tests green on `main` and red here are the price,
+  named above.
+- R2's SHA is the constants commit rather than the pushed head, so it is the commit the Mac
+  leg ran on; the post-constants diff check in step 5 shows the pushed head computes the same leg.
+- No verdict flipped and no constraint set changed in the local legs; Q4 did not fire.
