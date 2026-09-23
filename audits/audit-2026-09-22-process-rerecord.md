@@ -1363,17 +1363,22 @@ which covers the prompt set under `agents/strategic/prompts/` — prints
 **The key scan, count-only, over every new byte.** Every file this branch adds or
 changes (`git diff --name-only --diff-filter=AM 39a568c6..HEAD`, the gzipped
 reports decompressed), matched against five key shapes — a Featherless `rc_`
-key, an `sk-` key, a bearer token, a `FEATHERLESS_API_KEY=` assignment, an
-`api_key` assignment — printing counts only:
+key, an `sk-` key, a bearer token, a `FEATHERLESS_API_KEY=` assignment of a
+real-looking value (eight or more key characters), an `api_key` assignment —
+printing counts only:
 
 ```
 $ uv run python <out-of-tree>/keyscan.py 39a568c6
-files scanned: 337; bytes scanned (gz decompressed): 300,846,527
+files scanned: 418; bytes scanned (gz decompressed): 304,924,306
 TOTAL matches: 0
 ```
 
 Each pattern fires on a planted key (one match each), so the zero is a
-measurement and not a pattern that cannot match. Run during the close;
+measurement and not a pattern that cannot match. A looser first version of the
+assignment pattern matched twice, in `replays/ml_corpus/README.md`: both are the
+documented `export FEATHERLESS_API_KEY=...` placeholder, whose value is the
+literal three dots, and both were already on `main` at the base. Run during the
+close;
 the card re-runs it at the pull request's head. The key file the recording used
 was deleted from the operator's scratch directory, and no step of the close
 read the repository's `.env`.
