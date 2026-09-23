@@ -529,11 +529,14 @@ ceiling, so the owner's raise was needed (the Amendment above is corrected).
 
 ### Verification
 
-Re-run in the review round in a fresh worktree, in a bare shell (no
+Re-run in the second review round in a fresh worktree, in a bare shell (no
 `AILIBI_*` export, no `.env`), with each exit code captured directly. The runs
-used `8e6b62eb` plus the recomputed `audits/` registry row, before this
-Results edit. `scripts/validate_task_docs.py` was re-run after the edit, and the
-key scan was taken last, over the head that carries this line:
+used `daf7bfc3`, which has the two FO-6 re-pins, the record's campaign-tier
+section, the card's campaign list and the recomputed `audits/` registry row,
+before this Verification edit. `scripts/validate_task_docs.py` was re-run after
+the edit, and the key scan was taken last, over the head that carries this
+line. Every figure matches the first review round's run at `8e6b62eb` except
+the key scan's and the new campaign-tier line.
 
 ```
 bash scripts/check.sh (whole)                          EXIT 1 — pytest, below
@@ -559,6 +562,10 @@ scripts/validate_task_docs.py (after this edit)        EXIT 0
 scripts/generate_prompts.py --check                    EXIT 0
 scripts/gen_frontend_types.py --check                  EXIT 0
 uv run pytest tests/orchestrator/ (fresh interpreter)  586 passed, 3 xfailed
+uv run pytest -m campaign (not part of check.sh)       EXIT 1; 304 passed, 29 failed + 2 errors =
+                                                       the 31 campaign reds under "Left red"
+                                                       (base 39a568c6, same venv: 335 passed;
+                                                       c447a928: 302 passed, 31 failed + 2 errors)
 scripts/verify_ml_evidence.py (offline, never --complete)   EXIT 1; 61 checks: OK 37,
                                                        FAIL 12, ABSENT 7, INFO 5 — the 12 are the
                                                        corpus rows of record §7.3
@@ -569,7 +576,7 @@ scripts/measure_baseline.py --watchability --json      EXIT 0; baseline-9 defaul
 git log --oneline 39a568c6..HEAD -- engine agents meetings observation orchestrator
                                                        (empty: the freeze held)
 git log --oneline 39a568c6..origin/main                (empty: main did not move)
-count-only key scan over every added or changed byte   427 files, 307,038,663 bytes, 0 matches
+count-only key scan over every added or changed byte   428 files, 307,083,881 bytes, 0 matches
   (git diff --name-only --diff-filter=AM 39a568c6..HEAD at the head carrying this line;
    gzipped reports decompressed; the five patterns each fire once on a planted key)
 ```
