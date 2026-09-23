@@ -253,17 +253,17 @@ def test_zero_conversion_with_backed_supply_also_fails() -> None:
 
 
 def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
-    """The committed default (baseline-8) sets clear their own DERIVED floor.
+    """The committed default (baseline-9) sets clear their own DERIVED floor.
 
     At the baseline's own evidence density the supply ratio is exactly 1.0 and
     the derived floor IS the pin — an exact float identity, not an approximate
     one (the derivation multiplies the pin by the ratio, in that order, so
     "the baseline passes at equality" survives the re-anchor bit-exact). Re-pinned
-    to the baseline-8 conversion cells (9p2i 81/128, 4p1i 20/33; baseline 7 read
-    84/132 and 20/34, and baseline 6 read 78/136 and 9/30).
+    to the baseline-9 conversion cells (9p2i 79/112, 4p1i 20/37; baseline 8 read
+    81/128 and 20/33, baseline 7 84/132 and 20/34, baseline 6 78/136 and 9/30).
     """
 
-    expected = {_NINE: 81 / 128, _FOUR: 20 / 33}  # was 84 / 132, 20 / 34
+    expected = {_NINE: 79 / 112, _FOUR: 20 / 37}  # was 81 / 128, 20 / 33
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name
@@ -287,18 +287,18 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
 
     * 4p1i still PASSES — its conversion clears the derived population-relative
       floor and the one-event ``witnessed_event_rate`` floor is advisory.
-    * 9p2i still FAILS the referee, on ``witnessed_event_rate`` (0.03383 < the
-      0.03390 floor — still a real rate miss, NOT the one-event advisory case,
-      but now a hair's breadth: 9 of 266 kills, where one more witnessed kill
-      would clear it) and on ``flags_per_meeting`` (1.0228 < the 1.0909 floor).
-      Its conversion clears with room (0.645 against a derived 0.612). A
+    * 9p2i still FAILS the referee, on ``witnessed_event_rate`` (0.02909 < the
+      0.03390 floor — a real rate miss, NOT the one-event advisory case: 8 of
+      275 kills) and on ``flags_per_meeting`` (0.8330 < the 1.0909 floor). A
       starved-supply rejection is the instrument working, never silent. The
       surrogate/bake-off consume the corpus as a TRAINING substrate regardless
       of this watchability verdict.
 
-    The baseline-8 re-record lifts the 9p2i flag density (428/432 = 0.9907 ->
-    1.0228), so the population-relative conversion demand eases slightly and the
-    gauge still clears.
+    The baseline-9 re-record LOWERS the 9p2i flag density (1.0228 -> 374/449 =
+    0.8330, the route claim no longer minting envelope flags against honest
+    movers), so the population-relative conversion demand RISES (0.612 ->
+    0.751) and conversion now misses it too (78/125 = 0.624): on these bytes the
+    9p2i corpus fails all three Layer-1 gauges against the baseline-6 block.
     """
 
     corpus_nine = compute_watchability(_CORPUS_NINE, baseline_id="baseline-6")
@@ -308,25 +308,25 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     witnessed_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed_nine.measured == 0.03383458646616541  # was 0.030418250950570342
+    assert witnessed_nine.measured == 8 / 275  # was 0.03383458646616541 (9/266)
     assert witnessed_nine.floor == 0.03389830508474576
     assert witnessed_nine.passed is False  # a real rate miss, blocks the floor AND
     flags_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "flags_per_meeting"
     )
-    assert flags_nine.measured == 1.0227790432801822  # was 0.9907407407407407
+    assert flags_nine.measured == 374 / 449  # was 1.0227790432801822
     assert flags_nine.floor == 1.0909090909090908
     assert flags_nine.passed is False
     conversion_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_nine.measured == 0.6450777202072538  # was 0.6675603217158177
+    assert conversion_nine.measured == 78 / 125  # was 0.6450777202072538
     assert (
-        conversion_nine.floor == 0.6117337398616057
-    )  # derived population-relative  # was 0.6315158178819531
+        conversion_nine.floor == 0.7511367210958277
+    )  # derived population-relative  # was 0.6117337398616057
     assert (
-        conversion_nine.passed is True
-    )  # conversion clears; the misses are supply-side
+        conversion_nine.passed is False
+    )  # the thinner supply raises the demand past it  # was True
 
     corpus_four = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-6")
     assert corpus_four.integrity_ok is True
@@ -337,10 +337,10 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     conversion_four = next(
         g for g in corpus_four.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_four.measured == 0.7435897435897436  # was 0.6829268292682927
+    assert conversion_four.measured == 9 / 13  # was 0.7435897435897436
     assert (
-        conversion_four.floor == 0.18249336870026525
-    )  # derived population-relative  # was 0.186737400530504
+        conversion_four.floor == 0.189010989010989
+    )  # derived population-relative  # was 0.18249336870026525
     assert conversion_four.passed is True
 
 

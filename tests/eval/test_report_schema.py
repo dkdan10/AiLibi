@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from engine.entities import Role
 from eval.deduction_metrics import DeductionMetricsReport
 from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
+from eval.report_io import read_set_report_text
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -901,9 +902,7 @@ def test_a_committed_report_whose_clock_is_a_json_boolean_is_refused() -> None:
     which is what makes the perturbed copy the only variable.
     """
 
-    raw = (_REPO_ROOT / "replays/samples/4p1i/tournament-eval-report.json").read_text(
-        encoding="utf-8"
-    )
+    raw = read_set_report_text(_REPO_ROOT / "replays/samples/4p1i")
     document = json.loads(raw)
 
     clean = TournamentEvalReport.model_validate(document)

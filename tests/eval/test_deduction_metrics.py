@@ -5,20 +5,20 @@ objective; §8 rows 3, 10, 14] plus the item-24 disclosure twin Task 19.8 landed
 in ``replays/ml_corpus/README.md``. The module is a pure fold over an assembled
 report, so its cells are pinnable against the committed bytes — and the
 committed bytes are the PRIMARY pin here: every headline assertion reads the
-``deduction`` block off the four committed ``tournament-eval-report.json``
+``deduction`` block off the four committed ``tournament-eval-report.json.gz``
 views, then a recompute proves the block is not stale.
 
 What is pinned, and why each pin exists:
 
-1. **The headline cross-tab under BOTH partitions, separately.** The triage's
-   independent 9p recount is reproduced to the digit twice — once by MEETING
-   flag (70 flagged -> 68 imp / 2 inn; 95 unflagged -> 10 / 21; unflagged
-   accuracy 10/31) and once by EJECTEE-specific proof (68 proof-present of 101;
-   non-direct accuracy 10/33). A dedicated test asserts the two partitions
-   DISAGREE on their splits while agreeing on the ejection total — the
-   define-before-counting (C5) lesson made executable, so a future refactor
-   cannot quietly collapse them into one number.
-2. **The corpus twins** beside them (35/89 = 39.3% non-direct).
+1. **The headline cross-tab under BOTH partitions, separately.** First pinned
+   to the triage's independent 9p recount (MEETING flag: 70 flagged -> 68 imp /
+   2 inn, unflagged accuracy 10/31; EJECTEE-specific proof: 68 proof-present of
+   101, non-direct accuracy 10/33) and re-pinned at every re-record since. A
+   dedicated test asserts the two partitions agree on the ejection total while
+   staying distinct cells, and pins the corpus set where their evidence-present
+   buckets differ — the define-before-counting (C5) lesson made executable, so
+   a future refactor cannot quietly collapse them into one number.
+2. **The corpus twins** beside them (30/62 = 48.4% non-direct).
 3. **The 19.11 cross-pin.** The eval-side taxonomy is an independent
    re-implementation of ``api.schemas.classify_evidence``; here the two are run
    over the same committed flags and must agree flag-by-flag AND on the exact
@@ -72,6 +72,7 @@ from eval.deduction_metrics import (
 )
 from eval.kill_craft import KillCraftReport
 from eval.meeting_quality import TournamentEvalReport, compute_ballot_target_redirects
+from eval.report_io import read_set_report_text
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -111,9 +112,7 @@ _CORPUS_9P2I: Final[Path] = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 
 
 def _committed(sample_dir: Path) -> TournamentEvalReport:
-    return TournamentEvalReport.model_validate_json(
-        (sample_dir / "tournament-eval-report.json").read_text(encoding="utf-8")
-    )
+    return TournamentEvalReport.model_validate_json(read_set_report_text(sample_dir))
 
 
 # --------------------------------------------------------------------------- #
@@ -156,16 +155,16 @@ def test_samples_9p2i_meeting_flag_partition(
     """
 
     cross_tab = samples_9p2i.deduction.meeting_flag_cross_tab
-    assert cross_tab.meetings_total == 151  # was 152
-    assert cross_tab.flagged_meetings == 68  # was 69
-    assert cross_tab.unflagged_meetings == 83  # was 95
-    assert cross_tab.flagged_ejections_impostor == 68  # was 69
-    assert cross_tab.flagged_ejections_innocent == 0  # was 2
-    assert cross_tab.unflagged_ejections_impostor == 14  # was 16
-    assert cross_tab.unflagged_ejections_innocent == 13  # was 14
+    assert cross_tab.meetings_total == 145  # was 151
+    assert cross_tab.flagged_meetings == 70  # was 68
+    assert cross_tab.unflagged_meetings == 75  # was 83
+    assert cross_tab.flagged_ejections_impostor == 70  # was 68
+    assert cross_tab.flagged_ejections_innocent == 0
+    assert cross_tab.unflagged_ejections_impostor == 11  # was 14
+    assert cross_tab.unflagged_ejections_innocent == 9  # was 13
     accuracy = cross_tab.unflagged_meeting_accuracy
-    assert (accuracy.numerator, accuracy.denominator) == (14, 27)  # was (16, 30)
-    assert accuracy.rate == pytest.approx(0.5185185185185185)  # was 0.5333333333333333
+    assert (accuracy.numerator, accuracy.denominator) == (11, 20)  # was (14, 27)
+    assert accuracy.rate == pytest.approx(0.55)  # was 0.5185185185185185
 
 
 def test_samples_9p2i_ejectee_proof_partition(
@@ -179,30 +178,32 @@ def test_samples_9p2i_ejectee_proof_partition(
     """
 
     cross_tab = samples_9p2i.deduction.ejectee_proof_cross_tab
-    assert cross_tab.ejections_total == 95  # was 99
-    assert cross_tab.proof_present_ejections == 68  # was 69
-    assert cross_tab.proof_present_impostor == 68  # was 69
+    assert cross_tab.ejections_total == 90  # was 95
+    assert cross_tab.proof_present_ejections == 70  # was 68
+    assert cross_tab.proof_present_impostor == 70  # was 68
     assert cross_tab.proof_present_innocent == 0
-    assert cross_tab.non_direct_ejections == 27  # was 30
+    assert cross_tab.non_direct_ejections == 20  # was 27
     accuracy = cross_tab.non_direct_accuracy
-    assert (accuracy.numerator, accuracy.denominator) == (14, 27)  # was (16, 30)
-    assert accuracy.rate == pytest.approx(0.5185185185185185)  # was 0.5333333333333333
-    # The headline share on these bytes: 68 of the 82 correct ejections rode
-    # ejectee-specific proof (baseline 6: 68 of 78).
-    assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 82
+    assert (accuracy.numerator, accuracy.denominator) == (11, 20)  # was (14, 27)
+    assert accuracy.rate == pytest.approx(0.55)  # was 0.5185185185185185
+    # The headline share on these bytes: 70 of the 81 correct ejections rode
+    # ejectee-specific proof (baseline 8: 68 of 82).
+    assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 81
 
 
 def test_the_two_partitions_are_not_interchangeable(
-    samples_9p2i: TournamentEvalReport,
+    samples_9p2i: TournamentEvalReport, corpus_9p2i: TournamentEvalReport
 ) -> None:
-    """The C5 lesson, executable: same bytes, same total, DIFFERENT splits.
+    """The C5 lesson, executable: same bytes, same total, two definitions.
 
     The fourth Codex planning round caught the two denominators being blended
     into one sentence. This test is the guard against the same blend in code:
-    both partitions span every ejection, and their "evidence present" buckets
-    differ (70 ejections in flagged meetings vs 68 with ejectee-specific proof),
-    so any cell that divided one's numerator by the other's denominator would be
-    wrong by construction.
+    both partitions span every ejection, and on the corpus set their "evidence
+    present" buckets differ (213 ejections in flagged meetings vs 211 with
+    ejectee-specific proof), so any cell that divided one's numerator by the
+    other's denominator would be wrong by construction. On the samples set the
+    two buckets coincide on these bytes, which is why the model's no-mixing
+    validator, not an arithmetic inequality, is what keeps the cells apart.
     """
 
     deduction = samples_9p2i.deduction
@@ -221,29 +222,21 @@ def test_the_two_partitions_are_not_interchangeable(
         flagged_meeting_ejections + unflagged_meeting_ejections
         == ejectee_proof.ejections_total
         == deduction.ejections_total
-        == 95  # was 99
+        == 90  # was 95
     )
-    # The "evidence present" buckets are NOT the same set. On these bytes they
-    # happen to hold the SAME COUNT -- 68 each -- so the inequality that made the
-    # C5 point on baseline 6 (70 vs 68) is asserted over the ejection SETS
-    # instead, which is what the lesson was always about.
-    assert flagged_meeting_ejections == 68  # was 69
-    assert ejectee_proof.proof_present_ejections == 68  # was 69
-    # The SETS still differ, which is the whole C5 point: the meeting-flag
-    # partition's unflagged half splits 14/13 by role and the ejectee-proof
-    # partition's non-direct half splits 14/13 too -- but over different
-    # ejections, so the two accuracy CELLS carry the same denominator and are
-    # still not interchangeable. The model's no-mixing validator is what
-    # enforces that (test_a_cross_tab_cell_cannot_carry_another_blocks_counts).
+    # On the samples set the "evidence present" buckets hold the SAME COUNT --
+    # 70 each -- and, on these bytes, the same ejections: every ejection in a
+    # vent-flagged meeting ejected a player that flag named. Both halves split
+    # 11/9 by role. The two accuracy CELLS are still two definitions, and the
+    # model's no-mixing validator is what keeps them apart
+    # (test_a_cross_tab_cell_cannot_carry_another_blocks_counts).
+    assert flagged_meeting_ejections == 70  # was 68
+    assert ejectee_proof.proof_present_ejections == 70  # was 68
     assert meeting_flag.unflagged_meeting_accuracy is not (
         ejectee_proof.non_direct_accuracy
     )
-    # On baseline 6 the complements differed too (31 vs 33). On these bytes both
-    # halves hold 27 ejections, so the partitions agree on every COUNT and still
-    # describe different sets -- which is why the model's no-mixing validator,
-    # not an arithmetic inequality, is what keeps them apart.
-    assert unflagged_meeting_ejections == 27  # was 30
-    assert ejectee_proof.non_direct_ejections == 27  # was 30
+    assert unflagged_meeting_ejections == 20  # was 27
+    assert ejectee_proof.non_direct_ejections == 20  # was 27
     assert (
         meeting_flag.unflagged_meeting_accuracy.denominator
         == ejectee_proof.non_direct_accuracy.denominator
@@ -255,34 +248,46 @@ def test_the_two_partitions_are_not_interchangeable(
         == ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor
     )
 
+    # The corpus set carries the C5 inequality itself: two innocents were ejected
+    # in vent-flagged meetings whose flag named someone else, so partition A's
+    # evidence-present bucket is two ejections wider than partition B's.
+    corpus_flag = corpus_9p2i.deduction.meeting_flag_cross_tab
+    corpus_proof = corpus_9p2i.deduction.ejectee_proof_cross_tab
+    corpus_flagged = (
+        corpus_flag.flagged_ejections_impostor + corpus_flag.flagged_ejections_innocent
+    )
+    assert corpus_flagged == 213
+    assert corpus_proof.proof_present_ejections == 211
+    assert corpus_flagged != corpus_proof.proof_present_ejections
+
 
 def test_corpus_9p2i_cross_tab_twins(corpus_9p2i: TournamentEvalReport) -> None:
-    """The corpus twins of both partitions (§2 consensus #1: 213/248, 35/89)."""
+    """The corpus twins of both partitions (§2 consensus #1 first read 213/248, 35/89)."""
 
     deduction = corpus_9p2i.deduction
     meeting_flag = deduction.meeting_flag_cross_tab
     ejectee_proof = deduction.ejectee_proof_cross_tab
 
-    assert meeting_flag.meetings_total == 439  # was 432
-    assert meeting_flag.flagged_meetings == 220  # was 212
-    assert meeting_flag.unflagged_meetings == 219  # was 220
-    assert meeting_flag.flagged_ejections_impostor == 220  # was 212
-    assert meeting_flag.flagged_ejections_innocent == 0  # was 3
-    assert meeting_flag.unflagged_ejections_impostor == 32  # was 42
-    assert meeting_flag.unflagged_ejections_innocent == 29  # was 26
+    assert meeting_flag.meetings_total == 449  # was 439
+    assert meeting_flag.flagged_meetings == 215  # was 220
+    assert meeting_flag.unflagged_meetings == 234  # was 219
+    assert meeting_flag.flagged_ejections_impostor == 211  # was 220
+    assert meeting_flag.flagged_ejections_innocent == 2  # was 0
+    assert meeting_flag.unflagged_ejections_impostor == 30  # was 32
+    assert meeting_flag.unflagged_ejections_innocent == 30  # was 29
 
-    assert ejectee_proof.ejections_total == 281  # was 280
-    assert ejectee_proof.proof_present_ejections == 220  # was 212
-    assert ejectee_proof.proof_present_impostor == 220  # was 212
+    assert ejectee_proof.ejections_total == 273  # was 281
+    assert ejectee_proof.proof_present_ejections == 211  # was 220
+    assert ejectee_proof.proof_present_impostor == 211  # was 220
     non_direct = ejectee_proof.non_direct_accuracy
-    assert (non_direct.numerator, non_direct.denominator) == (32, 61)  # was (42, 68)
+    assert (non_direct.numerator, non_direct.denominator) == (30, 62)  # was (32, 61)
     assert non_direct.rate == pytest.approx(
-        0.5245901639344263
-    )  # was 0.6176470588235294
-    # 220 of the 252 correct corpus ejections rode ejectee-specific proof
-    # (baseline 6: 213 of 248).
+        0.4838709677419355
+    )  # was 0.5245901639344263
+    # 211 of the 241 correct corpus ejections rode ejectee-specific proof
+    # (baseline 8: 220 of 252).
     assert (
-        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 252
+        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 241
     )
 
 
@@ -294,46 +299,47 @@ def test_4p_sets_cross_tab(
     §8 row 3's 4p clause reads "13 total ejections: 12 in flagged meetings and
     one in a flagless meeting; 26/27 flagless meetings skipped". The committed
     ``replays/samples/4p1i`` bytes (byte-identical to the triage's tree — no
-    replay JSONL moved in Phase 19) carry **12** ejections over 39 meetings, and
+    replay JSONL moved in Phase 19) carried **12** ejections over 39 meetings, and
     neither partition yields 13: partition A splits 10 / 2 over 10 vent-flagged
     and 29 unflagged meetings, while an ANY-flag reading gives 12 / 0 over 13
     flagged and 26 flagless. The row's 9p claims — the ones the triage DID
     independently re-run — reproduce exactly (above); this one is a source
-    miscount, corrected here.
+    miscount, corrected here. (Those were the Phase-19 bytes; the pins below
+    are the current record's.)
     """
 
     samples = samples_4p1i.deduction
-    assert samples.meetings_total == 39  # was 40
-    assert samples.ejections_total == 24  # was 21
+    assert samples.meetings_total == 39
+    assert samples.ejections_total == 20  # was 24
     meeting_flag = samples.meeting_flag_cross_tab
-    assert meeting_flag.flagged_meetings == 19  # was 10
-    assert meeting_flag.unflagged_meetings == 20  # was 21
-    assert meeting_flag.flagged_ejections_impostor == 19  # was 9
-    assert meeting_flag.flagged_ejections_innocent == 0  # was 1
+    assert meeting_flag.flagged_meetings == 19
+    assert meeting_flag.unflagged_meetings == 20
+    assert meeting_flag.flagged_ejections_impostor == 19
+    assert meeting_flag.flagged_ejections_innocent == 0
     assert meeting_flag.unflagged_ejections_impostor == 1
-    assert meeting_flag.unflagged_ejections_innocent == 4  # was 1
-    # The ANY-flag reading the triage may have meant: 13 flagged meetings, all
-    # 12 ejections inside them, 26 flagless meetings — still not 13 ejections.
-    assert samples.evidence_taxonomy.meetings_with_any_flag == 19  # was 13
+    assert meeting_flag.unflagged_ejections_innocent == 0  # was 4
+    # The ANY-flag reading beside it: on these bytes every meeting carrying any
+    # flag carries a role-proof one, so the two meeting counts coincide at 19.
+    assert samples.evidence_taxonomy.meetings_with_any_flag == 19
     ejectee_proof = samples.ejectee_proof_cross_tab
-    assert ejectee_proof.proof_present_ejections == 19  # was 9
-    assert ejectee_proof.non_direct_ejections == 5  # was 2
+    assert ejectee_proof.proof_present_ejections == 19
+    assert ejectee_proof.non_direct_ejections == 1  # was 5
     assert ejectee_proof.non_direct_accuracy.numerator == 1
-    # 19 of the 20 correct 4p ejections involved vent proof (baseline 6: 9 of 10).
-    assert ejectee_proof.proof_present_impostor == 19  # was 9
+    # 19 of the 20 correct 4p ejections involved vent proof, as at baseline 8.
+    assert ejectee_proof.proof_present_impostor == 19
     assert (
         ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 20
     )
 
     corpus = corpus_4p1i.deduction
-    assert corpus.meetings_total == 43  # was 44
-    assert corpus.ejections_total == 29  # was 20
+    assert corpus.meetings_total == 43
+    assert corpus.ejections_total == 28  # was 29
     assert corpus.ejectee_proof_cross_tab.proof_present_ejections == 26
     # Baseline 6 read an EMPTY non-direct denominator on this set (the None
-    # sentinel, never 0.0). The record filled it: three ejections now sit in the
-    # non-direct cell, so the sentinel is asserted where it still applies --
-    # ``samples/4p1i``'s meeting-flag block -- rather than dropped.
-    assert corpus.ejectee_proof_cross_tab.non_direct_accuracy.denominator == 3
+    # sentinel, never 0.0). Later records filled it: two ejections sit in the
+    # non-direct cell on these bytes, so the sentinel is pinned on synthetic data
+    # instead (test_empty_report_yields_none_rates_not_zeroes).
+    assert corpus.ejectee_proof_cross_tab.non_direct_accuracy.denominator == 2  # was 3
     assert corpus.ejectee_proof_cross_tab.non_direct_accuracy.rate is not None
 
 
@@ -393,14 +399,14 @@ def test_accepts_a_bare_game_sequence(samples_4p1i: TournamentEvalReport) -> Non
 # the DTO-side derivation. Reproducing them from the eval-side twin IS the
 # cross-pin the contract asks for; a diff on either side is a loud failure in
 # both suites.
-# Baseline 6 read (96, 64, 26), (11, 2, 3), (313, 204, 90) and (20, 1, 0). The
-# cross-statement column is what the record closed: 64 -> 7 and 204 -> 8.
+# The weak-signal column is what the baseline-9 record moved: 50 -> 11 on the
+# samples set and 126 -> 44 on the corpus.
 _EXPECTED_CATEGORY_COUNTS: Final[dict[str, tuple[int, int, int]]] = {
     # set -> (role_proof, cross_statement, weak_signal)
-    "samples/9p2i": (90, 7, 50),  # was (92, 2, 50)
+    "samples/9p2i": (90, 6, 11),  # was (90, 7, 50)
     "samples/4p1i": (20, 0, 0),
-    "ml_corpus/9p2i": (315, 8, 126),  # was (308, 10, 110)
-    "ml_corpus/4p1i": (28, 0, 1),
+    "ml_corpus/9p2i": (317, 13, 44),  # was (315, 8, 126)
+    "ml_corpus/4p1i": (28, 0, 0),  # was (28, 0, 1)
 }
 
 
@@ -449,7 +455,7 @@ def test_every_committed_flag_classifies_identically_on_both_surfaces(
                         event_b_id=flag.event_b_id,
                         weak=is_weak_contradiction(flag),
                     )
-    assert checked == 147 + 449  # samples + corpus 9p2i flags; was 144 + 428
+    assert checked == 107 + 374  # samples + corpus 9p2i flags; was 147 + 449
 
 
 def test_unclassifiable_kind_raises_rather_than_bucketing() -> None:
@@ -494,9 +500,9 @@ def test_roll_call_coverage_split_under_both_estimators(
     """VERIFY-THEN-FIX for the §7 item-24 roll-call split (source-specific).
 
     The two estimators genuinely differ, so both ship as separately named cells:
-    on these bytes the pooled turn-level impostor share is 47.5% (samples) and
-    45.3% (corpus), while the unweighted per-meeting macro-average of the same
-    turns reads 43.8% and 41.1%. ``replays/ml_corpus/README.md`` item 8
+    on these bytes the pooled turn-level impostor share is 49.5% (samples) and
+    45.8% (corpus), while the unweighted per-meeting macro-average of the same
+    turns reads 46.6% and 41.6%. ``replays/ml_corpus/README.md`` item 8
     publishes the pooled pair as its headline and names the macro-average
     beside it; ``check_doc_facts.check_corpus_disclosures`` re-derives those
     cells from the same reports these asserts read.
@@ -504,38 +510,36 @@ def test_roll_call_coverage_split_under_both_estimators(
 
     samples = samples_9p2i.deduction.public_response_coverage
     assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (
-        651,
-        651,
-    )  # was (652, 652)
+        635,
+        635,
+    )  # was (651, 651)
     assert (samples.impostor_turns_with_whereabouts, samples.impostor_turns) == (
-        106,
-        218,
-    )  # was (104, 219)
-    assert samples.crew_pooled_coverage == pytest.approx(1.0)  # was 0.9958677685950413
+        104,
+        210,
+    )  # was (106, 218)
+    assert samples.crew_pooled_coverage == pytest.approx(1.0)
     assert samples.impostor_pooled_coverage == pytest.approx(
-        0.48623853211009177
-    )  # was 0.4748858447488584
+        0.49523809523809526
+    )  # was 0.48623853211009177
     assert samples.impostor_macro_average_coverage == pytest.approx(
-        0.45364238410596025
-    )  # was 0.4375
-    assert samples.crew_macro_average_coverage == pytest.approx(
-        1.0
-    )  # was 0.9957575757575758
+        0.46551724137931033
+    )  # was 0.45364238410596025
+    assert samples.crew_macro_average_coverage == pytest.approx(1.0)
 
     corpus = corpus_9p2i.deduction.public_response_coverage
     assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (
-        1880,
-        1880,
-    )  # was (1854, 1854)
+        1888,
+        1888,
+    )  # was (1880, 1880)
     assert (corpus.impostor_turns_with_whereabouts, corpus.impostor_turns) == (
-        292,
-        636,
-    )  # was (283, 625)
-    assert corpus.impostor_pooled_coverage == pytest.approx(292 / 636)  # was 283 / 625
+        298,
+        651,
+    )  # was (292, 636)
+    assert corpus.impostor_pooled_coverage == pytest.approx(298 / 651)  # was 292 / 636
     # Baseline 6's macro-average was 0.4654 (the triage's "46.5%").
     assert corpus.impostor_macro_average_coverage == pytest.approx(
-        0.4202733485193622
-    )  # was 0.41087962962962965
+        0.41648106904231624
+    )  # was 0.4202733485193622
     # The two estimators genuinely differ; publishing one alone is the drift.
     assert corpus.impostor_pooled_coverage != corpus.impostor_macro_average_coverage
 
@@ -543,26 +547,20 @@ def test_roll_call_coverage_split_under_both_estimators(
 def test_roll_call_coverage_4p_sets(
     samples_4p1i: TournamentEvalReport, corpus_4p1i: TournamentEvalReport
 ) -> None:
-    """The 4p disclosure twins (crew 78/78 and 86/86 vs impostor 6/39 and 3/43)."""
+    """The 4p disclosure twins (crew 78/78 and 86/86 vs impostor 2/39 and 1/43)."""
 
     samples = samples_4p1i.deduction.public_response_coverage
-    assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (
-        78,
-        78,
-    )  # was (80, 80)
+    assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (78, 78)
     assert (samples.impostor_turns_with_whereabouts, samples.impostor_turns) == (
-        6,
+        2,
         39,
-    )  # was (5, 40)
+    )  # was (6, 39)
     corpus = corpus_4p1i.deduction.public_response_coverage
-    assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (
-        86,
-        86,
-    )  # was (88, 88)
+    assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (86, 86)
     assert (corpus.impostor_turns_with_whereabouts, corpus.impostor_turns) == (
-        3,
+        1,
         43,
-    )  # was (1, 44)
+    )  # was (3, 43)
 
 
 def test_thirteen_engine_redirected_ejects_reproduces(
@@ -570,18 +568,19 @@ def test_thirteen_engine_redirected_ejects_reproduces(
 ) -> None:
     """VERIFY-THEN-FIX for §8 row 18's "13 engine-redirected under-gate ejects".
 
-    The triage listed it UNVERIFIED-CHEAPLY. Recount over the committed bytes:
-    exactly 13 redirect-marked ballots on ``replays/samples/9p2i``, all 13
-    recorded as ejects, none coerced to SKIP. The source claim reproduces, and
-    the recount is now the pin.
+    The triage listed it UNVERIFIED-CHEAPLY. The recount over the triage's bytes
+    found exactly 13 redirect-marked ballots on ``replays/samples/9p2i``, all 13
+    recorded as ejects, none coerced to SKIP, and the recount became the pin. On
+    the baseline-9 bytes the class is EMPTY: not one ballot on the set carries
+    the redirect marker (baseline 8 read 23, all ejects).
     """
 
     redirects = samples_9p2i.deduction.redirected_ballots
-    assert redirects.redirected_ballots == 23  # was 36
-    assert redirects.redirected_eject_ballots == 23  # was 36
+    assert redirects.redirected_ballots == 0  # was 23
+    assert redirects.redirected_eject_ballots == 0  # was 23
     assert redirects.redirect_coerced_skip_ballots == 0
-    assert redirects.ballots_total == 869  # was 871
-    assert redirects.redirected_ballot_share == pytest.approx(23 / 869)  # was 36 / 871
+    assert redirects.ballots_total == 845  # was 869
+    assert redirects.redirected_ballot_share == pytest.approx(0 / 845)  # was 23 / 869
 
 
 @pytest.mark.parametrize(
@@ -613,58 +612,62 @@ def test_redirect_census_cross_pins_the_owning_analyzer(sample_dir: Path) -> Non
 def test_weak_flag_only_conviction_lands_on_the_audit_exhibit(
     samples_9p2i: TournamentEvalReport, corpus_9p2i: TournamentEvalReport
 ) -> None:
-    """§8 row 14's seed-47 exhibit is the sample set's single weak-only conviction.
+    """§8 row 14's seed-47 exhibit first defined this class: a weak-only conviction.
 
     "Seed 47: innocent p-8 ejected on flags all stamped ``[weak signal…]``". The
     metric is ejectee-scoped, so it is not merely counting meetings that happen
     to be weak-flagged. Every weak-only conviction on the CORPUS set still
-    ejected an innocent; the sample set no longer reads that way — one of its
-    six landed on an impostor, so the innocent share is 5/6 there. The numerators
-    are 6 and 3, so the cells keep the rare-event advisory: the interval, not the
+    ejected an innocent (2 of 2); the sample set carries none on these bytes
+    (baseline 8 read six there, five of them innocent). The numerators are 0
+    and 2, so the cells keep the rare-event advisory: the interval, not the
     rate, is the honest read.
     """
 
     samples = samples_9p2i.deduction.weak_flag_conviction
-    assert samples.flag_named_ejections == 75  # was 72
-    assert samples.weak_flag_only_convictions == 6  # was 3
-    assert samples.weak_flag_only_innocent == 5  # was 3
-    assert samples.weak_flag_only_impostor == 1  # was 0
+    assert samples.flag_named_ejections == 72  # was 75
+    assert samples.weak_flag_only_convictions == 0  # was 6
+    assert samples.weak_flag_only_innocent == 0  # was 5
+    assert samples.weak_flag_only_impostor == 0  # was 1
     assert samples.weak_flag_only_rate.advisory is True
 
     corpus = corpus_9p2i.deduction.weak_flag_conviction
-    assert corpus.flag_named_ejections == 223  # was 214
-    assert corpus.weak_flag_only_convictions == 3  # was 2
-    assert corpus.weak_flag_only_innocent == 3  # was 2
+    assert corpus.flag_named_ejections == 214  # was 223
+    assert corpus.weak_flag_only_convictions == 2  # was 3
+    assert corpus.weak_flag_only_innocent == 2  # was 3
     assert corpus.weak_flag_only_impostor == 0
     assert corpus.weak_flag_only_rate.advisory is True
 
 
 def test_seed_47_is_the_sample_weak_only_conviction(
-    samples_9p2i: TournamentEvalReport,
+    samples_9p2i: TournamentEvalReport, corpus_9p2i: TournamentEvalReport
 ) -> None:
-    """Name the exhibit: the one weak-only conviction is seed 47's innocent p-8."""
+    """Name the exhibits: every weak-only conviction, walked independently.
 
-    hits = [
-        (game.seed, meeting.meeting_id, meeting.ejected_player_id)
-        for game in samples_9p2i.report.games
-        for meeting in game.meetings
-        if meeting.outcome == "EJECTED"
-        and (
-            naming := [
-                flag
-                for flag in meeting.contradictions
-                if meeting.ejected_player_id in flag.subjects
-            ]
-        )
-        and all(classify_flag(flag) == "weak_signal" for flag in naming)
-    ]
-    assert hits == [  # was seeds 2 / 44 / 46 (p-5, p-9, p-1)
-        (1, "headless-seed-1:meeting-1", "p-5"),
-        (4, "headless-seed-4:meeting-3", "p-7"),
-        (10, "headless-seed-10:meeting-0", "p-6"),
-        (12, "headless-seed-12:meeting-0", "p-5"),
-        (38, "headless-seed-38:meeting-0", "p-8"),
-        (48, "headless-seed-48:meeting-2", "p-2"),
+    The class began as seed 47's innocent p-8. On these bytes the sample set
+    carries none, so the named exhibits are the corpus set's two, both innocent.
+    """
+
+    def weak_only(report: TournamentEvalReport) -> list[tuple[int, str, str | None]]:
+        return [
+            (game.seed, meeting.meeting_id, meeting.ejected_player_id)
+            for game in report.report.games
+            for meeting in game.meetings
+            if meeting.outcome == "EJECTED"
+            and (
+                naming := [
+                    flag
+                    for flag in meeting.contradictions
+                    if meeting.ejected_player_id in flag.subjects
+                ]
+            )
+            and all(classify_flag(flag) == "weak_signal" for flag in naming)
+        ]
+
+    # was seeds 1 / 4 / 10 / 12 / 38 / 48 on the sample set
+    assert weak_only(samples_9p2i) == []
+    assert weak_only(corpus_9p2i) == [
+        (1016, "headless-seed-1016:meeting-0", "p-8"),
+        (1135, "headless-seed-1135:meeting-0", "p-2"),
     ]
 
 
@@ -679,22 +682,22 @@ def test_turn_ballot_consistency_pins(
     """The committed consistency split, buckets partitioning the denominator."""
 
     samples = samples_9p2i.deduction.turn_ballot_consistency
-    assert samples.accusations_total == 738  # was 752
-    assert samples.accusing_ballots == 738  # was 752
-    assert samples.consistent_ballots == 402  # was 404
-    assert samples.inconsistent_skip_ballots == 277  # was 276
-    assert samples.inconsistent_other_target_ballots == 57  # was 69
-    assert samples.inconsistent_invalid_target_ballots == 2  # was 3
-    assert samples.guard_rewritten_ballots_unwound == 21  # was 34
-    assert samples.consistency_rate == pytest.approx(402 / 738)  # was 101 / 188
+    assert samples.accusations_total == 750  # was 738
+    assert samples.accusing_ballots == 750  # was 738
+    assert samples.consistent_ballots == 399  # was 402
+    assert samples.inconsistent_skip_ballots == 299  # was 277
+    assert samples.inconsistent_other_target_ballots == 49  # was 57
+    assert samples.inconsistent_invalid_target_ballots == 3  # was 2
+    assert samples.guard_rewritten_ballots_unwound == 3  # was 21
+    assert samples.consistency_rate == pytest.approx(399 / 750)  # was 402 / 738
 
     corpus = corpus_9p2i.deduction.turn_ballot_consistency
-    assert corpus.accusing_ballots == 2149  # was 2113
-    assert corpus.consistent_ballots == 1175  # was 1158
-    assert corpus.inconsistent_skip_ballots == 809  # was 792
-    assert corpus.inconsistent_other_target_ballots == 163  # was 162
-    assert corpus.inconsistent_invalid_target_ballots == 2  # was 1
-    assert corpus.guard_rewritten_ballots_unwound == 62  # was 85
+    assert corpus.accusing_ballots == 2286  # was 2149
+    assert corpus.consistent_ballots == 1209  # was 1175
+    assert corpus.inconsistent_skip_ballots == 910  # was 809
+    assert corpus.inconsistent_other_target_ballots == 162  # was 163
+    assert corpus.inconsistent_invalid_target_ballots == 5  # was 2
+    assert corpus.guard_rewritten_ballots_unwound == 9  # was 62
 
 
 def test_consistency_is_scored_against_the_authored_target(
@@ -708,10 +711,17 @@ def test_consistency_is_scored_against_the_authored_target(
     census, so the fold unwinds it first. This test re-scores the same bytes
     BOTH ways and asserts the two genuinely disagree — the unwind is not a
     no-op dressed up as rigour.
+
+    On these bytes the disagreement is in the inconsistent buckets, not the
+    consistent count: the three unwound ballots were rewritten to SKIP, and
+    their authored target was not a votable player, so the recorded reading
+    files them as SKIPs (302) where the authored reading files them as invalid
+    targets (299 SKIPs). Neither reading counts them consistent (399 each).
     """
 
     committed = samples_9p2i.deduction.turn_ballot_consistency
     naive_consistent = 0
+    naive_skip = 0
     scored = 0
     for game in samples_9p2i.report.games:
         for meeting in game.meetings:
@@ -728,12 +738,19 @@ def test_consistency_is_scored_against_the_authored_target(
                 scored += 1
                 if ballot.target in accused:
                     naive_consistent += 1
+                elif ballot.target == "SKIP":
+                    naive_skip += 1
 
-    assert scored == committed.accusing_ballots == 738  # was 752
+    assert scored == committed.accusing_ballots == 750  # was 738
     # The recorded-target reading is the one the metric must NOT publish.
-    assert naive_consistent == 392  # was 387
-    assert committed.consistent_ballots == 402  # was 404
-    assert committed.guard_rewritten_ballots_unwound == 21  # was 34
+    assert naive_consistent == 399  # was 392
+    assert committed.consistent_ballots == 399  # was 402
+    assert committed.guard_rewritten_ballots_unwound == 3  # was 21
+    assert naive_skip == 302
+    assert committed.inconsistent_skip_ballots == 299
+    assert naive_skip - committed.inconsistent_skip_ballots == (
+        committed.guard_rewritten_ballots_unwound
+    )
 
 
 def _authored(ballot: VoteBallot, model_body: str) -> tuple[str, bool]:
@@ -776,12 +793,12 @@ def test_authored_target_recovers_the_pre_guard_ballot() -> None:
 class TestTheRedactionRecognizerIsGenerationAware:
     """This module reads FROZEN bytes, so it must know every redaction body.
 
-    The committed corpus was recorded before the teammate note was rewritten to
-    state the redirect, so recognizing only the LIVE constant would file 18
-    well-understood guard redactions as ``guard_provenance_unverifiable`` —
-    a recorded fact re-read through today's vocabulary. Both generations
-    verify; anything else still falls through, so a genuinely unregistered
-    writer-side body surfaces rather than passing.
+    A body the recognizer does not know would file well-understood guard
+    redactions as ``guard_provenance_unverifiable`` — a recorded fact re-read
+    through today's vocabulary. Every committed set now carries only the LIVE
+    teammate note (the pre-reword body retired at the baseline-8 record), so
+    that is the body registered; anything else still falls through, so a
+    genuinely unregistered writer-side body surfaces rather than passing.
     """
 
     @staticmethod
@@ -819,7 +836,7 @@ class TestTheRedactionRecognizerIsGenerationAware:
         # Pins the literal against the record it exists for: if no committed
         # ballot carried it, the entry would be dead on arrival. The pre-reword
         # body retired at the baseline-8 record — it appeared 36 times across the
-        # previous recording and zero times in these bytes.
+        # recording before that and zero times since.
         carried = sum(
             1
             for path in sorted(_SAMPLES_9P2I.glob("replay-seed-*.jsonl"))
@@ -830,7 +847,7 @@ class TestTheRedactionRecognizerIsGenerationAware:
             if ballot["rationale_text"].endswith(TEAMMATE_COERCED_VOTE_RATIONALE)
         )
 
-        assert carried == 2  # was 5, and under the pre-reword body
+        assert carried == 1  # was 2
 
 
 @pytest.mark.parametrize(
@@ -1011,32 +1028,32 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
     corpus_9p2i: TournamentEvalReport,
     corpus_4p1i: TournamentEvalReport,
 ) -> None:
-    """The MODEL-originated nets match ``replays/ml_corpus/README.md`` item 7.
+    """The MODEL-originated nets behind ``replays/ml_corpus/README.md`` item 7.
 
-    29/245 and 81/684 impostor-voter ballots name a partner, with a crew
-    false-positive control of 0; 8, 14 and 2 ballots state the role outright;
-    player-visible ``free_text`` carries exactly one leak, in the corpus.
+    41/210 and 124/651 impostor-voter ballots name a partner, with a crew
+    false-positive control of 0; 12, 36 and 3 ballots state the role outright;
+    player-visible ``free_text`` carries no leak on either 9p2i set.
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    # was (27, 219). Kept on ONE line with no trailing comma: this is the pin
+    # was (36, 218). Kept on ONE line with no trailing comma: this is the pin
     # scripts/check_doc_facts.py reads to hold the reading guide's partner-ballot
     # row, and its pattern needs the tuple literal contiguous.
-    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (36, 218)
-    assert samples.model_role_statement_ballots == 10  # was 7
+    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (41, 210)
+    assert samples.model_role_statement_ballots == 12  # was 10
     assert samples.crew_partner_naming_ballots == 0
     assert samples.player_visible_leak_turns == 0
 
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    # was (105, 625). One line for the same reason as the samples pin above.
-    assert (corpus.model_partner_naming_ballots, corpus.impostor_ballots) == (137, 636)
-    assert corpus.model_role_statement_ballots == 39  # was 24
+    # was (137, 636). One line for the same reason as the samples pin above.
+    assert (corpus.model_partner_naming_ballots, corpus.impostor_ballots) == (124, 651)
+    assert corpus.model_role_statement_ballots == 36  # was 39
     assert corpus.crew_partner_naming_ballots == 0
     assert corpus.player_visible_leak_turns == 0
 
     assert (
-        corpus_4p1i.deduction.scaffold_leakage.model_role_statement_ballots == 8
-    )  # was 11
+        corpus_4p1i.deduction.scaffold_leakage.model_role_statement_ballots == 3
+    )  # was 8
 
 
 def test_self_kill_disclosure_is_counted(
@@ -1049,9 +1066,9 @@ def test_self_kill_disclosure_is_counted(
     measuring two thirds of the class. The union is below the net sum because a
     ballot can hit several nets at once.
 
-    The crew CONTROL is no longer zero on the re-recorded bytes: one crew ballot
-    on the sample set and two on the corpus trip the text net (baseline 6 read
-    zero on both). It is a false positive of the phrase matcher, not a firewall
+    The crew CONTROL is not zero on the re-recorded bytes: no crew ballot on the
+    sample set but three on the corpus trip the text net (baseline 8 read one
+    and two). It is a false positive of the phrase matcher, not a firewall
     breach -- the firewall is enforced
     structurally (the import-linter contracts, tests/test_firewall.py
     and eval/leak_scan.py, all green) and a crewmate cannot receive an
@@ -1060,14 +1077,14 @@ def test_self_kill_disclosure_is_counted(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert samples.model_self_kill_disclosure_ballots == 6  # was 11
-    assert samples.model_omniscient_ballots == 45  # was 41
-    assert samples.crew_omniscient_control_ballots == 1  # was 0
+    assert samples.model_self_kill_disclosure_ballots == 12  # was 6
+    assert samples.model_omniscient_ballots == 59  # was 45
+    assert samples.crew_omniscient_control_ballots == 0  # was 1
 
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    assert corpus.model_self_kill_disclosure_ballots == 17  # was 21
-    assert corpus.model_omniscient_ballots == 169  # was 139
-    assert corpus.crew_omniscient_control_ballots == 2  # was 1
+    assert corpus.model_self_kill_disclosure_ballots == 32  # was 17
+    assert corpus.model_omniscient_ballots == 172  # was 169
+    assert corpus.crew_omniscient_control_ballots == 3  # was 2
     # The union is a union, not a sum: overlapping nets are not double-counted.
     assert corpus.model_omniscient_ballots < (
         corpus.model_partner_naming_ballots
@@ -1102,8 +1119,8 @@ def test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope(
 
     The raw vote response carries ``"confidence": 0.NN``, which the
     quoted-decimal net would read as the model reproducing its own scoring grid.
-    Scanning the envelope would report 850 machinery quotations on this set
-    against the 39 real ones — so the extraction is load-bearing, not cosmetic.
+    Scanning the envelope would report 501 machinery quotations on this set
+    against no real one — so the extraction is load-bearing, not cosmetic.
     """
 
     envelope_hits = 0
@@ -1115,7 +1132,7 @@ def test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope(
                 ):
                     envelope_hits += 1
 
-    assert envelope_hits == 530  # was 563
+    assert envelope_hits == 501  # was 530
     assert (
         samples_9p2i.deduction.scaffold_leakage.model_machinery_quotation_ballots == 0
     )
@@ -1127,18 +1144,18 @@ def test_guard_preserved_omniscient_rate_has_its_own_denominator(
     """The guard-side RATE is over target rewrites, not over all marked ballots.
 
     ``guard_marked_ballot_share`` answers a different question over a different
-    denominator (55/2,726 here), so it cannot stand in for the stale-rationale
-    rate the contract asks for: 1/53.
+    denominator (20/2,539 here), so it cannot stand in for the stale-rationale
+    rate the contract asks for: 0/17.
     """
 
     leakage = corpus_9p2i.deduction.scaffold_leakage
     rate = leakage.guard_preserved_omniscient_rate
-    assert (rate.numerator, rate.denominator) == (0, 70)  # was (1, 102)
+    assert (rate.numerator, rate.denominator) == (0, 17)  # was (0, 70)
     assert rate.advisory is True
-    assert leakage.guard_marked_ballots == 80  # was 115
+    assert leakage.guard_marked_ballots == 20  # was 80
     assert leakage.guard_marked_ballot_share == pytest.approx(
-        80 / 2516
-    )  # was 115 / 2479
+        20 / 2539
+    )  # was 80 / 2516
     assert rate.rate != leakage.guard_marked_ballot_share
 
 
@@ -1386,16 +1403,17 @@ def test_machinery_quotation_reproduces_the_19_8_disclosure(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    # The unambiguous quotation cell went to ZERO on the samples set (was 39/971).
+    # The unambiguous quotation cell stays at ZERO on the samples set (baseline 6
+    # read 39/971).
     assert samples.model_machinery_quotation_ballots == 0
     assert samples.model_machinery_quotation_share == pytest.approx(0.0)
-    assert samples.model_machinery_vocabulary_ballots == 0  # was 8
+    assert samples.model_machinery_vocabulary_ballots == 4  # was 0
 
     corpus = corpus_9p2i.deduction.scaffold_leakage
     # Baseline 6: 94/2,726 quoted and 297 on the vocabulary net.
-    assert corpus.model_machinery_quotation_ballots == 0  # was 1
-    assert corpus.model_machinery_quotation_share == pytest.approx(0.0)  # was 1 / 2479
-    assert corpus.model_machinery_vocabulary_ballots == 11  # was 23
+    assert corpus.model_machinery_quotation_ballots == 0
+    assert corpus.model_machinery_quotation_share == pytest.approx(0.0)
+    assert corpus.model_machinery_vocabulary_ballots == 15  # was 11
     # The vocabulary net is strictly the looser reading of the same ballots.
     assert (
         corpus.model_machinery_vocabulary_ballots
@@ -1407,24 +1425,26 @@ def test_machinery_quotation_reproduces_the_19_8_disclosure(
     ("set_name", "sample_dir", "expected"),
     [
         ("samples/4p1i", _SAMPLES_4P1I, 0),
-        ("samples/9p2i", _SAMPLES_9P2I, 1),
+        ("samples/9p2i", _SAMPLES_9P2I, 0),  # was 1
         ("ml_corpus/4p1i", _CORPUS_4P1I, 0),
-        ("ml_corpus/9p2i", _CORPUS_9P2I, 0),  # was 1
+        ("ml_corpus/9p2i", _CORPUS_9P2I, 0),
     ],
 )
 def test_guard_originated_stale_rationales_are_rare_not_absent(
     set_name: str, sample_dir: Path, expected: int
 ) -> None:
-    """Task 19.15's class measured, not asserted — and it is NOT zero everywhere.
+    """Task 19.15's class measured, not asserted, set by set.
 
     19.15 redacts the omniscient rationale a target-rewriting guard used to
     preserve, and labels the path "dormant for committed bytes". Measured, that
-    label is *rare*, not *absent*: the re-recorded bytes carry one instance on
-    ``samples/9p2i`` and none on the other three sets (baseline 6 carried one, in
-    the corpus alone). This test exists because the metric read 0 everywhere until the
-    self-kill net landed — a leakage predicate that saw only partner and role
-    phrasing was blind to a voter narrating their own kill, which is the third
-    shape 19.15's own contract names.
+    label was *rare*, not *absent*, on the earlier records (baseline 8 carried
+    one instance on ``samples/9p2i``, baseline 6 one in the corpus). On the
+    baseline-9 bytes it IS absent: zero on all four sets, over 4 and 17 target
+    rewrites on the two 9p2i sets. This test exists because the metric read 0
+    everywhere until the self-kill net landed — a leakage predicate that saw
+    only partner and role phrasing was blind to a voter narrating their own
+    kill, which is the third shape 19.15's own contract names — so a zero here
+    is read through that net, not past it.
     """
 
     leakage = _committed(sample_dir).deduction.scaffold_leakage
@@ -1435,11 +1455,14 @@ def test_guard_originated_stale_rationales_are_rare_not_absent(
 def test_the_guard_preserved_instance_is_seed_1118(
     corpus_9p2i: TournamentEvalReport,
 ) -> None:
-    """Name the exhibit: corpus seed 1118, meeting 0, a redirected impostor ballot.
+    """The exhibit this class was named for is gone from the current corpus.
 
-    Its preserved rationale reads "… when I know I was killing p-3 …" — the
-    guard rewrote the TARGET and left the self-kill disclosure in place, which
-    is exactly the text Task 19.15 redacts going forward.
+    Corpus seed 1118, meeting 0, once carried a redirected impostor ballot whose
+    preserved rationale read "… when I know I was killing p-3 …" — the guard
+    rewrote the TARGET and left the self-kill disclosure in place, which is
+    exactly the text Task 19.15 redacts going forward. No redirected ballot on
+    the current corpus carries that phrase, and none carries the redirect
+    marker at all on the baseline-9 bytes.
     """
 
     hits = [
@@ -1459,11 +1482,11 @@ def test_guard_marker_counts(
     """The guard-originated census, pinned beside the model-originated one."""
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert samples.guard_marked_ballots == 30  # was 53
-    assert samples.guard_target_rewrite_ballots == 27  # was 45
+    assert samples.guard_marked_ballots == 6  # was 30
+    assert samples.guard_target_rewrite_ballots == 4  # was 27
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    assert corpus.guard_marked_ballots == 80  # was 115
-    assert corpus.guard_target_rewrite_ballots == 70  # was 102
+    assert corpus.guard_marked_ballots == 20  # was 80
+    assert corpus.guard_target_rewrite_ballots == 17  # was 70
 
 
 # --------------------------------------------------------------------------- #
@@ -1478,8 +1501,8 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
 ) -> None:
     """The committed supply cells ARE ``tests/eval/test_kill_craft.py:66-135``.
 
-    Corpus 532 kills / 18 crew-witnessed, samples-9p2i 182 / 3, samples-4p1i
-    62 / 1, and ``co_present_histogram == {0: N}`` on every set — the
+    Corpus 550 kills / 16 crew-witnessed, samples-9p2i 175 / 3, samples-4p1i
+    66 / 1, and ``co_present_histogram == {0: N}`` on every set — the
     "too-clean evidence economy" structural finding, which lands here as
     ``co_present_crew_kills == 0``.
     """
@@ -1487,28 +1510,28 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
     corpus = corpus_9p2i.deduction.witnessed_supply
     assert corpus is not None
     assert (corpus.kills_total, corpus.crew_witnessed_kills) == (
-        532,
-        18,
-    )  # was (526, 16)
+        550,
+        16,
+    )  # was (532, 18)
     assert corpus.co_present_crew_kills == 0
 
     samples9 = samples_9p2i.deduction.witnessed_supply
     assert samples9 is not None
     assert (samples9.kills_total, samples9.crew_witnessed_kills) == (
-        182,
+        175,
         3,
-    )  # was (177, 3)
+    )  # was (182, 3)
     assert samples9.co_present_crew_kills == 0
     assert samples9.crew_witnessed_kill_rate.rate == pytest.approx(
-        3 / 182
-    )  # was 1 / 59
+        3 / 175
+    )  # was 3 / 182
 
     samples4 = samples_4p1i.deduction.witnessed_supply
     assert samples4 is not None
     assert (samples4.kills_total, samples4.crew_witnessed_kills) == (
-        62,
+        66,
         1,
-    )  # was (65, 1)
+    )  # was (62, 1)
     assert samples4.co_present_crew_kills == 0
 
 
@@ -1572,13 +1595,13 @@ def test_wilson_cell_rejects_a_hand_edited_interval(
 ) -> None:
     """A cell whose interval contradicts its counts fails loud on load.
 
-    The good cell is the committed 10/31 unflagged-accuracy cell round-tripped
+    The good cell is the committed 11/20 unflagged-accuracy cell round-tripped
     through JSON — never hand-typed bounds, which is the very drift the
     validator exists to catch.
     """
 
     good = samples_9p2i.deduction.meeting_flag_cross_tab.unflagged_meeting_accuracy
-    assert (good.numerator, good.denominator) == (14, 27)  # was (16, 30)
+    assert (good.numerator, good.denominator) == (11, 20)  # was (14, 27)
     assert WilsonRateCell.model_validate_json(good.model_dump_json()) == good
 
     tampered = good.model_dump()
@@ -1598,7 +1621,7 @@ def test_wilson_cell_rejects_a_wrong_advisory_flag(
     """``advisory`` is derived, so a hand-set flag cannot disagree with the count."""
 
     rare = samples_9p2i.deduction.weak_flag_conviction.weak_flag_only_rate
-    assert rare.numerator == 6 and rare.advisory is True  # was 3
+    assert rare.numerator == 0 and rare.advisory is True  # was 6
     flipped = rare.model_dump()
     flipped["advisory"] = False
     with pytest.raises(ValidationError, match="advisory flag must equal"):
@@ -1611,7 +1634,7 @@ def test_a_cross_tab_cell_cannot_carry_another_blocks_counts(
     """The no-mixing validator: one block's accuracy cell cannot ride another's.
 
     This is the C5 lesson enforced by the model rather than by prose. On the
-    re-recorded bytes both partitions happen to hold 27 non-direct / unflagged
+    re-recorded bytes both partitions happen to hold 20 non-direct / unflagged
     ejections, so swapping the cell across is no longer detectable by its
     counts alone -- the swap is perturbed by ONE ejection first, which is what
     the validator is for.
@@ -1646,12 +1669,10 @@ def test_block_round_trips_through_json(samples_9p2i: TournamentEvalReport) -> N
     restored = DeductionMetricsReport.model_validate_json(block.model_dump_json())
     assert restored == block
     # And it is really on disk, not only in memory.
-    committed = json.loads(
-        (_SAMPLES_9P2I / "tournament-eval-report.json").read_text(encoding="utf-8")
-    )
+    committed = json.loads(read_set_report_text(_SAMPLES_9P2I))
     assert (
         committed["deduction"]["ejectee_proof_cross_tab"]["proof_present_ejections"]
-        == 68  # was 69
+        == 70  # was 68
     )
 
 
@@ -2498,10 +2519,10 @@ def test_the_oracle_net_is_separate_from_the_vocabulary_net() -> None:
 
 _ORACLE_CENSUS: Final[Mapping[str, tuple[int, int, int, int]]] = {
     # set -> (ballots, free_text turns, claim reasons, claim_reasons_total)
-    "samples/9p2i": (0, 0, 0, 1062),  # was (12, 6, 3, 1071)
-    "ml_corpus/9p2i": (0, 0, 0, 3192),  # was (25, 19, 8, 3170)
-    "samples/4p1i": (0, 0, 0, 127),  # was (1, 1, 1, 135)
-    "ml_corpus/4p1i": (0, 0, 0, 145),  # was (2, 2, 1, 147)
+    "samples/9p2i": (0, 0, 0, 1097),  # was (0, 0, 0, 1062)
+    "ml_corpus/9p2i": (0, 0, 0, 3330),  # was (0, 0, 0, 3192)
+    "samples/4p1i": (0, 0, 0, 136),  # was (0, 0, 0, 127)
+    "ml_corpus/4p1i": (0, 0, 0, 142),  # was (0, 0, 0, 145)
 }
 
 
@@ -2514,8 +2535,8 @@ def test_committed_sets_pin_the_oracle_register_census(
     """The three surfaces, per set — the leak A-6 traced to two template lines.
 
     The register is ABSENT from the re-recorded bytes: all three surfaces read 0
-    on every set, where baseline 7 carried 40 ballots / 28 free-text turns / 13
-    claim reasons. The claim-reason BASES are pinned beside the zeroes so a
+    on every set, as at baseline 8, where baseline 7 carried 40 ballots / 28
+    free-text turns / 13 claim reasons. The claim-reason BASES are pinned beside the zeroes so a
     silently emptied denominator cannot masquerade as a closed leak.
 
     NOT immutable — a re-record or a prompt fix regenerates these.
@@ -2547,7 +2568,7 @@ def test_committed_sets_pin_the_oracle_register_census(
             "oracle_register_claim_reasons",
         )
     ]
-    assert totals == [0, 0, 0]  # was [40, 28, 13]
+    assert totals == [0, 0, 0]
 
 
 def test_the_oracle_net_does_not_read_alibi_evidence(
@@ -2588,15 +2609,17 @@ def test_the_crew_omniscient_control_is_one_on_each_9p2i_set(
     """The false-positive control's base rate, re-derived — it is not zero.
 
     Both module docstrings used to say the two controls read 0 on every
-    committed set. The partner control does; the omniscient one reads 1 on
-    ``samples/9p2i`` and 2 on ``ml_corpus/9p2i``. Pinned so the prose and the
-    bytes cannot drift again.
+    committed set. The partner control does; the omniscient one reads 0 on
+    ``samples/9p2i`` but 3 on ``ml_corpus/9p2i`` (baseline 8 read 1 and 2).
+    Pinned so the prose and the bytes cannot drift again.
     """
 
-    assert samples_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 1
     assert (
-        corpus_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 2
+        samples_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
     )  # was 1
+    assert (
+        corpus_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 3
+    )  # was 2
     assert samples_4p1i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
     assert corpus_4p1i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
     for report in (samples_9p2i, corpus_9p2i, samples_4p1i, corpus_4p1i):

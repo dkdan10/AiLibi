@@ -3247,7 +3247,7 @@ _COMMITTED_SETS = (
     _REPO_ROOT / "replays" / "ml_corpus" / "9p2i",
     _REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
 )
-_COMMITTED_MEETINGS = 672  # was 668
+_COMMITTED_MEETINGS = 676  # was 672
 
 # Meetings whose recorded flags a records-free re-derivation CANNOT reproduce.
 # The movement channel re-reads a spoken placement at the destination the
@@ -3255,7 +3255,7 @@ _COMMITTED_MEETINGS = 672  # was 668
 # persisted in the replay -- so a re-read pair is provably unrecoverable, the way
 # the vent record's TICK is (see ``_VENT_STRUCT`` below). Pinned by count so the
 # number cannot drift silently; every diverging meeting is named on failure.
-_MOVEMENT_CHANNEL_DIVERGENCES = 78  # was 70
+_MOVEMENT_CHANNEL_DIVERGENCES = 69  # was 78
 
 
 @functools.cache
@@ -3263,7 +3263,7 @@ def _committed_meeting_entries() -> tuple[tuple[str, int, MeetingReplayEntry], .
     """Every committed meeting entry across all four sets (set, seed, entry).
 
     Cached so the byte-identity pin AND the live-detector census below read the
-    707-meeting corpus off ONE walk (the "do not walk twice" rule): the file read
+    676-meeting corpus off ONE walk (the "do not walk twice" rule): the file read
     happens once per session, and each consumer runs its own detector
     re-derivations over the shared, already-parsed entries.
     """
@@ -3438,88 +3438,79 @@ def _rederive(
 
 #: The committed meetings whose re-derivation the movement channel decides.
 #: Named individually rather than counted: see the walk below for why.
-#: (Re-derived wholesale on the baseline-8 record; the previous generation named
-#: 70 meetings, this one names 78 — the whole membership moved with the bytes.)
+#: (Re-derived wholesale on the baseline-9 record; baseline 8 named 78 meetings,
+#: this one names 69 — the whole membership moved with the bytes.)
 _MOVEMENT_CHANNEL_DIVERGING_MEETINGS: frozenset[str] = frozenset(
     {
         "ml_corpus/9p2i:1000:headless-seed-1000:meeting-0",
         "ml_corpus/9p2i:1001:headless-seed-1001:meeting-1",
-        "ml_corpus/9p2i:1003:headless-seed-1003:meeting-0",
-        "ml_corpus/9p2i:1009:headless-seed-1009:meeting-1",
-        "ml_corpus/9p2i:1011:headless-seed-1011:meeting-0",
-        "ml_corpus/9p2i:1014:headless-seed-1014:meeting-0",
-        "ml_corpus/9p2i:1015:headless-seed-1015:meeting-0",
-        "ml_corpus/9p2i:1021:headless-seed-1021:meeting-1",
-        "ml_corpus/9p2i:1026:headless-seed-1026:meeting-1",
+        "ml_corpus/9p2i:1003:headless-seed-1003:meeting-1",
+        "ml_corpus/9p2i:1005:headless-seed-1005:meeting-0",
+        "ml_corpus/9p2i:1010:headless-seed-1010:meeting-1",
+        "ml_corpus/9p2i:1012:headless-seed-1012:meeting-0",
+        "ml_corpus/9p2i:1013:headless-seed-1013:meeting-0",
+        "ml_corpus/9p2i:1015:headless-seed-1015:meeting-1",
+        "ml_corpus/9p2i:1016:headless-seed-1016:meeting-1",
+        "ml_corpus/9p2i:1021:headless-seed-1021:meeting-0",
+        "ml_corpus/9p2i:1023:headless-seed-1023:meeting-0",
+        "ml_corpus/9p2i:1026:headless-seed-1026:meeting-0",
+        "ml_corpus/9p2i:1035:headless-seed-1035:meeting-3",
+        "ml_corpus/9p2i:1038:headless-seed-1038:meeting-1",
+        "ml_corpus/9p2i:1038:headless-seed-1038:meeting-2",
+        "ml_corpus/9p2i:1040:headless-seed-1040:meeting-0",
         "ml_corpus/9p2i:1040:headless-seed-1040:meeting-2",
+        "ml_corpus/9p2i:1041:headless-seed-1041:meeting-1",
         "ml_corpus/9p2i:1042:headless-seed-1042:meeting-0",
-        "ml_corpus/9p2i:1044:headless-seed-1044:meeting-0",
         "ml_corpus/9p2i:1046:headless-seed-1046:meeting-0",
         "ml_corpus/9p2i:1046:headless-seed-1046:meeting-1",
-        "ml_corpus/9p2i:1046:headless-seed-1046:meeting-2",
-        "ml_corpus/9p2i:1048:headless-seed-1048:meeting-0",
-        "ml_corpus/9p2i:1049:headless-seed-1049:meeting-0",
-        "ml_corpus/9p2i:1053:headless-seed-1053:meeting-0",
-        "ml_corpus/9p2i:1054:headless-seed-1054:meeting-1",
-        "ml_corpus/9p2i:1059:headless-seed-1059:meeting-0",
-        "ml_corpus/9p2i:1060:headless-seed-1060:meeting-0",
-        "ml_corpus/9p2i:1062:headless-seed-1062:meeting-0",
-        "ml_corpus/9p2i:1064:headless-seed-1064:meeting-0",
-        "ml_corpus/9p2i:1066:headless-seed-1066:meeting-2",
-        "ml_corpus/9p2i:1073:headless-seed-1073:meeting-0",
-        "ml_corpus/9p2i:1074:headless-seed-1074:meeting-1",
-        "ml_corpus/9p2i:1074:headless-seed-1074:meeting-2",
+        "ml_corpus/9p2i:1055:headless-seed-1055:meeting-0",
         "ml_corpus/9p2i:1078:headless-seed-1078:meeting-0",
         "ml_corpus/9p2i:1079:headless-seed-1079:meeting-0",
+        "ml_corpus/9p2i:1079:headless-seed-1079:meeting-2",
         "ml_corpus/9p2i:1080:headless-seed-1080:meeting-0",
-        "ml_corpus/9p2i:1085:headless-seed-1085:meeting-0",
-        "ml_corpus/9p2i:1088:headless-seed-1088:meeting-0",
+        "ml_corpus/9p2i:1083:headless-seed-1083:meeting-1",
         "ml_corpus/9p2i:1093:headless-seed-1093:meeting-0",
-        "ml_corpus/9p2i:1096:headless-seed-1096:meeting-1",
-        "ml_corpus/9p2i:1097:headless-seed-1097:meeting-0",
-        "ml_corpus/9p2i:1097:headless-seed-1097:meeting-1",
-        "ml_corpus/9p2i:1098:headless-seed-1098:meeting-1",
-        "ml_corpus/9p2i:1099:headless-seed-1099:meeting-0",
+        "ml_corpus/9p2i:1096:headless-seed-1096:meeting-0",
+        "ml_corpus/9p2i:1100:headless-seed-1100:meeting-0",
         "ml_corpus/9p2i:1101:headless-seed-1101:meeting-1",
         "ml_corpus/9p2i:1103:headless-seed-1103:meeting-0",
+        "ml_corpus/9p2i:1104:headless-seed-1104:meeting-0",
         "ml_corpus/9p2i:1104:headless-seed-1104:meeting-1",
-        "ml_corpus/9p2i:1106:headless-seed-1106:meeting-0",
-        "ml_corpus/9p2i:1113:headless-seed-1113:meeting-0",
+        "ml_corpus/9p2i:1112:headless-seed-1112:meeting-0",
         "ml_corpus/9p2i:1114:headless-seed-1114:meeting-0",
-        "ml_corpus/9p2i:1114:headless-seed-1114:meeting-2",
-        "ml_corpus/9p2i:1116:headless-seed-1116:meeting-0",
-        "ml_corpus/9p2i:1116:headless-seed-1116:meeting-1",
-        "ml_corpus/9p2i:1118:headless-seed-1118:meeting-0",
         "ml_corpus/9p2i:1119:headless-seed-1119:meeting-0",
         "ml_corpus/9p2i:1120:headless-seed-1120:meeting-1",
         "ml_corpus/9p2i:1123:headless-seed-1123:meeting-0",
+        "ml_corpus/9p2i:1124:headless-seed-1124:meeting-0",
         "ml_corpus/9p2i:1126:headless-seed-1126:meeting-0",
-        "ml_corpus/9p2i:1130:headless-seed-1130:meeting-0",
+        "ml_corpus/9p2i:1127:headless-seed-1127:meeting-1",
         "ml_corpus/9p2i:1131:headless-seed-1131:meeting-0",
         "ml_corpus/9p2i:1133:headless-seed-1133:meeting-1",
-        "ml_corpus/9p2i:1140:headless-seed-1140:meeting-3",
+        "ml_corpus/9p2i:1134:headless-seed-1134:meeting-0",
+        "ml_corpus/9p2i:1134:headless-seed-1134:meeting-3",
+        "ml_corpus/9p2i:1138:headless-seed-1138:meeting-1",
+        "ml_corpus/9p2i:1139:headless-seed-1139:meeting-0",
+        "ml_corpus/9p2i:1144:headless-seed-1144:meeting-2",
         "ml_corpus/9p2i:1146:headless-seed-1146:meeting-0",
         "ml_corpus/9p2i:1147:headless-seed-1147:meeting-0",
-        "samples/9p2i:10:headless-seed-10:meeting-0",
-        "samples/9p2i:12:headless-seed-12:meeting-0",
-        "samples/9p2i:13:headless-seed-13:meeting-0",
+        "ml_corpus/9p2i:1149:headless-seed-1149:meeting-1",
+        "samples/9p2i:11:headless-seed-11:meeting-0",
+        "samples/9p2i:17:headless-seed-17:meeting-0",
+        "samples/9p2i:20:headless-seed-20:meeting-0",
         "samples/9p2i:20:headless-seed-20:meeting-1",
+        "samples/9p2i:22:headless-seed-22:meeting-1",
         "samples/9p2i:23:headless-seed-23:meeting-0",
         "samples/9p2i:23:headless-seed-23:meeting-1",
         "samples/9p2i:24:headless-seed-24:meeting-2",
         "samples/9p2i:26:headless-seed-26:meeting-1",
-        "samples/9p2i:29:headless-seed-29:meeting-0",
-        "samples/9p2i:29:headless-seed-29:meeting-1",
-        "samples/9p2i:30:headless-seed-30:meeting-0",
-        "samples/9p2i:31:headless-seed-31:meeting-1",
+        "samples/9p2i:27:headless-seed-27:meeting-0",
+        "samples/9p2i:2:headless-seed-2:meeting-0",
+        "samples/9p2i:30:headless-seed-30:meeting-2",
         "samples/9p2i:32:headless-seed-32:meeting-0",
-        "samples/9p2i:36:headless-seed-36:meeting-1",
-        "samples/9p2i:38:headless-seed-38:meeting-0",
-        "samples/9p2i:39:headless-seed-39:meeting-0",
-        "samples/9p2i:41:headless-seed-41:meeting-2",
-        "samples/9p2i:44:headless-seed-44:meeting-0",
-        "samples/9p2i:5:headless-seed-5:meeting-0",
-        "samples/9p2i:6:headless-seed-6:meeting-1",
+        "samples/9p2i:34:headless-seed-34:meeting-1",
+        "samples/9p2i:38:headless-seed-38:meeting-1",
+        "samples/9p2i:40:headless-seed-40:meeting-0",
+        "samples/9p2i:7:headless-seed-7:meeting-0",
     }
 )
 
@@ -3528,7 +3519,7 @@ class TestLiveDetectorCommittedBytesByteIdentity:
     """The graduated ``detect_contradictions`` against every committed meeting.
 
     Coverage beyond the ``test_transcript.py`` re-derivation pin: this walk
-    includes ``vent_sighting`` across all four sets exhaustively (668 meetings).
+    includes ``vent_sighting`` across all four sets exhaustively (676 meetings).
     Every lever is UNCONDITIONAL, so the detector ignores its ``env`` -- env
     absent and env={} must agree -- and the two private channels a recorded flag
     can be inverted back into (vents, sightings) are rebuilt from the recorded
@@ -3561,8 +3552,8 @@ class TestLiveDetectorCommittedBytesByteIdentity:
         #
         # Every diverging meeting must be one the movement channel can actually
         # move: supplying a channel changes what the detector emits there. The
-        # predicate cuts the set — 462 of the 672 committed meetings are
-        # movement-sensitive, 210 are not — so a divergence in a meeting the
+        # predicate cuts the set — 451 of the 676 committed meetings are
+        # movement-sensitive, 225 are not — so a divergence in a meeting the
         # channel cannot touch is a different defect and fails here rather than
         # inheriting this pin's number.
         #
@@ -3587,7 +3578,7 @@ class TestLiveDetectorCommittedBytesByteIdentity:
             )
         # Non-vacuous in BOTH directions: the predicate holds for the diverging
         # meetings and is false for a third of the set.
-        assert sensitive == 462  # was 440
+        assert sensitive == 451  # was 462
         assert sensitive < _COMMITTED_MEETINGS
 
     def test_the_planted_movement_channel_is_live(self) -> None:
@@ -3643,7 +3634,7 @@ class TestLiveDetectorCommittedBytesByteIdentity:
 
 @functools.cache
 def _roles_by_seed(set_name: str) -> dict[int, dict[str, str]]:
-    """``seed -> {player_id: role}`` from a set's tournament-eval-report.json.
+    """``seed -> {player_id: role}`` from a set's gzipped eval report.
 
     ``role`` is ``"CREWMATE"`` / ``"IMPOSTOR"``; a degenerate self-alibi's LIAR
     role and a vent placement's SUBJECT role are both read here, keyed by the
@@ -3652,11 +3643,9 @@ def _roles_by_seed(set_name: str) -> dict[int, dict[str, str]]:
 
     import json
 
-    report = json.loads(
-        (_REPO_ROOT / "replays" / set_name / "tournament-eval-report.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    from eval.report_io import read_set_report_text
+
+    report = json.loads(read_set_report_text(_REPO_ROOT / "replays" / set_name))
     return {game["seed"]: game["roles"] for game in report["report"]["games"]}
 
 
@@ -3845,13 +3834,13 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
     return per_set
 
 
-# The exemption census, re-measured on the baseline-7 bytes. Baseline 6 read
+# The exemption census, re-measured on the baseline-9 bytes. Baseline 6 read
 # {CREWMATE: 37, IMPOSTOR: 3} / {whereabouts: 38, alibi: 2} / 48 flags on 9p2i and
 # a single CREWMATE whereabouts claim on 4p1i, every one of them STRONG. The class
 # survives on 9p2i and is now entirely WEAK-banded; on 4p1i it is empty.
-_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 15, "IMPOSTOR": 1}  # was CREWMATE 11
-_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"alibi": 2, "whereabouts": 14}  # was alibi 3/where 9
-_SAMPLES_9P2I_EXEMPT_FLAGS = 17  # was 15
+_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 21}  # was CREWMATE 15, IMPOSTOR 1
+_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"whereabouts": 21}  # was alibi 2/where 14
+_SAMPLES_9P2I_EXEMPT_FLAGS = 22  # was 17
 _SAMPLES_9P2I_EXEMPT_STRONG: dict[str, int] = {}
 _SAMPLES_9P2I_EXEMPT_STRONG_FLAGS = 0
 _SAMPLES_4P1I_EXEMPT_BY_ROLE: dict[str, int] = {}
@@ -3860,7 +3849,7 @@ _SAMPLES_4P1I_EXEMPT_FLAGS = 0
 _SAMPLES_4P1I_EXEMPT_STRONG: dict[str, int] = {}
 _SAMPLES_4P1I_EXEMPT_STRONG_FLAGS = 0
 # Meetings the records-free re-derivation reproduces byte-identically, per set.
-_SAMPLES_9P2I_REDERIVED = 131  # was 135
+_SAMPLES_9P2I_REDERIVED = 128  # was 131
 _SAMPLES_4P1I_REDERIVED = 39  # was 40
 
 
@@ -3902,9 +3891,9 @@ class TestExemptionCensus:
     def test_samples_9p2i_cells(self, census: dict[str, _SetCensus]) -> None:
         # Baseline 6 read 165 meetings, {CREWMATE: 37, IMPOSTOR: 3},
         # {whereabouts: 38, alibi: 2} and 48 flags. The class did not empty; the
-        # graduated rules re-banded most of it.
+        # graduated rules re-banded all of it WEAK (the two STRONG cells are 0).
         cell = census["samples/9p2i"]
-        assert cell.meetings == 151  # was 152
+        assert cell.meetings == 145  # was 151
         assert cell.exempt_off_distinct_by_role == _SAMPLES_9P2I_EXEMPT_BY_ROLE
         assert cell.exempt_off_distinct_by_class == _SAMPLES_9P2I_EXEMPT_BY_CLASS
         assert cell.exempt_off_flag_count == _SAMPLES_9P2I_EXEMPT_FLAGS
@@ -3999,7 +3988,7 @@ def _band_census(flags: tuple[ContradictionRef, ...]) -> dict[str, int]:
 
 @functools.cache
 def _grounded_prosecution_census() -> dict[str, _GroundedSetCensus]:
-    """One shared walk of the 707 committed meetings, three detector legs each."""
+    """One shared walk of the 676 committed meetings, three detector legs each."""
 
     per_set: dict[str, _GroundedSetCensus] = {}
     for set_dir in _COMMITTED_SETS:
@@ -4070,7 +4059,7 @@ def _grounded_prosecution_census() -> dict[str, _GroundedSetCensus]:
 
 
 class TestGroundedProsecutionCommittedCensus:
-    """The lever's price and its scope firewall, over all 707 committed meetings."""
+    """The lever's price and its scope firewall, over all 676 committed meetings."""
 
     @pytest.fixture(scope="class")
     def census(self) -> dict[str, _GroundedSetCensus]:
@@ -4108,17 +4097,18 @@ class TestGroundedProsecutionCommittedCensus:
             for band, count in cell.bands_off.items():
                 totals[band] = totals.get(band, 0) + count
         # Baseline 6 read 234/79/37/5/35/440. The STRONG sighting class is the
-        # cell the record closed: 234 -> 21 even before any grounding channel.
-        # was {alibi_vs_sighting:strong 11, alibi_vs_sighting:weak 94,
-        # alibi_vs_physical:strong 12, alibi_vs_physical:weak 1,
-        # alibi_conflict:weak 60, vent_sighting:strong 448} — the
-        # ``alibi_vs_physical:weak`` cell empties on this record.
+        # cell the record closed: 234 -> 42 even before any grounding channel.
+        # was {alibi_vs_sighting:strong 21, alibi_vs_sighting:weak 99,
+        # alibi_vs_physical:strong 13, alibi_conflict:weak 62,
+        # vent_sighting:strong 453} — the ``alibi_vs_physical:weak`` cell, empty
+        # on baseline 8, returns on this record.
         assert totals == {
-            "alibi_vs_sighting:strong": 21,
-            "alibi_vs_sighting:weak": 99,
-            "alibi_vs_physical:strong": 13,
-            "alibi_conflict:weak": 62,
-            "vent_sighting:strong": 453,
+            "alibi_vs_sighting:strong": 42,
+            "alibi_vs_sighting:weak": 79,
+            "alibi_vs_physical:strong": 18,
+            "alibi_vs_physical:weak": 7,
+            "alibi_conflict:weak": 3,
+            "vent_sighting:strong": 455,
         }
 
     def test_the_ungrounded_leg_convicts_on_nothing(
@@ -4126,7 +4116,7 @@ class TestGroundedProsecutionCommittedCensus:
     ) -> None:
         # Rule (a) alone, at its limit: no speaker's record supports anything
         # they said, so the whole class is weak and none convicts. The class is
-        # 120 flags on these bytes (baseline 7: 105; baseline 6: 313).
+        # 121 flags on these bytes (baseline 8: 120; baseline 6: 313).
         strong = sum(
             cell.bands_ungrounded.get("alibi_vs_sighting:strong", 0)
             for cell in census.values()
@@ -4135,7 +4125,7 @@ class TestGroundedProsecutionCommittedCensus:
             cell.bands_ungrounded.get("alibi_vs_sighting:weak", 0)
             for cell in census.values()
         )
-        assert (strong, weak) == (0, 120)  # was (0, 105)
+        assert (strong, weak) == (0, 121)  # was (0, 120)
 
     def test_the_fully_grounded_leg_drops_the_whole_class(
         self, census: dict[str, _GroundedSetCensus]
@@ -4216,7 +4206,7 @@ class TestGroundedProsecutionInjusticeShapes:
 # one and a sighting in the other at the window's edge are two honest accounts of
 # one transit. The lever teaches the detector that geometry; these tests pin the
 # resolver, the demotion and its two limits, the frozen neighbour table against
-# the map, and the whole class over the 707 committed meetings.
+# the map, and the whole class over the 676 committed meetings.
 
 _ROSTER_MAP = frozenset({"p-1", "p-9"})
 
@@ -4458,7 +4448,7 @@ class _MapAwareSetCensus:
 
 @functools.cache
 def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
-    """One shared walk of the 707 committed meetings, three detector legs each."""
+    """One shared walk of the 676 committed meetings, three detector legs each."""
 
     per_set: dict[str, _MapAwareSetCensus] = {}
     for set_dir in _COMMITTED_SETS:
@@ -4534,7 +4524,7 @@ def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
 
 
 class TestMapAwareArbitrationCommittedCensus:
-    """The lever's price and its scope firewall, over all 707 committed meetings."""
+    """The lever's price and its scope firewall, over all 676 committed meetings."""
 
     @pytest.fixture(scope="class")
     def census(self) -> dict[str, _MapAwareSetCensus]:
@@ -4549,12 +4539,12 @@ class TestMapAwareArbitrationCommittedCensus:
         # cannot rebuild (it supplies vents only).
         for cell in census.values():
             assert cell.off_matches_recorded == cell.falsey_matches_recorded
-        # was {samples/9p2i 132, samples/4p1i 40, ml_corpus/9p2i 371,
-        # ml_corpus/4p1i 44}
+        # was {samples/9p2i 126, samples/4p1i 39, ml_corpus/9p2i 369,
+        # ml_corpus/4p1i 43}
         assert {name: cell.off_matches_recorded for name, cell in census.items()} == {
-            "samples/9p2i": 126,
+            "samples/9p2i": 123,
             "samples/4p1i": 39,
-            "ml_corpus/9p2i": 369,
+            "ml_corpus/9p2i": 382,
             "ml_corpus/4p1i": 43,
         }
         assert sum(cell.meetings for cell in census.values()) == _COMMITTED_MEETINGS
@@ -4586,7 +4576,7 @@ class TestMapAwareArbitrationCommittedCensus:
     ) -> None:
         # Baseline 6 priced the corridor at 140 demotions of 234 STRONG flags.
         # The arbitration is UNCONDITIONAL here, so both legs already carry it and
-        # the env differential is zero: 21 STRONG and 99 WEAK on both sides, and
+        # the env differential is zero: 42 STRONG and 79 WEAK on both sides, and
         # nothing moves BETWEEN the legs. The corridor's price on these bytes is
         # in the record audit, not in an env diff that no longer exists.
         strong_off = sum(
@@ -4602,8 +4592,8 @@ class TestMapAwareArbitrationCommittedCensus:
         weak_on = sum(
             cell.bands_on.get("alibi_vs_sighting:weak", 0) for cell in census.values()
         )
-        assert (strong_off, strong_on) == (21, 21)  # was (11, 11)
-        assert (weak_off, weak_on) == (99, 99)  # was (94, 94)
+        assert (strong_off, strong_on) == (42, 42)  # was (21, 21)
+        assert (weak_off, weak_on) == (79, 79)  # was (99, 99)
         assert sum(cell.demoted for cell in census.values()) == 0
         # The rule still bites -- on a transcript, where a corridor pair exists.
         corridor = detect_contradictions(_corridor_transcript(), roster=_ROSTER_MAP)
@@ -5173,7 +5163,8 @@ class TestOneSegmentRoutesReadLikeTheEnvelope:
     The corpus-wide half of the same property is
     :meth:`TestLiveDetectorCommittedBytesByteIdentity.
     test_re_derivation_equals_recorded_on_every_committed_meeting`, which holds
-    672 committed meetings of one-segment claims to their recorded flags.
+    the 676 committed meetings to their recorded flags; 62 of their 1,021 alibi
+    claims are one-segment routes (baseline 8's were all one segment).
     """
 
     @staticmethod

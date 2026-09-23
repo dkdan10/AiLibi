@@ -477,63 +477,63 @@ def _counts(report: SolvabilityReport) -> dict[str, tuple[int, int]]:
 
 def test_samples_9p2i_cells(samples_9p2i: SolvabilityReport) -> None:
     assert samples_9p2i.games_total == 50
-    assert samples_9p2i.body_meetings == 141  # of 151 recorded meetings  # was 144
-    assert samples_9p2i.ejections_at_body_meetings == 85  # was 91
+    assert samples_9p2i.body_meetings == 135  # of 145 recorded meetings  # was 141
+    assert samples_9p2i.ejections_at_body_meetings == 80  # was 85
     assert _counts(samples_9p2i) == {
-        "killer_in_set": (127, 141),  # was (126, 144)
-        "singleton_sets": (26, 141),  # was (20, 144)
-        "singleton_correct": (21, 26),  # was (14, 20)
-        "at_most_two_sets": (52, 141),  # was (46, 144)
-        "at_most_two_contains_killer": (45, 52),  # was (37, 46)
-        "cleared_player_ejections": (16, 85),  # was (19, 91)
-        "killer_in_set_last_kill_anchor": (132, 141),  # was (135, 144)
+        "killer_in_set": (120, 135),  # was (127, 141)
+        "singleton_sets": (21, 135),  # was (26, 141)
+        "singleton_correct": (16, 21),  # was (21, 26)
+        "at_most_two_sets": (46, 135),  # was (52, 141)
+        "at_most_two_contains_killer": (39, 46),  # was (45, 52)
+        "cleared_player_ejections": (12, 80),  # was (16, 85)
+        "killer_in_set_last_kill_anchor": (129, 135),  # was (132, 141)
     }
 
 
 def test_samples_4p1i_cells(samples_4p1i: SolvabilityReport) -> None:
     assert samples_4p1i.games_total == 50
-    assert samples_4p1i.body_meetings == 36  # of 39 recorded meetings  # was 37
-    assert samples_4p1i.ejections_at_body_meetings == 21  # was 18
+    assert samples_4p1i.body_meetings == 36  # of 39 recorded meetings
+    assert samples_4p1i.ejections_at_body_meetings == 17  # was 21
     # One impostor and at most three living crew: nobody is ever cleared away
     # from the killer, so containment is total on both 4p1i sets.
     assert _counts(samples_4p1i) == {
-        "killer_in_set": (36, 36),  # was (37, 37)
-        "singleton_sets": (5, 36),  # was (5, 37)
+        "killer_in_set": (36, 36),
+        "singleton_sets": (5, 36),
         "singleton_correct": (5, 5),
-        "at_most_two_sets": (5, 36),  # was (5, 37)
+        "at_most_two_sets": (5, 36),
         "at_most_two_contains_killer": (5, 5),
-        "cleared_player_ejections": (0, 21),  # was (0, 18)
-        "killer_in_set_last_kill_anchor": (36, 36),  # was (37, 37)
+        "cleared_player_ejections": (0, 17),  # was (0, 21)
+        "killer_in_set_last_kill_anchor": (36, 36),
     }
 
 
 def test_corpus_9p2i_cells(corpus_9p2i: SolvabilityReport) -> None:
     assert corpus_9p2i.games_total == 150
-    assert corpus_9p2i.body_meetings == 407  # of 463 recorded meetings  # was 400
-    assert corpus_9p2i.ejections_at_body_meetings == 249  # was 248
+    assert corpus_9p2i.body_meetings == 416  # of 449 recorded meetings  # was 407
+    assert corpus_9p2i.ejections_at_body_meetings == 241  # was 249
     assert _counts(corpus_9p2i) == {
-        "killer_in_set": (358, 407),  # was (355, 400)
-        "singleton_sets": (55, 407),  # was (51, 400)
-        "singleton_correct": (52, 55),  # was (49, 51)
-        "at_most_two_sets": (133, 407),  # was (133, 400)
-        "at_most_two_contains_killer": (111, 133),  # was (112, 133)
-        "cleared_player_ejections": (47, 249),  # was (49, 248)
-        "killer_in_set_last_kill_anchor": (386, 407),  # was (377, 400)
+        "killer_in_set": (368, 416),  # was (358, 407)
+        "singleton_sets": (52, 416),  # was (55, 407)
+        "singleton_correct": (49, 52),  # was (52, 55)
+        "at_most_two_sets": (127, 416),  # was (133, 407)
+        "at_most_two_contains_killer": (107, 127),  # was (111, 133)
+        "cleared_player_ejections": (50, 241),  # was (47, 249)
+        "killer_in_set_last_kill_anchor": (391, 416),  # was (386, 407)
     }
 
 
 def test_corpus_4p1i_cells(corpus_4p1i: SolvabilityReport) -> None:
     assert corpus_4p1i.games_total == 50
-    assert corpus_4p1i.body_meetings == 36  # of 40 recorded meetings  # was 37
-    assert corpus_4p1i.ejections_at_body_meetings == 22
+    assert corpus_4p1i.body_meetings == 36  # of 43 recorded meetings
+    assert corpus_4p1i.ejections_at_body_meetings == 21  # was 22
     assert _counts(corpus_4p1i) == {
-        "killer_in_set": (36, 36),  # was (37, 37)
-        "singleton_sets": (4, 36),  # was (4, 37)
+        "killer_in_set": (36, 36),
+        "singleton_sets": (4, 36),
         "singleton_correct": (4, 4),
-        "at_most_two_sets": (4, 36),  # was (4, 37)
+        "at_most_two_sets": (4, 36),
         "at_most_two_contains_killer": (4, 4),
-        "cleared_player_ejections": (0, 22),
-        "killer_in_set_last_kill_anchor": (36, 36),  # was (37, 37)
+        "cleared_player_ejections": (0, 21),  # was (0, 22)
+        "killer_in_set_last_kill_anchor": (36, 36),
     }
 
 
@@ -545,8 +545,8 @@ def test_pooled_denominators_and_headline_cells(
 ) -> None:
     """The pooled pin, with the review's [REVIEW-DERIVED] values beside it.
 
-    Splits (body meetings / ejections at them) 141/85 + 36/21 + 407/249 +
-    36/22.
+    Splits (body meetings / ejections at them) 135/80 + 36/17 + 416/241 +
+    36/21.
 
     The review comparison below is FROZEN at the review's own era (pooled
     denominator 626) and is not re-derived against later bytes — it records why
@@ -580,18 +580,18 @@ def test_pooled_denominators_and_headline_cells(
             pooled[name] = (carried[0] + numerator, carried[1] + denominator)
 
     assert sum(report.games_total for report in reports) == 300
-    assert sum(report.body_meetings for report in reports) == 620  # was 618
+    assert sum(report.body_meetings for report in reports) == 623  # was 620
     assert (
-        sum(report.ejections_at_body_meetings for report in reports) == 377
-    )  # was 379
+        sum(report.ejections_at_body_meetings for report in reports) == 359
+    )  # was 377
     assert pooled == {
-        "killer_in_set": (557, 620),  # was (555, 618)
-        "singleton_sets": (90, 620),  # was (80, 618)
-        "singleton_correct": (82, 90),  # was (72, 80)
-        "at_most_two_sets": (194, 620),  # was (188, 618)
-        "at_most_two_contains_killer": (165, 194),  # was (158, 188)
-        "cleared_player_ejections": (63, 377),  # was (68, 379)
-        "killer_in_set_last_kill_anchor": (590, 620),  # was (586, 618)
+        "killer_in_set": (560, 623),  # was (557, 620)
+        "singleton_sets": (82, 623),  # was (90, 620)
+        "singleton_correct": (74, 82),  # was (82, 90)
+        "at_most_two_sets": (182, 623),  # was (194, 620)
+        "at_most_two_contains_killer": (155, 182),  # was (165, 194)
+        "cleared_player_ejections": (62, 359),  # was (63, 377)
+        "killer_in_set_last_kill_anchor": (592, 623),  # was (590, 620)
     }
 
 
@@ -602,7 +602,7 @@ def test_cells_carry_their_wilson_interval(samples_4p1i: SolvabilityReport) -> N
     assert cell.rate is not None
     assert cell.wilson_low is not None
     assert cell.wilson_high is not None
-    assert cell.rate == pytest.approx(5 / 36)  # was 5 / 37
+    assert cell.rate == pytest.approx(5 / 36)
     assert cell.wilson_low < cell.rate < cell.wilson_high
     assert cell.advisory is True  # numerator 5 is a rare-event count
 

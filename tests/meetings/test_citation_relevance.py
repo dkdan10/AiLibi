@@ -313,9 +313,13 @@ class TestGuardAndGraderCannotDisagree:
                 )
                 compared += 1
                 # The ruling, asserted on every committed EJECT: whatever the
-                # label says, the recorded target does not move.
+                # label says, the recorded target does not move, and the label
+                # is the only field the labeller writes. The recorded ballot
+                # carries its recording-time label, so both sides drop it.
                 assert labelled.target == ballot.target
-                assert labelled.model_copy(update={"grounding_label": None}) == ballot
+                assert labelled.model_copy(
+                    update={"grounding_label": None}
+                ) == ballot.model_copy(update={"grounding_label": None})
                 # A ballot the layer already rewrote is not the voter's, so it
                 # is not assessed and the grader's verdict does not apply.
                 if ballot.guard_rewrite_reason is not None:
@@ -334,7 +338,7 @@ class TestGuardAndGraderCannotDisagree:
                         "none_held",
                         "uncited",
                     }
-        assert compared == 578, compared
+        assert compared == 545, compared  # was 578 on baseline 8
         # PLANTED would be silent on a set the rule never bites: it bites here.
         assert off_target > 0, off_target
 
@@ -406,9 +410,9 @@ class TestGuardAndGraderCannotDisagree:
         """The case above is not hypothetical: committed prompts render it.
 
         A voter's tenth observation within one tick is what mints the pair, and
-        the committed sample prompts hold 244 of them. The count is pinned the
-        way this module pins ``compared``: over bytes that move only when a card
-        deliberately moves them.
+        the committed sample prompts hold 212 of them (244 on baseline 8). The
+        count is pinned the way this module pins ``compared``: over bytes that
+        move only when a card deliberately moves them.
         """
 
         colliding = 0
@@ -424,7 +428,7 @@ class TestGuardAndGraderCannotDisagree:
                     for other in ids
                 ):
                     colliding += 1
-        assert colliding == 244, colliding
+        assert colliding == 212, colliding  # was 244 on baseline 8
 
 
 class TestTheCompositionIsShared:

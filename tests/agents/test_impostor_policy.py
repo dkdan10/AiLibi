@@ -2135,22 +2135,23 @@ class TestImpostorRefutedSighting:
         assert [target.player_id for target in ranking] == ["ghost"]
 
     @pytest.mark.slow
-    def test_seed_7_refutes_a_living_lead_and_keeps_it_dropped(self) -> None:
+    def test_seed_20_refutes_a_living_lead_and_keeps_it_dropped(self) -> None:
         # The demonstrable case for the LIVING half of C-4, the half the ejection
-        # barrier does not cover: p-2 stands in WEST_HALL at tick 13 without seeing
-        # p-1 there, so p-1 leaves the ranking -- and stays out at tick 14, after
-        # p-2 has moved on to ADMIN.
+        # barrier does not cover: p-8 stands in WEST_HALL at tick 5 without seeing
+        # p-5 there, so p-5 leaves the ranking -- and stays out at tick 6, after
+        # p-8 has moved on to ADMIN.
+        # was seed 7 p-2 ticks 13-14; on baseline 9 p-2 decides only through tick 10
         rows = {
             row.tick: row
-            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=7)
-            if row.actor == "p-2" and row.tick in (13, 14)
+            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=20)
+            if row.actor == "p-8" and row.tick in (5, 6)
         }
-        for tick in (13, 14):
+        for tick in (5, 6):
             frozen = _frozen_static_ranking(rows[tick].memory)
-            assert frozen[0].player_id == "p-1" and frozen[0].room == "WEST_HALL"
-            assert all(target.player_id != "p-1" for target in rows[tick].ranked)
-        assert _own_room(rows[13].memory) == "LABS"
-        assert _own_room(rows[14].memory) == "LABS"
+            assert frozen[0].player_id == "p-5" and frozen[0].room == "WEST_HALL"
+            assert all(target.player_id != "p-5" for target in rows[tick].ranked)
+        assert _own_room(rows[5].memory) == "WEST_HALL"
+        assert _own_room(rows[6].memory) == "ADMIN"
 
 
 class TestCommittedCorpusTargetingPins:
@@ -2183,41 +2184,42 @@ class TestCommittedCorpusTargetingPins:
         assert before.decline_reason_ranking == 168
         assert before.decline_reason_fellow_defer == 15
         assert before.decline_reason_cover == 7
-        # After: 35/415 = 8.4%, under the < 10% bar, and every survivor lands in a
-        # named legitimate branch -- 28 fellow-impostor defers and 7 COVER bodies.
-        # The contract predicted 22 (15 + 7). The 13-decision difference is the
-        # fellow-defer population the OLD seam never reached: those declines were
-        # attributed to the ranking because the ranking's head was not the victim,
-        # and with the head no longer deciding they resolve to the deliberate defer
-        # they always were. Predicted residual and measured residual differ; the
-        # measured one is the pin.
+        # After, at the repair on the baseline-6 bytes: 35/415 = 8.4%, under the
+        # < 10% bar, and every survivor lands in a named legitimate branch -- 28
+        # fellow-impostor defers and 7 COVER bodies. The contract predicted 22
+        # (15 + 7). The 13-decision difference is the fellow-defer population the
+        # OLD seam never reached: those declines were attributed to the ranking
+        # because the ranking's head was not the victim, and with the head no
+        # longer deciding they resolve to the deliberate defer they always were.
+        # Predicted residual and measured residual differ; the measured one is the
+        # pin. On the baseline-9 bytes it reads 9/232 = 3.9%: 7 defers, 2 COVER.
         assert (
             after.free_kills_declined.numerator,
             after.free_kills_declined.denominator,
-        ) == (8, 237)  # was (8, 228)
+        ) == (9, 232)  # was (8, 237)
         assert after.free_kills_declined.rate is not None
         assert after.free_kills_declined.rate < 0.10
         assert after.decline_reason_ranking == 0
         assert after.decline_reason_other == 0
-        assert after.decline_reason_fellow_defer == 6
+        assert after.decline_reason_fellow_defer == 7  # was 6
         assert after.decline_reason_cover == 2
         # The reconstruction still walks every decision the recording holds. The
         # frozen ``before`` describes the BASELINE-6 bytes (2,461 decisions, 130
         # in-vent), which the record replaced, so the two are no longer
         # comparable and only the measured side is pinned.
-        assert after.decisions_reconstructed == 1826  # was 1750
-        assert after.in_vent_decisions == 119  # was 111
+        assert after.decisions_reconstructed == 1754  # was 1826
+        assert after.in_vent_decisions == 109  # was 119
 
     @pytest.mark.slow
     def test_no_recorded_kill_is_lost(self) -> None:
         # The loss guard: a repair that gains free kills must not silently drop one
         # the recording made. Every recorded kill state re-emits the same intent.
         # Baseline 6 recorded 225 / 640 / 64 / 57.
-        # was 220 / 663 / 67 / 61.
+        # was 229 / 678 / 64 / 62.
         for name, recorded_kills in (
-            ("samples/9p2i", 229),
-            ("ml_corpus/9p2i", 678),
-            ("samples/4p1i", 64),
+            ("samples/9p2i", 223),
+            ("ml_corpus/9p2i", 703),
+            ("samples/4p1i", 68),
             ("ml_corpus/4p1i", 62),
         ):
             cells = self._targeting(name)
@@ -2245,13 +2247,13 @@ class TestCommittedCorpusTargetingPins:
             (after[name].ghost_top.numerator, after[name].ghost_top.denominator)
             for name in names
         ] == [
-            (3, 1826),
-            (4, 5584),
-            (0, 536),
-            (0, 526),
-        ]  # was [(5, 1750), (4, 5528), (0, 551), (0, 529)]
+            (5, 1754),
+            (5, 5748),
+            (0, 558),
+            (0, 531),
+        ]  # was [(3, 1826), (4, 5584), (0, 536), (0, 526)]
         assert after["samples/9p2i"].ghost_top_ejected == 0
-        assert after["samples/9p2i"].ghost_top_unseen_death == 3  # was 5
+        assert after["samples/9p2i"].ghost_top_unseen_death == 5  # was 3
         assert after["ml_corpus/9p2i"].ghost_top_ejected == 0
         # 4p1i was clean on both sets before and stays clean: the defect was a
         # 9p2i-roster phenomenon, which is to say it biased the eval baseline.

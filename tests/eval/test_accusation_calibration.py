@@ -32,6 +32,7 @@ from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
 )
+from eval.report_io import read_set_report_text
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -689,32 +690,30 @@ _COMMITTED_SPLIT: Final[
     Mapping[str, tuple[tuple[float, int], tuple[float, int], tuple[float, int]]]
 ] = {
     "replays/samples/9p2i": (
-        (0.2977642276422763, 738),  # was (0.30033244680851046, 752)
-        (0.17509090909090924, 550),  # was (0.18190730837789656, 561)
-        (0.6757978723404261, 188),  # was (0.6769633507853406, 191)
+        (0.3031066666666665, 750),  # was (0.2977642276422763, 738)
+        (0.18955908289241633, 567),  # was (0.17509090909090924, 550)
+        (0.6745901639344266, 183),  # was (0.6757978723404261, 188)
     ),
     "replays/ml_corpus/9p2i": (
-        (0.27847654435671193, 2153),  # was (0.28170283018867964, 2120)
-        (0.163608374384236, 1624),  # was (0.17446038677479642, 1603)
-        (0.6791304347826082, 529),  # was (0.671856866537717, 517)
+        (0.28633187772925806, 2290),  # was (0.27847654435671193, 2153)
+        (0.1685755813953478, 1720),  # was (0.163608374384236, 1624)
+        (0.6753508771929817, 570),  # was (0.6791304347826082, 529)
     ),
     "replays/samples/4p1i": (
-        (0.2946601941747573, 103),  # was (0.24866071428571437, 112)
-        (0.12307692307692301, 65),  # was (0.06506849315068489, 73)
-        (0.6407894736842105, 38),  # was (0.6282051282051283, 39)
+        (0.24863636363636377, 110),  # was (0.2946601941747573, 103)
+        (0.11197183098591552, 71),  # was (0.12307692307692301, 65)
+        (0.6256410256410255, 39),  # was (0.6407894736842105, 38)
     ),
     "replays/ml_corpus/4p1i": (
-        (0.28750000000000003, 120),  # was (0.26585365853658544, 123)
-        (0.10064935064935064, 77),  # was (0.09493670886075953, 79)
-        (0.6453488372093021, 43),  # was (0.6409090909090909, 44)
+        (0.2771551724137932, 116),  # was (0.28750000000000003, 120)
+        (0.10479452054794526, 73),  # was (0.10064935064935064, 77)
+        (0.6441860465116278, 43),  # was (0.6453488372093021, 43)
     ),
 }
 
 
 def _committed_calibration(sample_dir: str) -> AccusationCalibrationReport:
-    raw = (_REPO_ROOT / sample_dir / "tournament-eval-report.json").read_text(
-        encoding="utf-8"
-    )
+    raw = read_set_report_text(_REPO_ROOT / sample_dir)
     return AccusationCalibrationReport.model_validate(
         json.loads(raw)["accusation_calibration"]
     )
@@ -915,16 +914,19 @@ def test_a_self_accusation_by_an_impostor_does_score_as_a_hit() -> None:
 
 
 def test_the_4p1i_impostor_curves_are_honestly_low_power() -> None:
-    """Four populated bins under the five-bin power bar is signal, not a bug.
+    """Three or four populated bins under the five-bin power bar is signal, not a bug.
 
     A single-impostor roster gives the impostor accuser few lawful confidences
     to spread, so the conditioned curve legitimately flags. The 9p2i curves,
     with two impostors accusing, do not.
     """
 
-    for sample_dir in ("replays/samples/4p1i", "replays/ml_corpus/4p1i"):
+    for sample_dir, populated in (
+        ("replays/samples/4p1i", 4),
+        ("replays/ml_corpus/4p1i", 3),  # was 4
+    ):
         curve = _committed_calibration(sample_dir).accusation_claim_impostor_accuser
-        assert curve.populated_bins == 4
+        assert curve.populated_bins == populated
         assert curve.populated_bins < MIN_POPULATED_BINS_FOR_POWER
         assert curve.low_power is True
     for sample_dir in ("replays/samples/9p2i", "replays/ml_corpus/9p2i"):
@@ -1091,15 +1093,22 @@ def test_the_committed_guard_drop_reconciles_against_the_vote_curve() -> None:
     Recomputes both sides from the committed bytes: the binnable population
     ignoring the guard rule, minus the curve's total, must equal the published
     count. A census that over-counted marked SKIPs would fail here.
+
+    The guard now authors almost no ballot: one on the corpus 9p2i set and none
+    on the other three, so that set is the one whose reconciliation exercises a
+    real drop, and the exact per-set drop is pinned beside it.
     """
 
+    drops: Mapping[str, int] = {
+        "replays/ml_corpus/4p1i": 0,  # was 2
+        "replays/ml_corpus/9p2i": 1,  # was 67
+        "replays/samples/4p1i": 0,  # was 1
+        "replays/samples/9p2i": 0,  # was 26
+    }
+    assert sorted(drops) == sorted(_COMMITTED_SPLIT)
     for sample_dir in sorted(_COMMITTED_SPLIT):
         served = _committed_calibration(sample_dir)
-        raw = json.loads(
-            (_REPO_ROOT / sample_dir / "tournament-eval-report.json").read_text(
-                encoding="utf-8"
-            )
-        )
+        raw = json.loads(read_set_report_text(_REPO_ROOT / sample_dir))
         non_skip = sum(
             1
             for game in raw["report"]["games"]
@@ -1111,7 +1120,11 @@ def test_the_committed_guard_drop_reconciles_against_the_vote_curve() -> None:
             non_skip - served.vote_ballot_total
             == served.vote_ballot_guard_authored_excluded
         ), sample_dir
-        assert served.vote_ballot_guard_authored_excluded > 0, sample_dir
+        assert served.vote_ballot_guard_authored_excluded == drops[sample_dir], (
+            sample_dir
+        )
+    # The reconciliation still runs over a real drop on at least one set.
+    assert any(drop > 0 for drop in drops.values())
 
 
 def test_marker_shaped_prose_the_model_wrote_is_not_treated_as_a_guard_marker() -> None:
