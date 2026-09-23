@@ -22,6 +22,7 @@ from __future__ import annotations
 import importlib
 import re
 import shutil
+import statistics
 import sys
 from pathlib import Path
 from typing import Any
@@ -410,22 +411,14 @@ def test_a_mixed_provenance_manifest_still_keys_on_a_multi_fingerprint(
     assert mixed is not None and mixed.startswith("multi:")
 
 
-def test_the_served_rubric_is_fresh_but_every_score_is_floored() -> None:
-    # THE PROBE PIN, and at this HEAD it pins a FRESH rubric whose every score is
-    # the integrity floor, deliberately.
-    #
-    # The rubric WAS regenerated on the re-recorded 9p2i bytes, so its
-    # provenance key matches the manifest and the served view is not stale. But
-    # one of the gameplay-facts extractor's self-checks still fails on these
-    # bytes (its re-derived genuine-class conversion disagrees with the shipped
-    # compute_genuine_class_conversion), and experiments/lab/rubric_score.py's
-    # _facts_integrity_ok floors EVERY game's score to zero on any self-check
-    # FAIL. So the served scores are the floor, not a measurement: the per-rule
-    # components still vary, only the score is zero.
-    #
-    # This pins that state so it cannot pass unnoticed, and so the day the
-    # extractor is reconciled and the rubric regenerated, THIS test fails and
-    # has to be moved on purpose. (Was: stale by provenance on the baseline-8 bytes.)
+def test_the_served_rubric_is_fresh_and_floors_only_per_game() -> None:
+    # THE PROBE PIN: the served 9p2i rubric is FRESH by provenance and SCORED in
+    # content. Every gameplay-facts self-check passes on these bytes, so
+    # experiments/lab/rubric_score.py's _facts_integrity_ok leaves the scores to
+    # their dimensions and floors only per game. A wholesale floor (every score
+    # 0.0 while the rules vary) is what one failing self-check produces, and
+    # this pin fails on it.
+    # Was: all 50 scores floored by the genuine-class self-check (baseline 9, 87c6abfe).
     set_dir = _PARENT / "9p2i"
     manifest_sha = _manifest_git_sha(set_dir)
 
@@ -437,12 +430,14 @@ def test_the_served_rubric_is_fresh_but_every_score_is_floored() -> None:
     assert view.git_head == manifest_sha
     assert view.stale is False
 
-    # Fresh by provenance, floored in content: all 50 served scores are 0.0 while
-    # the rules they are built from are not all zero, which is what separates the
-    # integrity floor from a set that genuinely scored nothing.
+    # Only the five per-game railroad floors read 0.0, the same five games
+    # tests/eval/test_watchability.py pins for the production referee.
     assert len(view.per_game) == 50
-    assert all(row.score == 0.0 for row in view.per_game)
-    assert any(row.r1_decisive > 0 for row in view.per_game)
+    scores = sorted(row.score for row in view.per_game)
+    zeroed = sorted(row.seed for row in view.per_game if row.score == 0.0)
+    assert zeroed == [6, 12, 13, 38, 39]
+    assert statistics.median(scores) == pytest.approx(50.7)
+    assert scores[-1] == 83.5
 
 
 def test_featured_labels_are_spoiler_free() -> None:
