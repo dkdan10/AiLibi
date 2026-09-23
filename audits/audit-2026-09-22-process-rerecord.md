@@ -1146,19 +1146,40 @@ the world under them.
 
 | test | what the bytes now say |
 |---|---|
-| `tests/meetings/test_contradictions.py::TestTheAlibiIsARoute` (3 tests) | The seed-41 exhibit is gone: meeting 2 carries 0 recorded flags and p-9 now states a six-leg route. Searched over all 676 meetings, no recorded flag rests on a sole self-alibi that is one stay spanning more than a tick, so no successor exists. This is the route claim's own exhibit disappearing, and §4.3's census says the same across the corpus. |
-| `…::TestGroundedProsecutionCommittedCensus::test_the_fully_grounded_leg_drops_the_whole_class` | "Entirely weak" is false: the fully grounded re-derivation now keeps 8 STRONG flags beside 113 weak (was 0 and 120), all 8 on impostor subjects, all in meetings where movement diverges. |
+| `tests/meetings/test_contradictions.py::TestGroundedProsecutionCommittedCensus::test_the_fully_grounded_leg_drops_the_whole_class` | "Entirely weak" is false: the fully grounded re-derivation now keeps 8 STRONG flags beside 113 weak (was 0 and 120), all 8 on impostor subjects, all in meetings where movement diverges. |
 | `…::TestGroundedProsecutionInjusticeShapes::test_no_committed_ejection_rides_a_strong_sighting_flag` | "The class is empty" is false: 5 ejections ride a strong sighting flag, every ejectee an impostor; 4 exist only in the records-free re-derivation, 1 (`ml_corpus/9p2i` seed 1041 meeting 1) in the recording. |
 | `tests/meetings/test_transcript.py::TestCommittedBytesArtifactCollapse::test_rederivation_diverges_only_at_the_repaired_sites` | 4 new re-derived pairings are neither a weak proxy re-target nor the corridor band (seed 7 meeting 0 twice, one of them STRONG; seed 32 meeting 0; seed 38 meeting 1). |
-| `…::TestCommittedBytes1010Pins::test_seed25_m0_weak_cross_speaker_conflict_not_retargeted` | The shape is gone: `samples/9p2i` carries 0 `alibi_conflict` flags (21 before), and the only 3 in the four sets are single-author. |
-| `tests/meetings/test_reported_testimony_derive.py::TestRoutesOverTheCommittedRecord` (2 tests) | Premised on the legacy one-room alibi: every one of the 1,021 committed alibis is now a route. The byte round trip itself holds (0 of 275 mismatch); one test expects a statement per route LEG where production emits one per maximal STAY, which differ in 3 of 184 meetings. |
 | `tests/agents/test_reported_testimony.py::test_reported_rows_survive_in_every_candidate_bucket` | The render keeps 5,927 of 7,539 offered testimony rows = 0.786 in the >150-candidate bucket, under the 0.80 floor (0.962 before; the rows offered in that bucket doubled). A render-budget question for the owner. |
 | `tests/eval/test_evidence_honesty.py::test_the_instrument_and_the_detector_read_one_adjacency_rule` | The detector and the adjacency instrument measure a multi-leg route from different points: all 29 adjacent flags the detector keeps STRONG sit on multi-leg routes, and for 26 the sighting is within one tick of an INNER leg boundary but more than one tick from the route's outer ends, which the detector measures from. Single-leg routes never exposed the difference. |
 | `…::test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage` | With the old reported band restored, the fold now renders 32,123 rows against 32,037 recorded — slightly more, not fewer — though it still covers more first-hand ticks (28,359 against 20,629). |
-| `tests/api/test_evidence_mechanisms.py::test_the_flip_search_finds_exactly_the_named_meetings` | The statement-pair wrongful-conviction class it names is EMPTY on these bytes (baseline 8 had seed 41 meeting 2). The test's own comment says a closed class means the pin needs revisiting; the planted positive control still fires. |
-| `tests/api/test_view_model.py::test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment` | No last meeting in `samples/9p2i` carries a target-rewritten ballot; the one in any set (`ml_corpus/9p2i` seed 1056) was rewritten to SKIP and so shows no judgement. |
-| `…::test_report_tick_fog_keeps_the_reported_body` | **A real viewer gap the new bytes exposed.** At seed 13 tick 13 a body report and the game-ending kill share a tick; `api/replay_loader.py` restores the reported body only in MEETING phase, so the reporter's fogged view drops it (1 of 136 body reports). A product fix, out of this record's scope. |
+| `tests/api/test_view_model.py::test_report_tick_fog_keeps_the_reported_body` | **A real viewer gap the new bytes exposed.** At seed 13 tick 13 a body report and the game-ending kill share a tick; `api/replay_loader.py` restores the reported body only in MEETING phase, so the reporter's fogged view drops it (1 of 136 body reports). A product fix, out of this record's scope. |
 | `tests/scripts/test_counterfactual_phase21.py::test_the_memo_table_equals_a_live_four_set_run`, `::test_the_memo_marks_every_advisory_cell` | They hold `audits/audit-phase-21-counterfactual.md`, a baseline-8 memo, to a live run on the committed bytes: 42 of 43 pooled cells differ. A new table or erratum, or a re-scoped drift gate, is the owner's call. |
+
+
+**Frozen rather than re-pinned: four exhibits the new bytes no longer carry.**
+Seven of the eight tests above assert on a shape that the route claim or the
+labelling guards removed from every committed meeting. Each now reads that
+shape's baseline-8 recording, frozen under `tests/fixtures/baseline8_exhibits/`
+from the `main` commit `39a568c6`. The README there gives each file's source,
+transform and sha256, and a snippet that rebuilds all five files from git byte
+for byte. Every assertion is unchanged, and all seven pass on the unchanged
+detector and loader:
+
+| exhibit | tests reading it | what the new bytes say |
+|---|---|---|
+| seed 41 meeting 2, the line verbatim | `tests/meetings/test_contradictions.py::TestTheAlibiIsARoute` (the 3 red, and the 2 green ones that were running on a meeting which had lost its exhibit), and the honest-route sibling | meeting 2 carries 0 recorded flags and p-9 now states a six-leg route; no successor in 676 meetings |
+| the 17 `samples/9p2i` meetings holding the 21 `alibi_conflict` flags, model calls emptied | `tests/meetings/test_transcript.py::…::test_seed25_m0_weak_cross_speaker_conflict_not_retargeted` | `samples/9p2i` carries 0 `alibi_conflict` flags, and the only 3 in the four sets are single-author |
+| all 190 meetings of both sample sets, model calls emptied | `tests/meetings/test_reported_testimony_derive.py::TestRoutesOverTheCommittedRecord` (the 2 red and the view check) | every one of the 1,021 committed alibis is a route, and production reduces a route to one statement per maximal stay, which differs from one per leg in 3 of 184 meetings; the whole-line round trip still reads the live sets and holds |
+| `samples/9p2i` seed 11 and its roster, verbatim | `tests/api/test_view_model.py::test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment` | all 21 target rewrites (8 `invalid_target`, 13 `teammate_coerced`) tally SKIP; the one on a last meeting (`ml_corpus/9p2i` seed 1056) is among them |
+
+The eighth, `tests/api/test_evidence_mechanisms.py::test_the_flip_search_finds_exactly_the_named_meetings`,
+was re-pinned to its measured value. Its walk finds no statement-pair
+wrongful conviction on these bytes, so `_STATEMENT_PAIR_CONVICTIONS` is now the
+empty set (it named seed 41 meeting 2). Empty is the stricter growth tripwire,
+because any meeting that convicts this way now fails it. The planted case still
+proves the predicate fires, and the baseline-8 loss is still stated, on the
+frozen seed-41 line through the loader's own flag projection: two STRONG
+cross-statement `alibi_vs_sighting` flags naming the ejected p-9.
 
 **Restated rather than re-pinned, for the owner to confirm.** Where a pinned
 example seed no longer carried its shape, the same property was re-stated on a
@@ -1276,9 +1297,10 @@ denominator is zero.
   the stale rubric showed "score unavailable". The badge is labelled an
   internal heuristic; it is still a visible consequence of shipping the zeros,
   and the owner's merge publishes it.
-- **Seventeen tests outside the ML set stay red** because the new bytes
+- **Nine tests outside the ML set stay red** because the new bytes
   falsified what they assert (§6.4); `check.sh` fails on them and on the ML
-  tests below, and on nothing else.
+  tests below, and on nothing else. Eight more now read frozen baseline-8
+  exhibits or a re-pinned empty set (§6.4).
 - **The ML fits are not grounded on these bytes** (§7.1 first item), and the
   gate says so rather than hiding it: the rows and tests below stay red.
 
