@@ -1135,6 +1135,17 @@ Ticked where the evidence is whole: items 2, 3, 4, 5 and 10 (the readings). Open
    merging `main`, `docs/artifacts.md` rows `:103`-`:104`, last.
 5. The gates: the PR's CI and the Actions campaign run below (or its re-run at the final head).
 
+**The campaign tier on GitHub Actions `ubuntu-latest`** (`gh workflow run campaign-tier.yml --ref work/ml-reground-baseline-9`,
+dispatched at the pushed head `692233e3`): run **35869361782** reads **4 failed, 332 passed**
+(336 collected) in 427.69 s, and the four are exactly the composed-artifact tests listed in
+step 6 (`test_factory_adoption_gate_refuses_non_go_composed_verdicts`,
+`test_historical_composed_weights_cannot_be_installed[historical]`,
+`test_committed_composed_verdict_round_trips_and_pins_the_shas`,
+`test_committed_composed_verdict_is_rederivable`). Against `39a568c6`'s 335 passed, the one
+extra id is the study pin's planted case. The Mac beside: the full run read 7 failed / 329
+passed before the three campaign re-pins of step 6, which then passed on their own; the same
+four remain. The PR's CI (run 35869352089) was still running when these local legs stopped.
+
 **The deferred cost of the version-one choice** (Constraints, **Deferred cost**). The first
 current install of either fit mints version two at its own commit, and inherits:
 - the identity row (`scripts/verify_ml_evidence.py:1716-1781`) and the grounding row
