@@ -1142,8 +1142,9 @@ below were NOT: each asserts a property that is no longer true of the committed
 bytes, and re-pinning it would have meant deleting or weakening an assertion.
 They stay red; `bash scripts/check.sh` fails on them, and on the ML tests of
 §7.3, and on nothing else. None was caused by an edit here: the re-record moved
-the world under them. One more belongs with them from the campaign tier, which
-`check.sh` excludes; it follows the table.
+the world under them. The campaign tier, which `check.sh` excludes, had one more.
+The third review round re-anchored it, and it follows the table with the
+reversal the re-anchoring exposed.
 
 | test | what the bytes now say |
 |---|---|
@@ -1156,14 +1157,44 @@ the world under them. One more belongs with them from the campaign tier, which
 | `tests/api/test_view_model.py::test_report_tick_fog_keeps_the_reported_body` | **A real viewer gap the new bytes exposed.** At seed 13 tick 13 a body report and the game-ending kill share a tick; `api/replay_loader.py` restores the reported body only in MEETING phase, so the reporter's fogged view drops it (1 of 136 body reports). A product fix, out of this record's scope. |
 | `tests/scripts/test_counterfactual_phase21.py::test_the_memo_table_equals_a_live_four_set_run`, `::test_the_memo_marks_every_advisory_cell` | They hold `audits/audit-phase-21-counterfactual.md`, a baseline-8 memo, to a live run on the committed bytes: 42 of 43 pooled cells differ. A new table or erratum, or a re-scoped drift gate, is the owner's call. |
 
-**The campaign tier's falsified property.** `uv run pytest -m campaign` runs
-the frozen campaign families that `check.sh` leaves out (§7.1 and §7.3 give the
-whole tier). One of its red tests fails on a property of the bytes, not on a
-fit:
+**The campaign tier's tie-break census: re-anchored, and a reversal for the
+owner.** `uv run pytest -m campaign` runs the frozen campaign families that
+`check.sh` leaves out (§7.1 and §7.3 give the whole tier).
+`tests/training/test_surrogate_fidelity.py::test_the_tie_break_moves_the_decision_census_but_not_the_ranking`
+asserts that FO-6's decision census moves between the lowest and the highest
+tied tau while every ranking and calibration channel stays identical, on "the
+set where the census actually moves". That set was `samples/9p2i`, and the new
+bytes stopped the move there. Measured on each committed set through
+`training.surrogate.fidelity.fo6_rebaseline` (the shipped head, which takes the
+highest tied tau) against the test's own lowest-tied-tau control:
 
-| test | what the bytes now say |
-|---|---|
-| `tests/training/test_surrogate_fidelity.py::test_the_tie_break_moves_the_decision_census_but_not_the_ranking` | "The set where the census actually moves" is false. On `samples/9p2i` the lowest and the highest tied tau now both eject on 7 meetings and both skip 86 of the 90 true ejections, so the tie-break moves nothing here. On baseline 8 the low tau ejected on 10 and skipped 90 of 95, and the high tau ejected on none. Every ranking and calibration channel is still identical under both. Re-pinning it to (7, 7) would leave a test that shows no move at all. A set where the census moves, or a re-scoped test, is the owner's call, routed with the re-ground (§7.1). |
+| set | predicted ejections, low / high tau | ejection meetings predicted SKIP, low / high | skip-vs-eject accuracy, low / high | ranking and calibration |
+|---|---|---|---|---|
+| `samples/9p2i` | 7 / 7 | 86 / 86 | 0.3862 / 0.3862 | identical |
+| `samples/4p1i` | 18 / 16 | 9 / 10 | 0.5897 / 0.5897 | identical |
+| `ml_corpus/9p2i`, test side | 5 / 0 | 50 / 52 | 0.4362 / 0.4468 | identical |
+| `ml_corpus/4p1i`, test side | 5 / 5 | 1 / 1 | 0.75 / 0.75 | identical |
+
+On baseline 8, `samples/9p2i` read (10, 0), 90 and 95. The third review round
+re-anchored the test on `samples/4p1i`, which carries the shape the test names:
+the census moves (18 against 16), the ranking does not, and the two accuracies
+are equal (23/39 each), because the one true ejection the low tau catches costs
+it one correct skip. Every assertion is unchanged, including
+`new.skip_vs_eject_accuracy <= old.skip_vs_eject_accuracy`, and the card lists
+the move as a RE-ANCHOR.
+
+**The reversal, for the owner's ruling.** The test's docstring said the tuned
+head "never scores BETTER". On the `ml_corpus/9p2i` test side, the population
+the GO bar is measured on, it does. The shipped head ejects on 0 meetings
+against the low tau's 5, and scores 0.4468 (42/94) against 0.4362 (41/94): the
+low tau's 5 ejections catch 2 true ejections and cost 3 correct skips. So the
+never-better claim is false on the corpus. The docstring now scopes the claim to
+`samples/4p1i` and names this reversal. The neighbouring test's comment said the
+corpus test side decides identically across the tied plateau; it now says the
+side does not. No test asserts on the corpus's accuracy either way, so no
+assertion was weakened. The owner rules on whether the higher-tau tie-break
+stands when the tuned head scores better on the measured population, or whether
+the claim is re-scoped. This is routed with the re-ground (§7.1).
 
 
 **Frozen rather than re-pinned: four exhibits the new bytes no longer carry.**
@@ -1228,13 +1259,17 @@ discharge it.** `bash scripts/check.sh` runs the default tier only. The frozen
 campaign families run under `uv run pytest -m campaign`, which
 `.github/workflows/campaign-tier.yml` runs weekly on `main` and on demand. On
 the base `39a568c6` the tier reads 335 passed. At this record's head it reads
-304 passed, 29 failed and 2 errors, all 31 in `tests/training`. So the first
+308 passed, 25 failed and 2 errors, all 27 in `tests/training`. So the first
 scheduled run on `main` after the merge fails on them unless the re-ground
-lands first. 30 of the 31 are the fits' corpus (§7.3), and the re-ground owns
-them. The 31st is the tie-break census the bytes falsified (§6.4), which needs
-the owner's ruling beside it. Two more were FO-6 pins that fit fresh on the
-committed table and load no artifact; they were re-derived from these bytes, and
-the card lists them. The previous re-record named the same tier as not
+lands first. All 27 are the fits' corpus (§7.3), and the re-ground owns them.
+Six more were re-derived from these bytes, and the card lists each. Two are
+FO-6 pins that fit fresh on the committed table and load no artifact (second
+review round). Three read both frozen fits on the re-recorded split through
+`run_composed_fidelity` or its recompute, without editing an artifact (third
+review round). The last is the tie-break census, re-anchored on `samples/4p1i`
+(third review round). The re-anchoring exposed a reversal on `ml_corpus/9p2i`,
+which needs the owner's ruling beside the re-ground (§6.4). The previous
+re-record named the same tier as not
 discharged (`audits/audit-phase-21-rerecord.md` §7 item 1), and it was green
 again at this record's base.
 
@@ -1326,8 +1361,10 @@ denominator is zero.
   falsified what they assert (§6.4); `check.sh` fails on them and on the ML
   tests below, and on nothing else. Eight more now read frozen baseline-8
   exhibits or a re-pinned empty set (§6.4). In the campaign tier, which
-  `check.sh` does not run, one more fails on a falsified property: the
-  tie-break census (§6.4).
+  `check.sh` does not run, the one falsified property, the tie-break census,
+  was re-anchored on `samples/4p1i` in the third review round. The reversal
+  the re-anchoring exposed on `ml_corpus/9p2i` is reported for the owner
+  (§6.4).
 - **The ML fits are not grounded on these bytes** (§7.1 first item), and the
   gate says so rather than hiding it: the rows and tests below stay red.
 
@@ -1371,9 +1408,14 @@ denominator is zero.
   kind could reach, so `top1_ceiling_gap` reads −0.0962. No test asserts that
   bound for the ballot surrogate; the measured gap is pinned, and whether the
   ceiling still means what its docstring says is a question for the re-ground.
+  The frozen committed surrogate reads the same 46/52 on the re-recorded split,
+  through the composed path and through an independent recompute, against the
+  same 41/52 ceiling. `test_composed_fidelity_scores_the_committed_test_split`
+  pins both values as measured. On baseline 8 the two were equal, at 47/57.
 
-  **The ML tests that stay red**, 45 before the registry recompute and 43 after
-  it, all for one cause, the fits' corpus:
+  **The ML tests that stay red**, 45 before the registry recompute, 43 after
+  it, and 41 after the third review round re-derived two, all for one cause,
+  the fits' corpus:
   - 28 where the product's fit-corpus fence refuses the replaced corpus ("fit
     corpus or derivation drifted", recorded `cc54d3c0…`, measured `6536c68c…`):
     26 in `tests/training` — `test_surrogate_runner.py` (11, two at setup),
@@ -1381,16 +1423,27 @@ denominator is zero.
     `test_model_evidence_provenance.py` (1) — and 2 outside it,
     `tests/eval/test_balance_eval_meeting_runner.py` and
     `tests/experiments/test_torch_probe_excluded.py`;
-  - 9 that assert a frozen fit or a committed training artifact equals the live
-    corpus (`test_surrogate_runner.py` 5, `test_conviction_model.py` 3,
-    `test_bakeoff_methods.py`'s map-elites stamp 1, which could only be fixed
-    under `training/artifacts/`);
+  - 7 that assert a frozen fit or a committed training artifact equals the live
+    corpus (`test_surrogate_runner.py` 4, `test_conviction_model.py` 2,
+    `test_bakeoff_methods.py`'s map-elites stamp 1), which could only be fixed
+    under `training/artifacts/`. Two more were filed here until the third review
+    round and now re-derive green without an artifact edit:
+    `test_conviction_model.py::test_axis_three_is_a_floor_the_live_model_clears_on_all_three`
+    and
+    `test_surrogate_runner.py::test_no_go_verdict_holds_on_live_served_clamped_features`.
+    Each reads the committed weights directly, without the fence, and scores
+    them on the re-recorded held-out split through the production computation,
+    so its value is an out-of-sample measurement of the frozen fit rather than
+    an equality between an artifact and the corpus. The conviction weights read
+    confusion (42, 5, 2, 45) over 94 meetings, accuracy 87/94 against the
+    trivial 50/94, GO; the surrogate on live-served features reads 21 replaced
+    cells, top-1 46, 90 predicted skips and 42 correct, the NO-GO axes unchanged;
   - 6 in `tests/scripts/test_verify_ml_evidence.py` whose OK controls run on the
     real corpus and now read FAIL on rows 1-2 or the recompute rows (the other
     2 of its 8 were the registry row 13, cleared by the recompute). Every status
     assertion was left at OK: moving one to FAIL would be asserting the defect.
 
-  **And 30 more in the campaign tier** (`uv run pytest -m campaign`, which
+  **And 27 more in the campaign tier** (`uv run pytest -m campaign`, which
   `check.sh` does not run; §7.1), for the same cause, all in `tests/training`:
   - 24 refused by the fit-corpus fence. 16 go through the surrogate's fence,
     all in `test_composed_runner.py`; two of those fail at setup
@@ -1400,23 +1453,31 @@ denominator is zero.
     `test_coevo_driver.py` 2 and `test_anchor_study.py::test_run_anchor_study_ci_budget`.
     Six of the 24 test a different refusal, such as a corrupt weights file, a
     NO-GO verdict or a foreign policy, and fail because the fence refuses first;
-  - 6 that hold a frozen artifact or a committed verdict to the live corpus.
-    Each reads a committed fit or artifact under `training/artifacts/`, so it
-    stays red until the re-ground. Four are in `test_composed_runner.py`. Two
-    hold the frozen surrogate's composed fidelity to the old split, which now
-    has 94 test meetings and 52 ejections against the pinned 91 and 57. One is
-    the live-exclusion GO check, whose (decision hits, ejections) are now
-    (79, 52) against (82, 57). The fourth is the committed composed
-    `verdict.json`: its
-    re-derivation differs on corpus-derived fields, among them decision
-    accuracy, 0.8404 against 0.9011 (row 9 above). The other two are
+  - 3 that hold a committed artifact or verdict to the live corpus. Each
+    reads a committed fit or artifact under `training/artifacts/`, so it stays
+    red until the re-ground. One is the committed composed `verdict.json` in
+    `test_composed_runner.py`: its re-derivation differs on corpus-derived
+    fields, among them decision accuracy, 0.8404 against 0.9011 (row 9 above).
+    The other two are
     `test_anchor_study.py::test_committed_study_artifacts_are_the_baseline8_fit`
     (the study stamps substrate `c845602d…`, live `894f4daf…`) and
     `test_hall_of_fame.py::test_committed_pool_restores_only_with_explicit_historical_identity`
     (the map-elites pool stamps `4a25ccdf…`, live `8b174cab…`, the same stamp
     as the default tier's map-elites test).
 
-  The tier's 31st red is the falsified tie-break census (§6.4).
+  Three more `test_composed_runner.py` tests were filed with them until the
+  third review round, and now re-derive green without an artifact edit. They
+  score both frozen fits on the re-recorded split through
+  `run_composed_fidelity` and the test's own recompute:
+  `test_composed_fidelity_scores_the_committed_test_split` (94 test meetings,
+  52 ejections, convicting top-1 46/52, top-1 ceiling 41/52, the tally
+  ejecting on 4 and skipping 90),
+  `test_composed_fidelity_top1_matches_an_independent_recompute` (52
+  ejections, the recompute equal to the composed top-1) and
+  `test_go_verdict_holds_under_the_live_teammate_exclusion_ranking`
+  ((decision hits, ejections) (79, 52), top-1 46, exact 78, GO). The tier's
+  falsified tie-break census is re-anchored and green. The reversal on
+  `ml_corpus/9p2i` is in §6.4.
 
 - **Row 3 is not evaluable on these bytes** (§4.3): 74 of 74 alibi-class flags,
   42 of them because the route claim made the accused's account multi-stay.
