@@ -410,33 +410,39 @@ def test_a_mixed_provenance_manifest_still_keys_on_a_multi_fingerprint(
     assert mixed is not None and mixed.startswith("multi:")
 
 
-def test_the_served_rubric_reads_stale_against_the_rerecorded_manifest() -> None:
-    # THE PROBE PIN, and at this HEAD it pins the STALE side deliberately.
+def test_the_served_rubric_is_fresh_but_every_score_is_floored() -> None:
+    # THE PROBE PIN, and at this HEAD it pins a FRESH rubric whose every score is
+    # the integrity floor, deliberately.
     #
-    # The baseline-8 record re-recorded 9p2i, but its rubric could NOT be
-    # regenerated: one of the gameplay-facts extractor's self-checks fails on
-    # these bytes (the extractor's genuine-class re-derivation disagrees with
-    # eval.vote_correctness by one supplied row), and the lab scorer floors EVERY
-    # game's score to zero on any self-check FAIL. A geomean of 0.0 that
-    # eval.watchability reads at 48.57 is a scorer artifact, not a measurement,
-    # so it was NOT shipped: the rubric artifacts stay at their previous content
-    # and the served rubric is therefore STALE against the new manifest.
+    # The rubric WAS regenerated on the re-recorded 9p2i bytes, so its
+    # provenance key matches the manifest and the served view is not stale. But
+    # one of the gameplay-facts extractor's self-checks still fails on these
+    # bytes (its re-derived genuine-class conversion disagrees with the shipped
+    # compute_genuine_class_conversion), and experiments/lab/rubric_score.py's
+    # _facts_integrity_ok floors EVERY game's score to zero on any self-check
+    # FAIL. So the served scores are the floor, not a measurement: the per-rule
+    # components still vary, only the score is zero.
     #
-    # That is the honest state and the banner exists to show it. This test pins
-    # it so the staleness cannot pass unnoticed, and so the day the extractor is
-    # reconciled and the rubric regenerated, THIS test fails and has to be moved
-    # back to the fresh side on purpose.
+    # This pins that state so it cannot pass unnoticed, and so the day the
+    # extractor is reconciled and the rubric regenerated, THIS test fails and
+    # has to be moved on purpose. (Was: stale by provenance on the baseline-8 bytes.)
     set_dir = _PARENT / "9p2i"
     manifest_sha = _manifest_git_sha(set_dir)
 
-    # The producer's own recomputation still tracks the manifest exactly — the
-    # mechanism is intact; it is the artifact that is behind.
+    # The producer's own recomputation tracks the manifest exactly.
     assert _rubric_score._set_manifest_sha(set_dir) == manifest_sha
 
     view = SetLoaderRegistry(_PARENT).get("9p2i").rubric()
     assert view.manifest_sha == manifest_sha
-    assert view.git_head != manifest_sha
-    assert view.stale is True
+    assert view.git_head == manifest_sha
+    assert view.stale is False
+
+    # Fresh by provenance, floored in content: all 50 served scores are 0.0 while
+    # the rules they are built from are not all zero, which is what separates the
+    # integrity floor from a set that genuinely scored nothing.
+    assert len(view.per_game) == 50
+    assert all(row.score == 0.0 for row in view.per_game)
+    assert any(row.r1_decisive > 0 for row in view.per_game)
 
 
 def test_featured_labels_are_spoiler_free() -> None:
@@ -558,16 +564,17 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     # from with `uv run python scripts/measure_featured_criterion.py`.
     featured = _parse_featured_games()
     assert {game[0] for game in featured} == {"4p1i", "9p2i"}
-    # Re-curated against the baseline-7 bytes: every earlier blurb described a
-    # game the record changed (audits/audit-phase-20-baseline-7.md §4), so the
-    # list was re-read rather than re-scored. Baseline 6 featured 9p2i {2, 8, 17,
-    # 23} and 4p1i {2, 29, 41}.
+    # Re-curated against the baseline-9 bytes: seed 13's blurb counted three
+    # meetings of 7, 6 and 5 turns where the served game has one, and seed 46
+    # now records no flag and no ejection in any of its four meetings, so both
+    # slots were refilled from the eligible openers (seeds 0 and 29), each with a
+    # blurb written against the served game. Baseline 8 featured 9p2i {2, 13, 23, 46}.
     assert featured[0] == ("9p2i", 23)  # the tour's landing game (the curated head)
     assert {seed for set_name, seed in featured if set_name == "9p2i"} == {
+        0,
         2,
-        13,
         23,
-        46,
+        29,
     }
     assert {seed for set_name, seed in featured if set_name == "4p1i"} == {2, 11, 29}
     registry = SetLoaderRegistry(_PARENT)
@@ -590,32 +597,39 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     "set_name,seed,why,message",
     [
         ("9p2i", 2, "no ejection anywhere in the game", "SKIPPED"),
-        ("9p2i", 13, "the first meeting skips", "SKIPPED"),
+        ("9p2i", 10, "no ejection anywhere in the game", "SKIPPED"),
         ("9p2i", 46, "the first meeting skips", "SKIPPED"),
         (
             "9p2i",
+            36,
+            "the first meeting skips, though a later one ejects on role proof",
+            "SKIPPED",
+        ),
+        (
+            "9p2i",
             44,
-            "the first meeting ejects an impostor, but on NO flag naming them",
-            "weak_signal",
+            "the first meeting ejects an IMPOSTOR on no flag at all",
+            r"'9p2i', 44, \[\]",
         ),
         (
             "9p2i",
             12,
-            "the first meeting ejects a crewmate on a flag that is not role proof",
-            "weak_signal",
+            "the first meeting ejects a CREWMATE on no flag at all",
+            r"'9p2i', 12, \[\]",
         ),
         (
             "9p2i",
-            10,
-            "the first meeting ejects an IMPOSTOR that a flag names — but the flag is not role proof",
-            "weak_signal",
+            13,
+            "the first meeting ejects a CREWMATE on no flag at all",
+            r"'9p2i', 13, \[\]",
         ),
         (
-            "4p1i",
-            29,
-            "the first meeting ejects a CREWMATE on no flag at all",
-            r"'4p1i', 29, \[\]",
+            "9p2i",
+            7,
+            "the first meeting ejects an IMPOSTOR that a flag names — but the flag is not role proof",
+            "cross_statement",
         ),
+        ("4p1i", 29, "the one meeting skips: no ejection anywhere", "SKIPPED"),
         (
             "4p1i",
             11,
@@ -635,43 +649,44 @@ def test_featured_head_criterion_rejects_a_head_that_establishes_nothing(
     # proof of the clause it was chosen for.
     #
     # BOTH SETS are represented, because the pin above now applies the criterion
-    # to each set's head: 4p1i seed 29 (the strip's own third 4p1i entry) ejects
-    # a CREWMATE on no flag and seed 11 ejects an impostor on no flag, so
-    # promoting either to the 4p1i head turns this red. No 4p1i game can isolate
-    # the category clause the way 9p2i seed 10 does — measured, every flagged
-    # FIRST meeting in `replays/samples/4p1i` is role proof — so that clause's
-    # proof stays 9p2i's and this records why rather than leaving a gap.
+    # to each set's head: 4p1i seed 29 (the strip's own third 4p1i entry) skips
+    # its one meeting and seed 11 ejects an impostor on no flag, so promoting
+    # either to the 4p1i head turns this red. No 4p1i game can isolate the
+    # category clause the way 9p2i seed 7 does — measured, every flag recorded
+    # anywhere in `replays/samples/4p1i` is a role-proof vent sighting — so that
+    # clause's proof stays 9p2i's and this records why rather than leaving a gap.
     #
-    # SEED 10 IS THE ISOLATING CASE, and the one the clause rests on: its first
-    # meeting ejects p-6, p-6 IS an impostor, and a flag in that same meeting
-    # DOES name p-6 — only the flag's category is `weak_signal` rather than
-    # `role_proof`. Weaken that one clause and seed 10 is the case that goes
-    # green, which is what `test_seed_10_isolates_the_role_proof_clause` below
+    # SEED 7 IS THE ISOLATING CASE, and the one the clause rests on: its first
+    # meeting ejects p-2, p-2 IS an impostor, and both flags in that same meeting
+    # DO name p-2 — only their category is `cross_statement` rather than
+    # `role_proof`. Weaken that one clause and seed 7 is the case that goes
+    # green, which is what `test_seed_7_isolates_the_role_proof_clause` below
     # reads out of the bytes rather than asserting in prose.
     #
-    # Seeds 44 and 12 bracket it: 44 ejects an impostor in its first meeting on
-    # a flag naming somebody ELSE, so a pin checking only "the head ejects" or
-    # "the head ejects correctly" would wave it through; 12 ejects a crewmate
-    # named by a flag, so it fails the category clause here AND the role clause
-    # under a weakened one — which is exactly why it cannot serve as the
-    # category clause's proof on its own. (The card named seed 46 as the "ejects
-    # on no flag" case; measured, 46's first meeting SKIPS, so it is kept here
-    # for the reason it actually fails.)
+    # The rest bracket it. 44 ejects an IMPOSTOR in its first meeting on no flag
+    # at all, so a pin checking only "the head ejects" or "the head ejects
+    # correctly" would wave it through; 12 and 13 eject a CREWMATE on no flag;
+    # 36 establishes something only in a LATER meeting, which the tour's
+    # auto-follow does not open first. No committed first meeting ejects on a
+    # flag that names somebody else, or ejects a crewmate on any flag, so the
+    # role clause has no bracket of its own on these bytes.
+    # (Re-derived on the baseline-9 bytes: 10, 12, 13, 44 and 4p1i 29 kept for
+    # the reasons they now fail; 7 and 36 added for the shapes 10 and 13 lost.)
     registry = SetLoaderRegistry(_PARENT)
     with pytest.raises(AssertionError, match=message):
         _assert_opens_on_role_proof(registry, set_name, seed)
 
 
-def test_seed_10_isolates_the_role_proof_clause() -> None:
+def test_seed_7_isolates_the_role_proof_clause() -> None:
     # The parametrized rejection above is only a proof of the ROLE_PROOF clause
-    # if seed 10 clears every other clause of the criterion, so read that out of
+    # if seed 7 clears every other clause of the criterion, so read that out of
     # the served bytes here instead of claiming it in a comment. Each assertion
     # below is one clause of `_assert_opens_on_role_proof` satisfied; the last
     # two are the defect — the ejected player IS named by a flag, and no flag in
     # the meeting is role proof — so the category comparison is the only thing
-    # left that can reject this game.
+    # left that can reject this game. (Was seed 10, which no longer ejects.)
     registry = SetLoaderRegistry(_PARENT)
-    replay = registry.get("9p2i").load_replay("headless-seed-10")
+    replay = registry.get("9p2i").load_replay("headless-seed-7")
     first = replay.meetings[0]
     assert first.outcome == "EJECTED"
     ejected = first.ejected_player_id
@@ -682,31 +697,41 @@ def test_seed_10_isolates_the_role_proof_clause() -> None:
     assert not any(flag.category == "role_proof" for flag in first.contradictions)
 
 
-def test_featured_seed_13_card_states_the_served_turn_shape() -> None:
-    # The seed-13 card used to claim five meetings; the served game has THREE, of
-    # 7, 6 and 5 spoken turns (audits/audit-phase-21-rerecord.md §5.1.1c). A blurb
-    # that names a countable fact needs a check that counts it, or the next record
-    # falsifies it again in silence — so the card's own numbers are read back out
-    # of the picker and compared against the served set through the loader.
+def test_featured_seed_0_card_states_the_served_meeting_shape() -> None:
+    # A blurb that names a countable fact needs a check that counts it, or the
+    # next record falsifies it in silence: seed 13's card promised meetings of 7,
+    # 6 and 5 turns to a game the baseline-9 record left with ONE meeting. Seed 0
+    # took that slot, and its card makes an ORDERED claim the shared vocabulary
+    # check below cannot see — a vent sighting, then a LATER meeting whose only
+    # flags are weak signals — so the card's words are read back out of the
+    # picker and compared, meeting by meeting, against the served game.
     #
-    # The turn counts are read from the SET LOADER rather than from the raw
-    # JSONL: the card describes what a viewer sees, which is the served payload.
+    # Read from the SET LOADER rather than from the raw JSONL: the card
+    # describes what a viewer sees, which is the served payload.
     registry = SetLoaderRegistry(_PARENT)
-    replay = registry.get("9p2i").load_replay("headless-seed-13")
+    replay = registry.get("9p2i").load_replay("headless-seed-0")
     served = tuple(len(meeting.turns) for meeting in replay.meetings)
-    assert served == (7, 6, 5), served
+    assert served == (8, 7, 6), served
+    kinds = [
+        {(flag.kind, flag.category) for flag in meeting.contradictions}
+        for meeting in replay.meetings
+    ]
+    assert kinds == [
+        {("vent_sighting", "role_proof")},
+        {("alibi_vs_sighting", "weak_signal")},
+        {("vent_sighting", "role_proof")},
+    ], kinds
 
     label = next(
         label
         for (set_name, seed), label in zip(
             _parse_featured_games(), _FEATURED_LABEL.findall(_featured_block())
         )
-        if (set_name, seed) == ("9p2i", 13)
+        if (set_name, seed) == ("9p2i", 0)
     )
-    # The card names the shrinking run in words; the words and the bytes agree.
-    assert "seven turns, then six, then five" in label
-    # ...and it no longer claims a meeting count the served game does not have.
-    assert "five meetings" not in label.lower()
+    # The card names that order in words; the words and the bytes agree.
+    assert label.startswith("Three meetings, twenty-one spoken turns.")
+    assert "use a vent, and a later meeting's only flags are weak signals" in label
 
 
 def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -726,12 +751,45 @@ def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
         assert replay.metadata.game_id == f"headless-seed-{_FAST_SEED}"
 
 
+# The flag claims a label may make, each bound to the flags it promises: a
+# reported vent sighting, a meeting whose flags are ALL weak signals, and a
+# meeting whose flags are ALL contradictions (the viewer's own group headings).
+_FLAG_CLAIMS: dict[str, str] = {
+    r"\bvent\b": "vent",
+    r"only flags are weak signals": "weak_signal",
+    r"flags are contradictions": "cross_statement",
+}
+
+
+def _flag_claim_holds(claim: str, replay: ReplayView) -> bool:
+    if claim == "vent":
+        return any(
+            flag.kind == "vent_sighting"
+            for meeting in replay.meetings
+            for flag in meeting.contradictions
+        )
+    return any(
+        meeting.contradictions
+        and all(flag.category == claim for flag in meeting.contradictions)
+        for meeting in replay.meetings
+    )
+
+
 def _assert_featured_counts(label: str, replay: ReplayView) -> None:
     """Check the bounded count vocabulary used by these editorial labels."""
-    words = {"one": 1, "three": 3, "four": 4, "twenty-six": 26}
+    words = {
+        "one": 1,
+        "three": 3,
+        "four": 4,
+        "twenty": 20,
+        "twenty-one": 21,
+        "twenty-six": 26,
+    }
     text = label.lower()
-    meeting = re.search(r"\b(one|four) (?:short )?meetings?\b", text)
-    turns = re.search(r"\b(three|twenty-six) (?:spoken )?turns\b", text)
+    meeting = re.search(r"\b(one|three|four) (?:short )?meetings?\b", text)
+    turns = re.search(
+        r"\b(three|twenty-six|twenty-one|twenty) (?:spoken )?turns\b", text
+    )
     assert meeting is not None or turns is not None
     if meeting is not None:
         assert len(replay.meetings) == words[meeting.group(1)]
@@ -739,11 +797,46 @@ def _assert_featured_counts(label: str, replay: ReplayView) -> None:
         assert sum(len(item.turns) for item in replay.meetings) == words[turns.group(1)]
     if "no flagged contradictions" in text:
         assert not any(item.contradictions for item in replay.meetings)
+    for pattern, claim in _FLAG_CLAIMS.items():
+        if re.search(pattern, text):
+            assert _flag_claim_holds(claim, replay), (claim, label)
+
+
+def _without_flags(replay: ReplayView, claim: str) -> ReplayView:
+    """The served replay with every flag the named claim rests on removed."""
+
+    def keep(kind: str, category: str) -> bool:
+        return kind != "vent_sighting" if claim == "vent" else category != claim
+
+    return replay.model_copy(
+        update={
+            "meetings": tuple(
+                meeting.model_copy(
+                    update={
+                        "contradictions": tuple(
+                            flag
+                            for flag in meeting.contradictions
+                            if keep(flag.kind, flag.category)
+                        )
+                    }
+                )
+                for meeting in replay.meetings
+            )
+        }
+    )
 
 
 @pytest.mark.parametrize(
     "set_name,seed",
-    [("9p2i", 2), ("9p2i", 23), ("9p2i", 46), ("4p1i", 29), ("4p1i", 2), ("4p1i", 11)],
+    [
+        ("9p2i", 23),
+        ("9p2i", 0),
+        ("9p2i", 29),
+        ("9p2i", 2),
+        ("4p1i", 2),
+        ("4p1i", 11),
+        ("4p1i", 29),
+    ],
 )
 def test_current_featured_claims_match_source_and_gate_bites(
     set_name: str, seed: int
@@ -761,6 +854,13 @@ def test_current_featured_claims_match_source_and_gate_bites(
     _assert_featured_counts(label, replay)
     with pytest.raises(AssertionError):
         _assert_featured_counts(label, replay.model_copy(update={"meetings": ()}))
+    # Each flag claim the label makes bites on its own: strip only the flags that
+    # claim rests on, leave every meeting, turn and other flag in place, and the
+    # same label must fail.
+    for pattern, claim in _FLAG_CLAIMS.items():
+        if re.search(pattern, label.lower()):
+            with pytest.raises(AssertionError, match=claim):
+                _assert_featured_counts(label, _without_flags(replay, claim))
     for claim in (
         "no evidence at all",
         "everything the crew will ever know",

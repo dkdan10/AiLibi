@@ -88,7 +88,7 @@ export interface FeaturedGame {
 }
 
 // WHICH games are here is editorial, independent of the pacing rubric: seven
-// hand-read recordings. Labels name a setup or question, never an ending,
+// hand-picked recordings. Labels name a setup or question, never an ending,
 // ejection or vote tally. A lack of detector flags says nothing about how much
 // evidence the agents hold. Countable claims are checked against the recordings
 // by tests/api/test_sets.py and the browser tests.
@@ -111,19 +111,19 @@ export const FEATURED_GAMES: readonly FeaturedGame[] = [
     set: "9p2i",
     seed: 23,
     label:
-      "Four meetings, twenty-six spoken turns. A player reports seeing someone use a vent, and the meeting files that apart from one account merely contradicting another. Read which each ballot cites, and who else its voter weighed.",
+      "Four meetings, twenty-six spoken turns. A player reports seeing someone use a vent. Read which each ballot cites, and who else its voter weighed.",
   },
   {
     set: "9p2i",
-    seed: 13,
+    seed: 0,
     label:
-      "A game where the talking shrinks every round — seven turns, then six, then five. Watch whether less argument means more evidence or just less patience.",
+      "Three meetings, twenty-one spoken turns. A player reports seeing someone use a vent, and a later meeting's only flags are weak signals. Compare what each ballot cites in the two.",
   },
   {
     set: "9p2i",
-    seed: 46,
+    seed: 29,
     label:
-      "Four meetings to compare. Follow how the table turns sightings and statements into accusations.",
+      "Four meetings, twenty spoken turns. Reported vent sightings, and a meeting whose flags are contradictions instead. Follow how the table turns sightings and statements into accusations.",
   },
   {
     set: "9p2i",
