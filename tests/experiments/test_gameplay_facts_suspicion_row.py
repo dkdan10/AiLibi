@@ -61,8 +61,7 @@ def _narrowed_graph(prompt: str) -> dict[str, float]:
         return {}
     block = prompt.split(header, 1)[1].split("## ", 1)[0]
     return {
-        m.group("pid"): float(m.group("sus"))
-        for m in _NARROWED_ROW_RE.finditer(block)
+        m.group("pid"): float(m.group("sus")) for m in _NARROWED_ROW_RE.finditer(block)
     }
 
 
