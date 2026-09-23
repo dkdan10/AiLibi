@@ -473,14 +473,22 @@ ceiling, so the owner's raise was needed (the Amendment above is corrected).
     advances** (b3b007bf); `training/bakeoff/harness.py` `BAKEOFF_BASELINE_ID`
     stays `baseline-8`, naming the corpus the ML fits are ground on.
 15. **The ML pins.** Task 21.17 deleted the STALE amnesty the previous re-record
-    used, so no row can honestly be marked a declared gap. Re-derived where a
-    test measures the corpus without a fitted artifact; every test that loads a
-    fit through its corpus fence, or asserts a frozen fit equals the live
-    corpus, is left red (below and record §7.3). The FIRST follow-up routed to
-    the owner is the re-ground, successor of Task 21.17, on the same bytes.
-    The campaign tier follows the same rule, applied in the second review
-    round. Two FO-6 pins are re-derived. 30 fit-bound tests are left red, and
-    one falsified census is reported (record §6.4, §7.1, §7.3).
+    used, so no row can honestly be marked a declared gap. A value is
+    re-derived wherever the production computation reads the live corpus
+    without an edit under `training/artifacts/`. That covers a fresh fit on the
+    committed table, and a committed fit read directly and scored on the
+    re-recorded split, which is an out-of-sample measurement. Every test that
+    loads a fit through its corpus fence, or asserts that a committed artifact
+    or verdict equals the live corpus, is left red (below and record §7.3). The
+    FIRST follow-up routed to the owner is the re-ground, successor of Task
+    21.17, on the same bytes. The campaign tier follows the same rule. The
+    second review round re-derived two FO-6 pins. The third re-derived five
+    reads of the frozen fits that the first close had filed as `[frozen-fit]`:
+    two in the default tier and three composed-fidelity reads in the campaign
+    tier. It also re-anchored the tie-break census on `samples/4p1i`. 27
+    fit-bound campaign tests are left red, and the tie-break reversal on
+    `ml_corpus/9p2i` is reported for the owner's ruling (record §6.4, §7.1,
+    §7.3).
 16. **Attribution.** This close's commits carry `Co-Authored-By: Claude Opus
     5.5`, the model that wrote them; the recording commits before it carry the
     earlier operator's trailer. The review-fix round's commits after `e89509e1`
@@ -529,16 +537,19 @@ ceiling, so the owner's raise was needed (the Amendment above is corrected).
 
 ### Verification
 
-Re-run in the second review round in a fresh worktree, in a bare shell (no
-`AILIBI_*` export, no `.env`), with each exit code captured directly. The runs
-used `daf7bfc3`, which has the two FO-6 re-pins, the record's campaign-tier
-section, the card's campaign list and the recomputed `audits/` registry row,
-before this Verification edit. `scripts/validate_task_docs.py` was re-run after
-the edit, and the key scan was taken last, over the head that carries this
-line. Every figure matches the first review round's run at `8e6b62eb` except
-the key scan's and the new campaign-tier line.
+Re-run in the third review round in a fresh worktree, in a bare shell (no
+`AILIBI_*` export, no `.env`), with each exit code captured directly and
+pytest under `PYTHONDONTWRITEBYTECODE=1 -p no:cacheprovider`. The runs used
+`dd9e1c89`, which has the six re-derived tests, the record's §6.4, §7.1 and
+§7.3 edits and the recomputed `audits/` registry row, before this card's edit.
+`scripts/validate_task_docs.py` was re-run after the edit, and the key scan was
+taken last, over the head that carries this line. The second block is the
+second review round's run at `daf7bfc3`, carried unchanged: this round changed
+six tests under `tests/training`, the record, this card and one
+`docs/artifacts.md` row, and none of those commands reads any of them.
 
 ```
+Third review round, at dd9e1c89
 bash scripts/check.sh (whole)                          EXIT 1 — pytest, below
   ruff check .                                         All checks passed
   ruff format --check .                                521 files already formatted
@@ -546,8 +557,30 @@ bash scripts/check.sh (whole)                          EXIT 1 — pytest, below
   scripts/validate_task_docs.py                        390 phase tasks + 390 prompts; 73 work cards
   scripts/generate_prompts.py --check                  all 390 prompts in sync
   mypy .                                               no issues in 492 source files
-  pytest -n auto --dist loadfile                       8,241 passed, 20 skipped, 3 xfailed;
-                                                       43 failed + 9 errors = the 52 red tests below
+  pytest -n auto --dist loadfile                       8,243 passed, 20 skipped, 3 xfailed;
+                                                       41 failed + 9 errors = the 50 red tests below
+uv run pytest -m campaign (not part of check.sh)       EXIT 1; 308 passed, 25 failed + 2 errors =
+                                                       the 27 campaign reds under "Left red"
+                                                       (base 39a568c6, same venv: 335 passed;
+                                                       c447a928: 302 passed, 31 failed + 2 errors;
+                                                       60a70a6a: 304 passed, 29 failed + 2 errors)
+scripts/check_doc_facts.py                             EXIT 0
+scripts/publish_process_scorecard.py --check           EXIT 0, consistent
+scripts/gen_frontend_types.py --check                  EXIT 0
+scripts/verify_ml_evidence.py (offline, never --complete)   EXIT 1; 61 checks: OK 37,
+                                                       FAIL 12, ABSENT 7, INFO 5 — the 12 are the
+                                                       corpus rows of record §7.3; the in-tree
+                                                       family inventory reads OK
+scripts/validate_task_docs.py (after this edit)        EXIT 0
+git log --oneline 39a568c6..HEAD -- engine agents meetings observation orchestrator
+                                                       (empty: the freeze held)
+git log --oneline 39a568c6..origin/main                (empty: main did not move)
+git diff --stat 39a568c6..HEAD -- training/artifacts   (empty: no fit, weight or verdict moved)
+count-only key scan over every added or changed byte   429 files, 307,163,467 bytes, 0 matches
+  (git diff --name-only --diff-filter=AM 39a568c6..HEAD at the head carrying this line;
+   gzipped reports decompressed; the five patterns each fire once on a planted key)
+
+Second review round, at daf7bfc3 (inputs unchanged since)
   (set -e stops check.sh at pytest, so its frontend leg was run on its own:)
 cd frontend && npm run lint / tsc:check / test / build EXIT 0 each; vitest 558 passed in 20 files
 cd frontend && npm run e2e                             EXIT 0; 13 passed, 3 skipped (the README
@@ -556,29 +589,11 @@ bash scripts/verify_samples.sh                         EXIT 0; 50 + 50 verified 
 bash scripts/verify_samples.sh replays/ml_corpus/9p2i  EXIT 0; 150 verified clean
 bash scripts/verify_samples.sh replays/ml_corpus/4p1i  EXIT 0; 50 verified clean
 scripts/build_sample_report.py --sample-dir <set> --check, all four sets   EXIT 0 each
-scripts/publish_process_scorecard.py --check           EXIT 0, consistent
-scripts/check_doc_facts.py                             EXIT 0
-scripts/validate_task_docs.py (after this edit)        EXIT 0
-scripts/generate_prompts.py --check                    EXIT 0
-scripts/gen_frontend_types.py --check                  EXIT 0
 uv run pytest tests/orchestrator/ (fresh interpreter)  586 passed, 3 xfailed
-uv run pytest -m campaign (not part of check.sh)       EXIT 1; 304 passed, 29 failed + 2 errors =
-                                                       the 31 campaign reds under "Left red"
-                                                       (base 39a568c6, same venv: 335 passed;
-                                                       c447a928: 302 passed, 31 failed + 2 errors)
-scripts/verify_ml_evidence.py (offline, never --complete)   EXIT 1; 61 checks: OK 37,
-                                                       FAIL 12, ABSENT 7, INFO 5 — the 12 are the
-                                                       corpus rows of record §7.3
 scripts/measure_featured_criterion.py                  EXIT 0; eligible openers 32/50 and 19/50
 scripts/measure_baseline.py --watchability --json      EXIT 0; baseline-9 default: referee and
                                                        supply floors pass on both sets, every
                                                        gauge at exact equality
-git log --oneline 39a568c6..HEAD -- engine agents meetings observation orchestrator
-                                                       (empty: the freeze held)
-git log --oneline 39a568c6..origin/main                (empty: main did not move)
-count-only key scan over every added or changed byte   428 files, 307,083,881 bytes, 0 matches
-  (git diff --name-only --diff-filter=AM 39a568c6..HEAD at the head carrying this line;
-   gzipped reports decompressed; the five patterns each fire once on a planted key)
 ```
 
 The planted failures this close added or re-proved: the prompt-set agreement
@@ -593,9 +608,9 @@ patterns, each firing once on a planted key.
 
 ### Limitations
 
-- **Tests left red: 52 in `check.sh`'s default tier and 31 in the campaign
+- **Tests left red: 50 in `check.sh`'s default tier and 27 in the campaign
   tier (next item), all listed under "Left red" at the end of this section.**
-  `bash scripts/check.sh` does not pass. The ML set (43) fails for one cause,
+  `bash scripts/check.sh` does not pass. The ML set (41) fails for one cause,
   the fits' corpus; nine more fail because the new bytes falsified what they
   assert, and re-pinning them would have meant deleting or weakening an
   assertion. Eight more were red at the first close and now read frozen
@@ -603,22 +618,32 @@ patterns, each firing once on a planted key.
   By AGENTS.md a card is done only when `check.sh` passes; this card is marked
   done on the coordinator's instruction with every red named, and the owner
   decides whether it stays done until the re-ground and the §6.4 rulings land.
-- **The campaign tier is not discharged: 31 more red tests.** `uv run pytest -m campaign`,
+- **The campaign tier is not discharged: 27 more red tests.** `uv run pytest -m campaign`,
   which `check.sh` does not run and `.github/workflows/campaign-tier.yml` runs
-  weekly on `main`, reads 304 passed, 29 failed and 2 errors, against 335
+  weekly on `main`, reads 308 passed, 25 failed and 2 errors, against 335
   passed at the base. So its first scheduled run after the merge fails unless
-  the re-ground lands first. 30 of the 31 are the fits' corpus (24 fence, 6
-  frozen artifact or verdict), and the re-ground owns them. The other one is a
-  falsified tie-break census that needs the owner's ruling. All are listed
-  under "Left red" and in the record §6.4, §7.1 and §7.3. The first close and
-  the first review round left this tier out; the second review round lists it,
-  and re-derives the two corpus-only FO-6 pins in it.
+  the re-ground lands first. All 27 are the fits' corpus (24 fence, 3 committed
+  artifact or verdict), and the re-ground owns them. All are listed under "Left
+  red" and in the record §7.1 and §7.3. The first close and the first review
+  round left this tier out. The second review round listed it and re-derived
+  the two corpus-only FO-6 pins in it. The third re-derived three
+  composed-fidelity reads of the frozen fits and re-anchored the tie-break
+  census.
+- **The tie-break reversal needs the owner's ruling.** On the `ml_corpus/9p2i`
+  test side the shipped FO-6 head, which takes the higher tied tau, ejects on 0
+  meetings against the lower tau's 5, and scores 0.4468 against 0.4362. That
+  falsifies the tie-break test's docstring claim that the tuned head never
+  scores better. The test now states and asserts its property on
+  `samples/4p1i`, where it holds, and names the reversal (record §6.4).
 - **The rubric is zeros** and the viewer shows 0/100 badges (decision 3).
 - **Row 3 is not evaluable on these bytes**; the per-stay basis test is the
   third follow-up routed to the owner.
 - **The ML fits are not grounded on these bytes** (decision 15). A finding for
   the re-ground: the freshly fitted ballot surrogate scores 46/52 top-1, above
   the documented "honest ceiling" of 41/52 (gap −0.0962, pinned as measured).
+  The frozen committed surrogate reads the same 46/52 against the same 41/52
+  on the composed path, pinned as measured in
+  `test_composed_fidelity_scores_the_committed_test_split` (record §7.3).
 - **Legibility residual.** A contradiction evidence row reads `not first-hand:
   <subject> stated it at this table`, and the sentence beside it is the
   detector's, not the subject's; pinned by the weighing card, and a prompt-byte
@@ -646,7 +671,7 @@ patterns, each firing once on a planted key.
 
 ### Every changed expectation
 
-Old is the value at `main` 39a568c6 (baseline 8). New is the value at f4961ad1, re-derived from the baseline-9 bytes through the production computation the test itself calls; the two campaign-tier entries of the second review round are at 60a70a6a. Unprefixed bullets are value re-pins. The prefixes mark the other kinds of change:
+Old is the value at `main` 39a568c6 (baseline 8). New is the value at f4961ad1, re-derived from the baseline-9 bytes through the production computation the test itself calls; the two campaign-tier entries of the second review round are at 60a70a6a; the six entries marked "third review round" are at 4ff55b20. Unprefixed bullets are value re-pins. The prefixes mark the other kinds of change:
 
 - **GZIP:** a report read or write moved to `eval/report_io.py`.
 - **RE-ANCHOR:** an example seed, meeting or set was replaced by measurement; the property is the same.
@@ -1226,9 +1251,27 @@ Where a value re-pin names no other reason, the reason is the record itself: the
 #### tests/scripts/test_validity_gate_cli.py
 - RETIRED: `test_expected_prompt_versions_fails_a_homogeneous_wrong_pin`: the wrong pin `.replace(".v5", ".v4")` -> `.replace(".v6", ".v5").replace(".v8", ".v7")`. The `_locked_pin` docstring is restated. With the archive empty, `_locked_pin()` reads the live v6/v8 registry, so the old substitution was a no-op.
 
+#### tests/training/test_composed_runner.py
+Campaign tier, third review round (a3a68b18). The first close had left all three red as `[frozen-fit]`. Each scores both committed fits on the re-recorded split, through `training.composed_runner.run_composed_fidelity` or the test's own recompute, and no file under `training/artifacts/` moves.
+- `test_composed_fidelity_scores_the_committed_test_split`:
+  - test meetings 91 -> 94; ejections 57 -> 52; always-eject 57/91 -> 52/94;
+  - convicting top-1 47/57 -> 46/52; top-1 ceiling 47/57 -> 41/52;
+  - surrogate tally ejections/skips 2/89 -> 4/90; gate confusion total 91 -> 94.
+  - `[owner review]`: the frozen surrogate's top-1 now sits above the ceiling. A comment names it, and the record §7.3 keeps it beside the re-fit's for the re-ground.
+- `test_composed_fidelity_top1_matches_an_independent_recompute`: held-out ejection meetings 57 -> 52. The recompute (46/52) equals the composed convicting top-1 exactly.
+- `test_go_verdict_holds_under_the_live_teammate_exclusion_ranking`:
+  - (decision hits, ejections) (82, 57) -> (79, 52); top-1 45 -> 46; exact 74 -> 78; tally ejections 2, unchanged;
+  - gate convictions still equal the report's predicted convictions (47); the re-decided verdict is still GO, with top-1 45/57 -> 46/52.
+  - The docstring's 45/57 and 82/91 now read 46/52 and 79/94.
+
 #### tests/training/test_conviction_model.py
 - `test_sample_conversion_census_pins`: samples/9p2i meetings 151 -> 145, attempts 128 -> 112, conversions 81 -> 79; samples/4p1i attempts 33 -> 37.
 - `test_corpus_census_pins`: meetings 439 -> 449; ejections 281 -> 273; flags 449 -> 374 (317 vent + 57); attempts 386 -> 375; conversions 249 -> 234; fit-side rows 348 -> 355.
+- `test_axis_three_is_a_floor_the_live_model_clears_on_all_three` (third review round, 5b33015b). The first close had left it red as `[frozen-fit]`. It reads the committed weights directly, without the fence, and scores them on the re-recorded split through `run_conviction_fidelity`; no artifact moves.
+  - (test meetings, conversions) (91, 51) -> (94, 44); confusion (49, 3, 2, 37) -> (42, 5, 2, 45);
+  - recall 49/51 -> 42/44; precision 49/52 -> 42/47; accuracy 86/91 -> 87/94; trivial baseline 51/91 -> 50/94;
+  - the margin 35/91 -> 37/94, still above 0.3; the verdict is still GO on all three axes.
+  - The docstring is restated as an out-of-sample read: the weights were fitted on the baseline-8 corpus and have seen none of these meetings.
 
 #### tests/training/test_conviction_serving.py
 - `_EXPECTED_TEST_MEETINGS` 91 -> 94. These are the held-out test meetings of the re-recorded corpus, and live/offline parity holds on all 94.
@@ -1255,6 +1298,11 @@ Campaign tier, second review round (60a70a6a). Both tests fit FO-6 fresh on the 
 - `test_fo6_decision_head_is_published_as_a_meeting_mix_tracker` (ml_corpus/9p2i):
   - fit meetings/ejections/skips 348/224/124 -> 355/221/134; tuned_correct 124 -> 134.
   - The plateau over tau >= 0.35 is still exactly {fit skips}, and the margin over always-SKIP is still 0.
+- RE-ANCHOR (third review round, 4ff55b20): `test_the_tie_break_moves_the_decision_census_but_not_the_ranking` reads `_FOUR` (samples/4p1i) instead of `_NINE`.
+  - On samples/9p2i both tied taus now eject on 7 meetings, so the census no longer moves there.
+  - (low, high) predicted ejections (10, 0) -> (18, 16); low-tau ejection-predicted skips 90 -> 9; high-tau 95 -> 10.
+  - The ranking and calibration channels are still identical, and the two skip-vs-eject accuracies are equal (23/39). Every assertion is unchanged.
+  - `[owner review]`: the docstring said the tuned head never scores better. That is false on the ml_corpus/9p2i test side: 0 ejections against 5, and 0.4468 against 0.4362. The docstring now scopes the claim to samples/4p1i and names the reversal. The comment in `test_the_ranking_channel_is_untouched_by_the_tie_break` no longer says the corpus test side decides identically (record §6.4).
 
 #### tests/training/test_surrogate_runner.py
 - `test_surrogate_fidelity_reproduces_pinned_numbers`, a re-fit on every fold:
@@ -1269,6 +1317,10 @@ Campaign tier, second review round (60a70a6a). Both tests fit FO-6 fresh on the 
 - `test_fo6_rebaseline_reproduces_pinned_numbers`: top1 14 -> 16; ejection 57 -> 52; skips 91 -> 94; correct skip 34 -> 42; top1/top2 0.2456/0.4561 -> 0.3077/0.5769; skip-vs-eject 0.3736 -> 0.4468.
 - `test_the_corpus_rows_the_fit_drops_are_the_whole_rewrite_class`: 9p2i coerced 6 -> 0 and rewritten 70 -> 17; 4p1i rewritten 2 -> 0; fit side 9p2i (5,59) -> (0,11), 4p1i (0,2) -> (0,0); the bound >59 -> >11.
 - `test_predicted_ballot_calibration_is_a_distinct_channel`: predicted ballots 110 -> 84; skips 406 -> 442; brier 0.3278 -> 0.2491.
+- `test_no_go_verdict_holds_on_live_served_clamped_features` (third review round, 5b33015b). The first close had left it red as `[frozen-fit]`. It loads the committed predictor without the fence and scores it on the re-recorded split; no artifact moves.
+  - replaced cells 25 -> 21, the held-out count of the parity census above (fit/test 61/21);
+  - top-1 hits 47 -> 46; predicted skips 89 -> 90; correct skips 34 -> 42.
+  - Raw and served decisions and top-1 targets still agree on every one of the 94 meetings, and the NO-GO axes hold. The docstring's 25 cells and 91 meetings now read 21 and 94.
 
 #### frontend/e2e/evidence-journey.ts
 - The replay browser's "Earlier scores" banner goes from present to absent. The test now checks for the score legend and for every card named "… interestingness score N of 100". The rubric is fresh, and every score is 0, as pinned in test_sets.
@@ -1360,7 +1412,6 @@ Unless marked, the assertion that fails was not changed. "(measured half re-pinn
 - `tests/training/test_bakeoff_methods.py::test_the_committed_map_elites_pool_is_historical_and_structurally_untouched`: [frozen-fit]. The committed map-elites index stamps the baseline-8 corpus MANIFEST digest (4a25ccdf…, live 8b174cab…).
 - `tests/training/test_conviction_model.py::test_committed_artifact_round_trips_and_the_refit_no_longer_matches`: [frozen-fit]. The live fit side has 355 rows, against 348 in the committed record.
 - `tests/training/test_conviction_model.py::test_the_committed_verdict_is_the_baseline8_first_evaluation`: [frozen-fit]. The frozen weights give confusion (42,5,2,45), where the pin is (49,3,2,37).
-- `tests/training/test_conviction_model.py::test_axis_three_is_a_floor_the_live_model_clears_on_all_three`: [frozen-fit]. There are 94 test meetings and 44 conversions, where the pin is 91 and 51; GO still holds.
 - `tests/training/test_goodhart_probe.py::test_conviction_path_report_shape`, `::test_conviction_path_consumption_is_metered_and_quoted`, `::test_conviction_path_verdict_composes_blockers` and `::test_conviction_path_report_round_trips_json` (ERROR at setup): [fence] (conviction).
 - `tests/training/test_goodhart_probe.py::test_carried_4p1i_reread`, `::test_carried_reread_requires_the_reference_roster` and `::test_champion_genome_is_additive_for_old_report_json` (ERROR at setup): [fence] (conviction).
 - `tests/training/test_goodhart_probe.py::test_conviction_reader_determinism_at_unit_level`: [fence] (conviction).
@@ -1375,13 +1426,13 @@ Unless marked, the assertion that fails was not changed. "(measured half re-pinn
 - `tests/training/test_surrogate_runner.py::test_committed_artifact_round_trips_and_the_refit_no_longer_matches`: [frozen-fit]. Same 355 vs 348 gap.
 - `tests/training/test_surrogate_runner.py::test_the_committed_verdict_is_keyed_on_the_weights_and_reproduces`: [frozen-fit]. The committed verdict.json differs on 16 corpus-derived fields.
 - `tests/training/test_surrogate_runner.py::test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers`: [frozen-fit]. The frozen weights now see 94 test views, where the pin has 91.
-- `tests/training/test_surrogate_runner.py::test_no_go_verdict_holds_on_live_served_clamped_features`: [frozen-fit]. The first failing line is corpus-only (replaced 25 -> 21), and the rest depends on the frozen fit.
 
-**The campaign tier, 31 more** (second review round). `bash scripts/check.sh` runs the default tier only, so the 52 above are its whole red list. The campaign families run under `uv run pytest -m campaign`, which `.github/workflows/campaign-tier.yml` runs weekly on `main`. It was left out of the first close and the first review round.
-- At base 39a568c6 the tier reads 335 passed; at c447a928 it read 302 passed, 31 failed and 2 errors; at 60a70a6a it reads 304 passed, 29 failed and 2 errors.
-- The 33 red at c447a928 fall into four classes: 24 fit-corpus fence, 6 frozen artifact or verdict equivalence, 1 falsified signal and 2 re-derivable.
+**The campaign tier, 27 more** (listed in the second review round, re-counted in the third). `bash scripts/check.sh` runs the default tier only, so the 50 above are its whole red list. The campaign families run under `uv run pytest -m campaign`, which `.github/workflows/campaign-tier.yml` runs weekly on `main`. It was left out of the first close and the first review round.
+- At base 39a568c6 the tier reads 335 passed; at c447a928 it read 302 passed, 31 failed and 2 errors; at 60a70a6a, 304 passed, 29 failed and 2 errors; at dd9e1c89 it reads 308 passed, 25 failed and 2 errors.
+- The 33 red at c447a928 were filed in four classes: 24 fit-corpus fence, 6 frozen artifact or verdict equivalence, 1 falsified signal and 2 re-derivable.
 - The 2 re-derivable ones are re-pinned (`tests/training/test_surrogate_fidelity.py` above) and are green.
-- The other 31 are listed here, all in `tests/training`. Audit §6.4 and §7.3 give their reasons, and §7.1 routes them with the re-ground.
+- The third review round found that 3 of the 6 re-derive from the new bytes without an artifact edit, and that the falsified signal re-anchors on samples/4p1i. All four are listed above under their files and are green.
+- The other 27 are listed here, all in `tests/training`. Audit §7.3 gives their reasons, and §7.1 routes them with the re-ground.
 
 - `tests/training/test_composed_runner.py`, 16 tests, [fence] (surrogate):
   - `::test_runner_satisfies_meeting_runner_protocol`, `::test_skip_branch_passes_the_surrogate_ballots_through`, `::test_convict_branch_reanchors_onto_the_ranked_target`, `::test_firewall_holds_when_the_ranked_target_is_an_impostor`;
@@ -1393,23 +1444,16 @@ Unless marked, the assertion that fails was not changed. "(measured half re-pinn
 - `tests/training/test_crew_owned_tasks.py::test_owned_entrant_ci_budget_is_deterministic` and `::test_owned_evaluate_crew_candidate_full_row`: [fence] (conviction).
 - `tests/training/test_coevo_driver.py::test_conviction_term_is_served_into_training_fitness` and `::test_spent_conviction_meter_is_refused_before_any_disk_mutation`: [fence] (conviction).
 - `tests/training/test_anchor_study.py::test_run_anchor_study_ci_budget`: [fence] (conviction).
-- `tests/training/test_composed_runner.py::test_composed_fidelity_scores_the_committed_test_split`: [frozen-fit]. The first failing line is corpus-only: 94 test meetings, where the pin is 91. The rest pins the frozen surrogate's convicting top-1 on the old split.
-- `tests/training/test_composed_runner.py::test_composed_fidelity_top1_matches_an_independent_recompute`: [frozen-fit]. The recompute through the frozen surrogate sees 52 ejections, where the pin is 57.
-- `tests/training/test_composed_runner.py::test_go_verdict_holds_under_the_live_teammate_exclusion_ranking`: [frozen-fit]. With both frozen fits, (decision hits, ejections) = (79, 52), where the pin is (82, 57).
 - `tests/training/test_composed_runner.py::test_committed_composed_verdict_is_rederivable`: [frozen-fit], verdict equivalence. The committed composed `verdict.json` differs from its re-derivation on corpus-derived fields; for example, decision accuracy is 0.9011 committed against 0.8404 live.
 - `tests/training/test_anchor_study.py::test_committed_study_artifacts_are_the_baseline8_fit`: [frozen-fit]. The committed study stamps substrate c845602d…, and the live substrate is 894f4daf….
 - `tests/training/test_hall_of_fame.py::test_committed_pool_restores_only_with_explicit_historical_identity`: [frozen-fit]. The committed map-elites pool stamps 4a25ccdf…, and the live substrate is 8b174cab…. This is the same stamp as `test_bakeoff_methods.py` above.
-- `tests/training/test_surrogate_fidelity.py::test_the_tie_break_moves_the_decision_census_but_not_the_ranking`: falsified signal, not a fit.
-  - On samples/9p2i the lowest and the highest tied tau now both eject on 7 meetings. Both skip 86 of the 90 true ejections. The pin is (10, 0).
-  - So the census the test exists to show moving does not move on this set. Re-pinning it to (7, 7) would leave the test showing nothing it names.
-  - Audit §6.4 has the details; the owner rules on it with the re-ground.
 
 Cross-check against `red2.txt` (66 ids: 57 FAILED and 9 ERROR):
-- The 60 ids red at the first close were exactly the ids in red2.txt that were still red. The review round (70e49468) made 8 of them honest without changing an assertion: `TestTheAlibiIsARoute` x3, the seed-25 tripwire, `TestRoutesOverTheCommittedRecord` x2 and the finale recap now read frozen baseline-8 exhibits, and the flip search is re-pinned to its measured empty set. The 52 listed above are exactly the red ids of the review round's `check.sh` run (43 failed + 9 errors), and no id outside the 60 turned red.
+- The 60 ids red at the first close were exactly the ids in red2.txt that were still red. The review round (70e49468) made 8 of them honest without changing an assertion: `TestTheAlibiIsARoute` x3, the seed-25 tripwire, `TestRoutesOverTheCommittedRecord` x2 and the finale recap now read frozen baseline-8 exhibits, and the flip search is re-pinned to its measured empty set. The 52 red after that round were exactly the red ids of its `check.sh` run (43 failed + 9 errors), and no id outside the 60 turned red. The third review round re-derived two of the 52 (`test_axis_three_is_a_floor_the_live_model_clears_on_all_three` and `test_no_go_verdict_holds_on_live_served_clamped_features`). The 50 listed above are exactly the red ids of its `check.sh` run at dd9e1c89 (41 failed + 9 errors), and no other id turned red.
 - `tests/scripts/test_verify_ml_evidence.py::test_main_runs_the_cheap_legs_green_at_head` and `::test_every_counted_registry_row_matches_the_index` are green after the registry recompute (5718620b, 2a5fde8d): they read the in-tree family inventory row, which lagged the regenerated W2 baseline fixture and the growing audit.
 - Four ids in red2.txt are green at f4961ad1:
   - `tests/scripts/test_counterfactual_phase21.py::test_a_reconstruction_that_misses_the_record_refuses`: its asserted citation followed the moved SystemExit.
   - `tests/scripts/test_check_doc_facts.py::test_ml_duplicated_comparator_row_detected`, `::test_ml_invented_arm_row_detected` and `::test_ml_lookalike_comparator_row_detected`: docs/ml-program.md is back inside its word budget. No test was edited.
 - red2.txt does not include `tests/experiments/test_fresh_deduction_instrument.py::TestLiveGate::test_no_committed_file_outside_the_module_and_the_manifest_names_the_flag`. It was a transient failure on the uncommitted archive deletion and cleared with a4bbee7f.
 - Vitest (558) and Playwright (13 passed, 3 pre-existing skips) are green per the pub worker. red2.txt does not cover them.
-- red2.txt is a default-tier run and holds no campaign-tier id. The campaign list above is the red ids of `uv run pytest -m campaign` at 60a70a6a: 29 FAILED and 2 ERROR. They are the 33 red at c447a928 less the two FO-6 re-pins, and no other id turned red.
+- red2.txt is a default-tier run and holds no campaign-tier id. The campaign list above is the red ids of `uv run pytest -m campaign` at dd9e1c89: 25 FAILED and 2 ERROR. They are the 33 red at c447a928 less the two FO-6 re-pins of the second review round, the three composed-fidelity re-pins and the re-anchored tie-break census of the third, and no other id turned red.
