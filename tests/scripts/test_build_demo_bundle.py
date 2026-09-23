@@ -276,9 +276,10 @@ def test_baked_bytes_are_the_bytes_the_live_api_serves(
 def test_rubric_is_trimmed_to_the_baked_seeds(tmp_path: Path, api: TestClient) -> None:
     """Everything but ``per_game`` passes through; ``per_game`` is subsetted.
 
-    The committed rubric is historical, so its stale verdict survives while
-    obsolete rows are suppressed. Fresh trimming is covered by the source-bound
-    positive control in test_public_recording_provenance.py.
+    The committed rubric was regenerated on the baseline-9 bytes, so it is fresh
+    and the bake keeps exactly the baked seed's row out of the full set. The
+    stale branch, which suppresses every row, is covered by the source-bound
+    controls in test_public_recording_provenance.py.
     """
 
     bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
@@ -286,8 +287,9 @@ def test_rubric_is_trimmed_to_the_baked_seeds(tmp_path: Path, api: TestClient) -
     live = api.get("/eval/rubric", params={"set": "9p2i"}).json()
 
     assert isinstance(baked, dict)
-    assert baked["stale"] is True
-    assert baked["per_game"] == []
+    assert baked["stale"] is False  # was True on the baseline-8 rubric
+    assert len(live["per_game"]) == 50
+    assert [row["seed"] for row in baked["per_game"]] == [2]
     assert baked["per_game"] == [row for row in live["per_game"] if row["seed"] == 2]
     for field in ("seedset", "git_head", "manifest_sha", "stale", "viewModelVersion"):
         assert baked[field] == live[field], field
@@ -715,7 +717,9 @@ def test_summary_covers_full_validated_set_but_links_only_baked_cases(
 ) -> None:
     bdb.bake_data(
         tmp_path,
-        games=tuple(bdb.FeaturedGame(set_name="9p2i", seed=seed) for seed in (23, 46)),
+        games=tuple(
+            bdb.FeaturedGame(set_name="9p2i", seed=seed) for seed in (0, 23, 29)
+        ),
         samples_dir=_SAMPLES,
     )
     path = tmp_path / "data/9p2i/eval/summary.json"

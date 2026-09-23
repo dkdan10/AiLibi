@@ -33,11 +33,12 @@ _SAMPLES = _REPO_ROOT / "replays" / "samples"
 # The published fingerprints ``api.public_results._source_url`` maps to a source
 # URL. A pattern change that moved either one would silently republish a
 # different claim about which bytes the results came from.
+# Baseline 9; was 85fb119e... (9p2i) and 8bbf89bf... (4p1i) on baseline 8.
 _PUBLISHED_9P2I = (
-    "sha256:85fb119eeb09cc9b70fc8e9c7e202d41a3c3a93ff62b8ef824907c4cdec25d10"
+    "sha256:cde794abe57af44da0fd3e16652435b7b1af88aaf7310d495cf3108ae80cd09f"
 )
 _PUBLISHED_4P1I = (
-    "sha256:8bbf89bf86072311d45338dd84a98f4fe51c42fe6709bb606926072c4e617d14"
+    "sha256:2abab5c07eafb01c5efeef4d1234a77a6b57939a6923f3aee240349e0c0b1566"
 )
 
 # Names and the seed each one declares (``None`` = declares no seed).
