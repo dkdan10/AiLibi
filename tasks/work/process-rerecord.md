@@ -496,11 +496,41 @@ ceiling, so the owner's raise was needed (the Amendment above is corrected).
     report delivers. So the recording code state is `7fd7040f`. The MANIFEST is
     left as recorded, not hand-edited. The record discloses this in §5 event 5,
     with the commands.
+18. **Four exhibits frozen, not re-recorded** (review round, 70e49468). Four
+    tests asserted on shapes that the route claim or the labelling guards
+    removed from every committed meeting, and the first close left them red.
+    They are the seed-41 envelope meeting, the two-author `alibi_conflict`
+    flags, the legacy one-room alibi, and a rewritten ballot naming a player on
+    a game's last meeting. Each shape's baseline-8 recording is now frozen from
+    39a568c6 under `tests/fixtures/baseline8_exhibits/`, and the tests read the
+    frozen copy with every assertion unchanged. The README there gives each
+    file's source, transform (verbatim, or model calls emptied) and sha256, plus
+    a snippet that rebuilds the five files byte for byte from git. The precedent
+    is `tests/fixtures/v3_policy_reconstruction/`. The flip search's
+    `_STATEMENT_PAIR_CONVICTIONS` is re-pinned to the empty set its walk
+    measures. Its baseline-8 loss statement is asserted on the frozen seed-41
+    line, apart from the ejectee's role, which a meeting line does not carry and
+    which is kept as prose. Record §6.4.
+19. **The corpus disclosures re-derived** (2660f4fc).
+    `replays/ml_corpus/README.md` items 2-9 held baseline-8 figures under a
+    baseline-9 heading. They are re-derived through the section's three folds:
+    the eval reports, an `eval.replay_walk` walk under `eval.kill_craft`'s
+    profile, and direct counts over the replay rows. Run over the preserved
+    baseline-8 bytes, the same derivation reproduces every baseline-8 figure
+    except item 7's "looser phrase net reaches 46 and 159". That net's phrase
+    list was never committed, no candidate net reproduces 46 and 159 (the
+    nearest read 45 and 154), and so the figure is dropped rather than guessed.
+    The sentence claiming the gate re-derives items 1, 8 and 9 now names the
+    nine cells `scripts/check_doc_facts.py` gates: item 1's meeting total and
+    item 8's eight coverage pairs.
 
 ### Verification
 
-Every command run in this worktree in a bare shell (no `AILIBI_*` export, no
-`.env`), each exit code captured directly, at `ead4a244` plus this card:
+Re-run in the review round in a fresh worktree, in a bare shell (no
+`AILIBI_*` export, no `.env`), with each exit code captured directly. The runs
+used `8e6b62eb` plus the recomputed `audits/` registry row, before this
+Results edit. `scripts/validate_task_docs.py` was re-run after the edit, and the
+key scan was taken last, over the head that carries this line:
 
 ```
 bash scripts/check.sh (whole)                          EXIT 1 — pytest, below
@@ -510,8 +540,8 @@ bash scripts/check.sh (whole)                          EXIT 1 — pytest, below
   scripts/validate_task_docs.py                        390 phase tasks + 390 prompts; 73 work cards
   scripts/generate_prompts.py --check                  all 390 prompts in sync
   mypy .                                               no issues in 492 source files
-  pytest -n auto --dist loadfile                       8,233 passed, 20 skipped, 3 xfailed;
-                                                       51 failed + 9 errors = the 60 red tests below
+  pytest -n auto --dist loadfile                       8,241 passed, 20 skipped, 3 xfailed;
+                                                       43 failed + 9 errors = the 52 red tests below
   (set -e stops check.sh at pytest, so its frontend leg was run on its own:)
 cd frontend && npm run lint / tsc:check / test / build EXIT 0 each; vitest 558 passed in 20 files
 cd frontend && npm run e2e                             EXIT 0; 13 passed, 3 skipped (the README
@@ -522,7 +552,7 @@ bash scripts/verify_samples.sh replays/ml_corpus/4p1i  EXIT 0; 50 verified clean
 scripts/build_sample_report.py --sample-dir <set> --check, all four sets   EXIT 0 each
 scripts/publish_process_scorecard.py --check           EXIT 0, consistent
 scripts/check_doc_facts.py                             EXIT 0
-scripts/validate_task_docs.py                          EXIT 0
+scripts/validate_task_docs.py (after this edit)        EXIT 0
 scripts/generate_prompts.py --check                    EXIT 0
 scripts/gen_frontend_types.py --check                  EXIT 0
 uv run pytest tests/orchestrator/ (fresh interpreter)  586 passed, 3 xfailed
@@ -530,13 +560,15 @@ scripts/verify_ml_evidence.py (offline, never --complete)   EXIT 1; 61 checks: O
                                                        FAIL 12, ABSENT 7, INFO 5 — the 12 are the
                                                        corpus rows of record §7.3
 scripts/measure_featured_criterion.py                  EXIT 0; eligible openers 32/50 and 19/50
-scripts/measure_baseline.py --watchability --json      baseline-9 default: referee and supply
-                                                       floors pass on both sets, every gauge at
-                                                       exact equality
+scripts/measure_baseline.py --watchability --json      EXIT 0; baseline-9 default: referee and
+                                                       supply floors pass on both sets, every
+                                                       gauge at exact equality
 git log --oneline 39a568c6..HEAD -- engine agents meetings observation orchestrator
                                                        (empty: the freeze held)
 git log --oneline 39a568c6..origin/main                (empty: main did not move)
-count-only key scan over every added or changed byte   418 files, 304,924,306 bytes, 0 matches
+count-only key scan over every added or changed byte   427 files, 307,038,663 bytes, 0 matches
+  (git diff --name-only --diff-filter=AM 39a568c6..HEAD at the head carrying this line;
+   gzipped reports decompressed; the five patterns each fire once on a planted key)
 ```
 
 The planted failures this close added or re-proved: the prompt-set agreement
@@ -551,11 +583,12 @@ patterns, each firing once on a planted key.
 
 ### Limitations
 
-- **Tests left red: 60, listed under "Left red" at the end of this section.**
+- **Tests left red: 52, listed under "Left red" at the end of this section.**
   `bash scripts/check.sh` does not pass. The ML set (43) fails for one cause,
-  the fits' corpus; seventeen more fail because the new bytes falsified what
-  they assert, and re-pinning them would have meant deleting or weakening an
-  assertion. Each is listed with its reason, and in the record §6.4 and §7.3.
+  the fits' corpus; nine more fail because the new bytes falsified what they
+  assert, and re-pinning them would have meant deleting or weakening an
+  assertion. Eight more were red at the first close and now read frozen
+  baseline-8 exhibits or a re-pinned empty set (decision 18). Each is listed with its reason, and in the record §6.4 and §7.3.
   By AGENTS.md a card is done only when `check.sh` passes; this card is marked
   done on the coordinator's instruction with every red named, and the owner
   decides whether it stays done until the re-ground and the §6.4 rulings land.
@@ -580,6 +613,15 @@ patterns, each firing once on a planted key.
 - **Restatements for the owner to confirm** (listed below with the `RESTATED:`
   and `RE-ANCHOR:` prefixes): where a pinned example no longer carried its
   shape, the same property was re-stated on a game that does, by measurement.
+- **Frozen exhibits are history, not the record** (decision 18): the tests
+  that read them prove the detector, the reduction and the loader still behave
+  on a recorded baseline-8 shape. They say nothing about how often the shape
+  occurs on baseline 9, where it does not occur.
+- **The corpus disclosures were re-derived by a script that is not
+  committed** (decision 19). It implements the README's three folds, and on the
+  preserved baseline-8 bytes it reproduces every figure the section held except
+  the dropped looser net. The README's own fold commands are the committed
+  method, and they cover a subset of the cells.
 
 ### Every changed expectation
 
@@ -591,10 +633,14 @@ Old is the value at `main` 39a568c6 (baseline 8). New is the value at f4961ad1, 
 - **RETIRED:** part of the retirement of the v5 prompt archive.
 - **PLANTED:** a new planted failure was added.
 - **FIXTURE:** a fixture derivation was fixed; no value moved.
+- **FROZEN:** added in the review round (70e49468). The test now reads a frozen baseline-8 exhibit under `tests/fixtures/baseline8_exhibits/` instead of the committed corpus, because no committed meeting carries its shape any more. No assertion changed. The README there gives each file's source at 39a568c6, its transform and its sha256.
 
 `[owner review]` marks a re-pin whose property now holds only vacuously or whose verdict flipped. Where one bullet carries several floats, they are rounded to 4 d.p. The test file holds the exact value, and its `# was` comment holds the old one.
 
 Where a value re-pin names no other reason, the reason is the record itself: the four sets were re-recorded at the same seeds on the substrate wave's bytes, so the census moved, and the new value was read off the production computation.
+
+#### tests/_helpers/committed.py
+- FROZEN: new `BASELINE8_EXHIBITS` path and `frozen_meetings(name)` reader, which refuses a file holding anything but meeting lines. It pins no value.
 
 #### tests/agents/test_absence_prior.py
 - GZIP: `TestAbsencePriorOnCommittedBytes.roles_by_seed` reads through `read_set_report_text` (134b10de).
@@ -648,7 +694,9 @@ Where a value re-pin names no other reason, the reason is the record itself: the
 #### tests/api/test_evidence_mechanisms.py
 - `test_provenance_impossible_sighting_no_longer_mints_its_flag`: [weak_signal, weak_signal] plus all-weak -> `meeting.contradictions == ()`. Seed 23 M1 has no flag, so this is a strictly stronger assertion (the baseline-7 form).
 - `test_content_vs_own_memory_miss_defangs_the_flag_but_still_ejects`: two weak flags -> `()`; ejectee p-5 -> p-2, still a CREWMATE. Seed 12 M0 ejects a different crewmate, on no flag.
-- RE-ANCHOR: `test_the_flip_search_finds_exactly_the_named_meetings`: the planted source moves from seed-12 M0 `contradictions[1]`, which no longer exists, to `_PLANTED_SOURCE = (9, 0, 0)`: the only flag of seed 9 M0, weak alibi_vs_sighting on crewmate p-1. The source is now pre-asserted and the plant runs before the walk. The test is still red; see Left red.
+- RE-ANCHOR: `test_the_flip_search_finds_exactly_the_named_meetings`: the planted source moves from seed-12 M0 `contradictions[1]`, which no longer exists, to `_PLANTED_SOURCE = (9, 0, 0)`: the only flag of seed 9 M0, weak alibi_vs_sighting on crewmate p-1. The source is now pre-asserted and the plant runs before the walk.
+- `_STATEMENT_PAIR_CONVICTIONS` (review round, 70e49468): {`headless-seed-41:meeting-2`} -> `frozenset()`. The walk finds no statement-pair wrongful conviction on baseline 9, and the test's own comment says a meeting leaving the set means the pin needs revisiting. Empty is the stricter growth tripwire, because any meeting convicting this way now fails it. The planted case still proves the predicate fires. The test is green.
+- FROZEN: the two baseline-8 loss statements move off the committed walk. The flag kinds are asserted on the frozen seed-41 line through the loader's own projection (`api.replay_loader._contradiction_view`): two STRONG cross-statement `alibi_vs_sighting` flags naming the ejected p-9. The ejectee's CREWMATE role is not in a meeting line, so it is kept as history prose rather than asserted, as the review finding allowed. The now-unused role map of the walk is removed.
 
 #### tests/api/test_evidence_taxonomy.py
 - `_EXPECTED_COUNTS` (role_proof / cross_statement / weak_signal): samples/9p2i 90/7/50 -> 90/6/11, ml_corpus/9p2i 315/8/126 -> 317/13/44, and ml_corpus/4p1i weak 1 -> 0. Far fewer weak alibi flags on the route-claim bytes.
@@ -714,6 +762,7 @@ Where a value re-pin names no other reason, the reason is the record itself: the
   - The surviving crewmate's vote moves p-7 -> p-5 and is now judged False (was True).
   - It adds: the voters naming p-1 are {p-2,p-4,p-5,p-9}, all False, and p-3 and p-4 are IMPOSTORs.
   - Seed 47 is now a crew task win, and baseline 8's "True" element exists in no parity game.
+- FROZEN: `test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment` takes a new `rewritten_ballot_loader` over the frozen baseline-8 `samples/9p2i` seed 11 and its roster. On baseline 9 all 21 target rewrites (8 `invalid_target`, 13 `teammate_coerced`) tally SKIP, so no committed game ends on a rewritten ballot naming a player. The assertions are unchanged, and the test is green.
 
 #### tests/eval/test_accusation_calibration.py
 - GZIP: `_committed_calibration` and `test_the_committed_guard_drop_reconciles_against_the_vote_curve` read through `read_set_report_text`.
@@ -976,6 +1025,9 @@ Where a value re-pin names no other reason, the reason is the record itself: the
 #### tests/experiments/test_gameplay_facts_suspicion_row.py
 - PLANTED: new module (ee9c8dcf; formatted in 3eba9495). The gameplay extractor's suspicion-row pattern must parse both the trust-suffixed row and the trust-less row. The narrowed pre-fix pattern, kept in the test, must return nothing on the trust-less shape, which is the silent zeroing leg 1 hit.
 
+#### tests/fixtures/baseline8_exhibits/
+- FROZEN: new. It holds `seed-41-meeting-2.jsonl` (verbatim), `alibi-conflict-meetings.jsonl` (17 meetings, 21 flags, model calls emptied), `legacy-one-room-alibi-meetings.jsonl` (190 meetings, 292 legacy alibi payloads, model calls emptied), `rewritten-ballot-9p2i/` (seed 11 and roster, verbatim) and a README. The README has a snippet that rebuilds all five files byte for byte from `git show 39a568c6:…`, and the snippet was checked against the committed copies. `docs/artifacts.md` `tests/fixtures/` row: 2,098,348 tracked bytes / 29 files -> 4,064,349 / 35.
+
 #### tests/fixtures/phase10/corrected_w2_baseline.json
 - Regenerated by its producer, `scripts/build_sample_report.py --sample-dir replays/samples/9p2i --baseline-out …` (83148aa6), not hand-edited:
   - conversion 82/151 -> 81/145;
@@ -1001,6 +1053,7 @@ Where a value re-pin names no other reason, the reason is the record itself: the
 - `test_the_committed_class_and_the_untouched_kinds`: a-v-s strong/weak 21/99 -> 42/79; a-v-p strong 13 -> 18, and a-v-p weak 7 returns; conflict weak 62 -> 3; vent 453 -> 455.
 - `test_the_ungrounded_leg_convicts_on_nothing`: (0,120) -> (0,121). `test_the_env_legs_agree_on_every_committed_meeting`: off_matches samples/9p2i 126 -> 123, ml_corpus/9p2i 369 -> 382.
 - `test_the_committed_class_prices_the_corridor`: strong (21,21) -> (42,42); weak (99,99) -> (79,79). Demoted is still 0.
+- FROZEN: `_seed_41_entry` reads the frozen baseline-8 line of seed 41 meeting 2 instead of the committed corpus, where the meeting carries 0 flags now. `TestTheAlibiIsARoute` passes 6 of 6 (3 were red, and 2 green ones were running on a meeting that had lost its exhibit), and so does `test_the_honest_seed_41_route_still_mints_nothing`. One comment now says the meeting WAS a movement-channel diverging meeting on baseline 8.
 
 #### tests/meetings/test_manager.py
 - GZIP: `TestCommittedBytesLiftPins::test_no_crew_row_is_railroaded_to_certain_guilt` reads through `read_set_report_text`.
@@ -1016,6 +1069,9 @@ Where a value re-pin names no other reason, the reason is the record itself: the
 - RETIRED: `test_one_byte_template_perturbation_breaks_the_golden`: the victim moves from the archived `qwen3_6_27b_v5/crewmate_report.j2` to the live `qwen3_6_27b/crewmate_report.j2`, because perturbing the archive would now be a no-op.
 - `test_every_reconstruction_divergence_is_a_retired_guard`: 9p2i (151, 869, 23, 14) -> (145, 845, 0, 0); 4p1i (39, 117, 1, 1) -> (39, 117, 0, 0) `[owner review: the moved-ballot branch is unexercised on committed bytes]`.
 
+#### tests/meetings/test_reported_testimony_derive.py
+- FROZEN: `TestRoutesOverTheCommittedRecord`'s two helpers become `_legacy_meetings` and `_legacy_alibi_payloads`, over the 190 frozen baseline-8 sample meetings (292 one-room alibi payloads). The claim round trip, the served-view check and the reduction check read them. On baseline 9 all 1,021 committed alibis are routes. The whole-line round trip still reads the live sample sets. The assertions are unchanged, and the class is green.
+
 #### tests/meetings/test_transcript.py
 - `TestCommittedBytesArtifactCollapse._REPAIRED_SITES`: 11 sites / 15 flags -> {}. No recorded flag is removed on baseline 9. `test_rederivation_diverges_only_at_the_repaired_sites`: recorded/re-derived 54/60 -> 15/39. That test is still red.
 - `test_surviving_endpoint_flags_are_weak_banded`: 50 -> 25.
@@ -1024,6 +1080,7 @@ Where a value re-pin names no other reason, the reason is the record itself: the
 - `test_no_spawn_window_corroboration_survives_set_wide`: surviving 194 -> 246.
 - `test_seed12_m0_derives_no_voice_for_bare_pile_on_p4`: set-wide multi-accuser list 37 rows -> 27 rows. The membership moved with the bytes.
 - `test_seed16_m2_derives_two_voices_for_p4`: voices of p-9 ("p-8",) -> ("p-2","p-4","p-8"). The name keeps its history.
+- FROZEN: `test_seed25_m0_weak_cross_speaker_conflict_not_retargeted` walks the 17 frozen baseline-8 meetings that hold the 21 `alibi_conflict` flags, instead of samples/9p2i seeds 0-49, which now carry none. It still asserts 21 recorded = 21 re-derived and no proxy-intra-turn marker, and it is green.
 
 #### tests/meetings/test_vote_tally_parity.py
 - `test_committed_corpus_counts_are_pinned`: meetings/ballots samples/9p2i 151/869 -> 145/845 and ml_corpus/9p2i 439/2516 -> 449/2539. `test_committed_corpus_totals_are_pinned`: 672/3631 -> 676/3630.
@@ -1251,8 +1308,6 @@ Unless marked, the assertion that fails was not changed. "(measured half re-pinn
 - **[grounding]**: the test's "ML grounding / fit-corpus identity == OK" control fails for the [fence] reason.
 
 - `tests/agents/test_reported_testimony.py::test_reported_rows_survive_in_every_candidate_bucket` (measured half re-pinned): the 0.80 survival floor fails in the >150 bucket, where 5,927/7,539 = 0.786. It was 0.962 on baseline 8.
-- `tests/api/test_evidence_mechanisms.py::test_the_flip_search_finds_exactly_the_named_meetings` (plant re-anchored): the statement-pair conviction class is empty again, while `_STATEMENT_PAIR_CONVICTIONS` still names seed-41 M2. Owner ruling: re-pin to frozenset().
-- `tests/api/test_view_model.py::test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment`: no committed game has a target-rewriting ballot on its last meeting. The one on ml_corpus 1056 M2 tallies SKIP.
 - `tests/api/test_view_model.py::test_report_tick_fog_keeps_the_reported_body`: product gap. At seed 13 tick 13, a report and a parity kill land on one tick with no meeting. `api/replay_loader.py` ≈l.1683 re-opens the body only in MEETING phase.
 - `tests/eval/test_balance_eval_meeting_runner.py::test_surrogate_runner_factory_drives_zero_cost_diagnostic_tournament`: [fence] (surrogate).
 - `tests/eval/test_evidence_honesty.py::test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage` (measured half re-pinned): "fold renders fewer rows" fails, 32,123 vs 32,037. Coverage is still higher.
@@ -1260,12 +1315,6 @@ Unless marked, the assertion that fails was not changed. "(measured half re-pinn
 - `tests/experiments/test_torch_probe_excluded.py::test_stub_entrant_trains_through_env_and_lands_experiment_tier`: [fence] (conviction).
 - `tests/meetings/test_contradictions.py::TestGroundedProsecutionCommittedCensus::test_the_fully_grounded_leg_drops_the_whole_class`: "entirely WEAK" is false. There are 8 STRONG survivors, all on impostors.
 - `tests/meetings/test_contradictions.py::TestGroundedProsecutionInjusticeShapes::test_no_committed_ejection_rides_a_strong_sighting_flag`: "class is EMPTY" is false. There are 5 counterexamples, every ejectee an impostor; 1 of them (ml_corpus 1041 m1) is in the recording.
-- `tests/meetings/test_contradictions.py::TestTheAlibiIsARoute::test_the_record_holds_five_flags_against_an_honest_mover`: the seed-41 m2 exhibit is gone, and a search of all 676 meetings found no successor.
-- `tests/meetings/test_contradictions.py::TestTheAlibiIsARoute::test_the_envelope_still_mints_its_flags`: same reason.
-- `tests/meetings/test_contradictions.py::TestTheAlibiIsARoute::test_the_same_turn_stating_a_flat_lie_is_still_prosecuted`: same reason.
-- `tests/meetings/test_reported_testimony_derive.py::TestRoutesOverTheCommittedRecord::test_every_recorded_alibi_round_trips_byte_identically`: the premise "every committed alibi is claim_format 1" is false; all 1,021 alibis are format-2 routes. The byte round trip itself holds.
-- `tests/meetings/test_reported_testimony_derive.py::TestRoutesOverTheCommittedRecord::test_the_reduction_emits_one_statement_per_recorded_alibi`: the test expects one statement per leg, while production emits one per maximal stay. They differ in 3 of 184 meetings.
-- `tests/meetings/test_transcript.py::TestCommittedBytes1010Pins::test_seed25_m0_weak_cross_speaker_conflict_not_retargeted`: the shape is gone. There is no two-author alibi_conflict in any set.
 - `tests/meetings/test_transcript.py::TestCommittedBytesArtifactCollapse::test_rederivation_diverges_only_at_the_repaired_sites` (downstream pins re-pinned): 4 re-derived pairings are neither proxy re-targets nor the corridor band (seed 7 m0 ×2, one of them STRONG; seed 32 m0; seed 38 m1).
 - `tests/scripts/test_counterfactual_phase21.py::test_the_memo_table_equals_a_live_four_set_run`: the baseline-8 memo differs from the live baseline-9 run in 42 of 43 pooled cells. Owner call: a new table or erratum, or re-scope the gate.
 - `tests/scripts/test_counterfactual_phase21.py::test_the_memo_marks_every_advisory_cell`: the same memo, with the fast-set advisory cells unmarked.
@@ -1298,7 +1347,7 @@ Unless marked, the assertion that fails was not changed. "(measured half re-pinn
 - `tests/training/test_surrogate_runner.py::test_no_go_verdict_holds_on_live_served_clamped_features`: [frozen-fit]. The first failing line is corpus-only (replaced 25 -> 21), and the rest depends on the frozen fit.
 
 Cross-check against `red2.txt` (66 ids: 57 FAILED and 9 ERROR):
-- The 60 ids above are exactly the ids in red2.txt that are still red.
+- The 60 ids red at the first close were exactly the ids in red2.txt that were still red. The review round (70e49468) made 8 of them honest without changing an assertion: `TestTheAlibiIsARoute` x3, the seed-25 tripwire, `TestRoutesOverTheCommittedRecord` x2 and the finale recap now read frozen baseline-8 exhibits, and the flip search is re-pinned to its measured empty set. The 52 listed above are exactly the red ids of the review round's `check.sh` run (43 failed + 9 errors), and no id outside the 60 turned red.
 - `tests/scripts/test_verify_ml_evidence.py::test_main_runs_the_cheap_legs_green_at_head` and `::test_every_counted_registry_row_matches_the_index` are green after the registry recompute (5718620b, 2a5fde8d): they read the in-tree family inventory row, which lagged the regenerated W2 baseline fixture and the growing audit.
 - Four ids in red2.txt are green at f4961ad1:
   - `tests/scripts/test_counterfactual_phase21.py::test_a_reconstruction_that_misses_the_record_refuses`: its asserted citation followed the moved SystemExit.
