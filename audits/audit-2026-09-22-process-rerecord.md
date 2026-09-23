@@ -1291,6 +1291,8 @@ or spending a model call. Until then the committed rubric states what the
 shipped tool computes on these bytes, which is a record; the file it replaced
 described no bytes at all.
 
+**Discharged 2026-09-23** by `tasks/work/rubric-genuine-class-selfcheck.md`, landed into this record's branch before it merges (owner delegation of 2026-09-23): the extractor's re-derivation was the wrong side, a transcript-only replica of the definition the shipped metric left at Task 21.7; it now reads the recorded flags by the one-home rule, every self-check passes, and the rubric is regenerated on these same bytes (5 of 50 games at 0.0, each a per-game railroad floor).
+
 **Third: a per-STAY basis test for row 3, so a multi-stay route becomes evaluable.**
 Today a recorded contradiction flag names the claim's event id, not the stay it
 rests on, so `_flag_scored_claim_truth` refuses any claim with more than one

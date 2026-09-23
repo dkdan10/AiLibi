@@ -157,50 +157,40 @@ def test_historical_15_2_geomean_parity_frozen_pin_on_9p2i() -> None:
     assert len(scores) == 50
     assert {s.seed for s in scores} == set(ref_by_seed)
 
-    # PARITY IS RESTORED, DELIBERATELY, ON EVERY COLUMN THE LAB FLOOR DOES NOT
-    # TOUCH. The baseline-9 record regenerated the rubric on these bytes, so the
-    # lab artifact and this module describe the SAME recording again...
+    # PARITY IS RESTORED ON ALL ELEVEN COLUMNS. The lab artifact describes these
+    # same bytes...
     from experiments.lab.rubric_score import _set_manifest_sha
 
     assert fixture["git_head"] == _set_manifest_sha(_NINE)
-    # ...and the nine component columns reproduce to 1e-6 on all 50 rows. The two
-    # left out are the floor and the score it multiplies: the lab scorer floors
-    # EVERY game to zero on one failing gameplay-facts self-check (the record's
-    # integrity finding, section 2.1b), which this module does not share. Those
-    # two columns cannot agree until that extractor is reconciled, and the day
-    # they do, the exclusion below has to be dropped deliberately.
-    floor_columns = ("floor_multiplier", "score")
+    # ...and every component, the floor and the score it multiplies included,
+    # reproduces to 1e-6 on all 50 rows: with every gameplay-facts self-check
+    # passing, the lab floors only per game, exactly as this module does.
+    # Was: floor and score excluded while one failing self-check zeroed every lab game.
     for score in scores:
         ref = ref_by_seed[score.seed]
         assert score.reason == ref["reason"]
         assert score.n_meetings == ref["n_meetings"]
         for key in _PARITY_KEYS:
-            if key in floor_columns:
-                continue
             assert getattr(score, key) == pytest.approx(ref[key], abs=1e-6), (
                 f"seed {score.seed} {key}"
             )
-    assert fixture["validation"]["no_perverse_gradient"]["floored_games"] == list(
-        range(50)
-    )
-    assert fixture["mean_score"] == 0.0
-    assert fixture["median_score"] == 0.0
 
-    # The aggregate roll-ups, computed exactly as WatchabilityReport rounds them.
-    # Pinned to THIS module's own reading of the baseline-9 bytes, so the number is
-    # still asserted and still moves loudly if the scorer drifts; the lab's is the
-    # zeroed read above.
+    # The aggregate roll-ups, computed exactly as WatchabilityReport rounds them,
+    # agree with the lab's own. Both are pinned to the baseline-9 bytes, so the
+    # number still moves loudly if either scorer drifts.
     mean = round(math.fsum(s.score for s in scores) / len(scores), 2)
     median = round(statistics.median(s.score for s in scores), 2)
     assert mean == pytest.approx(50.54)  # was 50.18
     assert median == pytest.approx(50.7)  # was 56.25
-    # And this module's floor is NOT firing wholesale: 5 of 50 games floor on these
-    # bytes where the lab's floors all 50 — the discrepancy is the routed finding,
-    # and this assertion keeps it visible rather than letting a zeroed geomean
-    # look normal.
+    assert fixture["mean_score"] == pytest.approx(mean)
+    assert fixture["median_score"] == pytest.approx(median)
+    # Only the per-game floors fire, on the same five games in both scorers: a
+    # wholesale floor (all 50 games) would mean an integrity self-check failed.
     floored = {s.seed for s in scores if s.floor_multiplier == 0.0}
     assert floored == {6, 12, 13, 38, 39}  # was 7 games
-    assert len(floored) < len(scores)
+    assert fixture["validation"]["no_perverse_gradient"]["floored_games"] == sorted(
+        floored
+    )
 
 
 def test_referee_runs_on_both_sets_from_bytes_including_4p1i() -> None:

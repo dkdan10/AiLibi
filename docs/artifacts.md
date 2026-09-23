@@ -106,11 +106,11 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,633,740 tracked bytes / 329 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,632,967 tracked bytes / 329 files |
 | `docs/media/` — the README captures, their provenance, and the as-built architecture picture | (a) | in git | 1.4 MB / 7 files |
 | `docs/process-scorecard.md` + `docs/process-scorecard.json` — the nine-row process scorecard, folded from the committed recordings with no model call: the flattened measurement rows a spectator surface's cells will be read from, and the markdown that publishes them. `scripts/publish_process_scorecard.py --check` pins both against a recomputation, so the size states files and not bytes — a re-record rewrites the numbers without touching this row | (b) | in git | 2 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
-| `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
+| `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 6.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
 | **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate: recovered, folded onto the pinned commit and hash-verified, with one owner step still open (below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
 | **`wave2-finding/` on `evidence/phase-21-wave2-finding`** — a 300-game recording that is not one of the canonical replay sets: it reads only with the three Wave-2 levers switched on, so it is pinned rather than committed | **(c)** | pinned sha | **248.063 MiB / 315 restored files** (316 on the commit: its own README is hashed against the manifest but never restored, because the destination already holds the committed one) |
