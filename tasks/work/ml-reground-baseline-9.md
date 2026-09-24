@@ -273,7 +273,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   `test_an_undeclared_corpus_still_fails_the_grounding_row`
   (`tests/scripts/test_verify_ml_evidence.py:596`), not a near-copy: `cc54d3c0…` written back
   into a temporary copy's `fit-corpus.json` beside the new weights reads FAIL on grounding.
-- [ ] **All 68 tests are green, and every other committed-fit reader is re-derived**,
+- [x] **All 68 tests are green, and every other committed-fit reader is re-derived**,
   including the five the re-record re-derived against the frozen baseline-8 fits (the three
   composed-fidelity reads, `test_axis_three_is_a_floor_the_live_model_clears_on_all_three`,
   `test_no_go_verdict_holds_on_live_served_clamped_features`), whose "out-of-sample"
@@ -314,7 +314,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   pin names the new id in this `training/README.md` sentence in the same commit.
   Mechanism: the three tests the sentence names. Proof: the perturbed refit cases and the
   grounding plant above fail on exactly the drift the sentence says those tests catch.
-- [ ] **Derived documents are recomputed, never hand-written.** The four training reports
+- [x] **Derived documents are recomputed, never hand-written.** The four training reports
   refresh in the commits that move their artifacts, each §9 one-liner re-run, baseline-8
   figures kept as labelled history, each new digest beside its host stamp. `docs/ml-program.md`
   `:170-204` is re-derived from the verdicts, naming `6536c68c…`, at least 15 words under its
@@ -333,12 +333,12 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   front-door budget check, because no committed gate scans `docs/ml-program.md` or the reports
   for dialect terms (`check_dialect_terms` reads `README.md` only). Proof:
   `tests/scripts/test_check_doc_facts.py`'s ML-page perturbations stay red.
-- [ ] **The campaign tier is green on Linux**: `gh workflow run campaign-tier.yml --ref
+- [x] **The campaign tier is green on Linux**: `gh workflow run campaign-tier.yml --ref
   work/ml-reground-baseline-9` on GitHub Actions `ubuntu-latest` reads 335 passed (its count at
   `39a568c6`), any other count explained id by id (a perturbed refit case this card marks
   `campaign` is such a difference), with its run id quoted and the Mac run beside. Mechanism: pytest in `.github/workflows/campaign-tier.yml` (`:28`, `:59`, `:64`).
   Proof: at the re-record's close it read 308 passed, 25 failed, 2 errors.
-- [ ] **`bash scripts/check.sh` has no ML red** in the pull request's CI `project-checks` and
+- [x] **`bash scripts/check.sh` has no ML red** in the pull request's CI `project-checks` and
   `frontend-checks` jobs: its failing ids are none, or a subset of the nine under Constraints,
   **Done**. A whole run in a clean worktree on this Mac is reported beside, its frontend leg run
   on its own while pytest is red (`set -e` stops the script there). Mechanism:
@@ -1407,3 +1407,53 @@ on two platforms; the constants move bake-off selection to baseline 9's rung, an
 recorded byte moved. "Current model evidence": both fitted records stay version one and
 restore only under explicit historical diagnostics
 (`test_model_evidence_provenance.py:98-116` unchanged); nothing is promoted to current.
+
+### 13. `main` merged, and the gates on the merged branch (acceptance items 9, 12, 13 and 14)
+
+**The merge.** `git merge origin/main` at `efadfe06` (cards B and C and their status flips),
+never a rebase: merge commit `c586bf697fac77ae1f9c55af43e7ec8b4722942d`, no conflict. `main`
+changed `docs/artifacts.md` row `:109` only among the files this card writes. Freeze, from the
+new merge base: `git diff --stat $(git merge-base origin/main HEAD) HEAD -- engine agents
+meetings observation orchestrator` and the same for `eval/` print nothing; `-- replays
+docs/process-scorecard.md tasks/README.md` prints `replays/ml_corpus/README.md` alone. No
+utility-es, policy-es, bc-dagger, crew, coevo or runner-up byte and no `results-*.jsonl` row
+moved since `ff4c6bb8`. Rows `:103` and `:104` re-counted at the merged head: 105 files /
+897,988 bytes and 15 files / 8,295 bytes, as recomputed before the merge.
+
+**The gates at `c586bf69`** (exit codes captured directly; [Mac] unless named):
+
+| gate | result |
+|---|---|
+| `bash scripts/check.sh`, whole, this worktree | **exit 0** (03:58-04:08 UTC): ruff and format (523 files), `lint-imports` 4 kept, task docs, prompts, `mypy` 494 files; pytest **8307 passed**, 20 skipped, 3 xfailed, 0 failed, 0 errors (575.6 s); frontend lint, `tsc`, vitest 558 passed in 20 files, build |
+| `bash scripts/verify_samples.sh` | exit 0, both canonical sets clean |
+| `scripts/build_sample_report.py --sample-dir <set> --check`, four sets | exit 0 each (`samples/4p1i`, `samples/9p2i`, `ml_corpus/4p1i`, `ml_corpus/9p2i`) |
+| `scripts/publish_process_scorecard.py --check` | exit 0 |
+| `check_doc_facts.py`, `validate_task_docs.py`, `generate_prompts.py --check` | exit 0 each |
+| `scripts/verify_ml_evidence.py`, offline | exit 0; 61 checks, **OK 49, FAIL 0**, ABSENT 7, INFO 5 |
+| `npm --prefix frontend test` | exit 0, 558 passed in 20 files |
+| campaign tier, GitHub Actions `ubuntu-latest` | run **35953659978** (`workflow_dispatch` at `c586bf69`): **336 passed, 0 failed**, 408.34 s |
+| campaign tier, this Mac, beside | 336 passed, 0 failed, 113.8 s |
+| the PR's CI at `c586bf69` (run 35953658169, `ubuntu-latest`) | `project-checks` **pass** (pytest 8292 passed, 35 skipped, 3 xfailed, 0 failed, 979.8 s; 8330 collected, as on the Mac, with 15 more platform skips), `frontend-checks` pass, Playwright e2e pass |
+
+**Item 13.** 336 against `39a568c6`'s 335: the one extra id is
+`tests/training/test_anchor_study.py::test_the_writers_own_config_fails_the_historical_stamp_predicate`,
+the study pin's planted case this card added in the campaign tier; the renamed pins replace
+their old ids one for one, and the merge from `main` moved no campaign count (336 before it
+too). At the re-record's close the tier read 308 passed, 25 failed, 2 errors; at this card's
+local stop, 332 passed and 4 failed.
+
+**Item 14 and the red set.** The default tier reads 0 failed and 0 errors, so the red set at
+this head is **empty**: the 41 ML ids `main` carried are green, the two that were green on
+`main` and red on this branch are green again, and the nine ids cards B and C owned were
+re-pinned or renamed by those cards (merged in `efadfe06`) and are green here. Item 9: all 68
+are green, the 41 default-tier ids in the pytest run above and the 27 campaign-tier ids in
+run 35953659978, no assertion deleted, skipped, xfailed or widened, and
+`test_model_evidence_provenance.py:98-116` unchanged.
+
+**Item 12.** The four reports refreshed in the commits that moved their artifacts; the ML
+page, the corpus README and rows `:103`-`:104` in `cb0e9f3e`, re-checked after the merge;
+`check_doc_facts.py`, the registry-row test and the verifier's inventory row pass.
+
+**The composed digests, each beside its host stamp**, collected: `verdict.json`
+`a2071c12…` and `manifest.json` `feb04d83…` [Mac], from the leg whose JSON reads `9b4e358a…`
+on [Linux] and [Mac] alike.
