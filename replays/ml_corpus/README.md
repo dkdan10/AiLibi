@@ -26,23 +26,23 @@ Nothing trains against a meeting layer scheduled to change, so this corpus is a
 uses **fresh seed ranges** so a corpus game can never be confused with a
 canonical 0–49 game.
 
-> **The corpus and the samples sit at ONE substrate rung, and the ML program
-> does not.** This record re-recorded all four committed sets in one window, so
-> nothing downstream trains across a substrate seam *inside* `replays/`.
-> Everything fitted, selected, or pinned on an earlier corpus — the surrogate,
-> the conviction model, the composed runner, the bake-off rankings and finalist
-> rows — was ground on the baseline-8 corpus this record replaced:
+> **The corpus, the samples and the ML fits sit at ONE substrate rung.** This
+> record re-recorded all four committed sets in one window, so nothing
+> downstream trains across a substrate seam *inside* `replays/`. The fits it
+> left on the baseline-8 corpus were re-ground on these bytes on 2026-09-23 by
+> their committed recipes: the surrogate, the conviction model and the anchor
+> study's starting fit re-fit, the composed runner re-evaluated, and the
+> provenance stamps of the study and the genome pool rewritten, with nothing
+> re-searched. No verdict changed.
 > `uv run python scripts/verify_ml_evidence.py` reconstructs 300/300 and
-> **exits 1**. Read its `ML grounding` row first: it names the corpus the fits
-> were made on (`cc54d3c0…`) against the corpus on disk (`6536c68c…`), and every
-> corpus-dependent recompute row under it FAILS, because the declared-gap status
-> an earlier record leaned on was deleted when the fits were last re-ground.
-> `BAKEOFF_BASELINE_ID` reads `baseline-8`, which is correct — it names the
-> baseline the ML fits are ground on, not the substrate baseline. Re-grounding
-> those artifacts on these bytes is a NAMED FOLLOW-UP, not part of this record
-> ([the record](../../audits/audit-2026-09-22-process-rerecord.md) §7.1). Until
-> it lands, treat every published fit metric as anchored to bytes that are no
-> longer committed.
+> **exits 0**; its `ML grounding` row names the corpus the fits were made on
+> (`6536c68c…`), which is the corpus on disk. `BAKEOFF_BASELINE_ID` reads
+> `baseline-9`: it names the baseline the ML fits are ground on, so bake-off
+> selection reads this baseline's supply floors. The recorded bake-off rankings
+> and campaign rows were not re-run and stay a record of the corpora they were
+> made on. The fits keep the historical fingerprint, which covers the replay,
+> split and manifest bytes but not the roster or the fitting code, so they
+> restore only for historical diagnostics.
 
 > **Canary denominator — the pairing, unbroken again.** The standing rule (the
 > ML corpus is the canary denominator; the canonical `replays/samples/`
