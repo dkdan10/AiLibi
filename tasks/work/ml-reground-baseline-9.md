@@ -652,8 +652,9 @@ local legs could re-pin, and the documents that do not depend on the Linux leg; 
 Linux result, and their **Left for the next operator** lists are the hand-off, each item done
 in §9-§13. §9-§13 finish the card: the web session's hand-back read by SHA and the decision
 rule, the composed verdict and manifest written from the agreed leg, the composed-dependent
-re-pins, the remaining documents, and the gates on the merged branch. Where §8's status list
-and §9-§13 differ, §9-§13 are the later reading.
+re-pins, the remaining documents, and the gates on the merged branch. §14 sets each step's
+wall time against its budget and names the one step past it. Where §8's status list and
+§9-§13 differ, §9-§13 are the later reading.
 
 **The host stamp** (this Mac; beside every digest below unless another host is named):
 
@@ -1099,7 +1100,8 @@ the host shared with other sessions at a load average of 40-60, so wall times ar
 - The campaign tier, [Mac], with every re-pin in place: 336 collected (335 at `39a568c6` plus
   the study pin's planted case); the four composed-artifact tests listed in step 6 are red and
   the rest pass (the composed-fidelity and crew re-pins re-run green after the full run, which read
-  7 failed / 329 passed in 1140 s under the load above). The Actions run is below.
+  7 failed / 329 passed in 1140 s under the load above, past the 10 min budget: §14). The Actions
+  run is below.
 - Static gates at this head, [Mac]: `ruff check .`, `ruff format --check .`, `lint-imports`
   (4 kept), `validate_task_docs.py`, `generate_prompts.py --check` and `mypy .` (494 files)
   all pass; `check_doc_facts.py` passes. The frontend legs were not run here; no frontend file
@@ -1457,3 +1459,41 @@ page, the corpus README and rows `:103`-`:104` in `cb0e9f3e`, re-checked after t
 **The composed digests, each beside its host stamp**, collected: `verdict.json`
 `a2071c12…` and `manifest.json` `feb04d83…` [Mac], from the leg whose JSON reads `9b4e358a…`
 on [Linux] and [Mac] alike.
+
+### 14. Wall time against the budget, and the stop rule (Constraints, **Wall budget and stop rule**)
+
+Each step's measured wall set against its budget. The seconds are the timed commands quoted in
+§1-§13, the web session's `proof.json` (`runs.R1.wall_seconds` 97.08, `runs.R2.wall_seconds`
+95.4), the operator's run log for step 6's re-run of the re-pinned tests (503 s) and the
+Actions job times (`gh run view <id> --json jobs`); where a step also ran untimed lines, the
+bound beside it is the commit-timestamp bound the budget row itself uses for 21.17
+(`git log --first-parent --format='%h %cI' ff4c6bb8..HEAD`, times UTC-4 on this Mac).
+
+| step | budget | measured | reading |
+|---|---|---|---|
+| reproduction at `39a568c6` (§1) | 60 min | 86.0 s: fingerprint 1.4, verifier subset 21.9, three refits 3.5 + 11.0 + 4.2, pool stamp 0.4, Mac leg 43.6 [Mac] | inside |
+| surrogate, conviction, composed fidelity, Mac leg (§2, §3, §5, §10) | 55 min | 131.2 s timed: surrogate weights 3.6 and verdict 3.6; conviction weights 11.4 and verdict 5.6; composed verdict 10.1 and its validity diagnosis 1.6; Mac leg 47.5 and 47.8 [Mac]. The parity walk and the two version-one record lines were not timed; commits bound both fits with their reports at 12 min 55 s (`1127044f` 08:09:18 → `3e346ff3` 08:22:13) and the two Mac-leg runs with their card entry at 2 min 59 s (`c740c233` 08:30:34 → `283a87a1` 08:33:33) | inside |
+| walk, anchor, study and pool (§4) | 50 min | anchor re-fit with its 150-game walk 5.3 s [Mac]; the idempotent stamp lines were not timed (the pool line read 0.4 s in §1); commits bound the step, with the constants edit, the planted reverts and the targeted tests, at 8 min 21 s (`3e346ff3` 08:22:13 → `c740c233` 08:30:34) | inside |
+| web session: setup, R0 when needed, R1, R2, hand-back (§9) | 60 min | R1 97.1 s and R2 95.4 s [Linux]; R0 not needed; 27 min 36 s from R1's start (`runs.R1.started_utc` 15:49:13Z) to the hand-back commit `04d81a3d` (16:16:49Z). The session's setup before R1 is not in the proof | inside, setup unrecorded |
+| campaign tier, this Mac (§8, §13) | 10 min | step 6 development run, with the tests commit's edits in the work tree before its three campaign re-pins: **1140 s (19 min)**, 7 failed / 329 passed, at a load average of 40-60 from other sessions' pytest; the re-pinned tests alone then read green in 503 s under the same load; at the merged head `c586bf69`, 336 passed in 113.8 s | **the step-6 run is past its budget**; the merged-head run is inside |
+| campaign tier, GitHub Actions `ubuntu-latest` (§8, §13) | 30 min | run 35869361782 at `692233e3`: 427.69 s of pytest (job 7 min 29 s); run 35953659978 at `c586bf69`: 408.34 s (job 7 min 2 s) | inside; these are the budgeted gating runs |
+
+**The one step past its budget** is the Mac campaign run in step 6: 1140 s against 10 min.
+§8 reported its wall time without naming the overrun; this section names it. It was a
+development check, not the gating run: the Validation block runs the Mac campaign tier
+"beside", and the budgeted gating campaign runs are the two Actions runs, each inside its 30
+min. The operator did not stop the card on it, which the stop rule's plain reading asks of a
+step past its budget; it is named here for the owner rather than excused. What followed was not
+a retry of the same run: step 6's three campaign re-pins were made and only the re-pinned tests
+re-run, and the whole tier, re-run at the merged head, read 336 passed in 113.8 s on this Mac,
+inside its budget. No other step came near its budget.
+
+**The total.** The measured walls of the budgeted steps sum to about 50 min: 86.0 s + 131.2 s +
+5.3 s + 192.5 s on Linux + the three Mac campaign runs (1140 s, 503 s, 113.8 s) + the two
+Actions runs (427.69 s, 408.34 s) = 3007.8 s. The gates beside them whose wall is recorded add
+about 68 min: the two local default-tier runs (502 s at `ff4c6bb8`, 867 s at `94a2b9ed`, §8),
+`check.sh` at `c586bf69` (03:58-04:08 UTC, about 10 min, §13) and the PR's two CI
+`project-checks` jobs (18 min 26 s at `692233e3`, 17 min 5 s at `c586bf69`). The targeted
+pytest runs and the static gates were not timed; the commits bound the first operator's work
+from the reproduction commit to the first Actions entry at 1 h 45 min (`1127044f` 08:09:18 →
+`a105340d` 09:54:12), every run in it included. Total compute stays inside 4 h.
