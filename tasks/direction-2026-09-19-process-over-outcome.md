@@ -404,3 +404,44 @@ owner confirmed those ceilings explicitly on 2026-09-20. The merge of the
 re-record's pull request, which makes the new bytes the shown baseline, stays
 the owner's. Version 1 is merged as of `cdefb7a6` (PRs #471, #472, #473), and
 the substrate wave runs serially from there.
+
+Addendum, 2026-09-24 (Stage B). Section 5 called the reporter problem an instrument artifact of the 4-player
+slice. Baseline 9 contradicts that reading and it is superseded. Of the 37 innocent reporters ejected across the
+four committed sets, 36 were in 9-player games (`replays/samples/9p2i` 7, `replays/ml_corpus/9p2i` 29,
+`replays/ml_corpus/4p1i` 1, `replays/samples/4p1i` 0). `uv run python scripts/measure_baseline.py <set dir>
+--funnel`, run once per set, prints each count as `reporter ejected N/M (K innocent)`. At the 551 body-report
+meetings of the two 9-player sets, 36 of 551 reporter slots were ejected, against 4 of 1,769 innocent
+non-reporter slots: the 9p2i pool's context line in `docs/process-scorecard.md`, which
+`uv run python scripts/publish_process_scorecard.py --check` recomputes from the recordings. Baseline 8 had 34
+reporters among 46 innocent ejections (`audits/audit-phase-21-close.md` section 3.1, bar 4). The cause is the
+meeting structure. The opener speaks first; the reply chain stops on a player who has already spoken
+(`meetings/transcript.py`, `next_chain_step`); opt-in and the roll call exclude such players
+(`meetings/manager.py`, `MeetingManager.run`). So with the rebuttal switch off the opener never speaks again.
+Section 5's measurement that the reporter block renders stands; its conclusion does not.
+
+The owner took Stage B on 2026-09-24 ("We should implement stage B"). Section 10's stop on adding levers is
+amended for this wave only. No `AILIBI_*` lever and no environment switch is added. The wave adds recorded
+experiment fields, each default-OFF and recorded ON only in a candidate recording under `replays/candidates/`:
+- `vent_witness_rule` (R7, the physical witness rule);
+- `vent_exit_policy = look_and_wait` and `vent_entry_policy` (B1);
+- `report_body_handle_version` (B4);
+- `ballot_kill_row_version` (R8);
+- `impostor_ballot_version` (R10).
+
+It records the existing `meeting_reset = hub_with_grace` (B2) and `bounded_rebuttal_version = 1` (B3, without
+`reporter_reasoning`). Graduation deletes each switch and keeps its recorded key (craft rule 3). A recorded value's
+meaning is frozen, and a revision adds a new value.
+
+B2 ("full reset") supersedes section 9's deferral of the body-freshness band and cleanup decision A-28. B1 reverses
+`tasks/phase-11.md:65-68`, which exited toward the best isolated target and let a careless vent near a witness serve
+as the deliberate tell. The tell stays catchable, but the exit no longer walks into witnesses by default.
+`observed_risk` loses its mechanism when `look_and_wait` is adopted, and its lab rows stay. Impostor ballots under
+R10 express strategy: an impostor may name a crewmate only when it can cite a line it holds that points toward
+that crewmate (a turn in which someone accused them at this table, or a conflict that names them). It never
+names a teammate, and it SKIPs otherwise. The tally does not enforce the SKIP (ruling D6); a census cell counts
+every impostor EJECT whose only citation is a neutral row. The teammate firewall is unchanged. Impostor self-report stays off (R6).
+ML work and the featured tour wait until gameplay is finished (owner rulings 11 and 12).
+
+The owner also ruled that a record covers 50 seeds, not all 300. Each Stage-B round records `samples/9p2i`'s
+seeds 0-49 into its own candidate directory, and the owner assesses it against readings fixed before the first
+seed. The ladder tip stays at baseline 9 until an adopting decision.
