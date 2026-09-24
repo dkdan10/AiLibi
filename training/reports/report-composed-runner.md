@@ -5,22 +5,30 @@ rollouts, composed from the two committed instruments (the 18.15/18.16
 conviction model and the 15.13/18.14 ballot surrogate), no new weights.
 **Code:** `training/composed_runner.py`; tests in
 `tests/training/test_composed_runner.py`.
-**Date:** 2026-07-22; re-ground on the baseline-8 corpus 2026-08-31 (Task 21.17).
-**Corpus:** `replays/ml_corpus/9p2i` — the baseline-8 re-record (Task 21.15):
-committed `splits.json`, held-out test side **91 meetings / 57 ejections** (the
-same population both component verdicts were taken on).
+**Date:** 2026-07-22; re-ground on the baseline-8 corpus 2026-08-31 (Task 21.17);
+re-ground on the baseline-9 corpus 2026-09-23.
+**Corpus:** `replays/ml_corpus/9p2i` — the baseline-9 re-record (the 2026-09-22
+record): committed `splits.json`, held-out test side **94 meetings / 52
+ejections** (the same population both component verdicts were taken on).
 **Committed artifact:** `training/artifacts/composed/` — `manifest.json` (the
 component-sha manifest: conviction
-`7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed`, surrogate
-`06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8`) +
+`3a6fe4ca18cb0597d8df4e155be190f4601d8bfc5dae25490e9a3f3b821d762e`, surrogate
+`f89016200e94e1f136c26ba6bc4293a7fe9ad9b1b7406ff7f973ed342ccfa1d4`) +
 `verdict.json` (the bar verdict, with a `verdict.json.sha256` sidecar). The composed artifact carries **no weights** —
-it is the manifest pinning both component shas plus the verdict.
+it is the manifest pinning both component shas plus the verdict. Both files were
+written on Darwin 24.6.0 arm64 (macOS 15.7.3, Apple M1 Pro), CPython 3.11.15,
+numpy 2.2.6: `manifest.json` sha256
+`feb04d83c34358325e8582b9e18829aed78e52b3d7af2ee11b9a396d1e81794e`, `verdict.json`
+sha256 `a2071c127fbdec300cef59ca0020eae5e402900456d108a2795cfb9e01503121`. The §6
+Goodhart leg ran on that host and on Linux x86-64 (Intel Xeon at 2.10 GHz,
+CPython 3.11.15, numpy 2.2.6), and the two runs printed byte-identical JSON
+(sha256 `9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f`).
 
 **Verdict summary:** **GO**, taken on the FIRST held-out evaluation against the
-pre-registered bar. Meeting-level decision accuracy **82/91 = 0.9011 > 0.6264**
+pre-registered bar. Meeting-level decision accuracy **79/94 = 0.8404 > 0.5532**
 (the strictest trivial constant on this split — always-eject), convicting-meeting
-ejected-target top-1 **47/57 = 0.8246 ≥ 0.6184** (= 0.75 × the 0.8246 honest
-ceiling, the standing axis-1 form), exact-outcome match **76/91 = 0.8352**
+ejected-target top-1 **46/52 = 0.8846 ≥ 0.5913** (= 0.75 × the 0.7885 honest
+ceiling, the standing axis-1 form), exact-outcome match **78/94 = 0.8298**
 reported informationally. Consequence (pre-committed, machine-readable in
 `verdict.json`): `composed_role: "optional-campaign-configuration"` — the runner
 MAY be adopted through 18.21's runner-factory seam, only at a swap boundary (the
@@ -35,16 +43,16 @@ adoption constraints stated in §6.3 (never silent caveats).
 ## 1. The pre-registered GO bar
 
 Committed in the task contract (tasks/phase-18.md, Task 18.29) BEFORE any
-measurement, on the held-out corpus test split (91 meetings / 57 ejections):
+measurement, on the held-out corpus test split (94 meetings / 52 ejections):
 
-1. **Meeting-level decision accuracy > 0.6264** — strictly greater than the
-   always-eject constant (57/91), the strictest trivial constant on this split.
+1. **Meeting-level decision accuracy > 0.5532** — strictly greater than the
+   always-eject constant (52/94), the strictest trivial constant on this split.
    Computed population-relative (`always_eject_baseline = test_ejections /
    test_meetings`), never a hard-coded absolute.
-2. **Among convicting meetings, ejected-target top-1 ≥ 0.6184** — the standing
+2. **Among convicting meetings, ejected-target top-1 ≥ 0.5913** — the standing
    axis-1 form: `GO_TOP1_CEILING_RATIO` (0.75, imported from
    `training/surrogate/fidelity.py`) × the honest ceiling measured on the same
-   scored population (0.8246, `compute_honest_ceiling` over the test views).
+   scored population (0.7885, `compute_honest_ceiling` over the test views).
 3. **Exact-outcome match (ejected id or skip) REPORTED beside the verdict** —
    informational, never gating.
 
@@ -86,7 +94,7 @@ protocol and composes, never re-fits:
   untouched (candidate-set exclusion), and re-anchoring can only place the
   target on voters allowed to name it — an impostor's ballot never names a
   fellow impostor, before or after re-anchoring. In-loop measurement (§6):
-  0 betrayal ballots over 136 multi-impostor ballots on the composed substrate.
+  0 betrayal ballots over 143 multi-impostor ballots on the composed substrate.
 * **Both fences load committed.** The surrogate side loads through
   `load_surrogate_runner_factory`'s fence semantics (weights-sha sidecar, cap
   cross-check, fit-corpus cross-check, counter validation); the predictor is
@@ -115,22 +123,24 @@ never scored) — and the same cells were independently re-derived from the
 component public APIs alone (no `training.composed_runner` import) as an
 adversarial cross-check; the two computations agree cell-for-cell.
 
-| channel | held-out (30 test games, 91 meetings) |
+| channel | held-out (30 test games, 94 meetings) |
 |---|---|
-| decision accuracy | **82/91 = 0.9011** (bar > 0.6264) |
-| convicting-meeting top-1 | **47/57 = 0.8246** (bar ≥ 0.6184) |
-| exact-outcome match | 76/91 = 0.8352 (informational) |
-| gate convictions | 52 of 91 |
-| gate confusion vs the ejection label (tp/fp/fn/tn) | 50 / 2 / 7 / 32 |
-| top-1 among gate-convicted ejections | 44/50 = 0.8800 (informational) |
-| surrogate tally census (the composed skip branch) | 2 ejections / 89 skips |
-| honest ceiling on this population | 0.8246 (57 ejections, 47 reachable) |
+| decision accuracy | **79/94 = 0.8404** (bar > 0.5532) |
+| convicting-meeting top-1 | **46/52 = 0.8846** (bar ≥ 0.5913) |
+| exact-outcome match | 78/94 = 0.8298 (informational) |
+| gate convictions | 47 of 94 |
+| gate confusion vs the ejection label (tp/fp/fn/tn) | 42 / 5 / 10 / 37 |
+| top-1 among gate-convicted ejections | 41/42 = 0.9762 (informational) |
+| surrogate tally census (the composed skip branch) | 2 ejections / 92 skips |
+| honest ceiling on this population | 0.7885 (52 ejections, 41 reachable) |
 
 The surrogate-tally row restates the NO-GO fact this composes around: the
-surrogate's own decision channel skips 89 of the 91 test meetings (its 0.396
-decision accuracy, barely off the always-SKIP constant), so on the composed skip
-branch the pass-through tally is in practice always SKIPPED and the decision
-channel is carried almost entirely by the conviction gate.
+surrogate's own decision channel skips 92 of the 94 test meetings (its 0.468
+decision accuracy, barely off the 0.447 always-SKIP constant), so on the composed
+skip branch the pass-through tally is in practice always SKIPPED and the decision
+channel is carried almost entirely by the conviction gate. The top-1 row reads
+above the ceiling row beside it (46 hits against 41 reachable); §4 note (e) says
+why.
 
 > **Erratum (Task 21.17, the baseline-8 re-ground).** §3, §4 and §6 were
 > re-measured from components re-fit on `replays/ml_corpus/9p2i` at the
@@ -140,17 +150,35 @@ channel is carried almost entirely by the conviction gate.
 > confusion 48/1/12/35, and an all-SKIP surrogate tally on a 0.8500 ceiling.
 > Those are a record of bytes this checkout no longer holds.
 
+> **Erratum (the baseline-9 re-ground, 2026-09-23).** §1 to §8 were re-measured on
+> `replays/ml_corpus/9p2i` as the 2026-09-22 record left it, from components re-fit
+> on those bytes, and §6's leg was re-run on them. The baseline-8 components
+> (conviction `7e764b89…`, surrogate `06b20508…`) read 91 held-out meetings / 57
+> ejections, decision accuracy **82/91 = 0.9011** against a 0.6264 bar, convicting
+> top-1 **47/57 = 0.8246** against 0.6184 on a 0.8246 ceiling (47 reachable),
+> exact-outcome 76/91 = 0.8352, 52 gate convictions with confusion 50/2/7/32,
+> 44/50 = 0.8800 among gate-convicted ejections and a tally of 2 ejections / 89
+> skips; through the live candidate views they read 82/91, 45/57 and 74/91. In §5
+> the composed games read 23 meetings with 11 ejections (47.8%) against 64.0% on
+> the baseline-8 corpus, and §6.3's diagnosis 23 resolved meetings, 31 kills and
+> 136 multi-impostor ballots. Those figures are history; that fit is still
+> reachable at the last baseline-8 `main` (`39a568c6`). Scored on these bytes
+> before the re-fit, the frozen baseline-8 components already read the decision,
+> top-1 and exact-outcome cells the re-fit reads (0.8404, 0.8846 and 0.8298): the
+> re-fit moved none of the three.
+
 **The live candidate-view variant (measured, never assumed away — Codex review
 on PR #310).** The top-1 cell above is the STANDING axis-1 recipe: the
 surrogate fidelity harness's self-only candidate views, the exact channel the
-committed 0.8246 was measured on. The live runner additionally drops an
+committed 0.8846 was measured on. The live runner additionally drops an
 impostor voter's fellow impostors from its candidate set (the §7.12 firewall),
 which shifts the softmax denominator on multi-impostor meetings. Re-scoring
-the whole held-out split through the LIVE views: decision accuracy **82/91 =
-0.9011 (identical)**, convicting top-1 **45/57 = 0.7895** (two hits lower),
-exact-outcome **74/91 = 0.8132**, surrogate tally 2 ejections of 91. Every
-gating cell still clears its bar (0.9011 > 0.6264; 0.7895 ≥ 0.6184), so **the
-GO verdict is invariant to the live channel** — pinned by the committed test
+the whole held-out split through the LIVE views: decision accuracy **79/94 =
+0.8404 (identical)**, convicting top-1 **46/52 = 0.8846 (identical)**,
+exact-outcome **78/94 = 0.8298 (identical)**, surrogate tally 1 ejection of 94
+(one fewer than the standard views). Every gating cell still clears its bar
+(0.8404 > 0.5532; 0.8846 ≥ 0.5913), so **the GO verdict is invariant to the live
+channel** — pinned by the committed test
 `test_go_verdict_holds_under_the_live_teammate_exclusion_ranking` (the
 surrogate's own live-parity idiom, `test_no_go_verdict_holds_on_live_served_
 clamped_features`). The verdict itself stays on the standing recipe: the
@@ -162,34 +190,42 @@ forbids.
 
 | axis | measured | bar | pass |
 |---|---|---|---|
-| 1. decision accuracy | 0.9011 | > 0.6264 (always-eject) | **yes** |
-| 2. convicting top-1 | 0.8246 | ≥ 0.6184 = 0.75 × 0.8246 | **yes** |
-| 3. exact-outcome match | 0.8352 | informational, never gates | reported |
+| 1. decision accuracy | 0.8404 | > 0.5532 (always-eject) | **yes** |
+| 2. convicting top-1 | 0.8846 | ≥ 0.5913 = 0.75 × 0.7885 | **yes** |
+| 3. exact-outcome match | 0.8298 | informational, never gates | reported |
 
 **GO.** Honest notes: (a) the decision channel is the conviction model's
 CONVERSION head consumed as an eject/skip gate — its label was
-testimony-backed conversion, not ejection, so the 7 false negatives are
-mostly ejections that carried no testimony-backed conversion (57 ejections vs
-51 conversions on this split); the 0.9011 is the honest measurement of that
-re-use, well clear of the 0.6264 constant and now just below the model's 0.9451
+testimony-backed conversion, not ejection, so the 10 false negatives are
+mostly ejections that carried no testimony-backed conversion (8 of the 10; 52
+ejections vs 44 conversions on this split); the 0.8404 is the honest measurement
+of that re-use, well clear of the 0.5532 constant and below the model's 0.9255
 accuracy on its own conversion label; (b) the top-1 cell is the surrogate's
 retained ranking channel measured in the standing axis-1 form — identical to the
-surrogate's own 0.8246, confirming the composition preserves the WHO channel
+surrogate's own 0.8846, confirming the composition preserves the WHO channel
 unchanged; the verdict is also invariant to the gate-conditioned reading of
-"among convicting meetings" (top-1 among gate-convicted ejections = 44/50 =
-0.8800 ≥ 0.6184) AND to the live candidate-view variant (§3: 45/57 = 0.7895 ≥
-0.6184), so no interpretation of axis 2 flips it; (c) exact-outcome (0.8352)
+"among convicting meetings" (top-1 among gate-convicted ejections = 41/42 =
+0.9762 ≥ 0.5913) AND to the live candidate-view variant (§3: 46/52 = 0.8846 ≥
+0.5913), so no interpretation of axis 2 flips it; (c) exact-outcome (0.8298)
 compounds both channels and is quoted informationally per the
-pre-registration; (d) every number here is a baseline-8 population
+pre-registration; (d) every number here is a baseline-9 population
 measurement — nothing transfers as an absolute (population-relative
-doctrine), and any substrate change re-runs §8.
+doctrine), and any substrate change re-runs §8; (e) the top-1 cell reads above
+the honest ceiling it is measured against: 46 hits against 41 reachable of the
+52 ejections. The ceiling counts an ejection as reachable only when the ejected
+player strictly leads on the best-case evidence; six of the 46 hits are meetings
+where the ejected player ties for that lead and the surrogate's ranking breaks
+the tie toward them (the per-meeting census is in `report-ballot-surrogate.md`
+§3). For a ranker that breaks ties the ceiling is therefore not a maximum. The
+bar is unchanged and passes either way; whether the ceiling's wording or its
+rule changes is the owner's ruling.
 
 ## 5. What the composed path changes inside training rollouts
 
-On the composed substrate (8 scripted-FSM games, seeds 0–7, 9p2i), **23
-meetings resolved 11 ejections (47.8%)** — against 0% on the fake path (the
-verdict pair's opening: fake meetings convict nobody) and 64.0% on the real
-baseline-8 corpus. Games reach game-over with a consistent win condition (5
+On the composed substrate (8 scripted-FSM games, seeds 0–7, 9p2i), **25
+meetings resolved 11 ejections (44.0%)** — against 0% on the fake path (the
+verdict pair's opening: fake meetings convict nobody) and 60.8% (273 of 449) on
+the real baseline-9 corpus. Games reach game-over with a consistent win condition (5
 crew / 3 impostor on those seeds), rosters actually shrink, and replays remain
 byte-identical across re-runs (the validity gate's reconstruction check, §6.3).
 
@@ -203,15 +239,18 @@ baseline-relative gate split, the `_signed_relative_gain` laundering
 convention, and the one-shared-counter discipline are reused import-only,
 `goodhart.py` untouched. Budget: the committed 18.18 shape (`generations=6`,
 `population=6`, σ=0.5, seed=0, K=8 fitness seeds, `init_scale=0.5`), roster
-9p2i, baseline-8, materiality bar 0.25.
+9p2i, baseline-9 (baseline-8 before the 2026-09-23 re-ground), materiality
+bar 0.25.
 
 ### 6.1 Machine verdict
 
 **HELD; machinery blockers: none; findings: none.** The embedded standing probe:
-baseline mean score 3.42, ES champion 0.65, relative gain **−0.8102** (the
+baseline mean score 3.89, ES champion 0.65, relative gain **−0.8328** (the
 champion scores well BELOW the honest baseline — no exploit); every lever's
-score gain is negative or small (emergency +0.1423 on the score axis, report
-+0.0474, wait −0.9708 with a zero-meeting set, kill +0.1204, sabotage −0.1058).
+score gain is negative or small (emergency +0.0064 on the score axis, report
+−0.0772, wait −0.9743 with a zero-meeting set, kill −0.0611, sabotage −0.2122).
+The ES trace is −1.0 in all seven generations with no improvement, so the
+champion is the seed-0 starting genome, as on the baseline-8 leg.
 
 ### 6.2 The delta per forced lever against the standing bars
 
@@ -220,20 +259,31 @@ scripted-FSM baseline; recorded-flags gain beside it; materiality bar 0.25):
 
 | arm | meetings | predicted supply gain | recorded flags gain | predicted flags/meeting | recorded flags/meeting | predicted converting share | recorded converting share |
 |---|---|---|---|---|---|---|---|
-| scripted-FSM baseline | 23 | (anchor) 0.0 | 0.0 | 0.8523 | 0.000 | 0.4783 | 0.000 |
-| forced-emergency | 39 | **+0.0171** | 0.0 | 0.8399 | 0.000 | 0.3333 | 0.000 |
-| forced-report | 32 | −0.5091 | 0.0 | 0.4212 | 0.000 | 0.0312 | 0.000 |
+| scripted-FSM baseline | 25 | (anchor) 0.0 | 0.0 | 0.6052 | 0.000 | 0.4400 | 0.000 |
+| forced-emergency | 39 | **+0.1661** | 0.0 | 0.6635 | 0.000 | 0.3333 | 0.000 |
+| forced-report | 32 | −0.7009 | 0.0 | 0.1767 | 0.000 | 0.0312 | 0.000 |
 | forced-wait | 0 | −1.0000 | 0.0 | 0.0000 | 0.000 | 0.0000 | 0.000 |
-| forced-kill | 24 | −0.3700 | 0.0 | 0.4812 | 0.000 | 0.3750 | 0.000 |
-| forced-sabotage | 23 | +0.0326 | 0.0 | 0.8386 | 0.000 | 0.4348 | 0.000 |
-| ES champion | 28 | −0.0268 | 0.0 | 0.8057 | 0.000 | 0.0714 | 0.000 |
+| forced-kill | 25 | −0.4303 | 0.0 | 0.2631 | 0.000 | 0.3200 | 0.000 |
+| forced-sabotage | 23 | +0.0507 | 0.0 | 0.6023 | 0.000 | 0.4348 | 0.000 |
+| ES champion | 28 | −0.2388 | 0.0 | 0.4463 | 0.000 | 0.0714 | 0.000 |
 
 **No arm reaches the 0.25 materiality bar on the predicted-supply axis** — the
-largest positive delta is the sabotage arm's +3.3%, and the emergency arm, which
-carried +29.5% on the baseline-6 record, comes in at **+1.7%**. Every arm's
+largest positive delta is the emergency arm's **+16.6%** (it carried +29.5% on
+the baseline-6 record and +1.7% on the baseline-8 one). Every arm's
 `validity_passed` is **False** on the composed substrate, so the gate-check
 buckets (`laundered` / `substrate_divergent` / `false_blocked`) are empty
 **by construction** — diagnosed in §6.3, named, never silent.
+
+> **Baseline-8 leg, kept as history.** HELD, no blockers; baseline mean score
+> 3.42, ES champion 0.65, relative gain −0.8102; lever score gains emergency
+> +0.1423, report +0.0474, wait −0.9708, kill +0.1204, sabotage −0.1058. Per arm
+> (meetings, predicted supply gain, predicted flags per meeting, predicted
+> converting share): baseline 23, 0.0, 0.8523, 0.4783; emergency 39, +0.0171,
+> 0.8399, 0.3333; report 32, −0.5091, 0.4212, 0.0312; wait 0, −1.0000, 0.0000,
+> 0.0000; kill 24, −0.3700, 0.4812, 0.3750; sabotage 23, +0.0326, 0.8386, 0.4348;
+> ES champion 28, −0.0268, 0.8057, 0.0714; every recorded column 0.000 and every
+> arm's `validity_passed` False. That leg reproduces byte for byte at `39a568c6`
+> on both hosts named in the header.
 
 ### 6.3 The honest diagnosis + the named adoption constraints
 
@@ -243,9 +293,9 @@ failure to **exactly one check**: `cost_and_provenance_exact` — "model=None, 0
 prompt versions, substrate stamped exact on 8 games". A composed meeting makes
 zero LLM calls (`llm_calls=()`), so no model row exists to stamp — structural
 for ANY zero-LLM meeting path, not behavioral. Every behavioral check passes on
-the same set: all 8 games reach game-over, meeting rate 1.0 (23 resolved
-meetings), 0 duplicate meeting rows, 0 tick-≤1 kills over 31 kills, 0
-friendly-fire kills, **0 teammate-betrayal ballots over 136 multi-impostor
+the same set: all 8 games reach game-over, meeting rate 1.0 (25 resolved
+meetings), 0 duplicate meeting rows, 0 tick-≤1 kills over 32 kills, 0
+friendly-fire kills, **0 teammate-betrayal ballots over 143 multi-impostor
 ballots** (the §7.12 firewall held in-loop), 0 railroaded crew ejections, 0
 dangling reason ids, byte-identical reconstruction (0 drifted samples).
 
@@ -301,16 +351,27 @@ report's prose.
 >   remains true as doctrine (an empty `laundered` bucket is not a measured
 >   all-clear), and constraint 1 is what carries that warning now.
 
+> **Erratum (the baseline-9 re-ground, 2026-09-23 — the constraint set is
+> unchanged).** Both constraints were read against the re-run leg and hold word for
+> word: every arm's `validity_passed` is False, and every arm records 0.000 flags
+> per meeting in bytes. Neither retired shape returns: every arm's predicted
+> floors fail beside the recorded ones, and the largest predicted-supply delta is
+> the emergency arm's +16.6%, under the 25% bar. The leg records only whether
+> each arm passed validity; the name of the one failing check comes from the
+> diagnosis above, re-run on the re-fit components (§9).
+
 ### 6.4 Component consumption (metered and quoted)
 
-**1175 composed meetings ran** across the leg. The ONE shared sha-keyed
-conviction counter (`7e764b89…`) charged **1513** predicted meetings of the
-committed cap **49 764** (**3.04%**): 1175 composed-runner gate reads (one per
-composed meeting) + 338 probe reads (169 recorded meetings × the 2 committed
+**1189 composed meetings ran** across the leg. The ONE shared sha-keyed
+conviction counter (`3a6fe4ca…`) charged **1533** predicted meetings of the
+committed cap **50 765** (**3.02%**): 1189 composed-runner gate reads (one per
+composed meeting) + 344 probe reads (172 recorded meetings × the 2 committed
 consumption paths — the fitness-term read and the composed-gate pre-screen
-read). The shared surrogate counter (`06b20508…`) charged **1175** simulated
-meetings of its committed cap **49 764** (**2.36%**) — one per composed
-meeting. No prediction ran unmetered.
+read). The shared surrogate counter (`f8901620…`) charged **1189** simulated
+meetings of its committed cap **50 765** (**2.34%**) — one per composed
+meeting. No prediction ran unmetered. (Baseline-8 leg: 1175 composed meetings;
+conviction `7e764b89…` charged 1513 = 1175 + 338 of 49 764, surrogate
+`06b20508…` 1175 of 49 764.)
 
 ## 7. The consequence mapping (machine-readable)
 
@@ -325,11 +386,13 @@ report's prose:
   use-counters quoted in the campaign meters; under `"diagnostic-only"` the
   campaigns run the standing plan unchanged.
 * `meets_decision_bar: true`, `meets_top1_bar: true`, every cell beside its
-  bar (`decision_accuracy_bar: 0.6263736263736264`,
-  `top1_bar: 0.618421052631579`, `top1_ceiling: 0.8245614035087719`,
+  bar (`decision_accuracy_bar: 0.5531914893617021`,
+  `top1_bar: 0.5913461538461539`, `top1_ceiling: 0.7884615384615384`,
   `top1_ceiling_ratio: 0.75`),
-  `exact_outcome_match: 0.8351648351648352` informational. (Baseline-6 record,
-  for history: bars 0.625 / 0.6375, ceiling 0.85, exact match 0.7917.)
+  `exact_outcome_match: 0.8297872340425532` informational. (For history: the
+  baseline-8 record read bars 0.6264 / 0.6184, ceiling 0.8246, exact match
+  0.8352; the baseline-6 record bars 0.625 / 0.6375, ceiling 0.85, exact match
+  0.7917.)
 * `adoption_constraints`: the §6.3 named constraints, machine-readable beside
   the consequence — they ride with adoption and never flip the pre-committed
   GO/NO-GO mapping.
@@ -341,7 +404,7 @@ verdict — the composed artifact is this manifest, never weights.
 ## 8. Staleness + re-grounding (the standing recipes, both components)
 
 The composed runner adds no cap of its own — it meters BOTH committed caps per
-meeting (conviction 49 764, surrogate 49 764, each 143 × 348 fit-side
+meeting (conviction 50 765, surrogate 50 765, each 143 × 355 fit-side
 meetings). A run that spends either cap re-grounds per that component's own
 committed recipe (`training/reports/report-conviction-model.md` §8 /
 `report-ballot-surrogate.md` §8: re-record, re-validate the walk, re-fit,
@@ -352,17 +415,25 @@ the same first-eval discipline either way.
 
 ## 9. Reproduce
 
-Every figure re-derives from committed bytes (the first two write nothing):
+Every figure re-derives from committed bytes (none of the first four writes to
+the tree):
 
 ```
 uv run python -c "from pathlib import Path; from training.composed_runner import run_composed_fidelity; print(run_composed_fidelity(Path('replays/ml_corpus/9p2i')).model_dump_json(indent=2))"
 uv run python -c "from pathlib import Path; from training.composed_runner import load_composed_manifest, load_composed_verdict; d = Path('training/artifacts/composed'); print(load_composed_manifest(d).model_dump_json(indent=2)); print(load_composed_verdict(d).model_dump_json(indent=2))"
-uv run python -c "
-from training.bakeoff.es import ESConfig
-from training.composed_runner import run_composed_goodhart_leg
-cfg = ESConfig(generations=6, population=6, sigma=0.5, seed=0, fitness_seeds=tuple(range(8)), init_scale=0.5)
-print(run_composed_goodhart_leg(config=cfg).to_json())"
-uv run pytest tests/training/test_composed_runner.py -q
+uv run python -c "from training.bakeoff.es import ESConfig; from training.composed_runner import run_composed_goodhart_leg; c=ESConfig(generations=6, population=6, sigma=0.5, seed=0, fitness_seeds=tuple(range(8)), init_scale=0.5); print(run_composed_goodhart_leg(config=c, evidence_scope='historical').to_json())"
+uv run python -c "import json, tempfile; from pathlib import Path; from eval.validity import run_validity_gate; from training.env import TacticalRolloutEnv; from training.composed_runner import load_composed_runner_factory; from training.conviction.model import ConvictionUseCounter, load_conviction_staleness_cap; from training.surrogate.runner import SurrogateUseCounter, load_staleness_cap; from training.surrogate import build_meeting_table; from training.surrogate.fidelity import build_meeting_views; c=Path('training/artifacts/conviction'); s=Path('training/artifacts/surrogate'); f=load_composed_runner_factory(conviction_artifact_dir=c, surrogate_artifact_dir=s, conviction_use_counter=ConvictionUseCounter(load_conviction_staleness_cap(c)), surrogate_use_counter=SurrogateUseCounter(load_staleness_cap(s)), composed_artifact_dir=None, evidence_scope='historical'); d=Path(tempfile.mkdtemp()); (d/'roster.json').write_text(json.dumps({'num_players': 9, 'num_impostors': 2, 'tasks_per_crewmate': 2})); e=TacticalRolloutEnv(num_players=9, num_impostors=2, tasks_per_crewmate=2, intent_selector=None, output_dir=d, meeting_runner_factory=f); [e.rollout(i) for i in range(8)]; [p.unlink() for p in d.glob('*.audit.jsonl')]; r=run_validity_gate(d); [print(k.passed, k.name, k.summary) for k in r.checks]; print('kills', dict(next(k for k in r.checks if k.name == 'no_tick_1_kills').facts)); v=build_meeting_views(build_meeting_table(d)); print(len(v), sum(x.ejected is not None for x in v), sorted(json.loads(p.read_text().splitlines()[-1])['winner'] for p in d.glob('replay-seed-*.jsonl')))"
+uv run pytest -m campaign tests/training/test_composed_runner.py -q
+```
+
+The leg runs at historical scope because both components are version-one fits,
+which a current-scope load refuses. The fourth line is the §5 / §6.3 diagnosis:
+the scripted-FSM arm's eight games replayed into a scratch directory as the
+probe writes them, then the validity gate and a count of meetings, ejections and
+winners. The verdict and manifest were written by:
+
+```
+uv run python -c "from pathlib import Path; from training.composed_runner import run_composed_fidelity, decide_composed_go, build_composed_manifest, write_composed_manifest_artifact, write_composed_verdict_artifact, load_composed_verdict; from training.conviction.fidelity import load_conviction_verdict; from scripts.verify_ml_evidence import _COMPOSED_ADOPTION_CONSTRAINTS as K; a=Path('training/artifacts/composed'); ca=Path('training/artifacts/conviction'); k=load_composed_verdict(a).adoption_constraints; assert k == K; r=run_composed_fidelity(Path('replays/ml_corpus/9p2i')); v=decide_composed_go(r, conviction_weights_sha256=(ca/'conviction-model.json.sha256').read_text().split()[0], surrogate_weights_sha256=(Path('training/artifacts/surrogate')/'ballot-predictor.json.sha256').read_text().split()[0], adoption_constraints=k); write_composed_verdict_artifact(v, a); write_composed_manifest_artifact(build_composed_manifest(v, conviction_verdict=load_conviction_verdict(ca)), a); print(v.verdict, v.decision_accuracy, v.convicting_top1, v.exact_outcome_match)"
 ```
 
 ## 10. How downstream consumes this
@@ -383,7 +454,7 @@ uv run pytest tests/training/test_composed_runner.py -q
   runner's training-signal role grows further (the standing rule this leg
   instantiated); NO-GO or a fired probe would have left the campaigns on the
   standing plan with nothing re-planned — the fallback is always live.
-* Any substrate change re-runs §8 — every number here is a baseline-8
+* Any substrate change re-runs §8 — every number here is a baseline-9
   measurement, not a transferable constant.
 
 ## 11. Errata (coordination, 2026-08-04 — the Task 19.20 report-honesty pass; additive, no in-place rewrites)

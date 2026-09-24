@@ -1384,7 +1384,7 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
 
     The committed verdict's top-1 cell is the STANDING axis-1 recipe (the
     surrogate fidelity harness's self-only candidate views — the exact channel
-    the committed 0.7667 was measured on). The live runner additionally drops an
+    the committed 0.8846 was measured on). The live runner additionally drops an
     impostor voter's fellow impostors from its candidate set (the §7.12
     firewall), which shifts the softmax denominator on multi-impostor meetings.
     Measured, never assumed away (Codex review on PR #310; the surrogate's own
@@ -1727,16 +1727,16 @@ def test_committed_composed_verdict_is_rederivable(
         "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]",
     ]
 
-    # The first-evaluation numbers (baseline-8 corpus, committed split).
+    # The first-evaluation numbers (baseline-9 corpus, committed split).
     assert committed.verdict == "GO"
     assert committed.composed_role == "optional-campaign-configuration"
-    assert committed.test_meetings == 91  # was 96 on the baseline-6 fit
-    assert committed.test_ejections == 57  # was 60
-    assert committed.decision_accuracy == pytest.approx(82 / 91)  # was 83 / 96
-    assert committed.decision_accuracy_bar == pytest.approx(57 / 91)  # was 0.625
+    assert committed.test_meetings == 94  # 91 on the baseline-8 fit
+    assert committed.test_ejections == 52  # was 57
+    assert committed.decision_accuracy == pytest.approx(79 / 94)  # was 82 / 91
+    assert committed.decision_accuracy_bar == pytest.approx(52 / 94)  # was 57 / 91
     assert committed.meets_decision_bar
-    assert committed.convicting_top1 == pytest.approx(47 / 57)  # was 46 / 60
-    assert committed.top1_bar == pytest.approx(0.75 * 47 / 57)  # was 0.6375
-    assert committed.top1_ceiling == pytest.approx(47 / 57)  # was 0.85
+    assert committed.convicting_top1 == pytest.approx(46 / 52)  # was 47 / 57
+    assert committed.top1_bar == pytest.approx(0.75 * 41 / 52)  # was 0.75 * 47 / 57
+    assert committed.top1_ceiling == pytest.approx(41 / 52)  # was 47 / 57
     assert committed.meets_top1_bar
-    assert committed.exact_outcome_match == pytest.approx(76 / 91)  # was 76 / 96
+    assert committed.exact_outcome_match == pytest.approx(78 / 94)  # was 76 / 91

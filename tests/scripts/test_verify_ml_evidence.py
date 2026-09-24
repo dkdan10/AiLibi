@@ -466,14 +466,16 @@ def test_recompute_reads_every_committed_verdict_against_the_live_corpus() -> No
         assert verdict_row in vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS
     # Measured and committed, pinned in pairs so neither can drift alone. They
     # are equal by construction now, which is the point — the pin is that the
-    # committed report says what the recomputation says.
+    # committed report says what the recomputation says. The baseline-8 fits read,
+    # in this order: 0.8245614, 0.3956043, 0.6670062, 0.9450549, 0.9010989 and
+    # 0.8351648.
     for name, value in (
-        ("surrogate top-1 (ranking channel)", "0.8245614"),  # was 0.8070175
-        ("surrogate SKIP-vs-eject decision accuracy", "0.3956043"),
-        ("conviction flag-count Spearman", "0.6670062"),  # was 0.6425391
-        ("conviction conversion-label accuracy", "0.9450549"),
-        ("composed decision accuracy", "0.9010989"),  # was 0.8791208
-        ("composed exact-outcome match", "0.8351648"),  # was 0.8131868
+        ("surrogate top-1 (ranking channel)", "0.8846153"),
+        ("surrogate SKIP-vs-eject decision accuracy", "0.4680851"),
+        ("conviction flag-count Spearman", "0.8394835"),
+        ("conviction conversion-label accuracy", "0.9255319"),
+        ("composed decision accuracy", "0.8404255"),
+        ("composed exact-outcome match", "0.8297872"),
     ):
         row = _row(result.rows, name)
         assert row.measured.startswith(value), row.measured
