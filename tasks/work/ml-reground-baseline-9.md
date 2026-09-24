@@ -176,7 +176,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
 
 ## Acceptance
 
-- [ ] **Reproduce first, on the bytes each artifact was made on.** In a detached worktree at
+- [x] **Reproduce first, on the bytes each artifact was made on.** In a detached worktree at
   `39a568c6` (the last `main` before the re-record: baseline-8 corpus, this card's fit code),
   on this Mac with the host stamp: `historical_fit_corpus_fingerprint` reads `cc54d3c0…`;
   `verify_ml_evidence.py --only sidecars --only corpus --only recompute` exits 0; the
@@ -251,7 +251,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   `test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte`, the walk-fence
   tests (`tests/training/test_anchor_study.py:236-380`) and
   `test_founder_ingestion_substrate_mismatch_refused` stay green and unchanged.
-- [ ] **The composed verdict is re-derived last** (`run_composed_fidelity` →
+- [x] **The composed verdict is re-derived last** (`run_composed_fidelity` →
   `decide_composed_go` with the agreed leg's adoption constraints → both writers), from the
   fresh leg in the container: the web session's R2 at historical scope after the constants
   commit, its JSON reading `baseline_id` `baseline-9`, taken by the decision rule under
@@ -260,12 +260,12 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   merge rules it (Q4). Mechanism: the verifier's composed rows and
   `test_committed_composed_verdict_is_rederivable`. Proof: a one-character constraint edit in a
   temporary copy fails the full-string comparison.
-- [ ] **Verdicts publish as they read; no bar moves.** `git diff` is empty on
+- [x] **Verdicts publish as they read; no bar moves.** `git diff` is empty on
   `training/surrogate/fidelity.py` and `training/conviction/fidelity.py`; a GO/NO-GO flip
   publishes as it reads, is named first in the PR and waits for the owner's merge, with nothing
   downstream re-pointed (Q4). Mechanism: the verdict writers and recompute rows. Proof:
   `_verdict_identity_row`'s planted corpus-derived and corpus-independent drift cases stay red.
-- [ ] **The verifier reads FAIL 0 offline**, with no verifier logic change: the identity and
+- [x] **The verifier reads FAIL 0 offline**, with no verifier logic change: the identity and
   grounding rows name `6536c68c…` for both fitted records, keyed to the new digests, and the 12
   rows read OK. Mechanism: `scripts/verify_ml_evidence.py`. Planted proof: the existing
   undeclared-corpus, other-weights, relabelled-version, perturbed-replay and perturbed-weight-hash
@@ -295,7 +295,7 @@ sort_keys=True) + "\n"`, the writers' form (`training/bakeoff/harness.py:1645`,
   known-answer control runs first: the same census at `95fb894b` on the frozen baseline-8
   surrogate reads 46 of 52 hits against a ceiling of 41 (Evidence), or the census command is
   wrong.
-- [ ] **The keying rule is written down, scoped to what enforces it.** `training/README.md:48-49`
+- [x] **The keying rule is written down, scoped to what enforces it.** `training/README.md:48-49`
   ("A future fit must write …") is replaced by this sentence, the rest of the paragraph kept:
   "Re-grounds of the historical raw flag-count instrument (the ballot surrogate and the
   conviction model; ruled 2026-09-23) keep version-one records: their derivation is checked by
@@ -645,13 +645,15 @@ commands whole; it cites `docs/architecture.md` "Determinism and the substrate l
 
 ## Results
 
-**What this section covers (2026-09-23).** The local legs only, filled step by step in this
-order: the reproduction, the surrogate and conviction re-fits, the constants with the anchor,
-study and pool stamps, the Mac Goodhart leg at the constants commit, the tests the local legs
-can re-pin, and the documents that do not depend on the Linux leg. The web session's R1 and R2, the composed verdict and
-manifest written from the agreed leg, the composed-dependent pins, `docs/artifacts.md` rows
-`:103`-`:104`, and the gates on the pull request are the next operator's; each is listed
-under **Left for the next operator** below. Nothing here claims a Linux result.
+**What this section covers (2026-09-23).** Two operators filled it in order. §1-§8 are the
+local legs: the reproduction, the surrogate and conviction re-fits, the constants with the
+anchor, study and pool stamps, the Mac Goodhart leg at the constants commit, the tests the
+local legs could re-pin, and the documents that do not depend on the Linux leg; they claim no
+Linux result, and their **Left for the next operator** lists are the hand-off, each item done
+in §9-§13. §9-§13 finish the card: the web session's hand-back read by SHA and the decision
+rule, the composed verdict and manifest written from the agreed leg, the composed-dependent
+re-pins, the remaining documents, and the gates on the merged branch. Where §8's status list
+and §9-§13 differ, §9-§13 are the later reading.
 
 **The host stamp** (this Mac; beside every digest below unless another host is named):
 
@@ -1044,7 +1046,7 @@ corpus); in the campaign tier the crew, owned-tasks, coevo and anchor-study fenc
 of the 16 composed fence tests, `test_hall_of_fame.py::test_committed_pool_restores_only_with_explicit_historical_identity`,
 and the study and pool pins moved in step 4.
 
-**Left for the next operator: they read `training/artifacts/composed/`**, which the composed
+**Left for the next operator (done in §10-§11): they read `training/artifacts/composed/`**, which the composed
 step rewrites from the agreed leg (the composed verdict and manifest still name
 `7e764b89…`/`06b20508…`):
 - default tier: `tests/scripts/test_verify_ml_evidence.py::test_recompute_reads_every_committed_verdict_against_the_live_corpus`
@@ -1076,7 +1078,7 @@ step rewrites from the agreed leg (the composed verdict and manifest still name
   phrases the version-one identity plainly ("replay, split and manifest bytes"), so
   `docs/glossary.md` gains nothing.
 
-Left for the next operator, because each states the composed verdict or the verifier's final
+Left for the next operator (done in §10 and §12), because each states the composed verdict or the verifier's final
 exit status: `docs/ml-program.md:170-192` (the "What the instruments now stand on" paragraph
 and table, which still name `cc54d3c0…` and `--complete`), `training/reports/report-composed-runner.md`,
 the `replays/ml_corpus/README.md:29-45` blockquote (which still says the fits are baseline-8
@@ -1107,7 +1109,7 @@ the host shared with other sessions at a load average of 40-60, so wall times ar
   no utility-es, policy-es, bc-dagger, crew, coevo or runner-up byte and no `results-*.jsonl`
   row moved.
 
-**Status of the acceptance items at this head** (numbered in the order Acceptance lists them).
+**Status of the acceptance items at this head** (`94a2b9ed`; superseded by §13; numbered in the order Acceptance lists them).
 Ticked where the evidence is whole: items 2, 3, 4, 5 and 10 (the readings). Open:
 - item 1 needs R1;
 - items 6 and 7 need the composed verdict from R2;
@@ -1121,7 +1123,7 @@ Ticked where the evidence is whole: items 2, 3, 4, 5 and 10 (the readings). Open
 - item 12 needs the documents under "Left for the next operator";
 - items 13 and 14 need the Actions runs.
 
-**Left for the next operator, once the web session's `claude/<slug>` branch exists.**
+**Left for the next operator, once the web session's `claude/<slug>` branch exists** (done in §9-§13).
 1. Read the hand-back by SHA and apply the decision rule: R1 at `39a568c6` against the
    §6.1/§6.2 cells and both constraint strings; R2 at **`c740c2337008cdee06a00242ee2ce286681bff13`**
    against this Mac's `to_json()` sha256 `9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f`
@@ -1173,3 +1175,235 @@ that install.
 - R2's SHA is the constants commit rather than the pushed head, so it is the commit the Mac
   leg ran on; the post-constants diff check in step 5 shows the pushed head computes the same leg.
 - No verdict flipped and no constraint set changed in the local legs; Q4 did not fire.
+
+### 9. The hand-back from the web session, and the decision rule (acceptance items 1 and 6)
+
+The web session committed its hand-back to `claude/ml-reground-baseline-9-kjw7yb` as
+**`04d81a3dabf1e2c3a8c2936bb0a5cfe4579f70c5`** (parent `c740c233`): three files under
+`handback/ml-reground-baseline-9/`. They were read by commit SHA and nothing else
+(`git fetch origin claude/ml-reground-baseline-9-kjw7yb`, then
+`git show 04d81a3dabf1e2c3a8c2936bb0a5cfe4579f70c5:handback/ml-reground-baseline-9/<file> > $SCR/handback/<file>`
+and `shasum -a 256 $SCR/handback/*`); that branch was never checked out, merged or deleted,
+and no JSON from it is pasted here.
+
+| file | sha256, recomputed here | the proof's value | match |
+|---|---|---|---|
+| `proof.json` | `ea7962f9a33e85d3864b4930a03dc80f7b32aef9922e5a124cc235318508fba6` | none (a file cannot carry its own digest; it is cited by this one) | n/a |
+| `r1-leg-39a568c6.json` | `bddf96d5d0176505bfb7b6bc4d85eeab7da132641089f7d2b3fafa1fd44a1ffe` | `runs.R1.leg_json_sha256` the same | yes |
+| `r2-leg-c740c233.json` | `9b4e358a9ae3cb3b4f252e4d1238fa71994ec5692c50eb194bcaf5ea6f491d5f` | `runs.R2.leg_json_sha256` the same | yes |
+
+Each leg file is `to_json()`'s text byte for byte (no trailing newline), so its file sha256
+is the leg digest §1 and §5 compare; the proof records the stdout-with-newline digests too
+(`de9d8f1a…`, `b0cdb15b…`), equal to this Mac's.
+
+**The Linux host stamp** (`proof.json` `host_stamp`, identical at R1 and R2), short form
+**[Linux]**:
+
+| field | value |
+|---|---|
+| `uname -srm` | `Linux 6.18.44-fc-v37 x86_64` |
+| `platform.platform()` | `Linux-6.18.44-fc-v37-x86_64-with-glibc2.39` |
+| `sys.version` | `3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 13.3.0]` |
+| numpy | `2.2.6`; SIMD baseline `SSE, SSE2, SSE3`, found `SSSE3` … `AVX512_ICL` (14), not found `AVX512_KNL`, `AVX512_KNM`; no BLAS block (`threadpoolctl` is not in the locked environment) |
+| CPU | `Intel(R) Xeon(R) Processor @ 2.10GHz` (`/proc/cpuinfo`) |
+| shell | `env -i HOME=$HOME PATH=$PATH bash --noprofile --norc`: no `AILIBI_*`, no provider key, no `.env`; `uv 0.8.17`, `uv sync --frozen` at each checkout (`uv.lock` sha256 `c79ba472…` at both) |
+
+**The proof's commands**, checked here: R1 `git fetch origin`, `git checkout --detach
+39a568c6`, `uv sync --frozen`; R2 `git checkout --detach c740c2337008cdee06a00242ee2ce286681bff13`,
+`uv sync --frozen`; each then runs the Validation block's leg line, which equals this card's
+line character for character. The proof holds 210 comparisons (120 for R1, 90 for R2), each
+with a match boolean; recomputed here, every boolean equals `expected == measured`, and all
+210 are true (`summary.all_match`, `cells_differed` empty, `reruns` 0). Spend `$0`: no
+provider, model call, recorder or held-out generator, no `--complete`.
+
+| leg | host | `to_json()` sha256 | `es_digest` | verdict | `baseline_id` (leg, probe, ES probe) | wall |
+|---|---|---|---|---|---|---|
+| R1 at `39a568c6` | [Linux] | `bddf96d5…` | `00d2c414…` | HELD | baseline-8, three times | 97.1 s |
+| the same leg, §1 | [Mac] | `bddf96d5…` | `00d2c414…` | HELD | baseline-8 | 43.6 s |
+| R2 at `c740c233` | [Linux] | `9b4e358a…` | `00d2c414…` | HELD | baseline-9, three times | 95.4 s |
+| the same leg, §5 | [Mac] | `9b4e358a…` | `00d2c414…` | HELD | baseline-9, three times | 47.5 s |
+
+R1 was also read here against the committed record, independently of the proof: its §6.1
+cells (baseline 3.42, champion 0.65, relative gain −0.8102, lever gains +0.1423, +0.0474,
+−0.9708, +0.1204, −0.1058) and all seven §6.2 arms (meetings, predicted and recorded gains,
+flags per meeting and converting shares, every `validity_passed` False, the gate buckets
+empty) equal `training/reports/report-composed-runner.md` §6.1-§6.2 as committed at
+`39a568c6`, and both adoption-constraint strings in the committed `verdict.json` equal
+`scripts/verify_ml_evidence.py:1812-1815` in full.
+
+**The decision rule, applied.** R1 reproduces the committed cells on Linux and is
+byte-identical to this Mac's run, so the contingency in which the container and the
+reproduction rules disagree does not arise. R2 has the identical sha256 on both platforms,
+so **the composed verdict is written from that leg and both platforms are named: Linux
+x86-64 (Intel Xeon, glibc 2.39) and Darwin 24.6.0 arm64 (Apple M1 Pro)**. The leg reads
+`baseline_id` `baseline-9` at all three levels. Acceptance item 1 is complete with R1.
+
+### 10. The composed verdict and manifest (acceptance items 6 and 7)
+
+Written last, at `a105340d` on this Mac ([Mac]; the host stamp re-taken first and identical
+to the table at the top), through the writers, with the component digests read from the
+sidecars and the adoption constraints carried from the committed verdict after asserting
+they equal the verifier's pin:
+```
+uv run python -c "from pathlib import Path; from training.composed_runner import run_composed_fidelity, decide_composed_go, build_composed_manifest, write_composed_manifest_artifact, write_composed_verdict_artifact, load_composed_verdict; from training.conviction.fidelity import load_conviction_verdict; from scripts.verify_ml_evidence import _COMPOSED_ADOPTION_CONSTRAINTS as K; a=Path('training/artifacts/composed'); ca=Path('training/artifacts/conviction'); k=load_composed_verdict(a).adoption_constraints; assert k == K; r=run_composed_fidelity(Path('replays/ml_corpus/9p2i')); v=decide_composed_go(r, conviction_weights_sha256=(ca/'conviction-model.json.sha256').read_text().split()[0], surrogate_weights_sha256=(Path('training/artifacts/surrogate')/'ballot-predictor.json.sha256').read_text().split()[0], adoption_constraints=k); write_composed_verdict_artifact(v, a); write_composed_manifest_artifact(build_composed_manifest(v, conviction_verdict=load_conviction_verdict(ca)), a); print(v.verdict, v.composed_role, v.meets_decision_bar, v.meets_top1_bar, v.decision_accuracy, v.decision_accuracy_bar, v.convicting_top1, v.top1_bar, v.top1_ceiling, v.exact_outcome_match)"
+```
+printed `GO optional-campaign-configuration True True 0.8404255319148937 0.5531914893617021
+0.8846153846153846 0.5913461538461539 0.7884615384615384 0.8297872340425532` (10.1 s):
+**no flip**, the verdict baseline 8 published.
+
+| composed axis (94 held-out meetings, 52 ejections) | baseline 9 | bar | baseline 8 (history) |
+|---|---|---|---|
+| 1. decision accuracy > always-eject | 79/94 = 0.8404 PASS | 0.5532 | 82/91 = 0.9011 PASS |
+| 2. convicting top-1 ≥ 0.75 × ceiling | 46/52 = 0.8846 PASS | 0.5913 (ceiling 41/52) | 47/57 = 0.8246 PASS |
+| exact outcome (informational) | 78/94 = 0.8298 | none | 76/91 = 0.8352 |
+
+Beside them: 47 gate convictions of 94, confusion 42/5/10/37 (8 of the 10 missed ejections
+carried no testimony-backed conversion), 41/42 among gate-convicted ejections, surrogate
+tally 2 ejections / 92 skips. Digests [Mac]: `verdict.json`
+`a2071c127fbdec300cef59ca0020eae5e402900456d108a2795cfb9e01503121` (its sidecar names it),
+`manifest.json` `feb04d83c34358325e8582b9e18829aed78e52b3d7af2ee11b9a396d1e81794e`, keyed to
+conviction `3a6fe4ca…` and surrogate `f8901620…`. The frozen baseline-8 components already
+read these three cells on these bytes (Evidence: 0.8404, 0.8298, 0.8846); the re-fit moved
+none of them.
+
+**The adoption-constraint set is unchanged, so Q4 does not fire.** The leg emits no
+constraint strings; the committed two ride with the verdict, and the facts each rests on hold
+on R2: every arm's `validity_passed` is False, and every arm records 0.000 flags per meeting
+in bytes. Neither retired shape returns: `prescreen_floors_pass` is False on all seven arms,
+and the largest predicted-supply delta is the emergency arm's +0.1661 against the 0.25 bar.
+The name of constraint 1's failing check comes from the validity-gate diagnosis, re-run here
+on the re-fit components (the report's §9 fourth line, 1.6 s [Mac]): eight games, 25
+resolved meetings, 11 ejections, 32 kills, 0 betrayal ballots over 143 multi-impostor
+ballots, 5 crew and 3 impostor wins, and only `cost_and_provenance_exact` fails.
+`scripts/verify_ml_evidence.py` is not edited.
+
+**Proof for item 6** (`$SCR/plant_constraint.py`, run as `PYTHONPATH=.:scripts uv run python
+$SCR/plant_constraint.py`): it builds a temporary copy with the verifier test module's own
+`_manifests`, `_link` and `_copy` helpers, the composed `verdict.json` copied and everything
+else linked. Control: the `composed adoption constraints` row and the `composed verdict.json
+reproduces` row read OK, `_failed` empty. One character changed in constraint 0
+(`diagnostic-grade` → `diagnostic-grads`, same length): the constraints row reads **FAIL**,
+naming index 0 with both full strings, while the identity row still reads OK because the
+constraints are spliced from the committed side; the full-string pin alone catches it.
+
+**Item 7.** `git diff ff4c6bb8 HEAD -- training/surrogate/fidelity.py training/conviction/fidelity.py`
+is empty; no bar, ceiling or comparator moved. No verdict flipped: surrogate NO-GO (ranking
+GO, decision NO-GO), conviction GO, composed GO, each as at baseline 8, so nothing downstream
+is re-pointed. The identity row's drift classes stay red: the committed plants
+`test_a_perturbed_weight_hash_fails_and_is_named_corpus_independent` (the manifest row names
+`[corpus-independent]`), `test_a_corpus_path_field_is_compared_not_dropped` and
+`test_a_drifted_composed_manifest_field_is_compared` pass, each red on its plant; and, since
+no committed test plants a corpus-derived field into a verdict, `$SCR/plant_identity.py`
+(same temporary-copy build) does so on the new composed verdict: `decision_accuracy` set to
+0.5 reads **FAIL**, "16/17 fields identical (1 corpus-derived)", and
+`surrogate_weights_sha256` set to 64 `b`s reads **FAIL**, "(1 corpus-independent)", each
+control OK first.
+
+### 11. The composed-dependent re-pins (acceptance items 8, 9 and 11)
+
+Each value re-derived through the computation the test calls; the frozen side moves here
+because this is the adopting record for the fits.
+- `tests/scripts/test_verify_ml_evidence.py::test_recompute_reads_every_committed_verdict_against_the_live_corpus`:
+  six measured/committed pairs, pinned together so neither drifts alone. MEASURED (the live
+  recompute) and FROZEN (the committed report or verdict figure) move as one, old → new:
+  surrogate top-1 0.8245614 → 0.8846153; SKIP-vs-eject 0.3956043 → 0.4680851; conviction
+  Spearman 0.6670062 → 0.8394835; conversion accuracy 0.9450549 → 0.9255319; composed
+  decision accuracy 0.9010989 → 0.8404255; composed exact outcome 0.8351648 → 0.8297872.
+  The per-line baseline-6 "was" comments give way to one comment listing the baseline-8
+  values. Its row-status, grounding and field-identity assertions are unchanged.
+- `tests/training/test_composed_runner.py::test_committed_composed_verdict_is_rederivable`
+  (campaign): the rederivation half (MEASURED, `decide_composed_go(run_composed_fidelity(...))`
+  field for field) is unchanged; the committed first-evaluation numbers, FROZEN: test meetings
+  91 → 94; ejections 57 → 52; decision accuracy 82/91 → 79/94; its bar 57/91 → 52/94;
+  convicting top-1 47/57 → 46/52; top-1 bar 0.75 × 47/57 → 0.75 × 41/52; ceiling 47/57 →
+  41/52; exact outcome 76/91 → 78/94. GO, the role and both constraint names unchanged.
+- `test_composed_runner.py::test_go_verdict_holds_under_the_live_teammate_exclusion_ranking`:
+  docstring only, "the committed 0.7667" (a baseline-6 figure the last re-ground left) →
+  "the committed 0.8846"; its cells were re-pinned in step 6.
+- Green by the artifacts alone, no edit:
+  `test_verify_ml_evidence.py::test_the_corpus_dependent_partition_is_declared_and_is_not_the_whole_leg`
+  (default tier), and in the campaign tier
+  `test_composed_runner.py::test_committed_composed_verdict_round_trips_and_pins_the_shas`,
+  `::test_factory_adoption_gate_refuses_non_go_composed_verdicts` and
+  `::test_historical_composed_weights_cannot_be_installed[historical]`.
+
+Targeted, [Mac]: `tests/scripts/test_verify_ml_evidence.py` 82 passed (the grounding plant's
+three ids and every planted control among them); `tests/training/test_composed_runner.py -m
+campaign` 28 passed. **The verifier, offline** (`uv run python scripts/verify_ml_evidence.py`,
+never `--complete`), at `e58c43d3`: exit 0, 61 checks, **OK 49, FAIL 0**, ABSENT 7 (the
+evidence-branch and archive-only rows), INFO 5. The identity and grounding rows name
+`6536c68c…` for both fitted records, keyed to `f8901620…` and `3a6fe4ca…`; the twelve rows
+that failed at dispatch read OK, and the two weight-hash rows read the new composed manifest.
+The planted stale record still fails: `test_an_undeclared_corpus_still_fails_the_grounding_row[surrogate-record-back-to-b8]`
+and `[conviction-record-back-to-b8]` write `cc54d3c0…` back beside the new weights and read
+FAIL with "undeclared substrate". The third test the `training/README.md` sentence names is
+green, so item 11 is complete.
+
+### 12. The remaining documents (acceptance item 12)
+
+- `training/reports/report-composed-runner.md`, in the composed commit: header, §1-§8 and §10
+  re-derived from its §9 commands and the R2 JSON, each new digest beside the host stamps of
+  both platforms, the baseline-8 figures kept as a new erratum and a history block after §6.2,
+  and a §6.3 erratum recording that the constraint set is unchanged and why. §4 gains note
+  (e), the ceiling reading below. §9's leg line gains `evidence_scope='historical'` (the
+  report's old line defaults to current scope, which refuses version-one components) and a
+  fourth line, the validity diagnosis behind §5 and §6.3; its pytest line gains `-m
+  campaign`, without which the file collects nothing.
+- `docs/ml-program.md` "What the instruments now stand on": the corpus the 2026-09-22
+  re-recording left, historical fingerprint `6536c68c…`, which covers the replay, split and
+  manifest bytes but not the roster or the fitting code; every row re-derives under the
+  offline verifier (the `--complete` claim is gone); no verdict changed. 2,128 words against
+  the 2,150 ceiling (22 under); the policy paragraphs are word for word; the table's three
+  verdicts are unchanged.
+- `replays/ml_corpus/README.md` blockquote: it said the fits were baseline-8 and
+  `BAKEOFF_BASELINE_ID` read `baseline-8`; it now states what the re-ground did, that the
+  verifier exits 0 with the grounding row naming the corpus on disk, and that the recorded
+  bake-off and campaign rows were not re-run. The corpus MANIFESTs keep their FROZEN line.
+- `docs/artifacts.md`, recomputed with the change staged (`git ls-files <dirs>`, sizes summed
+  from the files): row `:103` 105 files, 897,988 bytes, **1.5 MB → 877 KB** (the 1.5 MB was
+  never supported by a committed state: 899,439 bytes when the row was written); row `:104`
+  15 files, 8,295 bytes, 8.1 KB, unchanged. Recomputed before the merge because `main` changes
+  no file under `training/artifacts/`; re-checked after it (§13).
+- New prose carries no task or audit id and no threshold arithmetic; the version-one identity
+  is phrased as "the replay, split and manifest bytes", so `docs/glossary.md` gains nothing.
+  `check_doc_facts.py` passes; `tests/scripts/test_check_doc_facts.py` passes whole, its ML
+  page perturbations red on their plants.
+
+**The two readings, as measured on the re-ground fits** (neither docstring edited; both
+rulings stay the owner's). Re-run at `cb0e9f3e`, [Mac], with the §2 commands quoted whole:
+- *The ceiling.* The census reads (hit, reachable) 40, (hit, not reachable) 6, (miss,
+  reachable) 1, (miss, not reachable) 5: 52 cells, 46 hits, the verdict's top-1. The composed
+  top-1 is the surrogate's ranking channel, so the composed verdict reads the same 46 of 52
+  against the same 41 of 52 ceiling. The six hits the ceiling counts unreachable are ties at
+  the top of the best-case evidence (§2), so for a ranker that breaks ties the ceiling is not
+  a maximum. The bar passes either way.
+- *The tie-break.* On the corpus test side the shipped highest-tau head reads 0.4468 against
+  the lowest tied tau's 0.4362 (0 ejections and 52 skips against 5 and 50); on the other
+  three sets the two heads score the same, as in §2; ranking and calibration are identical
+  on all four. FO-6 is re-fit
+  fresh on the table, so the re-fit cannot move the reversal: it belongs to the bytes.
+
+**Rulings relied on, quoted verbatim (owner, 2026-09-23).** Q1: "Look into how it should
+best be fitted and implement your recommended strategy." (version one). Q2: "Go with your
+recommendation." (the campaign tier in scope as tests; nothing re-searched or re-run). Q3:
+"The previous Linux environment used was a Claude code session dispatched to the web." (the
+leg's gate is that session's R1 and R2). Q4: "Publish and wait for the merge." (no verdict
+flipped and no constraint set changed, so nothing is named as a flip; the pull request still
+waits for the owner's merge). Q5: "Look into why the tests would still fail, if they are
+necessary at all, or a separate potential path forward. Go with the recommended idea from
+that." (done means the failing ids are a subset of the nine cards B and C owned).
+
+**Named deviation, for the owner's ruling.** GitHub Actions `ubuntu-latest` gates the
+campaign tier and `check.sh` as a second container instance; Q3 named the web session, which
+ran only the leg. **Routed, not done here:** the first current install of either fit mints
+version two at its own commit and inherits the verifier rows, test inversions, function
+switches and closure churn listed in §8 ("The deferred cost"); which code closure version
+two binds is the owner's before that install. Also routed: a campaign-tier refit pin for the
+filtered-BC anchor.
+
+**Architecture.** `docs/architecture.md` "Determinism and the substrate ladder": the leg is
+a deterministic replay of fixed seeds through frozen weights, and it printed the same bytes
+on two platforms; the constants move bake-off selection to baseline 9's rung, and no
+recorded byte moved. "Current model evidence": both fitted records stay version one and
+restore only under explicit historical diagnostics
+(`test_model_evidence_provenance.py:98-116` unchanged); nothing is promoted to current.
