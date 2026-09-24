@@ -653,8 +653,9 @@ Linux result, and their **Left for the next operator** lists are the hand-off, e
 in §9-§13. §9-§13 finish the card: the web session's hand-back read by SHA and the decision
 rule, the composed verdict and manifest written from the agreed leg, the composed-dependent
 re-pins, the remaining documents, and the gates on the merged branch. §14 sets each step's
-wall time against its budget and names the one step past it. Where §8's status list and
-§9-§13 differ, §9-§13 are the later reading.
+wall time against its budget and names the one step past it. §15 states the limitations: what
+this evidence does not establish. Where §8's status list and §9-§13 differ, §9-§13 are the
+later reading.
 
 **The host stamp** (this Mac; beside every digest below unless another host is named):
 
@@ -1497,3 +1498,51 @@ about 68 min: the two local default-tier runs (502 s at `ff4c6bb8`, 867 s at `94
 pytest runs and the static gates were not timed; the commits bound the first operator's work
 from the reproduction commit to the first Actions entry at 1 h 45 min (`1127044f` 08:09:18 →
 `a105340d` 09:54:12), every run in it included. Total compute stays inside 4 h.
+
+### 15. Limitations
+
+What the evidence above does not establish, each item with the sections it qualifies.
+- **The fit bytes were produced on this Mac only.** The surrogate (`f8901620…`), conviction
+  (`3a6fe4ca…`) and filtered-BC anchor (`6268ea3d…`) weights, and the composed `verdict.json`
+  (`a2071c12…`) and `manifest.json` (`feb04d83…`), were written on [Mac] (§2-§4, §10). R0 was
+  not needed, so no Linux host re-fit them, and their Linux bytes were never measured. What
+  Linux covers: the PR's CI `project-checks` job runs the two refit pins
+  (`test_surrogate_runner.py` and `test_conviction_model.py`
+  `::test_committed_artifact_round_trips_and_the_refit_no_longer_matches`), which re-fit on
+  Linux and compare to the committed weights at `rel=1e-9, abs=1e-12`, not byte for byte, and
+  `test_recompute_reads_every_committed_verdict_against_the_live_corpus`, which re-derives the
+  three verdicts from the committed weights; the Actions campaign run re-derives the composed
+  verdict field for field (`test_committed_composed_verdict_is_rederivable`). So Linux
+  agreement for the two fits is agreement within those pins' tolerance, not byte identity, and
+  for the verdicts it is inference from this Mac's weights. Only the Goodhart leg was compared
+  byte for byte across the two platforms (§9).
+- **The filtered-BC anchor has neither a refit pin nor a Linux measurement.** Its reproduction
+  at `39a568c6` and its baseline-9 re-fit are [Mac] readings only (§1, §4). The tests check
+  its `.sha256` sidecar and its historical stamp, which cover the committed bytes, not their
+  derivation, so a change to its recipe would pass them. A campaign-tier refit pin for it is
+  routed, not done (§12; the investigation's environment memo §8 and keying memo §7, not in
+  the tree, name the same gap).
+- **The held-out split is in-sample to the fitted corpus, and the verdicts measure fidelity
+  to the record, not correctness.** Each verdict is read on the corpus's own test side
+  (`replays/ml_corpus/9p2i/splits.json`: seed mod 5 = 4, 30 of the 150 games; 94 meetings, 52
+  ejections). It is disjoint from the fit side by game but comes from the same recording (one
+  model, one prompt set, one engine commit), so it is not an independent sample; the held-out
+  generator's band stays unseen. The test docstrings that called these reads out of sample
+  were restated (§6). The fits predict what the recording's agents did, right or wrong,
+  and nothing here measures whether those ballots were correct (Constraints,
+  **Role-correctness gates nothing**).
+- **The web session's setup wall was not recorded.** `proof.json` times R1, R2 and the
+  hand-back commit, not the setup before R1, so that step reads inside its budget with the
+  setup unmeasured (§14).
+- **The campaign-tier overrun stands as disclosed.** The step-6 Mac campaign run took 1140 s
+  against its 10 min budget and the card did not stop on it (§8, §14). The later in-budget
+  runs do not change that reading; the ruling on it is the owner's.
+- **The bake-off rankings and campaign rows stay on their old corpora.**
+  `BAKEOFF_BASELINE_ID` now reads `baseline-9` and the λ, study and pool stamps name the
+  baseline-9 substrate, but the λ sweep rows and genomes, the 30 pool genomes, `filled_cells`
+  and the champion, the recorded `results-*.jsonl` campaign rows, the coevo tree, the
+  `utility-es`, `policy-es` and `bc-dagger` genomes, the crew artifacts and the runner-up
+  stamp were not re-searched, re-run or re-scored (Q2; §4, §13). They stay a record of the
+  corpora, selection floors and fitness objective they were made under (the anchor report's
+  §1.1: the stamps' substrate digest does not cover the objective), and nothing here
+  measures how they would rank on baseline 9.
