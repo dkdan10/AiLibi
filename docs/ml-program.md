@@ -169,13 +169,13 @@ referee verdict.
 
 ## What the instruments now stand on
 
-The two models were re-fit, and their composed runner re-evaluated, on the corpus that
-second re-recording left behind — `replays/ml_corpus/9p2i`, historical fingerprint
-`cc54d3c0…`. The original fingerprint omits roster and derivation code, so it describes
-historical evidence and cannot certify a fit against current inputs. Every row below re-derived under
-`scripts/verify_ml_evidence.py --complete` on that corpus; the
-[2026-09-22 re-recording](../audits/audit-2026-09-22-process-rerecord.md) replaced it, so they
-FAIL until the fits are re-fit.
+The two models were re-fit, and their composed runner re-evaluated, on the corpus the
+[2026-09-22 re-recording](../audits/audit-2026-09-22-process-rerecord.md) left behind —
+`replays/ml_corpus/9p2i`, historical fingerprint `6536c68c…`. That fingerprint covers the
+replay, split and manifest bytes but not the roster or the fitting code, so it describes
+historical evidence and cannot certify a fit against current inputs. Every row below
+re-derives from those bytes under the offline `scripts/verify_ml_evidence.py`; no verdict
+changed at the re-fit.
 
 | instrument | verdict | the axes it was judged on |
 |---|---|---|
@@ -195,8 +195,8 @@ historical, as the erratum records; both follow-ups need owner decisions.
 
 Keep the paired campaign comparison and its failed adoption bars as the main result.
 The committed ballot surrogate is a useful negative: on its held-out split it ranks
-47 of 57 ejected targets correctly but gets only 36 of 91 eject/skip decisions right;
-always eject gets 57 of 91. Those counts are in its
+46 of 52 ejected targets correctly but gets only 44 of 94 eject/skip decisions right;
+always eject gets 52 of 94. Those counts are in its
 [verdict](../training/artifacts/surrogate/verdict.json). The conviction model's GO is
 historical qualification, not evidence that the later fit improved its predecessor;
 the [model report's erratum](../training/reports/report-conviction-model.md) records

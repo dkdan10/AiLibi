@@ -181,11 +181,11 @@ EVAL_SPLIT_REMAINDER: Final[int] = 4
 # on — and the baseline whose ``eval/watchability.py`` supply floors the bake-off
 # SELECTS on. The id names the floors selection is measured against, which is the
 # baseline the ML fits are ground on: it moves only when those fits move onto a
-# new corpus (Task 21.17 re-ground them onto the baseline-8 record).
+# new corpus (the 2026-09-23 re-ground moved them onto the baseline-9 record).
 BAKEOFF_NUM_PLAYERS: Final[int] = 9
 BAKEOFF_NUM_IMPOSTORS: Final[int] = 2
 BAKEOFF_TASKS_PER_CREWMATE: Final[int] = 2
-BAKEOFF_BASELINE_ID: Final[str] = "baseline-8"
+BAKEOFF_BASELINE_ID: Final[str] = "baseline-9"
 
 # The pre-stated BC bar (task contract): held-out top-1 intent agreement with
 # the FSM oracle. Stated here, before training, per the definition of done.

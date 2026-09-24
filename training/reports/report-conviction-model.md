@@ -5,24 +5,28 @@ chartered around (audits/audit-phase-18-planning.md §2.3; owner-ratified locked
 decision 1).
 **Code:** `training/conviction/{dataset,model,fidelity}.py`;
 tests in `tests/training/test_conviction_model.py`.
-**Date:** 2026-07-21; re-ground on the baseline-8 corpus 2026-08-31 (Task 21.17).
-**Corpus:** `replays/ml_corpus/9p2i` — the baseline-8 re-record (Task 21.15):
-150 games (seeds 1000–1149), 439 meetings, 281 ejections, committed
+**Date:** 2026-07-21; re-ground on the baseline-8 corpus 2026-08-31 (Task 21.17);
+re-ground on the baseline-9 corpus 2026-09-23.
+**Corpus:** `replays/ml_corpus/9p2i` — the baseline-9 re-record (the 2026-09-22
+record): 150 games (seeds 1000–1149), 449 meetings, 273 ejections, committed
 `splits.json` (seed mod 5 → 90 train / 30 val / 30 test games; fit side
-train ∪ val = 348 meetings, test = 91 meetings).
+train ∪ val = 355 meetings, test = 94 meetings).
 **Committed artifact:** `training/artifacts/conviction/conviction-model.json`
 (float-hex weights), sha256
-`7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed`
+`3a6fe4ca18cb0597d8df4e155be190f4601d8bfc5dae25490e9a3f3b821d762e`
 (sidecar `conviction-model.json.sha256`), staleness cap `max-uses.json`
-(**49 764** = 143 × 348), machine-readable verdict `verdict.json` keyed to the
+(**50 765** = 143 × 355), machine-readable verdict `verdict.json` keyed to the
 same sha with a `verdict.json.sha256` sidecar, and the fit-corpus provenance
-`fit-corpus.json` naming the corpus the weights were fitted on.
+`fit-corpus.json` naming the corpus the weights were fitted on (`6536c68c…`, the
+version-one identity: replay, split and manifest bytes). Fitted on Darwin 24.6.0
+arm64 (macOS 15.7.3, Apple M1 Pro), CPython 3.11.15, numpy 2.2.6; the same host
+reproduced the baseline-8 weights byte for byte from this recipe before the re-fit.
 
 **Verdict summary:** **GO**, taken on the FIRST held-out evaluation against the
-pre-stated bar. Held-out per-meeting flag-count Spearman **0.667** ≥ 0.5,
-conversion recall **49/51 = 0.961** ≥ **0.6184** = 0.75 × (1 − 0.1754), and
-conversion accuracy **0.945** > the population's own **0.560** trivial constant,
-with the voice-driven share (0.1754) measured on the same held-out population as
+pre-stated bar. Held-out per-meeting flag-count Spearman **0.839** ≥ 0.5,
+conversion recall **42/44 = 0.955** ≥ **0.5913** = 0.75 × (1 − 0.2115), and
+conversion accuracy **0.926** > the population's own **0.532** trivial constant,
+with the voice-driven share (0.2115) measured on the same held-out population as
 the structural denominator. Consequence (pre-committed, machine-readable in
 `verdict.json`): the fitness term SHIPS on both sides and the referee
 pre-screen GATES real-path spend (18.16 wires both). The conviction model is
@@ -132,17 +136,18 @@ verdict — the exact failure the 6-feature fence forbids.
 `TacticalAgent`s fed reconstructed packets, read through the exact
 `suspicion_graph_for_meeting()` accessor) comes back clean
 (`require_clean_walk` — the `ConvictionWalkGateError` gate). Re-measured on the
-baseline-8 corpus at the Task-21.17 re-ground:
+baseline-9 corpus at the 2026-09-23 re-ground:
 
-* **Fold fidelity: 0 raw mismatches, 0 trust mismatches** over **12 772**
-  non-self cells (150 games, 439 meetings, 2 516 rows); max raw |Δ| 0.0.
+* **Fold fidelity: 0 raw mismatches, 0 trust mismatches** over **12 760**
+  non-self cells (150 games, 449 meetings, 2 539 rows); max raw |Δ| 0.0.
 * **J1 live-parity divergence** (the graduated render clamp — the live runner
   is served the CLAMPED `SuspicionEntry.suspicion`; measured, never assumed
-  away): **102 divergent cells** across **98 rows** (77 fit-side / 25
+  away): **82 divergent cells** across **80 rows** (61 fit-side / 21
   test-side), max |Δ| **0.11**. The conviction features read the raw
-  fold-side scalar, so the live consumer sees at most a 0.11 shift on 0.8% of
-  cells — quoted here as the known live-parity delta. (Baseline-6 record: 141
-  cells across 130 rows of 14 326, max 0.06.)
+  fold-side scalar, so the live consumer sees at most a 0.11 shift on 0.6% of
+  cells — quoted here as the known live-parity delta. (Baseline-8 record: 102
+  cells across 98 rows of 2 516, max 0.11; baseline-6 record: 141 cells across
+  130 rows of 14 326, max 0.06.)
 
 ## 3. The labels, mirrored (never imported)
 
@@ -174,11 +179,15 @@ conviction term live before any campaign selection leans on it.
   accused never count; self-accusation-only subjects never enter; body
   reports never back; vent sightings back).
 
-Corpus census (baseline 8): **449 flags minted** over 439 meetings
-(fit side 343 / test 106), **249 converting meetings** of **386
-attempted-subject meetings** (fit 198 / test 51). Conversion stays DENSE — the
+Corpus census (baseline 9): **374 flags minted** over 449 meetings
+(fit side 304 / test 70), **234 converting meetings** of **375
+attempted-subject meetings** (fit 190 / test 44). Conversion stays DENSE — the
 18.11 CREW-ONLY package moved the economy the §3.1 census found scarce at
-baseline 5, and the Wave-1a repairs kept it there. (Baseline-6 record: 576 flags
+baseline 5, and the Wave-1a repairs kept it there. The flag census fell again,
+as it did on the canonical samples, where the baseline-9 floor block in
+`eval/watchability.py` attributes the fall to the route claim no longer minting
+single-room alibi flags against honest movers. (Baseline-8 record: 449 flags over 439 meetings, fit 343 / test 106; 249
+conversions of 386 attempts, fit 198 / test 51. Baseline-6 record: 576 flags
 over 463 meetings, fit 452 / test 124; 239 conversions of 394 attempts. The flag
 census fell because Task 21.5 stopped minting a witnessed vent twice, and
 Task 21.7 re-derived the transcript half off the record.)
@@ -193,39 +202,40 @@ evaluated ONCE, with the frozen weights that were committed. The numbers below
 ARE that first evaluation (`ConvictionFidelityReport`, reproducible from the
 frozen artifact — §9).
 
-| channel | held-out (30 test games, 91 meetings) |
+| channel | held-out (30 test games, 94 meetings) |
 |---|---|
-| flag-count Spearman | **0.6670** (bar 0.5) |
-| flag MAE | 0.603 (context; the bar is rank-based) |
-| conversion recall | **49/51 = 0.9608** (bar 0.6184) |
-| conversion precision | 49/52 = 0.9423 |
-| conversion accuracy | 86/91 = 0.9451 |
-| confusion (tp/fp/fn/tn) | 49 / 3 / 2 / 37 |
-| test ejections / reachable | 57 / 47 |
-| **voice_driven_share** | **0.1754** (the structural denominator) |
+| flag-count Spearman | **0.8395** (bar 0.5) |
+| flag MAE | 0.264 (context; the bar is rank-based) |
+| conversion recall | **42/44 = 0.9545** (bar 0.5913) |
+| conversion precision | 42/47 = 0.8936 |
+| conversion accuracy | 87/94 = 0.9255 |
+| confusion (tp/fp/fn/tn) | 42 / 5 / 2 / 45 |
+| test ejections / reachable | 52 / 41 |
+| **voice_driven_share** | **0.2115** (the structural denominator) |
 
 ## 5. THE VERDICT: GO
 
 | axis | measured | bar | pass |
 |---|---|---|---|
-| 1. flag-count Spearman | 0.6670 | ≥ 0.5 | **yes** |
-| 2. conversion recall | 0.9608 | ≥ 0.75 × (1 − 0.1754) = 0.6184 | **yes** |
-| 3. conversion accuracy | 0.9451 | > 0.5604 (the population's own best constant) | **yes** |
+| 1. flag-count Spearman | 0.8395 | ≥ 0.5 | **yes** |
+| 2. conversion recall | 0.9545 | ≥ 0.75 × (1 − 0.2115) = 0.5913 | **yes** |
+| 3. conversion accuracy | 0.9255 | > 0.5319 (the population's own best constant) | **yes** |
 
 **GO.** Honest notes: (a) the conversion head's strength rides the recorded
 economy — conversion correlates with the physical evidence supply the features
 see (vent/kill/body pins + the belief lead), which is exactly the §2.3 design
 claim, but the bar re-reads on any future substrate (population-relative
 doctrine — nothing here transfers as an absolute number); (b) the flag channel
-has more headroom than it did (0.667 vs the bar's 0.5, against 0.578 on the
-baseline-6 record) — the flag label's variance is dominated by roll-call-era
+has more headroom than it did (0.839 vs the bar's 0.5, against 0.667 on the
+baseline-8 record and 0.578 on the baseline-6 one) — the flag label's variance is dominated by roll-call-era
 alibi flags whose supply the fenced features see only through co-presence pins,
 so the Spearman channel stays the one to watch at re-grounds; (c) the
-voice-driven share on the held-out split (0.1754) differs from the fit side's —
+voice-driven share on the held-out split (0.2115) differs from the fit side's —
 both are measurements on their own populations, quoted per the
 anti-absolute-number doctrine; (d) axis 3 is what makes a NO-GO reachable at
 all: a degenerate always-convict head posts recall 1.0 on any corpus and clears
-axis 2, but cannot clear 0.9451 against this population's 0.5604 base rate.
+axis 2, but its accuracy is this population's 44/94 conversion rate, below the
+0.5319 best constant the model's 0.9255 clears.
 
 > **Erratum (Task 21.17, the baseline-8 re-ground).** §4 and §5 were re-measured
 > on `replays/ml_corpus/9p2i` at the baseline-8 record, from weights re-fit on
@@ -239,6 +249,18 @@ axis 2, but cannot clear 0.9451 against this population's 0.5604 base rate.
 > the FROZEN baseline-6 weights fully out-of-sample on a re-recorded corpus and
 > got GO on both bars with a *higher* Spearman (0.699 on 87 held-out meetings).
 > A NO-GO is the outcome that would have carried information here.
+
+> **Erratum (the baseline-9 re-ground, 2026-09-23).** §2.1, §3, §4, §5 and §7 were
+> re-measured on `replays/ml_corpus/9p2i` as the 2026-09-22 record left it, from
+> weights re-fit on those bytes. The baseline-8 fit (`7e764b89…`) read 91 held-out
+> meetings / 57 ejections / 51 conversions, Spearman **0.6670**, recall **49/51 =
+> 0.9608** against a 0.6184 bar, precision 0.9423, accuracy 86/91 = 0.9451 against
+> a 0.5604 constant, confusion 49/3/2/37, flag MAE 0.603 and a 0.1754 voice-driven
+> share, with a cap of 49 764 = 143 × 348. Those figures are history; that fit is
+> still reachable at the last baseline-8 `main` (`39a568c6`). The GO again carries
+> little information: the frozen baseline-8 weights, scored on these bytes before
+> the re-fit, already read GO, accuracy 87/94 with confusion 42/5/2/45 and a
+> Spearman of 0.8191, and the re-fit reads the same confusion.
 
 ## 6. The consequence mapping for 18.16 (machine-readable)
 
@@ -261,8 +283,8 @@ the model never reads, wraps, or re-derives `eval/watchability.py` scores.
 
 ## 7. The staleness cap (~143× rule)
 
-`max-uses.json`: **49 764** predicted meetings = 143 ×
-**348** fit-side meetings (`derive_conviction_max_uses` — the Task-17.10 rule
+`max-uses.json`: **50 765** predicted meetings = 143 ×
+**355** fit-side meetings (`derive_conviction_max_uses` — the Task-17.10 rule
 applied to THIS artifact; the constant is restated locally because the
 conviction model and the ballot surrogate are independent artifacts whose caps
 must never silently retune each other). Unit: one metered
@@ -283,9 +305,12 @@ threaded through both fitness sides and the pre-screen.
    new weights sha256, which the next two steps key to.
 4. **Re-write `fit-corpus.json` in the same breath.** The record is part of the
    bundle, not an extra: `SurrogateFitCorpus(corpus_set=..., corpus_sha256=
-   fit_corpus_fingerprint(<corpus dir>), fit_side_meetings=<fit-side count>,
-   weights_sha256=<the sha from step 3>)`, serialized sorted-keys with a
-   trailing newline. Skip it and the bundle is keyed to the PREVIOUS weights and
+   historical_fit_corpus_fingerprint(<corpus dir>), fit_side_meetings=<fit-side
+   count>, weights_sha256=<the sha from step 3>)` with no `fingerprint_version`
+   argument, serialized as `model_dump_json(indent=2)` plus a trailing newline
+   (the fields are already in sorted order). Naming `fit_corpus_fingerprint` here,
+   as this step once did, writes a record labelled version one that carries a
+   version-two digest, which every loader refuses. Skip it and the bundle is keyed to the PREVIOUS weights and
    corpus: `scripts/verify_ml_evidence.py`'s `ML grounding` row fails on all
    three fields, and `load_conviction_model_artifact(..., corpus_dir=...)`
    refuses the artifact outright.

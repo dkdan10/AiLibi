@@ -42,6 +42,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
 )
+from tests.training._refit_equivalence import assert_refit_reproduces_committed
 from training.conviction.dataset import (
     CONVICTION_FEATURE_NAMES,
     CONVICTION_FEATURE_PROVENANCE,
@@ -817,7 +818,11 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     INVERTED, pinning that the refit disagreed because the corpus had moved under
     a frozen fit. The re-ground restores the equivalence, and the staleness cap
     now keys to a fit-side count the live corpus reproduces — the two agreeing is
-    the statement that the cap is current rather than carried.
+    the statement that the cap is current rather than carried. The 2026-09-23
+    re-ground re-established it on the baseline-9 corpus. The comparison is the
+    shared ``tests/training/_refit_equivalence.py``, its perturbed case is
+    ``test_a_refit_on_shifted_max_suspicion_fails_the_refit_pin``, and this pin
+    is what certifies the version-one record's derivation (training/README.md).
     """
 
     committed_json = (_ARTIFACT_DIR / "conviction-model.json").read_text()
@@ -827,42 +832,63 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     cap = load_conviction_staleness_cap(_ARTIFACT_DIR)
     assert cap.weights_sha256 == digest
     assert cap.unit == "meetings"
-    assert cap.max_uses == derive_conviction_max_uses(348) == 49_764
+    assert cap.max_uses == derive_conviction_max_uses(355) == 50_765  # was 348, 49_764
 
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
     live_fit_rows = [row for row in corpus_conviction.rows if row.seed in fit_seeds]
     # The live fit side is the count the cap is keyed to.
-    assert len(live_fit_rows) == 348
+    assert len(live_fit_rows) == 355  # was 348
     refit = ConvictionEconomyModel()
     refit.fit(live_fit_rows)
-    import json
-
-    committed = json.loads(committed_json)
-    refitted = json.loads(refit.to_artifact_json())
     # Same schema, same numbers to ULP -- the committed weights ARE this refit.
-    assert set(committed) == set(refitted)
-    for key, value in committed.items():
-        if isinstance(value, list) and value and value[0].startswith(("0x", "-0x")):
-            assert [float.fromhex(v) for v in refitted[key]] == pytest.approx(
-                [float.fromhex(v) for v in value], rel=1e-9, abs=1e-12
-            ), key
-        elif isinstance(value, str) and value.startswith(("0x", "-0x")):
-            assert float.fromhex(refitted[key]) == pytest.approx(
-                float.fromhex(value), rel=1e-9, abs=1e-12
-            ), key
-        else:
-            assert refitted[key] == value, f"artifact field {key!r} drifted"
+    assert_refit_reproduces_committed(refit.to_artifact_json(), committed_json)
 
 
-def test_the_committed_verdict_is_the_baseline8_first_evaluation(
+def test_a_refit_on_shifted_max_suspicion_fails_the_refit_pin(
+    corpus_conviction: ConvictionTable,
+) -> None:
+    """The refit pin's perturbed case: one feature moved, and the pin must refuse.
+
+    The version-one fit record binds the corpus bytes, not the code that derives
+    the features, so a derivation change that leaves the corpus alone is caught
+    only by the refit pin. This plants the smallest such change the pin exists
+    for — the ``max_suspicion`` feature shifted by +0.125 on every live fit-side
+    row — and requires the shared comparison to raise, while the unperturbed
+    refit passes it in the pin above.
+    """
+
+    splits = corpus_conviction.splits
+    assert splits is not None
+    fit_seeds = frozenset(splits.train) | frozenset(splits.val)
+    shifted_rows = [
+        row.model_copy(
+            update={
+                "features": {
+                    **row.features,
+                    "max_suspicion": row.features["max_suspicion"] + 0.125,
+                }
+            }
+        )
+        for row in corpus_conviction.rows
+        if row.seed in fit_seeds
+    ]
+    refit = ConvictionEconomyModel()
+    refit.fit(shifted_rows)
+    committed_json = (_ARTIFACT_DIR / "conviction-model.json").read_text()
+    with pytest.raises(AssertionError):
+        assert_refit_reproduces_committed(refit.to_artifact_json(), committed_json)
+
+
+def test_the_committed_verdict_is_the_baseline9_first_evaluation(
     corpus_conviction: ConvictionTable,
 ) -> None:
     """The committed verdict IS the re-derivable held-out evaluation.
 
     ``verdict.json`` is the first held-out evaluation's verdict, decided at the
-    Task-21.17 re-ground on the corpus that is still on disk — so it is not a
+    2026-09-23 re-ground on the corpus that is still on disk (as the baseline-8
+    verdict was at the Task-21.17 re-ground) — so it is not a
     record to be read and taken on trust, it is a computation this test performs
     and compares field for field. During the interim between the baseline-7
     record and the re-ground the two could not converge, and this test's previous
@@ -883,25 +909,33 @@ def test_the_committed_verdict_is_the_baseline8_first_evaluation(
     assert committed.replay_set_dir == "replays/ml_corpus/9p2i"
     assert committed.verdict == "GO"
     assert committed.weights_sha256 == digest
-    assert committed.test_meetings == 91  # was 96 on the baseline-6 record
-    assert committed.test_ejections == 57  # was 60
-    assert committed.conversions_test == 51  # was 47
+    assert committed.test_meetings == 94  # was 91 on the baseline-8 record
+    assert committed.test_ejections == 52  # was 57
+    assert committed.conversions_test == 44  # was 51
     assert committed.flag_spearman == pytest.approx(
-        0.667006270925879
-    )  # was 0.5781584982719424
+        0.8394835297890146
+    )  # was 0.667006270925879
     assert committed.meets_spearman_bar
-    assert committed.conversion_recall == pytest.approx(49 / 51)  # was 45 / 47
+    assert committed.conversion_recall == pytest.approx(42 / 44)  # was 49 / 51
     assert committed.voice_driven_share == pytest.approx(
-        0.17543859649122806
-    )  # was 0.15
-    assert committed.conversion_bar == pytest.approx(0.618421052631579)  # was 0.6375
+        0.21153846153846156
+    )  # was 0.17543859649122806
+    assert committed.conversion_bar == pytest.approx(
+        0.5913461538461539
+    )  # was 0.618421052631579
     assert committed.meets_conversion_bar
     # Axis 3, and the ceiling the recall bar is a fraction of — B-20 (c) found
     # `conversion_ceiling` with no value pin anywhere in the suite.
-    assert committed.conversion_ceiling == pytest.approx(0.8245614035087719)
+    assert committed.conversion_ceiling == pytest.approx(
+        0.7884615384615384
+    )  # was 0.8245614035087719
     assert committed.conversion_ceiling_ratio == pytest.approx(0.75)
-    assert committed.conversion_accuracy == pytest.approx(0.945054945054945)
-    assert committed.conversion_trivial_baseline == pytest.approx(0.5604395604395604)
+    assert committed.conversion_accuracy == pytest.approx(
+        0.925531914893617
+    )  # was 0.945054945054945
+    assert committed.conversion_trivial_baseline == pytest.approx(
+        0.5319148936170213
+    )  # was 0.5604395604395604
     assert committed.beats_trivial_conversion
     assert (
         committed.fitness_term,
@@ -915,7 +949,7 @@ def test_the_committed_verdict_is_the_baseline8_first_evaluation(
         report.false_positives,
         report.false_negatives,
         report.true_negatives,
-    ) == (49, 3, 2, 37)
+    ) == (42, 5, 2, 45)  # was (49, 3, 2, 37)
 
     # The whole object, field for field. The corpus identity field is normalized
     # (the committed artifact stores a repo-relative path; this run built its
@@ -981,17 +1015,18 @@ def test_axis_three_refuses_a_degenerate_head_the_recall_bar_waves_through(
 def test_axis_three_is_a_floor_the_live_model_clears_on_all_three(
     corpus_conviction: ConvictionTable,
 ) -> None:
-    """The frozen weights, read out of sample, still pass every axis, axis 3 by a
+    """The committed weights pass every axis on the held-out split, axis 3 by a
     wide margin.
 
     Recomputed from the committed weights against the corpus now on disk, never
-    copied from the contract. The weights were fitted on the baseline-8 corpus,
-    and the baseline-9 re-record replaced every game under them, so this is a
-    fully out-of-sample read: the model has never seen a meeting it is scored on
-    here. Held-out confusion (TP, FP, FN, TN) = (42, 5, 2, 45) over 94 test
-    meetings with 44 conversions, so recall is 42/44, accuracy 87/94, and the
-    population's own best constant answer is 50/94. The axis is a floor the real
-    model clears, not a re-verdict on it, and not a substitute for the re-ground.
+    copied from the contract. Since the 2026-09-23 re-ground the weights are
+    fitted on this corpus's fit side, so the read is the held-out split of the
+    corpus they were fitted on, not an out-of-sample one. Held-out confusion (TP,
+    FP, FN, TN) = (42, 5, 2, 45) over 94 test meetings with 44 conversions, so
+    recall is 42/44, accuracy 87/94, and the population's own best constant
+    answer is 50/94. (Before the re-ground the frozen baseline-8 weights, read
+    fully out of sample on these bytes, gave the same confusion.) The axis is a
+    floor the real model clears, not a re-verdict on it.
     """
 
     model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)

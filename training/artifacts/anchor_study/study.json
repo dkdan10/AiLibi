@@ -1,5 +1,5 @@
 {
-  "baseline_id": "baseline-8",
+  "baseline_id": "baseline-9",
   "corpus_set": "9p2i",
   "determinism_cross_check": {
     "byte_identical": true,
@@ -42,135 +42,135 @@
   "filtered_bc": {
     "artifact_path": "training/artifacts/anchor_study/filtered-bc-anchor",
     "committed_champion_overall": {
-      "agreement": 0.413323782234957,
-      "agreement_hits": 2308,
+      "agreement": 0.41597077244258873,
+      "agreement_hits": 2391,
       "ce_clamped_decisions": 0,
-      "decisions": 5584,
+      "decisions": 5748,
       "divergence": [
         {
           "anchor_intent_kind": "wait",
-          "count": 1059,
-          "fsm_intent_kind": "do_task"
+          "count": 1069,
+          "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "wait",
-          "count": 1045,
-          "fsm_intent_kind": "move"
+          "count": 1054,
+          "fsm_intent_kind": "do_task"
         },
         {
           "anchor_intent_kind": "vent",
-          "count": 290,
+          "count": 295,
           "fsm_intent_kind": "vent"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 282,
+          "count": 280,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 256,
+          "count": 260,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 222,
+          "count": 253,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 38,
+          "count": 54,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 35,
           "fsm_intent_kind": "do_task"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 34,
-          "fsm_intent_kind": "wait"
-        },
-        {
-          "anchor_intent_kind": "move",
-          "count": 28,
+          "count": 33,
           "fsm_intent_kind": "vent"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 12,
+          "count": 10,
           "fsm_intent_kind": "sabotage"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 5,
+          "count": 8,
           "fsm_intent_kind": "sabotage"
         },
         {
           "anchor_intent_kind": "sabotage",
           "count": 5,
           "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 1,
+          "fsm_intent_kind": "move"
         }
       ],
       "fsm_offmenu_decisions": 0,
       "label": "committed utility-es champion",
-      "mean_anchor_ce": 1.0121008671448086,
+      "mean_anchor_ce": 1.002615593944999,
       "per_kind_agreement": {
         "do_task": [
-          1097,
+          1089,
           0
         ],
         "kill": [
-          678,
-          678
+          703,
+          703
         ],
         "move": [
-          2418,
-          895
+          2507,
+          924
         ],
         "sabotage": [
-          26,
-          9
+          34,
+          16
         ],
         "vent": [
-          809,
-          486
+          826,
+          493
         ],
         "wait": [
-          556,
-          240
+          589,
+          255
         ]
       }
     },
     "entrant": "filtered-bc-anchor",
     "epochs": 300,
     "filter_summary": {
-      "both_criteria_games": 71,
+      "both_criteria_games": 65,
       "both_criteria_weight": 2.0,
-      "crew_winning_games": 114,
-      "fit_decisions": 4375,
-      "fit_weight_total": 6523.0,
+      "crew_winning_games": 105,
+      "fit_decisions": 3798,
+      "fit_weight_total": 5753.0,
       "fsm_offmenu_decisions": 0,
       "games_walked": 150,
-      "high_flag_floor": 0.9735099337748344,
-      "high_flag_games": 82,
-      "qualifying_games": 125,
+      "high_flag_floor": 0.7379310344827587,
+      "high_flag_games": 71,
+      "qualifying_games": 111,
       "qualifying_seeds": [
         1000,
         1001,
         1003,
         1004,
         1005,
-        1006,
         1007,
-        1008,
         1009,
-        1010,
         1011,
-        1012,
         1013,
         1014,
-        1015,
         1016,
         1017,
-        1018,
         1019,
+        1020,
         1021,
         1023,
         1024,
@@ -183,8 +183,8 @@
         1031,
         1033,
         1034,
+        1035,
         1037,
-        1039,
         1040,
         1041,
         1042,
@@ -198,23 +198,21 @@
         1051,
         1052,
         1053,
-        1054,
-        1055,
         1056,
         1057,
         1058,
-        1059,
         1060,
         1061,
         1062,
-        1063,
         1064,
+        1065,
         1067,
         1068,
         1069,
         1070,
         1071,
         1072,
+        1073,
         1074,
         1075,
         1076,
@@ -224,40 +222,35 @@
         1080,
         1082,
         1084,
-        1085,
         1086,
         1087,
         1089,
         1090,
-        1091,
         1092,
         1093,
         1094,
         1096,
         1097,
         1098,
-        1099,
         1100,
         1101,
         1102,
         1103,
         1104,
+        1105,
         1107,
         1108,
         1109,
         1110,
         1112,
         1113,
-        1114,
         1115,
         1117,
         1118,
-        1119,
         1120,
         1121,
-        1122,
         1123,
-        1124,
+        1126,
         1128,
         1129,
         1130,
@@ -266,44 +259,42 @@
         1134,
         1136,
         1137,
+        1138,
         1139,
-        1140,
         1141,
-        1142,
         1143,
         1144,
         1145,
         1146,
-        1147,
         1148,
         1149
       ],
-      "total_decisions": 5584
+      "total_decisions": 5748
     },
     "in_filter": {
-      "agreement": 0.8598857142857143,
-      "agreement_hits": 3762,
+      "agreement": 0.8649289099526066,
+      "agreement_hits": 3285,
       "ce_clamped_decisions": 0,
-      "decisions": 4375,
+      "decisions": 3798,
       "divergence": [
         {
           "anchor_intent_kind": "move",
-          "count": 208,
+          "count": 180,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 146,
+          "count": 114,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "do_task",
-          "count": 97,
+          "count": 83,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "vent",
-          "count": 66,
+          "count": 55,
           "fsm_intent_kind": "vent"
         },
         {
@@ -313,221 +304,221 @@
         },
         {
           "anchor_intent_kind": "move",
-          "count": 30,
-          "fsm_intent_kind": "do_task"
-        },
-        {
-          "anchor_intent_kind": "kill",
-          "count": 19,
-          "fsm_intent_kind": "wait"
-        },
-        {
-          "anchor_intent_kind": "sabotage",
-          "count": 3,
-          "fsm_intent_kind": "kill"
-        },
-        {
-          "anchor_intent_kind": "wait",
-          "count": 3,
-          "fsm_intent_kind": "move"
-        }
-      ],
-      "fsm_offmenu_decisions": 0,
-      "label": "in-filter games",
-      "mean_anchor_ce": 0.4705646031540769,
-      "per_kind_agreement": {
-        "do_task": [
-          883,
-          853
-        ],
-        "kill": [
-          526,
-          523
-        ],
-        "move": [
-          1855,
-          1603
-        ],
-        "sabotage": [
-          18,
-          18
-        ],
-        "vent": [
-          643,
-          577
-        ],
-        "wait": [
-          450,
-          188
-        ]
-      }
-    },
-    "learning_rate": 0.3,
-    "out_of_filter": {
-      "agreement": 0.8883374689826302,
-      "agreement_hits": 1074,
-      "ce_clamped_decisions": 0,
-      "decisions": 1209,
-      "divergence": [
-        {
-          "anchor_intent_kind": "move",
-          "count": 37,
-          "fsm_intent_kind": "move"
-        },
-        {
-          "anchor_intent_kind": "move",
-          "count": 34,
-          "fsm_intent_kind": "wait"
-        },
-        {
-          "anchor_intent_kind": "vent",
-          "count": 27,
-          "fsm_intent_kind": "vent"
-        },
-        {
-          "anchor_intent_kind": "do_task",
           "count": 20,
-          "fsm_intent_kind": "wait"
-        },
-        {
-          "anchor_intent_kind": "do_task",
-          "count": 8,
-          "fsm_intent_kind": "move"
-        },
-        {
-          "anchor_intent_kind": "move",
-          "count": 5,
-          "fsm_intent_kind": "do_task"
-        },
-        {
-          "anchor_intent_kind": "wait",
-          "count": 2,
-          "fsm_intent_kind": "move"
-        },
-        {
-          "anchor_intent_kind": "sabotage",
-          "count": 1,
-          "fsm_intent_kind": "kill"
-        },
-        {
-          "anchor_intent_kind": "kill",
-          "count": 1,
-          "fsm_intent_kind": "wait"
-        }
-      ],
-      "fsm_offmenu_decisions": 0,
-      "label": "out-of-filter games",
-      "mean_anchor_ce": 0.3895106208101005,
-      "per_kind_agreement": {
-        "do_task": [
-          214,
-          209
-        ],
-        "kill": [
-          152,
-          151
-        ],
-        "move": [
-          563,
-          516
-        ],
-        "sabotage": [
-          8,
-          8
-        ],
-        "vent": [
-          166,
-          139
-        ],
-        "wait": [
-          106,
-          51
-        ]
-      }
-    },
-    "overall": {
-      "agreement": 0.8660458452722063,
-      "agreement_hits": 4836,
-      "ce_clamped_decisions": 0,
-      "decisions": 5584,
-      "divergence": [
-        {
-          "anchor_intent_kind": "move",
-          "count": 245,
-          "fsm_intent_kind": "move"
-        },
-        {
-          "anchor_intent_kind": "move",
-          "count": 180,
-          "fsm_intent_kind": "wait"
-        },
-        {
-          "anchor_intent_kind": "do_task",
-          "count": 117,
-          "fsm_intent_kind": "wait"
-        },
-        {
-          "anchor_intent_kind": "vent",
-          "count": 93,
-          "fsm_intent_kind": "vent"
-        },
-        {
-          "anchor_intent_kind": "do_task",
-          "count": 49,
-          "fsm_intent_kind": "move"
-        },
-        {
-          "anchor_intent_kind": "move",
-          "count": 35,
           "fsm_intent_kind": "do_task"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 20,
+          "count": 15,
           "fsm_intent_kind": "wait"
-        },
-        {
-          "anchor_intent_kind": "wait",
-          "count": 5,
-          "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "sabotage",
           "count": 4,
           "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "wait",
+          "count": 1,
+          "fsm_intent_kind": "move"
+        }
+      ],
+      "fsm_offmenu_decisions": 0,
+      "label": "in-filter games",
+      "mean_anchor_ce": 0.46084399814822224,
+      "per_kind_agreement": {
+        "do_task": [
+          760,
+          740
+        ],
+        "kill": [
+          467,
+          463
+        ],
+        "move": [
+          1624,
+          1402
+        ],
+        "sabotage": [
+          20,
+          20
+        ],
+        "vent": [
+          566,
+          511
+        ],
+        "wait": [
+          361,
+          149
+        ]
+      }
+    },
+    "learning_rate": 0.3,
+    "out_of_filter": {
+      "agreement": 0.8569230769230769,
+      "agreement_hits": 1671,
+      "ce_clamped_decisions": 0,
+      "decisions": 1950,
+      "divergence": [
+        {
+          "anchor_intent_kind": "move",
+          "count": 93,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 87,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "vent",
+          "count": 41,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 30,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 12,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 7,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 6,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 2,
+          "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "wait",
+          "count": 1,
+          "fsm_intent_kind": "move"
+        }
+      ],
+      "fsm_offmenu_decisions": 0,
+      "label": "out-of-filter games",
+      "mean_anchor_ce": 0.4685994817073257,
+      "per_kind_agreement": {
+        "do_task": [
+          329,
+          317
+        ],
+        "kill": [
+          236,
+          234
+        ],
+        "move": [
+          883,
+          782
+        ],
+        "sabotage": [
+          14,
+          14
+        ],
+        "vent": [
+          260,
+          219
+        ],
+        "wait": [
+          228,
+          105
+        ]
+      }
+    },
+    "overall": {
+      "agreement": 0.8622129436325678,
+      "agreement_hits": 4956,
+      "ce_clamped_decisions": 0,
+      "decisions": 5748,
+      "divergence": [
+        {
+          "anchor_intent_kind": "move",
+          "count": 273,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 201,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 113,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "vent",
+          "count": 96,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 48,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 32,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 21,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 6,
+          "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "wait",
+          "count": 2,
+          "fsm_intent_kind": "move"
         }
       ],
       "fsm_offmenu_decisions": 0,
       "label": "all corpus games",
-      "mean_anchor_ce": 0.4530154869911267,
+      "mean_anchor_ce": 0.46347503380240007,
       "per_kind_agreement": {
         "do_task": [
-          1097,
-          1062
+          1089,
+          1057
         ],
         "kill": [
-          678,
-          674
+          703,
+          697
         ],
         "move": [
-          2418,
-          2119
+          2507,
+          2184
         ],
         "sabotage": [
-          26,
-          26
+          34,
+          34
         ],
         "vent": [
-          809,
-          716
+          826,
+          730
         ],
         "wait": [
-          556,
-          239
+          589,
+          254
         ]
       }
     },
-    "weights_sha256": "62595367954fe8bd19f4dc8b73e547170d0185c7fde1b00815df729de6f45a7e"
+    "weights_sha256": "6268ea3d7027a78c3300494b11fa89d2ee42247530d95078b95a34b928b69a6e"
   },
   "lambda_grid": [
     0.25,
@@ -540,7 +531,7 @@
     "lambda-4.0",
     "filtered-bc-anchor"
   ],
-  "substrate_sha": "c845602d7e58f84920699d3d56aa12142b1b6b0f1a1cbfc1c1f3a0c287bd1677",
+  "substrate_sha": "b1fca5d43b2461a5110c0690a413ac96691e0eedaf910918d68793fc0d073413",
   "sweep_rows": [
     {
       "anchor_ce_flagged": false,

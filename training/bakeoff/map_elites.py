@@ -709,10 +709,12 @@ _CELL_WEIGHTS_FILENAME: Final = "weights.json"
 
 
 def historical_bakeoff_substrate_sha() -> str:
-    """Reproduce the original manifest-only cell identity for historical readers.
+    """The original manifest-only cell identity, for historical pools and re-grounds.
 
-    This definition cannot authorize current campaign seeds. New cell artifacts
-    use the version-two bakeoff_substrate_sha and record its definition name.
+    It restores old pools and also stamps the committed pool when the historical
+    instrument is re-ground onto a newly recorded corpus. This definition cannot
+    authorize current campaign seeds. New cell artifacts use the version-two
+    bakeoff_substrate_sha and record its definition name.
     """
 
     manifest = (CORPUS_SPLITS_PATH.parent / "MANIFEST.md").read_bytes()

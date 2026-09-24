@@ -466,14 +466,16 @@ def test_recompute_reads_every_committed_verdict_against_the_live_corpus() -> No
         assert verdict_row in vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS
     # Measured and committed, pinned in pairs so neither can drift alone. They
     # are equal by construction now, which is the point — the pin is that the
-    # committed report says what the recomputation says.
+    # committed report says what the recomputation says. The baseline-8 fits read,
+    # in this order: 0.8245614, 0.3956043, 0.6670062, 0.9450549, 0.9010989 and
+    # 0.8351648.
     for name, value in (
-        ("surrogate top-1 (ranking channel)", "0.8245614"),  # was 0.8070175
-        ("surrogate SKIP-vs-eject decision accuracy", "0.3956043"),
-        ("conviction flag-count Spearman", "0.6670062"),  # was 0.6425391
-        ("conviction conversion-label accuracy", "0.9450549"),
-        ("composed decision accuracy", "0.9010989"),  # was 0.8791208
-        ("composed exact-outcome match", "0.8351648"),  # was 0.8131868
+        ("surrogate top-1 (ranking channel)", "0.8846153"),
+        ("surrogate SKIP-vs-eject decision accuracy", "0.4680851"),
+        ("conviction flag-count Spearman", "0.8394835"),
+        ("conviction conversion-label accuracy", "0.9255319"),
+        ("composed decision accuracy", "0.8404255"),
+        ("composed exact-outcome match", "0.8297872"),
     ):
         row = _row(result.rows, name)
         assert row.measured.startswith(value), row.measured
@@ -593,43 +595,90 @@ def test_a_perturbed_weight_hash_fails_and_is_named_corpus_independent(
     assert vme._failed(result.rows, complete=False)
 
 
-def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> None:
+#: The version-one corpus identity of the baseline-8 corpus, which the fits
+#: recorded before the baseline-9 re-ground re-keyed them to the corpus on disk.
+_BASELINE_8_CORPUS_SHA256 = (
+    "cc54d3c02a9804d32b43b20cf1814749be64052378c9a199e042453da2845a34"
+)
+
+
+@pytest.mark.parametrize(
+    "planted_record",
+    [None, vme.SURROGATE_DIR, vme.CONVICTION_DIR],
+    ids=[
+        "added-recording",
+        "surrogate-record-back-to-b8",
+        "conviction-record-back-to-b8",
+    ],
+)
+def test_an_undeclared_corpus_still_fails_the_grounding_row(
+    tmp_path: Path, planted_record: str | None
+) -> None:
     """A fit and the bytes about to score it must agree — this is the whole gate.
 
     The one assertion that had to survive the amnesty's deletion. A corpus that is
     not the one the committed fits were made on is an undeclared substrate, and
-    the grounding row FAILS on it with nothing left to fall through to.
+    the grounding row FAILS on it with nothing left to fall through to. Two
+    plants reach it from either side: one added recording moves the corpus off
+    both records; or one record, keyed to the weights beside it, is written back
+    to the baseline-8 corpus digest the fits carried before the baseline-9
+    re-ground, so it names a corpus that is no longer on disk.
     """
 
     root = tmp_path / "repo"
     _manifests(root)
     _link(
         root,
-        f"{vme.SURROGATE_DIR}/fit-corpus.json",
         f"{vme.SURROGATE_DIR}/ballot-predictor.json",
         f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
-        f"{vme.CONVICTION_DIR}/fit-corpus.json",
         f"{vme.CONVICTION_DIR}/conviction-model.json",
         f"{vme.CONVICTION_DIR}/conviction-model.json.sha256",
     )
+    records = {
+        directory: _copy(root, f"{directory}/fit-corpus.json")
+        for directory in (vme.SURROGATE_DIR, vme.CONVICTION_DIR)
+    }
+    committed_bytes = {
+        directory: record.read_bytes() for directory, record in records.items()
+    }
     corpus = root / vme.CORPUS_SET
     corpus.mkdir(parents=True)
     for child in sorted((_REPO_ROOT / vme.CORPUS_SET).iterdir()):
         (corpus / child.name).symlink_to(child)
-    # One added recording moves the fingerprint off both committed records.
-    (corpus / "replay-seed-999999.jsonl").symlink_to(
-        _REPO_ROOT / vme.CORPUS_SET / "replay-seed-1000.jsonl"
-    )
+    # The unperturbed control first: the committed records read OK.
+    assert vme._grounding_row(root).status == "OK"
+
+    if planted_record is None:
+        # One added recording moves the fingerprint off both committed records.
+        (corpus / "replay-seed-999999.jsonl").symlink_to(
+            _REPO_ROOT / vme.CORPUS_SET / "replay-seed-1000.jsonl"
+        )
+        named: tuple[str, ...] = (vme.SURROGATE_DIR, vme.CONVICTION_DIR)
+    else:
+        record = json.loads(committed_bytes[planted_record])
+        assert record["corpus_sha256"] != _BASELINE_8_CORPUS_SHA256
+        record["corpus_sha256"] = _BASELINE_8_CORPUS_SHA256
+        records[planted_record].write_text(json.dumps(record, indent=2) + "\n")
+        named = (planted_record,)
 
     row = vme._grounding_row(root)
     assert row.status == "FAIL"
     assert "undeclared substrate" in row.detail
-    # Both measured instruments are named as drifted, not just the surrogate.
-    assert vme.SURROGATE_DIR in row.detail
-    assert vme.CONVICTION_DIR in row.detail
+    # Every drifted instrument is named, and only those.
+    for directory in (vme.SURROGATE_DIR, vme.CONVICTION_DIR):
+        assert (f"{directory}: the fit was made on" in row.detail) == (
+            directory in named
+        ), directory
+    if planted_record is not None:
+        assert (
+            f"{planted_record}: the fit was made on {_BASELINE_8_CORPUS_SHA256[:16]}"
+            in row.detail
+        )
 
-    # The perturbation removed: the unmodified corpus reads OK.
-    (corpus / "replay-seed-999999.jsonl").unlink()
+    # The perturbation removed: the unmodified corpus and records read OK.
+    (corpus / "replay-seed-999999.jsonl").unlink(missing_ok=True)
+    for directory, record_path in records.items():
+        record_path.write_bytes(committed_bytes[directory])
     assert vme._grounding_row(root).status == "OK"
 
 
@@ -1607,8 +1656,8 @@ def test_a_report_value_contradicting_its_fraction_raises(tmp_path: Path) -> Non
     report = _copy(decimal_root, vme.CONVICTION_REPORT)
     assert vme.fraction_from_report(
         decimal_root, vme.CONVICTION_REPORT, "conversion accuracy"
-    ) == (86, 91)
-    report.write_text(report.read_text().replace("86/91 = 0.9451", "86/91 = 0.5000"))
+    ) == (87, 94)  # was (86, 91) before the baseline-9 re-ground
+    report.write_text(report.read_text().replace("87/94 = 0.9255", "87/94 = 0.5000"))
     with pytest.raises(vme.EvidenceError, match="its own fraction does not produce"):
         vme.fraction_from_report(
             decimal_root, vme.CONVICTION_REPORT, "conversion accuracy"
@@ -1618,11 +1667,11 @@ def test_a_report_value_contradicting_its_fraction_raises(tmp_path: Path) -> Non
     surrogate = _copy(percent_root, vme.SURROGATE_REPORT)
     label = "top-1 (ejected target ranked first)"
     assert vme.fraction_from_report(percent_root, vme.SURROGATE_REPORT, label) == (
-        47,
-        57,
-    )
+        46,
+        52,
+    )  # was (47, 57) before the baseline-9 re-ground
     surrogate.write_text(
-        surrogate.read_text().replace("**82.5%** (47/57)", "**99.9%** (47/57)")
+        surrogate.read_text().replace("**88.5%** (46/52)", "**99.9%** (46/52)")
     )
     with pytest.raises(vme.EvidenceError, match="its own fraction does not produce"):
         vme.fraction_from_report(percent_root, vme.SURROGATE_REPORT, label)

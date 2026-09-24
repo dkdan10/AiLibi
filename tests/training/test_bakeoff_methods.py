@@ -1137,7 +1137,7 @@ def test_the_committed_map_elites_pool_is_historical_and_structurally_untouched(
     index = json.loads((root / "cells" / "index.json").read_text())
     assert index["filled_cells"] == 30
     # The pool declares the adopted baseline ...
-    assert index["baseline_id"] == BAKEOFF_BASELINE_ID == "baseline-8"
+    assert index["baseline_id"] == BAKEOFF_BASELINE_ID == "baseline-9"
     # ... and its stamp is the corpus now on disk.
     assert index["substrate"]["substrate_sha256"] == historical_bakeoff_substrate_sha()
     assert index["substrate"]["corpus_manifest"] == "replays/ml_corpus/9p2i/MANIFEST.md"

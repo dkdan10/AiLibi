@@ -1,6 +1,6 @@
 {
   "corpus_set": "9p2i",
-  "corpus_sha256": "cc54d3c02a9804d32b43b20cf1814749be64052378c9a199e042453da2845a34",
-  "fit_side_meetings": 348,
-  "weights_sha256": "06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8"
+  "corpus_sha256": "6536c68c1ad37bc8874186e3590788ab9fd91bc7d3eaa8d914036f704e649608",
+  "fit_side_meetings": 355,
+  "weights_sha256": "f89016200e94e1f136c26ba6bc4293a7fe9ad9b1b7406ff7f973ed342ccfa1d4"
 }

@@ -1,10 +1,10 @@
 {
   "composed_verdict": "GO",
   "conviction_verdict": "GO",
-  "conviction_weights_sha256": "7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed",
+  "conviction_weights_sha256": "3a6fe4ca18cb0597d8df4e155be190f4601d8bfc5dae25490e9a3f3b821d762e",
   "corpus_set": "9p2i",
   "decision_threshold": 0.5,
   "replay_set_dir": "replays/ml_corpus/9p2i",
   "skip_confidence_threshold": 0.6,
-  "surrogate_weights_sha256": "06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8"
+  "surrogate_weights_sha256": "f89016200e94e1f136c26ba6bc4293a7fe9ad9b1b7406ff7f973ed342ccfa1d4"
 }

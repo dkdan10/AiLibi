@@ -81,7 +81,7 @@ from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.game import MeetingRunner, build_default_meeting_runner
 from training.bakeoff import policy_es
 from training.bakeoff.es import ESConfig
-from training.bakeoff.goodhart import run_goodhart_probe
+from training.bakeoff.goodhart import run_conviction_path_probe, run_goodhart_probe
 from training.bakeoff.harness import (
     ANCHOR_CE_CEILING,
     ANCHOR_CE_EPSILON,
@@ -137,6 +137,7 @@ from training.rewards import (
     compute_shaped_reward,
 )
 from training.anchor_study import HIGH_FLAG_FLOOR
+from training.composed_runner import run_composed_goodhart_leg
 from training.rollout import DESCRIPTOR_VECTOR_FIELDS, EpisodeRollout
 
 # The four entrant modules the firewall test AST-scans (the committed forbidden
@@ -165,28 +166,36 @@ def test_eval_seeds_are_the_frozen_corpus_test_split() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 1b. The selection-bar pin (Task 18.14): baseline-6 + goodhart default.       #
+# 1b. The selection-bar pin: one baseline for selection and the three probes.  #
 # --------------------------------------------------------------------------- #
 
 
-def test_selection_bar_pins_the_baseline_8_floors() -> None:
-    """The bake-off selects on the baseline the ML fits are ground on, and the
-    goodhart probe default tracks the same literal.
+def test_selection_bar_and_the_three_probe_defaults_pin_one_baseline() -> None:
+    """The bake-off selects on the baseline the ML fits are ground on, and every
+    probe entry point defaults to the same id.
 
-    The flip is coupled: moving ``BAKEOFF_BASELINE_ID`` requires
-    ``run_goodhart_probe``'s default ``baseline_id`` to move with it, so the probe
-    keeps measuring against the same floors the bake-off selects on. The id moved
-    to ``baseline-8`` at the Task-21.17 re-ground, alongside
+    The flip is coupled: moving ``BAKEOFF_BASELINE_ID`` requires the default
+    ``baseline_id`` of ``run_goodhart_probe``, ``run_conviction_path_probe`` and
+    ``run_composed_goodhart_leg`` to move with it, so a probe or the composed
+    Goodhart leg scores against the same floors the bake-off selects on. The
+    three defaults are literals (an import of the constant would be circular),
+    so each is read by signature here rather than trusted. The id moved to
+    ``baseline-9`` at the 2026-09-23 re-ground, alongside
     ``training.anchor_study.HIGH_FLAG_FLOOR``, which is that baseline's own
     committed ``flags_per_meeting`` floor — the two travel together so the study
     never stamps one baseline while filtering on another's gauge."""
 
-    assert BAKEOFF_BASELINE_ID == "baseline-8"
-    signature = inspect.signature(run_goodhart_probe)
-    probe_default = signature.parameters["baseline_id"].default
-    assert probe_default == BAKEOFF_BASELINE_ID
-    # The floor the study filters against is the one this baseline commits.
-    assert HIGH_FLAG_FLOOR == 147 / 151
+    assert BAKEOFF_BASELINE_ID == "baseline-9"
+    for entry_point in (
+        run_goodhart_probe,
+        run_conviction_path_probe,
+        run_composed_goodhart_leg,
+    ):
+        default = inspect.signature(entry_point).parameters["baseline_id"].default
+        assert default == BAKEOFF_BASELINE_ID, entry_point.__name__
+    # The floor the study filters against is the one this baseline commits:
+    # 17 recorded transcript flags + 90 persisted vent flags over 145 meetings.
+    assert HIGH_FLAG_FLOOR == 107 / 145
 
 
 # --------------------------------------------------------------------------- #
@@ -835,9 +844,10 @@ def test_rerun_artifacts_carry_the_15_9_provenance_stamp() -> None:
 
 # The committed conviction artifact sha (training/artifacts/conviction/), pinned
 # as a literal so a re-ground that moves the weights trips the default-protocol
-# row-stamp pins HERE (the committed GO verdict is keyed to exactly this).
+# row-stamp pins HERE (the committed GO verdict is keyed to exactly this). Was
+# 7e764b89… for the baseline-8 fit.
 _COMMITTED_CONVICTION_SHA256: str = (
-    "7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed"
+    "3a6fe4ca18cb0597d8df4e155be190f4601d8bfc5dae25490e9a3f3b821d762e"
 )
 
 
