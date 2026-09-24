@@ -23,7 +23,7 @@ import json
 import re
 import tempfile
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -104,9 +104,7 @@ from meetings.schemas import (
     MoveWitnessRecord,
     SawMoveObservation,
     SawPlayerObservation,
-    SawVentObservation,
     SightingRecord,
-    VentWitnessRecord,
     VoteBallot,
     WhereaboutsClaim,
 )
@@ -114,6 +112,7 @@ from meetings.transcript import (
     canonical_rooms,
     detect_contradictions,
     is_weak_contradiction,
+    maximal_stays,
 )
 from eval.replay_walk import (
     MeetingApplied,
@@ -128,6 +127,13 @@ from observation.service import ObservationService
 from agents.strategic.prompts.loader import ENV_PROMPT_SET
 from orchestrator.game import DEFAULT_TASKS_PER_CREWMATE
 from orchestrator.replay import LLMCallRecord, MeetingReplayEntry, read_all_entries
+from tests._helpers.committed import (
+    committed_meetings,
+    meeting_trigger_kind,
+    move_witness_records_for_meeting,
+    sighting_records_for_meeting,
+    vent_witness_records_for_meeting,
+)
 from tests._helpers.world_state import scripted_initial_world_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -2414,70 +2420,6 @@ def test_the_completed_task_row_names_the_engine_truth_room(
 # agreeing with the mis-spoken origin.
 
 
-def _move_witness_records(
-    memory: MemoryStore, *, speaker: PlayerId, roles: Mapping[PlayerId, str]
-) -> tuple[MoveWitnessRecord, ...]:
-    """One speaker's witnessed transitions, the way the live accessor reads them.
-
-    Including the §4.7 teammate guard the accessor applies
-    (``TacticalAgent.move_witness_records_for_meeting``): an impostor's records
-    naming a fellow impostor never reach the meeting layer, so this census
-    measures the channel production actually feeds rather than a wider one.
-    """
-
-    fellows = (
-        frozenset(
-            pid for pid, role in roles.items() if role == "IMPOSTOR" and pid != speaker
-        )
-        if roles.get(speaker) == "IMPOSTOR"
-        else frozenset()
-    )
-    records: list[MoveWitnessRecord] = []
-    for event in memory.recent(since_tick=0):
-        if (
-            event.type != EVENT_SAW_PLAYER_MOVE
-            or event.provenance != PROVENANCE_OBSERVED
-        ):
-            continue
-        if event.payload.get("player_id") in fellows:
-            continue
-        subject = event.payload.get("player_id")
-        from_room = event.payload.get("from_room")
-        to_room = event.payload.get("to_room")
-        if (
-            isinstance(subject, str)
-            and isinstance(from_room, str)
-            and isinstance(to_room, str)
-        ):
-            records.append(
-                MoveWitnessRecord(
-                    subject=subject,
-                    from_room=from_room,
-                    to_room=to_room,
-                    tick=event.tick,
-                )
-            )
-    return tuple(records)
-
-
-def _vent_witness_records(memory: MemoryStore) -> tuple[VentWitnessRecord, ...]:
-    """One speaker's witnessed vents — the channel the recorded flags were minted with."""
-
-    records: list[VentWitnessRecord] = []
-    for event in memory.recent(since_tick=0):
-        if event.type != EVENT_SAW_PLAYER or event.provenance != PROVENANCE_OBSERVED:
-            continue
-        if event.payload.get("action") != OBSERVED_VENT_ACTION:
-            continue
-        subject = event.payload.get("player_id")
-        room = event.payload.get("room")
-        if isinstance(subject, str) and isinstance(room, str):
-            records.append(
-                VentWitnessRecord(subject=subject, room=room, tick=event.tick)
-            )
-    return tuple(records)
-
-
 def _move_backed_reading(
     resolved: _ResolvedFlag, memory: MemoryStore
 ) -> tuple[str, str] | None:
@@ -2521,7 +2463,6 @@ class _MovementCensus(NamedTuple):
     """One committed set's OFF→ON movement-lever counts, recounted from the bytes."""
 
     meetings: int
-    off_matches_recorded: int
     # Direction 1 — the I-7 class, priced OFF and followed into the ON output.
     origin_flags: int
     resolved_sighting_flags: int
@@ -2551,9 +2492,12 @@ def _movement_census(sample_dir: Path) -> _MovementCensus:
     """Re-derive every committed meeting's flags with the lever OFF and ON.
 
     The same walk the instrument runs, stopped at each ``MeetingOpened`` so each
-    speaker's movement channel is the memory they actually held there. The OFF
-    leg is checked against the recorded flags, so the ON leg is a counterfactual
-    on the real substrate and not on a drifted re-derivation.
+    speaker's movement channel is the memory they actually held there. The
+    census needs more than the channels -- the speaker's own memory and the
+    engine's rooms -- so it walks for itself, and builds its channels with the
+    shared builders in ``tests._helpers.committed``, with the living roster and
+    the trigger kind production passed. Both legs are counterfactuals: the
+    recording also carried the sighting channel, which neither leg passes.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
@@ -2597,36 +2541,38 @@ def _movement_census(sample_dir: Path) -> _MovementCensus:
                     }
                 elif isinstance(walk_event, MeetingOpened):
                     entry = walk_event.entry
-                    living = frozenset(
+                    roster = frozenset(
                         pid
                         for pid, player in walk_event.state.players.items()
                         if player.alive
                     )
-                    roster = frozenset(ballot.voter for ballot in entry.ballots)
+                    trigger_kind = meeting_trigger_kind(walk_event)
                     moves = {
-                        pid: _move_witness_records(
-                            memories[pid], speaker=pid, roles=roles
+                        pid: move_witness_records_for_meeting(
+                            memories[pid], holder=pid, roles=roles
                         )
-                        for pid in living
+                        for pid in roster
                     }
                     vents = {
-                        pid: _vent_witness_records(memories[pid]) for pid in living
+                        pid: vent_witness_records_for_meeting(memories[pid])
+                        for pid in roster
                     }
                     moves = {pid: rows for pid, rows in moves.items() if rows}
                     vents = {pid: rows for pid, rows in vents.items() if rows}
                     off = detect_contradictions(
-                        entry.transcript, roster=roster, vent_witness_records=vents
+                        entry.transcript,
+                        roster=roster,
+                        trigger_kind=trigger_kind,
+                        vent_witness_records=vents,
                     )
                     on = detect_contradictions(
                         entry.transcript,
                         roster=roster,
+                        trigger_kind=trigger_kind,
                         vent_witness_records=vents,
                         move_witness_records=moves,
                     )
                     counts["meetings"] += 1
-                    counts["off_matches_recorded"] += int(
-                        tuple(off) == tuple(entry.contradictions)
-                    )
                     counts["spoken_transitions"] += sum(
                         1
                         for turn in entry.transcript.turns
@@ -2741,7 +2687,6 @@ def _movement_census(sample_dir: Path) -> _MovementCensus:
 
     return _MovementCensus(
         meetings=counts["meetings"],
-        off_matches_recorded=counts["off_matches_recorded"],
         origin_flags=counts["origin_flags"],
         resolved_sighting_flags=counts["resolved_sighting_flags"],
         origin_strong=counts["origin_strong"],
@@ -2781,10 +2726,11 @@ def movement() -> Mapping[Path, _MovementCensus]:
 
 
 def test_the_movement_channel_drops_an_impostors_teammate_transitions() -> None:
-    # The §4.7 guard the live accessor applies, mirrored here so the census
-    # measures the channel production feeds. Re-indexing can mint a flag, so a
-    # transition the render hides from an impostor must not place its partner
-    # through this channel instead. Crew keep every row.
+    # The §4.7 guard the live accessor applies, mirrored in the shared builder
+    # so every census measures the channel production feeds. Re-indexing can
+    # mint a flag, so a transition the render hides from an impostor must not
+    # place its partner through this channel instead. A crew holder keeps every
+    # row but their own.
     memory = MemoryStore()
     for seq, subject in enumerate(("p-2", "p-3")):
         memory.append(
@@ -2800,12 +2746,50 @@ def test_the_movement_channel_drops_an_impostors_teammate_transitions() -> None:
                 observation_id=f"p-1:3:{seq}",
             )
         )
-    roles = {"p-1": "IMPOSTOR", "p-2": "IMPOSTOR", "p-3": "CREWMATE"}
+    roles = {"p-1": "IMPOSTOR", "p-2": "IMPOSTOR", "p-3": "CREWMATE", "p-4": "CREWMATE"}
 
-    impostor = _move_witness_records(memory, speaker="p-1", roles=roles)
+    impostor = move_witness_records_for_meeting(memory, holder="p-1", roles=roles)
     assert [record.subject for record in impostor] == ["p-3"]
-    crewmate = _move_witness_records(memory, speaker="p-3", roles=roles)
+    crewmate = move_witness_records_for_meeting(memory, holder="p-4", roles=roles)
     assert [record.subject for record in crewmate] == ["p-2", "p-3"]
+
+
+def test_the_movement_channel_drops_the_holders_own_transitions() -> None:
+    # The live accessor skips the holder's own rows (``player_id ==
+    # self.agent_id``). A planted memory holding one of each keeps only the
+    # other subject's row, and carries the episodic stamp it was read from. The
+    # planted switch restores the drift the builders once had.
+    memory = MemoryStore()
+    for seq, subject in enumerate(("p-3", "p-5")):
+        memory.append(
+            EpisodicEvent(
+                tick=4,
+                type=EVENT_SAW_PLAYER_MOVE,
+                payload={
+                    "player_id": subject,
+                    "from_room": "ADMIN",
+                    "to_room": "STORAGE",
+                },
+                provenance=PROVENANCE_OBSERVED,
+                observation_id=f"p-3:4:{seq}",
+            )
+        )
+    roles = {"p-3": "CREWMATE", "p-5": "CREWMATE"}
+
+    kept = move_witness_records_for_meeting(memory, holder="p-3", roles=roles)
+    assert kept == (
+        MoveWitnessRecord(
+            subject="p-5",
+            from_room="ADMIN",
+            to_room="STORAGE",
+            tick=4,
+            observation_id="p-3:4:1",
+        ),
+    )
+    planted = move_witness_records_for_meeting(
+        memory, holder="p-3", roles=roles, keep_holder_rows=True
+    )
+    assert [record.subject for record in planted] == ["p-3", "p-5"]
 
 
 def test_the_origin_reading_bites_on_a_destination_spoken_flag() -> None:
@@ -2854,29 +2838,17 @@ def test_the_origin_reading_bites_on_a_destination_spoken_flag() -> None:
     assert _move_backed_reading(_flag(room="MEDBAY", tick=3), MemoryStore()) is None
 
 
-# The records-free re-derivation these censuses run cannot reproduce a meeting
-# whose flags the MOVEMENT channel re-paired -- the replay persists no
-# ``MoveWitnessRecord`` rows, so those pairings are unrecoverable the way the
-# vent record's tick is (audits/audit-phase-20-baseline-7.md §10.3). Everything
-# else re-derives exactly, and the shortfall is pinned by set so it cannot drift.
-_REDERIVED_MEETINGS: Final[dict[Path, int]] = {
-    _SAMPLES_9P2I: 123,  # was 126, of 145 meetings
-    _CORPUS_9P2I: 382,  # was 369, of 449 meetings
-    _SAMPLES_4P1I: 39,  # every meeting
-    _CORPUS_4P1I: 43,  # every meeting
-}
+# Every committed meeting, which each census below must cover. Whether a
+# re-derivation reproduces the recording is the gate's question, answered with
+# all three private channels in tests/meetings/test_contradictions.py.
+# was _REDERIVED_MEETINGS {123, 382, 39, 43}: records-free OFF-leg matches per set
 _COMMITTED_MEETING_TOTAL: Final[int] = 676  # was 672
 
 
 @pytest.mark.slow
-def test_the_off_leg_re_derives_every_recoverable_meeting(
+def test_the_movement_census_covers_every_committed_meeting(
     movement: Mapping[Path, _MovementCensus],
 ) -> None:
-    # The counterfactual is only worth reading if its baseline IS the committed
-    # record. It is, on every meeting the replay carries enough to rebuild.
-    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
-        cell = movement[sample_dir]
-        assert cell.off_matches_recorded == _REDERIVED_MEETINGS[sample_dir]
     assert (
         sum(
             movement[d].meetings
@@ -2962,15 +2934,17 @@ def test_the_price_of_the_lever_in_the_other_direction(
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     per_set = [movement[d].new_flags for d in sets]
-    assert per_set == [0, 10, 0, 0]  # was [14, 43, 0, 0]
+    # MEASURED with the holder's own rows dropped from the move channel, as the
+    # live accessor drops them
+    assert per_set == [0, 9, 0, 0]  # was [0, 10, 0, 0]
     new_flags = sum(per_set)
-    assert new_flags == 10  # was 57
+    assert new_flags == 9  # was 10
     assert sum(movement[d].new_flags_strong for d in sets) == 0  # was 6
     # By SUBJECT role — the honest half of the price: most of the recovered
     # contradictions name crewmates, because crewmates misplace themselves too.
     assert sum(movement[d].new_subject_crewmate for d in sets) == 7  # was 48
-    assert sum(movement[d].new_subject_impostor for d in sets) == 3  # was 9
-    # Half of them rest on a placement the ENGINE agrees with — the subject
+    assert sum(movement[d].new_subject_impostor for d in sets) == 2  # was 3
+    # Five of the nine rest on a placement the ENGINE agrees with — the subject
     # really was in that room at that tick.
     assert sum(movement[d].new_destination_engine_true for d in sets) == 5  # was 10
     # The STRONG alibi_vs_sighting band the 13.14 lone-strong ruling can eject on.
@@ -3005,52 +2979,6 @@ _UNTOUCHED_BANDS: Final[tuple[str, ...]] = (
 )
 
 
-def _sighting_witness_records(
-    memory: MemoryStore, *, speaker: PlayerId, roles: Mapping[PlayerId, str]
-) -> tuple[SightingRecord, ...]:
-    """One speaker's first-hand sightings, as the prosecution channel gets them.
-
-    ``MeetingAwareAgent.sighting_records_for_meeting``: first-hand ``saw_player``
-    rows minus the INCRIMINATING actions (a witnessed vent or kill names its
-    subject an impostor and belongs to its own channel), with the co-presence
-    projection the record carries — then the §4.7 teammate guard
-    :class:`meetings.manager.MeetingManager` applies when it builds the mapping,
-    so this census measures the channel production actually feeds rather than a
-    wider one.
-    """
-
-    fellows = (
-        frozenset(
-            pid for pid, role in roles.items() if role == "IMPOSTOR" and pid != speaker
-        )
-        if roles.get(speaker) == "IMPOSTOR"
-        else frozenset()
-    )
-    rows: list[tuple[str, str, int]] = []
-    co_present: dict[tuple[int, str], set[str]] = {}
-    for event in memory.recent(since_tick=0):
-        if event.type != EVENT_SAW_PLAYER or event.provenance != PROVENANCE_OBSERVED:
-            continue
-        if event.payload.get("action") in (OBSERVED_VENT_ACTION, OBSERVED_KILL_ACTION):
-            continue
-        subject = event.payload.get("player_id")
-        room = event.payload.get("room")
-        if not isinstance(subject, str) or not isinstance(room, str):
-            continue
-        rows.append((subject, room, event.tick))
-        co_present.setdefault((event.tick, room), set()).add(subject)
-    return tuple(
-        SightingRecord(
-            subject=subject,
-            room=room,
-            tick=tick,
-            co_present=tuple(sorted(co_present.get((tick, room), set()) - {subject})),
-        )
-        for subject, room, tick in rows
-        if subject not in fellows
-    )
-
-
 def _record_supports(
     sighting: SawPlayerObservation, records: tuple[SightingRecord, ...]
 ) -> bool:
@@ -3074,7 +3002,6 @@ class _GroundedCensus(NamedTuple):
     """One committed set's grounded-prosecution counts, recounted from the bytes."""
 
     meetings: int
-    off_matches_recorded: int
     # The STRONG alibi_vs_sighting band on each leg.
     strong_off: int
     strong_grounded: int
@@ -3126,21 +3053,25 @@ def _strong_sightings(flags: tuple[ContradictionRef, ...]) -> list[Contradiction
 def _grounded_census(sample_dir: Path) -> _GroundedCensus:
     """Re-derive every committed meeting's flags on all four lever legs.
 
-    The same walk the movement census runs, stopped at each ``MeetingOpened`` so
-    each speaker's sighting channel is the memory they actually held there. The
-    OFF leg is checked against the recorded flags, so every ON reading is a
-    counterfactual on the real substrate.
+    Reads the channel walk cached in ``tests._helpers.committed``: each
+    speaker's vent, movement and sighting channels are the memory they held at
+    that meeting, projected as the live accessors project them, and every leg
+    passes the living roster and the trigger kind. The BOTH leg is
+    production's own call, which the gate in
+    tests/meetings/test_contradictions.py holds equal to the recording, so
+    every other leg is a counterfactual on the real substrate.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
-    game_map = load_canonical_map()
     roles_by_game = roles_by_seed(
         sample_dir,
         num_players=num_players,
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
-        game_map=game_map,
+        game_map=load_canonical_map(),
     )
+    no_moves: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] = MappingProxyType({})
+    no_sightings: Mapping[PlayerId, tuple[SightingRecord, ...]] = MappingProxyType({})
     counts: Counter[str] = Counter()
     bands: dict[str, Counter[str]] = {
         "off": Counter(),
@@ -3148,174 +3079,101 @@ def _grounded_census(sample_dir: Path) -> _GroundedCensus:
         "both": Counter(),
     }
 
-    for seed in seeds_on_disk(sample_dir):
-        roles = roles_by_game[seed]
-        memories: dict[PlayerId, MemoryStore] = {pid: MemoryStore() for pid in roles}
-        composites = {pid: AgentMemory(episodic=s) for pid, s in memories.items()}
-        audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-grounded-")
-        service = ObservationService(
-            game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
-        )
-        try:
-            for walk_event in walk_replay(
-                sample_dir / f"replay-seed-{seed}.jsonl",
-                seed=seed,
-                num_players=num_players,
-                num_impostors=num_impostors,
-                tasks_per_crewmate=tasks_per_crewmate,
-                game_map=game_map,
-                config=_WALK_CONFIG,
+    for meeting in committed_meetings(sample_dir):
+        entry = meeting.entry
+        roles = roles_by_game[meeting.seed]
+        sights = meeting.sighting_records
+        off = replace(
+            meeting, move_witness_records=no_moves, sighting_records=no_sightings
+        ).rederive()
+        grounded = replace(meeting, move_witness_records=no_moves).rederive()
+        move_only = replace(meeting, sighting_records=no_sightings).rederive()
+        both = meeting.rederive()
+        counts["meetings"] += 1
+        for leg, flags in (
+            ("off", off),
+            ("grounded", grounded),
+            ("both", both),
+        ):
+            bands[leg].update(_band_counts(flags))
+        counts["strong_off"] += len(_strong_sightings(off))
+        counts["strong_grounded"] += len(_strong_sightings(grounded))
+        counts["strong_move"] += len(_strong_sightings(move_only))
+        counts["strong_both"] += len(_strong_sightings(both))
+
+        # Nothing structural may move between OFF and the grounded leg.
+        off_by_id = {flag.contradiction_id: flag for flag in off}
+        for flag in grounded:
+            original = off_by_id.get(flag.contradiction_id)
+            if original is None:
+                counts["new_flags"] += 1
+            elif (
+                original.kind,
+                original.event_a_id,
+                original.event_b_id,
+                original.subjects,
+            ) != (
+                flag.kind,
+                flag.event_a_id,
+                flag.event_b_id,
+                flag.subjects,
             ):
-                if isinstance(walk_event, TickOpened):
-                    _perceive_tick(walk_event, service=service, memories=memories)
-                elif isinstance(walk_event, MeetingOpened):
-                    entry = walk_event.entry
-                    living = frozenset(
-                        pid
-                        for pid, player in walk_event.state.players.items()
-                        if player.alive
+                counts["structural_drift"] += 1
+        counts["count_drift"] += int(len(off) != len(grounded))
+
+        index = _event_index(entry.transcript)
+        for prefix, flags in (("", grounded), ("both_", both)):
+            for flag in _strong_sightings(flags):
+                resolved = _resolve_flag(flag, index=index)
+                if resolved is None:
+                    continue
+                counts[f"{prefix}surviving_sides"] += 1
+                counts[f"{prefix}surviving_sides_grounded"] += int(
+                    _record_supports(
+                        resolved.sighting, sights.get(resolved.speaker, ())
                     )
-                    roster = frozenset(ballot.voter for ballot in entry.ballots)
-                    vents = {
-                        pid: _vent_witness_records(memories[pid]) for pid in living
-                    }
-                    moves = {
-                        pid: _move_witness_records(
-                            memories[pid], speaker=pid, roles=roles
-                        )
-                        for pid in living
-                    }
-                    sights = {
-                        pid: _sighting_witness_records(
-                            memories[pid], speaker=pid, roles=roles
-                        )
-                        for pid in living
-                    }
-                    vents = {pid: rows for pid, rows in vents.items() if rows}
-                    moves = {pid: rows for pid, rows in moves.items() if rows}
-                    sights = {pid: rows for pid, rows in sights.items() if rows}
-                    off = detect_contradictions(
-                        entry.transcript, roster=roster, vent_witness_records=vents
-                    )
-                    grounded = detect_contradictions(
-                        entry.transcript,
-                        roster=roster,
-                        vent_witness_records=vents,
-                        sighting_records=sights,
-                    )
-                    move_only = detect_contradictions(
-                        entry.transcript,
-                        roster=roster,
-                        vent_witness_records=vents,
-                        move_witness_records=moves,
-                    )
-                    both = detect_contradictions(
-                        entry.transcript,
-                        roster=roster,
-                        vent_witness_records=vents,
-                        move_witness_records=moves,
-                        sighting_records=sights,
-                    )
-                    counts["meetings"] += 1
-                    counts["off_matches_recorded"] += int(
-                        tuple(off) == tuple(entry.contradictions)
-                    )
+                )
+        for leg, flags in (
+            ("off", off),
+            ("grounded", grounded),
+            ("both", both),
+        ):
+            subjects = {
+                subject
+                for flag in _strong_sightings(flags)
+                for subject in flag.subjects
+            }
+            counts[f"{leg}_subjects"] += len(subjects)
+            counts[f"{leg}_subject_impostors"] += sum(
+                1 for subject in subjects if roles.get(subject) == "IMPOSTOR"
+            )
+
+        # The I-3 per-victim population: the ejected player's only
+        # STRONG evidence was this class. Followed into both ON legs.
+        strong_all = [flag for flag in off if not is_weak_contradiction(flag)]
+        victim = entry.ejected_player_id
+        if entry.outcome == "EJECTED" and victim is not None:
+            on_victim = [flag for flag in strong_all if victim in flag.subjects]
+            if on_victim and all(
+                flag.kind == "alibi_vs_sighting" for flag in on_victim
+            ):
+                counts["sole_victims"] += 1
+                if roles.get(victim) == "IMPOSTOR":
+                    counts["sole_victim_impostors"] += 1
+                else:
                     for leg, flags in (
-                        ("off", off),
                         ("grounded", grounded),
                         ("both", both),
                     ):
-                        bands[leg].update(_band_counts(flags))
-                    counts["strong_off"] += len(_strong_sightings(off))
-                    counts["strong_grounded"] += len(_strong_sightings(grounded))
-                    counts["strong_move"] += len(_strong_sightings(move_only))
-                    counts["strong_both"] += len(_strong_sightings(both))
-
-                    # Nothing structural may move between OFF and the grounded leg.
-                    off_by_id = {flag.contradiction_id: flag for flag in off}
-                    for flag in grounded:
-                        original = off_by_id.get(flag.contradiction_id)
-                        if original is None:
-                            counts["new_flags"] += 1
-                        elif (
-                            original.kind,
-                            original.event_a_id,
-                            original.event_b_id,
-                            original.subjects,
-                        ) != (
-                            flag.kind,
-                            flag.event_a_id,
-                            flag.event_b_id,
-                            flag.subjects,
-                        ):
-                            counts["structural_drift"] += 1
-                    counts["count_drift"] += int(len(off) != len(grounded))
-
-                    index = _event_index(entry.transcript)
-                    for prefix, flags in (("", grounded), ("both_", both)):
-                        for flag in _strong_sightings(flags):
-                            resolved = _resolve_flag(flag, index=index)
-                            if resolved is None:
-                                continue
-                            counts[f"{prefix}surviving_sides"] += 1
-                            counts[f"{prefix}surviving_sides_grounded"] += int(
-                                _record_supports(
-                                    resolved.sighting, sights.get(resolved.speaker, ())
-                                )
+                        counts[f"sole_crewmate_still_strong_{leg}"] += int(
+                            any(
+                                victim in flag.subjects
+                                for flag in _strong_sightings(flags)
                             )
-                    for leg, flags in (
-                        ("off", off),
-                        ("grounded", grounded),
-                        ("both", both),
-                    ):
-                        subjects = {
-                            subject
-                            for flag in _strong_sightings(flags)
-                            for subject in flag.subjects
-                        }
-                        counts[f"{leg}_subjects"] += len(subjects)
-                        counts[f"{leg}_subject_impostors"] += sum(
-                            1
-                            for subject in subjects
-                            if roles.get(subject) == "IMPOSTOR"
                         )
-
-                    # The I-3 per-victim population: the ejected player's only
-                    # STRONG evidence was this class. Followed into both ON legs.
-                    strong_all = [
-                        flag for flag in off if not is_weak_contradiction(flag)
-                    ]
-                    victim = entry.ejected_player_id
-                    if entry.outcome == "EJECTED" and victim is not None:
-                        on_victim = [
-                            flag for flag in strong_all if victim in flag.subjects
-                        ]
-                        if on_victim and all(
-                            flag.kind == "alibi_vs_sighting" for flag in on_victim
-                        ):
-                            counts["sole_victims"] += 1
-                            if roles.get(victim) == "IMPOSTOR":
-                                counts["sole_victim_impostors"] += 1
-                            else:
-                                for leg, flags in (
-                                    ("grounded", grounded),
-                                    ("both", both),
-                                ):
-                                    counts[f"sole_crewmate_still_strong_{leg}"] += int(
-                                        any(
-                                            victim in flag.subjects
-                                            for flag in _strong_sightings(flags)
-                                        )
-                                    )
-                elif isinstance(walk_event, MeetingApplied):
-                    _fold_meeting_into_memories(walk_event, composites=composites)
-        finally:
-            service.close()
-            audit_dir.cleanup()
 
     return _GroundedCensus(
         meetings=counts["meetings"],
-        off_matches_recorded=counts["off_matches_recorded"],
         strong_off=counts["strong_off"],
         strong_grounded=counts["strong_grounded"],
         strong_move=counts["strong_move"],
@@ -3384,7 +3242,7 @@ def test_the_sighting_channel_drops_the_incriminating_rows() -> None:
             )
         )
     crew = {"p-1": "CREWMATE", "p-2": "CREWMATE"}
-    records = _sighting_witness_records(memory, speaker="p-1", roles=crew)
+    records = sighting_records_for_meeting(memory, holder="p-1", roles=crew)
     assert [record.tick for record in records] == [3]
 
 
@@ -3403,8 +3261,8 @@ def test_the_sighting_channel_drops_an_impostors_teammate_rows() -> None:
         )
     )
     roles = {"p-1": "IMPOSTOR", "p-2": "IMPOSTOR", "p-3": "CREWMATE"}
-    assert _sighting_witness_records(memory, speaker="p-1", roles=roles) == ()
-    assert len(_sighting_witness_records(memory, speaker="p-3", roles=roles)) == 1
+    assert sighting_records_for_meeting(memory, holder="p-1", roles=roles) == ()
+    assert len(sighting_records_for_meeting(memory, holder="p-3", roles=roles)) == 1
 
 
 def test_the_grounded_reading_bites_on_a_sighting_no_record_supports() -> None:
@@ -3422,16 +3280,12 @@ def test_the_grounded_reading_bites_on_a_sighting_no_record_supports() -> None:
 
 
 @pytest.mark.slow
-def test_the_grounded_off_leg_is_the_recorded_substrate(
+def test_the_grounded_census_covers_every_committed_meeting(
     grounded: Mapping[Path, _GroundedCensus],
 ) -> None:
-    # The counterfactual is only worth reading if its baseline IS the committed
-    # record: every recoverable meeting (``_REDERIVED_MEETINGS``) re-derives
-    # byte-identically with both levers off.
+    # The counterfactual is worth reading because its BOTH leg is production's
+    # own call, which the gate holds equal to the recording on every meeting.
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    for sample_dir in sets:
-        cell = grounded[sample_dir]
-        assert cell.off_matches_recorded == _REDERIVED_MEETINGS[sample_dir]
     assert sum(grounded[d].meetings for d in sets) == _COMMITTED_MEETING_TOTAL
     # Baseline 6's two baselines were 234 with neither rule and 268 with the
     # merged movement rule. On these bytes the class reads 42 and 19.
@@ -3536,45 +3390,103 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
 #
 # I-6 measures the geometry-blind aggregation: a STRONG ``alibi_vs_sighting``
 # convicts on two rooms that share a doorway, which one tick of walking
-# reconciles. This census re-derives the detector over the committed bytes with
-# the map lever OFF (the recorded substrate) and ON, reads the I-6 cell off both
-# legs with the INSTRUMENT's own classifier, and pins the one place the gauge and
-# the mechanism deliberately disagree.
+# reconciles. The map lever is unconditional now, so this census re-derives the
+# detector over the committed bytes on ONE leg, reads the I-6 cell off it with
+# the INSTRUMENT's own classifier, and holds the detector's tick rule to the
+# instrument's adjacency reading.
+#
+# The leg is records-free by design: the ballot roster, and no sighting,
+# movement or vent channel. With no sighting mapping the detector keeps its
+# pre-grounding rules, so the STRONG population here is a counterfactual
+# production never ran -- the widest class the two adjacency rules can disagree
+# on. The recorded flags are the gate's business (tests/meetings/
+# test_contradictions.py).
 
 
 class _CorridorCensus(NamedTuple):
-    """One committed set's I-6 counts on both legs, recounted from the bytes."""
+    """One committed set's I-6 counts on the records-free leg, recounted."""
 
     meetings: int
-    # The OFF leg IS the record for the class this lever touches.
-    sighting_flags_match_recorded: int
-    # The I-6 denominator: STRONG alibi_vs_sighting flags, per leg.
+    # The I-6 denominator: STRONG alibi_vs_sighting flags.
     strong_off: int
-    strong_on: int
     # The I-6 numerator: of those, the pairs one doorway apart.
     adjacent_off: int
-    adjacent_on: int
-    # The detector's own verdict, read against the instrument's.
-    demoted: int
-    demoted_but_not_adjacent: int
+    # The adjacent pairs the detector keeps STRONG. The leg IS the detector's
+    # output, so this is every adjacent pair above.
     adjacent_kept_strong: int
-    adjacent_kept_strong_min_gap: int
-    # Ejections whose only STRONG evidence loses its band under the lever.
-    sole_flag_ejections: int
+    # The detector's tick term over those kept pairs; ``None`` until one exists.
+    adjacent_kept_strong_min_gap: int | None
+    # The class the guard reports: kept pairs whose sighting sits within
+    # MAP_ARBITRATION_MAX_TICK_GAP of an interior stay boundary.
+    adjacent_kept_near_interior_boundary: int
+    # The production reading of the same kept pairs, matched to the recording by
+    # kind and both event ids: recorded STRONG, recorded weak, never minted.
+    adjacent_kept_recorded_strong: int
+    adjacent_kept_recorded_weak: int
+    adjacent_kept_not_recorded: int
 
 
-def _endpoint_gap(resolved: _ResolvedFlag) -> int:
-    """Ticks from the sighting to the NEAREST edge of the alibi window.
+def _alibi_stays(
+    resolved: _ResolvedFlag, *, index: Mapping[str, tuple[PlayerId, object]]
+) -> tuple[AlibiSegment, ...]:
+    """The flag's alibi side as the detector reads it: maximal stays.
 
-    The detector's tick term, restated from its definition rather than imported,
-    so the drift guard below compares two independent readings. Distinct from the
-    registered I-6 cell's ``gap``, which measures ticks OUTSIDE the window and is
-    therefore 0 on every minted flag.
+    An :class:`AlibiClaim` is its route through :func:`maximal_stays`; a
+    whereabouts claim is its one tick. Any other alibi side is a shape this
+    guard cannot measure, and it raises.
     """
 
+    for event_id in (resolved.flag.event_a_id, resolved.flag.event_b_id):
+        _speaker, artifact = index[event_id]
+        if isinstance(artifact, AlibiClaim):
+            return maximal_stays(artifact.route)
+        if isinstance(artifact, WhereaboutsClaim) and ":whereabouts:" in event_id:
+            return (
+                AlibiSegment(
+                    room=artifact.room, from_tick=artifact.tick, to_tick=artifact.tick
+                ),
+            )
+    raise AssertionError(f"{resolved.flag.contradiction_id}: no alibi side")
+
+
+def _endpoint_gap(resolved: _ResolvedFlag, *, route: tuple[int, int]) -> int:
+    """Ticks from the sighting to the NEAREST outer end of the alibi's route.
+
+    The detector's tick term (``meetings.transcript._adjacent_within_one_tick``),
+    restated from its definition rather than imported, so the drift guard below
+    compares two independent readings. It reads the ROUTE's outer ends -- the
+    first stay's ``from_tick`` and the last stay's ``to_tick`` -- because an
+    interior stay boundary is a transition the speaker declared, not movement
+    fuzz. Distinct from the registered I-6 cell's ``gap``, which measures ticks
+    OUTSIDE the stay window and is therefore 0 on every minted flag.
+    """
+
+    route_from, route_to = route
     return min(
-        resolved.sighting.tick - resolved.from_tick,
-        resolved.to_tick - resolved.sighting.tick,
+        resolved.sighting.tick - route_from,
+        route_to - resolved.sighting.tick,
+    )
+
+
+def _fold_min_gap(current: int | None, gap: int) -> int:
+    """The running minimum of the kept pairs' gaps, unset until the first one."""
+
+    return gap if current is None else min(current, gap)
+
+
+def _near_an_interior_boundary(tick: int, stays: Sequence[AlibiSegment]) -> bool:
+    """Whether ``tick`` sits within one tick of a boundary between two stays.
+
+    An interior boundary is where one stay ends and the next begins; a one-stay
+    account has none. One tick is ``MAP_ARBITRATION_MAX_TICK_GAP``, the fuzz the
+    detector grants at the route's outer ends.
+    """
+
+    boundaries = [stay.to_tick for stay in stays[:-1]] + [
+        stay.from_tick for stay in stays[1:]
+    ]
+    return any(
+        abs(tick - boundary) <= MAP_ARBITRATION_MAX_TICK_GAP for boundary in boundaries
     )
 
 
@@ -3592,127 +3504,69 @@ def _is_adjacent(
     return bool(reachable) and min(reachable) == 1
 
 
-def _vent_channel(
-    entry: MeetingReplayEntry,
-) -> dict[PlayerId, tuple[VentWitnessRecord, ...]]:
-    """Rebuild each speaker's groundable vent channel from the RECORDED flags.
-
-    The replay persists no private records, but a recorded ``vent_sighting`` flag
-    IS the record-time grounding verdict: its ``event_a_id`` names the spoken
-    observation that matched the speaker's own channel, so a record minted from
-    that observation's typed fields re-grounds it by construction. Without this
-    the re-derivation would drop every ``vent_sighting`` flag, and an ejection
-    backed by a grounded vent would be miscounted below as convicted on a
-    corridor alone.
-    """
-
-    flagged = {
-        flag.event_a_id for flag in entry.contradictions if flag.kind == "vent_sighting"
-    }
-    records: dict[PlayerId, list[VentWitnessRecord]] = {}
-    for turn in entry.transcript.turns:
-        for index, observation in enumerate(turn.observations):
-            if not isinstance(observation, SawVentObservation):
-                continue
-            if f"turn:{turn.turn_id}:obs:{index}" not in flagged:
-                continue
-            records.setdefault(turn.speaker, []).append(
-                VentWitnessRecord(
-                    subject=observation.subject,
-                    room=observation.room,
-                    tick=observation.tick,
-                )
-            )
-    return {speaker: tuple(rows) for speaker, rows in records.items()}
-
-
 def _corridor_census(sample_dir: Path) -> _CorridorCensus:
-    """Re-derive every committed meeting's flags OFF and ON.
+    """Re-derive every committed meeting's flags on the records-free leg.
 
-    The map rule is a pure function of the transcript and a frozen table, so this
-    census needs no memory reconstruction — only the vent channel rebuilt from the
-    recorded verdicts, so the victim's full STRONG evidence is on the table when
-    the sole-flag ejections are counted. The OFF leg is checked against the
-    recorded bytes for the one kind this lever can re-band.
+    The map rule is a pure function of the transcript and a frozen table, so
+    this census needs no memory reconstruction. Every adjacent STRONG pair is
+    measured two ways: the detector's tick term against the route's outer ends,
+    and the distance to the nearest interior stay boundary, which is the class
+    the guard reports.
     """
 
+    # was a lever-ON leg: the OFF call made twice, and the fields only it fed
+    # was a vent inversion, which only the sole-flag ejection count read
     distances = _room_distances(load_canonical_map())
     counts: Counter[str] = Counter()
-    min_gap = 0
+    min_gap: int | None = None
     for path in sorted(sample_dir.glob("replay-seed-*.jsonl")):
         for entry in read_all_entries(path):
             if not isinstance(entry, MeetingReplayEntry):
                 continue
             counts["meetings"] += 1
             roster = frozenset(ballot.voter for ballot in entry.ballots)
-            vents = _vent_channel(entry)
-            off = detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=vents
-            )
-            on = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-            )
-            counts["sighting_flags_match_recorded"] += int(
-                _sighting_flags(off) == _sighting_flags(entry.contradictions)
-            )
+            flags = detect_contradictions(entry.transcript, roster=roster)
             index = _event_index(entry.transcript)
-            weak_on = {
-                flag.contradiction_id for flag in on if is_weak_contradiction(flag)
+            recorded = {
+                (flag.kind, flag.event_a_id, flag.event_b_id): flag
+                for flag in entry.contradictions
             }
-            for flag in _strong_sightings(off):
+            for flag in _strong_sightings(flags):
                 counts["strong_off"] += 1
                 resolved = _resolve_flag(flag, index=index)
-                if resolved is None:
+                if resolved is None or not _is_adjacent(resolved, distances=distances):
                     continue
-                adjacent = _is_adjacent(resolved, distances=distances)
-                demoted = flag.contradiction_id in weak_on
-                counts["adjacent_off"] += int(adjacent)
-                counts["demoted"] += int(demoted)
-                counts["demoted_but_not_adjacent"] += int(demoted and not adjacent)
-                if adjacent and not demoted:
-                    counts["adjacent_kept_strong"] += 1
-                    gap = _endpoint_gap(resolved)
-                    min_gap = gap if min_gap == 0 else min(min_gap, gap)
-            for flag in _strong_sightings(on):
-                counts["strong_on"] += 1
-                resolved = _resolve_flag(flag, index=index)
-                if resolved is not None:
-                    counts["adjacent_on"] += int(
-                        _is_adjacent(resolved, distances=distances)
-                    )
-            victim = entry.ejected_player_id
-            if entry.outcome == "EJECTED" and victim is not None:
-                on_victim = [
-                    flag
-                    for flag in off
-                    if not is_weak_contradiction(flag) and victim in flag.subjects
-                ]
-                if on_victim and all(
-                    flag.contradiction_id in weak_on for flag in on_victim
-                ):
-                    counts["sole_flag_ejections"] += 1
+                counts["adjacent_off"] += 1
+                counts["adjacent_kept_strong"] += 1
+                stays = _alibi_stays(resolved, index=index)
+                gap = _endpoint_gap(
+                    resolved, route=(stays[0].from_tick, stays[-1].to_tick)
+                )
+                min_gap = _fold_min_gap(min_gap, gap)
+                counts["adjacent_kept_near_interior_boundary"] += int(
+                    _near_an_interior_boundary(resolved.sighting.tick, stays)
+                )
+                twin = recorded.get((flag.kind, flag.event_a_id, flag.event_b_id))
+                if twin is None:
+                    counts["adjacent_kept_not_recorded"] += 1
+                elif is_weak_contradiction(twin):
+                    counts["adjacent_kept_recorded_weak"] += 1
+                else:
+                    counts["adjacent_kept_recorded_strong"] += 1
 
     return _CorridorCensus(
         meetings=counts["meetings"],
-        sighting_flags_match_recorded=counts["sighting_flags_match_recorded"],
         strong_off=counts["strong_off"],
-        strong_on=counts["strong_on"],
         adjacent_off=counts["adjacent_off"],
-        adjacent_on=counts["adjacent_on"],
-        demoted=counts["demoted"],
-        demoted_but_not_adjacent=counts["demoted_but_not_adjacent"],
         adjacent_kept_strong=counts["adjacent_kept_strong"],
         adjacent_kept_strong_min_gap=min_gap,
-        sole_flag_ejections=counts["sole_flag_ejections"],
+        adjacent_kept_near_interior_boundary=counts[
+            "adjacent_kept_near_interior_boundary"
+        ],
+        adjacent_kept_recorded_strong=counts["adjacent_kept_recorded_strong"],
+        adjacent_kept_recorded_weak=counts["adjacent_kept_recorded_weak"],
+        adjacent_kept_not_recorded=counts["adjacent_kept_not_recorded"],
     )
-
-
-def _sighting_flags(
-    flags: tuple[ContradictionRef, ...],
-) -> tuple[ContradictionRef, ...]:
-    return tuple(flag for flag in flags if flag.kind == "alibi_vs_sighting")
 
 
 @pytest.fixture(scope="module")
@@ -3734,9 +3588,9 @@ def corridors() -> Mapping[Path, _CorridorCensus]:
 
 def test_the_endpoint_gap_is_not_the_registered_cells_gap() -> None:
     # The two tick terms measure different things, which is the whole reason the
-    # drift guard below has an enumerated difference. The registered cell's gap
-    # is ticks OUTSIDE the window — 0 on any minted flag; this one is the distance
-    # to the nearest endpoint, which grows toward the window's middle.
+    # drift guard below restates the detector's. The registered cell's gap is
+    # ticks OUTSIDE the window — 0 on any minted flag; this one is the distance
+    # to the route's nearest outer end, which grows toward the route's middle.
     edge = _resolved(
         alibi_room="ENGINEERING",
         sighting_room="EAST_HALL",
@@ -3751,7 +3605,10 @@ def test_the_endpoint_gap_is_not_the_registered_cells_gap() -> None:
         to_tick=8,
         sighting_tick=6,
     )
-    assert (_endpoint_gap(edge), _endpoint_gap(interior)) == (0, 2)
+    assert (
+        _endpoint_gap(edge, route=(4, 8)),
+        _endpoint_gap(interior, route=(4, 8)),
+    ) == (0, 2)
     distances = _room_distances(load_canonical_map())
     tallies = _Tallies()
     _fold_geometry(interior, distances=distances, tallies=tallies)
@@ -3761,9 +3618,71 @@ def test_the_endpoint_gap_is_not_the_registered_cells_gap() -> None:
     assert _is_adjacent(interior, distances=distances) is True
 
 
+def test_the_endpoint_gap_reads_the_route_not_the_stay() -> None:
+    # A sighting on the first tick of a later stay is ON its stay's edge but two
+    # ticks inside the route: the detector's term reads the route.
+    later_stay = _resolved(
+        alibi_room="LABS",
+        sighting_room="MEDBAY",
+        from_tick=8,
+        to_tick=12,
+        sighting_tick=8,
+    )
+    assert _endpoint_gap(later_stay, route=(2, 12)) == 4
+    assert _endpoint_gap(later_stay, route=(8, 12)) == 0
+
+
+def test_the_minimum_fold_keeps_a_zero_after_a_non_zero_gap() -> None:
+    # The guard's minimum starts unset. The old fold used 0 as "unset", so a
+    # genuine 0 was overwritten by the next non-zero gap -- the very gap the
+    # guard exists to catch.
+    gaps = (2, 0, 3)
+    fold: int | None = None
+    for gap in gaps:
+        fold = _fold_min_gap(fold, gap)
+    assert fold == 0
+
+    old = 0
+    for gap in gaps:
+        old = gap if old == 0 else min(old, gap)
+    assert old == 3
+
+
+def test_the_interior_boundary_reading_counts_one_tick_and_not_two() -> None:
+    stays = (
+        AlibiSegment(room="ADMIN", from_tick=2, to_tick=5),
+        AlibiSegment(room="STORAGE", from_tick=6, to_tick=12),
+        AlibiSegment(room="MEDBAY", from_tick=13, to_tick=20),
+    )
+    # One tick from the ADMIN/STORAGE boundary (6), and on it.
+    assert _near_an_interior_boundary(7, stays) is True
+    assert _near_an_interior_boundary(6, stays) is True
+    # Two ticks from every boundary (5, 6, 12, 13).
+    assert _near_an_interior_boundary(8, stays) is False
+    assert _near_an_interior_boundary(10, stays) is False
+    # A one-stay account has no interior boundary at all.
+    assert _near_an_interior_boundary(2, stays[:1]) is False
+
+
+def test_the_alibi_side_reader_refuses_a_shape_it_cannot_measure() -> None:
+    resolved = _resolved(
+        alibi_room="ENGINEERING",
+        sighting_room="EAST_HALL",
+        from_tick=4,
+        to_tick=8,
+        sighting_tick=6,
+    )
+    index: Mapping[str, tuple[PlayerId, object]] = {
+        "a": ("p-9", _saw_player(room="EAST_HALL")),
+        "b": ("p-3", _saw_player(room="ENGINEERING")),
+    }
+    with pytest.raises(AssertionError, match="no alibi side"):
+        _alibi_stays(resolved, index=index)
+
+
 def test_the_adjacency_reading_bites_on_a_two_hop_pair() -> None:
-    # The 148/148 agreement below would pass vacuously if _is_adjacent said yes to
-    # everything: the map's distance has to matter.
+    # The adjacency counts below would pass vacuously if _is_adjacent said yes
+    # to everything: the map's distance has to matter.
     distances = _room_distances(load_canonical_map())
     for room, expected in (("EAST_HALL", True), ("CAFETERIA", False), ("LABS", False)):
         resolved = _resolved(
@@ -3777,79 +3696,94 @@ def test_the_adjacency_reading_bites_on_a_two_hop_pair() -> None:
 
 
 @pytest.mark.slow
-def test_the_corridor_off_leg_is_the_recorded_substrate(
+def test_the_corridor_census_covers_every_committed_meeting(
     corridors: Mapping[Path, _CorridorCensus],
 ) -> None:
-    # The counterfactual is only worth reading if its baseline IS the record: on
-    # every committed meeting the OFF leg re-derives the recorded
-    # ``alibi_vs_sighting`` flags — the only kind this lever can move.
+    # was also the OFF leg against _REDERIVED_MEETINGS; the gate now holds that
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    for sample_dir in sets:
-        cell = corridors[sample_dir]
-        assert cell.sighting_flags_match_recorded == _REDERIVED_MEETINGS[sample_dir]
     assert sum(corridors[d].meetings for d in sets) == _COMMITTED_MEETING_TOTAL
     assert sum(corridors[d].strong_off for d in sets) == 42  # was 21; baseline 6: 234
 
 
 @pytest.mark.slow
-def test_i6_adjacent_room_strong_share_off_and_on(
+def test_i6_adjacent_room_strong_share_on_the_records_free_leg(
     corridors: Mapping[Path, _CorridorCensus],
 ) -> None:
-    """The registered I-6 cell, re-derived on both legs of this lever."""
+    """The registered I-6 cell, re-derived on the census's one leg."""
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     off = [(corridors[d].adjacent_off, corridors[d].strong_off) for d in sets]
-    on = [(corridors[d].adjacent_on, corridors[d].strong_on) for d in sets]
-    # OFF: the review's pooled 148/234 = 63.2%, re-derived here rather than
-    # restated. On these bytes the re-derived class is 42 STRONG flags, 29 of
-    # them one doorway apart (the report cell reads the recorded flags instead).
+    # The review's pooled 148/234 = 63.2%, re-derived here rather than restated.
+    # On these bytes the re-derived class is 42 STRONG flags, 29 of them one
+    # doorway apart (the report cell reads the recorded flags instead).
+    # was also an ON half, the same call as the OFF one since the lever graduated
     assert off == [(5, 7), (24, 35), (0, 0), (0, 0)]  # was [(0, 7), (2, 14), ...]
     assert (sum(n for n, _ in off), sum(d for _, d in off)) == (29, 42)  # was (2, 21)
-    # ON: the lever is unconditional, so the two legs are one walk and nothing
-    # is demoted (when first measured, 140 of 148 adjacent flags were).
-    assert on == [(5, 7), (24, 35), (0, 0), (0, 0)]  # was [(0, 7), (2, 14), ...]
-    assert (sum(n for n, _ in on), sum(d for _, d in on)) == (29, 42)  # was (2, 21)
-    assert sum(corridors[d].demoted for d in sets) == 0
 
 
 @pytest.mark.slow
 def test_the_instrument_and_the_detector_read_one_adjacency_rule(
     corridors: Mapping[Path, _CorridorCensus],
 ) -> None:
-    """The drift guard: one gauge, one mechanism, one enumerated difference."""
+    """The drift guard: one gauge, one mechanism, one enumerated difference.
 
+    The instrument calls a pair adjacent at one doorway, whatever the tick; the
+    detector bands it weak only when the sighting also sits within one tick of
+    the ROUTE's outer ends (``_endpoint_gap``). So every adjacent pair the
+    detector keeps STRONG must sit two or more ticks inside its route. The
+    minimum starts unset, so a zero gap anywhere in the fold survives to the
+    assertion.
+
+    Two readings of the same 29 kept pairs, both pinned. By design the census
+    is records-free and pre-grounding (no sighting channel), so 29 is a
+    counterfactual population. Of those 29, the recording holds 1 as STRONG
+    (ml_corpus/9p2i seed 1041 meeting 1, with a stay-relative gap of 0: the
+    member tests/meetings/test_contradictions.py names as the one committed
+    ejection riding a STRONG sighting flag), 5 as weak, and 23 were never
+    minted.
+    """
+
+    # was also direction 1 (nothing demoted off-adjacent), 0 by construction
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    # Direction 1 — the detector never demotes a pair the instrument does not
-    # call adjacent. A single such flag means the two are measuring two rules.
-    assert sum(corridors[d].demoted_but_not_adjacent for d in sets) == 0
-    # Direction 2 — the KNOWN difference, enumerated: 8 of the 148 adjacent flags
-    # sit two or more ticks inside their alibi window, so the tick half of the
-    # detector's predicate keeps them STRONG while the instrument still counts
-    # them adjacent. 148 - 140 = 8, and every one of them clears the tick bar.
     kept = sum(corridors[d].adjacent_kept_strong for d in sets)
     assert kept == 29  # was 2
-    assert sum(corridors[d].adjacent_off for d in sets) - kept == sum(
-        corridors[d].demoted for d in sets
+    assert sum(corridors[d].adjacent_off for d in sets) == kept
+    gaps = [
+        gap
+        for gap in (corridors[d].adjacent_kept_strong_min_gap for d in sets)
+        if gap is not None
+    ]
+    assert gaps
+    assert min(gaps) >= MAP_ARBITRATION_MAX_TICK_GAP + 1
+    recorded = (
+        sum(corridors[d].adjacent_kept_recorded_strong for d in sets),
+        sum(corridors[d].adjacent_kept_recorded_weak for d in sets),
+        sum(corridors[d].adjacent_kept_not_recorded for d in sets),
     )
-    assert min(
-        corridors[d].adjacent_kept_strong_min_gap
-        for d in sets
-        if corridors[d].adjacent_kept_strong
-    ) >= (MAP_ARBITRATION_MAX_TICK_GAP + 1)
+    assert recorded == (1, 5, 23)
 
 
+# was test_the_ejections_that_lose_their_only_strong_flag, 0 by construction
 @pytest.mark.slow
-def test_the_ejections_that_lose_their_only_strong_flag(
+def test_the_guard_reports_the_interior_boundary_class(
     corridors: Mapping[Path, _CorridorCensus],
 ) -> None:
-    # What the lever costs the meeting: 47 committed ejections were decided with
-    # no STRONG evidence against the victim except flags this rule re-bands to
-    # weak. They still inform — the flag set is identical — but they can no
-    # longer eject alone.
+    """The kept pairs a one-tick fuzz at an interior stay boundary would explain.
+
+    Counted, not blessed. Every one of the 29 kept pairs sits on a route of
+    more than one stay, two or more ticks from its outer ends, so the detector
+    keeps it STRONG by design; this many of them sit within
+    ``MAP_ARBITRATION_MAX_TICK_GAP`` of a boundary the speaker declared between
+    two stays. Whether such a pair should band weak is a rule question for the
+    owner (S-1 in tasks/decision-2026-09-23-reground-keying-environment-tests.md),
+    not this test's; its one recorded instance is the STRONG member the guard
+    above names.
+    """
+
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    per_set = [corridors[d].sole_flag_ejections for d in sets]
-    assert per_set == [0, 0, 0, 0]
-    assert sum(per_set) == 0
+    near = [corridors[d].adjacent_kept_near_interior_boundary for d in sets]
+    assert sum(near) == 26
+    assert sum(near) <= sum(corridors[d].adjacent_kept_strong for d in sets)
 
 
 # --------------------------------------------------------------------------- #
@@ -4182,15 +4116,14 @@ def test_the_on_leg_does_not_reach_the_contracts_row_ceiling(
 
 
 @pytest.mark.slow
-def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
+def test_the_band_change_is_what_costs_first_hand_coverage(
     render_budget: _RenderBudgetCensus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The coalesced render's two halves, priced apart on the same walk: with the
-    # reported band patched back to its PRE-coalesce value, the span + spawn fold
-    # alone renders FEWER rows that account for MORE first-hand subject-ticks
-    # than the recorded document -- it is compression, not loss. Raising the band
-    # is the half that spends that coverage, and this is where its price is
-    # stated.
+    # The raised reported band's price, on the same walk: with the band patched
+    # back to its PRE-coalesce value, the render keeps MORE first-hand sighting
+    # rows and accounts for MORE first-hand subject-ticks than the recorded
+    # document. Raising the band is the half of the coalesced render that spends
+    # that coverage, and this is where its price is stated.
     monkeypatch.setattr(
         memory_store,
         "_SALIENCE_REPORTED_TESTIMONY",
@@ -4199,14 +4132,17 @@ def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
 
     fold_only = _render_budget_census(_SAMPLES_9P2I)
 
-    # Baseline 6 read 40,924 rows / 39,012 covered ticks on this leg. With the
-    # band patched back the fold alone renders FEWER rows than the recorded
-    # document and accounts for MORE first-hand subject-ticks: compression, not
-    # loss. Raising the band is the half that spends coverage, and the recorded
-    # render (which has it raised) covers less than this leg does.
+    # Baseline 6 read 40,924 rows / 39,012 covered ticks on this leg. Row counts
+    # are capped by the character budget (see the test above), so how many rows
+    # a render shows says nothing about compression here; the pins record them.
+    # was also rows < the recorded rows: its comparand, the lever-OFF uncoalesced
+    # render, was deleted at graduation
     assert fold_only.rows_on == 32_123  # was 31_702
-    assert fold_only.rows_on < render_budget.rows_off
+    assert fold_only.sightings_on == 18_100
     assert fold_only.covered_on == 28_359  # was 29_894
+    # The mechanism of the coverage gain: the band patched back keeps more
+    # first-hand sighting rows, and they cover more subject-ticks.
+    assert fold_only.sightings_on > render_budget.sightings_on
     assert fold_only.covered_on > render_budget.covered_on
 
 

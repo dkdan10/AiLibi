@@ -1,6 +1,6 @@
 # Re-derive the committed meetings through their true private channels
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -35,8 +35,9 @@ Every `file:line` in this card is at `95fb894b`, the base the three sibling card
 re-verify at dispatch. A measured count comes from one of two places:
 - the tree, with the command given in Validation;
 - the orchestrator's 2026-09-23 decision memo, or its `signals.md` and `bugs_other.md`
-  investigation memos. These are notes outside the tree, in
-  `tasks/investigations-2026-09-23/`.
+  investigation memos. These are committed: the memo at
+  [tasks/decision-2026-09-23-reground-keying-environment-tests.md](../decision-2026-09-23-reground-keying-environment-tests.md)
+  and the investigation memos under `tasks/investigations-2026-09-23/`.
 
 Re-measure every memo count at dispatch, and pin what you measure, not the memo's figure.
 
@@ -201,7 +202,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
 
 ## Acceptance
 
-- [ ] **One home for the three private channels, matched to the live accessors.**
+- [x] **One home for the three private channels, matched to the live accessors.**
   - **Move.** The move, vent and sighting builders move into `tests/_helpers/committed.py`,
     together with the walk that feeds them, cached per set.
   - **Yield.** For each committed meeting the helper yields its set, seed, entry, living roster,
@@ -225,7 +226,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
     other subject's;
   - the three guard tests (`tests/eval/test_evidence_honesty.py:2783`, `:3365`, `:3391`) run
     against the helper's builders.
-- [ ] **The gate: with all three channels, the re-derivation equals the recording on 676 of 676
+- [x] **The gate: with all three channels, the re-derivation equals the recording on 676 of 676
   committed meetings.**
   - **Comparison.** Full model equality (every field, descriptions included), with the living
     roster, the trigger kind and every channel as production threads them.
@@ -249,7 +250,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
   so it needs no second walk (craft rule 2). The other two are committed tests too when they
   need no second walk; otherwise each is quoted in Results with its command, and Results lists
   it as a limitation.
-- [ ] **T1 is re-scoped under the owner's 2026-09-23 ruling (Q5), not repaired.**
+- [x] **T1 is re-scoped under the owner's 2026-09-23 ruling (Q5), not repaired.**
   - **Channels.** The census (`_grounded_prosecution_census`,
     `tests/meetings/test_contradictions.py:3993`) reads the helper's vent and movement channels,
     living roster and trigger kind on all three legs. It keeps its two
@@ -270,7 +271,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
 
   Mechanism: the pin and the bracket assertion. Perturbed proof: the census run without the
   movement channel reads (8, 113) again, and the pin fails.
-- [ ] **T2 is re-scoped under the same ruling, to the recorded set.**
+- [x] **T2 is re-scoped under the same ruling, to the recorded set.**
   - **Source.** It reads `entry.contradictions`, which the gate proves equal to production.
   - **Assertion.** The committed ejections whose ejectee carries a STRONG `alibi_vs_sighting`
     flag are exactly {`ml_corpus/9p2i` seed 1041 meeting 1}. Adding or losing a member fails,
@@ -286,7 +287,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
   Mechanism: the named-set equality. Planted proof: `test_the_search_finds_a_planted_conviction`
   (`tests/meetings/test_contradictions.py:4191`) stays unchanged and green, so the predicate is
   shown to fire.
-- [ ] **T5 returns to pure exactness.**
+- [x] **T5 returns to pure exactness.**
   - **Assertion.** The class walk reads the helper's channels for `samples/9p2i` and asserts no
     removed and no added flag on 145 of 145 meetings, every kind included. Recorded total equals
     re-derived total (memo: 107).
@@ -303,7 +304,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
   Mechanism: the exactness assertion. Perturbed proof: dropping the movement channel diverges
   exactly at the `samples/9p2i` meetings the helper names. By the memo's arithmetic that is 17;
   re-measure it.
-- [ ] **T3 is re-anchored on the band order.**
+- [x] **T3 is re-anchored on the band order.**
   - **Deleted.** The flat `_SURVIVAL_FLOOR = 0.80` (`tests/agents/test_reported_testimony.py:791`)
     and its loop (`:970-976`) go, with one history line. The floor was a Phase-20 acceptance
     target, met on the baseline-7 and baseline-8 bytes; these bytes read 0.786 in the >150
@@ -332,7 +333,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
 
   Mechanism: the per-render assertion. Planted proof: re-banding testimony to 25 by monkeypatch,
   as T4 already does, fails it (memo: 6,319 lower rows survive).
-- [ ] **T4's retired ordering is deleted.**
+- [x] **T4's retired ordering is deleted.**
   - **The ordering.** `fold_only.rows_on < render_budget.rows_off`
     (`tests/eval/test_evidence_honesty.py:4208`) goes, with one history line. Its comparand was
     the lever-OFF, uncoalesced render (49,590 rows at baseline 6), and it was deleted when the
@@ -347,7 +348,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
   band patch is the recorded census itself, so both strict inequalities fail. This is shown once
   in Results with its command, not committed, because committing it would repeat the walk;
   Results records that as a limitation.
-- [ ] **The adjacency guard reads the detector's rule, and reports the class instead of blessing
+- [x] **The adjacency guard reads the detector's rule, and reports the class instead of blessing
   it.**
   - **The tick term.** `_endpoint_gap` (`tests/eval/test_evidence_honesty.py:3566-3578`) measures
     from the route's outer ends through `maximal_stays`:
@@ -390,7 +391,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
     sentinel read the non-zero gap);
   - a synthetic flag one tick from an interior boundary is counted by the class pin, and one two
     ticks from every boundary is not.
-- [ ] **The records-free stand-ins are retired under craft rule 3.** Each gets one history line
+- [x] **The records-free stand-ins are retired under craft rule 3.** Each gets one history line
   and is deleted only once its last consumer has been dispositioned.
 
   Retired:
@@ -426,7 +427,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
 
   Mechanism: the `_rederive` grep in Validation, re-run at the head, lists only dispositioned
   sites. Proof: at `95fb894b` it lists 21 lines.
-- [ ] **No comment still says a private channel cannot be rebuilt from the replay.**
+- [x] **No comment still says a private channel cannot be rebuilt from the replay.**
   - **Scope.** Every such statement is corrected; the decision memo's list is the floor, not the
     ceiling.
   - **The 15 lines the Validation grep finds at `95fb894b`:**
@@ -440,7 +441,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
 
   Mechanism: the grep, re-run at the head, with each surviving hit explained in Results. Proof:
   the 15 hits at `95fb894b`.
-- [ ] **The stale "one segment" docstring in `eval/evidence_honesty.py` is restated, and no
+- [x] **The stale "one segment" docstring in `eval/evidence_honesty.py` is restated, and no
   other production byte moves.**
   - **The claim.** `eval/evidence_honesty.py:2295-2297` says that every committed recording
     carries a one-stay account.
@@ -458,7 +459,7 @@ file under `--dist loadfile` (`scripts/check.sh:41`). The spend is `$0`.
 
   Perturbed proof: run on a scratch copy that carries a one-token code edit, the AST check
   names the file.
-- [ ] **The six ids leave the red list, and none joins it.** Run `bash scripts/check.sh` whole,
+- [x] **The six ids leave the red list, and none joins it.** Run `bash scripts/check.sh` whole,
   in a clean worktree at the head:
   - the six ids, or their renamed successors, pass. Results maps each old id to its new one.
   - no failing id falls outside the re-ground card's ML list and card C's three ids;
@@ -662,4 +663,322 @@ control, and the per-worker wall cost of the new walk.
 
 ## Results
 
-Not started.
+**Delivered, at `beeaedd8` (five commits on `ff4c6bb8`).** The three private channels have
+one home, `tests/_helpers/committed.py`. That home re-derives all 676 committed meetings
+exactly. The six ids are green under their new names. `bash scripts/check.sh` fails on
+exactly `main`'s red ids minus these six. No recorded byte, prompt byte, detector output,
+served payload, fixture or registry row moved. The one production edit is docstring
+lines in `eval/evidence_honesty.py`. Record impact: none.
+
+**References.**
+- [`docs/architecture.md`](../../docs/architecture.md) "Determinism and the substrate
+  ladder": the recording is the reproducibility boundary. The gate is the test-side
+  reading of that boundary: the detector, given what production gave it, reproduces the
+  recorded flags byte for byte.
+- The same file's "Enforced boundaries": only `tests/` imports across packages here.
+  `agents/`, `engine/`, `meetings/`, `observation/` and `orchestrator/` are unchanged.
+- AGENTS.md load-bearing rule 1 (determinism) is what T5 now pins. Craft rule 2 (planted
+  cases), rule 3 (retire means delete, one history line) and rule 5 (claims name their
+  mechanism) govern the rest.
+- The ruling relied on is Q5 of [the re-ground card](ml-reground-baseline-9.md), quoted
+  in Evidence. T1 and T2 say in their docstrings that they are re-scopes under it.
+- The decision memo, §4 (signals), §5 item 2 (the adjacency guard) and §6 card B.
+
+**Decisions.**
+- **The home.** `CommittedMeeting` is a frozen dataclass that holds set, seed, entry,
+  living roster, trigger kind and three read-only channel mappings. `rederive()` passes
+  every argument production passed. `walk_committed_meetings` is the uncached walk and
+  `committed_meetings(set_dir)` is the cached accessor.
+  - The trigger kind is derived by calling production's two steps:
+    `orchestrator.game._build_meeting_trigger`, then `meetings.manager._trigger_is_emergency`.
+  - The builders carry the live accessors' names and add `observation_id`. The move
+    builder drops the holder's own rows.
+- **The self-row plant is committed.** The card allowed quoting it in Results if it
+  needed a second walk. It needs a one-game walk (ml_corpus/9p2i seed 1035), so it runs
+  as `test_keeping_the_holders_own_move_rows_diverges_at_one_meeting`.
+  - The builder's `keep_holder_rows` switch exists only to plant the drift, and its
+    docstring says so.
+  - The site is allow-listed in `UNCACHED_BY_DESIGN` with its reason.
+- **`MOVEMENT_DECIDED_MEETINGS` lives in the helper.** It holds the 68 measured names
+  where dropping the movement channel diverges. The gate control reads all 68 and T5's
+  control reads the 17 `samples/9p2i` names. This is the "meetings the helper names" of
+  the T5 acceptance item.
+- **The gate's home** is `TestLiveDetectorCommittedBytesByteIdentity` in
+  `tests/meetings/test_contradictions.py`. It replaces
+  `test_re_derivation_equals_recorded_on_every_committed_meeting`, and its determinism
+  half moves into the gate.
+- **The corridor census is records-free by design.** It uses the ballot roster and passes
+  no channel. `_vent_channel` fed only the deleted sole-flag ejection count. Measured
+  before deleting it: the inversion changes no `alibi_vs_sighting` flag on any of the
+  676 meetings.
+- **The production reading is pinned too.** The guard's docstring states it, so the
+  census now also matches its kept pairs to the recording by kind and both event ids,
+  and pins (1 STRONG, 5 weak, 23 never minted).
+- **T4 pins the sighting rows it adds.** Its new inequality is backed by a pin,
+  `fold_only.sightings_on == 18_100`.
+- **Commits are one per file group,** not the card's seven steps. The gate, T1 and T2
+  share `test_contradictions.py` and the census re-scopes read the gate's helper, so
+  they are one commit. Every commit carries the card path.
+
+**The six ids, old -> new** (all pass at `beeaedd8`):
+
+| # | old id | new id |
+|---|---|---|
+| T1 | `tests/meetings/test_contradictions.py::TestGroundedProsecutionCommittedCensus::test_the_fully_grounded_leg_drops_the_whole_class` | `...::TestGroundedProsecutionCommittedCensus::test_the_fully_grounded_leg_keeps_two_strong_on_these_bytes` |
+| T2 | `tests/meetings/test_contradictions.py::TestGroundedProsecutionInjusticeShapes::test_no_committed_ejection_rides_a_strong_sighting_flag` | `...::TestGroundedProsecutionInjusticeShapes::test_the_committed_strong_sighting_convictions_are_the_named_set` |
+| T3 | `tests/agents/test_reported_testimony.py::test_reported_rows_survive_in_every_candidate_bucket` | `tests/agents/test_reported_testimony.py::test_a_render_that_sheds_testimony_keeps_no_lower_band_row` |
+| T4 | `tests/eval/test_evidence_honesty.py::test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage` | `tests/eval/test_evidence_honesty.py::test_the_band_change_is_what_costs_first_hand_coverage` |
+| T5 | `tests/meetings/test_transcript.py::TestCommittedBytesArtifactCollapse::test_rederivation_diverges_only_at_the_repaired_sites` | `...::TestCommittedBytesArtifactCollapse::test_the_true_channels_re_derive_every_recorded_flag` |
+| guard | `tests/eval/test_evidence_honesty.py::test_the_instrument_and_the_detector_read_one_adjacency_rule` | unchanged |
+
+Other renames:
+- `test_contradictions.py::TestLiveDetectorCommittedBytesByteIdentity::test_re_derivation_equals_recorded_on_every_committed_meeting`
+  -> `::test_the_true_channels_re_derive_every_committed_meeting`
+- `test_evidence_honesty.py::test_the_off_leg_re_derives_every_recoverable_meeting`
+  -> `::test_the_movement_census_covers_every_committed_meeting`
+- `::test_the_grounded_off_leg_is_the_recorded_substrate`
+  -> `::test_the_grounded_census_covers_every_committed_meeting`
+- `::test_the_corridor_off_leg_is_the_recorded_substrate`
+  -> `::test_the_corridor_census_covers_every_committed_meeting`
+- `::test_i6_adjacent_room_strong_share_off_and_on`
+  -> `::test_i6_adjacent_room_strong_share_on_the_records_free_leg`
+
+**Moved pins, old -> new, all MEASURED.** Every count below was re-derived from the
+committed bytes through the production computation. No memo figure was copied.
+
+| pin | old | new | why it moved |
+|---|---|---|---|
+| T1 fully grounded leg `(STRONG, weak)` | (0, 120) | (2, 44) | the true movement and vent channels |
+| T1 ungrounded leg | (0, 121) | (0, 46) | same |
+| T1 lever-OFF totals, `alibi_vs_sighting` | strong 42, weak 79 | strong 19, weak 27 | same; physical 18/7, conflict 3 and vent 455 unchanged |
+| T1 bracket (new) | none | ungrounded 0 <= recorded 1 <= grounded 2 | |
+| T2 named set | `[]` | {`ml_corpus/9p2i:1041:headless-seed-1041:meeting-1`} | read off the recorded flags |
+| T5 recorded / re-derived flags | 15 / 39 | 107 / 107 | every kind, all three channels |
+| endpoint weak-band count (`test_transcript.py`) | 25 | 7 | read through the helper |
+| exemption census, samples/9p2i | {CREWMATE 21} / {whereabouts 21} / 22 flags | {CREWMATE 7} / {whereabouts 7} / 7 | read through the helper |
+| map-aware census, meetings reproduced | {123, 39, 382, 43} | {145, 39, 449, 43} | same |
+| map-aware census, sighting bands | (42, 42) strong, (79, 79) weak | (1, 1), (45, 45) | same |
+| movement census, new flags per set | [0, 10, 0, 0], 10 in total | [0, 9, 0, 0], 9 | the self-row fix |
+| movement census, new impostor subjects | 3 | 2 | the self-row fix |
+| T3 band order (new) | 0.80 floor | 232 renders shed testimony, 0 violate, 24,458 lower rows kept elsewhere | |
+| T3 plant (new) | none | 771 violating renders, 7,229 lower rows in >150, 31,531 in all, >150 kept 169 | |
+| T4 sighting rows (new) | none | 18,100 (> 12,771) | |
+| guard minimum gap | 0 (stay window) | 2 (route window) | |
+| guard class pin (new) | none | 26 of 29; recorded 1 / 5 / 23 | |
+
+The self-row fix alone moves the movement census. Re-run with the holder's rows kept,
+it reads 10 and 3 again. The grounded census's pins did not move. Neither the living
+roster (equal to the ballot roster on all 676 meetings) nor the trigger kind changes
+any all-channel re-derivation.
+
+The refuter's reading, re-measured: with the builders as they stood (ballot roster, no
+trigger kind, no `observation_id`, the holder's own move rows kept), 675 of 676 meetings
+re-derive. The one divergence is ml_corpus/9p2i seed 1035 meeting 3, the self-row
+drift. Removing only the holder's rows closes it; `observation_id`, the roster and the
+trigger kind change no meeting. The gate therefore needs no named exception: 676 of 676.
+
+The memo's T3 lower-row counts (20,178 and 6,319) do not reproduce under the salience
+reading across all ten classes. That reading gives 24,458 and 7,229, which is what is
+pinned. A four-class salience subset gives 18,601 and 5,938, so the memo counted a
+narrower set, apparently by text. The committed selector-list reading is the one the
+card specifies.
+
+**Retirements** (craft rule 3). Each has one history line at its successor.
+- `test_contradictions.py`:
+  - `_MOVEMENT_CHANNEL_DIVERGENCES` (69), `_MOVEMENT_CHANNEL_DIVERGING_MEETINGS`
+    (69 names) and the identity pin. Successor: the gate and `MOVEMENT_DECIDED_MEETINGS`.
+  - The 451 sensitivity test, `test_the_planted_movement_channel_is_live` and
+    `_planted_move_channel`. Successor: the drop-movement control.
+  - `_VENT_STRUCT` and `_flags_match`. Full model equality replaced them.
+  - `_SAMPLES_9P2I_REDERIVED` and `_SAMPLES_4P1I_REDERIVED`, the census field and
+    `test_live_census_reproduces_all_but_the_movement_divergences`.
+- `test_evidence_honesty.py`:
+  - `_REDERIVED_MEETINGS` and its three comparisons (movement, grounded, corridor).
+  - The local builders `_move_witness_records`, `_vent_witness_records` and
+    `_sighting_witness_records`.
+  - The corridor census's ON leg, its fields `strong_on`, `adjacent_on`, `demoted` and
+    `demoted_but_not_adjacent`, and `sighting_flags_match_recorded`.
+  - Direction 1, the ON half of the I-6 test,
+    `test_the_ejections_that_lose_their_only_strong_flag` and `_vent_channel`.
+  - The ON-leg items were 0 or equal to the OFF leg by construction: two identical calls
+    to a deterministic detector.
+  - T4's rows ordering.
+- `test_transcript.py`: `_REPAIRED_SITES`, `_NAMED_UNCLASSIFIED_DIVERGENCES`, the
+  addition allowlist and the vent-kind exclusion. Also `_classify_removed_flag`,
+  `_is_promoted_self_stated_divergence`, `_vent_observation_event_ids`,
+  `_has_spoken_transition`, `_alibi_rooms_by_event_id` and `_sighting_rooms_by_event_id`,
+  which had no other consumer.
+- `test_reported_testimony.py`: `_SURVIVAL_FLOOR`.
+
+**Kept, records-free by design.**
+- `sighting_records_from_recorded_flags`. Its docstring now says it serves frozen
+  exhibits and transcript-level re-runs.
+- `_vent_records_from_recorded_flags`, for frozen exhibits only.
+- The two `_rederive` harnesses.
+- `_planted_sighting_channel` and `_ungroundable_sighting_channel`, T1's planted
+  grounding channels.
+
+**The 21 `_rederive` call lines at `95fb894b`, dispositioned.** The rule is the card's:
+an assertion that claims to describe the recording moves to the helper, and a
+transcript-level property keeps `_rederive`.
+
+`test_contradictions.py`:
+
+| line | consumer | disposition |
+|---|---|---|
+| 3540, 3542 | the byte-identity walk | replaced by the gate (helper) |
+| 3570, 3572 | the 451 sensitivity test | retired |
+| 3592 | the planted-channel liveness test | retired |
+| 3763 | the exemption/vent census | helper |
+| 4186 | T2 | recorded flags |
+| 4616 | the corridor-convicts test | recorded flags |
+| 4708 | the envelope test | kept; frozen exhibit |
+
+`test_transcript.py`:
+
+| line | consumer | disposition |
+|---|---|---|
+| 1971 | T5 | helper |
+| 2066 | the endpoint weak band | helper |
+| 2081, 2082 | the determinism test | kept; determinism, docstring says records-free by design |
+| 2129 | the artifact input classes | helper |
+| 2199 | the genuine-canon pin | helper |
+| 3012 | seed 28 | helper |
+| 3126 | seed 5 | helper; its comment now says the meeting re-derives to its one recorded vent flag |
+| 3157 | seed 38 | helper; the living roster |
+| 3200 | proxy retargets set-wide | helper |
+| 3232 | the seed-25 frozen `alibi_conflict` exhibit | kept; docstring |
+| 3247 | seed 14 | helper |
+
+At the head, the Validation grep lists 4 lines. Three are in `test_transcript.py`
+(`:1814`, `:1815` determinism; `:2970` the frozen exhibit) and one is in
+`test_contradictions.py` (`:4603`, the frozen exhibit).
+
+The "cannot be rebuilt" grep lists 15 lines at `95fb894b` and 0 at the head. Surviving
+lines that mention a walk say only what is true: a frozen exhibit line carries no tick
+rows.
+
+**Verification** (Darwin arm64, this worktree, at `beeaedd8`).
+- `bash scripts/check.sh`, exit captured directly:
+  - ruff check, ruff format --check (522 files), lint-imports (4 kept) and
+    validate_task_docs pass.
+  - `generate_prompts.py --check` passes (390 in sync) and mypy passes (493 files).
+  - pytest: `35 failed, 8264 passed, 20 skipped, 3 xfailed, 9 errors in 390.12s`,
+    exit=1. The script stops there under `set -e`, before its frontend leg.
+- The red set, compared by node id with the junit of a `-n auto --dist loadfile` run at
+  `ff4c6bb8` (50 ids: 41 failed, 9 errors):
+  - head (44) == base (50) minus these six;
+  - new ids at head: none; other base ids gone: none;
+  - the 44 are card C's three
+    (`tests/api/test_view_model.py::test_report_tick_fog_keeps_the_reported_body` and
+    the two `tests/scripts/test_counterfactual_phase21.py` memo tests) and 41 ML ids,
+    all in files the re-ground card owns: `tests/training/` (33),
+    `tests/scripts/test_verify_ml_evidence.py` (6),
+    `tests/eval/test_balance_eval_meeting_runner.py` (1) and
+    `tests/experiments/test_torch_probe_excluded.py` (1).
+- A second whole run, at `d0191db8`, which adds only this card's Results:
+  - It ran under a load average near 70 from concurrent sessions and took 1662.99 s
+    against 390.12 s. It read `36 failed, 8263 passed, 9 errors`, exit=1.
+  - The one id beyond the 44 was
+    `tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`.
+    That test sets a 0.25 s wall deadline, and the deadline expired before the provider
+    was reached (`assert 0 == 2` on `attempts`).
+  - Re-run alone it passes (`2 passed in 0.84s`). It also passed in the run at
+    `beeaedd8` and at `ff4c6bb8`, and this card changes no `orchestrator/`, `llm/` or
+    `tests/orchestrator/` byte. It is a timing flake of the loaded host, reported rather
+    than hidden.
+- Frontend legs, run separately (`npm run lint`, `tsc:check`, `test`, `build`): all exit
+  0, 558 vitest tests. No served change, so no e2e.
+- Other steps:
+  - `bash scripts/verify_samples.sh`: exit 0.
+  - The four `build_sample_report.py --sample-dir <set> --check` runs: exit 0.
+  - `publish_process_scorecard.py --check`: exit 0.
+  - `check_doc_facts.py`: exit 0.
+- Offline `scripts/verify_ml_evidence.py` (never `--complete`): exit 1, with 37 OK,
+  12 FAIL, 7 ABSENT and 5 INFO. The 12 FAIL rows are the fit-corpus identity, grounding
+  and recompute rows. They are identical, row for row, to a run at `ff4c6bb8`: the
+  re-ground card's (A) territory.
+- The recording probe (Validation): `676 1 45`, the one named meeting ml_corpus/9p2i
+  replay-seed-1041 headless-seed-1041:meeting-1.
+- Production bytes: `git diff --stat $(git merge-base origin/main HEAD) HEAD` outside
+  `tests/` and this card names only `eval/evidence_honesty.py`, and the Validation AST
+  check prints `docstring-only`.
+- Freeze manifests: none moves.
+  - The held-out prefix manifests hash no `eval/` file.
+  - `eval/evidence_honesty.py` is outside the version-two closure.
+  - `audits/deduction-candidate/2026-09-06-mechanisms.json` lists the file's digest in
+    a historical capture that nothing gates (review NC5-08).
+- The card's Validation pytest command (`tests/_helpers` and the five named files):
+  584 passed.
+
+**Planted and perturbed proofs** (red before, green after):
+- **Committed, green on the real bytes:**
+  - the drop-movement control: 68 named meetings diverge;
+  - the drop-sighting control: 31;
+  - the self-row plant: exactly `ml_corpus/9p2i:1035:headless-seed-1035:meeting-3`;
+  - T1 without the movement channel: (8, 113), and the pin fails on it;
+  - T5 without the movement channel: the 17 named `samples/9p2i` meetings;
+  - T3 re-banded to 25: 771 violating renders;
+  - the scanner flags a planted `walk_committed_meetings(CORPUS_9P2I)`;
+  - the immutability walk flags a planted `list` field and an unfrozen dataclass;
+  - the planted memory keeps only the other subject's move row;
+  - the sentinel fold: gaps (2, 0, 3) read 0, and the old fold reads 3;
+  - the interior-boundary predicate counts one tick and not two;
+  - the alibi-side reader raises on a shape it cannot measure;
+  - T2's `test_the_search_finds_a_planted_conviction`, unchanged.
+- **Shown by edit, run and restore:**
+  - With the move builder's default flipped to keep the holder's rows,
+    `test_the_true_channels_re_derive_every_committed_meeting` fails:
+    `AssertionError: assert ['ml_corpus/9...35:meeting-3'] == []`.
+  - With `_endpoint_gap` pointed back at the stay window
+    (`route=(resolved.from_tick, resolved.to_tick)`), the guard fails:
+    `assert 0 >= (1 + 1)`, `where 0 = min([0, 0])`.
+  - The AST check run on a scratch copy of `eval/evidence_honesty.py` with one code
+    token changed (`len(stays) == 1` -> `== 2`) raises `AssertionError: eval/evidence_honesty.py`.
+- **T4's perturbed proof, quoted as the card asks** (not committed; it would repeat the
+  walk):
+
+  ```
+  uv run python -c "from tests.eval import test_evidence_honesty as t; a = t._render_budget_census(t._SAMPLES_9P2I); b = t._render_budget_census(t._SAMPLES_9P2I); print(a.sightings_on > b.sightings_on, a.covered_on > b.covered_on, a == b, a.sightings_on, a.covered_on)"
+  ```
+
+  It prints `False False True 12771 20629`. With the band left alone, both strict
+  inequalities fail.
+- **At `ff4c6bb8`, the six fail as the Evidence table says.** The same junit run shows
+  them among the 50.
+
+**Measurement commands.**
+- The gate and its two drop controls print `676 0 68 31`:
+
+  ```
+  uv run python -c "from dataclasses import replace; from types import MappingProxyType as P; from tests._helpers.committed import all_committed_meetings as a; m = a(); print(len(m), sum(x.rederive() != x.entry.contradictions for x in m), sum(replace(x, move_witness_records=P({})).rederive() != x.entry.contradictions for x in m), sum(replace(x, sighting_records=P({})).rederive() != x.entry.contradictions for x in m))"
+  ```
+
+  The committed tests are those probes.
+- The census pins: each census function called directly, for example
+  `uv run python -c "from tests.eval import test_evidence_honesty as t; print(t._corridor_census(t._CORPUS_9P2I))"`.
+- The T3 pins: `tests.agents.test_reported_testimony._survival_census`, plain and inside
+  `pytest.MonkeyPatch.context()` with `_SALIENCE_REPORTED_TESTIMONY` set to 25.
+- Every census output is count-only. No role gates anything: the role splits already
+  pinned in the grounded and exemption censuses re-derive as counts.
+
+**Wall cost of the new walk.**
+- `all_committed_meetings()` walks the four sets in 6.2 s on the Mac when unloaded:
+  samples/9p2i 1.5 s, samples/4p1i 0.3 s, ml_corpus/9p2i 4.1 s, ml_corpus/4p1i 0.3 s.
+- The same call took 42 s later, under a load average near 70 from concurrent sessions.
+- Under `--dist loadfile` it runs once per worker that loads `test_contradictions.py`
+  (all four sets), `test_evidence_honesty.py` (all four) or `test_transcript.py`
+  (samples/9p2i only).
+- The grounded census's own walk is gone: it reads the cache. The T3 plant adds one
+  ml_corpus/9p2i render walk, about 5 s.
+
+**Limitations.**
+- T4's perturbed proof is quoted, not committed, as the card prescribes.
+- The PR's CI `project-checks` job is the second reading of the gate. It was not
+  available when this was written.
+- The T2 docstring's account of the 1041 flag is the signals memo's engine-truth
+  finding, cited, not re-probed here. That finding: false at its own tick, true one
+  tick later.
+- S-1 (the interior-boundary rule question) stays routed and unscheduled. The guard's
+  class pin reports its 26 records-free members and the one recorded instance, and
+  labels nothing.

@@ -1,4 +1,4 @@
-"""Pins for the Phase-21 offline counterfactual and the memo it publishes.
+"""Pins for the Phase-21 offline counterfactual and the memo it published.
 
 Eight things are pinned, each with a case proving it bites:
 
@@ -13,16 +13,33 @@ Eight things are pinned, each with a case proving it bites:
    whole run and the ambient snapshot still reports every Wave-2 key OFF
    afterwards.
 4. **The OFF column IS the committed record.** The fast slice's OFF cells equal
-   the record audit's published cells and the committed instrument pins, and the
-   four corroboration cells FIRST become an assertion here.
-5. **The memo cannot drift from the instrument.** Every published table in
-   ``audits/audit-phase-21-counterfactual.md`` -- the cell rows per set and
-   pooled, the injustice ledger with its recorded tallies and its class totals,
-   the whole ballot census, all eight rows of the reduction census, every leg of
-   the render census and the advisory markers -- is parsed and compared against
-   a live four-set run, the size of each join included, and the memo carries no
-   bar, no target and no decision rule. Perturbed copies prove each check bites,
-   including a moved tally and a deleted zero-count row.
+   the record audit's published cells and the committed instrument pins, and a
+   four-set run's four corroboration cells equal
+   ``cf.COMMITTED_CORROBORATION_CELLS``
+   (``test_the_corroboration_cells_equal_the_committed_record``). Planted cases
+   move each committed cell by one and feed the pin an unchecked payload.
+5. **The memo is the frozen baseline-8 record, and carries no bar.**
+   ``audits/audit-phase-21-counterfactual.md`` still carries its tables
+   (``test_the_memo_table_parses_into_rows``) and writes no bar, no target and
+   no decision rule (``test_the_memo_declares_its_no_bar_status_in_its_opening``,
+   ``test_the_memo_attaches_no_threshold_to_a_wave_2_cell``, and eight planted
+   spellings in ``test_the_no_bar_pin_bites_on_a_perturbed_memo``). It is NOT
+   compared with a live run. The memo and a live run are the two sides of a
+   measured/frozen pair, under the rule the baseline-8 record (``3eebc7d5``)
+   followed when it re-stamped only the half that may move: a re-record
+   re-derives the measured side, and the frozen side moves only at a step that
+   re-issues it. The live run is the measured side and the dated memo is the
+   frozen one, and no step re-issues the memo: the phase closed on its finding
+   (``509e92ed``) and the memo's last amendment is ``608ae1f6``. A comparison of
+   the two sides turns red at every re-record and green at none, so it retired
+   when the memo froze (the memo's Errata E.4). The baseline-7 retirement
+   (``efcd43b8``) is not the warrant: it fired because the levers it priced
+   graduated, and that trigger does not hold here, where all three Wave-2
+   levers are still live toggles that read OFF under an empty environment
+   (item 1). Nor is the comparison kept alive on a frozen fixture, as
+   ``70e49468`` froze four baseline-8 exhibits: that would mean committing the
+   baseline-8 replay JSONL, 115,886,311 bytes in 300 files, for a table no
+   decision reads any more.
 6. **The tripwire readers.** The elicitation marker is read off the shipped
    template and appears nowhere in the reader's own source; a spoken kill moves
    an impostor prompt's BYTES while offering it no block; a template whose
@@ -47,6 +64,20 @@ Eight things are pinned, each with a case proving it bites:
    derived marker set refuses instead of reading zero; and both modes read the
    same three cells, the committed bytes identically to the byte column they
    replace.
+
+Retired when the memo froze as the baseline-8 record (its Errata E.4), one line
+per test, each naming what it compared:
+
+- ``test_the_memo_table_equals_a_live_four_set_run``: every memo table with a live run; memo frozen (E.4); corroboration now in ``test_the_corroboration_cells_equal_the_committed_record``.
+- ``test_the_memo_marks_every_advisory_cell``: memo advisory marks with live flags; memo frozen (E.4).
+- ``test_an_erratum_overrides_the_row_it_republishes``: the errata fold with the recorded rows; memo frozen (E.4).
+- ``test_a_memo_with_no_errata_folds_to_the_recorded_tables``: an errata-free fold with the record; memo frozen (E.4).
+- ``test_a_wrong_erratum_cannot_pass_the_drift_gate``: a bent erratum row with the fold; memo frozen (E.4).
+- ``test_the_table_comparison_bites_on_a_perturbed_memo``: a bent cell with the table parse; memo frozen (E.4).
+- ``test_the_census_comparisons_bite_on_a_perturbed_memo``: bent census rows with their parses; memo frozen (E.4).
+- ``test_the_ledger_comparison_covers_the_recorded_tally``: a bent ledger tally with its parse; memo frozen (E.4).
+- ``test_a_deleted_testimony_kind_row_is_caught``: a dropped kind row with the eight kinds; memo frozen (E.4).
+- ``test_the_advisory_marker_check_bites_on_a_stripped_memo``: a stripped advisory mark with its parse; memo frozen (E.4).
 """
 
 from __future__ import annotations
@@ -97,11 +128,6 @@ _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _MEMO: Final[Path] = _REPO_ROOT / "audits" / "audit-phase-21-counterfactual.md"
 _FAST_SET: Final[str] = "samples/4p1i"
 
-# A published table is never rewritten, so a figure that moves after publication
-# is re-derived in an appended errata block. Rows the errata republishes are the
-# authoritative pin; rows it does not are still pinned by the recorded table.
-_ERRATA_HEADING: Final[str] = "## Errata"
-
 # A lever the tree already graduated, used as the planted case for the
 # graduation half of the guard.
 _GRADUATED_LEVER: Final[str] = "reporter_exculpation"
@@ -140,30 +166,6 @@ _DECISION_VERB: Final[re.Pattern[str]] = re.compile(
 _CELL_THRESHOLD: Final[re.Pattern[str]] = re.compile(
     r"\b[A-Z]-\d+[a-z]?\b[^|\n]{0,40}?"
     r"(?:>=|<=|>|<|≥|≤|\bat least\b|\bat most\b|\bno more than\b|\bno fewer than\b)"
-)
-
-# Every kind the reduction can carry. The memo advertises an eight-kind census,
-# so the drift gate holds it to eight rows whatever the counts are.
-_REPORTED_KINDS: Final[tuple[str, ...]] = (
-    "saw_player",
-    "saw_vent",
-    "saw_kill",
-    "whereabouts",
-    "saw_move",
-    "alibi",
-    "accusation",
-    "corroboration",
-)
-
-# The slate legs the memo publishes a render census for: the whole set the
-# payload carries, so the join below is total rather than a sample.
-_RENDER_LEGS: Final[frozenset[str]] = frozenset(
-    {
-        "OFF",
-        *cf.WAVE_2_LEVERS,
-        "all-three-ON",
-        cf.decomposition_label("testimony_shapes"),
-    }
 )
 
 
@@ -275,7 +277,7 @@ def fast_run() -> dict[str, object]:
 
 @pytest.fixture(scope="module")
 def full_run() -> dict[str, object]:
-    """One four-set walk, shared by the memo drift gate and the cell pins."""
+    """One four-set walk, shared by the corroboration, tripwire and block pins."""
 
     return cf.run(list(cf.CANONICAL_SETS))
 
@@ -359,6 +361,52 @@ def test_a_reconstruction_that_misses_the_record_refuses(
     assert "audits/audit-2026-09-22-process-rerecord.md" in message
 
 
+@pytest.mark.slow
+def test_the_corroboration_cells_equal_the_committed_record(
+    full_run: Mapping[str, object],
+) -> None:
+    """The four corroboration cells a four-set run measures are the record's.
+
+    ``cf.COMMITTED_CORROBORATION_CELLS`` holds the cells the baseline-9 record
+    published; the run's own pin check compares them only over all four sets,
+    so the payload must say it was checked as well as carry the four readings.
+    """
+
+    _assert_corroboration_pins(full_run, cf.COMMITTED_CORROBORATION_CELLS)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("cell", sorted(cf.COMMITTED_CORROBORATION_CELLS))
+def test_the_corroboration_pin_bites_on_a_moved_cell(
+    full_run: Mapping[str, object], cell: str
+) -> None:
+    # The planted case: the measured payload against a committed mapping with
+    # one cell's numerator moved by one must fail, and name that cell.
+    numerator, denominator = cf.COMMITTED_CORROBORATION_CELLS[cell]
+    moved = {**cf.COMMITTED_CORROBORATION_CELLS, cell: (numerator + 1, denominator)}
+    with pytest.raises(AssertionError, match=cell):
+        _assert_corroboration_pins(full_run, moved)
+
+
+def test_the_corroboration_pin_refuses_an_unchecked_payload(
+    fast_run: Mapping[str, object],
+) -> None:
+    # A one-set run reports the cells unchecked (a subset is a different
+    # population), and the pin must refuse it rather than compare its readings.
+    with pytest.raises(AssertionError, match="unchecked"):
+        _assert_corroboration_pins(fast_run, cf.COMMITTED_CORROBORATION_CELLS)
+
+
+def _assert_corroboration_pins(
+    payload: Mapping[str, object], committed: Mapping[str, tuple[int, int]]
+) -> None:
+    pins = payload["corroboration_pins"]
+    assert isinstance(pins, dict)
+    assert pins["checked"] is True, "the run reports its corroboration pins unchecked"
+    for cell, expected in committed.items():
+        assert tuple(pins["measured"][cell]) == expected, cell
+
+
 def test_the_impossible_transit_net_is_committed_and_labelled() -> None:
     # The verifier's ruling, executed rather than paraphrased: the regex lives
     # in the script, it catches the charge, and the paragraph under it says what
@@ -397,7 +445,8 @@ def test_the_ledger_row_names_its_judgment_tag_separately() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 5. The memo cannot drift from the instrument, and carries no bar.            #
+# 5. The memo is the frozen baseline-8 record, and carries no bar.             #
+# It still parses into its tables; it is not compared with a live run (E.4).   #
 # --------------------------------------------------------------------------- #
 
 
@@ -459,42 +508,6 @@ def test_the_memo_table_parses_into_rows() -> None:
     assert {name for name, _ in per_set} == set(cf.CANONICAL_SETS)
 
 
-def test_the_table_comparison_bites_on_a_perturbed_memo(tmp_path: Path) -> None:
-    # Perturb ONE published value and the parse must differ from the original,
-    # which is what makes the four-set comparison below a real gate.
-    original_per_set, original_pooled = _memo_tables()
-    perturbed = tmp_path / "memo.md"
-    perturbed.write_text(
-        _perturb_first_published_value(_MEMO.read_text(encoding="utf-8")),
-        encoding="utf-8",
-    )
-    parsed_per_set, parsed_pooled = _parse_tables(perturbed.read_text(encoding="utf-8"))
-    assert (parsed_per_set, parsed_pooled) != (original_per_set, original_pooled)
-
-
-def _perturb_first_published_value(text: str) -> str:
-    """Move the numerator of the first published table row by one."""
-
-    lines = text.splitlines()
-    for index, line in enumerate(lines):
-        fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) != 5:
-            continue
-        if not (
-            _CELL_ID.match(fields[0])
-            or (fields[0] in cf.CANONICAL_SETS and _CELL_ID.match(fields[1]))
-        ):
-            continue
-        match = _PAIR.match(fields[2])
-        if match is None:
-            continue
-        bumped = f"{int(match.group(1)) + 1}/{match.group(2)}"
-        fields[2] = bumped
-        lines[index] = "| " + " | ".join(fields) + " |"
-        return "\n".join(lines) + "\n"
-    raise AssertionError("the memo publishes no parseable table row to perturb")
-
-
 def test_the_pooled_on_column_is_withdrawn_when_any_set_disagrees() -> None:
     """The aggregation half of the reconstruction-fidelity refusal.
 
@@ -530,135 +543,6 @@ def test_the_pooled_on_column_is_withdrawn_when_any_set_disagrees() -> None:
     assert pulled["recorded_off"] == [3, 100]
 
 
-def test_the_census_comparisons_bite_on_a_perturbed_memo(tmp_path: Path) -> None:
-    # The census joins are gates, not decoration: move one ballot-census figure
-    # and one render-census figure and each parse must change.
-    text = _MEMO.read_text(encoding="utf-8")
-    ballots = _memo_ballot_census(text)
-    render = _memo_render_census(text)
-    assert ballots and render
-
-    bent = tmp_path / "memo.md"
-    bent.write_text(
-        text.replace(
-            "| impostor ballots that joined the pile | 40 |",
-            "| impostor ballots that joined the pile | 41 |",
-        ).replace(
-            "| `corroboration_discipline` | `vote_ballot` | 3,631 |",
-            "| `corroboration_discipline` | `vote_ballot` | 3,632 |",
-        ),
-        encoding="utf-8",
-    )
-    perturbed = bent.read_text(encoding="utf-8")
-    assert _memo_ballot_census(perturbed) != ballots
-    assert _memo_render_census(perturbed) != render
-
-
-def test_an_erratum_overrides_the_row_it_republishes() -> None:
-    # The fold, asserted on the memo as it stands rather than on a fixture: the
-    # recorded §4.4 ballot row and the errata's disagree, and the errata's is
-    # what the drift gate reads. A row no erratum republishes still comes from
-    # the recorded table, so an errata block pins what it names and nothing else.
-    text = _MEMO.read_text(encoding="utf-8")
-    record, errata = _split_errata(text)
-    assert errata, "the memo publishes an errata block; the fold below needs one"
-    recorded = _memo_render_census(record)
-    corrected = _memo_render_census(errata)
-    folded = _published_render_census(text)
-    ballot = ("corroboration_discipline", "vote_ballot")
-    assert recorded[ballot] != corrected[ballot]
-    assert folded[ballot] == corrected[ballot]
-    untouched = ("reporter_reasoning", "accusation_round")
-    assert folded[untouched] == recorded[untouched]
-
-
-def test_a_memo_with_no_errata_folds_to_the_recorded_tables() -> None:
-    # The "when present" half: strip the block and every parse is the record's,
-    # so the mechanism adds no behaviour to a memo that has never been amended.
-    record, _ = _split_errata(_MEMO.read_text(encoding="utf-8"))
-    assert _published_render_census(record) == _memo_render_census(record)
-    assert _published_tables(record) == _parse_tables(record)
-
-
-@pytest.mark.parametrize(
-    "planted",
-    [
-        (
-            "| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,654 |"
-            " 5,871,323 |"
-        ),
-        "| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 |"
-        " 44669/7262 |",
-        "| samples/9p2i | B-3 | — | 0/1738 | 11021/1738 |",
-        "| C-1 | accused subjects with NO first-hand source | — | 460/1525 |"
-        " 460/1525 |",
-    ],
-)
-def test_a_wrong_erratum_cannot_pass_the_drift_gate(planted: str) -> None:
-    # Craft rule 2 for the mechanism itself. The drift gate asserts the FOLDED
-    # parse equals a live run, so an erratum that misstates a figure has to move
-    # the fold — otherwise the errata block would be prose that pins nothing.
-    # One planted row per published shape: the six-column census, a pooled cell,
-    # a per-set cell. Each names the LAST erratum to republish that row, because
-    # only the last one is the fold's pin -- bending a superseded row would move
-    # nothing and the case would stop biting.
-    text = _MEMO.read_text(encoding="utf-8")
-    assert text.count(planted) == 1, planted
-    bent = text.replace(planted, _bump_last_number(planted))
-    assert _published_parses(bent) != _published_parses(text)
-
-
-def _published_parses(text: str) -> tuple[Any, ...]:
-    """Everything the drift gate reads out of the memo, as one comparable value."""
-
-    per_set, pooled = _published_tables(text)
-    return (_published_render_census(text), per_set, pooled)
-
-
-def _bump_last_number(row: str) -> str:
-    """The row with its LAST integer moved by one — a one-digit drift."""
-
-    matches = list(re.finditer(r"\d[\d,]*", row))
-    assert matches, row
-    last = matches[-1]
-    moved = str(int(last.group(0).replace(",", "")) + 1)
-    return f"{row[: last.start()]}{moved}{row[last.end() :]}"
-
-
-def test_the_ledger_comparison_covers_the_recorded_tally(tmp_path: Path) -> None:
-    # A row whose tags survive an edit to its vote tally is still a drifted row.
-    text = _MEMO.read_text(encoding="utf-8")
-    original = _memo_ledger_rows(text)
-    assert original
-    bent = tmp_path / "memo.md"
-    bent.write_text(
-        text.replace(
-            "| samples/9p2i | 1 | m1 | p-5 | WEAKFLAG+REDIRECT | p-5 3, SKIP 2, p-1 1 |",
-            "| samples/9p2i | 1 | m1 | p-5 | WEAKFLAG+REDIRECT | p-5 999, SKIP 2, p-1 1 |",
-        ),
-        encoding="utf-8",
-    )
-    assert _memo_ledger_rows(bent.read_text(encoding="utf-8")) != original
-
-
-def test_a_deleted_testimony_kind_row_is_caught(tmp_path: Path) -> None:
-    # The zero-count kinds are the ones a memo could quietly stop publishing,
-    # so the gate holds the census to all eight rows rather than to its values.
-    text = _MEMO.read_text(encoding="utf-8")
-    assert set(_memo_kind_census(text)[0]) == set(_REPORTED_KINDS)
-    bent = tmp_path / "memo.md"
-    bent.write_text(
-        "\n".join(
-            line for line in text.splitlines() if not line.startswith("| `saw_kill` |")
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    assert set(_memo_kind_census(bent.read_text(encoding="utf-8"))[0]) != set(
-        _REPORTED_KINDS
-    )
-
-
 def test_the_advisory_label_keys_on_the_rows_own_denominator(
     fast_run: Mapping[str, object],
 ) -> None:
@@ -668,120 +552,6 @@ def test_the_advisory_label_keys_on_the_rows_own_denominator(
     assert rows["T-8"]["advisory"] is True
     # And a cell read over the whole ballot population is not.
     assert rows["C-9"]["advisory"] is False
-
-
-def test_the_memo_marks_every_advisory_cell(fast_run: Mapping[str, object]) -> None:
-    marked = _memo_advisory_cells()
-    block = _set_block(fast_run, _FAST_SET)
-    expected = {row["cell"] for row in block["rows"] if row["advisory"]}
-    assert expected, "the fast slice flags no advisory row — the check is vacuous"
-    assert {(_FAST_SET, cell) for cell in expected} <= marked
-
-
-def test_the_advisory_marker_check_bites_on_a_stripped_memo(tmp_path: Path) -> None:
-    # Drop the marker from ONE per-set row and the comparison must notice; the
-    # gate is a per-cell join, not a "the memo mentions [ADV] somewhere" check.
-    original = _memo_advisory_cells()
-    assert original, "the memo marks no advisory cell — the check is vacuous"
-    stripped = tmp_path / "memo.md"
-    stripped.write_text(_strip_one_advisory_marker(), encoding="utf-8")
-    parsed = _advisory_cells(stripped.read_text(encoding="utf-8"))
-    assert parsed != original
-    assert len(parsed) == len(original) - 1
-
-
-def _strip_one_advisory_marker() -> str:
-    lines = _MEMO.read_text(encoding="utf-8").splitlines()
-    for index, line in enumerate(lines):
-        fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) == 5 and fields[0] in cf.CANONICAL_SETS:
-            if cf.ADVISORY_MARK in line:
-                lines[index] = line.replace(cf.ADVISORY_MARK, "")
-                return "\n".join(lines) + "\n"
-    raise AssertionError("the memo marks no per-set advisory cell to strip")
-
-
-@pytest.mark.slow
-def test_the_memo_table_equals_a_live_four_set_run(
-    full_run: Mapping[str, object],
-) -> None:
-    """The document cannot drift from the instrument.
-
-    Every published row -- per set and pooled -- is re-derived here and compared
-    against the memo's own table, as are the two censuses the memo publishes as
-    tables of their own rather than as cell rows. This is also where the four
-    corroboration cells become an assertion: Task 21.19 shipped a walk that
-    prints them and deliberately asserts no figure.
-    """
-
-    payload = full_run
-    pins = payload["corroboration_pins"]
-    assert isinstance(pins, dict) and pins["checked"] is True
-    for cell, expected in cf.COMMITTED_CORROBORATION_CELLS.items():
-        assert tuple(pins["measured"][cell]) == expected, cell
-
-    text = _MEMO.read_text(encoding="utf-8")
-    memo_per_set, memo_pooled = _published_tables(text)
-    live_per_set, live_pooled = _run_tables(payload)
-    assert memo_pooled == live_pooled
-    assert memo_per_set == live_per_set
-
-    # Every published census, whole: nothing exists only as unchecked prose.
-    # Each comparison asserts the SIZE of the join first, so a memo that simply
-    # stopped publishing a field could not pass by publishing fewer rows.
-    ballots = payload["pooled_ballot_census"]
-    assert isinstance(ballots, dict)
-    memo_ballots, live_ballots = (
-        _memo_ballot_census(text),
-        _flatten_ballot_census(ballots),
-    )
-    assert len(memo_ballots) == len(live_ballots) > 0
-    assert memo_ballots == live_ballots
-
-    testimony = payload["pooled_testimony_census"]
-    assert isinstance(testimony, dict)
-    memo_kinds = _memo_kind_census(text)
-    assert set(memo_kinds[0]) == set(_REPORTED_KINDS), (
-        "the memo advertises an eight-kind census and must publish all eight, "
-        "including the ones nothing was ever spoken in"
-    )
-    assert memo_kinds == _run_kind_census(testimony)
-
-    render = payload["pooled_render_census"]
-    assert isinstance(render, dict)
-    memo_render, live_render = (
-        _published_render_census(text),
-        _flatten_render_census(render),
-    )
-    assert len(memo_render) == len(live_render) > 0
-    assert memo_render == live_render
-
-    # The injustice ledger the memo lists row by row, and its class totals.
-    memo_ledger = _memo_ledger_rows(text)
-    assert len(memo_ledger) == len(_run_ledger_rows(payload)) > 0
-    assert memo_ledger == _run_ledger_rows(payload)
-    memo_totals = _memo_class_totals(text)
-    assert len(memo_totals) == len(_totals(payload)) - 1 > 0
-    assert memo_totals == {
-        tag: count for tag, count in _totals(payload).items() if tag != "TOTAL"
-    }
-
-    # Every advisory cell the instrument flags carries its marker in the memo.
-    sets = payload["sets"]
-    assert isinstance(sets, dict)
-    flagged = {
-        (set_name, row["cell"])
-        for set_name, block in sets.items()
-        for row in block["rows"]
-        if row["advisory"]
-    }
-    assert flagged <= _advisory_cells(text)
-
-
-def _totals(payload: Mapping[str, object]) -> dict[str, int]:
-    totals = payload["pooled_ledger_class_totals"]
-    assert isinstance(totals, dict)
-    return totals
 
 
 # --------------------------------------------------------------------------- #
@@ -3006,34 +2776,6 @@ def _memo_tables() -> tuple[
     return _parse_tables(_MEMO.read_text(encoding="utf-8"))
 
 
-def _split_errata(text: str) -> tuple[str, str]:
-    """The memo as ``(record, errata)`` — the errata empty when there is none."""
-
-    head, marker, tail = text.partition(f"\n{_ERRATA_HEADING}")
-    return (head, f"{marker}{tail}" if marker else "")
-
-
-def _published_tables(
-    text: str,
-) -> tuple[dict[tuple[str, str], tuple[Any, ...]], dict[str, tuple[Any, ...]]]:
-    """Every cell as it now stands: the record, overridden row-by-row by errata."""
-
-    record, errata = _split_errata(text)
-    record_per_set, record_pooled = _parse_tables(record)
-    errata_per_set, errata_pooled = _parse_tables(errata)
-    return (
-        {**record_per_set, **errata_per_set},
-        {**record_pooled, **errata_pooled},
-    )
-
-
-def _published_render_census(text: str) -> dict[tuple[str, str], tuple[int, ...]]:
-    """The render census as it now stands, the same record-then-errata fold."""
-
-    record, errata = _split_errata(text)
-    return {**_memo_render_census(record), **_memo_render_census(errata)}
-
-
 def _parse_tables(
     text: str,
 ) -> tuple[dict[tuple[str, str], tuple[Any, ...]], dict[str, tuple[Any, ...]]]:
@@ -3061,238 +2803,6 @@ def _parse_tables(
     return per_set, pooled
 
 
-def _memo_advisory_cells() -> set[tuple[str, str]]:
-    return _advisory_cells(_MEMO.read_text(encoding="utf-8"))
-
-
-def _advisory_cells(text: str) -> set[tuple[str, str]]:
-    """Every ``(set, cell)`` the memo's per-set tables mark advisory."""
-
-    marked: set[tuple[str, str]] = set()
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("|") or cf.ADVISORY_MARK not in stripped:
-            continue
-        fields = [field.strip() for field in stripped.strip("|").split("|")]
-        if len(fields) == 5 and fields[0] in cf.CANONICAL_SETS:
-            marked.add((fields[0], fields[1]))
-    return marked
-
-
-# The §4.3 ballot-census table's row labels, mapped to the flattened census key
-# each one publishes. A label the census has no key for -- or a key the memo
-# never prints -- makes the comparison fail, which is the point.
-_BALLOT_CENSUS_LABELS: Final[tuple[tuple[str, str], ...]] = (
-    ("ejecting ballots", "ejecting_ballots"),
-    ("citation: hearsay", "citation.hearsay"),
-    ("citation: own observation", "citation.own_obs"),
-    ("citation: own turn", "citation.own_turn"),
-    ("citation: another player's observation", "citation.other_obs"),
-    ("citation: nothing", "citation.none"),
-    ("pile driver a CREWMATE", "driver.CREWMATE"),
-    ("pile driver an IMPOSTOR", "driver.IMPOSTOR"),
-    ("follower counts on a CREWMATE source", "followers.CREWMATE"),
-    ("follower counts on an IMPOSTOR source", "followers.IMPOSTOR"),
-    ("ejections with a contradiction naming the ejectee", "ejections.flagged"),
-    ("ejections with none", "ejections.unflagged"),
-    ("mean stated confidence, flagged", "confidence.flagged"),
-    ("mean stated confidence, unflagged", "confidence.unflagged"),
-    ("impostor ballots cast in these meetings", "impostor_ballots_cast"),
-    ("impostor ballots that joined the pile", "impostor_ballots_joined"),
-)
-
-
-def _memo_ballot_census(text: str) -> dict[str, object]:
-    """The §4.3 ballot-census table, flattened to the census's own keys."""
-
-    published: dict[str, object] = {}
-    for line in text.splitlines():
-        fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) != 2:
-            continue
-        for prefix, key in _BALLOT_CENSUS_LABELS:
-            if not fields[0].startswith(prefix):
-                continue
-            published[key] = _census_value(key, fields[1])
-            break
-    return published
-
-
-def _census_value(key: str, field: str) -> object:
-    if key.startswith("followers."):
-        return {
-            int(count.split("x")[0]): int(count.split("x")[1])
-            for count in field.split(", ")
-        }
-    if key.startswith("confidence."):
-        return float(field)
-    value = _first_int(field)
-    assert value is not None, (key, field)
-    return value
-
-
-def _flatten_ballot_census(census: Mapping[str, Any]) -> dict[str, object]:
-    flat: dict[str, object] = {
-        "ejecting_ballots": census["ejecting_ballots"],
-        "impostor_ballots_cast": census["impostor_ballots_cast"],
-        "impostor_ballots_joined": census["impostor_ballots_joining_the_pile"],
-    }
-    for channel, count in census["citation_mix"].items():
-        flat[f"citation.{channel}"] = count
-    for role, count in census["pile_driver_role"].items():
-        flat[f"driver.{role}"] = count
-    for role, counts in census["follower_counts"].items():
-        flat[f"followers.{role}"] = {int(key): value for key, value in counts.items()}
-    for status, count in census["ejections_by_flag_status"].items():
-        flat[f"ejections.{status}"] = count
-    for status, mean in census["mean_confidence"].items():
-        flat[f"confidence.{status}"] = mean
-    return flat
-
-
-def _memo_render_census(text: str) -> dict[tuple[str, str], tuple[int, ...]]:
-    """Every render-census row the memo publishes, keyed ``(leg, prompt class)``."""
-
-    rows: dict[tuple[str, str], tuple[int, ...]] = {}
-    for line in text.splitlines():
-        fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) != 6:
-            continue
-        leg = fields[0].strip("`")
-        prompt_class = fields[1].strip("`")
-        if leg not in _RENDER_LEGS or not prompt_class.islower():
-            continue
-        values = tuple(_first_int(field) for field in fields[2:6])
-        if any(value is None for value in values):
-            continue
-        rows[(leg, prompt_class)] = tuple(
-            int(value) for value in values if value is not None
-        )
-    return rows
-
-
-def _flatten_render_census(
-    census: Mapping[str, Any],
-) -> dict[tuple[str, str], tuple[int, ...]]:
-    return {
-        (leg, prompt_class): (
-            cells["rendered"],
-            cells["changed"],
-            cells["added_lines"],
-            cells["added_bytes"],
-        )
-        for leg, block in census.items()
-        for prompt_class, cells in block["by_prompt_class"].items()
-    }
-
-
-def _memo_kind_census(text: str) -> tuple[dict[str, int], dict[str, int]]:
-    """The §5.2 eight-kind reduction table, as ``(OFF, ON)`` counters."""
-
-    off: dict[str, int] = {}
-    on: dict[str, int] = {}
-    for line in text.splitlines():
-        fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) != 4:
-            continue
-        if not (fields[0].startswith("`") and fields[0].endswith("`")):
-            continue
-        off_value = _first_int(fields[1])
-        on_value = _first_int(fields[2])
-        if off_value is None or on_value is None:
-            continue
-        # Zeros are KEPT: a kind nobody ever spoke is still one of the eight the
-        # census advertises, and dropping it here would let the memo silently
-        # stop publishing a row.
-        kind = fields[0].strip("`")
-        off[kind] = off_value
-        on[kind] = on_value
-    return off, on
-
-
-def _run_kind_census(
-    census: Mapping[str, Any],
-) -> tuple[dict[str, int], dict[str, int]]:
-    """The pooled reduction census over ALL eight kinds, zeros included.
-
-    The live counters hold only the kinds something was spoken in, so the
-    absent ones are filled at zero here rather than dropped from the memo.
-    """
-
-    return (
-        {kind: census["statements_off"].get(kind, 0) for kind in _REPORTED_KINDS},
-        {kind: census["statements_on"].get(kind, 0) for kind in _REPORTED_KINDS},
-    )
-
-
-def _first_int(field: str) -> int | None:
-    match = re.search(r"(\d[\d,]*)", field)
-    return int(match.group(1).replace(",", "")) if match else None
-
-
-_LedgerRow = tuple[tuple[str, ...], dict[str, int]]
-
-
-def _memo_ledger_rows(text: str) -> dict[tuple[str, int, int, str], _LedgerRow]:
-    """The §2.3 per-case ledger, keyed by ``(set, seed, meeting, ejectee)``.
-
-    Every published column is carried, the recorded vote tally included: a tally
-    is a fact about the case, and a row whose tags survive an edit to its tally
-    is still a drifted row.
-    """
-
-    rows: dict[tuple[str, int, int, str], _LedgerRow] = {}
-    for line in text.splitlines():
-        fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) != 6 or fields[0] not in cf.CANONICAL_SETS:
-            continue
-        if not fields[1].isdigit() or not re.fullmatch(r"m\d+", fields[2]):
-            continue
-        tags = () if fields[4] == "(none)" else tuple(fields[4].split("+"))
-        key = (fields[0], int(fields[1]), int(fields[2][1:]), fields[3])
-        rows[key] = (tags, _memo_tally(fields[5]))
-    return rows
-
-
-def _memo_tally(field: str) -> dict[str, int]:
-    """``p-5 3, SKIP 2, p-1 1`` as the counter the payload publishes."""
-
-    tally: dict[str, int] = {}
-    for entry in field.split(","):
-        target, _, count = entry.strip().rpartition(" ")
-        tally[target] = int(count)
-    return tally
-
-
-def _run_ledger_rows(
-    payload: Mapping[str, object],
-) -> dict[tuple[str, int, int, str], _LedgerRow]:
-    ledger = payload["pooled_injustice_ledger"]
-    assert isinstance(ledger, list)
-    return {
-        (row["set"], row["seed"], row["meeting"], row["victim"]): (
-            tuple(row["tags"]),
-            dict(row["tally"]),
-        )
-        for row in ledger
-    }
-
-
-def _memo_class_totals(text: str) -> dict[str, int]:
-    """The §2.1 class-total table, keyed by the tag the ledger emits."""
-
-    totals: dict[str, int] = {}
-    for line in text.splitlines():
-        fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) != 4:
-            continue
-        count = re.fullmatch(r"\*\*(\d+)\*\*", fields[2])
-        if count is None or not re.fullmatch(r"[A-Z-]+", fields[1]):
-            continue
-        totals[fields[1]] = int(count.group(1))
-    return totals
-
-
 def _values(fields: list[str]) -> tuple[Any, ...]:
     return tuple(_value(field) for field in fields)
 
@@ -3302,29 +2812,3 @@ def _value(field: str) -> tuple[int, int] | None:
     if match is None:
         return None
     return (int(match.group(1)), int(match.group(2)))
-
-
-def _run_tables(
-    payload: Mapping[str, object],
-) -> tuple[dict[tuple[str, str], tuple[Any, ...]], dict[str, tuple[Any, ...]]]:
-    per_set: dict[tuple[str, str], tuple[Any, ...]] = {}
-    sets = payload["sets"]
-    assert isinstance(sets, dict)
-    for set_name, block in sets.items():
-        for row in block["rows"]:
-            per_set[(set_name, row["cell"])] = _columns(row)
-    pooled_rows = payload["pooled"]
-    assert isinstance(pooled_rows, list)
-    pooled = {row["cell"]: _columns(row) for row in pooled_rows}
-    return per_set, pooled
-
-
-def _columns(row: Mapping[str, object]) -> tuple[Any, ...]:
-    return tuple(
-        tuple(value) if isinstance(value, list) else None
-        for value in (
-            row["recorded_off"],
-            row["reconstructed_off"],
-            row["on"],
-        )
-    )

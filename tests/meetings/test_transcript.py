@@ -14,7 +14,6 @@ classification (DESIGN.md §5.4; audit gp-1 precision) is pinned here.
 from __future__ import annotations
 
 import itertools
-from typing import Final
 
 import pytest
 
@@ -41,7 +40,6 @@ from meetings.transcript import (
     WEAK_REASON_BOUNDARY_OVERLAP,
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_NARROW_WINDOW,
-    WEAK_REASON_ADJACENT_ONE_TICK,
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_RETARGETED_PROXY,
     WEAK_REASON_SELF_PAIR,
@@ -1646,12 +1644,17 @@ class TestContradictionLiftKey:
 
 from pathlib import Path  # noqa: E402
 
-from meetings.transcript import (  # noqa: E402
-    _dedupe_echo_alibis,  # noqa: PLC2701
-    _iter_alibis,  # noqa: PLC2701
-)
+from dataclasses import replace  # noqa: E402
+from types import MappingProxyType  # noqa: E402
+from collections.abc import Mapping  # noqa: E402
+
+from meetings.schemas import MoveWitnessRecord, PlayerId  # noqa: E402
 from orchestrator.replay import MeetingReplayEntry, read_all_entries  # noqa: E402
 from tests._helpers.committed import (  # noqa: E402
+    MOVEMENT_DECIDED_MEETINGS,
+    SAMPLES_9P2I,
+    CommittedMeeting,
+    committed_meetings,
     frozen_meetings,
     sighting_records_from_recorded_flags,
 )
@@ -1677,35 +1680,32 @@ def _living_roster(entry: MeetingReplayEntry) -> frozenset[str]:
     return frozenset(ballot.voter for ballot in entry.ballots)
 
 
-# The committed replays/samples sets were re-recorded for the baseline-7 record
-# (Task 20.36) on the Qwen/Qwen3.6-27B substrate, qwen3_6_27b.v4 prompts, with
-# every one of the twenty-one retired levers UNCONDITIONALLY ON — the substrate
-# stamped into every replay game_over. ``detect_contradictions`` is a pure
-# function with no env dependency, but it now reads two PRIVATE channels that the
-# transcript does not carry, so a bare re-derivation is no longer the right
-# comparison:
-#
-#   * ``vent_witness_records`` (Task 15.4 ``vent_sighting`` + the Task 18.9
-#     grounded vent-placement variant of ``alibi_vs_physical``). Left UNSUPPLIED
-#     here: a re-derivation without it mints no vent flag, so the recorded vent
-#     flags are recorded-only and are excluded from both sides of the comparison
-#     below (mirrors ``eval.watchability``'s vent-aware merge).
-#   * ``sighting_records`` (the graduated grounded-prosecution lever). This one
-#     IS supplied, inverted out of the recorded verdicts by
-#     :func:`tests._helpers.committed.sighting_records_from_recorded_flags`: a
-#     recorded flag carrying
-#     WEAK_REASON_UNGROUNDED_SIGHTING says the speaker's own record did not back
-#     that sighting, and every other spoken sighting was grounded at record time.
-#     Without it the re-derivation bands every sighting as ungrounded and the
-#     comparison measures the missing channel rather than the detector.
-#
-# The graduated movement channel is the one that CANNOT be inverted (a spoken
-# transition is read at its destination, which neither room index holds), so the
-# pairings it re-targets are classified rather than reproduced. Audit anchor:
-# audit-2026-06-10-1820-gameplay-data.md gp-2 (C-C-1, C-C-2, C-C-3, D-D-3), and
-# audits/audit-phase-20-baseline-7.md §10.3 for what the re-derivation can no
-# longer prove.
+def _channelled_meetings(seed: int) -> list[CommittedMeeting]:
+    """``seed``'s meetings in file order, with the arguments production passed.
+
+    The living roster, the trigger kind and the three private channels, rebuilt
+    by the replay walk in ``tests._helpers.committed`` and gated equal to the
+    recording in ``tests/meetings/test_contradictions.py``.
+    """
+
+    return [
+        meeting for meeting in committed_meetings(SAMPLES_9P2I) if meeting.seed == seed
+    ]
+
+
+# The detector reads three private per-speaker channels the transcript does not
+# carry: witnessed vents, witnessed moves and first-hand sightings. A pin that
+# describes the recording re-derives through ``_channelled_meetings``, which
+# threads all three as production did. ``_rederive`` stays for the
+# transcript-level properties only -- determinism, and a frozen baseline-8
+# exhibit line whose tick rows no walk can rebuild -- and passes the sighting
+# channel inverted from the recorded verdicts
+# (:func:`tests._helpers.committed.sighting_records_from_recorded_flags`), no
+# vent channel and no movement channel. Audit anchor:
+# audit-2026-06-10-1820-gameplay-data.md gp-2 (C-C-1, C-C-2, C-C-3, D-D-3).
 def _rederive(entry: MeetingReplayEntry) -> tuple[ContradictionRef, ...]:
+    """Records-free by design: the detector over a transcript alone."""
+
     return detect_contradictions(
         entry.transcript,
         roster=_living_roster(entry),
@@ -1713,366 +1713,99 @@ def _rederive(entry: MeetingReplayEntry) -> tuple[ContradictionRef, ...]:
     )
 
 
-def _alibi_rooms_by_event_id(entry: MeetingReplayEntry) -> dict[str, frozenset[str]]:
-    """Canonical room set per alibi-claim event id, detector-id format."""
-
-    return {
-        f"turn:{turn.turn_id}:claim:{index}": frozenset(
-            room for segment in claim.route for room in canonical_rooms(segment.room)
-        )
-        for turn in entry.transcript.turns
-        for index, claim in enumerate(turn.claims)
-        if isinstance(claim, AlibiClaim)
-    }
-
-
-def _sighting_rooms_by_event_id(
-    entry: MeetingReplayEntry,
-) -> dict[str, frozenset[str]]:
-    return {
-        f"turn:{turn.turn_id}:obs:{index}": canonical_rooms(observation.room)
-        for turn in entry.transcript.turns
-        for index, observation in enumerate(turn.observations)
-        if isinstance(observation, SawPlayerObservation)
-    }
-
-
-def _vent_observation_event_ids(entry: MeetingReplayEntry) -> frozenset[str]:
-    """Detector-id set for every spoken :class:`SawVentObservation`.
-
-    The Task 18.9 lever-2 (grounded vent-placement) variant of
-    ``alibi_vs_physical`` pairs one of these vent observations with the subject's
-    own placement, GROUNDED against the speaker's typed vent-witness channel --
-    which is not in the transcript. A bare re-derivation (no vent channel) never
-    mints it, exactly like the Task 15.4 ``vent_sighting`` kind, so those recorded
-    flags are recorded-only and excluded from the re-derivation-exactness pin.
-    """
-
-    return frozenset(
-        f"turn:{turn.turn_id}:obs:{index}"
-        for turn in entry.transcript.turns
-        for index, observation in enumerate(turn.observations)
-        if isinstance(observation, SawVentObservation)
-    )
-
-
-def _has_spoken_transition(entry: MeetingReplayEntry, flag: ContradictionRef) -> bool:
-    """Did either side's speaker also speak a transition for the flag's subject?
-
-    The graduated ``movement_claim_shape`` lever reads a spoken ``saw_move`` at
-    its DESTINATION room, so a sighting the transcript indexes under the ORIGIN
-    can be prosecuted against the destination instead. The channel that decides
-    it is the speaker's private movement perception, which the replay does not
-    persist and no inversion recovers, so the re-derivation cannot reproduce the
-    re-aim -- it is classified here rather than re-run. Audit:
-    audits/audit-phase-20-baseline-7.md §10.3.
-    """
-
-    turn_ids = {
-        event_id.rsplit(":", 2)[0].removeprefix("turn:")
-        for event_id in (flag.event_a_id, flag.event_b_id)
-    }
-    return any(
-        isinstance(observation, SawMoveObservation)
-        and observation.subject in flag.subjects
-        for turn in entry.transcript.turns
-        if turn.turn_id in turn_ids
-        for observation in turn.observations
-    )
-
-
-def _classify_removed_flag(
-    entry: MeetingReplayEntry, flag: ContradictionRef
-) -> set[str]:
-    """Which Task 10.1 artifact classes explain a no-longer-emitted flag.
-
-    Resolves the flag's event ids back into the recorded claims and
-    classifies with the production ``canonical_rooms`` -- the audited
-    artifact taxonomy (gp-2): ``placeholder`` (a side canonicalises to no
-    room), ``containment`` (the canonical sets intersect -- a
-    confirmation, not a contradiction), ``echo`` (the flag rode an alibi
-    restatement now deduped to the original claim), ``movement`` (the graduated
-    movement channel read one side at a spoken transition's DESTINATION rather
-    than at the room the transcript indexes it under -- either the side is a
-    transition neither room index holds at all, or the same speaker spoke a
-    ``saw_move`` for the flag's subject, which is what re-aims the pairing).
-    """
-
-    alibi_rooms = _alibi_rooms_by_event_id(entry)
-    sighting_rooms = _sighting_rooms_by_event_id(entry)
-    sides = [
-        alibi_rooms.get(event_id, sighting_rooms.get(event_id))
-        for event_id in (flag.event_a_id, flag.event_b_id)
-    ]
-
-    classes: set[str] = set()
-    if sides[0] is None or sides[1] is None:
-        return {"movement"}
-    if _has_spoken_transition(entry, flag):
-        classes.add("movement")
-    if not sides[0] or not sides[1]:
-        classes.add("placeholder")
-    elif sides[0] & sides[1]:
-        classes.add("containment")
-    surviving_claim_ids = {
-        alibi.event_id
-        for alibi in _dedupe_echo_alibis(tuple(_iter_alibis(entry.transcript)))
-    }
-    flag_claim_ids = {
-        event_id
-        for event_id in (flag.event_a_id, flag.event_b_id)
-        if event_id in alibi_rooms
-    }
-    if flag_claim_ids - surviving_claim_ids:
-        classes.add("echo")
-    return classes
-
-
-def _is_promoted_self_stated_divergence(
-    recorded: ContradictionRef | None, rederived: ContradictionRef | None
-) -> bool:
-    """Whether ``recorded`` -> ``rederived`` is the Task 13.14 self-stated drop.
-
-    The 13.14 reversal removes ``WEAK_REASON_SELF_STATED`` from the
-    ``alibi_vs_sighting`` marker writer, so a committed (pre-13.14) weak
-    self-stated flag re-derives as the SAME flag -- identical contradiction id,
-    kind, subjects, and event-id pair -- with only the self-stated reason gone
-    (the interior/wide subset thereby crossing into the STRONG band). This
-    recogniser lets the artifact-collapse pin treat that reclassification as
-    the EXPECTED $0-re-extraction divergence, distinct from the placeholder /
-    proxy-retarget repairs.
-    """
-
-    return (
-        recorded is not None
-        and rederived is not None
-        and recorded.kind == "alibi_vs_sighting"
-        and WEAK_REASON_SELF_STATED in recorded.description
-        and WEAK_REASON_SELF_STATED not in rederived.description
-        and recorded.subjects == rederived.subjects
-        and recorded.event_a_id == rederived.event_a_id
-        and recorded.event_b_id == rederived.event_b_id
-    )
-
-
-#: Divergences the classifier below cannot NAME, listed one by one so the walk
-#: stays a real gate on GROWTH: an unexplained divergence outside this set still
-#: fails, and one leaving it fails too.
-#:
-#: The single entry is a knock-on of the movement channel that the classifier's
-#: own helper cannot see. The flag re-derives identically EXCEPT that it gains
-#: ``[weak signal: single grounded source]``: its sibling pairing is no longer
-#: re-derivable, so the alibi falls from two grounded sources to one. The helper
-#: scans only the flag's OWN turns, and the ``saw_move`` that grounds the second
-#: source lives in turn 0 of the same meeting — so the cause is a movement
-#: divergence that the "movement" class genuinely fails to match. Widening the
-#: helper is a change to test logic and was deliberately not made under a record;
-#: it is routed with the baseline-8 findings.
-_NAMED_UNCLASSIFIED_DIVERGENCES: Final[frozenset[str]] = frozenset(
-    {
-        "contra:alibi_vs_sighting:turn:headless-seed-41:meeting-2:turn-3:obs:2"
-        "|turn:headless-seed-41:meeting-2:turn-4:claim:0"
-    }
-)
-
-
 class TestCommittedBytesArtifactCollapse:
-    """Re-derivation reproduces the recorded bytes EXACTLY (no offline divergence).
+    """Re-derivation reproduces the recorded bytes EXACTLY.
 
     At 10.1 merge time this class proved the artifact collapse against the
     e750b40 era bytes; at 10.5 it pinned exactness; at W1 the only surviving
-    divergence was the Task 10.10 guard the W1 bytes predated. The Task 10.17
-    W2 re-record was recorded with the FULL repaired detector — the 10.6
-    allowlist/proxy rules AND the 10.10 same-speaker guard all ran at record
-    time — so the committed bytes already carry every repair and the pin is
-    once again pure exactness: re-derivation reproduces every recorded
-    transcript-derivable flag byte-for-byte, with no removed and no added sites.
+    divergence was the Task 10.10 guard the W1 bytes predated. Since the Task
+    10.17 W2 re-record every repair runs at record time, so the pin is pure
+    exactness: replay determinism (AGENTS.md load-bearing rule 1), read through
+    the detector.
 
-    Task 16.14 baseline 4: the recorded set carries the grounded Task 15.4
-    ``vent_sighting`` kind, which is GROUNDED against each speaker's typed
-    vent-witness channel rather than the transcript, so a bare re-derivation never
-    mints it. Task 18.12 baseline 6: the graduated lever-2 adds the GROUNDED
-    vent-placement variant of ``alibi_vs_physical`` (9 flags), grounded the same
-    way. Both grounded kinds are excluded from the recorded side of the exactness
-    comparison below (re-derivation and the recorded vent census are disjoint);
-    the transcript-derivable flags -- including the 6 INFERENTIAL co-presence
-    ``alibi_vs_physical`` flags -- still re-derive byte-for-byte.
-
-    The structural guards stay armed: any removal must still be explained by a
-    repair (placeholder kill or a proxy re-target) and any addition must still
-    be a weak proxy re-target — so a future detector drift away from the
-    committed bytes fails here exactly as before, even though on baseline 4 both
-    lists are empty.
+    It holds for every kind, the grounded vent kinds and the movement-read
+    pairings included, because the re-derivation threads the three private
+    channels production threaded: every recorded flag re-derives byte-for-byte,
+    nothing is removed and nothing is added, on all 145 committed meetings.
     """
 
-    # (seed, meeting_index) -> recorded flags that no longer re-derive.
-    # At W0/W1 this class proved detector repairs (10.6, then 10.10) as an
-    # OFFLINE divergence from pre-repair recorded flags. The Task 10.17 W2
-    # re-record ran every repair at RECORD time (10.6 allowlist/proxy + the
-    # 10.10 same-speaker guard), which emptied the map.
-    #
-    # The graduated ``movement_claim_shape`` lever prosecutes a spoken
-    # transition at its DESTINATION, decided against the speaker's private
-    # movement perception. That channel is not persisted and no inversion of the
-    # recorded verdicts recovers it (unlike vents and sightings), so a recorded
-    # flag it re-paired can re-derive differently or not at all; any such
-    # removal must classify ``movement`` by _classify_removed_flag, the map pins
-    # WHERE, and the per-flag assertion in the loop pins WHY. Audit:
-    # audits/audit-phase-20-baseline-7.md §10.3. On the baseline-9 record no
-    # recorded flag is removed; every divergence is an ADDITION (a flag the
-    # re-derivation mints that the recording did not carry), all of them in the
-    # 17 samples meetings the movement-channel walk in test_contradictions.py
-    # names.
-    # was {(5,0):1, (10,0):1, (12,0):1, (13,0):1, (23,1):1, (29,1):1, (31,1):2,
-    # (38,0):1, (39,0):2, (41,2):2, (44,0):2} — 15 flags across 11 meetings.
-    _REPAIRED_SITES: dict[tuple[int, int], int] = {}
-
-    def test_rederivation_diverges_only_at_the_repaired_sites(self) -> None:
+    def test_the_true_channels_re_derive_every_recorded_flag(self) -> None:
+        # was _REPAIRED_SITES plus a removed-flag classifier over a records-free walk
+        # was an addition allowlist (proxy re-targets and the corridor band)
+        # was a vent-kind exclusion: a bare re-derivation minted no vent flag
+        # was _NAMED_UNCLASSIFIED_DIVERGENCES, a seed-41 meeting-2 flag of baseline 8
+        meetings = committed_meetings(SAMPLES_9P2I)
+        assert len(meetings) == 145
         recorded_total = 0
         rederived_total = 0
-        removed_sites: dict[tuple[int, int], int] = {}
-        # Task 13.14: the self-stated down-weight is removed for the
-        # alibi_vs_sighting band. On the Task 16.14 baseline-4 re-record
-        # the bytes are RECORDED under 13.14, so the recorded flags already carry
-        # the post-13.14 classification and re-derivation no longer drops a marker
-        # -- 0 promoted divergences (vs 110 when the pre-13.14 bytes re-derived).
-        # These are counted + pinned separately from the placeholder /
-        # proxy-retarget repairs the original guard tracks.
-        promoted_divergences = 0
-        promoted_to_strong = 0
-        for seed in range(50):
-            for index, entry in enumerate(_committed_meetings(seed)):
-                # ``vent_sighting`` (Task 15.4) AND the Task 18.9 lever-2 GROUNDED
-                # vent-placement variant of ``alibi_vs_physical`` are both grounded
-                # against each speaker's typed vent-witness channel, which is not in
-                # the transcript, so a bare re-derivation never mints them -- the
-                # recorded vent flags are recorded-only and disjoint from the
-                # re-derived set (mirrors eval.watchability's vent-aware merge).
-                # The re-derivation-exactness pin is over the transcript-derivable
-                # kinds, so both are excluded from the recorded side here. A
-                # grounded vent-placement flag is one referencing a spoken
-                # SawVentObservation (the INFERENTIAL alibi_vs_physical -- a plain
-                # co-presence contradiction -- has no vent-observation side and
-                # re-derives normally).
-                vent_obs_ids = _vent_observation_event_ids(entry)
-                recorded_by_id = {
-                    flag.contradiction_id: flag
-                    for flag in entry.contradictions
-                    if flag.kind != "vent_sighting"
-                    and not (
-                        flag.kind == "alibi_vs_physical"
-                        and (
-                            flag.event_a_id in vent_obs_ids
-                            or flag.event_b_id in vent_obs_ids
-                        )
-                    )
-                }
-                rederived_by_id = {
-                    flag.contradiction_id: flag for flag in _rederive(entry)
-                }
-                recorded_total += len(recorded_by_id)
-                rederived_total += len(rederived_by_id)
-                removed = []
-                for flag_id, flag in recorded_by_id.items():
-                    rederived = rederived_by_id.get(flag_id)
-                    if rederived == flag:
-                        continue
-                    if rederived is not None and _is_promoted_self_stated_divergence(
-                        flag, rederived
-                    ):
-                        promoted_divergences += 1
-                        if not is_weak_contradiction(rederived):
-                            promoted_to_strong += 1
-                        continue
-                    removed.append(flag)
-                added = [
-                    flag
-                    for flag_id, flag in rederived_by_id.items()
-                    if recorded_by_id.get(flag_id) != flag
-                    and not _is_promoted_self_stated_divergence(
-                        recorded_by_id.get(flag_id), flag
-                    )
-                ]
-                if removed:
-                    removed_sites[(seed, index)] = len(removed)
-                for flag in removed:
-                    # Each non-13.14 removal must be explained by a repair: a
-                    # 10.6 placeholder-variant side (the allowlist kill) or a
-                    # flag whose re-target now exists in the re-derived set under
-                    # the same event-id pair -- the 10.6 cross-speaker proxy
-                    # alibi or the 10.10 same-speaker proxy-intra-turn guard.
-                    classes = _classify_removed_flag(entry, flag)
-                    retargeted = flag.contradiction_id in rederived_by_id and any(
-                        reason in rederived_by_id[flag.contradiction_id].description
-                        for reason in (
-                            WEAK_REASON_RETARGETED_PROXY,
-                            WEAK_REASON_PROXY_INTRA_TURN,
-                        )
-                    )
-                    assert (
-                        "placeholder" in classes
-                        or "movement" in classes
-                        or retargeted
-                        or flag.contradiction_id in _NAMED_UNCLASSIFIED_DIVERGENCES
-                    ), flag.contradiction_id
-                for flag in added:
-                    # The only NEW pairings a repair may mint are the weak
-                    # re-targets at the proxy speaker (10.6 cross-speaker, 10.10
-                    # same-speaker) and the corridor band the graduated map-aware
-                    # arbitration adds to a pair the recording carried STRONG.
-                    assert (
-                        WEAK_REASON_RETARGETED_PROXY in flag.description
-                        or WEAK_REASON_PROXY_INTRA_TURN in flag.description
-                        or WEAK_REASON_ADJACENT_ONE_TICK in flag.description
-                        or flag.contradiction_id in _NAMED_UNCLASSIFIED_DIVERGENCES
-                    ), flag.contradiction_id
-                    assert is_weak_contradiction(flag)
+        removed: list[str] = []
+        added: list[str] = []
+        reordered: list[str] = []
+        for meeting in meetings:
+            recorded = meeting.entry.contradictions
+            rederived = meeting.rederive()
+            recorded_total += len(recorded)
+            rederived_total += len(rederived)
+            removed.extend(
+                f"{meeting.name} {flag.contradiction_id}"
+                for flag in recorded
+                if flag not in rederived
+            )
+            added.extend(
+                f"{meeting.name} {flag.contradiction_id}"
+                for flag in rederived
+                if flag not in recorded
+            )
+            if rederived != recorded:
+                reordered.append(meeting.name)
+        assert removed == []
+        assert added == []
+        assert reordered == []
+        # was 15 recorded vs 39 re-derived, vent kinds excluded and no move channel
+        assert recorded_total == rederived_total == 107
 
-        # The divergence is confined to the movement-channel sites above.
-        assert removed_sites == self._REPAIRED_SITES
-        # The transcript-derivable flag COUNT no longer round-trips exactly: 15
-        # recorded, 39 re-derived. The recorded grounded ``vent_sighting`` and
-        # grounded vent-placement ``alibi_vs_physical`` flags are excluded above
-        # (re-derivation without the vent channel cannot mint them); all 15 that
-        # remain re-derive byte-for-byte, and the other 24 are pairings the
-        # recording did not carry, all in meetings the movement channel can move.
-        # Baseline 6 read recorded == rederived; the record trades that exactness
-        # for the graduated channels, and §10.3 of the record audit says so in
-        # words.
-        assert recorded_total == 15  # was 54
-        assert rederived_total == 39  # was 60
-        # Task 16.14 baseline-4: the bytes are RECORDED under 13.14, so
-        # the self-stated down-weight is already baked into every recorded
-        # alibi_vs_sighting flag. Re-derivation is BYTE-IDENTICAL (0 promoted
-        # divergences, vs 110 when the pre-13.14 bytes re-derived with the marker
-        # dropped) — the post-substrate determinism property; the strong promotions
-        # now live in the recorded bytes, not minted at re-extraction.
-        assert promoted_divergences == 0
-        assert promoted_to_strong == 0
+    def test_dropping_the_movement_channel_diverges_at_the_named_meetings(
+        self,
+    ) -> None:
+        # The perturbed control: the exactness above rests on the movement
+        # channel, so dropping it diverges exactly at this set's members of the
+        # helper's named movement-decided meetings.
+        empty: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] = MappingProxyType({})
+        diverged = {
+            meeting.name
+            for meeting in committed_meetings(SAMPLES_9P2I)
+            if replace(meeting, move_witness_records=empty).rederive()
+            != meeting.entry.contradictions
+        }
+        named = {
+            name
+            for name in MOVEMENT_DECIDED_MEETINGS
+            if name.startswith("samples/9p2i:")
+        }
+        assert diverged == named
+        assert len(diverged) == 17
 
     def test_surviving_endpoint_flags_are_weak_banded(self) -> None:
         # The endpoint class survives ONLY weak-banded (the 10.1 decision:
         # weak-banded by preference over exclusion — an endpoint mismatch
         # can still convert under corroboration). The invariant is that every
         # endpoint-reason flag carries the weak marker (asserted in-loop); the
-        # count is 25 on the baseline-9 record (26 at baseline 6). The band grew
-        # at baseline 7 because the graduated map-aware arbitration re-reads
-        # corridor-adjacent pairs and lands more of them in the endpoint/boundary
-        # weak band rather than in the strong one; on baseline 9 it shrank along
-        # with the alibi-class flag count as a whole.
+        # count is 7 on the baseline-9 record (26 at baseline 6), read through
+        # the channels production threaded.
         endpoint_weak = 0
-        for seed in range(50):
-            for entry in _committed_meetings(seed):
-                for flag in _rederive(entry):
-                    if (
-                        WEAK_REASON_ENDPOINT_TICK in flag.description
-                        or WEAK_REASON_BOUNDARY_OVERLAP in flag.description
-                    ):
-                        assert is_weak_contradiction(flag)
-                        endpoint_weak += 1
-        assert endpoint_weak == 25  # was 50
+        for meeting in committed_meetings(SAMPLES_9P2I):
+            for flag in meeting.rederive():
+                if (
+                    WEAK_REASON_ENDPOINT_TICK in flag.description
+                    or WEAK_REASON_BOUNDARY_OVERLAP in flag.description
+                ):
+                    assert is_weak_contradiction(flag)
+                    endpoint_weak += 1
+        assert endpoint_weak == 7  # was 25, records-free
 
     def test_every_surviving_flag_remains_deterministic(self) -> None:
+        """Records-free by design: determinism is a property of the transcript."""
+
         # Byte-identical re-derivation: running the pure detector twice
         # over every committed transcript yields identical flag tuples
         # (the §0 rule-1 precondition for the 10.5 re-record).
@@ -2112,7 +1845,8 @@ class TestCommittedBytesSeedPins:
         placeholder_claim_rooms = 0
         placeholder_turn_ids: set[str] = set()
         for seed in range(50):
-            for entry in _committed_meetings(seed):
+            for meeting in _channelled_meetings(seed):
+                entry = meeting.entry
                 for turn in entry.transcript.turns:
                     for claim in turn.claims:
                         room = getattr(claim, "room", None)
@@ -2126,7 +1860,7 @@ class TestCommittedBytesSeedPins:
                             placeholder_turn_ids.add(turn.turn_id)
                 # A placeholder side mints nothing: no flag (recorded or re-derived)
                 # references the turn that carried the non-spatial claim.
-                for flag in (*entry.contradictions, *_rederive(entry)):
+                for flag in (*entry.contradictions, *meeting.rederive()):
                     assert not any(
                         tid in flag.contradiction_id for tid in placeholder_turn_ids
                     )
@@ -2196,7 +1930,10 @@ class TestCommittedBytesSeedPins:
             and f"at tick {interior_tick}." in flag.description
         ]
         assert len(recorded) == 0  # was 2
-        rederived_by_id = {f.contradiction_id: f for f in _rederive(entry)}
+        rederived_by_id = {
+            f.contradiction_id: f
+            for f in _channelled_meetings(seed)[meeting_index].rederive()
+        }
         for flag in recorded:
             # The pin is an INTERIOR genuine flag, not an endpoint-band one: the
             # sighting tick sits strictly inside the alibi window, so the genuine
@@ -3008,8 +2745,7 @@ class TestCommittedBytes106Pins:
         # PROXY band, a different class — is unaffected, and p-9 stays below gate.
         from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 
-        entry = _committed_meetings(28)[1]
-        rederived = _rederive(entry)
+        rederived = _channelled_meetings(28)[1].rederive()
 
         def _rederived_suspicion(player: str) -> float:
             beliefs = BeliefState()
@@ -3116,14 +2852,14 @@ class TestCommittedBytes1010Pins:
         # baseline-2/3 representative proxy-intra-turn firing site (p-9's proxy
         # alibi for p-1 conflicting with p-9's own sighting of p-1, re-targeted WEAK
         # at speaker p-9) DISSOLVED with the alibi-surface collapse: seed-5 m0 now
-        # re-derives to ZERO contradiction flags, and no same-speaker proxy pair
-        # fires the guard anywhere on the set. This pins the honest absence at the
-        # former representative coordinate: seed-5 m0 mints no proxy-intra-turn
-        # retarget on the speaker AND none leaks onto the third party. The guard
-        # LOGIC (that such a pair WOULD re-target weak) is pinned by the synthetic
+        # re-derives to its one recorded flag, a vent sighting of p-3, and no
+        # same-speaker proxy pair fires the guard anywhere on the set. This pins
+        # the honest absence at the former representative coordinate: seed-5 m0
+        # mints no proxy-intra-turn retarget on the speaker AND none leaks onto
+        # the third party. The guard LOGIC (that such a pair WOULD re-target weak)
+        # is pinned by the synthetic
         # ``TestProxyIntraTurnGuard.test_same_speaker_alibi_vs_sighting_retargets_weak``.
-        entry = _committed_meetings(5)[0]
-        rederived = _rederive(entry)
+        rederived = _channelled_meetings(5)[0].rederive()
         on_p1_proxy = [
             flag
             for flag in rederived
@@ -3153,8 +2889,8 @@ class TestCommittedBytes1010Pins:
         # on NO ONE. Walked from the 0.5 prior, the seed-28 pin's convention.
         from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 
-        entry = _committed_meetings(38)[1]
-        rederived = _rederive(entry)
+        meeting = _channelled_meetings(38)[1]
+        rederived = meeting.rederive()
 
         def lifted_max(player: str) -> float:
             beliefs = BeliefState()
@@ -3175,7 +2911,7 @@ class TestCommittedBytes1010Pins:
         # The redirect argmax is the highest over-gate candidate (ties to
         # the lowest id); no proxy artifact row is over-gate, so p-6 (and
         # p-2) can never be that argmax.
-        graph = {player: lifted_max(player) for player in sorted(_living_roster(entry))}
+        graph = {player: lifted_max(player) for player in sorted(meeting.roster)}
         over_gate = {p: s for p, s in graph.items() if s >= 0.60}
         assert "p-6" not in over_gate
         assert "p-2" not in over_gate
@@ -3196,14 +2932,16 @@ class TestCommittedBytes1010Pins:
         # re-triggers scrutiny.
         retargets: list[tuple[int, int, tuple[str, ...]]] = []
         for seed in range(50):
-            for index, entry in enumerate(_committed_meetings(seed)):
-                for flag in _rederive(entry):
+            for index, meeting in enumerate(_channelled_meetings(seed)):
+                for flag in meeting.rederive():
                     if WEAK_REASON_PROXY_INTRA_TURN in flag.description:
                         assert is_weak_contradiction(flag)
                         retargets.append((seed, index, flag.subjects))
         assert sorted(set(retargets)) == []
 
     def test_seed25_m0_weak_cross_speaker_conflict_not_retargeted(self) -> None:
+        """Records-free by design: a frozen exhibit and a kind with no channel."""
+
         # THE TRIPWIRE, INTENT-PRESERVED (doctrine rule 3) on the Task 18.12
         # baseline-6 re-record (the CREW-ONLY graduation slate). The
         # alibi_conflict band carries EIGHT flags set-wide, each a WEAK two-author
@@ -3243,9 +2981,11 @@ class TestCommittedBytes1010Pins:
         # A genuine same-subject contradiction from TWO different speakers
         # (the seed-14 m0 two-witness fold on p-3) classifies exactly as
         # today: no retarget, re-derivation byte-identical to the record.
-        entry = _committed_meetings(14)[0]
-        rederived = _rederive(entry)
-        recorded_by_id = {flag.contradiction_id: flag for flag in entry.contradictions}
+        meeting = _channelled_meetings(14)[0]
+        rederived = meeting.rederive()
+        recorded_by_id = {
+            flag.contradiction_id: flag for flag in meeting.entry.contradictions
+        }
         rederived_by_id = {flag.contradiction_id: flag for flag in rederived}
         assert rederived_by_id == recorded_by_id
         assert not any(

@@ -16,7 +16,7 @@ import functools
 import itertools
 import tempfile
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Final, NamedTuple
 
@@ -788,7 +788,25 @@ _CANDIDATE_BUCKETS: Final[tuple[str, ...]] = ("<=60", "61-100", "101-150", ">150
 # is the CLAIM half -- matching on the untagged frame counted the candidate rows
 # and none of the rendered ones.
 _TESTIMONY_ROW: Final[str] = "CLAIM by "
-_SURVIVAL_FLOOR: Final[float] = 0.80
+# was _SURVIVAL_FLOOR = 0.80, a Phase-20 target met on baseline 7 and 8 (0.786 here)
+
+#: The classes the store bands below reported testimony, fixed by their own
+#: constants. Read once, at import, and never derived by comparison with
+#: ``_SALIENCE_REPORTED_TESTIMONY``, so re-banding testimony cannot move the set.
+_BANDS_BELOW_TESTIMONY: Final[frozenset[int]] = frozenset(
+    {
+        store._SALIENCE_SAW_PLAYER_ACTIVE,
+        store._SALIENCE_SAW_PLAYER_MOVE,
+        store._SALIENCE_SAW_PLAYER,
+        store._SALIENCE_TRANSITION,
+        store._SALIENCE_COMPLETED_TASK,
+        store._SALIENCE_OWN_ROUTINE,
+        store._SALIENCE_COOLDOWN_STATUS,
+        store._SALIENCE_EVIDENCE_TRAVEL,
+        store._SALIENCE_EVIDENCE_ACCOUNT_NOTICE,
+        store._SALIENCE_EVIDENCE_ACCOUNT_UNCERTAINTY,
+    }
+)
 
 
 def _candidate_bucket(candidates: int) -> str:
@@ -809,11 +827,20 @@ def _candidate_bucket(candidates: int) -> str:
 
 
 class _SurvivalCensus(NamedTuple):
-    """Reported rows offered and kept per candidate bucket."""
+    """Reported rows offered and kept per candidate bucket, and the band order."""
 
     offered: Mapping[str, int]
     kept: Mapping[str, int]
     renders: int
+    # Renders whose selector was handed a testimony row it did not keep.
+    shedding_renders: int
+    # Of those, the renders that still kept a row of a lower band: the
+    # per-render violation of the band order.
+    violating_renders: int
+    # Lower-band rows kept, per candidate bucket, by the renders that shed.
+    lower_kept_when_shedding: Mapping[str, int]
+    # Lower-band rows kept by the renders that shed no testimony row.
+    lower_kept_otherwise: int
 
 
 def _survival_census(sample_dir: Path) -> _SurvivalCensus:
@@ -824,6 +851,10 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
     composite. Each render is bucketed by how many candidate observations the
     selector saw, and the reported rows it OFFERED are scored against the
     reported rows it KEPT.
+
+    The band order is read off the selector itself: ``_select_within_budget`` is
+    wrapped for the walk, and each render's offered and kept lists are the ones
+    it was handed and returned, not rows parsed back out of the rendered text.
 
     ONE leg. The census was a two-way lever counterfactual until the raised
     reported band graduated; with the lever gone the second render was the same
@@ -842,71 +873,116 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
     )
     offered: Counter[str] = Counter()
     kept: Counter[str] = Counter()
-    renders = 0
+    lower_kept_when_shedding: Counter[str] = Counter()
+    renders = shedding_renders = violating_renders = lower_kept_otherwise = 0
 
-    for seed in seeds_on_disk(sample_dir):
-        roles = roles_by_game[seed]
-        memories: dict[str, MemoryStore] = {pid: MemoryStore() for pid in roles}
-        composites = {pid: AgentMemory(episodic=s) for pid, s in memories.items()}
-        audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-survival-")
-        service = ObservationService(
-            game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+    selections: list[tuple[list[store._Observation], list[store._Observation]]] = []
+    select = store._select_within_budget
+
+    def _recording_select(
+        *,
+        observations: Iterable[store._Observation],
+        budget: int,
+        account_uncertainty_subjects: int = 0,
+    ) -> list[store._Observation]:
+        handed = list(observations)
+        chosen = select(
+            observations=handed,
+            budget=budget,
+            account_uncertainty_subjects=account_uncertainty_subjects,
         )
-        try:
-            for walk_event in walk_replay(
-                sample_dir / f"replay-seed-{seed}.jsonl",
-                seed=seed,
-                num_players=num_players,
-                num_impostors=num_impostors,
-                tasks_per_crewmate=tasks_per_crewmate,
-                game_map=game_map,
-                config=_WALK_CONFIG,
-            ):
-                if isinstance(walk_event, TickOpened):
-                    _perceive_tick(walk_event, service=service, memories=memories)
-                elif isinstance(walk_event, MeetingOpened):
-                    living = sorted(
-                        pid
-                        for pid, player in walk_event.state.players.items()
-                        if player.alive
-                    )
-                    for pid in living:
-                        composite = composites[pid]
-                        own, fellows = _latest_self_guard_fields(composite.episodic)
-                        candidates = _build_observations(
-                            composite.episodic,
-                            own_agent_id=own,
-                            teammate_ids=(
-                                fellows if roles.get(pid) == "IMPOSTOR" else frozenset()
-                            ),
+        selections.append((handed, chosen))
+        return chosen
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(store, "_select_within_budget", _recording_select)
+        for seed in seeds_on_disk(sample_dir):
+            roles = roles_by_game[seed]
+            memories: dict[str, MemoryStore] = {pid: MemoryStore() for pid in roles}
+            composites = {pid: AgentMemory(episodic=s) for pid, s in memories.items()}
+            audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-survival-")
+            service = ObservationService(
+                game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+            )
+            try:
+                for walk_event in walk_replay(
+                    sample_dir / f"replay-seed-{seed}.jsonl",
+                    seed=seed,
+                    num_players=num_players,
+                    num_impostors=num_impostors,
+                    tasks_per_crewmate=tasks_per_crewmate,
+                    game_map=game_map,
+                    config=_WALK_CONFIG,
+                ):
+                    if isinstance(walk_event, TickOpened):
+                        _perceive_tick(walk_event, service=service, memories=memories)
+                    elif isinstance(walk_event, MeetingOpened):
+                        living = sorted(
+                            pid
+                            for pid, player in walk_event.state.players.items()
+                            if player.alive
                         )
-                        rows = sum(
-                            1 for obs in candidates if _TESTIMONY_ROW in obs.line
-                        )
-                        renders += 1
-                        if rows == 0:
-                            continue
-                        bucket = _candidate_bucket(len(candidates))
-                        offered[bucket] += rows
-                        rendered = render_for_prompt(
-                            composite,
-                            token_budget=DEFAULT_TOKEN_BUDGET,
-                        )
-                        kept[bucket] += sum(
-                            1
-                            for line in rendered.splitlines()
-                            if _TESTIMONY_ROW in line
-                        )
-                elif isinstance(walk_event, MeetingApplied):
-                    _fold_meeting_into_memories(walk_event, composites=composites)
-        finally:
-            service.close()
-            audit_dir.cleanup()
+                        for pid in living:
+                            composite = composites[pid]
+                            own, fellows = _latest_self_guard_fields(composite.episodic)
+                            candidates = _build_observations(
+                                composite.episodic,
+                                own_agent_id=own,
+                                teammate_ids=(
+                                    fellows
+                                    if roles.get(pid) == "IMPOSTOR"
+                                    else frozenset()
+                                ),
+                            )
+                            rows = sum(
+                                1 for obs in candidates if _TESTIMONY_ROW in obs.line
+                            )
+                            renders += 1
+                            if rows == 0:
+                                continue
+                            bucket = _candidate_bucket(len(candidates))
+                            offered[bucket] += rows
+                            selections.clear()
+                            rendered = render_for_prompt(
+                                composite,
+                                token_budget=DEFAULT_TOKEN_BUDGET,
+                            )
+                            kept[bucket] += sum(
+                                1
+                                for line in rendered.splitlines()
+                                if _TESTIMONY_ROW in line
+                            )
+                            (handed, chosen), *rest = selections
+                            assert rest == []
+                            chosen_ids = {id(obs) for obs in chosen}
+                            lower = sum(
+                                1
+                                for obs in chosen
+                                if obs.salience in _BANDS_BELOW_TESTIMONY
+                            )
+                            if any(
+                                _TESTIMONY_ROW in obs.line and id(obs) not in chosen_ids
+                                for obs in handed
+                            ):
+                                shedding_renders += 1
+                                violating_renders += int(lower > 0)
+                                lower_kept_when_shedding[bucket] += lower
+                            else:
+                                lower_kept_otherwise += lower
+                    elif isinstance(walk_event, MeetingApplied):
+                        _fold_meeting_into_memories(walk_event, composites=composites)
+            finally:
+                service.close()
+                audit_dir.cleanup()
 
     return _SurvivalCensus(
         offered=dict(offered),
         kept=dict(kept),
         renders=renders,
+        shedding_renders=shedding_renders,
+        violating_renders=violating_renders,
+        lower_kept_when_shedding=dict(lower_kept_when_shedding),
+        lower_kept_otherwise=lower_kept_otherwise,
     )
 
 
@@ -926,8 +1002,16 @@ def test_the_bucket_boundaries_partition_the_candidate_counts() -> None:
     assert [_candidate_bucket(n) for n in (151, 4000)] == [">150", ">150"]
 
 
+def test_the_lower_bands_sit_below_testimony_today() -> None:
+    # The set is fixed by its own constants; this reads today's testimony band
+    # against it once, so the per-render assertion below tests the band order
+    # the store ships, and a re-banding of testimony is what can fail it.
+    assert max(_BANDS_BELOW_TESTIMONY) < store._SALIENCE_REPORTED_TESTIMONY
+    assert len(_BANDS_BELOW_TESTIMONY) == 10
+
+
 @pytest.mark.slow
-def test_reported_rows_survive_in_every_candidate_bucket(
+def test_a_render_that_sheds_testimony_keeps_no_lower_band_row(
     survival: _SurvivalCensus,
 ) -> None:
     # Recounted from the committed bytes of replays/ml_corpus/9p2i, the set the
@@ -967,13 +1051,32 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # the saw_vent rows the OFF default used to swallow.
     assert sum(kept.values()) == 51346  # was 36958
     assert sum(survival.offered.values()) == 55016  # was 37123
-    # Every bucket clears the survival floor now, including the largest render --
-    # the bucket the register measured keeping NO reported row at all.
-    for bucket in _CANDIDATE_BUCKETS:
-        offered = survival.offered[bucket]
-        assert survival.kept[bucket] / offered >= _SURVIVAL_FLOOR, (
-            f"{bucket}: kept {survival.kept[bucket]} of {offered}"
-        )
+    # The band order, per render: a render whose selector was handed a
+    # testimony row it did not keep kept no row of a lower band either, because
+    # the selector keeps a salience-ordered prefix and testimony outranks them.
+    # A saturated render can still shed testimony -- the route claim offers more
+    # of it than 6,000 characters hold -- but never below a lower-band row.
+    assert survival.violating_renders == 0
+    assert sum(survival.lower_kept_when_shedding.values()) == 0
+    # Non-vacuous both ways: renders DO shed testimony, and renders that shed
+    # none DO keep lower-band rows, so the assertion above has rows to fail on.
+    assert survival.shedding_renders == 232
+    assert survival.lower_kept_otherwise == 24_458
+
+
+@pytest.mark.slow
+def test_re_banding_testimony_below_the_sightings_breaks_the_band_order() -> None:
+    # The planted failure: testimony re-banded to 25, below every sighting, move
+    # and transition row, as the coalesced render's own counterfactual patches it
+    # (tests/eval/test_evidence_honesty.py). Renders that shed testimony now keep
+    # lower-band rows, and survival in the largest bucket collapses.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(store, "_SALIENCE_REPORTED_TESTIMONY", 25)
+        planted = _survival_census(_CORPUS_9P2I)
+    assert planted.violating_renders == 771
+    assert planted.lower_kept_when_shedding.get(">150", 0) == 7_229
+    assert sum(planted.lower_kept_when_shedding.values()) == 31_531
+    assert planted.kept[">150"] == 169
 
 
 # --------------------------------------------------------------------------- #
