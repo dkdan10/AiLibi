@@ -340,7 +340,7 @@ moves in those paths, stop and ask. Otherwise, merge `main` in and re-run every 
 - Branch `work/stage-b-record-r1`, one PR into `main`, merged or fast-forwarded, never squashed.
   Never amend a pushed commit; merge `main` in, never rebase. Each commit body, P included, carries
   `Card: tasks/work/stage-b-record-r1.md` immediately followed by
-  the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card).
+  the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever model the worker session runs).
 - The PR body fills Summary, Definition of done, Decisions and Questions, and ends with the Claude
   Code attribution line. Agents post no PR comments. The worker fills Results; the orchestrator owns
   the Status line.

@@ -378,7 +378,7 @@ the cap of 4 are named constants documented as the values' frozen meaning.
 - Branch `work/vent-look-and-wait` from `main`; one PR into `main`, merged as a merge commit or a
   fast-forward, never squashed. Never amend a pushed commit; merge `main` in, never rebase.
 - Every commit body ends with the trailer `Card: tasks/work/vent-look-and-wait.md`, immediately
-  followed by the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card).
+  followed by the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever model the worker session runs).
 - The PR body has the sections Summary, Definition of done, Decisions and Questions
   (`docs/agent-procedures.md`, "PR description"), ending with the Claude Code attribution line.
 - Agents post no PR comments. Every merge is the owner's.
