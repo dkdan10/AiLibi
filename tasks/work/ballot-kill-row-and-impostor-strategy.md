@@ -349,7 +349,7 @@ held-out band. Fake provider and scripted clients only: no live call and no `.en
 **Delivery.** Branch `work/ballot-kill-row-and-impostor-strategy`, one PR into `main`, merged or
 fast-forwarded, never squashed; never amend a pushed commit; merge `main` in, never rebase. Each
 commit body carries `Card: tasks/work/ballot-kill-row-and-impostor-strategy.md` immediately
-followed by the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card). The PR body fills the
+followed by the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever model the worker session runs). The PR body fills the
 template's Summary, Definition of done, Decisions and Questions and ends with the Claude Code
 attribution line. Agents post no PR comments. `bash scripts/check.sh` is reported with its real
 exit code. The Status line and `tasks/README.md` are the orchestrator's (the validator derives the

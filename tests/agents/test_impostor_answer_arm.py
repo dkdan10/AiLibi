@@ -770,6 +770,7 @@ class TestVariantStampInRecordedBytes:
             triggered_by="p-1",
             trigger_tick=7,
             description="p-1 called an emergency meeting at tick 7",
+            kind="emergency",
         )
         loop = asyncio.new_event_loop()
         try:

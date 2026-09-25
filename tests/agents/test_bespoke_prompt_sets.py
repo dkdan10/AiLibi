@@ -58,6 +58,7 @@ from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
 )
 from orchestrator.boundary import public_map_from_engine_map
+from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.game import (
     DEFAULT_PROMPT_VERSIONS,
     IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS,
@@ -1556,3 +1557,29 @@ def test_the_alibi_sentence_pin_covers_every_registered_set() -> None:
     """A new family must arrive with its own pinned alibi sentence."""
 
     assert set(_ALIBI_TRANSCRIPT_SENTENCES) == set(PROMPT_VERSION_SETS)
+
+
+@pytest.mark.parametrize("set_name", sorted(PROMPT_VERSION_SETS))
+def test_a_config_turning_no_registered_arm_on_keeps_the_mapping_by_identity(
+    set_name: str,
+) -> None:
+    """The experiment-arm fold adds nothing unless a registered arm is ON.
+
+    No config, the default config, and a config switching ON arms that register
+    no templates (the arm registry is empty until an arm card fills it) all
+    serve the set's own mapping object, as the lever fold alone did.
+    """
+
+    default = PROMPT_VERSION_SETS[set_name]
+    for config in (
+        None,
+        RecordedExperimentConfig(),
+        RecordedExperimentConfig(
+            meeting_reset="hub_with_grace",
+            bounded_rebuttal_version=1,
+            crew_idle_policy="patrol",
+        ),
+    ):
+        assert prompt_versions_for_set(set_name, env={}, experiment_config=config) is (
+            default
+        )

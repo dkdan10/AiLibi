@@ -28,6 +28,8 @@ must never import it to reach engine state.
 actions, without wall clock or globals. It owns roles, kill attribution and vent
 occupancy. `rng.py` serializes the full Mersenne state into every committed
 `state_hash`; the default `FULL` hash policy preserves byte identity.
+[The game-shape page](game-shape.md) states the rules that shape every game,
+each with its enforcing symbol.
 
 **`observation/`** — `service.py` builds `ObservationPacket` through
 `engine/visibility.py`, strips hidden fields and writes packets through
@@ -114,31 +116,29 @@ same-runtime repeatability and optimizer portability; these claims are separate.
 incompatible settings. Graduation deletes the resolver and env mechanism while
 retaining its provenance key, following `docs/agent-procedures.md`.
 
-Baselines are adopting records. Baseline 8 is the maintenance re-record on
-corrected behavior (`audits/audit-phase-21-rerecord.md`). Baseline 7 followed an
-explicit FINDING override (`audits/audit-phase-20-baseline-7.md` §6.1), not a
-claim that its missed bars passed.
+Baselines are adopting records. Baseline 9, the current one, is the process
+re-record that adopted the substrate wave
+(`audits/audit-2026-09-22-process-rerecord.md`). Baseline 8 is the maintenance
+re-record on corrected behavior (`audits/audit-phase-21-rerecord.md`).
+Baseline 7 followed an explicit FINDING override
+(`audits/audit-phase-20-baseline-7.md` §6.1), not a claim that its missed bars
+passed.
 
 ### Observation timing and public identities
 
 Packets use victim-derived body handles; privileged report translation retains
 engine IDs. Default-OFF `temporal_observations` adds event-local movement
 entitlement and source-tick kill/vent/move delivery before meetings, including
-witnesses killed later that tick. Shared delivery helpers preserve exact-once
-ingestion in live play and supported readers. Tick-row versions identify partial
-runs; missing means legacy, conflicts fail and unsupported instruments refuse ON.
+witnesses killed later that tick.
 
 Complete model-facing body-ID privacy remains gated: legacy OFF opening prompts
-still expose internal body IDs until adoption. Typed packet handles are repaired
-unconditionally. The current audio wire allows only global sabotage alarms.
-Spectator version 5 makes an alibi a route over version 4's public
-task-activity accounts, reading compatible version-2/3/4 bundles explicitly and
-rejecting unsupported audio cues. The historical
-learned-vector audio position stays reserved zero.
+still expose internal body IDs until adoption. The current audio wire allows
+only global sabotage alarms.
 
 [The observation contract](observation-contract.md) defines entitlement, clocks,
-citations and compatibility. `api/observation_references.py` projects stable
-citations and exact spectator scene frames within the privileged-reader boundary.
+exact-once delivery, recording versions, citations, spectator versions and
+compatibility. `api/observation_references.py` projects stable citations and
+exact spectator scene frames within the privileged-reader boundary.
 
 ### Explicit cleanup experiments
 
@@ -148,7 +148,8 @@ self-report, sabotage timing, coherent reset and independently selected evidence
 reply, public-account and attributed-testimony profiles.
 Default configuration is omitted from recordings. Enabled tick and game-over stamps
 must agree; unknown versions fail. The orchestrator passes narrow engine-free
-options to engine and agent functions.
+options to engine and agent functions. [The experiment-arms page](experiment-arms.md)
+states the Stage-B fields, their layers, the pending guard and the engine helper.
 
 `meetings/evidence_profile.py` binds those versions before play. New account
 profiles use experiment format 2 and their own prompt identities, preserving

@@ -26,9 +26,9 @@ This module exposes three pure functions:
 * :func:`ballot_target_rewrite_provenance` — the typed half of that
   same audit trail, shared by every guard that replaces a ballot's
   target (here and in :mod:`meetings.manager`): who the voter named,
-  and which of the five
-  :data:`~meetings.schemas.BallotTargetRewriteReason` classes replaced
-  it. Reading a field is what spares a consumer the marker regex.
+  and which :data:`~meetings.schemas.BallotTargetRewriteReason` class
+  replaced it (the alias is the vocabulary, live and retired members
+  alike). Reading a field is what spares a consumer the marker regex.
 
 * :func:`tally_ballots` — plurality tally with the confidence
   threshold enforced. :data:`SKIP_TARGET` is a first-class tally

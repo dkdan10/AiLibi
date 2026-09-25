@@ -48,7 +48,6 @@ from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.world import load_canonical_map
 from llm.fake_provider import FakeProvider
 from meetings.manager import (
-    EMERGENCY_TRIGGER_PHRASE,
     ENV_REPORTER_REASONING,
     MeetingConfig,
     MeetingDeadlines,
@@ -76,11 +75,13 @@ _BODY_REPORT = MeetingTrigger(
     triggered_by=_REPORTER,
     trigger_tick=5,
     description="p-1 reported p-2's body in MedBay at tick 5",
+    kind="report",
 )
 _EMERGENCY = MeetingTrigger(
     triggered_by=_REPORTER,
     trigger_tick=5,
     description="p-1 called an emergency meeting",
+    kind="emergency",
 )
 
 
@@ -381,7 +382,8 @@ def _turn_prompts(
         )
         for pid in ids
     ]
-    is_body_report = EMERGENCY_TRIGGER_PHRASE not in trigger.description
+    # The manager's own predicate: the typed kind, never the description.
+    is_body_report = trigger.kind == "report"
     reporter_id = (
         trigger.triggered_by
         if reporter_reasoning_enabled(env) and is_body_report
@@ -662,6 +664,7 @@ class TestReporterReasoningDiscoveryAccount:
             triggered_by="p-4",
             trigger_tick=5,
             description="p-4 reported p-2's body in MedBay at tick 5",
+            kind="report",
         )
         prompts = _turn_prompts(trigger=other, env=_LEVER_ON, discoveries=self._ROWS)
         assert _DISCOVERY_ACCOUNT_OPENER not in prompts[(_REPORTER, "opening")]
@@ -674,10 +677,10 @@ class TestReporterReasoningDiscoveryAccount:
         assert _DISCOVERY_ACCOUNT_OPENER not in prompts[(_REPORTER, "opening")]
 
     def test_two_corpses_in_the_window_name_neither(self) -> None:
-        # The meeting layer carries no structured trigger body, so with two of
-        # this speaker's own discoveries inside the window nothing here can say
-        # WHICH one opened the meeting. Naming the wrong victim is worse than
-        # naming none: the ask stays, the guess does not.
+        # This trigger names no victim (``body_victim_id`` is None), so with two
+        # of this speaker's own discoveries inside the window nothing here can
+        # say WHICH one opened the meeting. Naming the wrong victim is worse
+        # than naming none: the ask stays, the guess does not.
         ambiguous: dict[PlayerId, tuple[BodyDiscoveryRecord, ...]] = {
             _REPORTER: (
                 BodyDiscoveryRecord(victim_id="p-2", room="MEDBAY", tick=5),

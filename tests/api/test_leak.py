@@ -505,6 +505,13 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "bounded_rebuttal_version",
         "public_account_version",
         "attributed_testimony_version",
+        # The Stage-B experiment fields: recorded configuration switches, each a
+        # rule name or a version number, carrying no role, player or room.
+        "vent_witness_rule",
+        "vent_entry_policy",
+        "report_body_handle_version",
+        "ballot_kill_row_version",
+        "impostor_ballot_version",
         "provenance_groups",
         "game_ids",
         "skip_confidence_threshold",

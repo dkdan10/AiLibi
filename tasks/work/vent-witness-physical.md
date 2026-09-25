@@ -327,7 +327,7 @@ Shared files, one writer at a time, per the memo's section 3.2:
   never squashed.
 - Never amend a pushed commit. Bring `main` in by merging it, never by rebasing.
 - Each commit body carries `Card: tasks/work/vent-witness-physical.md`, immediately followed by
-  the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card).
+  the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever model the worker session runs).
 - The PR body fills `.github/pull_request_template.md`'s sections Summary, Definition of done,
   Decisions and Questions, and ends with the Claude Code attribution line.
 - Agents post no PR comments.

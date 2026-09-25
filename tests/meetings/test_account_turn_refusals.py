@@ -161,6 +161,7 @@ async def _candidate_meeting(
             triggered_by="p-1",
             trigger_tick=10,
             description="p-1 called an emergency meeting",
+            kind="emergency",
         ),
         participants=participants,
     )

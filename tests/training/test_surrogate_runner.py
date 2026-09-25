@@ -1569,7 +1569,10 @@ def test_cap_is_cumulative_across_fresh_runner_instances() -> None:
     )
     agents = _canned_agents(state)
     trigger = MeetingTrigger(
-        triggered_by="p-1", trigger_tick=state.tick, description="p-1 reported a body"
+        triggered_by="p-1",
+        trigger_tick=state.tick,
+        description="p-1 reported a body",
+        kind="report",
     )
     living = frozenset(
         player_id for player_id, player in state.players.items() if player.alive
@@ -1614,7 +1617,7 @@ def test_missing_artifact_and_malformed_meeting_id_fail_loud(tmp_path: Path) -> 
     )
     agents = _canned_agents(state)
     trigger = MeetingTrigger(
-        triggered_by="p-1", trigger_tick=state.tick, description="report"
+        triggered_by="p-1", trigger_tick=state.tick, description="report", kind="report"
     )
     with pytest.raises(ValueError, match="does not carry the orchestrator"):
         asyncio.run(
@@ -1670,7 +1673,10 @@ def test_impostor_ballot_never_names_a_fellow_impostor() -> None:
         for player_id in state.players
     }
     trigger = MeetingTrigger(
-        triggered_by=voter, trigger_tick=state.tick, description="reported a body"
+        triggered_by=voter,
+        trigger_tick=state.tick,
+        description="reported a body",
+        kind="report",
     )
     artifacts = asyncio.run(
         runner.run_meeting(
@@ -1708,6 +1714,7 @@ def test_impostor_ballot_never_names_a_fellow_impostor() -> None:
                 triggered_by=voter,
                 trigger_tick=duo_state.tick,
                 description="emergency",
+                kind="emergency",
             ),
             state=duo_state,
             agents=duo_agents,

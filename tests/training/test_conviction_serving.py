@@ -703,7 +703,10 @@ def test_serving_runner_predicts_records_and_delegates_unchanged() -> None:
         inner=inner, predict=_predict, record=_record, on_features=_on_features
     )
     trigger = MeetingTrigger(
-        triggered_by="p-1", trigger_tick=state.tick, description="reported a body"
+        triggered_by="p-1",
+        trigger_tick=state.tick,
+        description="reported a body",
+        kind="report",
     )
     returned = asyncio.run(
         runner.run_meeting(
@@ -742,7 +745,10 @@ def test_serving_runner_propagates_a_predict_side_error() -> None:
         inner=inner, predict=_predict, record=_record
     )
     trigger = MeetingTrigger(
-        triggered_by="p-1", trigger_tick=state.tick, description="emergency"
+        triggered_by="p-1",
+        trigger_tick=state.tick,
+        description="emergency",
+        kind="emergency",
     )
     with pytest.raises(RuntimeError, match="staleness cap spent"):
         asyncio.run(

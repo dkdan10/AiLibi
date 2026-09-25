@@ -1,6 +1,6 @@
 # Declare the Stage-B arms and thread them through one helper
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -133,7 +133,27 @@ commands are under Validation.
 
 ## Acceptance
 
-- [ ] **The eight fields and `FIELD_LAYER`.** `RecordedExperimentConfig` declares, after the
+- [x] Review correction: **the environment-switch sentence** (Codex P2 on PR 484, confirmed by the docs
+  verifier). `docs/experiment-arms.md` no longer says no environment switch selects a Stage-B arm: it says the
+  wave adds no `AILIBI_*` lever and no environment switch, names `AILIBI_BOUNDED_REBUTTAL` as the one older
+  switch that still selects `bounded_rebuttal_version` for a runner built from the environment (a game using
+  that runner records the value), and says `build_default_meeting_runner` refuses it exported ON beside a
+  declared profile. Mechanism: `_page_problems` in `tests/orchestrator/test_experiment_arms.py` requires every
+  `EXPERIMENT_ENV_NAMES` switch that reaches a wave field to be named beside that field in one sentence;
+  `test_the_four_switch_fields_keep_their_one_way_rule` and `test_an_ambient_switch_beside_a_declared_profile_raises`
+  hold the behaviour the sentence states. Planted: `test_the_page_check_bites_an_undisclosed_environment_switch`
+  (the switch unnamed, and a switch table widened to a ballot field); the page as it stood at `43c7b898` fails the
+  check.
+- [x] Review correction: **the factory-kind wording** (Codex P2 on PR 484, confirmed by the docs verifier). The
+  `FSM_DEFAULT_POLICY_ID` comment and the `fsm_default_tactical_policy_stamp` docstring in `orchestrator/replay.py`
+  say `HeadlessGame` classifies the built agents by exact type, not by which factory built them: `experimental`
+  when every agent is an exact built-in `TacticalAgent` running the exact experimental policy class for its role,
+  `custom` when any agent or policy is another type. Mechanism: `HeadlessGame._build_agents`. Proof:
+  `test_the_factory_kind_reads_the_built_types_not_the_factory` runs a caller-supplied wrapper around the built-in
+  factory under a tactical arm (records `experimental`) and wrappers returning an agent subclass, a crew policy
+  subclass or an impostor policy subclass (each records `custom`); three perturbations of `_build_agents` turn it
+  red.
+- [x] **The eight fields and `FIELD_LAYER`.** `RecordedExperimentConfig` declares, after the
   existing fields and in this order: `vent_witness_rule: Literal["both_rooms", "physical"] =
   "both_rooms"`; `vent_entry_policy: Literal["any_body", "own_fresh_kill"] = "any_body"`;
   `report_body_handle_version: Literal[1] | None = None`; `ballot_kill_row_version: Literal[1] |
@@ -146,7 +166,7 @@ commands are under Validation.
   meeting: `bounded_rebuttal_version` and both ballot fields). Each existing field is classified by
   the consumer that reads it, recorded in Results. Mechanism: a test comparing `FIELD_LAYER`'s keys
   with `model_fields`. Planted: a config model with one extra, unclassified field fails it.
-- [ ] **Omit at default.** A new serializer rule beside `_preserve_version_one_bytes` drops each
+- [x] **Omit at default.** A new serializer rule beside `_preserve_version_one_bytes` drops each
   of the five new fields from the payload while it holds its default, under every
   `format_version`; the declared wave config serializes with `format_version` 1. Mechanism: a
   committed-bytes test that parses each of the 956 recorded payloads and 237 audit-JSON payloads
@@ -156,7 +176,7 @@ commands are under Validation.
   lists every typed field. Perturbed: with the new rule removed, the committed-bytes test fails on
   the first archive row. `is_default` and `normalize_experiment_config` keep reading a config
   whose new fields sit at default as all-OFF.
-- [ ] **The pending guard.** `WAVE_ARMS_PENDING` is an immutable mapping from field name to its
+- [x] **The pending guard.** `WAVE_ARMS_PENDING` is an immutable mapping from field name to its
   refused values: `vent_witness_rule` `physical`; `vent_exit_policy` `look_and_wait`;
   `vent_entry_policy` `own_fresh_kill`; `report_body_handle_version` 1; `ballot_kill_row_version`
   1; `impostor_ballot_version` 1. Mechanism: config validation raises naming the field and value;
@@ -170,7 +190,7 @@ commands are under Validation.
   validates and constructs (`least_remaining_work`, `hub_with_grace`, `patrol`, `accompany`,
   `observed_risk`, `post_meeting_retarget`, `self_report`, `two_thirds`,
   `bounded_rebuttal_version` 1, and the payload shapes of the committed archive and v3 fixture).
-- [ ] **The two reset guards.** Validation refuses `evidence_reasoning_version` 1 with
+- [x] **The two reset guards.** Validation refuses `evidence_reasoning_version` 1 with
   `meeting_reset="hub_with_grace"`, and `post_meeting_retarget` with `hub_with_grace`, each message
   naming both fields in plain words. Mechanism: the model validator. Planted: both pairs raise.
   Adverse: evidence version 2 with the reset still validates (the shape
@@ -178,7 +198,7 @@ commands are under Validation.
   committed payload and none of the lab's nine candidate configs
   (`experiments/tactical_gameplay.py:95-110`, `candidate_configs`: a baseline and eight one-change
   arms) combines either pair.
-- [ ] **One engine-arguments helper.** One function in `orchestrator/experiment_config.py` takes
+- [x] **One engine-arguments helper.** One function in `orchestrator/experiment_config.py` takes
   the recorded config (or `None`) and returns the `advance_tick` keyword arguments for every
   engine-layer field it threads (today `redistribution_policy`), raising and naming any
   engine-layer field set to a non-default value it does not thread. Every re-simulation advance
@@ -190,7 +210,7 @@ commands are under Validation.
   arguments. Planted: `FIELD_LAYER` extended with a fake engine field set non-default makes the
   helper raise, where a hand-threaded call would re-simulate the default; a fixture module passing
   `redistribution_policy=` by hand fails the scan. With no config the arguments equal today's.
-- [ ] **Walk configs thread or refuse by layer.** `ReplayWalkConfig` gains `threaded_layers`,
+- [x] **Walk configs thread or refuse by layer.** `ReplayWalkConfig` gains `threaded_layers`,
   the layers besides the engine whose fields the profile's consumer reads, and `_walk_replay`
   refuses before its first advance a recording that sets one of the five new fields, or the
   `look_and_wait` value, outside those layers, naming field and profile. Engine-layer fields go
@@ -215,7 +235,7 @@ commands are under Validation.
   profile without the tactical layer refuses a copy of a fake recording whose rows carry
   `vent_entry_policy="own_fresh_kill"` (pending set patched empty for the test), and accepts it
   once the layer is declared.
-- [ ] **A runner built from the recorded config.** `build_default_meeting_runner(profile=...)`
+- [x] **A runner built from the recorded config.** `build_default_meeting_runner(profile=...)`
   serves the given profile instead of reading the environment, and raises if any
   `EXPERIMENT_ENV_NAMES` switch is exported ON beside it: the declared config is the one source.
   `profile_from_config` in `meetings/evidence_profile.py` builds the profile from the meeting-layer
@@ -232,7 +252,7 @@ commands are under Validation.
   a bare env-built runner raises; with the pending set patched empty, a runner serving
   `ballot_kill_row_version=1` under a config without it raises, and so does the reverse; a
   profile plus an ambient `AILIBI_BOUNDED_REBUTTAL=1` raises.
-- [ ] **The tactical options mirror.** `TacticalExperimentOptions` gains `vent_entry_policy` and
+- [x] **The tactical options mirror.** `TacticalExperimentOptions` gains `vent_entry_policy` and
   the `look_and_wait` value; `_tactical_experiment_options` passes `vent_entry_policy`;
   `has_tactical_changes` counts it. A value whose behaviour is not built (`look_and_wait`,
   `own_fresh_kill`) raises a named error when a policy is built with it, rather than running the
@@ -240,12 +260,12 @@ commands are under Validation.
   options' fields minus the derived `meeting_positions_preserved`. Planted: drift fails;
   `ExperimentalImpostorPolicy` built with `look_and_wait` raises, where the exit branch
   (`agents/tactical/experimental.py:193`) would otherwise fall through to `target_distance`.
-- [ ] **The trigger keyword.** `_build_meeting_trigger` takes `report_body_handle_version`,
+- [x] **The trigger keyword.** `_build_meeting_trigger` takes `report_body_handle_version`,
   passed from the recorded config at the live call site. `None` keeps today's text byte for byte;
   a non-`None` value raises until the body-handle card replaces the refusal with its substitution.
   The two other callers keep the default. Mechanism: the keyword. Planted: value 1 raises; the
   golden on s9 and s4 is unchanged.
-- [ ] **Arm stamps, derived.** `orchestrator/game.py` gains an empty experiment-arm stamp
+- [x] **Arm stamps, derived.** `orchestrator/game.py` gains an empty experiment-arm stamp
   registry (config field name to the templates its arm re-bodies) and one function deriving a
   stamp suffix from a field name and value: drop `_version`, append `_v<value>`.
   `prompt_versions_for_set(..., experiment_config=...)` folds ON arms after the lever overlays, in
@@ -258,7 +278,7 @@ commands are under Validation.
   `ballot_kill_row_version` 1 derives `ballot_kill_row_v1` and `impostor_ballot_version` 1 derives
   `impostor_ballot_v1`; a field not ending in `_version` raises; a planted entry that supplies a
   literal stamp string fails the derivation test.
-- [ ] **The view, the types and the labels.** `ExperimentConfigView` mirrors every new field and
+- [x] **The view, the types and the labels.** `ExperimentConfigView` mirrors every new field and
   value; the five new keys join the optional list in `scripts/gen_frontend_types.py`, and
   `frontend/src/types/api.ts` and `api.fidelity.ts` are regenerated; the five names join the leak
   allow-list. `BehaviorIdentity` names each new ON field in plain words (proposed: "vent use seen
@@ -270,21 +290,21 @@ commands are under Validation.
   field ON renders its phrase; a default group reads "No enabled experiments recorded. This alone
   does not certify the default behavior." unchanged; a payload missing the five keys validates
   with defaults; removing one name from the allow-list fails the leak test.
-- [ ] **Publication: the shown data does not move.** The demo bundle built by
+- [x] **Publication: the shown data does not move.** The demo bundle built by
   `scripts/build_demo_bundle.py` at the base and at the head has a byte-identical baked data tree
   (every file under `data/`, compared by a sha256 listing), and the `PublicResults` text of every
   shown group is unchanged. The compiled frontend differs only by the label strings this card
   adds, named file by file in the PR. Mechanism: the listing diff and `npm --prefix frontend run
   e2e`. Perturbed: a one-byte edit to a baked file in a scratch copy makes the listing diff
   non-empty.
-- [ ] **The OFF path is byte-identical.** The golden on s9 and s4; `verify_samples` run once per
+- [x] **The OFF path is byte-identical.** The golden on s9 and s4; `verify_samples` run once per
   set directory on all four sets; the four `build_sample_report --check` runs;
   `publish_process_scorecard --check`; the c9 refit pins including `uv run pytest -m campaign`;
   `check_doc_facts`; offline `verify_ml_evidence`; and the lab's committed rows
   (`tests/experiments/test_tactical_gameplay.py`) all pass unchanged. The census `--check` does
   not exist yet (the census card merges after this one). Perturbed: a scratch copy of one s4 game
   with one tick row's state hash edited fails `verify_samples` on that copy.
-- [ ] **Documentation as contract.** A new page, `docs/experiment-arms.md`, states the wave's
+- [x] **Documentation as contract.** A new page, `docs/experiment-arms.md`, states the wave's
   arms: the eight fields and their layers, omit-at-default and what a missing key means, the
   pending guard and who empties it, the one helper, the config-only ballot fields, and the
   frozen-value rule. The "Explicit cleanup experiments" section of `docs/architecture.md`
@@ -467,9 +487,283 @@ above.
 
 ## Results
 
-Not started. The worker fills this section: the architecture and memo sections the change
-implements; the `FIELD_LAYER` classification of each existing field and the consumer that decided
-it; the label wording as merged, with any glossary entry; the file-by-file compiled-asset delta of
-the bundle; every command above with its exit code and count; the planted and perturbed failures,
-each shown red before and green after; material decisions; and limitations (at least: no arm
-behaviour exists, so the pending values are proved refused, never proved to work).
+Implemented on `work/stage-b-arm-spine` from base `7f2890f0` in three code commits: `115e445e` (the spine),
+`4b8acbd3` (the public-results labels) and `eff201ab` (tests that close the probes the first neutering pass left
+green). Every number below was measured at `eff201ab`. The commit that carries this section changes only this card
+and `tasks/README.md`.
+
+**What it implements.** `docs/architecture.md` "Determinism and the substrate ladder" and "Explicit cleanup
+experiments"; the new contract page `docs/experiment-arms.md`, which that section now links; the decision memo's
+section 1 (the settled mechanism), section 0.3 items 2, 4, 5, 6 and 9, section 2.3's optional guards, section 2.4's
+view mirror, and the card-3 brief in section 3.4. The rulings relied on are ruling 1 ("We should implement stage B"),
+the partial-record principle, and AGENTS.md craft rule 7 under the 2026-09-24 direction addendum. No arm behaviour
+exists: every new ON value is refused (the pending guard, the policy refusal, the trigger refusal, the
+engine-arguments helper).
+
+### `FIELD_LAYER`, field by field
+
+| Field | Layer | The consumer that decided it |
+| --- | --- | --- |
+| `format_version` | format | the recording format itself (`_preserve_version_one_bytes`; format 3 selects policy reconstruction) |
+| `redistribution_policy` | engine | `engine.tick.advance_tick` / `_apply_action`, now through `engine_arguments` |
+| `meeting_reset` | orchestrator | `orchestrator.game.apply_meeting_result` and the regroup ingestion in `HeadlessGame` |
+| `crew_idle_policy`, `vent_exit_policy`, `post_meeting_retarget`, `self_report`, `sabotage_threshold`, `investigation_version`, `contextual_self_report_version` | tactical | `TacticalExperimentOptions`, built by `_tactical_experiment_options` |
+| `evidence_reasoning_version`, `bounded_rebuttal_version`, `public_account_version`, `attributed_testimony_version` | meeting | `MeetingEvidenceProfile` (the orchestrator also binds three of them into agent memory, as the profile serves them) |
+| `vent_witness_rule` | engine | version plan (the physical-witness card threads it through the helper) |
+| `vent_entry_policy` | tactical | version plan; `TacticalExperimentOptions` |
+| `report_body_handle_version` | orchestrator | version plan; `_build_meeting_trigger` |
+| `ballot_kill_row_version`, `impostor_ballot_version` | meeting | version plan; `MeetingEvidenceProfile` (config-only) |
+
+`tests/orchestrator/test_experiment_config.py` holds the meeting layer equal to the profile's fields and the tactical
+layer equal to the options' fields minus `meeting_positions_preserved`, and pins the remaining rows.
+
+### Labels as merged
+
+`BehaviorIdentity` adds, verbatim from the card's proposal: "vent use seen only in the room where it happens"
+(`vent_witness_rule` physical); "body reports without the time of death" (`report_body_handle_version`); "witnessed
+kills listed on the voter's ballot" (`ballot_kill_row_version`); "impostor ballots cast by strategy"
+(`impostor_ballot_version`). `vent_entry_policy` joins the "experimental movement or action policies" condition, read
+as `any_body` when an older payload omits the key; `look_and_wait` already falls under that condition through
+`vent_exit_policy`. No label introduces a term beyond plain game words, so `docs/glossary.md` is unchanged.
+
+### Publication
+
+| Check | Result |
+| --- | --- |
+| baked data tree, base `7f2890f0` vs head `eff201ab` (`find data -type f -exec shasum -a 256 {} + \| sort -k2`) | 156 files each; `diff` empty (exit 0) |
+| shown groups rendered by the base and head `PublicResultsView` from the baked `data/9p2i/eval/summary.json` and `data/4p1i/eval/summary.json` (a temporary vitest render, deleted after the run) | 2 groups, 1 per set, `experiment_config` null in both; markup equal (7,113 and 3,824 characters), both reading "No enabled experiments recorded. This alone does not certify the default behavior." |
+| `diff -rq bundle-base bundle-head` | `index.html` and 7 hashed chunks differ |
+| compiled delta, chunk hashes normalised | `assets/TournamentDashboard-*.js` (the chunk that carries `PublicResults`): the four label strings and the clause `(t.vent_entry_policy??"any_body")!=="any_body"` inserted, nothing removed. `assets/index-*.js`, `CanvasRenderer`, `MapView`, `ReplayPicker`, `WebGLRenderer`, `WebGPURenderer` and `index.html`: only their references to renamed chunk files change |
+| perturbed: one byte appended to `data/4p1i/eval/summary.json` in a scratch copy | listing `diff` exit 1, 4 diff lines |
+| `npm --prefix frontend run e2e` | exit 0: 13 passed, 3 skipped (the README media captures) |
+
+The owner's merge is the publication decision: the bundle it republishes shows the same data and the same text for
+every shown group, and the new strings render for no shown game.
+
+### Verification at `eff201ab`
+
+| Command | Result |
+| --- | --- |
+| `git grep -c '"experiment_config":{' -- 'audits/deduction-candidate/run-2026-09-16/*.jsonl'` | 947 rows over 100 files |
+| `git grep -c '"experiment_config":{' -- 'tests/fixtures/v3_policy_reconstruction/*.jsonl'` | 9 |
+| `grep -c '"experiment_config": {'` over the five audit JSON files | 41, 41, 42, 13, 100 (237) |
+| the card's seven test files (`uv run pytest ... -q`) | exit 0, 362 passed |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `uv run mypy .` | exit 0, no issues in 497 source files |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | exit 0, 25 passed |
+| `bash scripts/verify_samples.sh` on `replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run pytest -m campaign -q` | exit 0, 336 passed |
+| `uv run python scripts/gen_frontend_types.py --check` | exit 0 |
+| `npm --prefix frontend test` | exit 0, 20 files, 559 tests |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `len(open('docs/architecture.md').read().split())` | 1,282 (budget 1,300; the linking sentence cost 16 words and nothing was condensed) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 61 checks, 49 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `git diff --stat $(git merge-base origin/main HEAD) HEAD -- replays audits tests/fixtures` | empty |
+| `bash scripts/check.sh` (captured by redirect, no pipe) | exit 0: 8,509 passed, 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 tests and the build pass |
+
+The committed-bytes census is also re-measured by the test itself: 956 rows in 101 recordings and 237 payloads in
+5 audit JSON files (`tests/orchestrator/test_experiment_arms.py`, the two committed-bytes tests).
+
+### Planted and perturbed failures
+
+Each is a committed test unless marked as a manual run; each was seen red with the defect and green without it.
+
+| Claim | Planted or perturbed case | Red |
+| --- | --- | --- |
+| every field is classified | a `RecordedExperimentConfig` subclass with one extra field | `["unclassified stand_in_rule"]` |
+| omit at default | `OMITTED_AT_DEFAULT` patched empty | the walk stops on `audits/deduction-candidate/run-2026-09-16/<first file>.jsonl:1` |
+| pending guard | the six values from the live mapping, each through validation and through `model_construct` into `HeadlessGame`; the two ballot values into the runner; an empty-mapping guard; the mapping held equal to the set of values whose behaviour is unbuilt | each pending name deleted alone (6 probes) fails the equality |
+| reset guards | evidence 1 and `post_meeting_retarget` beside `hub_with_grace` | both raise, naming both fields; evidence 2 with the reset validates |
+| one engine helper | a stand-in engine field set non-default; `_THREADED_ENGINE_FIELDS` patched empty; six scan fixtures (by hand, bare, helper plus by hand, another spread, an alias, and the passing helper form) | the helper raises naming the field; the scan flags each defect and passes the helper form |
+| walk thread-or-refuse | engine threading patched to omit `redistribution_policy` on a fake workload recording; copies of a fake patrol recording carrying each of `own_fresh_kill`, `look_and_wait`, body handle 1 and both ballot values (pending patched empty) | refused before the first advance, naming field and `'test-arms'`; accepted, every hash verified, once the layer is declared; `vent_witness_rule` refused by a profile declaring every layer |
+| runner from the config | each of the four switches exported ON beside a profile; each ballot field in the runner but not the config, and the reverse; `AILIBI_BOUNDED_REBUTTAL=1` beside a profile | all raise; a fake 9p2i game (seed 7) from `meeting_reset=hub_with_grace` and `bounded_rebuttal_version=1` in a shell with every `AILIBI_*` cleared records both keys on all 38 tick rows and the footer, and loads verified |
+| tactical options | layer drift; `ExperimentalImpostorPolicy` with `look_and_wait` or `own_fresh_kill`; the factory with `own_fresh_kill` | drift breaks both equalities; the policy raises `UnbuiltTacticalOptionError` instead of running `target_distance` |
+| trigger keyword | value 1, over a 40-example Hypothesis family of trigger shapes and in a live 4p1i game | raises; `None` builds the same trigger as the omitted keyword |
+| derived stamps | a planted `bounded_rebuttal_version` entry for `accusation_round`; two ballot entries registered in reverse order; an entry supplying a literal stamp | served as `accusation_round.qwen3_6_27b.v6.bounded_rebuttal_v1` only for a config carrying it, composed with `reporter_reasoning` by `+`; folded as `...v8.ballot_kill_row_v1+...v8.impostor_ballot_v1`; the literal fails the derivation test |
+| view and labels | one name dropped from the leak allow-list (manual run); each label removed (manual runs) | leak test 1 failed; vitest 1 failed each |
+| OFF path | a scratch copy of s4 seed 0 with tick 5's hash edited (manual run) | `verify_samples.sh` exit 1, "diverged at tick 5"; the clean copy exits 0 |
+| contract page | the page without one field name, without one value, and the section without its link | one named problem each |
+
+### The neutering pass
+
+Every production line this card added or changed was neutered in place, the seven card test files run
+(`pytest -x -n 6`), and the file restored from a byte copy (sha256 compared, never `git checkout`); the frontend,
+generator and allow-list lines were run against vitest, `gen_frontend_types.py --check` and the leak test the same
+way. 88 Python probes and 8 others, all restored.
+
+| Area | Probes | First pass | After `eff201ab` |
+| --- | --- | --- | --- |
+| `experiment_config.py` (fields, validators, guards, serializer rule, `FIELD_LAYER` rows, omitted and pending tables, helpers) | 41 | 38 red, 3 green | 41 red |
+| `evidence_profile.py` | 5 | 4 red, 1 green | 5 red |
+| `agents/tactical/experimental.py` | 6 | 6 red | 6 red |
+| `orchestrator/game.py` (registry, suffix, fold, runner, construction, agreement loop, live tick, trigger, options) | 21 | 18 red, 3 green | 21 red |
+| `api/replay_loader.py`, `eval/replay_walk.py` | 8 | 7 red, 1 green | 8 red |
+| `experiments/tactical_gameplay.py` | 4 | 2 red, 2 green | 3 red, 1 green (equivalent) |
+| `api/schemas.py` | 3 | 3 red | 3 red |
+| `PublicResults.tsx`, `gen_frontend_types.py`, `test_leak.py` | 8 | 8 red | 8 red |
+
+The ten probes that first came back green: the integer check on the three new config versions and on the profile's
+`impostor_ballot_version` (the pending guard masked them, since `Literal[1]` alone coerces `True` and `1.0` to 1; now
+tested with the guard patched open); the runner's own pending check (masked by the stamp fold's validation; now tested
+on the explicit-pin path); the stamp config's format-2 promotion (now tested with a version-2 evidence runner); the
+live tick, the loader and the lab's per-action apply reading the recorded config (the lab's 4p1i fixture never
+redistributed differently; now tested on seed 1000 with two tasks per crewmate, whose default re-simulation diverges
+at tick 4). The one that stays green is equivalent: `measure_identity_effects` hands the helper its recorded config
+after `require_baseline_experiments` has refused any non-baseline recording, so that config is always none.
+
+### Closing greps
+
+- `git grep -niE 'redistribution_policy=' -- orchestrator/game.py api/replay_loader.py eval/replay_walk.py
+  experiments/tactical_gameplay.py`: five hits, all `apply_meeting_result` sites (which keep their two named fields,
+  as the card requires) or the lab's `workload` candidate; no advance takes the field by hand.
+- `git grep -niE 'profile (is )?(read|built|captured) from the environment|reads? its (meeting )?profile
+  from|from_environment\(frozen_env\)' -- ':!tasks' ':!audits' ':!agent_prompts' ':!tests'`: one hit, the runner's
+  own ambient read.
+- `git grep -niE 'supports.experiments' -- '*.md' ':!tasks' ':!audits' ':!agent_prompts'`: one hit, the new page.
+- `git grep -niE 'vent_exit_policy.{0,40}(two|both) (values|options)'`: none.
+
+### Decisions
+
+- **Pending equals unbuilt.** Beyond the card's parametrized refusal, a test holds `WAVE_ARMS_PENDING` equal to the
+  set of values whose behaviour is unbuilt, read off the behaviour itself (an engine field the helper does not
+  thread, `UNBUILT_OPTION_VALUES`, the trigger builder's refusal, a ballot field with no registered template). An arm
+  card that builds its behaviour and deletes its name together needs no edit to `test_experiment_arms.py`; deleting
+  a name early fails.
+- **The walk's "later setting" is derived from a frozen inventory.** `wave_settings` compares each recorded value with
+  `_PRE_WAVE_VALUES` (every field and value at `e886b663`), so a field added later is refused by every profile until
+  its owner declares the layer. `ReplayWalkConfig` refuses declaring `engine` or `format`, and declaring layers
+  without `supports_experiments`.
+- **`has_tactical_changes` reads the tactical layer.** It is derived from `FIELD_LAYER`, which is equivalent to the
+  old seven-field disjunction plus `vent_entry_policy`; a per-field test covers each tactical field.
+- **The runner's stamps read its profile.** `_profile_arm_config` turns the served profile into the config the stamp
+  fold reads (format 2 when the profile needs it), so the recorded versions and the rendered profile have one source.
+  An explicit `prompt_versions` pin and the public-account versions bypass the fold; the ballot card refuses those
+  combinations (memo 2.5 item 5).
+- **Registry shape.** `EXPERIMENT_ARM_TEMPLATES` maps a meeting-layer `*_version` field to a tuple of template names;
+  the derivation test refuses any other shape.
+- **The unbuilt refusal sits in `ExperimentalImpostorPolicy`**, the only reader of the vent options, as
+  `UnbuiltTacticalOptionError`.
+- **The trigger refusal fires for any non-`None` value**, whatever the trigger kind, until the body-handle card
+  replaces it.
+- **The engine arguments are computed once**, at `HeadlessGame` construction and before the first advance in the loader,
+  the walk and the lab, so a refusal comes before any tick.
+- **Status and attribution.** The card reserves the Status line and the index for the orchestrator; the dispatch
+  delegated the flip, so this commit flips Status to done and re-derives the inventory sentence (88 cards: 10 ready,
+  78 done). Commits end with the attribution line this session's harness supplies, as the card's Delivery paragraph
+  asks, rather than the model name the dispatch text named.
+
+### Limitations
+
+- No arm behaviour exists, so the pending values are proved refused, never proved to work.
+- The stamp fold stamps any registered prompt set, and an explicit version pin or the account profiles bypass it; the
+  ballot card must refuse sets and paths whose templates lack its block.
+- `_PRE_WAVE_VALUES` is a hand-written statement of the values at `e886b663`; a test holds its field set equal to the
+  fields the wave did not add, but not each older field's value list.
+- The `ast` scan covers the four modules the card names. The other `advance_tick` callers either refuse experimental
+  recordings (off-menu, the anchor study, the surrogate table) or never read a recorded config (determinism, rollouts,
+  the leak test, type generation); `audits/workflows/extract_gameplay_facts.py` gets its refusal from the readers
+  card.
+- Every existing experiment-supporting walk profile (`current-report`, `leak-scan-factory`, `process-scorecard` and
+  the lab's two derived profiles) now refuses any Stage-B setting until its owner card declares its layers, so the
+  lab's `measure_replay` refuses a wave recording until the look-and-wait card.
+- The census card's tripwire over the five undeclared fields fails once it merges this card, as the coordination note
+  expects.
+- The bundle comparison was built on macOS; CI builds on Linux, where chunk hashes may differ while the data listing
+  is produced by the same code.
+
+### Review corrections, round 1 (2026-09-25)
+
+The docs verifier confirmed two Codex P2 comments on PR 484 as valid and unfixed at `43c7b898`. Both are fixed in
+`adbddf3c`, which changes `docs/experiment-arms.md`, two comments in `orchestrator/replay.py` and
+`tests/orchestrator/test_experiment_arms.py`. No production logic changed. Every number in this subsection was
+measured at `adbddf3c`.
+
+**Reply to Codex: the environment-switch sentence (valid).** The page said no `AILIBI_*` lever and no environment
+switch selects a Stage-B arm. `bounded_rebuttal_version` is one of the page's eight fields, and `AILIBI_BOUNDED_REBUTTAL`
+still selects it: a runner built from the environment with the switch ON serves version 1, and a game given no declared
+config records it (`test_the_four_switch_fields_keep_their_one_way_rule`). The page now says what the code delivers:
+the wave adds no `AILIBI_*` lever and no environment switch; the one older switch among the eight fields still selects
+`bounded_rebuttal_version` for a runner built from the environment, and a game using that runner records the value;
+`build_default_meeting_runner` refuses the switch exported ON beside a declared profile
+(`test_an_ambient_switch_beside_a_declared_profile_raises`). The page check now reads `EXPERIMENT_ENV_NAMES` and
+requires every switch that reaches a wave field to be named beside that field in one sentence.
+
+**Reply to Codex: the factory-kind wording (valid).** The `FSM_DEFAULT_POLICY_ID` comment said `experimental` means the
+built-in factory built the agents and `custom` any other factory; the `fsm_default_tactical_policy_stamp` docstring said
+`HeadlessGame` records `custom` for any factory but the built-in one. `HeadlessGame._build_agents` never looks at the
+factory: it compares the exact type of each built agent and its policy with `TacticalAgent` and the policy class for the
+role. Both places now say that, and drop the factory-origin wording. The new
+`test_the_factory_kind_reads_the_built_types_not_the_factory` runs four caller-supplied factories under
+`crew_idle_policy="patrol"`: a wrapper that returns the built-in agents unchanged records `experimental`, and wrappers
+that return an agent subclass, a crew policy subclass or an impostor policy subclass each record `custom`.
+
+**Planted and perturbed.** Each probe edited one file in place from a byte copy, ran the named selection of
+`tests/orchestrator/test_experiment_arms.py`, and restored the copy; the sha256 matched after every restore and the
+restored run was green. The probe script is a scratch file, not committed.
+
+| Probe | Perturbation | Perturbed run | Restored run |
+| --- | --- | --- | --- |
+| exact agent type | `type(built_agent) is TacticalAgent` made `isinstance` in `_build_agents` | 1 failed, 3 passed (`_in_an_agent_subclass`) | 4 passed |
+| exact policy type | `type(built_agent._policy) is policy_class` made `isinstance` | 2 failed, 2 passed (both policy subclasses) | 4 passed |
+| factory origin | `custom` also whenever the factory's `__qualname__` is not the built-in one | 1 failed, 3 passed (`_as_built`) | 4 passed |
+| switch sentence | `` `AILIBI_BOUNDED_REBUTTAL` `` removed from the page's sentence | 3 failed (every page test) | 3 passed |
+| old page | the page's sentence as it stood at `43c7b898` put back | 3 failed (every page test; the check reports "the page does not say AILIBI_BOUNDED_REBUTTAL selects bounded_rebuttal_version") | 3 passed |
+
+The committed planted cases are `test_the_page_check_bites_an_undisclosed_environment_switch` (the switch unnamed; a
+switch table widened with a stand-in switch to `impostor_ballot_version` must be disclosed too; a stand-in switch to a
+field outside the wave needs no disclosure) and the three `custom` cases above. No probe came back green. The first
+neutering table above is unchanged: it cites no comment or docstring, and this round changed no production line.
+
+**Closing greps** (case-insensitive, over the whole tree except `audits/`, `agent_prompts/` and `tasks/phase-*`; this
+card's own review-correction text, which quotes the old wording, is set aside below):
+
+- `git grep -niE 'environment switch(es)? selects?|no environment switch'`: eight hits outside this card's review
+  text, all true today: the page's "The two ballot fields have no environment switch", `meetings/evidence_profile.py:67`,
+  the config-only comment in `orchestrator/game.py`, the body-handle card's field (it has no switch), and four lines
+  saying no switch "is added" (the decision memo, the direction addendum, this card's Constraints and the look-and-wait
+  card).
+- `git grep -niE 'factory but the built-in|any other factory|for any factory|built-in factory built|factory (that )?built (it|them)'`:
+  outside this card, two hits, both the new wording in `orchestrator/replay.py` ("never by which factory built them",
+  "not by which factory built them").
+- `git grep -niE '(records?|reads?) .?custom.? for (any|every)'`: none outside this card's quotation of the old
+  docstring.
+
+**Verification at `adbddf3c`.**
+
+| Command | Result |
+| --- | --- |
+| `git grep -c '"experiment_config":{' -- 'audits/deduction-candidate/run-2026-09-16/*.jsonl'` | 947 rows over 100 files |
+| `git grep -c '"experiment_config":{' -- 'tests/fixtures/v3_policy_reconstruction/*.jsonl'` | 9 |
+| `grep -c '"experiment_config": {'` over the five audit JSON files | 41, 41, 42, 13, 100 |
+| the card's seven test files (`uv run pytest ... -q`) | exit 0, 367 passed (362 plus the 5 new) |
+| `uv run lint-imports`; `uv run mypy .` (both inside `check.sh`) | exit 0: 4 kept, 0 broken; no issues in 497 source files |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | exit 0, 25 passed |
+| `bash scripts/verify_samples.sh` on `replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run pytest -m campaign -q` | exit 0, 336 passed |
+| `uv run python scripts/gen_frontend_types.py --check` | exit 0 |
+| `npm --prefix frontend run e2e` | exit 0: 13 passed, 3 skipped (the README media captures) |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `len(open('docs/architecture.md').read().split())` | 1,282 (budget 1,300; unchanged this round) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 61 checks, 49 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `git diff --stat $(git merge-base origin/main HEAD) HEAD -- replays audits tests/fixtures` | empty (merge base `7f2890f0`) |
+| `bash scripts/check.sh` (captured by redirect, no pipe; the working tree also held this card's uncommitted Acceptance edit) | exit 0: 8,514 passed, 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 vitest tests and the build pass |
+
+**Publication, re-measured.** This round touches neither `api/` nor `frontend/`. The bundle was built at the base
+`7f2890f0` (a `git archive` export whose replay files were given the worktree's mtimes, because the loader bakes each
+replay's `created_at` from its file mtime and a fresh export otherwise differs in that field alone) and at `adbddf3c`.
+The baked data listings match: 156 files each, `diff` exit 0. `diff -rq` names `index.html` and the same 7 hashed chunks
+as before; with chunk names normalised, only `assets/TournamentDashboard-*.js` differs, by the four label strings and the
+`vent_entry_policy` clause of the movement condition, and every other asset and `index.html` is equal. The base and
+head `PublicResultsView`, rendered on the baked `data/9p2i` and `data/4p1i` summaries by a temporary vitest file
+(deleted after the run), give byte-equal markup (7,122 and 3,833 bytes), both reading "No enabled experiments
+recorded. This alone does not certify the default behavior." Perturbed: one byte appended to the baked 4p1i summary in
+a scratch copy makes the listing `diff` exit 1.
+
+**Record impact.** None: no recording, derived view, fixture, audit byte or prompt byte moved, and no production logic
+changed.

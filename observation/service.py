@@ -668,10 +668,14 @@ class ObservationService:
         # Per-player re-key (DESIGN.md §3.2/§3.5): ``WorldState.tasks`` is keyed by
         # per-player INSTANCE, so the denominator counts task instances, not map
         # tasks (e.g. 9p/2i is 14 instances over the 12 map tasks). This is the
-        # same set ``engine/win_conditions.py`` counts -- ``_apply_kill`` drops a
-        # dead player's incomplete instances, so both read the live-instance total
-        # -- which keeps the agent-visible progress equal to the engine's win
-        # denominator. The rule is unchanged; only the magnitude scales.
+        # same set ``engine/win_conditions.py`` counts, which keeps the
+        # agent-visible progress equal to the engine's win denominator. A death
+        # changes the set under the map's ``dead_task_rule``: under
+        # ``redistribute`` (the canonical map) ``_apply_kill`` re-keys the dead
+        # crewmate's incomplete instances to a living crewmate
+        # (``engine.tick.redistribute_dead_tasks``), so the total shrinks only
+        # when no crewmate can take one; under ``drop`` they are removed. The rule
+        # is unchanged; only the magnitude scales.
         tasks_total = len(world_state.tasks)
         tasks_completed = sum(
             1 for task in world_state.tasks.values() if task.completed

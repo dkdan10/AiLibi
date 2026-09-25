@@ -65,7 +65,7 @@ export interface ExperimentConfigView {
   redistribution_policy: "lowest_id" | "least_remaining_work";
   meeting_reset: "preserve" | "hub_with_grace";
   crew_idle_policy: "hub_wait" | "patrol" | "accompany";
-  vent_exit_policy: "target_distance" | "observed_risk";
+  vent_exit_policy: "target_distance" | "observed_risk" | "look_and_wait";
   post_meeting_retarget: boolean;
   self_report: boolean;
   sabotage_threshold: "six_sevenths" | "two_thirds";
@@ -75,6 +75,11 @@ export interface ExperimentConfigView {
   attributed_testimony_version: 1 | null;
   investigation_version?: 1 | null;
   contextual_self_report_version?: 1 | null;
+  vent_witness_rule?: "both_rooms" | "physical";
+  vent_entry_policy?: "any_body" | "own_fresh_kill";
+  report_body_handle_version?: 1 | null;
+  ballot_kill_row_version?: 1 | null;
+  impostor_ballot_version?: 1 | null;
 }
 
 export interface TacticalPolicyView {

@@ -304,9 +304,9 @@ def _meeting_trigger(
 ) -> tuple[str, PlayerId | None]:
     """``(kind, reported victim)`` off the recorded action stream at this tick.
 
-    The meeting layer keeps no structured trigger kind (the description IS the
-    trigger surface, and descriptions are not recorded), so the honest recorded
-    source is the tick's action list: the meeting's own opener's APPLIED
+    A recorded meeting carries neither the trigger's typed kind nor its
+    description (``MeetingReplayEntry`` stores ``triggered_by`` alone), so the
+    honest recorded source is the tick's action list: the meeting's own opener's APPLIED
     ``report`` or ``emergency``. Fails loud when the tick carries neither --
     a meeting the recorded actions cannot explain is a corrupt reading, not a
     meeting to bin as "other".

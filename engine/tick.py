@@ -396,19 +396,23 @@ def _apply_kill(
 
     players = _with_actor_last_action(state, action)
     target = state.players[action.payload.target]
-    # Dead-crewmate task rule: DESIGN.md §3.5 (dropped). Clear the victim's
-    # ``last_action`` so the next tick's `_advance_tasks` does not try to
-    # continue a `DoTaskAction` for a task that has just been removed.
+    # Clear the victim's ``last_action`` so the next tick's `_advance_tasks` does
+    # not try to continue a `DoTaskAction` for a task the victim no longer owns.
+    # The map's ``dead_task_rule`` decides where that task goes: under
+    # ``redistribute`` (the canonical map) the victim's incomplete instances are
+    # re-keyed to a living crewmate (`redistribute_dead_tasks`) and dropped only
+    # when no crewmate is eligible; under ``drop`` they are removed.
     players[action.payload.target] = replace(target, alive=False, last_action=None)
     bodies = dict(state.bodies)
     bodies[body.id] = body
     cooldowns = dict(state.cooldowns)
     cooldowns[action.actor] = game_map.kill_cooldown_ticks
-    # Dead-crewmate task rule: DESIGN.md §3.5. Drop the killed player's
-    # incomplete task *instances* so the crew win check counts only alive-owned
-    # instances; completed instances remain (even the victim's) so they still
-    # count toward `crew_tasks_done`. The owner-filter is unchanged by the
-    # per-player re-key — it already keys on ``task.owner`` per instance.
+    # Dead-crewmate task rule, first step (DESIGN.md §3.5 states the ``drop``
+    # form): drop the killed player's incomplete task *instances* (under
+    # ``redistribute`` the step below re-keys them) so the crew win check counts only
+    # alive-owned instances; completed instances remain (even the victim's) so
+    # they still count toward `crew_tasks_done`. The owner-filter is unchanged by
+    # the per-player re-key — it already keys on ``task.owner`` per instance.
     surviving_tasks = {
         instance_id: task
         for instance_id, task in state.tasks.items()

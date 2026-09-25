@@ -363,7 +363,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
 **Delivery.** Branch `work/meeting-reset-coherence`, one PR into `main`, merged or fast-forwarded and never
 squashed. Never amend a pushed commit; take `main` by merging, never by rebasing. Each commit body carries
 `Card: tasks/work/meeting-reset-coherence.md` immediately followed by
-the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card). The PR body has Summary, Definition of done,
+the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever model the worker session runs). The PR body has Summary, Definition of done,
 Decisions and Questions, ending with the Claude Code attribution line. Agents post no PR comments.
 `tasks/README.md` and this card's Status line are the orchestrator's; the worker fills Results.
 

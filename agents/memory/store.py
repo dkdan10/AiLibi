@@ -91,9 +91,12 @@ _SALIENCE_COMPLETED_TASK: Final[int] = 30
 # Reported testimony: a meeting speaker's public CLAIM, rendered self-framed as
 # unverified -- something the model WEIGHS, never ground truth it acts on as if
 # witnessed. Banded above bare co-presence and below every first-hand HARD-evidence
-# row (body, own kill, witnessed kill, witnessed vent, heard vent, heard sabotage),
-# so the budget sheds routine sightings before it sheds the game's only
-# cross-meeting social memory.
+# row (body, own kill, witnessed kill, witnessed vent, heard sabotage alarm), so
+# the budget sheds routine sightings before it sheds the game's only
+# cross-meeting social memory. No heard-vent row exists: the audio wire carries
+# only the global sabotage alarm
+# (``observation.service.ObservationService._audible_events``), so a witnessed
+# vent is visual only.
 _SALIENCE_REPORTED_TESTIMONY: Final[int] = 60
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
 

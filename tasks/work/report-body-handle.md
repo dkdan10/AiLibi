@@ -349,7 +349,7 @@ writer.
   `main` by merging it, never by rebasing.
 - Each commit body ends with `Card: tasks/work/report-body-handle.md`,
   immediately followed by
-  the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card).
+  the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever model the worker session runs).
 - The PR body has the sections Summary, Definition of done (this Acceptance,
   ticked with evidence), Decisions and Questions, and ends with the Claude Code
   attribution line. Agents post no PR comments.

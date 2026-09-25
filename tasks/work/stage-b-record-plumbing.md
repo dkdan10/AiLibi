@@ -357,7 +357,7 @@ README states this rule. This card also adds `replays/candidates/*/.ailibi-refre
 - Branch `work/stage-b-record-plumbing`, one pull request into `main`, merged or fast-forwarded,
   never squashed. Never amend a pushed commit; bring `main` in by merging it, never by rebasing.
 - Each commit body carries `Card: tasks/work/stage-b-record-plumbing.md`, immediately followed by
-  the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card).
+  the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever model the worker session runs).
 - The PR body fills Summary, Definition of done (this Acceptance list, ticked), Decisions and
   Questions, and ends with the Claude Code attribution line. Agents post no PR comments. Every
   merge is the owner's. `tasks/README.md` and this card's Status line are the orchestrator's; the

@@ -1436,7 +1436,9 @@ class ExperimentConfigView(_FrozenView):
     redistribution_policy: Literal["lowest_id", "least_remaining_work"] = "lowest_id"
     meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve"
     crew_idle_policy: Literal["hub_wait", "patrol", "accompany"] = "hub_wait"
-    vent_exit_policy: Literal["target_distance", "observed_risk"] = "target_distance"
+    vent_exit_policy: Literal["target_distance", "observed_risk", "look_and_wait"] = (
+        "target_distance"
+    )
     post_meeting_retarget: bool = False
     self_report: bool = False
     sabotage_threshold: Literal["six_sevenths", "two_thirds"] = "six_sevenths"
@@ -1446,6 +1448,13 @@ class ExperimentConfigView(_FrozenView):
     attributed_testimony_version: Literal[1] | None = None
     investigation_version: Literal[1] | None = None
     contextual_self_report_version: Literal[1] | None = None
+    # The Stage-B fields. A recorded payload omits each while it holds its
+    # default, so the defaults here are what an older payload means.
+    vent_witness_rule: Literal["both_rooms", "physical"] = "both_rooms"
+    vent_entry_policy: Literal["any_body", "own_fresh_kill"] = "any_body"
+    report_body_handle_version: Literal[1] | None = None
+    ballot_kill_row_version: Literal[1] | None = None
+    impostor_ballot_version: Literal[1] | None = None
 
 
 class TacticalPolicyView(_FrozenView):

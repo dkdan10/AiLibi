@@ -230,7 +230,7 @@ from orchestrator.replay_integrity import (
     ReplayIntegrityValidator,
     resolve_ballot_tally_threshold,
 )
-from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator.experiment_config import RecordedExperimentConfig, engine_arguments
 from orchestrator.policy_reconstruction import PolicyReconstruction
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
@@ -1452,6 +1452,7 @@ class ReplayLoader:
         entries = read_all_entries(path)
         integrity = ReplayIntegrityValidator(entries, game_id=game_id)
         experiment = recorded_experiment_config(entries)
+        engine = engine_arguments(experiment)
         reconstruct_policy = experiment is not None and experiment.format_version == 3
         track_memory = collect_memory or reconstruct_policy
         testimony_shapes = recorded_testimony_shapes(entries)
@@ -1631,12 +1632,7 @@ class ReplayLoader:
 
                 source_state = state
                 state, events = advance_tick(
-                    state,
-                    actions,
-                    game_map=self._game_map,
-                    redistribution_policy=experiment.redistribution_policy
-                    if experiment
-                    else "lowest_id",
+                    state, actions, game_map=self._game_map, **engine
                 )
                 actual = _state_hash(state)
                 if actual != entry.state_hash:

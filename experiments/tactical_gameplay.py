@@ -48,7 +48,7 @@ from eval.replay_walk import (
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
-from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator.experiment_config import RecordedExperimentConfig, engine_arguments
 from orchestrator.action_ordering import order_actions_for_tick
 from orchestrator.game import (
     HeadlessGame,
@@ -60,6 +60,7 @@ from orchestrator.replay import (
     classify_action_dispositions,
     compute_cost_usd,
     read_all_entries,
+    recorded_experiment_config,
     require_baseline_experiments,
 )
 from orchestrator.run_limits import RunDeadline
@@ -191,9 +192,11 @@ def measure_identity_effects(
 ) -> dict[str, int]:
     """Compare two fixed relabellings per recorded transition; never rescore speech."""
 
+    entries = read_all_entries(path)
     require_baseline_experiments(
-        read_all_entries(path), consumer="recorded baseline identity intervention"
+        entries, consumer="recorded baseline identity intervention"
     )
+    engine = engine_arguments(recorded_experiment_config(entries))
     counts: Counter[str] = Counter()
     game_map = load_canonical_map()
     config = replace(_CURRENT_REPORT_WALK_CONFIG, profile="tactical-seat-effects")
@@ -220,7 +223,9 @@ def measure_identity_effects(
             renamed, reordered = permute_state_and_actions(
                 step.pre_state, actions, permutation
             )
-            after, events = advance_tick(renamed, reordered, game_map=game_map)
+            after, events = advance_tick(
+                renamed, reordered, game_map=game_map, **engine
+            )
             actual = dict(
                 zip(
                     (action.actor for action in reordered),
@@ -359,7 +364,7 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
         for call in entry.llm_calls
     ]
     failures = [entry for entry in entries if isinstance(entry, FailedCallReplayEntry)]
-    experiments = recorded_experiment_config(entries) or RecordedExperimentConfig()
+    engine = engine_arguments(recorded_experiment_config(entries))
     config = replace(_CURRENT_REPORT_WALK_CONFIG, profile="tactical-mechanisms")
     game_map = load_canonical_map()
     adapter: TypeAdapter[Action] = TypeAdapter(Action)
@@ -410,12 +415,7 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
                 counts[f"{disposition}:{role}:{action.type}"] += 1
                 if disposition != "applied":
                     continue
-                after, event = _apply_action(
-                    working,
-                    game_map,
-                    action,
-                    redistribution_policy=experiments.redistribution_policy,
-                )
+                after, event = _apply_action(working, game_map, action, **engine)
                 if isinstance(event, KilledEvent):
                     _transfers(working, after, event.target, counts)
                 working = after
