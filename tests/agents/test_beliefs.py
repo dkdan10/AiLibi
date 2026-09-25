@@ -73,12 +73,14 @@ _DEFAULT_SUSPICION = 0.5
 def _recorded_reporter(entry: MeetingReplayEntry) -> str | None:
     """The reporter the production fold saw, read back off the recorded bytes.
 
-    ``MeetingReplayEntry`` stores ``triggered_by`` but no trigger kind, and
-    :func:`meetings.manager._trigger_is_emergency` decides the kind off the
-    trigger DESCRIPTION -- which survives inside the recorded opening prompt.
-    Keying on the same phrase keeps a replay-side re-derivation in lockstep with
-    the meeting the model actually saw: a body report threads its reporter, an
-    emergency call threads ``None``.
+    ``MeetingReplayEntry`` stores ``triggered_by`` but no trigger kind. The
+    manager decides the kind off the typed ``MeetingTrigger.kind``
+    (:func:`meetings.manager._trigger_is_emergency`), which is not recorded; the
+    trigger DESCRIPTION survives inside the recorded opening prompt, and its
+    emergency phrase agrees with the kind on every trigger the orchestrator
+    builds (the lockstep pin in ``tests/meetings/test_meeting_trigger_kind.py``).
+    Keying on that phrase therefore reads back what the model saw: a body report
+    threads its reporter, an emergency call threads ``None``.
     """
 
     from meetings.manager import EMERGENCY_TRIGGER_PHRASE
@@ -3372,6 +3374,7 @@ class TestSelfRefutedAlibiDowngrade:
                     triggered_by="p-2",
                     trigger_tick=1,
                     description="p-2 called an emergency meeting",
+                    kind="emergency",
                 ),
                 participant=participants[1],
                 participants=participants,
@@ -3586,7 +3589,8 @@ class TestEvidenceQualityLiftOnCommittedBytes:
                 # soft lift landing on them. The replay stores the reporter as
                 # ``triggered_by`` but no trigger kind, so the emergency case --
                 # where production passes None -- is read back off the recorded
-                # prompt, from the same phrase ``_trigger_is_emergency`` keys on.
+                # prompt, from the emergency phrase the lockstep pin holds equal
+                # to the typed kind ``_trigger_is_emergency`` reads.
                 reporter=_recorded_reporter(entry),
             )
             rows[voter] = {e.player_id: e.suspicion for e in graph}

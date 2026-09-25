@@ -267,7 +267,9 @@ class TestApplyMeetingResult:
     def test_skip_advances_tick_and_phase(self) -> None:
         game_map = load_canonical_map()
         state, _ = _meeting_state_with_body(game_map)
-        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        trigger = MeetingTrigger(
+            triggered_by="p-1", trigger_tick=42, description="x", kind="report"
+        )
         result = _skip_result("g-1:meeting-0", trigger)
 
         next_state, events = apply_meeting_result(state, result, game_map=game_map)
@@ -294,7 +296,9 @@ class TestApplyMeetingResult:
             task.owner == target and not task.completed for task in state.tasks.values()
         ), "fixture must include at least one incomplete task for the target"
 
-        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        trigger = MeetingTrigger(
+            triggered_by="p-1", trigger_tick=42, description="x", kind="report"
+        )
         result = _eject_result(target)("g-1:meeting-0", trigger)
 
         next_state, events = apply_meeting_result(state, result, game_map=game_map)
@@ -324,7 +328,10 @@ class TestApplyMeetingResult:
         state = replace(base, phase="MEETING", players=players, tick=99)
 
         trigger = MeetingTrigger(
-            triggered_by=crewmates[1], trigger_tick=99, description="emergency"
+            triggered_by=crewmates[1],
+            trigger_tick=99,
+            description="emergency",
+            kind="emergency",
         )
         # Ejecting another crewmate puts impostors at parity.
         result = _eject_result(crewmates[1])("g-1:meeting-0", trigger)
@@ -360,7 +367,10 @@ class TestApplyMeetingResult:
         state = replace(base, phase="MEETING", tasks=finished_tasks, tick=33)
 
         trigger = MeetingTrigger(
-            triggered_by="p-1", trigger_tick=33, description="vote impostor"
+            triggered_by="p-1",
+            trigger_tick=33,
+            description="vote impostor",
+            kind="report",
         )
         result = _eject_result(impostor_id)("g-1:meeting-0", trigger)
         next_state, events = apply_meeting_result(state, result, game_map=game_map)
@@ -375,7 +385,9 @@ class TestApplyMeetingResult:
     def test_apply_outside_meeting_phase_fails_loud(self) -> None:
         game_map = load_canonical_map()
         state = seed_initial_state(seed=1, game_map=game_map, num_players=4)
-        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=0, description="x")
+        trigger = MeetingTrigger(
+            triggered_by="p-1", trigger_tick=0, description="x", kind="report"
+        )
         result = _skip_result("g-1:meeting-0", trigger)
 
         with pytest.raises(ValueError, match="MEETING"):
@@ -384,7 +396,9 @@ class TestApplyMeetingResult:
     def test_apply_eject_dead_player_fails_loud(self) -> None:
         game_map = load_canonical_map()
         state, _ = _meeting_state_with_body(game_map)
-        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        trigger = MeetingTrigger(
+            triggered_by="p-1", trigger_tick=42, description="x", kind="report"
+        )
         # ``p-2`` is dead in the fixture.
         result = _eject_result("p-2")("g-1:meeting-0", trigger)
 
@@ -394,7 +408,9 @@ class TestApplyMeetingResult:
     def test_apply_advances_rng_state(self) -> None:
         game_map = load_canonical_map()
         state, _ = _meeting_state_with_body(game_map)
-        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        trigger = MeetingTrigger(
+            triggered_by="p-1", trigger_tick=42, description="x", kind="report"
+        )
         result = _skip_result("g-1:meeting-0", trigger)
 
         next_state, _ = apply_meeting_result(state, result, game_map=game_map)
@@ -1252,6 +1268,7 @@ class TestDefaultMeetingRunner:
             triggered_by="p-1",
             trigger_tick=10,
             description="x",
+            kind="report",
         )
         participants_seed = seed_initial_state(
             seed=1, game_map=load_canonical_map(), num_players=3
@@ -1352,7 +1369,7 @@ class TestDefaultMeetingRunner:
             runner.run_meeting(
                 meeting_id="m-2",
                 trigger=trigger.__class__(
-                    triggered_by="p-1", trigger_tick=20, description="y"
+                    triggered_by="p-1", trigger_tick=20, description="y", kind="report"
                 ),
                 state=participants_seed,
                 agents=agents,  # type: ignore[arg-type]
@@ -1894,7 +1911,10 @@ class TestSeed6ImpostorMeetingCoordination:
             ),
         )
         trigger = MeetingTrigger(
-            triggered_by="p-1", trigger_tick=8, description="p-1 reported a body"
+            triggered_by="p-1",
+            trigger_tick=8,
+            description="p-1 reported a body",
+            kind="report",
         )
 
         artifacts = _run(

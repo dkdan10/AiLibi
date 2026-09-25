@@ -1642,6 +1642,7 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
         triggered_by=impostor,
         trigger_tick=state.tick,
         description=f"{impostor} {EMERGENCY_TRIGGER_PHRASE} at tick {state.tick}",
+        kind="emergency",
     )
     participants = _build_participants(
         state=state, agents=agents, token_budget=DEFAULT_TOKEN_BUDGET

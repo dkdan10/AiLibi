@@ -587,14 +587,19 @@ OPENING_UNSURE_DEGRADE_MARKER: Final[str] = (
     "[opening degraded to unsure after failed validation] "
 )
 
-# Emergency-opening no-body backstop (Task 10.11.1; audit-2026-06-13-1816
-# B-B-1). The phrase that marks an EMERGENCY meeting's ``MeetingTrigger``
-# description -- the ONE home shared with
-# ``orchestrator.game._build_meeting_trigger`` (the producer) and, as a
-# documented JINJA-literal lockstep (a template cannot import), the
-# ``crewmate_report.j2`` emergency branch. DESIGN.md keeps no structured trigger
-# kind on the meeting layer -- the description IS the trigger surface -- so the
-# manager detects an emergency the same way the renderer does.
+# The phrase that marks an EMERGENCY meeting's ``MeetingTrigger.description``.
+# ``orchestrator.game._build_meeting_trigger`` writes it into every emergency
+# description and never into a report description built from the engine's ids.
+# The manager itself never reads it: every trigger decision here reads the
+# typed ``MeetingTrigger.kind`` through ``_trigger_is_emergency``. The opening
+# prompt renderers receive only the description, and the
+# ``crewmate_report.j2`` / ``impostor_report.j2`` /
+# ``impostor_report_roll_call.j2`` templates branch on this literal because a
+# template cannot import a constant. ``tests/meetings/test_meeting_trigger_kind.py``
+# pins that ``kind`` and this phrase agree on every trigger the builder
+# constructs, that every template branch literal equals it, and that no line
+# of this module decides from the phrase or the description.
+# Provenance: the emergency-opening backstop of Task 10.11.1.
 EMERGENCY_TRIGGER_PHRASE: Final[str] = "called an emergency meeting"
 
 # The reporter-voice lever, DEFAULT OFF. It carries the reporter's identity and
@@ -903,44 +908,71 @@ class MeetingParticipant:
     body_discovery_records: tuple[BodyDiscoveryRecord, ...] = ()
 
 
+# The values ``MeetingTrigger.kind`` accepts, read off the Literal rather than
+# restated, so the validation below cannot drift from the type.
+_MEETING_TRIGGER_KINDS: Final[tuple[str, ...]] = get_args(MeetingTriggerKind)
+
+
 @dataclass(frozen=True)
 class MeetingTrigger:
     """Why the meeting was opened (DESIGN.md §5.1).
 
     The orchestrator constructs this from the engine event that
-    transitioned the world into ``MEETING`` phase. ``triggered_by`` is the
+    transitioned the world into ``MEETING`` phase
+    (``orchestrator.game._build_meeting_trigger``). ``triggered_by`` is the
     opener (turn 0); ``description`` is a short free-text summary (e.g.
     ``"p3 reported p2's body in MedBay at tick 410"``) that the opening
     prompt surfaces to the LLM.
 
-    ``body_victim_id`` is the player whose corpse a BODY REPORT was made on --
-    the one structured trigger fact the meeting layer carries, added because a
-    speaker can hold discoveries of two different corpses within a tick of each
-    other and a render that says "the body" must know which one it means.
-    ``None`` for an emergency call and for any caller that does not thread it;
-    a ``None`` here means the layer cannot tell the corpses apart and says so by
-    rendering no victim rather than by guessing one. Additive and defaulted, so
-    every existing construction site stays valid.
+    ``kind`` is the engine's typed trigger kind, copied from
+    ``MeetingTriggeredEvent.trigger``: ``"report"`` for a body report and
+    ``"emergency"`` for an emergency call. It is required and has no default,
+    because a default would file an emergency as a report without anyone
+    noticing, and any other value raises ``ValueError`` at construction. Every
+    trigger decision the manager makes reads ``kind`` through
+    :func:`_trigger_is_emergency`. The prompt renderers still receive only
+    ``description``; ``tests/meetings/test_meeting_trigger_kind.py`` pins that
+    ``kind`` and the description's emergency phrase agree on every trigger the
+    builder constructs.
+
+    ``body_victim_id`` is the player whose corpse a BODY REPORT was made on,
+    carried because a speaker can hold discoveries of two different corpses
+    within a tick of each other and a render that says "the body" must know
+    which one it means. ``None`` for an emergency call and for any caller that
+    does not thread it; a ``None`` here means the layer cannot tell the corpses
+    apart and says so by rendering no victim rather than by guessing one.
     """
 
     triggered_by: PlayerId
     trigger_tick: int
     description: str
+    kind: MeetingTriggerKind
     body_victim_id: PlayerId | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in _MEETING_TRIGGER_KINDS:
+            raise ValueError(
+                f"MeetingTrigger.kind must be one of {_MEETING_TRIGGER_KINDS}, "
+                f"got {self.kind!r}"
+            )
 
 
 def _trigger_is_emergency(trigger: MeetingTrigger) -> bool:
-    """True iff ``trigger`` opened an EMERGENCY meeting (Task 10.11.1).
+    """True iff ``trigger`` opened an EMERGENCY meeting.
 
-    The meeting layer carries no structured trigger kind by design -- the
-    description IS the trigger surface (``orchestrator.game._build_meeting_trigger``
-    builds it from :data:`EMERGENCY_TRIGGER_PHRASE`, the same substring the
-    ``crewmate_report.j2`` emergency branch keys on). Detecting it here off the
-    same phrase keeps the no-body strip in lockstep with the prompt the model
-    actually saw.
+    Reads the typed ``trigger.kind``, which the orchestrator copies from the
+    engine's ``MeetingTriggeredEvent`` (``orchestrator.game._build_meeting_trigger``).
+    The description's wording decides nothing here. Every trigger decision the
+    manager makes comes through this function; today there are five: the
+    reporter-voice render id, the contradiction detector's trigger kind, the
+    emergency-opening body strip, a reply's ``is_body_report`` and the ballot's
+    ``reporter_id``. The opening templates still branch on the emergency phrase
+    inside the description they receive, and
+    ``tests/meetings/test_meeting_trigger_kind.py`` pins that the two answers
+    agree on every trigger the builder constructs.
     """
 
-    return EMERGENCY_TRIGGER_PHRASE in trigger.description
+    return trigger.kind == "emergency"
 
 
 @dataclass(frozen=True)
@@ -2132,10 +2164,11 @@ class MeetingManager:
             # PR #159 review: the cover directive talks about "the body's room
             # and the tick it happened", so it must fire only on a body-report
             # meeting -- never on a body-less emergency reply, which would inject
-            # contradictory "a body was found" copy. Derived from the trigger
-            # via the same load-bearing substring the opening templates branch
-            # on (mirrors impostor_report.j2's `body_report_opening` gate).
-            is_body_report=(EMERGENCY_TRIGGER_PHRASE not in trigger.description),
+            # contradictory "a body was found" copy. Read off the trigger's
+            # typed kind, which the lockstep pin holds equal to the substring
+            # the opening templates branch on (impostor_report.j2's
+            # `body_report` gate).
+            is_body_report=not _trigger_is_emergency(trigger),
             render_inputs=render_inputs,
             # The listener half: everyone EXCEPT the reporter hears who reported
             # and the base rate before they pick a target.
@@ -5266,11 +5299,12 @@ def _reporter_context_for(
     who perceived it.
 
     The concrete victim / room clause is filled ONLY when the window holds
-    exactly ONE of that speaker's discoveries. The meeting layer carries no
-    structured trigger body -- the description IS the trigger surface -- so with
-    two corpses found in the window there is nothing here that can say WHICH one
-    opened the meeting, and naming the wrong victim is worse than naming none.
-    Ambiguity therefore renders the generic ask, not a guess.
+    exactly ONE of that speaker's discoveries. The window is already narrowed to
+    the trigger's ``body_victim_id`` when the trigger names one
+    (:func:`_discoveries_in_window`); when it names none, two corpses found in
+    the window leave nothing here that can say WHICH one opened the meeting,
+    and naming the wrong victim is worse than naming none. Ambiguity therefore
+    renders the generic ask, not a guess.
     """
 
     if len(discoveries) != 1:

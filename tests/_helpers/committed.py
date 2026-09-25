@@ -377,19 +377,20 @@ class MoveRecordBuilder(Protocol):
 def meeting_trigger_kind(walk_event: MeetingOpened) -> MeetingTriggerKind:
     """The trigger kind the meeting manager threads into detection.
 
-    The orchestrator renders the engine's trigger event into a meeting trigger
-    (``orchestrator.game._build_meeting_trigger``), and the manager reads the kind
-    back off its description (``meetings.manager._trigger_is_emergency``). Both
-    steps are called here rather than restated.
+    The orchestrator rebuilds the meeting trigger from the engine's trigger event
+    (``orchestrator.game._build_meeting_trigger``), copying that event's typed
+    kind onto ``MeetingTrigger.kind``, and the manager reads that field
+    (``meetings.manager._trigger_is_emergency``). The builder is called here
+    rather than restated, and the returned value is the rebuilt trigger's typed
+    ``kind``: the trigger's description is never read.
     """
 
-    from meetings.manager import _trigger_is_emergency
     from orchestrator.game import _build_meeting_trigger
 
     trigger, _body_id, _engine_kind = _build_meeting_trigger(
         state=walk_event.state, events=walk_event.events
     )
-    return "emergency" if _trigger_is_emergency(trigger) else "report"
+    return trigger.kind
 
 
 @dataclass(frozen=True)

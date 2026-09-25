@@ -237,7 +237,10 @@ class TestRunPreconditions:
     def test_non_participant_reporter_is_rejected(self) -> None:
         manager = _make_manager(llm_client=_ScriptedLLMClient(_make_responder()))
         trigger = MeetingTrigger(
-            triggered_by="p-99", trigger_tick=1, description="ghost report"
+            triggered_by="p-99",
+            trigger_tick=1,
+            description="ghost report",
+            kind="report",
         )
         with pytest.raises(ValueError, match="not in"):
             _run(
@@ -1646,7 +1649,7 @@ class TestTeammateGuardOnProductionPath:
         # firewall outcome is identical either way: no teammate accusation,
         # no floor pass.)
         trigger = MeetingTrigger(
-            triggered_by="p-4", trigger_tick=1, description="p-4 reports"
+            triggered_by="p-4", trigger_tick=1, description="p-4 reports", kind="report"
         )
         result, _ = _run_meeting(
             _make_responder(accusations={"p-4": "p-5"}),
@@ -1995,7 +1998,7 @@ class TestTeammateFirewallInputSide:
             )
 
         trigger = MeetingTrigger(
-            triggered_by="p-4", trigger_tick=8, description="p-4 reports"
+            triggered_by="p-4", trigger_tick=8, description="p-4 reports", kind="report"
         )
 
         # Guarded render -> p-4 cannot surface the teammate sighting -> no
@@ -3466,6 +3469,7 @@ class TestCoverDirectiveThreading:
             triggered_by="p-1",
             trigger_tick=410,
             description="p-1 called an emergency meeting at tick 410",
+            kind="emergency",
         )
         result, client = _run_meeting(
             self._impostor_reply_responder,
@@ -6071,6 +6075,7 @@ class TestEmergencyOpeningNoBody:
             triggered_by="p-1",
             trigger_tick=410,
             description="p-1 called an emergency meeting at tick 410",
+            kind="emergency",
         )
 
     @staticmethod
@@ -6079,9 +6084,10 @@ class TestEmergencyOpeningNoBody:
             type="found_body", tick=406, body_of="p-9", room="STORAGE"
         )
 
-    def test_detection_keys_off_the_trigger_description(self) -> None:
-        # The meeting layer carries no structured trigger kind; the manager
-        # detects an emergency off the same description phrase the renderer does.
+    def test_detection_reads_the_typed_trigger_kind(self) -> None:
+        # The manager detects an emergency off ``MeetingTrigger.kind``, the
+        # engine event's typed kind; the description's wording decides nothing
+        # (tests/meetings/test_meeting_trigger_kind.py plants the disagreement).
         assert _trigger_is_emergency(self._emergency_trigger())
         assert not _trigger_is_emergency(_default_trigger())
 
@@ -7285,6 +7291,7 @@ def _run_planted_meeting(
                 triggered_by="p-1",
                 trigger_tick=410,
                 description=f"p-1 {EMERGENCY_TRIGGER_PHRASE} at tick 410",
+                kind="emergency",
             ),
             participants=participants,
         )
