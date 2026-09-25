@@ -21,7 +21,7 @@ from typing import Any, Literal, cast, get_args
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 import orchestrator.game as game_module
 from agents.tactical.experimental import UNBUILT_OPTION_VALUES
@@ -29,7 +29,14 @@ from api.replay_loader import ReplayLoader
 from api.schemas import ExperimentConfigView
 from engine.events import MeetingTriggeredEvent
 from engine.world import load_canonical_map
-from experiments.tactical_gameplay import candidate_configs
+from engine.actions import Action
+from engine.tick import advance_tick
+from experiments.tactical_gameplay import (
+    Roster,
+    candidate_configs,
+    measure_replay,
+    run_candidate,
+)
 from llm.fake_provider import FakeProvider
 from meetings.evidence_profile import (
     CONFIG_ONLY_PROFILE_FIELDS,
@@ -57,7 +64,12 @@ from orchestrator.game import (  # noqa: PLC2701
     experiment_arm_suffix,
     prompt_versions_for_set,
 )
-from orchestrator.replay import _stable_json  # noqa: PLC2701
+from orchestrator.replay import (  # noqa: PLC2701
+    ReplayEntry,
+    _state_hash,
+    _stable_json,
+    read_all_entries,
+)
 from orchestrator.seeder import seed_initial_state
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -416,6 +428,55 @@ def test_dropping_a_threaded_field_makes_the_helper_refuse_it(
         ValueError, match="redistribution_policy='least_remaining_work'"
     ):
         engine_arguments(workload)
+
+
+def _first_default_divergence(path: Path, *, seed: int, roster: Roster) -> int | None:
+    """The first tick whose recorded hash a default-engine re-simulation misses."""
+
+    adapter: TypeAdapter[Action] = TypeAdapter(Action)
+    game_map = load_canonical_map()
+    state = seed_initial_state(seed=seed, game_map=game_map, **roster.model_dump())
+    for entry in read_all_entries(path):
+        if not isinstance(entry, ReplayEntry) or state.phase != "PLAY":
+            continue
+        actions = [adapter.validate_python(dict(raw)) for raw in entry.actions]
+        state, _events = advance_tick(state, actions, game_map=game_map)
+        if _state_hash(state) != entry.state_hash:
+            return entry.tick
+    return None
+
+
+def test_every_site_threads_a_recorded_policy_that_changes_the_game(
+    tmp_path: Path,
+) -> None:
+    """A workload game whose recipients differ from the default's.
+
+    The live tick records it, the loader and the walk re-simulate it with every
+    hash verified, and the lab's per-action apply picks the least-loaded
+    recipient each time; a site that fell back to the default would miss a hash
+    or pick a busier recipient.
+    """
+
+    roster = Roster(num_players=4, num_impostors=1, tasks_per_crewmate=2)
+    path = tmp_path / "replay-seed-1000.jsonl"
+    (tmp_path / "roster.json").write_text(roster.model_dump_json(), encoding="utf-8")
+    row = run_candidate(
+        seed=1000,
+        roster=roster,
+        config=candidate_configs()["workload"],
+        replay_path=path,
+    )
+    assert row.error is None and row.completion_status == "completed"
+    # The recording exercises the difference: the default engine diverges.
+    assert _first_default_divergence(path, seed=1000, roster=roster) is not None
+    assert (
+        ReplayLoader(tmp_path)
+        .load_replay("headless-seed-1000")
+        .metadata.outcome_verified
+    )
+    counts = measure_replay(path, seed=1000, roster=roster).counts
+    assert counts["redistributed_instances"] > 0
+    assert counts.get("redistributions_to_above_minimum_work", 0) == 0
 
 
 _RESIMULATION_MODULES: tuple[str, ...] = (
@@ -870,6 +931,37 @@ def test_two_arms_fold_in_field_declaration_order(
     assert prompt_versions_for_set(_SET, env={}, experiment_config=only)[
         "vote_ballot"
     ] == ("vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1")
+
+
+def test_a_pinned_runner_still_refuses_a_pending_profile_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An explicit version pin skips the stamp fold, so the runner's own check
+    # is what refuses the pending value on this path.
+    assert _PENDING_PROFILE
+    field, value = _PENDING_PROFILE[0]
+    with pytest.raises(ValueError, match=re.escape(f"{field}={value!r}")):
+        build_default_meeting_runner(
+            llm_client=FakeProvider(),
+            env={"AILIBI_PROMPT_SET": _SET},
+            prompt_versions=PROMPT_VERSION_SETS[_SET],
+            profile=MeetingEvidenceProfile.model_validate({field: value}),
+        )
+
+
+def test_a_version_two_profile_folds_its_stamps_as_format_two() -> None:
+    env = {"AILIBI_PROMPT_SET": _SET, "AILIBI_TEMPORAL_OBSERVATIONS": "2"}
+    declared = build_default_meeting_runner(
+        llm_client=FakeProvider(),
+        env=env,
+        profile=MeetingEvidenceProfile(evidence_reasoning_version=2),
+    )
+    ambient = build_default_meeting_runner(
+        llm_client=FakeProvider(), env={**env, "AILIBI_EVIDENCE_REASONING": "2"}
+    )
+    for runner in (declared, ambient):
+        assert runner.evidence_profile.evidence_reasoning_version == 2
+        assert runner._prompt_versions == dict(PROMPT_VERSION_SETS[_SET])  # noqa: PLC2701
 
 
 def test_the_runner_stamps_the_profile_it_renders(

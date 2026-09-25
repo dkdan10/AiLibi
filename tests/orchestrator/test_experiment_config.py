@@ -623,10 +623,33 @@ def test_the_live_meeting_passes_the_recorded_body_handle_arm(
     "raw",
     [
         {"ballot_kill_row_version": True},
+        {"ballot_kill_row_version": 1.0},
+        {"impostor_ballot_version": True},
+        {"impostor_ballot_version": 1.0},
         {"impostor_ballot_version": "1"},
         {"ballot_kill_row_version": 2},
     ],
 )
 def test_the_profile_refuses_a_coerced_ballot_version(raw: dict[str, object]) -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="integer version numbers|literal"):
         MeetingEvidenceProfile.model_validate(raw)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "report_body_handle_version",
+        "ballot_kill_row_version",
+        "impostor_ballot_version",
+    ],
+)
+@pytest.mark.parametrize("value", [True, 1.0])
+def test_a_coerced_wave_version_is_refused_with_the_guard_open(
+    monkeypatch: pytest.MonkeyPatch, field: str, value: object
+) -> None:
+    # Literal[1] alone would coerce True and 1.0 to 1; the integer check
+    # refuses them whether or not the pending guard still lists the field.
+    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+    with pytest.raises(ValidationError, match="integer version numbers"):
+        RecordedExperimentConfig.model_validate({field: value})
+    assert RecordedExperimentConfig.model_validate({field: 1}).model_dump()[field] == 1
