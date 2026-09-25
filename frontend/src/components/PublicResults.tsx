@@ -12,7 +12,12 @@ function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
   if (config?.public_account_version) mechanisms.push("common public accounts");
   if (config?.attributed_testimony_version) mechanisms.push("attributed witness testimony");
   if (config?.bounded_rebuttal_version) mechanisms.push("one reply to a late accusation");
-  if (config && (config.crew_idle_policy !== "hub_wait" || config.vent_exit_policy !== "target_distance" || config.post_meeting_retarget || config.self_report || config.sabotage_threshold !== "six_sevenths")) mechanisms.push("experimental movement or action policies");
+  if (config?.vent_witness_rule === "physical") mechanisms.push("vent use seen only in the room where it happens");
+  if (config?.report_body_handle_version) mechanisms.push("body reports without the time of death");
+  if (config?.ballot_kill_row_version) mechanisms.push("witnessed kills listed on the voter's ballot");
+  if (config?.impostor_ballot_version) mechanisms.push("impostor ballots cast by strategy");
+  // Older payloads omit vent_entry_policy; a missing key is the default.
+  if (config && (config.crew_idle_policy !== "hub_wait" || config.vent_exit_policy !== "target_distance" || (config.vent_entry_policy ?? "any_body") !== "any_body" || config.post_meeting_retarget || config.self_report || config.sabotage_threshold !== "six_sevenths")) mechanisms.push("experimental movement or action policies");
   if (config && (config.meeting_reset !== "preserve" || config.redistribution_policy !== "lowest_id")) mechanisms.push("experimental round or task rules");
   const factory = group.agent_factory_kind === "custom" ? "Custom agent factory" : group.agent_factory_kind === "experimental" ? "Experimental agent factory" : group.agent_factory_kind === "scripted" ? "Built-in scripted agent factory" : "Agent factory not recorded";
   return <li className="rounded border border-ink-300 p-3">
