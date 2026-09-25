@@ -595,7 +595,9 @@ class MeetingFact:
     by the loader; ``None`` when there is no repeat-speaker turn or the selector
     chooses nothing. ``opener_prompt_has_kill_tick_handle`` is ``None`` when the
     opener's first prompt was not recorded. ``regrouped`` says the recorded
-    reset gathered the survivors when play resumed.
+    reset gathered the survivors when play resumed. ``ejected`` is set exactly
+    when ``outcome`` is ``EJECTED``, the invariant a meeting result carries; a
+    carrier breaking it raises.
     """
 
     meeting_id: str
@@ -623,6 +625,13 @@ class MeetingFact:
     bodies_after: frozenset[str]
     regrouped: bool
 
+    def __post_init__(self) -> None:
+        if (self.outcome == "EJECTED") != (self.ejected is not None):
+            raise ValueError(
+                f"{self.meeting_id}: an ejected player is recorded exactly when "
+                "the outcome is EJECTED"
+            )
+
 
 @dataclass(frozen=True)
 class DiscardedAction:
@@ -643,7 +652,7 @@ class GameFacts:
     discarded: tuple[DiscardedAction, ...]
     rows_without_dispositions: int
     winner: str | None
-    terminal_tick: int | None
+    terminal_tick: int
 
 
 @dataclass(frozen=True)
@@ -1159,9 +1168,11 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
         "own_kill_rows_breaching": CellSpec(
             "Own-kill ballot rows naming a teammate or held by a non-witness",
             _BALLOTS,
-            "Served own-kill rows whose killer is the holder's fellow impostor, or "
-            "whose cited observation joins to no kill the holder witnessed, over all "
-            "served own-kill rows; rows citing nothing are not evaluable.",
+            "Served own-kill rows that name the holder's fellow impostor as the "
+            "killer, whatever they cite, or that do not cite, by the holder's own "
+            "observation id, a kill the named player made with the holder among its "
+            "witnesses, over all served own-kill rows. A row citing nothing counts "
+            "here, because the row is specified to cite its kill.",
             ("recorded ballot prompt", "Killed"),
             OWN_KILL_BALLOT_ROW,
         ),
@@ -1425,7 +1436,7 @@ class _Trip:
     actor: PlayerId
     entry_tick: int
     close_tick: int
-    close: Literal["exit", "regroup", "ejected", "game_end", "open"]
+    close: Literal["exit", "regroup", "ejected", "game_end"]
     ticks_inside: int
     exit: VentFact | None
 
@@ -1492,14 +1503,11 @@ def _trips(game: GameFacts) -> tuple[_Trip, ...]:
             trips.append(
                 _Trip(actor, entry_tick, tick, reason, inside(entry_tick, tick), None)
             )
+    end = game.terminal_tick
     for actor, entry_tick in sorted(open_entry.items()):
-        end = game.terminal_tick
-        if end is None:
-            trips.append(_Trip(actor, entry_tick, entry_tick, "open", 0, None))
-        else:
-            trips.append(
-                _Trip(actor, entry_tick, end, "game_end", inside(entry_tick, end), None)
-            )
+        trips.append(
+            _Trip(actor, entry_tick, end, "game_end", inside(entry_tick, end), None)
+        )
     return tuple(trips)
 
 
@@ -1625,14 +1633,13 @@ def _fold_trips(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> Non
         )
     trips = _trips(game)
     for trip in trips:
-        if trip.close != "open":
-            acc.count(
-                "trips_closed_by_regroup",
-                trip.close == "regroup",
-                seed=game.seed,
-                where=f"tick {trip.entry_tick}",
-            )
-        if trip.close != "open" and trip.ticks_inside > 1:
+        acc.count(
+            "trips_closed_by_regroup",
+            trip.close == "regroup",
+            seed=game.seed,
+            where=f"tick {trip.entry_tick}",
+        )
+        if trip.ticks_inside > 1:
             acc.count(
                 "trips_longer_than_cap",
                 trip.ticks_inside > IN_VENT_CAP_TICKS,
@@ -1879,7 +1886,7 @@ def _fold_vent_proof(game: GameFacts, meeting: MeetingFact, acc: _Accumulator) -
     acc.count("meetings_with_vent_proof", proof, seed=seed, where=where)
     if meeting.trigger_kind == "emergency":
         acc.count("button_meetings_with_vent_proof", proof, seed=seed, where=where)
-    ejected = meeting.ejected if meeting.outcome == "EJECTED" else None
+    ejected = meeting.ejected
     if not proof:
         acc.count(
             "meetings_without_vent_proof_ejecting",
@@ -2014,7 +2021,7 @@ def _fold_structure(game: GameFacts, meeting: MeetingFact, acc: _Accumulator) ->
                 seed=seed,
                 where=where,
             )
-    ejected = meeting.ejected if meeting.outcome == "EJECTED" else None
+    ejected = meeting.ejected
     if ejected is not None and not _is_impostor(game, ejected):
         acc.count(
             "openers_among_innocent_ejections",
@@ -2116,28 +2123,30 @@ def _fold_rebuttals(game: GameFacts, acc: _Accumulator) -> None:
             )
 
 
-def _own_kill_row_join(
-    game: GameFacts, row: OwnKillRowFact
-) -> Literal["ok", "breach", "not_evaluable"]:
-    if row.citation_id is None:
-        return "not_evaluable"
+def _own_kill_row_breaches(game: GameFacts, row: OwnKillRowFact) -> bool:
+    """Whether one served own-kill row breaches the own-kill row setting.
+
+    The row names its killer, so a row naming the holder's fellow impostor is a
+    breach whatever it cites. Any other row must cite, by the holder's own
+    observation id, a kill the named player made on that tick with the holder
+    among its witnesses. The ballot card specifies that every own-kill row cites
+    its kill, so a row citing nothing joins no kill and is a breach too.
+    """
+
     if row.subject in _teammates(game, row.holder):
-        return "breach"
+        return True
+    if row.citation_id is None:
+        return True
     match = _OBSERVATION_ID_RE.match(row.citation_id)
     if match is None or match["agent"] != row.holder:
-        return "breach"
+        return True
     engine_tick = int(match["tick"]) - AGENT_CLOCK_OFFSET
-    kill = next(
-        (
-            kill
-            for kill in game.kills
-            if kill.tick == engine_tick and kill.killer == row.subject
-        ),
-        None,
+    return not any(
+        kill.tick == engine_tick
+        and kill.killer == row.subject
+        and row.holder in kill.witnesses
+        for kill in game.kills
     )
-    if kill is None or row.holder not in kill.witnesses:
-        return "breach"
-    return "ok"
 
 
 def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
@@ -2172,7 +2181,7 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
                 seed=seed,
                 where=voter_where,
             )
-        if meeting.outcome == "EJECTED" and meeting.ejected is not None:
+        if meeting.ejected is not None:
             confident = [
                 ballot.voter
                 for ballot in meeting.ballots
@@ -2188,16 +2197,12 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
         ballots_by_voter = {ballot.voter: ballot for ballot in meeting.ballots}
         for row in meeting.own_kill_rows:
             row_where = f"{where}, holder {row.holder}"
-            verdict = _own_kill_row_join(game, row)
-            if verdict == "not_evaluable":
-                acc.not_evaluable("own_kill_rows_breaching")
-            else:
-                acc.count(
-                    "own_kill_rows_breaching",
-                    verdict == "breach",
-                    seed=seed,
-                    where=row_where,
-                )
+            acc.count(
+                "own_kill_rows_breaching",
+                _own_kill_row_breaches(game, row),
+                seed=seed,
+                where=row_where,
+            )
             held = ballots_by_voter.get(row.holder)
             acc.count(
                 "own_kill_rows_cited_by_holder",
@@ -2238,7 +2243,7 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
         )
         acc.count(
             "held_kill_killers_ejected",
-            following.outcome == "EJECTED" and following.ejected == kill.killer,
+            following.ejected == kill.killer,
             seed=game.seed,
             where=where,
         )
@@ -2314,7 +2319,7 @@ def prompt_stamps_from_cell(cell: str) -> tuple[str, ...]:
     """
 
     stamps = tuple(stamp.strip() for stamp in cell.split(","))
-    if not stamps or any(not stamp or " " in stamp for stamp in stamps):
+    if any(not stamp or " " in stamp for stamp in stamps):
         raise ValueError("a MANIFEST row of a game with meetings names no prompt stamp")
     return tuple(sorted(stamps))
 
@@ -2521,11 +2526,10 @@ def _load_game(
     bodies: list[BodyFact] = []
     discarded: list[DiscardedAction] = []
     rows_without_dispositions = 0
-    meetings: list[MeetingFact] = []
+    applied_meetings: list[tuple[MeetingOpened, MeetingApplied]] = []
     opened: MeetingOpened | None = None
     game_end: GameEndReplayEntry | None = None
     terminal_tick: int | None = None
-    regroup_recorded = False
     for event in walk_replay(
         path,
         seed=seed,
@@ -2538,10 +2542,6 @@ def _load_game(
         if isinstance(event, TickOpened):
             entries.append(event.entry)
             frames[event.entry.tick] = _frame_of(event.state)
-            if len(entries) == 1:
-                regroup_recorded = MEETING_REGROUP.holds(
-                    dict(_game_era(entries, None).settings)
-                )
         elif isinstance(event, TickAdvanced):
             killed: dict[PlayerId, int] = {}
             for engine_event in event.events:
@@ -2599,30 +2599,34 @@ def _load_game(
                     if disposition == "discarded_by_meeting"
                 )
         elif isinstance(event, MeetingOpened):
-            entries.append(event.entry)
             opened = event
         elif isinstance(event, MeetingApplied):
             if opened is None or opened.entry.meeting_id != event.entry.meeting_id:
                 raise ValueError(f"seed {seed}: a meeting applied without opening")
-            meetings.append(
-                _meeting_fact(opened, event, regroup_recorded=regroup_recorded)
-            )
+            applied_meetings.append((opened, event))
             opened = None
         elif isinstance(event, WalkComplete):
             game_end = event.game_end
             terminal_tick = event.terminal_tick
             if game_end is not None:
                 entries.append(game_end)
-    stamps = prompt_stamps_from_cell(manifest_cell) if meetings else None
+    if terminal_tick is None:
+        raise ValueError(f"seed {seed}: the walk never reached its terminal tick")
+    stamps = prompt_stamps_from_cell(manifest_cell) if applied_meetings else None
+    era = _game_era(entries, stamps)
+    regroup_recorded = MEETING_REGROUP.holds(era.values)
     return GameFacts(
         seed=seed,
         roles=MappingProxyType(dict(roles)),
-        era=_game_era(entries, stamps),
+        era=era,
         kills=tuple(kills),
         vents=tuple(vents),
         bodies=tuple(bodies),
         frames=MappingProxyType(frames),
-        meetings=tuple(meetings),
+        meetings=tuple(
+            _meeting_fact(opened_meeting, applied, regroup_recorded=regroup_recorded)
+            for opened_meeting, applied in applied_meetings
+        ),
         discarded=tuple(discarded),
         rows_without_dispositions=rows_without_dispositions,
         winner=game_end.winner if game_end is not None else None,
@@ -2630,14 +2634,15 @@ def _load_game(
     )
 
 
-def load_census_inputs(set_dir: Path, *, game_map: Map | None = None) -> CensusInputs:
-    """Walk one replay set into the census carrier. The one impure step.
+def load_census_inputs(set_dir: Path) -> CensusInputs:
+    """Walk one replay set on the canonical map into the census carrier.
 
-    Roles come from :func:`eval.validity.roles_by_seed`, the seeder the sample
-    report takes them from. No model is called and nothing is written.
+    The one impure step. Roles come from :func:`eval.validity.roles_by_seed`,
+    the seeder the sample report takes them from. No model is called and
+    nothing is written.
     """
 
-    resolved_map = game_map if game_map is not None else load_canonical_map()
+    resolved_map = load_canonical_map()
     seeds = seeds_on_disk(set_dir)
     unseen = [seed for seed in seeds if seed in UNSEEN_SEED_BAND]
     if unseen:

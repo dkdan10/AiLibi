@@ -75,29 +75,37 @@ def test_set_dir_prints_the_committed_section_of_that_set() -> None:
     assert printed == _section("samples/9p2i")
 
 
-def _planted_inputs(*meetings: MeetingFact) -> CensusInputs:
+PLANTED_ERA = EraKey(
+    settings=(),
+    temporal_observation_version=None,
+    substrate_flags=(("absence_prior", True), ("reporter_reasoning", False)),
+    prompt_stamps=("vote_ballot.qwen3_6_27b.v8",),
+)
+
+
+def _planted_inputs(
+    *meetings: MeetingFact,
+    era: EraKey = PLANTED_ERA,
+    label: str = "samples/9p2i",
+    rows_without_dispositions: int = 1,
+) -> CensusInputs:
     game = GameFacts(
         seed=7,
         roles=MappingProxyType({"p-0": "IMPOSTOR", "p-1": "CREWMATE"}),
-        era=EraKey(
-            settings=(),
-            temporal_observation_version=None,
-            substrate_flags=(("absence_prior", True), ("reporter_reasoning", False)),
-            prompt_stamps=("vote_ballot.qwen3_6_27b.v8",),
-        ),
+        era=era,
         kills=(),
         vents=(),
         bodies=(),
         frames=MappingProxyType({}),
         meetings=meetings,
         discarded=(census.DiscardedAction(5, "move"),),
-        rows_without_dispositions=1,
+        rows_without_dispositions=rows_without_dispositions,
         winner="IMPOSTORS",
         terminal_tick=5,
     )
     return CensusInputs(
-        label="samples/9p2i",
-        source="replays/samples/9p2i",
+        label=label,
+        source=f"replays/{label}",
         era=game.era,
         kill_cooldown_ticks=4,
         neighbours=MappingProxyType({}),
@@ -441,3 +449,57 @@ def test_the_manifest_reader_agrees_with_the_manifest_writers_parser() -> None:
             seed: row.prompt_versions for seed, row in parse_manifest(text).items()
         }
         assert dict(census._manifest_prompt_cells(set_dir)) == expected
+
+
+def test_a_not_evaluable_row_shows_when_any_group_has_one() -> None:
+    page = command.render_markdown(
+        census_from_inputs(
+            [
+                _planted_inputs(),
+                _planted_inputs(label="samples/4p1i", rows_without_dispositions=0),
+            ]
+        )
+    )
+    assert "| not evaluable | 1 | 1 | 1 | 0 |" in page
+
+
+def test_the_era_lines_name_every_recorded_part_or_say_none() -> None:
+    def era_text(era: EraKey) -> str:
+        return "\n".join(
+            command._era_lines(census_from_inputs([_planted_inputs(era=era)]))
+        )
+
+    stamped = era_text(
+        EraKey(
+            settings=(("meeting_reset", "hub_with_grace"),),
+            temporal_observation_version=2,
+            substrate_flags=(("absence_prior", True), ("temporal_observations", True)),
+            prompt_stamps=None,
+        )
+    )
+    assert "recorded experiment settings: `meeting_reset = hub_with_grace`;" in stamped
+    assert "temporal observations: version 2;" in stamped
+    assert "substrate flags on: absence_prior, temporal_observations; off: none;" in (
+        stamped
+    )
+    assert "held a meeting: none." in stamped
+    bare = era_text(
+        EraKey(
+            settings=(),
+            temporal_observation_version=None,
+            substrate_flags=None,
+            prompt_stamps=None,
+        )
+    )
+    assert "recorded experiment settings: none beyond the historical defaults;" in bare
+    assert "temporal observations: not delivered;" in bare
+    assert "substrate flags on: none; off: none;" in bare
+    all_off = era_text(
+        EraKey(
+            settings=(),
+            temporal_observation_version=None,
+            substrate_flags=(("absence_prior", False),),
+            prompt_stamps=None,
+        )
+    )
+    assert "substrate flags on: none; off: absence_prior;" in all_off

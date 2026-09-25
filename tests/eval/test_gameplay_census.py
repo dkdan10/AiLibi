@@ -20,6 +20,7 @@ from types import MappingProxyType
 from typing import Any, get_args, get_origin
 
 import pytest
+from pydantic import BaseModel
 
 import eval.gameplay_census as census
 from engine.events import (
@@ -464,6 +465,36 @@ def test_a_thawed_or_mutable_carrier_fails_the_shape_check() -> None:
     ]
 
 
+def test_every_census_record_type_is_frozen() -> None:
+    """Explicit objects own state: only the fold's own accumulator is mutable."""
+
+    records = [
+        value
+        for value in vars(census).values()
+        if isinstance(value, type) and value.__module__ == census.__name__
+    ]
+    dataclass_types = [value for value in records if dataclasses.is_dataclass(value)]
+    models = [value for value in records if issubclass(value, BaseModel)]
+    assert len(dataclass_types) > 10 and len(models) > 5
+    thawed = {
+        value.__name__
+        for value in dataclass_types
+        if not value.__dataclass_params__.frozen  # type: ignore[attr-defined]
+    }
+    assert thawed == {"_Accumulator"}
+    assert all(model.model_config.get("frozen") for model in models)
+
+
+def test_the_json_keeps_text_as_written() -> None:
+    view = census.EraView(
+        settings={},
+        temporal_observation_version=None,
+        substrate_flags=None,
+        prompt_stamps=("caf\u00e9.x.v1",),
+    )
+    assert "caf\u00e9.x.v1" in census.serialize_json(view)
+
+
 def test_pool_adds_counts_and_recomputes_the_rate_from_them() -> None:
     small = fold_set(inputs(game(kills=(kill(5, witnesses=("p-2",)),))))
     large = fold_set(
@@ -849,6 +880,24 @@ def test_the_first_report_of_a_game_is_never_stale() -> None:
     assert counts("stale_report_meetings", planted) == (0, 1, 0)
 
 
+def test_a_corpse_killed_on_the_regroup_tick_is_older_than_the_regroup() -> None:
+    """A kill on the regroup meeting's own tick came before that meeting opened."""
+
+    def reported_after_regroup(kill_tick: int) -> GameFacts:
+        return game(
+            kills=(kill(kill_tick),),
+            bodies=(body("body-x", kill_tick),),
+            meetings=(
+                meeting(meeting_id="meeting-0", tick=10, regrouped=True),
+                report(20, "body-x", meeting_id="meeting-1"),
+            ),
+        )
+
+    key = "report_corpses_older_than_last_close"
+    assert counts(key, reported_after_regroup(10)) == (1, 1, 0)
+    assert counts(key, reported_after_regroup(11)) == (0, 1, 0)
+
+
 # --------------------------------------------------------------------------- #
 # Vent proof against the vent band                                             #
 # --------------------------------------------------------------------------- #
@@ -917,6 +966,56 @@ def test_the_moment_table_names_entry_both_and_neither() -> None:
     }
     late = ejected_after((entry(30, source=("p-2",)),))
     assert table("vent_band_by_moment", late) == {"neither": 1}
+
+
+def test_a_vent_on_the_trigger_tick_came_before_the_meeting() -> None:
+    planted = game(
+        vents=(entry(19), exit_(20, source=("p-2",))),
+        frames={20: frame({})},
+        meetings=(
+            meeting(
+                tick=20,
+                outcome="EJECTED",
+                ejected="p-0",
+                vent_flag_subjects=(frozenset({"p-0"}),),
+            ),
+        ),
+    )
+    assert table("vent_band_by_moment", planted) == {"exit only": 1}
+    assert counts("vent_band_resting_only_on_room_left", planted) == (1, 1, 0)
+
+
+def _band_after(
+    vents: tuple[VentFact, ...],
+    *,
+    settings: Mapping[str, SettingValue] | None = None,
+    living: frozenset[str] = frozenset(ROLES),
+) -> GameFacts:
+    return game(
+        settings,
+        vents=vents,
+        frames={tick: frame({}) for tick in range(1, 20)},
+        meetings=(
+            meeting(
+                outcome="EJECTED",
+                ejected="p-0",
+                living=living,
+                vent_flag_subjects=(frozenset({"p-0"}),),
+            ),
+        ),
+    )
+
+
+def test_resting_on_the_room_left_needs_a_living_crew_sighting() -> None:
+    key = "vent_band_resting_only_on_room_left"
+    seen_left = (entry(10), exit_(11, source=("p-2",)))
+    assert counts(key, _band_after(seen_left)) == (1, 1, 0)
+    dead_witness = _band_after(seen_left, living=frozenset(ROLES) - {"p-2"})
+    assert counts(key, dead_witness) == (0, 1, 0)
+    physical = {"vent_witness_rule": "physical"}
+    for vents in ((), (entry(10), exit_(11))):
+        unseen = _band_after(vents, settings=physical)
+        assert counts(key, unseen) == (0, 1, 0), vents
 
 
 def test_the_no_vent_proof_cells_and_the_crew_vent_band() -> None:
@@ -1030,6 +1129,27 @@ def test_a_kill_witness_held_voted_and_ejected() -> None:
     assert counts("crew_witnessed_kills_held_at_next_meeting", planted) == (1, 2, 1)
     assert counts("held_kill_witnesses_voting_killer", planted) == (1, 1, 0)
     assert counts("held_kill_killers_ejected", planted) == (1, 1, 0)
+
+
+def test_a_kill_on_the_trigger_tick_is_held_by_that_meeting() -> None:
+    planted = game(
+        kills=(kill(20, witnesses=("p-2",)),),
+        meetings=(meeting(tick=20, ballots=(ballot("p-2", "p-0"),)),),
+    )
+    assert counts("crew_witnessed_kills_held_at_next_meeting", planted) == (1, 1, 0)
+    assert counts("held_kill_witnesses_voting_killer", planted) == (1, 1, 0)
+
+
+def test_only_a_living_witness_naming_the_killer_votes_the_killer() -> None:
+    for ballots in (
+        (ballot("p-2", "SKIP"), ballot("p-3", "p-0")),
+        (ballot("p-2", "p-1"),),
+    ):
+        planted = game(
+            kills=(kill(5, witnesses=("p-2",)),),
+            meetings=(meeting(tick=10, ballots=ballots),),
+        )
+        assert counts("held_kill_witnesses_voting_killer", planted) == (0, 1, 0)
 
 
 # --------------------------------------------------------------------------- #
@@ -1271,6 +1391,48 @@ def _own_kill_row_of_non_witness(settings: Mapping[str, SettingValue]) -> GameFa
     )
 
 
+def _own_kill_row_of_teammate_citing_nothing(
+    settings: Mapping[str, SettingValue],
+) -> GameFacts:
+    """The row names its killer, so a teammate row breaches with no citation."""
+
+    return game(
+        settings,
+        kills=(kill(12, witnesses=("p-1",)),),
+        meetings=(
+            meeting(own_kill_rows=(OwnKillRowFact("p-1", "p-0", ROOM, 13, None),)),
+        ),
+    )
+
+
+def _own_kill_row_citing_nothing(settings: Mapping[str, SettingValue]) -> GameFacts:
+    """A witness's row served without its kill's id joins no kill."""
+
+    return game(
+        settings,
+        kills=(kill(12, witnesses=("p-2",)),),
+        meetings=(
+            meeting(own_kill_rows=(OwnKillRowFact("p-2", "p-0", ROOM, 13, None),)),
+        ),
+    )
+
+
+def _own_kill_row_naming_another_killer(
+    settings: Mapping[str, SettingValue],
+) -> GameFacts:
+    """The cited kill was witnessed, but the row names someone else as killer."""
+
+    return game(
+        settings,
+        kills=(kill(12, killer="p-1", witnesses=("p-2",)),),
+        meetings=(
+            meeting(
+                own_kill_rows=(OwnKillRowFact("p-2", "p-0", ROOM, 13, "p-2:13:0"),)
+            ),
+        ),
+    )
+
+
 GUARD_PAIRS: tuple[
     tuple[
         str,
@@ -1389,6 +1551,27 @@ GUARD_PAIRS: tuple[
     (
         "own_kill_rows_breaching",
         _own_kill_row_of_non_witness,
+        {"ballot_kill_row_version": 1},
+        {},
+        "meeting meeting-0, holder p-2",
+    ),
+    (
+        "own_kill_rows_breaching",
+        _own_kill_row_of_teammate_citing_nothing,
+        {"ballot_kill_row_version": 1},
+        {},
+        "meeting meeting-0, holder p-1",
+    ),
+    (
+        "own_kill_rows_breaching",
+        _own_kill_row_citing_nothing,
+        {"ballot_kill_row_version": 1},
+        {},
+        "meeting meeting-0, holder p-2",
+    ),
+    (
+        "own_kill_rows_breaching",
+        _own_kill_row_naming_another_killer,
         {"ballot_kill_row_version": 1},
         {},
         "meeting meeting-0, holder p-2",
@@ -1571,13 +1754,11 @@ def test_the_rows_found_are_the_denominator_so_a_mismatch_reads_n_a() -> None:
     silent = game({"ballot_kill_row_version": 1}, meetings=(meeting(),))
     breaching = cell("own_kill_rows_breaching", silent)
     assert (breaching.denominator, breaching.rate) == (0, None)
-    uncitable = game(
-        {"ballot_kill_row_version": 1},
-        meetings=(
-            meeting(own_kill_rows=(OwnKillRowFact("p-2", "p-0", ROOM, 13, None),)),
-        ),
-    )
-    assert counts("own_kill_rows_breaching", uncitable) == (0, 0, 1)
+    for build in (
+        _own_kill_row_citing_nothing,
+        _own_kill_row_of_teammate_citing_nothing,
+    ):
+        assert counts("own_kill_rows_breaching", build({})) == (1, 1, 0), build
 
 
 def test_a_row_joined_to_a_kill_its_holder_saw_is_no_breach() -> None:
@@ -1593,6 +1774,23 @@ def test_a_row_joined_to_a_kill_its_holder_saw_is_no_breach() -> None:
     )
     assert counts("own_kill_rows_breaching", witnessed) == (0, 1, 0)
     assert counts("own_kill_rows_cited_by_holder", witnessed) == (1, 1, 0)
+    for held, row_citation in (
+        (ballot("p-2", "p-0", cited="p-2:14:0"), "p-2:13:0"),
+        (ballot("p-2", "p-0"), None),
+        (ballot("p-3", "p-0", cited="p-2:13:0"), "p-2:13:0"),
+    ):
+        other = game(
+            kills=(kill(12, witnesses=("p-2",)),),
+            meetings=(
+                meeting(
+                    own_kill_rows=(
+                        OwnKillRowFact("p-2", "p-0", ROOM, 13, row_citation),
+                    ),
+                    ballots=(held,),
+                ),
+            ),
+        )
+        assert counts("own_kill_rows_cited_by_holder", other) == (0, 1, 0), held
     for citation in ("p-3:13:0", "not-an-id", "p-2:12:0"):
         wrong = game(
             kills=(kill(12, witnesses=("p-2",)),),
@@ -1736,9 +1934,9 @@ def test_a_trip_is_closed_by_a_regroup_an_ejection_or_the_game_end() -> None:
     preserved = game(vents=(entry(10),), meetings=(meeting(tick=12),), terminal_tick=14)
     assert counts("trips_closed_by_regroup", preserved) == (0, 1, 0)
     assert counts("trips_longer_than_cap", preserved) == (0, 1, 0)
-    unfinished = game(vents=(entry(10),), terminal_tick=None, winner=None)
-    assert counts("trips_closed_by_regroup", unfinished) == (0, 0, 0)
-    assert counts("impostor_wins", unfinished) == (0, 0, 1)
+    unrecorded_winner = game(vents=(entry(10),), winner=None)
+    assert counts("trips_closed_by_regroup", unrecorded_winner) == (0, 1, 0)
+    assert counts("impostor_wins", unrecorded_winner) == (0, 0, 1)
 
 
 def test_a_long_trip_closed_without_an_exit_counts_against_the_cap() -> None:
@@ -1865,6 +2063,17 @@ def test_the_regroup_cells_read_regroups_only() -> None:
     kept = game(meetings=(replace(regroup, regrouped=False),))
     assert counts("sabotage_active_at_regroup", kept) == (0, 0, 0)
     assert table("trigger_tick_events_dropped_by_regroup", kept) == {}
+
+
+def test_a_kill_witness_button_at_the_cooldown_tick_counts() -> None:
+    edge = meeting(
+        meeting_id="meeting-1", tick=10 + census.BUTTON_COOLDOWN_TICKS, opener="p-3"
+    )
+    planted = game(
+        kills=(kill(12, witnesses=("p-3",)),),
+        meetings=(meeting(meeting_id="meeting-0", tick=10, regrouped=True), edge),
+    )
+    assert counts("kill_witness_button_calls_soon_after_regroup", planted) == (1, 1, 0)
 
 
 def test_opening_state_cells() -> None:
@@ -2010,6 +2219,30 @@ def test_rebuttal_claim_structure() -> None:
     assert counts("rebuttals_differing_from_selector", planted) == (0, 2, 0)
 
 
+def test_an_alibi_about_another_player_is_no_alibi_of_the_rebuttal() -> None:
+    planted = game(
+        {"bounded_rebuttal_version": 1},
+        meetings=(
+            meeting(
+                turns=(
+                    turn(0, "p-2"),
+                    turn(1, "p-3", accuses=("p-2",), reply_to="t0"),
+                    turn(
+                        2,
+                        "p-2",
+                        reply_to="t1",
+                        accuses=("p-3",),
+                        alibis=(AlibiFact("p-4", ((ROOM, 3, 6),)),),
+                    ),
+                ),
+                selector_pick=("p-2", "t1"),
+            ),
+        ),
+    )
+    assert counts("rebuttals_with_alibi", planted) == (0, 1, 0)
+    assert counts("rebuttals_redirect_only", planted) == (1, 1, 0)
+
+
 def test_rebuttal_beneficiaries_name_the_accusers_role() -> None:
     planted = game(
         {"bounded_rebuttal_version": 1},
@@ -2046,9 +2279,10 @@ def test_opener_rebuttals_answer_the_charged_tick() -> None:
         *evidence: ObservationFact,
         alibi: AlibiFact | None = None,
         charge_tick: int | None = 5,
+        charged: str = "p-2",
     ) -> GameFacts:
         charge_observations = (
-            () if charge_tick is None else (seen("saw_vent", charge_tick, "p-2"),)
+            () if charge_tick is None else (seen("saw_vent", charge_tick, charged),)
         )
         return game(
             {"bounded_rebuttal_version": 1},
@@ -2084,6 +2318,11 @@ def test_opener_rebuttals_answer_the_charged_tick() -> None:
     assert counts(key, answered(alibi=AlibiFact("p-4", ((ROOM, 3, 6),)))) == (0, 1, 0)
     assert counts(key, answered(seen("completed_task", 5))) == (0, 1, 0)
     assert counts(key, answered(seen("whereabouts", 5), charge_tick=None)) == (0, 0, 1)
+    assert counts(key, answered(seen("whereabouts", 5), charged="p-4")) == (0, 0, 1)
+    for first, last in ((5, 7), (2, 5)):
+        edge = AlibiFact("p-2", ((ROOM, first, last),))
+        assert counts(key, answered(alibi=edge)) == (1, 1, 0), (first, last)
+    assert counts(key, answered(alibi=AlibiFact("p-2", ((ROOM, 6, 7),)))) == (0, 1, 0)
     ranged = ObservationFact("task_activity", 4, 6, "p-2")
     spanning = game(
         {"bounded_rebuttal_version": 1},
@@ -2107,6 +2346,206 @@ def test_opener_rebuttals_answer_the_charged_tick() -> None:
         ),
     )
     assert counts(key, spanning) == (1, 1, 0)
+
+
+# --------------------------------------------------------------------------- #
+# Joins, boundaries and exclusions, one planted case each                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_an_impostors_teammates_exclude_the_impostor_itself() -> None:
+    planted = game()
+    assert census._teammates(planted, "p-0") == frozenset({"p-1"})
+    assert census._teammates(planted, "p-2") == frozenset()
+
+
+def test_a_meeting_carrier_couples_the_outcome_and_the_ejected_player() -> None:
+    with pytest.raises(ValueError, match="exactly when the outcome is EJECTED"):
+        meeting(outcome="SKIPPED", ejected="p-0")
+    with pytest.raises(ValueError, match="exactly when the outcome is EJECTED"):
+        meeting(outcome="EJECTED", ejected=None)
+
+
+def test_a_new_trip_after_a_regroup_closes_the_old_one_first() -> None:
+    planted = game(
+        vents=(entry(5), entry(15), exit_(16)),
+        frames={16: frame({})},
+        meetings=(meeting(tick=10, regrouped=True),),
+    )
+    assert counts("trips_closed_by_regroup", planted) == (1, 2, 0)
+    assert table("ticks_inside_per_trip", planted) == {"1": 1}
+
+
+def test_an_entry_seen_through_either_witness_list_is_seen() -> None:
+    planted = game(
+        vents=(entry(10, source=("p-2",)), exit_(11)), frames={11: frame({})}
+    )
+    assert counts("vent_entries_seen_by_crew", planted) == (1, 1, 0)
+    for seen_entry in (entry(10, source=("p-2",)), entry(10, destination=("p-2",))):
+        banded = _band_after((seen_entry, exit_(11)))
+        assert table("vent_band_by_moment", banded) == {"entry only": 1}, seen_entry
+
+
+def test_a_kill_on_the_surfacing_tick_is_not_after_the_surfacing() -> None:
+    planted = game(
+        vents=(entry(8), exit_(10)), frames={10: frame({})}, kills=(kill(10),)
+    )
+    assert counts("kills_soon_after_surfacing", planted) == (0, 1, 0)
+
+
+def test_a_crewmate_on_the_first_tick_after_an_in_place_surfacing_counts() -> None:
+    planted = game(
+        vents=(entry(10), exit_(11, destination_room=ROOM)),
+        frames={
+            11: frame({}),
+            12: frame({"p-0": ROOM, "p-3": ROOM}),
+            13: frame({"p-0": NEIGHBOUR}),
+        },
+    )
+    assert counts("in_place_surfacings_near_crew", planted) == (1, 1, 0)
+
+
+def test_only_an_undiscovered_corpse_other_than_the_reported_one_counts() -> None:
+    def opened_with(bodies: tuple[tuple[str, str | None], ...]) -> GameFacts:
+        return game(
+            kills=(kill(18),),
+            bodies=(body("body-x", 18),),
+            meetings=(report(20, "body-x", bodies_at_open=bodies),),
+        )
+
+    key = "meetings_opening_with_another_unreported_corpse"
+    assert counts(key, opened_with((("body-x", None),))) == (0, 1, 0)
+    assert counts(key, opened_with((("body-x", "p-2"), ("body-y", "p-3")))) == (
+        0,
+        1,
+        0,
+    )
+    assert counts(key, opened_with((("body-x", "p-2"), ("body-y", None)))) == (1, 1, 0)
+
+
+def test_a_button_soon_after_a_regroup_with_no_kill_since_is_no_witness_call() -> None:
+    planted = game(
+        meetings=(
+            meeting(meeting_id="meeting-0", tick=10, regrouped=True),
+            meeting(meeting_id="meeting-1", tick=13, opener="p-3"),
+        ),
+    )
+    assert counts("kill_witness_button_calls_soon_after_regroup", planted) == (0, 1, 0)
+
+
+def test_the_opener_accusing_themself_is_no_one_accusing_the_opener() -> None:
+    planted = game(meetings=(meeting(turns=(turn(0, "p-2", accuses=("p-2",)),)),))
+    assert counts("opener_accused_after_opening", planted) == (0, 1, 0)
+
+
+def _one_rebuttal(**claims: Any) -> GameFacts:
+    return game(
+        {"bounded_rebuttal_version": 1},
+        meetings=(
+            meeting(
+                turns=(
+                    turn(0, "p-2"),
+                    turn(1, "p-3", accuses=("p-2",), reply_to="t0"),
+                    turn(2, "p-2", reply_to="t1", **claims),
+                ),
+                selector_pick=("p-2", "t1"),
+            ),
+        ),
+    )
+
+
+def test_rebuttal_claim_kinds_are_told_apart() -> None:
+    alibi = AlibiFact("p-2", ((ROOM, 3, 6),))
+    sighting_only = _one_rebuttal(observations=(seen("saw_player", 4, "p-0"),))
+    assert counts("rebuttals_with_whereabouts", sighting_only) == (0, 1, 0)
+    assert counts("rebuttals_with_sighting", sighting_only) == (1, 1, 0)
+    whereabouts_only = _one_rebuttal(observations=(seen("whereabouts", 4),))
+    assert counts("rebuttals_with_whereabouts", whereabouts_only) == (1, 1, 0)
+    assert counts("rebuttals_with_sighting", whereabouts_only) == (0, 1, 0)
+    assert counts("rebuttals_redirect_only", _one_rebuttal()) == (0, 1, 0)
+    for claims in (
+        {"alibis": (alibi,)},
+        {"observations": (seen("whereabouts", 4),)},
+        {"observations": (seen("saw_player", 4, "p-0"),)},
+    ):
+        backed = _one_rebuttal(accuses=("p-3",), **claims)
+        assert counts("rebuttals_redirect_only", backed) == (0, 1, 0), claims
+    assert counts("rebuttals_redirect_only", _one_rebuttal(accuses=("p-3",))) == (
+        1,
+        1,
+        0,
+    )
+
+
+def test_the_charged_tick_cell_reads_opener_rebuttals_only() -> None:
+    key = "opener_rebuttals_answering_charged_tick"
+    other = game(
+        {"bounded_rebuttal_version": 1},
+        meetings=(
+            meeting(
+                turns=(
+                    turn(0, "p-2"),
+                    turn(1, "p-3", accuses=("p-4",), reply_to="t0"),
+                    turn(
+                        2,
+                        "p-4",
+                        accuses=("p-3",),
+                        reply_to="t1",
+                        observations=(seen("saw_vent", 5, "p-2"),),
+                    ),
+                    turn(
+                        3, "p-3", reply_to="t2", observations=(seen("whereabouts", 5),)
+                    ),
+                ),
+                selector_pick=("p-3", "t2"),
+            ),
+        ),
+    )
+    assert counts(key, other) == (0, 0, 0)
+    unrecorded = game(
+        {"bounded_rebuttal_version": 1},
+        meetings=(
+            meeting(
+                turns=(
+                    turn(0, "p-2"),
+                    turn(1, "p-3", accuses=("p-2",)),
+                    turn(
+                        2, "p-2", reply_to="t9", observations=(seen("whereabouts", 5),)
+                    ),
+                ),
+                selector_pick=("p-2", "t9"),
+            ),
+        ),
+    )
+    assert counts(key, unrecorded) == (0, 0, 1)
+
+
+def test_a_row_joins_the_one_kill_it_cites_among_several() -> None:
+    planted = game(
+        {"ballot_kill_row_version": 1},
+        kills=(kill(12, witnesses=("p-2",)), kill(30, killer="p-1")),
+        meetings=(
+            meeting(
+                own_kill_rows=(OwnKillRowFact("p-2", "p-0", ROOM, 13, "p-2:13:0"),)
+            ),
+        ),
+    )
+    assert counts("own_kill_rows_breaching", planted) == (0, 1, 0)
+
+
+def test_the_impostor_only_floor_reads_only_confident_ballots_for_the_ejected() -> None:
+    def ejection(*ballots: BallotFact) -> GameFacts:
+        return game(
+            meetings=(meeting(outcome="EJECTED", ejected="p-2", ballots=ballots),)
+        )
+
+    key = "ejections_carried_only_by_impostor_ballots"
+    elsewhere = ejection(
+        ballot("p-0", "p-2", confidence=0.9), ballot("p-4", "p-3", confidence=0.9)
+    )
+    assert counts(key, elsewhere) == (1, 1, 0)
+    unconfident = ejection(ballot("p-0", "p-2", confidence=0.1))
+    assert counts(key, unconfident) == (0, 1, 0)
 
 
 # --------------------------------------------------------------------------- #
@@ -2499,6 +2938,173 @@ def test_turn_facts_keep_ids_ticks_and_alibi_legs() -> None:
     )
 
 
+def _first_meeting(
+    events: Sequence[ReplayWalkEvent],
+) -> tuple[MeetingOpened, MeetingApplied]:
+    opened = next(event for event in events if isinstance(event, MeetingOpened))
+    applied = next(event for event in events if isinstance(event, MeetingApplied))
+    return opened, applied
+
+
+def test_the_frame_holds_living_players_outside_the_vents_and_live_sabotage() -> None:
+    from engine.entities import SabotageState
+
+    opened = next(event for event in _events() if isinstance(event, TickOpened))
+    state = opened.state
+    assert all(p.alive and not p.in_vent for p in state.players.values())
+    venting, dead = sorted(state.players)[:2]
+    players = dict(state.players)
+    players[venting] = replace(players[venting], in_vent=True)
+    players[dead] = replace(players[dead], alive=False)
+    shown = census._frame_of(replace(state, players=players))
+    assert set(shown.rooms) == set(state.players) - {venting, dead}
+    for active in (True, False):
+        sabotage = SabotageState(
+            kind="reactor", remaining_ticks=5, affected_rooms=(), active=active
+        )
+        framed = census._frame_of(replace(state, sabotage=sabotage))
+        assert framed.sabotage_active is active
+
+
+def test_the_meeting_fact_reads_living_impostor_cooldowns_and_live_sabotage() -> None:
+    from engine.entities import SabotageState
+
+    opened, applied = _first_meeting(_events())
+    state = opened.state
+    impostor = next(
+        pid for pid, player in state.players.items() if player.role == "IMPOSTOR"
+    )
+    crewmate = next(
+        pid
+        for pid, player in state.players.items()
+        if player.role == "CREWMATE" and player.alive
+    )
+    cooled = replace(state, cooldowns={impostor: 3, crewmate: 0})
+    fact = census._meeting_fact(
+        replace(opened, state=cooled), applied, regroup_recorded=False
+    )
+    assert fact.impostor_cooldowns_at_open == ((impostor, 3),)
+    players = dict(cooled.players)
+    players[impostor] = replace(players[impostor], alive=False)
+    dead = census._meeting_fact(
+        replace(opened, state=replace(cooled, players=players)),
+        applied,
+        regroup_recorded=False,
+    )
+    assert dead.impostor_cooldowns_at_open == ()
+    for active in (True, False):
+        sabotage = SabotageState(
+            kind="reactor", remaining_ticks=5, affected_rooms=(), active=active
+        )
+        sabotaged = census._meeting_fact(
+            replace(opened, state=replace(state, sabotage=sabotage)),
+            applied,
+            regroup_recorded=False,
+        )
+        assert sabotaged.sabotage_active is active
+
+
+def test_an_unrewritten_ballot_was_authored_as_recorded() -> None:
+    opened, applied = _first_meeting(_events())
+    fact = census._meeting_fact(opened, applied, regroup_recorded=False)
+    pairs = [
+        (loaded.authored_target, recorded.target)
+        for loaded, recorded in zip(fact.ballots, opened.entry.ballots, strict=True)
+        if recorded.guard_rewrite_reason is None
+    ]
+    assert pairs and all(authored == target for authored, target in pairs)
+
+
+def test_the_loader_refuses_a_meeting_applied_under_another_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = [
+        replace(event, entry=event.entry.model_copy(update={"meeting_id": "other"}))
+        if isinstance(event, MeetingApplied)
+        else event
+        for event in _events()
+    ]
+    with pytest.raises(ValueError, match="applied without opening"):
+        _load(monkeypatch, events)
+
+
+def test_the_game_over_row_joins_the_era_and_names_the_winner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = _events()
+    regroup = RecordedExperimentConfig(meeting_reset="hub_with_grace")
+    footer_only = [
+        replace(
+            event,
+            game_end=event.game_end.model_copy(update={"experiment_config": regroup}),
+        )
+        if isinstance(event, WalkComplete) and event.game_end is not None
+        else event
+        for event in events
+    ]
+    with pytest.raises(ValueError, match="terminal experiment configuration"):
+        _load(monkeypatch, footer_only)
+    assert _load(monkeypatch, events).winner in ("CREWMATES", "IMPOSTORS")
+    without = [
+        replace(event, game_end=None) if isinstance(event, WalkComplete) else event
+        for event in events
+    ]
+    assert _load(monkeypatch, without).winner is None
+
+
+def test_the_loader_refuses_dispositions_that_do_not_pair_with_the_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = _events()
+    index = next(
+        position
+        for position, event in enumerate(events)
+        if isinstance(event, TickAdvanced) and event.entry.action_dispositions
+    )
+    advanced = events[index]
+    assert isinstance(advanced, TickAdvanced)
+    dispositions = advanced.entry.action_dispositions
+    assert dispositions is not None
+    events[index] = replace(
+        advanced,
+        entry=advanced.entry.model_copy(
+            update={"action_dispositions": dispositions[:-1]}
+        ),
+    )
+    with pytest.raises(ValueError, match="zip"):
+        _load(monkeypatch, events)
+
+
+def test_the_loader_refuses_a_walk_that_never_ended(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = [
+        replace(event, terminal_tick=None) if isinstance(event, WalkComplete) else event
+        for event in _events()
+    ]
+    with pytest.raises(ValueError, match="never reached its terminal tick"):
+        _load(monkeypatch, events)
+
+
+def test_the_loader_reads_a_recording_without_substrate_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unstamped(event: ReplayWalkEvent) -> ReplayWalkEvent:
+        if isinstance(event, TickOpened):
+            return replace(
+                event, entry=event.entry.model_copy(update={"substrate_flags": None})
+            )
+        if isinstance(event, WalkComplete) and event.game_end is not None:
+            return replace(
+                event,
+                game_end=event.game_end.model_copy(update={"substrate_flags": None}),
+            )
+        return event
+
+    loaded = _load(monkeypatch, [unstamped(event) for event in _events()])
+    assert loaded.era.substrate_flags is None
+
+
 def test_the_selector_pick_reads_the_turns_before_the_first_repeat() -> None:
     def spoken(
         index: int,
@@ -2569,6 +3175,27 @@ def test_the_loader_refuses_a_seed_in_the_unseen_band_before_reading_it(
         census.load_census_inputs(tmp_path)
 
 
+@pytest.mark.parametrize("seed", (2100, 2999))
+def test_the_loader_refuses_both_edges_of_the_unseen_band(
+    tmp_path: Path, seed: int
+) -> None:
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        "not a recording\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="no census walk may read"):
+        census.load_census_inputs(tmp_path)
+
+
+def test_the_unseen_band_ends_at_its_edges() -> None:
+    band = census.UNSEEN_SEED_BAND
+    assert (2099 in band, 2100 in band, 2999 in band, 3000 in band) == (
+        False,
+        True,
+        True,
+        False,
+    )
+
+
 def test_the_loader_refuses_a_set_without_its_manifest_rows(tmp_path: Path) -> None:
     source = SAMPLES_4P1I / "replay-seed-0.jsonl"
     (tmp_path / "replay-seed-0.jsonl").write_bytes(source.read_bytes())
@@ -2591,6 +3218,15 @@ def test_the_manifest_reader_takes_the_third_cell_of_every_seed_row(
         encoding="utf-8",
     )
     assert dict(census._manifest_prompt_cells(tmp_path)) == {3: "a.x.v1, b.x.v2"}
+
+
+def test_the_manifest_reader_skips_prose_and_reads_a_three_cell_row(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "MANIFEST.md").write_text(
+        "5 | m | prose.x.v1\n| 6 | m | a.x.v1 |\n", encoding="utf-8"
+    )
+    assert dict(census._manifest_prompt_cells(tmp_path)) == {6: "a.x.v1"}
 
 
 def test_the_cell_count_adds_field_by_field() -> None:

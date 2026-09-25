@@ -541,7 +541,7 @@
       },
       "own_kill_rows_breaching": {
         "by_construction": null,
-        "definition": "Served own-kill rows whose killer is the holder's fellow impostor, or whose cited observation joins to no kill the holder witnessed, over all served own-kill rows; rows citing nothing are not evaluable.",
+        "definition": "Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill.",
         "denominator": 0,
         "guard": "ballot_kill_row_version = 1",
         "heading": "Ballots",
@@ -1706,7 +1706,7 @@
       },
       "own_kill_rows_breaching": {
         "by_construction": null,
-        "definition": "Served own-kill rows whose killer is the holder's fellow impostor, or whose cited observation joins to no kill the holder witnessed, over all served own-kill rows; rows citing nothing are not evaluable.",
+        "definition": "Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill.",
         "denominator": 0,
         "guard": "ballot_kill_row_version = 1",
         "heading": "Ballots",
@@ -2872,7 +2872,7 @@
         },
         "own_kill_rows_breaching": {
           "by_construction": null,
-          "definition": "Served own-kill rows whose killer is the holder's fellow impostor, or whose cited observation joins to no kill the holder witnessed, over all served own-kill rows; rows citing nothing are not evaluable.",
+          "definition": "Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill.",
           "denominator": 0,
           "guard": "ballot_kill_row_version = 1",
           "heading": "Ballots",
@@ -4032,7 +4032,7 @@
         },
         "own_kill_rows_breaching": {
           "by_construction": null,
-          "definition": "Served own-kill rows whose killer is the holder's fellow impostor, or whose cited observation joins to no kill the holder witnessed, over all served own-kill rows; rows citing nothing are not evaluable.",
+          "definition": "Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill.",
           "denominator": 0,
           "guard": "ballot_kill_row_version = 1",
           "heading": "Ballots",
@@ -5184,7 +5184,7 @@
         },
         "own_kill_rows_breaching": {
           "by_construction": null,
-          "definition": "Served own-kill rows whose killer is the holder's fellow impostor, or whose cited observation joins to no kill the holder witnessed, over all served own-kill rows; rows citing nothing are not evaluable.",
+          "definition": "Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill.",
           "denominator": 0,
           "guard": "ballot_kill_row_version = 1",
           "heading": "Ballots",
@@ -6323,7 +6323,7 @@
         },
         "own_kill_rows_breaching": {
           "by_construction": null,
-          "definition": "Served own-kill rows whose killer is the holder's fellow impostor, or whose cited observation joins to no kill the holder witnessed, over all served own-kill rows; rows citing nothing are not evaluable.",
+          "definition": "Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill.",
           "denominator": 0,
           "guard": "ballot_kill_row_version = 1",
           "heading": "Ballots",

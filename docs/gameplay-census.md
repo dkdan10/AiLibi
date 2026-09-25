@@ -400,7 +400,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 **Ejections whose confidence floor only impostors met** (`ejections_carried_only_by_impostor_ballots`). Ejections where every ballot for the ejected player at or above the tally's recorded confidence floor was cast by an impostor, over all ejections. Reads `meeting row ballots`.
 
-**Own-kill ballot rows naming a teammate or held by a non-witness** (`own_kill_rows_breaching`). Served own-kill rows whose killer is the holder's fellow impostor, or whose cited observation joins to no kill the holder witnessed, over all served own-kill rows; rows citing nothing are not evaluable. Reads `recorded ballot prompt`, `Killed`. Zero by construction while `ballot_kill_row_version = 1`.
+**Own-kill ballot rows naming a teammate or held by a non-witness** (`own_kill_rows_breaching`). Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill. Reads `recorded ballot prompt`, `Killed`. Zero by construction while `ballot_kill_row_version = 1`.
 
 **Own-kill ballot rows their holder cited** (`own_kill_rows_cited_by_holder`). Served own-kill rows whose holder's ballot cites the row's observation, over all served own-kill rows. Reads `recorded ballot prompt`, `meeting row ballots`.
 
