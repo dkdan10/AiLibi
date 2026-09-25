@@ -10,13 +10,15 @@ one committed game's walk.
 from __future__ import annotations
 
 import dataclasses
+import importlib.util
 import json
+import sys
 import typing
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, ModuleType
 from typing import Any, get_args, get_origin
 
 import pytest
@@ -36,6 +38,7 @@ from engine.world import load_canonical_map
 from eval.balance_eval import _CURRENT_REPORT_WALK_CONFIG
 from eval.gameplay_census import (
     CELLS,
+    CENSUS_THREADED_LAYERS,
     CENSUS_WALK_CONFIG,
     FIELD_CLASSIFICATION,
     FRESH_KILL_WINDOW_TICKS,
@@ -98,7 +101,12 @@ from meetings.schemas import (
     TaskActivityAccount,
     WhereaboutsClaim,
 )
-from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator import experiment_config
+from orchestrator.experiment_config import (
+    FIELD_LAYER,
+    RecordedExperimentConfig,
+    wave_settings,
+)
 from tests._helpers.committed import (
     SAMPLES_4P1I,
     census_inputs,
@@ -541,18 +549,53 @@ def test_the_walk_profile_is_the_current_report_profile_plus_three_refusals() ->
         missing_meeting_row="violation",
         reject_duplicate_meeting_rows=True,
         require_terminal_tick=True,
+        threaded_layers=CENSUS_THREADED_LAYERS,
     )
+    assert CENSUS_WALK_CONFIG.supports_experiments
+    assert CENSUS_WALK_CONFIG.verify_tick_hashes
+    assert CENSUS_WALK_CONFIG.verify_meeting_post_hashes
 
 
-def unclassified(
+def test_the_census_declares_its_own_layers_every_one_it_classifies() -> None:
+    """The census names each declarable layer, and classifies every field in it.
+
+    The declaration is the census's own: the profile above sets it in its
+    ``replace``, so a change to the current-report profile's layers cannot reach
+    it. Engine fields are the spine helper's; the format field is read by every
+    walk.
+    """
+
+    assert CENSUS_WALK_CONFIG.threaded_layers == CENSUS_THREADED_LAYERS
+    assert CENSUS_THREADED_LAYERS == frozenset({"orchestrator", "tactical", "meeting"})
+    assert CENSUS_THREADED_LAYERS == frozenset(FIELD_LAYER.values()) - {
+        "engine",
+        "format",
+    }
+    for name, layer in FIELD_LAYER.items():
+        if layer in CENSUS_THREADED_LAYERS:
+            assert name in FIELD_CLASSIFICATION, name
+
+
+def classification_problems(
     fields: Iterable[str], classification: Mapping[str, FieldUse]
 ) -> list[str]:
-    return sorted(set(fields) - set(classification))
+    """Each recorded field left unclassified, and each classified name not recorded."""
+
+    declared = set(fields)
+    return [
+        f"unclassified {name}" for name in sorted(declared - set(classification))
+    ] + [
+        f"not a recorded field {name}"
+        for name in sorted(set(classification) - declared)
+    ]
 
 
 def test_every_recorded_setting_field_is_classified() -> None:
     assert (
-        unclassified(RecordedExperimentConfig.model_fields, FIELD_CLASSIFICATION) == []
+        classification_problems(
+            RecordedExperimentConfig.model_fields, FIELD_CLASSIFICATION
+        )
+        == []
     )
 
 
@@ -562,31 +605,52 @@ def test_a_classification_missing_one_field_fails() -> None:
         for name, use in FIELD_CLASSIFICATION.items()
         if name != "meeting_reset"
     }
-    assert unclassified(RecordedExperimentConfig.model_fields, planted) == [
-        "meeting_reset"
+    assert classification_problems(RecordedExperimentConfig.model_fields, planted) == [
+        "unclassified meeting_reset"
     ]
 
 
-def test_the_names_read_before_the_spine_declares_them() -> None:
-    """Five names are read ahead of their declaration; this fails once they land.
-
-    When the arm spine declares them on the config, this difference empties and
-    the test goes red, so the census's own defaults are retired in the same
-    change that brings the declared ones.
-    """
-
-    assert set(FIELD_CLASSIFICATION) - set(RecordedExperimentConfig.model_fields) == {
-        "vent_witness_rule",
-        "vent_entry_policy",
-        "report_body_handle_version",
-        "ballot_kill_row_version",
-        "impostor_ballot_version",
+# History: a tripwire held five fields undeclared until the spine merged (8df69e15).
+def test_a_classification_naming_an_undeclared_field_fails() -> None:
+    planted = {
+        **FIELD_CLASSIFICATION,
+        "hidden_travel": FieldUse(predicates=("always",)),
     }
+    assert classification_problems(RecordedExperimentConfig.model_fields, planted) == [
+        "not a recorded field hidden_travel"
+    ]
 
 
 def test_the_defaults_match_the_config_model() -> None:
     for name, declared in RecordedExperimentConfig.model_fields.items():
         assert SETTING_DEFAULTS[name] == declared.default, name
+
+
+def test_a_default_follows_the_config_models_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Moved(RecordedExperimentConfig):
+        vent_entry_policy: typing.Literal["any_body", "own_fresh_kill"] = (
+            "own_fresh_kill"
+        )
+
+    assert census._field_default("vent_entry_policy") == "any_body"
+    monkeypatch.setattr(census, "RecordedExperimentConfig", _Moved)
+    assert census._field_default("vent_entry_policy") == "own_fresh_kill"
+
+
+def test_a_classified_field_the_config_does_not_declare_has_no_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        census,
+        "FIELD_CLASSIFICATION",
+        MappingProxyType(
+            {**FIELD_CLASSIFICATION, "hidden_travel": FieldUse(predicates=("always",))}
+        ),
+    )
+    with pytest.raises(GameplayCensusFieldError, match="not declared on the recorded"):
+        census._field_default("hidden_travel")
 
 
 def test_the_classification_and_the_predicates_name_each_other() -> None:
@@ -2117,6 +2181,146 @@ def test_a_kill_at_the_first_legal_tick_is_an_ordinary_post_meeting_kill() -> No
         fold_set(inputs(_grace_kill({"meeting_reset": "hub_with_grace"})))
 
 
+def test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds() -> None:
+    """Planted: a map whose kill cooldown is 6, not the canonical map's 4."""
+
+    cooldown = MAP.kill_cooldown_ticks + 2
+    regroup = {"meeting_reset": "hub_with_grace"}
+
+    def walked_on_it(kill_tick: int) -> CensusInputs:
+        return replace(
+            inputs(
+                game(
+                    regroup,
+                    kills=(kill(kill_tick),),
+                    meetings=(meeting(tick=10, regrouped=True),),
+                ),
+                label="samples/9p2i",
+            ),
+            kill_cooldown_ticks=cooldown,
+        )
+
+    with pytest.raises(GameplayCensusConformanceError, match=f"tick {10 + cooldown} "):
+        fold_set(walked_on_it(10 + cooldown))
+    outside = section_from_tally(fold_set(walked_on_it(10 + cooldown + 1)))
+    grace = outside.cells["kills_in_grace_window_after_regroup"]
+    assert (grace.numerator, grace.denominator) == (0, 1)
+    published = census_from_inputs([walked_on_it(10 + cooldown + 1)])
+    assert published.constants["grace_window_ticks"] == cooldown
+
+
+def test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the loaded map's cooldown moves, and the carrier's follows it.
+
+    The set is loaded on one map, once: the carrier's cooldown and every game's
+    walk come from it.
+    """
+
+    planted_map = MAP.model_copy(
+        update={"kill_cooldown_ticks": MAP.kill_cooldown_ticks + 2}
+    )
+    set_dir = tmp_path / "planted" / "4p1i"
+    set_dir.mkdir(parents=True)
+    (set_dir / f"replay-seed-{LOADER_SEED}.jsonl").write_text("", encoding="utf-8")
+    (set_dir / "MANIFEST.md").write_text(
+        f"| {LOADER_SEED} | model | a.x.v1 |\n", encoding="utf-8"
+    )
+    committed = _committed_game()
+    loads: list[object] = []
+    walked_on: list[object] = []
+
+    def load_map() -> object:
+        loads.append(planted_map)
+        return planted_map
+
+    def load_game(path: Path, **kwargs: Any) -> GameFacts:
+        walked_on.append(kwargs["game_map"])
+        return committed
+
+    monkeypatch.setattr(census, "load_canonical_map", load_map)
+    monkeypatch.setattr(census, "_load_game", load_game)
+    loaded = census.load_census_inputs(set_dir)
+    assert loaded.kill_cooldown_ticks == planted_map.kill_cooldown_ticks
+    # One map per set: loaded once, and every game walks on it.
+    assert loads == [planted_map]
+    assert walked_on == [planted_map]
+
+
+def _census_executed_again(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """A second, independent execution of the census module's source.
+
+    Its module-level constants bind to whatever their sources hold now, so a
+    test can move a source and read the constant that follows it. The module
+    lives under its own name for the test only; the imported module is untouched.
+    """
+
+    spec = importlib.util.spec_from_file_location(
+        "_gameplay_census_again", census.__file__
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_constants_bound_from_a_source_follow_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: each source moves, and the census constant bound to it follows."""
+
+    from agents.tactical import crewmate_policy
+    from eval import process_scorecard
+
+    class _Moved(RecordedExperimentConfig):
+        vent_entry_policy: typing.Literal["any_body", "own_fresh_kill"] = (
+            "own_fresh_kill"
+        )
+
+    button = crewmate_policy.EMERGENCY_COOLDOWN_TICKS + 3
+    sets = ("replays/planted/9p2i", "replays/planted/4p1i")
+    monkeypatch.setattr(crewmate_policy, "EMERGENCY_COOLDOWN_TICKS", button)
+    monkeypatch.setattr(process_scorecard, "COMMITTED_SETS", sets)
+    monkeypatch.setattr(process_scorecard, "NINE_PLAYER_SETS", sets[:1])
+    monkeypatch.setattr(experiment_config, "RecordedExperimentConfig", _Moved)
+    again = _census_executed_again(monkeypatch)
+    assert again.BUTTON_COOLDOWN_TICKS == button
+    assert again.CENSUS_SETS == sets
+    assert again.CENSUS_NINE_PLAYER_SETS == sets[:1]
+    assert again.SETTING_DEFAULTS["vent_entry_policy"] == "own_fresh_kill"
+    assert census.SETTING_DEFAULTS["vent_entry_policy"] == "any_body"
+
+
+def test_the_own_kill_join_reads_the_scorecards_clock_offset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the agent clock offset moves, and the citation that joins follows."""
+
+    def cited(citation: str) -> tuple[int, int, int]:
+        return counts(
+            "own_kill_rows_breaching",
+            game(
+                kills=(kill(12, witnesses=("p-2",)),),
+                meetings=(
+                    meeting(
+                        own_kill_rows=(
+                            OwnKillRowFact("p-2", "p-0", ROOM, 12, citation),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    from eval.process_scorecard import AGENT_CLOCK_OFFSET as offset
+
+    assert cited(f"p-2:{12 + offset}:0") == (0, 1, 0)
+    monkeypatch.setattr(census, "AGENT_CLOCK_OFFSET", offset + 2)
+    assert cited(f"p-2:{12 + offset}:0") == (1, 1, 0)
+    assert cited(f"p-2:{12 + offset + 2}:0") == (0, 1, 0)
+
+
 def test_census_from_inputs_refuses_sets_walked_on_different_maps() -> None:
     first = inputs(game())
     with pytest.raises(ValueError, match="different kill cooldowns"):
@@ -2846,6 +3050,12 @@ def _events() -> list[ReplayWalkEvent]:
     return list(census_walk_events(SAMPLES_4P1I, LOADER_SEED))
 
 
+def _committed_game() -> GameFacts:
+    return next(
+        item for item in census_inputs(SAMPLES_4P1I).games if item.seed == LOADER_SEED
+    )
+
+
 def _load(
     monkeypatch: pytest.MonkeyPatch,
     events: Sequence[ReplayWalkEvent],
@@ -3042,6 +3252,35 @@ def test_the_loader_copies_ids_the_floor_ballots_and_sabotage(
     assert changed.ballots[0].cited_observation_id == "p-2:9:0"
     assert changed.sabotage_active is True
     assert fact.sabotage_active is False
+
+
+def test_the_ballot_floor_is_the_threshold_the_meeting_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: every committed meeting's floor is 0.6, so move one to 0.75.
+
+    A meeting that recorded no threshold reads the tally's historical rule.
+    """
+
+    from orchestrator.replay_integrity import LEGACY_SKIP_CONFIDENCE_THRESHOLD
+
+    events = _events()
+    index = next(
+        position
+        for position, event in enumerate(events)
+        if isinstance(event, MeetingOpened)
+    )
+    opened = events[index]
+    assert isinstance(opened, MeetingOpened)
+    assert _load(monkeypatch, events).meetings[0].ballot_floor == 0.6
+    for recorded, floor in ((0.75, 0.75), (None, LEGACY_SKIP_CONFIDENCE_THRESHOLD)):
+        events[index] = replace(
+            opened,
+            entry=opened.entry.model_copy(
+                update={"skip_confidence_threshold": recorded}
+            ),
+        )
+        assert _load(monkeypatch, events).meetings[0].ballot_floor == floor, recorded
 
 
 def test_the_loader_reads_the_openers_first_prompt_and_served_rows(
@@ -3427,6 +3666,248 @@ def test_the_selector_pick_reads_the_turns_before_the_first_repeat() -> None:
     assert selector_pick(turns[:2], living) is None
     unanswerable = (spoken(0, "p-2"), spoken(1, "p-3"), spoken(2, "p-2"))
     assert selector_pick(unanswerable, living) is None
+
+
+# --------------------------------------------------------------------------- #
+# Recorded settings reach the census walk by the spine's contract              #
+# --------------------------------------------------------------------------- #
+
+
+def _later_settings() -> tuple[tuple[str, SettingValue], ...]:
+    """Every Stage-B setting outside the engine layer, derived from the spine.
+
+    A value qualifies when the spine's own :func:`wave_settings` reports it: its
+    field or the value itself did not exist before the wave. Engine settings are
+    the helper's, tested below with a threaded field.
+    """
+
+    settings: list[tuple[str, SettingValue]] = []
+    for name, info in RecordedExperimentConfig.model_fields.items():
+        if FIELD_LAYER[name] in ("engine", "format"):
+            continue
+        for value in _literal_values(info.annotation):
+            constructed: dict[str, Any] = {name: value}
+            if wave_settings(RecordedExperimentConfig.model_construct(**constructed)):
+                settings.append((name, value))
+    return tuple(settings)
+
+
+def _literal_values(annotation: Any) -> tuple[SettingValue, ...]:
+    """The values a ``Literal`` annotation allows, through a union with ``None``."""
+
+    if get_origin(annotation) is typing.Literal:
+        return get_args(annotation)
+    return tuple(
+        value for part in get_args(annotation) for value in _literal_values(part)
+    )
+
+
+LATER_SETTINGS: tuple[tuple[str, SettingValue], ...] = _later_settings()
+
+
+def test_the_later_settings_cover_every_layer_the_census_declares() -> None:
+    assert {FIELD_LAYER[name] for name, _value in LATER_SETTINGS} == (
+        CENSUS_THREADED_LAYERS
+    )
+
+
+def _open_pending_arms(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let a planted recording carry an ON value no arm card has built yet."""
+
+    monkeypatch.setattr(
+        experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}), raising=False
+    )
+
+
+def _stamped_copy(directory: Path, settings: Mapping[str, object]) -> Path:
+    """A copy of one committed game whose tick rows and footer record ``settings``."""
+
+    source = SAMPLES_4P1I / f"replay-seed-{LOADER_SEED}.jsonl"
+    rows = [
+        json.loads(line) for line in source.read_text(encoding="utf-8").splitlines()
+    ]
+    stamped = 0
+    for row in rows:
+        if row["kind"] in ("tick", "game_over"):
+            row["experiment_config"] = {"format_version": 1, **settings}
+            stamped += 1
+    assert stamped > 1
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / source.name
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return path
+
+
+def _walked(path: Path) -> GameFacts:
+    """``path`` loaded through the census's own walk, as the loader runs it."""
+
+    committed = _committed_game()
+    return census._load_game(
+        path,
+        seed=LOADER_SEED,
+        roles=committed.roles,
+        manifest_cell=", ".join(committed.era.prompt_stamps or ()),
+        num_players=4,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        game_map=MAP,
+    )
+
+
+def _spied_walk(monkeypatch: pytest.MonkeyPatch) -> list[ReplayWalkEvent]:
+    """Record every event the census's walk yields, to see where it refused."""
+
+    yielded: list[ReplayWalkEvent] = []
+    from eval.replay_walk import walk_replay as real
+
+    def spy(*args: Any, **kwargs: Any) -> Iterator[ReplayWalkEvent]:
+        for event in real(*args, **kwargs):
+            yielded.append(event)
+            yield event
+
+    monkeypatch.setattr(census, "walk_replay", spy)
+    return yielded
+
+
+def test_the_census_walk_reads_every_later_setting_it_declares(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A full-config copy walks with every hash verified, and each value is read.
+
+    The copy carries every later setting outside the engine layer at its ON
+    value. The walk verifies every recorded state hash, so the facts equal the
+    committed game's; only the era differs, and it holds the recorded values.
+    """
+
+    _open_pending_arms(monkeypatch)
+    settings = dict(LATER_SETTINGS)
+    walked = _walked(_stamped_copy(tmp_path, settings))
+    committed = _committed_game()
+    assert dict(walked.era.values) == settings
+    assert walked == replace(
+        committed, era=replace(committed.era, settings=canonical_settings(settings))
+    )
+    for key in (
+        "look_and_wait_exit",
+        "own_fresh_kill_entry",
+        "public_body_handle",
+        "own_kill_ballot_row",
+    ):
+        assert PREDICATES[key].holds(walked.era.values), key
+        assert not PREDICATES[key].holds(committed.era.values), key
+
+
+def test_the_recorded_body_handle_setting_reaches_its_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End to end: the committed opening carries the kill-tick handle.
+
+    Read from a recording that says the public handle was ON, that opening is a
+    breach naming the set, seed and meeting; the same game without the setting
+    folds.
+    """
+
+    _open_pending_arms(monkeypatch)
+    committed = _committed_game()
+    assert any(item.opener_prompt_has_kill_tick_handle for item in committed.meetings)
+    walked = _walked(_stamped_copy(tmp_path, {"report_body_handle_version": 1}))
+    with pytest.raises(
+        GameplayCensusConformanceError,
+        match=f"report_body_handle_version = 1, but set {PLANTED}, seed {LOADER_SEED}, "
+        "meeting ",
+    ):
+        fold_set(inputs(walked))
+    fold_set(inputs(committed))
+
+
+@pytest.mark.parametrize(("name", "value"), LATER_SETTINGS)
+def test_a_census_walk_without_a_layer_refuses_its_setting_before_advancing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    value: SettingValue,
+) -> None:
+    """Planted: the census profile with that setting's layer taken out."""
+
+    _open_pending_arms(monkeypatch)
+    path = _stamped_copy(tmp_path, {name: value})
+    layer = FIELD_LAYER[name]
+    monkeypatch.setattr(
+        census,
+        "CENSUS_WALK_CONFIG",
+        replace(CENSUS_WALK_CONFIG, threaded_layers=CENSUS_THREADED_LAYERS - {layer}),
+    )
+    yielded = _spied_walk(monkeypatch)
+    with pytest.raises(ValueError) as refused:
+        _walked(path)
+    message = str(refused.value)
+    assert f"{name}={value!r}" in message and "'gameplay-census'" in message
+    assert yielded == []
+    monkeypatch.setattr(census, "CENSUS_WALK_CONFIG", CENSUS_WALK_CONFIG)
+    assert dict(_walked(path).era.values) == {name: value}
+
+
+def test_the_census_walk_takes_its_engine_settings_from_the_spines_helper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the helper patched to thread no engine field refuses one.
+
+    Unpatched, the same copy walks and its era reads the recorded engine
+    setting, so the refusal comes from the helper the walk goes through.
+    """
+
+    path = _stamped_copy(tmp_path, {"redistribution_policy": "least_remaining_work"})
+    assert dict(_walked(path).era.values) == {
+        "redistribution_policy": "least_remaining_work"
+    }
+    monkeypatch.setattr(experiment_config, "_THREADED_ENGINE_FIELDS", ())
+    yielded = _spied_walk(monkeypatch)
+    with pytest.raises(
+        ValueError, match="redistribution_policy='least_remaining_work'"
+    ):
+        _walked(path)
+    assert yielded == []
+
+
+def test_a_recorded_setting_no_one_declared_is_refused_before_advancing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: a recording naming a field the config does not declare."""
+
+    path = _stamped_copy(tmp_path, {"hidden_travel": "on"})
+    yielded = _spied_walk(monkeypatch)
+    with pytest.raises(ValueError, match="hidden_travel"):
+        _walked(path)
+    assert yielded == []
+
+
+def test_a_declared_setting_the_census_has_not_classified_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a stand-in field on the recorded config the census never reviewed."""
+
+    class _StandIn(RecordedExperimentConfig):
+        stand_in_rule: typing.Literal["old", "new"] = "old"
+
+    stand_in = _StandIn(stand_in_rule="new")
+
+    def stamped(event: ReplayWalkEvent) -> ReplayWalkEvent:
+        if isinstance(event, TickOpened):
+            return replace(
+                event,
+                entry=event.entry.model_copy(update={"experiment_config": stand_in}),
+            )
+        if isinstance(event, WalkComplete) and event.game_end is not None:
+            return replace(
+                event,
+                game_end=event.game_end.model_copy(
+                    update={"experiment_config": stand_in}
+                ),
+            )
+        return event
+
+    with pytest.raises(GameplayCensusFieldError, match="stand_in_rule"):
+        _load(monkeypatch, [stamped(event) for event in _events()])
 
 
 # --------------------------------------------------------------------------- #

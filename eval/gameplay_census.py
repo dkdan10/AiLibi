@@ -31,6 +31,17 @@ post-hashes and chronology, and accepts recordings that carry experiment
 settings or temporal delivery. The profile's row belongs to the drift table in
 :mod:`eval.replay_walk`, which this module does not edit; it is documented here.
 
+Recorded settings reach the walk by the arm spine's contract. Engine-layer
+settings go to every advance through
+:func:`orchestrator.experiment_config.engine_arguments`, which refuses, before
+the first advance, one it does not thread. The profile declares its own
+``threaded_layers`` rather than inheriting the current-report profile's:
+:data:`CENSUS_THREADED_LAYERS` is orchestrator, tactical and meeting, every
+layer a profile can declare, because the census classifies every field in them.
+A profile without one of them refuses that layer's Stage-B settings before its
+first advance, and a setting the census has not classified raises
+:class:`GameplayCensusFieldError`.
+
 Settings, eras and the cells a setting forces to zero
 -----------------------------------------------------
 Every field of :class:`orchestrator.experiment_config.RecordedExperimentConfig`
@@ -109,7 +120,7 @@ from meetings.schemas import (
     MeetingTurn,
     TaskActivityAccount,
 )
-from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator.experiment_config import ConfigLayer, RecordedExperimentConfig
 from orchestrator.replay import (
     GameEndReplayEntry,
     ReplayLogEntry,
@@ -325,10 +336,8 @@ def _not_read(reason: str) -> FieldUse:
 
 
 #: Every recorded setting field, read by a named predicate or deliberately not
-#: read. ``tests/eval/test_gameplay_census.py`` enumerates
-#: ``RecordedExperimentConfig.model_fields`` against it. Five names are read here
-#: before the arm spine declares them on the config; the census reads a missing
-#: key as the historical default, so today's recordings are unaffected.
+#: read. ``tests/eval/test_gameplay_census.py`` holds its names equal to
+#: ``RecordedExperimentConfig.model_fields``, both ways.
 FIELD_CLASSIFICATION: Final[Mapping[str, FieldUse]] = MappingProxyType(
     {
         "format_version": _not_read("a serialization version, not a game rule"),
@@ -372,28 +381,23 @@ FIELD_CLASSIFICATION: Final[Mapping[str, FieldUse]] = MappingProxyType(
     }
 )
 
-#: The five fields above that the census reads before the arm spine declares
-#: them, with their historical defaults. Every other default is read from the
-#: config model's own field declaration.
-_UNDECLARED_DEFAULTS: Final[Mapping[str, SettingValue]] = MappingProxyType(
-    {
-        "vent_witness_rule": "both_rooms",
-        "vent_entry_policy": "any_body",
-        "report_body_handle_version": None,
-        "ballot_kill_row_version": None,
-        "impostor_ballot_version": None,
-    }
-)
-
 
 def _field_default(name: str) -> SettingValue:
+    """``name``'s historical default, read from the config model's declaration.
+
+    History: census-local defaults stood in for five fields until the arm spine
+    declared them (merged at 8df69e15).
+    """
+
+    if name not in FIELD_CLASSIFICATION:
+        raise GameplayCensusFieldError(f"recorded setting {name!r} is not classified")
     declared = RecordedExperimentConfig.model_fields.get(name)
-    if declared is not None:
-        default: SettingValue = declared.default
-        return default
-    if name in _UNDECLARED_DEFAULTS:
-        return _UNDECLARED_DEFAULTS[name]
-    raise GameplayCensusFieldError(f"recorded setting {name!r} is not classified")
+    if declared is None:
+        raise GameplayCensusFieldError(
+            f"classified setting {name!r} is not declared on the recorded config"
+        )
+    default: SettingValue = declared.default
+    return default
 
 
 #: The historical default of every classified field: the value a missing key reads.
@@ -2297,14 +2301,27 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
 # ---------------------------------------------------------------------------
 
 
+#: The layers besides the engine whose later settings the census reads. Every
+#: field in them is classified in :data:`FIELD_CLASSIFICATION`, and the fold
+#: reads each as a recorded value. Where such a setting changes the walk itself,
+#: the walk reads it from the recorded config: the meeting reset when it applies
+#: a meeting's result, and the tactical options when it re-decides a format-3
+#: recording's actions. The walk replays every recorded meeting and re-decides
+#: none.
+CENSUS_THREADED_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
+    {"orchestrator", "tactical", "meeting"}
+)
+
 #: The census walk profile (module docstring, "The walk profile"): the
-#: current-report profile plus three refusals.
+#: current-report profile plus three refusals, declaring its own layers rather
+#: than inheriting the current-report profile's.
 CENSUS_WALK_CONFIG: Final[ReplayWalkConfig] = replace(
     _CURRENT_REPORT_WALK_CONFIG,
     profile="gameplay-census",
     missing_meeting_row="violation",
     reject_duplicate_meeting_rows=True,
     require_terminal_tick=True,
+    threaded_layers=CENSUS_THREADED_LAYERS,
 )
 
 
@@ -3127,6 +3144,7 @@ __all__ = [
     "CELLS",
     "CENSUS_NINE_PLAYER_SETS",
     "CENSUS_SETS",
+    "CENSUS_THREADED_LAYERS",
     "CENSUS_WALK_CONFIG",
     "COUNT_ONLY_NOTE",
     "FIELD_CLASSIFICATION",
