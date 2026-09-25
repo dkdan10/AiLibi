@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeGuard, get_args
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import BaseModel
 
@@ -256,6 +256,9 @@ def test_the_lockstep_pin_on_every_trigger_shape_the_builder_constructs(
     body_mode=st.sampled_from(("present", "consumed", "none")),
     temporal=st.booleans(),
 )
+# Every example parses the map and seeds a world, so its wall time grows with
+# machine load; the per-example deadline is off, as on the other costly properties.
+@settings(deadline=None)
 def test_the_lockstep_pin_holds_over_every_generated_engine_trigger(
     kind: MeetingTriggerKind,
     actor: PlayerId,
