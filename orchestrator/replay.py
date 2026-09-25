@@ -526,11 +526,14 @@ class TacticalPolicyStamp(BaseModel):
 # ``--tactical-policy-stamp fsm-default`` recording stamps the full block below
 # so a Task-15.12 corpus row can attribute the FSM default the SAME way a learned
 # recording attributes a champion. The label names the scripted FSM family, not
-# which of its classes ran: beside a recorded tactical arm (an experiment config
-# whose tactical-layer fields leave their defaults) the game ran the FSM's
-# ``ExperimentalImpostorPolicy`` / ``ExperimentalCrewmatePolicy`` subclasses, and
-# the replay's ``agent_factory_kind`` reads ``experimental`` when the built-in
-# factory built them (``custom`` for any other factory).
+# which of its classes ran. ``HeadlessGame`` classifies the agents a factory
+# built by their exact types, never by which factory built them: beside a
+# recorded tactical arm (an experiment config with any tactical-layer field off
+# its default) the replay's ``agent_factory_kind`` reads ``experimental`` when
+# every agent is an exact built-in ``TacticalAgent`` running the exact
+# experimental policy class for its role (``ExperimentalImpostorPolicy`` /
+# ``ExperimentalCrewmatePolicy``), and ``custom`` when any agent or policy is
+# another type.
 FSM_DEFAULT_POLICY_ID: Final[str] = "fsm-default"
 
 
@@ -544,10 +547,14 @@ def fsm_default_tactical_policy_stamp() -> TacticalPolicyStamp:
     the same way a Wave-2 champion recording attributes its weights hash.
 
     ``fsm-default`` plus a recorded tactical arm means the experimental FSM
-    subclasses ran (``ExperimentalImpostorPolicy`` for impostors) whenever the
-    replay's ``agent_factory_kind`` reads ``experimental``: ``HeadlessGame``
-    refuses a factory whose agents do not carry the recorded tactical options,
-    and records ``custom`` for any factory but the built-in one. The stamp does
+    subclasses ran (``ExperimentalImpostorPolicy`` for impostors,
+    ``ExperimentalCrewmatePolicy`` for crew) whenever the replay's
+    ``agent_factory_kind`` reads ``experimental``. ``HeadlessGame`` refuses a
+    factory whose agents do not carry the recorded tactical options, then
+    classifies the built agents by exact type, not by which factory built them:
+    ``experimental`` when every agent is an exact built-in ``TacticalAgent``
+    running the exact experimental policy class for its role, ``custom`` when
+    any agent or policy is another type, a subclass included. The stamp does
     not say so itself; ``agent_factory_kind`` is the record that does.
     """
 

@@ -4,8 +4,12 @@ The Stage-B gameplay wave changes behaviour only through recorded experiment
 arms. Each arm is a field of `RecordedExperimentConfig`
 ([`orchestrator/experiment_config.py`](../orchestrator/experiment_config.py)),
 off by default, written on every tick row and on the game-over row of a
-recording that turns it on. No `AILIBI_*` lever and no environment switch
-selects a Stage-B arm. The owner's rulings and the wave's design are in
+recording that turns it on. The wave adds no `AILIBI_*` lever and no
+environment switch. The one older switch among the eight fields,
+`AILIBI_BOUNDED_REBUTTAL`, still selects `bounded_rebuttal_version` for a
+meeting runner built from the environment, and a game using that runner
+records the value; `build_default_meeting_runner` refuses the switch exported
+ON beside a declared profile. The owner's rulings and the wave's design are in
 [the Stage-B decision memo](../tasks/decision-2026-09-24-stage-b-wave.md)
 (sections 0.3, 1 and 3.3) and in the dated 2026-09-24 addendum to
 [the process-over-outcome direction](../tasks/direction-2026-09-19-process-over-outcome.md).

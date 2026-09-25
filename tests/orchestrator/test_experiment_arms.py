@@ -1,6 +1,7 @@
 """The Stage-B arm spine: committed bytes, the pending guard, one engine helper,
 a runner built from the recorded config, derived arm stamps, the spectator
-view and the contract page (``docs/experiment-arms.md``).
+view, the contract page (``docs/experiment-arms.md``) and the factory-kind
+record the policy-stamp docstring in ``orchestrator/replay.py`` relies on.
 
 No arm behaviour exists yet, so every ON value here is either refused (the
 pending guard) or reached with that guard patched open to prove the plumbing
@@ -13,7 +14,7 @@ import ast
 import json
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from types import MappingProxyType, NoneType
 from typing import Any, Literal, cast, get_args
@@ -24,9 +25,15 @@ from hypothesis import strategies as st
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 import orchestrator.game as game_module
-from agents.tactical.experimental import UNBUILT_OPTION_VALUES
+from agents.base import AgentInterface
+from agents.tactical.experimental import (
+    UNBUILT_OPTION_VALUES,
+    ExperimentalCrewmatePolicy,
+    ExperimentalImpostorPolicy,
+)
 from api.replay_loader import ReplayLoader
 from api.schemas import ExperimentConfigView
+from engine.entities import PlayerId, Role
 from engine.events import MeetingTriggeredEvent
 from engine.world import load_canonical_map
 from engine.actions import Action
@@ -57,6 +64,7 @@ from orchestrator.experiment_config import (
 from orchestrator.game import (  # noqa: PLC2701
     PROMPT_VERSION_SETS,
     HeadlessGame,
+    TacticalAgent,
     _arm_is_served,
     _build_meeting_trigger,
     build_default_agent_factory,
@@ -69,7 +77,9 @@ from orchestrator.replay import (  # noqa: PLC2701
     _state_hash,
     _stable_json,
     read_all_entries,
+    recorded_agent_factory_kind,
 )
+from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -1028,8 +1038,20 @@ _ARCHITECTURE = _REPO / "docs" / "architecture.md"
 _SECTION = "### Explicit cleanup experiments"
 
 
-def _page_problems(page: str, architecture: str) -> list[str]:
+def _page_problems(
+    page: str,
+    architecture: str,
+    env_names: Mapping[str, str] = EXPERIMENT_ENV_NAMES,
+) -> list[str]:
     problems: list[str] = []
+    # An older environment switch that still selects a wave field is disclosed
+    # beside that field in one sentence, so the page cannot claim no switch
+    # reaches the wave while one does.
+    for name, field in env_names.items():
+        if field in _WAVE_FIELDS and not re.search(
+            rf"`{re.escape(name)}`[^.]*`{re.escape(field)}`", page
+        ):
+            problems.append(f"the page does not say {name} selects {field}")
     for field in _WAVE_FIELDS:
         layer = FIELD_LAYER[field]
         row = re.search(
@@ -1084,6 +1106,114 @@ def test_the_page_check_bites_a_missing_field_and_a_missing_link() -> None:
     ]
 
 
+def test_the_page_check_bites_an_undisclosed_environment_switch() -> None:
+    page = _PAGE.read_text(encoding="utf-8")
+    architecture = _ARCHITECTURE.read_text(encoding="utf-8")
+    # The overclaim the page once made: no switch named beside the field.
+    undisclosed = page.replace("`AILIBI_BOUNDED_REBUTTAL`", "the older switch")
+    assert _page_problems(undisclosed, architecture) == [
+        "the page does not say AILIBI_BOUNDED_REBUTTAL selects bounded_rebuttal_version"
+    ]
+    # The check reads the live switch table: a switch that reached another wave
+    # field would have to be disclosed too.
+    widened = {**EXPERIMENT_ENV_NAMES, "AILIBI_STAND_IN": "impostor_ballot_version"}
+    assert _page_problems(page, architecture, widened) == [
+        "the page does not say AILIBI_STAND_IN selects impostor_ballot_version"
+    ]
+    # A switch outside the wave's fields needs no disclosure here.
+    assert (
+        _page_problems(
+            page, architecture, {**EXPERIMENT_ENV_NAMES, "AILIBI_STAND_IN": "x_version"}
+        )
+        == []
+    )
+
+
 def test_the_lab_candidates_are_all_arms_that_exist_today() -> None:
     for config in candidate_configs().values():
         assert not set(OMITTED_AT_DEFAULT) & set(config.model_dump())
+
+
+# ---------------------------------------------------------------------------
+# The factory-kind record beside a tactical arm.
+# ---------------------------------------------------------------------------
+
+
+class _SubclassedAgent(TacticalAgent):
+    pass
+
+
+class _SubclassedCrewPolicy(ExperimentalCrewmatePolicy):
+    pass
+
+
+class _SubclassedImpostorPolicy(ExperimentalImpostorPolicy):
+    pass
+
+
+def _as_built(agent: TacticalAgent) -> TacticalAgent:
+    return agent
+
+
+def _in_an_agent_subclass(agent: TacticalAgent) -> TacticalAgent:
+    return _SubclassedAgent(
+        agent_id=agent.agent_id, policy=agent._policy, role=agent.role
+    )
+
+
+def _with_a_crew_policy_subclass(agent: TacticalAgent) -> TacticalAgent:
+    policy = agent._policy
+    if not isinstance(policy, ExperimentalCrewmatePolicy):
+        return agent
+    replaced = _SubclassedCrewPolicy(agent_id=agent.agent_id, options=policy.options)
+    return TacticalAgent(agent_id=agent.agent_id, policy=replaced, role=agent.role)
+
+
+def _with_an_impostor_policy_subclass(agent: TacticalAgent) -> TacticalAgent:
+    policy = agent._policy
+    if not isinstance(policy, ExperimentalImpostorPolicy):
+        return agent
+    replaced = _SubclassedImpostorPolicy(
+        agent_id=agent.agent_id, options=policy.options
+    )
+    return TacticalAgent(agent_id=agent.agent_id, policy=replaced, role=agent.role)
+
+
+@pytest.mark.parametrize(
+    ("wrap", "kind"),
+    [
+        (_as_built, "experimental"),
+        (_in_an_agent_subclass, "custom"),
+        (_with_a_crew_policy_subclass, "custom"),
+        (_with_an_impostor_policy_subclass, "custom"),
+    ],
+)
+def test_the_factory_kind_reads_the_built_types_not_the_factory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    wrap: Callable[[TacticalAgent], TacticalAgent],
+    kind: str,
+) -> None:
+    # Every case runs a caller-supplied factory, never the built-in one, so the
+    # stamp can only follow the exact types of what that factory returned.
+    _clear_ailibi_environment(monkeypatch)
+    config = RecordedExperimentConfig(crew_idle_policy="patrol")
+    built_in = build_default_agent_factory(experiment_config=config)
+
+    def caller_factory(agent_id: PlayerId, role: Role) -> AgentInterface:
+        agent = built_in(agent_id, role)
+        assert isinstance(agent, TacticalAgent)
+        return wrap(agent)
+
+    path = tmp_path / "replay-seed-1.jsonl"
+    HeadlessGame(
+        seed=1,
+        num_players=7,
+        tasks_per_crewmate=1,
+        game_map=load_canonical_map(),
+        agent_factory=caller_factory,
+        experiment_config=config,
+        replay_path=path,
+        scheduler=TickScheduler(max_ticks=3),
+    ).run()
+    assert recorded_agent_factory_kind(read_all_entries(path)) == kind
