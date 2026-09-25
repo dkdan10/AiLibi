@@ -285,6 +285,7 @@ async def run_reply_scenario(
             triggered_by="p-1",
             trigger_tick=10,
             description="p-1 called an emergency meeting",
+            kind="emergency",
         ),
         participants=tuple(
             MeetingParticipant(agent_id=pid, role="CREWMATE", rendered_memory="")

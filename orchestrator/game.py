@@ -3412,13 +3412,20 @@ def _build_meeting_trigger(
     it into the human-readable description the report prompt
     surfaces.
 
-    The emergency description's "called an emergency meeting" phrase is
-    load-bearing (Task 10.8): ``crewmate_report.j2`` v6 branches its
-    emergency-opening frame on exactly that substring of the rendered
-    ``meeting_trigger`` (the meeting layer threads no structured trigger
-    kind to the prompt renderers, by design — the description IS the
-    trigger surface). A wording change here must move in lockstep with
-    the template branch; the strategic-prompt tests pin both ends.
+    The trigger carries the engine event's typed ``kind``
+    (``MeetingTriggeredEvent.trigger``), and the meeting manager decides
+    emergency versus report from that field alone
+    (``meetings.manager._trigger_is_emergency``). The prompt renderers still
+    receive only the description, so its emergency phrase
+    (:data:`meetings.manager.EMERGENCY_TRIGGER_PHRASE`) stays load-bearing
+    for them: ``crewmate_report.j2``, ``impostor_report.j2`` and
+    ``impostor_report_roll_call.j2`` branch on that substring of the
+    rendered ``meeting_trigger``. This builder writes the phrase into every
+    emergency description; a report description is assembled from the
+    seeded ``p-N`` player id, the engine's body id or public handle and the
+    tick, none of which contains it. ``tests/meetings/test_meeting_trigger_kind.py``
+    pins that ``kind`` and the phrase agree on every trigger shape built
+    here. A wording change must move in lockstep with the template branches.
 
     The second element of the returned tuple is the ``body_id`` of
     the corpse that triggered a ``report`` meeting (``None`` for an
@@ -3430,9 +3437,10 @@ def _build_meeting_trigger(
     reject already-discovered bodies, so an adversarial / scripted
     intent could otherwise replay the trigger).
 
-    The third element is the engine's trigger kind, consumed by the
-    Task 10.8 post-meeting pacing notification (an ``emergency``
-    meeting spends its caller's one emergency call per game).
+    The third element is the engine's trigger kind, equal to the returned
+    trigger's ``kind``, consumed by the Task 10.8 post-meeting pacing
+    notification (an ``emergency`` meeting spends its caller's one
+    emergency call per game).
     """
 
     trigger_event: MeetingTriggeredEvent | None = None
@@ -3478,6 +3486,7 @@ def _build_meeting_trigger(
         triggered_by=trigger_event.actor,
         trigger_tick=trigger_event.tick,
         description=description,
+        kind=trigger_event.trigger,
         body_victim_id=victim_id,
     )
     return trigger, body_id, trigger_event.trigger

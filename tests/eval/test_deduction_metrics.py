@@ -2080,7 +2080,7 @@ def _zeroed(cell: dict[str, object]) -> dict[str, object]:
 def test_a_marker_chain_ending_in_parse_default_is_not_machinery() -> None:
     """The writer emits the parse-default marker ALONE, never after another.
 
-    ``_collect_vote`` returns ``_vote_parse_default`` straight out of the
+    ``_collect_one_ballot`` returns ``_vote_parse_default`` straight out of the
     ``ValidationError`` handler, so no other guard has run or can run. A chain
     of several markers ending in a parse default is a shape the writer cannot
     produce, and must not be accepted as machinery.

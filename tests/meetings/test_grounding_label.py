@@ -742,7 +742,7 @@ class TestEveryBallotDeclaresItsBasis:
         assert ballot.grounding_label == "not_assessed"
 
     def test_a_fabricated_basis_survives_the_teammate_redaction(self) -> None:
-        # The provenance boundary, planted. `_collect_vote` reads the model's
+        # The provenance boundary, planted. `_collect_one_ballot` reads the model's
         # body into `authored_rationale_text` BEFORE prepending
         # `INVALID_BASIS_MARKER`, and `_preserved_ballot_markers` keeps exactly
         # what precedes that body. Take the boundary one line later and the

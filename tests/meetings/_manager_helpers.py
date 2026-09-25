@@ -442,6 +442,7 @@ def _default_trigger() -> MeetingTrigger:
         triggered_by="p-1",
         trigger_tick=410,
         description="p-1 reported a body at tick 410",
+        kind="report",
     )
 
 

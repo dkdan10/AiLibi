@@ -982,10 +982,11 @@ nothing must not be upgraded by the layer.
 
 ``None`` means nobody labelled this ballot, and on a MEETING recording that is
 reserved for a recording made before the field existed: the two writers above
-run on every ballot the meeting layer records, so a live meeting leaves none
-unlabelled. Every committed recording reads ``None``; the first bytes carrying
-a value are the single re-record that follows the substrate wave. Outside the
-meeting layer the default says only what it says -- a surrogate or fixture
+(:func:`meetings.manager.label_ballot_grounding` and
+:func:`meetings.manager._default_vote`) run on every ballot the meeting layer
+records, so a meeting recorded since the field existed carries a label on every
+ballot and leaves none unlabelled. Outside the meeting layer the default says
+only what it says -- a surrogate or fixture
 ballot built directly from this class (``training.surrogate.runner``,
 ``training.composed_runner``, ``eval.reasoning_evidence``) carries ``None``
 because no meeting assessed it, and none of those objects is a recording.
@@ -997,8 +998,9 @@ BallotDecisionBasis: TypeAlias = Literal["cited", "none_held"]
 
 ``"cited"`` puts the basis in the two citation id slots; ``"none_held"`` is the
 voter's explicit statement that it holds nothing that resolves. The field's
-``None`` means the voter answered nothing, which is what every committed
-recording parses to and is deliberately distinguishable from ``"none_held"``.
+``None`` means the voter answered nothing (a recording made before the field
+existed parses to it too), and is deliberately distinguishable from
+``"none_held"``.
 
 Any other token is dropped from the raw payload before validation and counted
 under :data:`meetings.manager.INVALID_BASIS_MARKER`, so a fabricated value is
@@ -1057,9 +1059,9 @@ class VoteBallot(ModelAuthoredVoteBallot):
     ``primary_reason_id`` (mark-and-null in
     :func:`meetings.manager._normalize_ballot_observation_id`); NO gate,
     guard, or tally consults it until Task 16.6. ADDITIVE: the ``None``
-    default is what lets every committed replay -- recorded before the
-    field existed -- parse unchanged under ``_FrozenModel``'s config;
-    ``None`` means the voter cited no private observation.
+    default is what lets a replay recorded before the field existed parse
+    unchanged under ``_FrozenModel``'s config; ``None`` means the voter cited
+    no private observation.
 
     ``counter_reason_id`` (ruling D5 of 2026-09-19) is the weighing channel's
     second slot: the strongest thing the voter holds pointing AWAY from the
@@ -1079,8 +1081,11 @@ class VoteBallot(ModelAuthoredVoteBallot):
     ``invalid_citation`` / ``uncited`` split is computed from the two PRIMARY
     slots alone, so a nulled counter cannot change the label a ballot receives.
     ADDITIVE with a ``None`` default, the rule
-    ``primary_reason_observation_id`` states above, so every committed recording
-    parses unchanged and reads ``None``.
+    ``primary_reason_observation_id`` states above, so a recording made before
+    the field existed parses unchanged and reads ``None``. On a ballot recorded
+    since, the field holds a counter only where the voter named one and it
+    survived :func:`meetings.manager._normalize_ballot_counter_reason_id`; a
+    voter that named none, or named one the validator nulled, records ``None``.
 
     ``decision_basis`` (ruling D6 of 2026-09-19) is the VOTER's own word for
     what its decision rests on, and the one ballot field on this schema a SKIP

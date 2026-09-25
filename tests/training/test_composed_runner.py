@@ -327,6 +327,7 @@ def _drive(
         triggered_by=triggered_by,
         trigger_tick=state.tick,
         description="reported a body",
+        kind="report",
     )
     assert isinstance(runner, ComposedMeetingRunner | SurrogateMeetingRunner)
     return asyncio.run(
