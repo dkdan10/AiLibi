@@ -133,6 +133,26 @@ commands are under Validation.
 
 ## Acceptance
 
+- [x] Review correction: **the environment-switch sentence** (Codex P2 on PR 484, confirmed by the docs
+  verifier). `docs/experiment-arms.md` no longer says no environment switch selects a Stage-B arm: it says the
+  wave adds no `AILIBI_*` lever and no environment switch, names `AILIBI_BOUNDED_REBUTTAL` as the one older
+  switch that still selects `bounded_rebuttal_version` for a runner built from the environment (a game using
+  that runner records the value), and says `build_default_meeting_runner` refuses it exported ON beside a
+  declared profile. Mechanism: `_page_problems` in `tests/orchestrator/test_experiment_arms.py` requires every
+  `EXPERIMENT_ENV_NAMES` switch that reaches a wave field to be named beside that field in one sentence;
+  `test_the_four_switch_fields_keep_their_one_way_rule` and `test_an_ambient_switch_beside_a_declared_profile_raises`
+  hold the behaviour the sentence states. Planted: `test_the_page_check_bites_an_undisclosed_environment_switch`
+  (the switch unnamed, and a switch table widened to a ballot field); the page as it stood at `43c7b898` fails the
+  check.
+- [x] Review correction: **the factory-kind wording** (Codex P2 on PR 484, confirmed by the docs verifier). The
+  `FSM_DEFAULT_POLICY_ID` comment and the `fsm_default_tactical_policy_stamp` docstring in `orchestrator/replay.py`
+  say `HeadlessGame` classifies the built agents by exact type, not by which factory built them: `experimental`
+  when every agent is an exact built-in `TacticalAgent` running the exact experimental policy class for its role,
+  `custom` when any agent or policy is another type. Mechanism: `HeadlessGame._build_agents`. Proof:
+  `test_the_factory_kind_reads_the_built_types_not_the_factory` runs a caller-supplied wrapper around the built-in
+  factory under a tactical arm (records `experimental`) and wrappers returning an agent subclass, a crew policy
+  subclass or an impostor policy subclass (each records `custom`); three perturbations of `_build_agents` turn it
+  red.
 - [x] **The eight fields and `FIELD_LAYER`.** `RecordedExperimentConfig` declares, after the
   existing fields and in this order: `vent_witness_rule: Literal["both_rooms", "physical"] =
   "both_rooms"`; `vent_entry_policy: Literal["any_body", "own_fresh_kill"] = "any_body"`;
@@ -653,3 +673,97 @@ after `require_baseline_experiments` has refused any non-baseline recording, so 
   expects.
 - The bundle comparison was built on macOS; CI builds on Linux, where chunk hashes may differ while the data listing
   is produced by the same code.
+
+### Review corrections, round 1 (2026-09-25)
+
+The docs verifier confirmed two Codex P2 comments on PR 484 as valid and unfixed at `43c7b898`. Both are fixed in
+`adbddf3c`, which changes `docs/experiment-arms.md`, two comments in `orchestrator/replay.py` and
+`tests/orchestrator/test_experiment_arms.py`. No production logic changed. Every number in this subsection was
+measured at `adbddf3c`.
+
+**Reply to Codex: the environment-switch sentence (valid).** The page said no `AILIBI_*` lever and no environment
+switch selects a Stage-B arm. `bounded_rebuttal_version` is one of the page's eight fields, and `AILIBI_BOUNDED_REBUTTAL`
+still selects it: a runner built from the environment with the switch ON serves version 1, and a game given no declared
+config records it (`test_the_four_switch_fields_keep_their_one_way_rule`). The page now says what the code delivers:
+the wave adds no `AILIBI_*` lever and no environment switch; the one older switch among the eight fields still selects
+`bounded_rebuttal_version` for a runner built from the environment, and a game using that runner records the value;
+`build_default_meeting_runner` refuses the switch exported ON beside a declared profile
+(`test_an_ambient_switch_beside_a_declared_profile_raises`). The page check now reads `EXPERIMENT_ENV_NAMES` and
+requires every switch that reaches a wave field to be named beside that field in one sentence.
+
+**Reply to Codex: the factory-kind wording (valid).** The `FSM_DEFAULT_POLICY_ID` comment said `experimental` means the
+built-in factory built the agents and `custom` any other factory; the `fsm_default_tactical_policy_stamp` docstring said
+`HeadlessGame` records `custom` for any factory but the built-in one. `HeadlessGame._build_agents` never looks at the
+factory: it compares the exact type of each built agent and its policy with `TacticalAgent` and the policy class for the
+role. Both places now say that, and drop the factory-origin wording. The new
+`test_the_factory_kind_reads_the_built_types_not_the_factory` runs four caller-supplied factories under
+`crew_idle_policy="patrol"`: a wrapper that returns the built-in agents unchanged records `experimental`, and wrappers
+that return an agent subclass, a crew policy subclass or an impostor policy subclass each record `custom`.
+
+**Planted and perturbed.** Each probe edited one file in place from a byte copy, ran the named selection of
+`tests/orchestrator/test_experiment_arms.py`, and restored the copy; the sha256 matched after every restore and the
+restored run was green. The probe script is a scratch file, not committed.
+
+| Probe | Perturbation | Perturbed run | Restored run |
+| --- | --- | --- | --- |
+| exact agent type | `type(built_agent) is TacticalAgent` made `isinstance` in `_build_agents` | 1 failed, 3 passed (`_in_an_agent_subclass`) | 4 passed |
+| exact policy type | `type(built_agent._policy) is policy_class` made `isinstance` | 2 failed, 2 passed (both policy subclasses) | 4 passed |
+| factory origin | `custom` also whenever the factory's `__qualname__` is not the built-in one | 1 failed, 3 passed (`_as_built`) | 4 passed |
+| switch sentence | `` `AILIBI_BOUNDED_REBUTTAL` `` removed from the page's sentence | 3 failed (every page test) | 3 passed |
+| old page | the page's sentence as it stood at `43c7b898` put back | 3 failed (every page test; the check reports "the page does not say AILIBI_BOUNDED_REBUTTAL selects bounded_rebuttal_version") | 3 passed |
+
+The committed planted cases are `test_the_page_check_bites_an_undisclosed_environment_switch` (the switch unnamed; a
+switch table widened with a stand-in switch to `impostor_ballot_version` must be disclosed too; a stand-in switch to a
+field outside the wave needs no disclosure) and the three `custom` cases above. No probe came back green. The first
+neutering table above is unchanged: it cites no comment or docstring, and this round changed no production line.
+
+**Closing greps** (case-insensitive, over the whole tree except `audits/`, `agent_prompts/` and `tasks/phase-*`; this
+card's own review-correction text, which quotes the old wording, is set aside below):
+
+- `git grep -niE 'environment switch(es)? selects?|no environment switch'`: eight hits outside this card's review
+  text, all true today: the page's "The two ballot fields have no environment switch", `meetings/evidence_profile.py:67`,
+  the config-only comment in `orchestrator/game.py`, the body-handle card's field (it has no switch), and four lines
+  saying no switch "is added" (the decision memo, the direction addendum, this card's Constraints and the look-and-wait
+  card).
+- `git grep -niE 'factory but the built-in|any other factory|for any factory|built-in factory built|factory (that )?built (it|them)'`:
+  outside this card, two hits, both the new wording in `orchestrator/replay.py` ("never by which factory built them",
+  "not by which factory built them").
+- `git grep -niE '(records?|reads?) .?custom.? for (any|every)'`: none outside this card's quotation of the old
+  docstring.
+
+**Verification at `adbddf3c`.**
+
+| Command | Result |
+| --- | --- |
+| `git grep -c '"experiment_config":{' -- 'audits/deduction-candidate/run-2026-09-16/*.jsonl'` | 947 rows over 100 files |
+| `git grep -c '"experiment_config":{' -- 'tests/fixtures/v3_policy_reconstruction/*.jsonl'` | 9 |
+| `grep -c '"experiment_config": {'` over the five audit JSON files | 41, 41, 42, 13, 100 |
+| the card's seven test files (`uv run pytest ... -q`) | exit 0, 367 passed (362 plus the 5 new) |
+| `uv run lint-imports`; `uv run mypy .` (both inside `check.sh`) | exit 0: 4 kept, 0 broken; no issues in 497 source files |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | exit 0, 25 passed |
+| `bash scripts/verify_samples.sh` on `replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run pytest -m campaign -q` | exit 0, 336 passed |
+| `uv run python scripts/gen_frontend_types.py --check` | exit 0 |
+| `npm --prefix frontend run e2e` | exit 0: 13 passed, 3 skipped (the README media captures) |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `len(open('docs/architecture.md').read().split())` | 1,282 (budget 1,300; unchanged this round) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 61 checks, 49 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `git diff --stat $(git merge-base origin/main HEAD) HEAD -- replays audits tests/fixtures` | empty (merge base `7f2890f0`) |
+| `bash scripts/check.sh` (captured by redirect, no pipe; the working tree also held this card's uncommitted Acceptance edit) | exit 0: 8,514 passed, 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 vitest tests and the build pass |
+
+**Publication, re-measured.** This round touches neither `api/` nor `frontend/`. The bundle was built at the base
+`7f2890f0` (a `git archive` export whose replay files were given the worktree's mtimes, because the loader bakes each
+replay's `created_at` from its file mtime and a fresh export otherwise differs in that field alone) and at `adbddf3c`.
+The baked data listings match: 156 files each, `diff` exit 0. `diff -rq` names `index.html` and the same 7 hashed chunks
+as before; with chunk names normalised, only `assets/TournamentDashboard-*.js` differs, by the four label strings and the
+`vent_entry_policy` clause of the movement condition, and every other asset and `index.html` is equal. The base and
+head `PublicResultsView`, rendered on the baked `data/9p2i` and `data/4p1i` summaries by a temporary vitest file
+(deleted after the run), give byte-equal markup (7,122 and 3,833 bytes), both reading "No enabled experiments
+recorded. This alone does not certify the default behavior." Perturbed: one byte appended to the baked 4p1i summary in
+a scratch copy makes the listing `diff` exit 1.
+
+**Record impact.** None: no recording, derived view, fixture, audit byte or prompt byte moved, and no production logic
+changed.
