@@ -708,3 +708,20 @@ restore: 28 and 10 passed.
   orchestrator tests.
 - The Hypothesis property draws random text for undeclared kinds, so it did not find the planted
   `"Emergency"` widening; the explicit miscased test does.
+
+### 2026-09-25: the full gate at `c330cf1c`
+
+`bash scripts/check.sh > <log> 2>&1`, run as its own command (no pipe, no compound) in this
+worktree, clean at `c330cf1c` (the Results commit), macOS: **exit code 0**.
+
+```
+ruff check: All checks passed!         ruff format --check: 525 files already formatted
+lint-imports: Contracts: 4 kept, 0 broken.
+validate_task_docs: passed, 390 historical phase tasks and 390 prompts; 88 work cards.
+generate_prompts --check: All 390 prompts are in sync.
+mypy: Success: no issues found in 496 source files
+pytest -n auto --dist loadfile: 8345 passed, 20 skipped, 3 xfailed in 645.53s
+frontend: lint, tsc:check, vitest (Test Files 20 passed, Tests 558 passed), build
+```
+
+The commit that adds this subsection changes only this card.
