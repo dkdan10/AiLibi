@@ -311,6 +311,11 @@ class _Generator:
                     ("AgentTickStateView", "investigation_plan"),
                     ("ExperimentConfigView", "investigation_version"),
                     ("ExperimentConfigView", "contextual_self_report_version"),
+                    ("ExperimentConfigView", "vent_witness_rule"),
+                    ("ExperimentConfigView", "vent_entry_policy"),
+                    ("ExperimentConfigView", "report_body_handle_version"),
+                    ("ExperimentConfigView", "ballot_kill_row_version"),
+                    ("ExperimentConfigView", "impostor_ballot_version"),
                     # An alibi is a ROUTE, and ``AlibiClaimView`` serves the
                     # ONE surface each claim arrived on: a recorded one-room
                     # envelope keeps its three flat keys and carries no

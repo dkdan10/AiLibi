@@ -148,7 +148,8 @@ self-report, sabotage timing, coherent reset and independently selected evidence
 reply, public-account and attributed-testimony profiles.
 Default configuration is omitted from recordings. Enabled tick and game-over stamps
 must agree; unknown versions fail. The orchestrator passes narrow engine-free
-options to engine and agent functions.
+options to engine and agent functions. [The experiment-arms page](experiment-arms.md)
+states the Stage-B fields, their layers, the pending guard and the engine helper.
 
 `meetings/evidence_profile.py` binds those versions before play. New account
 profiles use experiment format 2 and their own prompt identities, preserving

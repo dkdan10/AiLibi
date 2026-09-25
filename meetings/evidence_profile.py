@@ -64,6 +64,14 @@ def bounded_rebuttal_enabled(env: Mapping[str, str] | None = None) -> bool:
     return _enabled(BOUNDED_REBUTTAL_ENV, env)
 
 
+#: Profile fields no environment switch resolves: a declared experiment config
+#: is their only source, through :func:`profile_from_config`.
+CONFIG_ONLY_PROFILE_FIELDS: Final[tuple[str, ...]] = (
+    "ballot_kill_row_version",
+    "impostor_ballot_version",
+)
+
+
 class MeetingEvidenceProfile(BaseModel):
     """Versions captured before work begins; ``None`` preserves recorded behavior."""
 
@@ -73,12 +81,16 @@ class MeetingEvidenceProfile(BaseModel):
     bounded_rebuttal_version: Literal[1] | None = None
     public_account_version: Literal[1] | None = None
     attributed_testimony_version: Literal[1] | None = None
+    ballot_kill_row_version: Literal[1] | None = None
+    impostor_ballot_version: Literal[1] | None = None
 
     @field_validator(
         "evidence_reasoning_version",
         "bounded_rebuttal_version",
         "public_account_version",
         "attributed_testimony_version",
+        "ballot_kill_row_version",
+        "impostor_ballot_version",
         mode="before",
     )
     @classmethod
@@ -91,7 +103,11 @@ class MeetingEvidenceProfile(BaseModel):
     def from_environment(
         cls, env: Mapping[str, str] | None = None
     ) -> MeetingEvidenceProfile:
-        """Capture both switches from one environment snapshot."""
+        """Capture the four switches from one environment snapshot.
+
+        The :data:`CONFIG_ONLY_PROFILE_FIELDS` have no switch and stay ``None``
+        here whatever the environment holds.
+        """
 
         source = dict(os.environ if env is None else env)
         return cls(
@@ -102,3 +118,21 @@ class MeetingEvidenceProfile(BaseModel):
             if _enabled(ATTRIBUTED_TESTIMONY_ENV, source)
             else None,
         )
+
+
+def profile_from_config(values: Mapping[str, object]) -> MeetingEvidenceProfile:
+    """The profile a declared experiment config selects, from its meeting values.
+
+    ``values`` carries exactly this profile's fields: the orchestrator selects
+    them from the recorded config by its field-layer classification, so this
+    package never imports the wiring module. A missing or extra field raises
+    rather than defaulting, since the two field sets must stay equal.
+    """
+
+    expected = set(MeetingEvidenceProfile.model_fields)
+    if set(values) != expected:
+        raise ValueError(
+            "meeting values disagree with the profile's fields: missing "
+            f"{sorted(expected - set(values))}, unknown {sorted(set(values) - expected)}"
+        )
+    return MeetingEvidenceProfile.model_validate(dict(values))
