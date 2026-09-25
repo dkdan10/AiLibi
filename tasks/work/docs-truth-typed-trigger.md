@@ -140,6 +140,15 @@ the corrected text states the rule, not the tally.
 
 ## Acceptance
 
+- [x] Review correction: the perturbation table's red counts reproduce (round 2). Every row of
+  "Planted and perturbed evidence" was re-run over one stated scope, the whole test tree in both
+  tiers (`uv run pytest -m "campaign or not campaign" -n auto --dist loadfile -q -rfE -p
+  no:cacheprovider`, 8,704 tests, at `39c84cad`), and the table now lists every red test. Over
+  the review's own scopes, `return False` gives 10 red in the new file plus
+  `tests/meetings/test_manager.py` and 18 in the four Validation directories (36 over the whole
+  tree). The three reasoning test files hold 43 tests, and all 43 stay green under the reasoning
+  row's edit. The builder row adds the seven prompt-byte golden cases. Results (round 2) quotes
+  each command and its counts.
 - [x] Review correction: the lockstep property no longer fails on Hypothesis's
   per-example deadline. `test_the_lockstep_pin_holds_over_every_generated_engine_trigger`
   carries `@settings(deadline=None)`; its strategies, assertions and 100 examples are
@@ -663,30 +672,57 @@ study reports, linked). The rows themselves are unchanged.
 
 ### Planted and perturbed evidence
 
-Each row: the production line or document changed, the perturbation, the command, and the result.
-Every perturbation was made in place, run, and restored by copying the saved file back
-(`cmp` confirmed each restore); none used `git checkout`. The new test files alone ran after each
-restore: 28 and 10 passed.
+This table was re-measured in round 2. The round-2 subsection below says what the first version
+got wrong. Each row names the production line, test line or document changed and the one exact
+edit made to it. A scratch harness outside the worktree made each edit in place and ran the scope
+below. With the edit still in place, it ran every red test again on its own by node id, and each
+one failed again. It then restored the file by copying the saved copy back, and a byte comparison
+and the sha256 confirmed each restore. No step used `git checkout`.
 
-| changed thing | perturbation | red tests | green before this card? |
-|---|---|---|---|
-| `_trigger_is_emergency` body | restore the base substring body | 4 red in the new file: the planted report, its mirror, the declared-kind case and the source scan. The planted report reads `assert {None} == {'p-1'}` (ballot `reporter_id`), the mirror `assert {'p-1'} == {None}`; a diagnostic run over the pair showed all five decisions flipped: report kind with the phrase gave reporter `None`, detector kind `emergency`, no opener reporter context, `is_body_report` False and the stale body stripped, and the mirror gave `p-1`, `report`, a context, True and the body kept | the planted pair is new |
-| same | `return False` | 7 red: the mirror, the declared-kind case, and five existing emergency tests in `test_manager.py` | no |
-| `kind` field | give it a default of `"report"` | `test_omitting_the_kind_raises_type_error` | new |
-| `__post_init__` check | `if False:` | the miscased and the Hypothesis undeclared-kind tests | new |
-| `_MEETING_TRIGGER_KINDS` | add `"Emergency"` | the miscased test | the Hypothesis property alone stayed green |
-| reply `is_body_report` site | revert to the base substring test | the planted pair (`assert {False} == {True}` and the reverse) and the source scan | new |
-| each of the other four decision sites (reporter render id, detector kind, body strip, ballot reporter) | swap `_trigger_is_emergency(trigger)` for the substring, one site at a time | the planted pair, every time | new |
-| builder `kind=trigger_event.trigger` | hard-code `kind="report"` | the builder emergency case, the emergency lockstep shape, the lockstep property, the committed-helper emergency case | new |
-| builder report description | append the phrase to the report wording | the four report lockstep shapes and the lockstep property | new |
-| `eval/reasoning_evidence.py` `kind="emergency"` | `kind="report"` | `test_the_reasoning_evidence_scenario_opens_a_typed_emergency` only (the existing reasoning-scorecard and reasoning-evidence tests: 66 passed) | **yes: green under every existing test** |
-| `committed.py::meeting_trigger_kind` | `return "report"` | the committed-helper emergency case only; the four committed-walk suites (`test_evidence_honesty`, `test_contradictions`, `test_schemas_pooling`, `test_transcript`) stayed green, 499 passed | **yes: green under every existing test** |
-| the phrase comment block | reintroduce "no structured trigger kind" | the four-passage test | new |
-| the four trigger passages | the `e886b663` wordings held as fixed strings | fail the check, one case each | planted in-test |
-| ladder paragraph | drop "Baseline 9" | `test_the_ladder_paragraph_names_the_current_baseline`; the `e886b663` paragraph is also planted in-test | new |
-| the architecture link | unlink `game-shape.md` | the committed-note test and the link test | new |
-| a game-shape symbol | rename `resolve_vent` | the committed-note test and its planted case; one planted case per symbol runs in-test | new |
-| a test-site `kind=` | delete it (`tests/meetings/_manager_helpers.py`) | `mypy`: `Missing positional argument "kind" in call to "MeetingTrigger"` | n/a |
+The scope for every row is the whole test tree in both tiers, 8,704 tests, at `39c84cad`:
+
+```
+uv run pytest -m "campaign or not campaign" -n auto --dist loadfile -q -rfE -p no:cacheprovider
+```
+
+Unperturbed, it reports `8681 passed, 20 skipped, 3 xfailed` (exit 0). "Red" counts failed plus
+errored tests. "Older red" counts the red tests outside this card's two new test files
+(`tests/meetings/test_meeting_trigger_kind.py` and `tests/scripts/test_architecture_truth.py`).
+
+| changed thing | edit | red | older red | the red tests |
+|---|---|---|---|---|
+| `_trigger_is_emergency` body | `return EMERGENCY_TRIGGER_PHRASE in trigger.description` (the base body) | 4 | 0 | in the new file: the planted report (`assert {None} == {'p-1'}`, ballot `reporter_id`), its mirror (`assert {'p-1'} == {None}`), `test_each_declared_kind_constructs_and_decides[emergency]` and the source scan |
+| same | `return False` | 36 | 34 | the new file, 2: the mirror and `test_each_declared_kind_constructs_and_decides[emergency]`. `tests/meetings/test_manager.py`, 8: `test_impostor_reply_in_emergency_meeting_gates_off_body_report`; four `TestEmergencyOpeningNoBody` tests (`test_detection_reads_the_typed_trigger_kind`, `test_stubborn_body_is_stripped_after_one_retry`, `test_retry_recovers_a_clean_opening_without_stripping`, `test_body_only_emergency_opening_degrades_to_unsure_after_strip`); and three structured-turn-marker tests (`test_every_dropped_claim_is_recoverable_in_claim_order`, `test_a_recorded_turn_carries_its_annotations_key`, `test_both_recording_branches_record_the_identical_annotations`). `tests/meetings/test_manager_reporter_render.py`, 1: `test_emergency_meeting_never_annotates`. The prompt-byte golden, 7: `test_every_recorded_prompt_re_renders_byte_identically`, `test_every_reconstruction_divergence_is_a_retired_guard` and `test_defaults_are_the_only_lookup_misses` on 9p2i and on 4p1i, plus `test_reconstructed_transcript_matches_the_recording[9p2i]`. `tests/scripts/test_counterfactual_phase21.py`, 18: 7 failed, and 11 errored at the setup of its module fixtures |
+| `kind` field | `kind: MeetingTriggerKind = "report"` | 1 | 0 | `test_omitting_the_kind_raises_type_error` |
+| `__post_init__` check | `if False:` | 2 | 0 | `test_a_miscased_kind_raises_value_error` and `test_every_undeclared_kind_raises_value_error` |
+| `_MEETING_TRIGGER_KINDS` | `(*get_args(MeetingTriggerKind), "Emergency")` | 1 | 0 | `test_a_miscased_kind_raises_value_error`. The Hypothesis property stays green, because it draws random text |
+| reply `is_body_report` site | `(EMERGENCY_TRIGGER_PHRASE not in trigger.description)` (the base test) | 3 | 0 | the planted pair and the source scan |
+| reporter render id, detector kind, body strip and ballot reporter (four runs, one site each) | `_trigger_is_emergency(trigger)` becomes `(EMERGENCY_TRIGGER_PHRASE in trigger.description)` | 3 each | 0 | the planted pair and the source scan, at every site |
+| builder `kind=trigger_event.trigger` | `kind="report"` | 29 | 25 | the new file, 4: `test_the_builder_copies_the_engine_kind[emergency]`, the emergency lockstep shape, the lockstep property and `test_the_committed_walk_helper_returns_the_engine_kind[emergency]`. The prompt-byte golden, 7 (the same seven as `return False`). `test_counterfactual_phase21.py`, 18 (7 failed, 11 errored) |
+| builder report description | the report wording ends `at tick {tick} after p-4 {EMERGENCY_TRIGGER_PHRASE}` | 36 | 31 | the new file, 5: the four report lockstep shapes and the lockstep property. The prompt-byte golden, 8: the seven above plus `test_reconstructed_transcript_matches_the_recording[4p1i]`. `tests/meetings/test_corroboration.py`, 3 (`TestRecordedAnchors`). `tests/agents/test_beliefs_hard_evidence_gate.py`, 1 (`test_soft_only_split_by_role`). `tests/experiments/test_held_out_prefixes.py`, 1 (`test_an_unwitnessed_planted_prefix_passes_and_keeps_the_killer_record`). `test_counterfactual_phase21.py`, 18 (7 failed, 11 errored) |
+| `eval/reasoning_evidence.py` `kind="emergency"` | `kind="report"` | 1 | 0 | only `test_the_reasoning_evidence_scenario_opens_a_typed_emergency`. Every older test stays green, including the 43 tests in the three reasoning test files |
+| `committed.py::meeting_trigger_kind` | `return "report"` | 1 | 0 | only `test_the_committed_walk_helper_returns_the_engine_kind[emergency]`. Every older test stays green, including the 499 default-tier tests of the four committed-walk suites (`test_evidence_honesty`, `test_contradictions`, `test_schemas_pooling` and `test_transcript`) |
+| the phrase comment block | the line `# DESIGN.md keeps no structured trigger kind on the meeting layer.` added to the block | 1 | 0 | `test_the_four_trigger_passages_describe_the_typed_kind` |
+| the four trigger passages | none: the `e886b663` wordings are held in the test as fixed strings | n/a | n/a | `test_each_base_wording_fails_the_passage_check` has four cases and passes at the head, so the check rejects each base wording |
+| ladder paragraph | `Baseline 9, the current one, is` becomes `The current baseline is` | 1 | 0 | `test_the_ladder_paragraph_names_the_current_baseline`. The `e886b663` paragraph is also planted in the test |
+| the architecture link | `[The game-shape page](game-shape.md)` becomes plain text | 3 | 0 | `test_the_game_shape_note_names_every_enforcing_symbol`, `test_an_architecture_page_without_the_link_is_rejected` and `test_a_note_carrying_a_task_id_is_rejected` (the last two compare the whole problem list) |
+| a game-shape symbol | `resolve_vent` becomes `vent_resolution` in `docs/game-shape.md` | 4 | 0 | `test_the_game_shape_note_names_every_enforcing_symbol`, `test_a_note_missing_one_fact_symbol_is_rejected[venting is visible]`, and the link and task-id tests. The test also plants one case per symbol |
+| a test-site `kind=` | `kind="report",` deleted from `_default_trigger` in `tests/meetings/_manager_helpers.py` | 240 | 240 | every test that builds the default trigger fails at construction with `TypeError: MeetingTrigger.__init__() missing 1 required positional argument: 'kind'`: `test_manager.py` 166, `test_weighing_channel.py` 38, `test_grounding_label.py` 23, `test_ballot_observation_citation.py` 5, `test_elicitation_fixtures.py` 4, `test_vote_guard_rationale.py` 3 and `test_vouch_grounding.py` 1, all under `tests/meetings/`. `uv run mypy .` also fails with 1 error: `Missing positional argument "kind" in call to "MeetingTrigger"` |
+
+Diagnostic for the first row, re-run in round 2 through the planted pair's own `_run_watched`.
+Under the base body, the report that carries the phrase gets ballot reporter `None`, detector kind
+`emergency`, no opener reporter context, `is_body_report` False and the stale body stripped. The
+mirror gets `p-1`, `report`, a context, `is_body_report` True and the body kept. At the head each
+decision reads the other way, so all five decisions flip.
+
+In the whole-tree run, 15 of the 19 edits are caught only by this card's new tests. Most of that is
+by construction. The kind field and its checks are new code, and the comment edit and the three
+document edits break text that only this card's tests read. The base body and the five
+decision-site edits give the old substring's answer, which is what the older tests were written
+against. Two of the 15 are production lines whose old behaviour older tests could have covered:
+`eval/reasoning_evidence.py`'s `kind="emergency"` and the helper's `return trigger.kind`. The
+other four edits turn older tests red: `return False`, both builder edits, and the deleted
+test-site `kind=`.
 
 ### Follow-ups (count-only; not done here)
 
@@ -839,3 +875,91 @@ frontend: lint, tsc:check, vitest (Test Files 20 passed, Tests 558 passed), buil
 
 An earlier `check.sh` run at `9b1ed920` was stopped part-way through pytest and is not quoted: this
 card was edited in the worktree while it ran.
+
+### Review corrections, round 2 (2026-09-25)
+
+One review lens (documentation, evidence claims and Codex review) returned one blocking finding
+over the head `39c84cad`: the red counts in "Planted and perturbed evidence" did not reproduce.
+Codex has not reviewed the branch since `32a77ab2` and has left no inline comment. This round
+changes no code, test or document other than this card. The table in "Planted and perturbed
+evidence" was rewritten in place from the re-measurement, and the commit that adds this subsection
+changes only this card.
+
+**What was wrong.** The first table named no scope for its red counts. Each count came from a run
+over a few chosen files, so red tests elsewhere in the tree were left out. The finding reproduced
+three rows against the head. The whole-tree re-measurement found eight of the seventeen rows wrong:
+
+| row | stated at `c330cf1c` | re-measured |
+|---|---|---|
+| `return False` | 7: the mirror, the declared-kind case and five `test_manager.py` emergency tests | 36 over the whole tree. Over the review's two scopes: 10 in the new file plus `tests/meetings/test_manager.py`, where the eight `test_manager.py` tests include three structured-turn-marker tests; and 18 in the four Validation directories, which add `test_emergency_meeting_never_annotates` and the seven prompt-byte golden cases. The whole tree adds 18 in `tests/scripts/test_counterfactual_phase21.py` |
+| the four other decision sites | the planted pair | 3 each: the planted pair and the source scan |
+| builder hard-codes `kind="report"` | 4 new-file tests | 29: adds the seven golden cases and the 18 counterfactual tests |
+| builder report wording carries the phrase | 5 new-file tests | 36: adds eight golden cases, three corroboration anchors, the hard-evidence gate's role split, one held-out prefix test and the 18 counterfactual tests |
+| `eval/reasoning_evidence.py` `kind="report"` | "66 passed" for the existing reasoning tests | the three reasoning test files hold 43 tests, and all 43 pass under the edit. The 66 named no scope and does not reproduce, so it is withdrawn. Over the whole tree the new test is the only red |
+| the architecture link removed | 2 | 3: the task-id test also compares the whole problem list |
+| `resolve_vent` renamed | 2 | 4: the link and task-id tests also compare the whole problem list |
+| a test-site `kind=` deleted | mypy only | mypy reports 1 error, and 240 tests fail with the missing-kind `TypeError` |
+
+The other nine rows reproduced as stated: the base body (4), the `"report"` default (1), `if False:`
+(2), the `"Emergency"` widening (1), the reply site (3), the helper's `return "report"` (1, with
+the four committed-walk suites' 499 tests green), the phrase comment (1), the ladder paragraph
+(1), and the passages planted in the test.
+
+**How it was re-measured.** The scratch harness applied each row's edit as one exact string
+replacement, and it refuses an anchor that does not occur exactly once. It ran the whole-tree
+command quoted above the table, then ran every red test on its own by node id with the edit still in
+place. Last, it restored the file from its saved copy and compared bytes and sha256. For the rows
+the finding named, it also ran the finding's scopes under the same edit (each command on its own,
+exit codes captured directly):
+
+```
+# return False
+uv run pytest -q -rfE -p no:cacheprovider tests/meetings/test_meeting_trigger_kind.py tests/meetings/test_manager.py
+    10 failed, 287 passed                                      (exit 1)
+uv run pytest -q -rfE -p no:cacheprovider -n auto --dist loadfile tests/meetings tests/orchestrator tests/agents tests/training
+    18 failed, 3905 passed, 3 xfailed                          (exit 1)
+# eval/reasoning_evidence.py kind="report"
+uv run pytest -q -rfE -p no:cacheprovider tests/eval/test_reasoning_scorecard.py tests/meetings/test_reasoning_evidence.py tests/scripts/test_reasoning_scorecard_cli.py
+    43 passed                                                  (exit 0)
+# kind= deleted from tests/meetings/_manager_helpers.py
+uv run mypy .
+    Found 1 error in 1 file (checked 496 source files)         (exit 1)
+```
+
+Each row's whole-tree summary line (every run also reports 20 skipped and 3 xfailed):
+
+```
+unperturbed                                  8681 passed                      exit 0
+_trigger_is_emergency: the base body         4 failed, 8677 passed            exit 1
+_trigger_is_emergency: return False          25 failed, 8645 passed, 11 errors  exit 1
+kind defaults to "report"                    1 failed, 8680 passed            exit 1
+__post_init__: if False                      2 failed, 8679 passed            exit 1
+_MEETING_TRIGGER_KINDS widened               1 failed, 8680 passed            exit 1
+reply is_body_report: substring              3 failed, 8678 passed            exit 1
+reporter render id: substring                3 failed, 8678 passed            exit 1
+detector kind: substring                     3 failed, 8678 passed            exit 1
+body strip: substring                        3 failed, 8678 passed            exit 1
+ballot reporter: substring                   3 failed, 8678 passed            exit 1
+builder kind="report"                        18 failed, 8652 passed, 11 errors  exit 1
+builder report wording carries the phrase    25 failed, 8645 passed, 11 errors  exit 1
+reasoning_evidence kind="report"             1 failed, 8680 passed            exit 1
+committed helper returns "report"            1 failed, 8680 passed            exit 1
+phrase comment reintroduces the claim        1 failed, 8680 passed            exit 1
+ladder paragraph drops Baseline 9            1 failed, 8680 passed            exit 1
+architecture link removed                    3 failed, 8678 passed            exit 1
+resolve_vent renamed                         4 failed, 8677 passed            exit 1
+test-site kind= deleted                      240 failed, 8441 passed          exit 1
+```
+
+Every red test failed again when run on its own, and every restore compared equal. The harness
+wrote each run's pytest output to a scratch log and kept the summary line and the red node ids.
+The logs were then deleted, because a golden failure can carry recorded prompt text. The worktree
+was clean before and after the runs.
+
+**Which probes first came back green.** None this round: every edit turned at least one test red.
+Two findings from the first version stand. `eval/reasoning_evidence.py`'s `kind="emergency"` and
+the helper's `return trigger.kind` are caught only by this card's new tests. The whole-tree run
+now confirms that over both tiers.
+
+**Changed expectations: none.** No test was weakened, skipped or deleted, and no test or code
+changed in this round.
