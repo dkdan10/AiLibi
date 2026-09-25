@@ -157,12 +157,20 @@ claim matches their witnessed record. The speaker need not be an impostor.
 ### hard evidence (certified role evidence)
 
 In this game's rules, an attributed witnessed vent or kill establishes an
-impostor role. The meeting layer grounds a spoken vent claim against the
-speaker's actual observation before publishing its proof flag. Other spoken
-placements, contradictions and agreement are different evidence classes; a
-citation alone does not certify their inference
-([observation contract](observation-contract.md),
-[meeting detector](../meetings/transcript.py)).
+impostor role, but the meeting layer certifies only the vent. It grounds a
+spoken vent claim against the speaker's own witness record before publishing a
+`vent_sighting` proof flag ([meeting detector](../meetings/transcript.py),
+`detect_contradictions`). A witnessed kill stays with its witness: it enters the
+witness's own memory and raises the witness's own suspicion of the killer
+(`WITNESSED_KILL_SUSPICION_DELTA` in
+[`agents/memory/beliefs.py`](../agents/memory/beliefs.py)). It publishes no flag,
+because no contradiction kind names a kill (`ContradictionRef.kind` in
+[`meetings/schemas.py`](../meetings/schemas.py)), and it adds no row to the
+witness's ballot evidence (`_own_channel_evidence_rows` in
+[`meetings/manager.py`](../meetings/manager.py)). Other spoken placements,
+contradictions and agreement are different evidence classes; a citation alone
+does not certify their inference
+([observation contract](observation-contract.md)).
 
 ### conviction economy (what a meeting does with evidence)
 

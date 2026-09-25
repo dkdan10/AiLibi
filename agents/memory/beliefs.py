@@ -217,8 +217,13 @@ down to (Task 16.4; audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J1
 One display-precision notch under the §4.6 0.60 eject gate
 (:data:`meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`): a row clamped to
 ``0.59`` renders exactly ``"0.59"`` under the vote template's ``"%.2f"`` format, so
-the model reads a MUST-SKIP row rather than the MUST-vote a raw ``>= 0.60`` scalar
-would surface. Mirrors the :data:`CONTRADICTION_RENDER_CEIL` naming (a
+an entirely-soft row renders below the ejection floor rather than at or above it,
+as a raw ``>= 0.60`` scalar would. The clamp changes a rendered number and issues
+no instruction: the ballot, not the render, decides (the ballots' own confidence
+is what :func:`meetings.voting.tally_ballots` holds to the floor), and the
+grounding label describes a ballot's basis without changing its target
+(:func:`meetings.manager.label_ballot_grounding`, ruling D6 of 2026-09-19).
+Mirrors the :data:`CONTRADICTION_RENDER_CEIL` naming (a
 render-time ceiling, not a fold-time cap). The measured trade was re-checked per rung of the ladder: the
 planning-doc §3.4 J1 static counterfactual read 24/31 crew mis-ejects neutralised
 vs 6/16 impostor catches risked (baseline-2-era figures); the 16.4 re-measure on

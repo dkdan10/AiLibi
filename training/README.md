@@ -111,6 +111,18 @@ Recorded here so the tier map preserves results, not just machinery:
 
 ## 2. The tier map
 
+> **History label: baseline 6.** The tables in this section record the
+> baseline-6 corpus and its fits as they stood when the map was ruled. Their
+> "Measured basis" numbers and line citations are that record; the reports have
+> since been re-grounded, so a cited line may now hold a different figure. The
+> committed corpus under `replays/ml_corpus/` is the baseline-9 re-record, and
+> its current fits are in each report's baseline-9 re-ground section:
+> [ballot surrogate](reports/report-ballot-surrogate.md),
+> [conviction model](reports/report-conviction-model.md),
+> [composed runner](reports/report-composed-runner.md) and
+> [anchor study](reports/report-anchor-study.md). The keep / freeze / retire
+> rulings themselves stand.
+
 ### KEEP — committed evidence and always-on gates still execute it
 
 | Component | Measured basis (committed bytes, cited by line) | Where it lives / consumer boundary |

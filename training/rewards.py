@@ -298,6 +298,13 @@ def _crew_terms(rollout: EpisodeRollout) -> dict[str, float]:
     )
     crew_alive = last.alive_crew if last is not None else 0
     initial_crew = max(1, rollout.num_players - rollout.num_impostors)
+    # Role-correct rewards: ``correct_reports`` and ``patrol_coverage`` both pay
+    # for being right about roles, read from engine truth (an ejected player who
+    # IS an impostor; a crewmate sharing a room with a player who IS an impostor,
+    # ``training.rollout._crew_shadows_impostor``), so neither is a neutral
+    # crew-conduct term. Their values and weights are unchanged while ML work is
+    # held (owner ruling of 2026-09-24).
+    #
     # correctly-routed reports: count only meetings a crewmate ROUTED via a body
     # report that ejected an impostor — never an emergency or an impostor-triggered
     # report, which credit the crew for outcomes it did not produce.

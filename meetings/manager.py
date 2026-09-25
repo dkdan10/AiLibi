@@ -4324,7 +4324,7 @@ def _preserved_ballot_markers(
 ) -> str:
     """The upstream audit markers a rationale redaction must carry across.
 
-    The ballot chain in :meth:`MeetingManager._collect_vote` runs both
+    The ballot chain in :meth:`MeetingManager._collect_one_ballot` runs both
     citation-id validators BEFORE the teammate coercion, so a betrayal ballot
     that also carried a hallucinated reason / observation id reaches the guard
     with their markers already prepended. The Task 19.15 redaction removes
@@ -4552,7 +4552,7 @@ def label_ballot_grounding(
     site. Both are KEPT as defensive lines, said so here rather than left to be
     re-found:
 
-    * branch 3 can never race branch 2. ``_collect_vote`` computes
+    * branch 3 can never race branch 2. ``_collect_one_ballot`` computes
       ``citation_nulled`` as "cited before the validators AND both ids ``None``
       after them", so a nulled citation forces ``cited`` false there and no
       ordering between the two is observable; branch 3 stays BELOW branch 2 for
