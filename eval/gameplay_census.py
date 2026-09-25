@@ -2772,8 +2772,8 @@ TERMS: Final[Mapping[str, str]] = MappingProxyType(
         "by construction": (
             "a count a recorded setting forces to zero. While the setting is on the "
             "census checks the count is zero and stops with an error naming the "
-            "game and meeting if it is not, and the page says 0 by construction "
-            "instead of presenting a measured improvement."
+            "game and the meeting or tick if it is not, and the page says 0 by "
+            "construction instead of presenting a measured improvement."
         ),
         "n/a": "an empty denominator: nothing of that kind happened, so no rate exists.",
     }

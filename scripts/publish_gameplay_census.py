@@ -7,11 +7,12 @@ in the tree with zero model calls. ``--check`` recomputes both and exits 1 on
 drift, naming the stale file and the command that regenerates it.
 ``--set-dir DIR --json-stdout`` folds one directory (a candidate record, or a
 scratch rehearsal), prints that one section as JSON and writes nothing; it exits
-1 on a conformance breach, which names the set, seed and meeting.
+1 on a conformance breach, which names the set, the seed and the meeting or
+tick.
 
 Destinations are pre-flighted through ``scripts/_report_output.py`` before
-anything is computed, with every ``replays/**`` file, the recording roots
-themselves and every input the census reads declared as protected, so this
+anything is computed, with the recording root itself and every ``replays/**``
+file declared as protected (every input the census reads lives there), so this
 writer cannot be aimed at a recording directory whether or not the destination
 exists yet.
 

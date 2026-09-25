@@ -6962,7 +6962,7 @@
     "vent_witness_rule": "who sees a vent exit: under physical, only the room surfaced into."
   },
   "terms": {
-    "by construction": "a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and meeting if it is not, and the page says 0 by construction instead of presenting a measured improvement.",
+    "by construction": "a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and the meeting or tick if it is not, and the page says 0 by construction instead of presenting a measured improvement.",
     "era": "the recorded settings a group of games shares: its experiment settings, its observation delivery version, its substrate-flag stamp and its prompt versions. Games of different eras are never pooled.",
     "fresh kill": "the impostor's own victim, killed at most 3 ticks earlier in the same room, with no meeting in between.",
     "grace window": "the ticks after a regroup before the impostors' restarted kill cooldown runs out: from the tick after the meeting through the map's kill cooldown.",

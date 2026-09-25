@@ -23,7 +23,7 @@ This page is generated. Do not edit it by hand: run `uv run python scripts/publi
 * **inferred-visible rooms**: the rooms an impostor inside a vent can infer it sees: the vent's own room and its map neighbours, or the own room alone while any sabotage is active. Never the engine's own visibility.
 * **rebuttal**: a turn by a player who already spoke in the same meeting; the only such turn the meeting layer can produce is the bounded rebuttal.
 * **era**: the recorded settings a group of games shares: its experiment settings, its observation delivery version, its substrate-flag stamp and its prompt versions. Games of different eras are never pooled.
-* **by construction**: a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and meeting if it is not, and the page says 0 by construction instead of presenting a measured improvement.
+* **by construction**: a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and the meeting or tick if it is not, and the page says 0 by construction instead of presenting a measured improvement.
 * **n/a**: an empty denominator: nothing of that kind happened, so no rate exists.
 
 Each cell reads `numerator/denominator (rate)`. A cell whose count a recorded setting forces to zero reads `0/N by construction` while that setting is on, and every cell with nothing to count reads `n/a`.
