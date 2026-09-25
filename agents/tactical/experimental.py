@@ -8,7 +8,9 @@ never enter a model's evidence memory.
 
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
 
@@ -32,7 +34,10 @@ class TacticalExperimentOptions(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     crew_idle_policy: Literal["hub_wait", "patrol", "accompany"] = "hub_wait"
-    vent_exit_policy: Literal["target_distance", "observed_risk"] = "target_distance"
+    vent_exit_policy: Literal["target_distance", "observed_risk", "look_and_wait"] = (
+        "target_distance"
+    )
+    vent_entry_policy: Literal["any_body", "own_fresh_kill"] = "any_body"
     post_meeting_retarget: StrictBool = False
     self_report: StrictBool = False
     sabotage_threshold: Literal["six_sevenths", "two_thirds"] = "six_sevenths"
@@ -61,6 +66,31 @@ class TacticalExperimentOptions(BaseModel):
                 "contextual reporting conflicts with unconditional reporting"
             )
         return self
+
+
+#: Option values declared ahead of their behaviour. A policy built with one
+#: raises instead of running the default decision under the arm's name; the
+#: card that builds a value's behaviour deletes it here.
+UNBUILT_OPTION_VALUES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "vent_exit_policy": frozenset({"look_and_wait"}),
+        "vent_entry_policy": frozenset({"own_fresh_kill"}),
+    }
+)
+
+
+class UnbuiltTacticalOptionError(ValueError):
+    """A declared tactical option value whose behaviour does not exist yet."""
+
+
+def _refuse_unbuilt_options(options: TacticalExperimentOptions) -> None:
+    for field, unbuilt in UNBUILT_OPTION_VALUES.items():
+        value = getattr(options, field)
+        if value in unbuilt:
+            raise UnbuiltTacticalOptionError(
+                f"{field}={value!r} is declared but its policy behaviour is not "
+                "built; building a policy with it would run the default instead"
+            )
 
 
 def _visits(events: tuple[EpisodicEvent, ...]) -> dict[str, int]:
@@ -168,6 +198,7 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
     """Compare vent risk, route persistence, reporting and task pressure."""
 
     def __init__(self, *, agent_id: str, options: TacticalExperimentOptions) -> None:
+        _refuse_unbuilt_options(options)
         super().__init__(agent_id=agent_id)
         self.options = options
         self._announced_dead: frozenset[str] = frozenset()

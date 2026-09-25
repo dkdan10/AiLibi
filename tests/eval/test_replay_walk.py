@@ -25,12 +25,14 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
+from types import MappingProxyType
 from typing import NoReturn, cast
 
 import pytest
 from pydantic import TypeAdapter
 
 from api.replay_loader import ReplayLoader
+from experiments.tactical_gameplay import Roster, candidate_configs, run_candidate
 from engine.actions import Action
 from engine.entities import PlayerId, Role
 from engine.events import GameOverEvent
@@ -60,6 +62,8 @@ from eval.replay_walk import (
     walk_replay,
 )
 from llm.fake_provider import FakeProvider
+from orchestrator import experiment_config
+from orchestrator.experiment_config import ConfigLayer
 from orchestrator.game import (
     HeadlessGame,
     build_default_agent_factory,
@@ -1335,3 +1339,172 @@ def test_a_set_carrying_the_new_shape_passes_the_validity_gate(
     failed = [check.name for check in report.checks if not check.passed]
     assert failed == []
     assert report.passed
+
+
+# --------------------------------------------------------------------------- #
+# Stage-B fields: the engine helper threads or refuses, and a profile reads a  #
+# later field only in a layer it declares.                                     #
+# --------------------------------------------------------------------------- #
+
+_ARM_ROSTER = Roster(num_players=4, num_impostors=1, tasks_per_crewmate=1)
+_DECLARABLE: tuple[ConfigLayer, ...] = ("orchestrator", "tactical", "meeting")
+_ARM_SEED = 1000
+
+
+def _arm_profile(
+    *, threaded_layers: frozenset[ConfigLayer] = frozenset()
+) -> ReplayWalkConfig:
+    return ReplayWalkConfig(
+        profile="test-arms",
+        on_violation=_raise_violation,
+        verify_tick_hashes=True,
+        verify_meeting_pre_hashes=True,
+        verify_meeting_post_hashes=True,
+        missing_meeting_row="violation",
+        supports_experiments=True,
+        threaded_layers=threaded_layers,
+    )
+
+
+def _arm_walk(path: Path, config: ReplayWalkConfig) -> list[ReplayWalkEvent]:
+    return list(
+        walk_replay(
+            path,
+            seed=_ARM_SEED,
+            game_map=load_canonical_map(),
+            config=config,
+            **_ARM_ROSTER.model_dump(),
+        )
+    )
+
+
+def _first_step(path: Path, config: ReplayWalkConfig) -> ReplayWalkEvent:
+    """The walk's first event; a refusal before the first advance raises here."""
+
+    return next(
+        iter(
+            walk_replay(
+                path,
+                seed=_ARM_SEED,
+                game_map=load_canonical_map(),
+                config=config,
+                **_ARM_ROSTER.model_dump(),
+            )
+        )
+    )
+
+
+@pytest.fixture(scope="module")
+def arm_recordings(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Fake-provider recordings made on two arms that exist today."""
+
+    paths: dict[str, Path] = {}
+    for arm in ("workload", "patrol"):
+        path = tmp_path_factory.mktemp(arm) / f"replay-seed-{_ARM_SEED}.jsonl"
+        row = run_candidate(
+            seed=_ARM_SEED,
+            roster=_ARM_ROSTER,
+            config=candidate_configs()[arm],
+            replay_path=path,
+        )
+        assert row.error is None and row.completion_status == "completed"
+        paths[arm] = path
+    return paths
+
+
+def _with_recorded_setting(
+    source: Path, directory: Path, *, field: str, value: object
+) -> Path:
+    """A copy whose every stamped config row also carries ``field=value``."""
+
+    rows = [json.loads(line) for line in source.read_text().splitlines()]
+    stamped = 0
+    for row in rows:
+        if isinstance(row.get("experiment_config"), dict):
+            row["experiment_config"][field] = value
+            stamped += 1
+    assert stamped > 1  # every tick row and the footer
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / source.name
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return path
+
+
+def test_a_recording_on_an_older_arm_walks_with_no_layer_declared(
+    arm_recordings: dict[str, Path],
+) -> None:
+    for path in arm_recordings.values():
+        events = _arm_walk(path, _arm_profile())
+        assert isinstance(events[-1], WalkComplete)
+
+
+def test_a_walk_whose_engine_threading_omits_a_field_refuses_it(
+    arm_recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Planted: the helper patched to thread no engine field.
+    monkeypatch.setattr(experiment_config, "_THREADED_ENGINE_FIELDS", ())
+    with pytest.raises(
+        ValueError, match="redistribution_policy='least_remaining_work'"
+    ):
+        _first_step(arm_recordings["workload"], _arm_profile())
+
+
+_LATER_SETTINGS: list[tuple[str, object, ConfigLayer]] = [
+    ("vent_entry_policy", "own_fresh_kill", "tactical"),
+    ("vent_exit_policy", "look_and_wait", "tactical"),
+    ("report_body_handle_version", 1, "orchestrator"),
+    ("ballot_kill_row_version", 1, "meeting"),
+    ("impostor_ballot_version", 1, "meeting"),
+]
+
+
+@pytest.mark.parametrize(("field", "value", "layer"), _LATER_SETTINGS)
+def test_a_profile_reads_a_later_setting_only_in_a_declared_layer(
+    arm_recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    value: object,
+    layer: ConfigLayer,
+) -> None:
+    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+    path = _with_recorded_setting(
+        arm_recordings["patrol"], tmp_path / "copy", field=field, value=value
+    )
+    others = frozenset(item for item in _DECLARABLE if item != layer)
+    with pytest.raises(ValueError) as refused:
+        _first_step(path, _arm_profile(threaded_layers=others))
+    message = str(refused.value)
+    assert f"{field}={value!r}" in message and "'test-arms'" in message
+    events = _arm_walk(path, _arm_profile(threaded_layers=frozenset({layer})))
+    assert isinstance(events[-1], WalkComplete)
+
+
+def test_an_engine_setting_the_helper_does_not_thread_is_refused_by_any_profile(
+    arm_recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+    path = _with_recorded_setting(
+        arm_recordings["patrol"],
+        tmp_path / "copy",
+        field="vent_witness_rule",
+        value="physical",
+    )
+    every = frozenset(_DECLARABLE)
+    with pytest.raises(ValueError, match="vent_witness_rule='physical'"):
+        _first_step(path, _arm_profile(threaded_layers=every))
+
+
+def test_a_profile_declares_only_non_engine_layers_it_supports() -> None:
+    engine: frozenset[ConfigLayer] = frozenset({"engine"})
+    fmt: frozenset[ConfigLayer] = frozenset({"format", "tactical"})
+    for layers in (engine, fmt):
+        with pytest.raises(ValueError, match="declares"):
+            _arm_profile(threaded_layers=layers)
+    with pytest.raises(ValueError, match="does not support experimental"):
+        ReplayWalkConfig(
+            profile="test-arms",
+            on_violation=_raise_violation,
+            threaded_layers=frozenset({"tactical"}),
+        )
+    assert _arm_profile().threaded_layers == frozenset()

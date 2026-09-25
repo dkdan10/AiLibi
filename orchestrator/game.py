@@ -36,6 +36,7 @@ from collections.abc import Callable, Coroutine, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, cast, runtime_checkable
 
 from agents.base import AgentInterface, EventObservingAgent
@@ -111,7 +112,11 @@ from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
 from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
 from meetings.corroboration import corroboration_discipline_enabled
-from meetings.evidence_profile import MeetingEvidenceProfile
+from meetings.evidence_profile import (
+    CONFIG_ONLY_PROFILE_FIELDS,
+    EXPERIMENT_ENV_NAMES,
+    MeetingEvidenceProfile,
+)
 from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
     BodyDiscoveryRecord,
@@ -146,8 +151,11 @@ from observation.action_intent import ActionIntent
 from observation.body_ids import public_body_id
 from observation.packet import EventObservationBatch, ObservationPacket
 from orchestrator.experiment_config import (
+    FIELD_LAYER,
     RecordedExperimentConfig,
+    engine_arguments,
     normalize_experiment_config,
+    refuse_pending_values,
 )
 from orchestrator.observation_delivery import event_observation_batches
 from orchestrator.replay_integrity import LEGACY_SKIP_CONFIDENCE_THRESHOLD
@@ -497,6 +505,68 @@ def _lever_arm_versions(set_name: str, lever_key: str) -> Mapping[str, str]:
     }
 
 
+# The experiment-arm stamp registry: a meeting-layer config field whose ON value
+# re-bodies a set's own templates, mapped to the templates it re-bodies. It is
+# keyed on the RECORDED config rather than on an environment lever, so a
+# recording serves an arm's stamps only when its config carries the arm. Each
+# stamp is ``_lever_arm_versions``' form with a suffix derived from the field
+# and value (:func:`experiment_arm_suffix`), never a hand-written string. Empty
+# until an arm card registers its templates.
+EXPERIMENT_ARM_TEMPLATES: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType({})
+
+
+def experiment_arm_suffix(field: str, value: object) -> str:
+    """The stamp suffix for a config field's ON value: drop ``_version``, append ``_v<value>``.
+
+    ``ballot_kill_row_version`` at 1 derives ``ballot_kill_row_v1``. A field not
+    named ``*_version``, or a value that is not a positive integer, raises: the
+    suffix is derived from the field, never chosen.
+    """
+
+    stem = field.removesuffix("_version")
+    if stem == field or not stem:
+        raise ValueError(
+            f"an experiment-arm stamp derives from a *_version field; {field!r} is not one"
+        )
+    if type(value) is not int or value < 1:
+        raise ValueError(
+            f"an experiment-arm stamp needs a positive integer version, got {value!r}"
+        )
+    return f"{stem}_v{value}"
+
+
+def enabled_experiment_arms(
+    config: RecordedExperimentConfig | None,
+) -> tuple[tuple[str, object], ...]:
+    """The registered arms a recorded config turns ON, in field-declaration order."""
+
+    if config is None:
+        return ()
+    return tuple(
+        (field, getattr(config, field))
+        for field, info in RecordedExperimentConfig.model_fields.items()
+        if field in EXPERIMENT_ARM_TEMPLATES and getattr(config, field) != info.default
+    )
+
+
+def _experiment_arm_entry(
+    set_name: str, field: str, value: object
+) -> Mapping[str, str]:
+    """One experiment arm's full version mapping for ``set_name``.
+
+    The templates the arm re-bodies carry the derived stamp; every other
+    template keeps the set's default value, like a lever overlay's entry.
+    """
+
+    stamps = _lever_arm_versions(set_name, experiment_arm_suffix(field, value))
+    return {
+        template: stamps[template]
+        if template in EXPERIMENT_ARM_TEMPLATES[field]
+        else default
+        for template, default in PROMPT_VERSION_SETS[set_name].items()
+    }
+
+
 # The reporter-voice ON-arm version registry, served by
 # :func:`prompt_versions_for_set` only while the default-OFF
 # ``reporter_reasoning`` lever is ON. The lever swaps no template FILE: it
@@ -662,6 +732,7 @@ def prompt_versions_for_set(
     prompt_set: str | None = None,
     *,
     env: Mapping[str, str] | None = None,
+    experiment_config: RecordedExperimentConfig | None = None,
 ) -> Mapping[str, str]:
     """Return the recorded ``prompt_versions`` mapping for a prompt set.
 
@@ -693,6 +764,14 @@ def prompt_versions_for_set(
     3. the composite is computed by a fold over the enabled set, not by a
        pairwise table, so a third arm costs a registration and no new branch.
 
+    ``experiment_config`` folds the experiment arms of
+    :data:`EXPERIMENT_ARM_TEMPLATES` the recorded config turns ON after the
+    lever overlays, in field-declaration order, on the same per-template rule.
+    With no config, or a config that turns no registered arm ON, the result is
+    the lever fold's alone, so every registered set still returns its default
+    mapping by identity. The fold stamps any registered set; an arm card whose
+    block exists only in some sets' templates refuses the others itself.
+
     One constraint the fold cannot enforce and the next arm author must respect:
     an arm that swaps in a variant FILE serves a body written independently of
     every sibling, so a sibling whose block lives in the DEFAULT body does not
@@ -705,6 +784,7 @@ def prompt_versions_for_set(
 
     name = resolve_prompt_set(prompt_set, env=env)
     enabled = enabled_prompt_version_overlays(env)
+    arms = enabled_experiment_arms(experiment_config)
     try:
         default = PROMPT_VERSION_SETS[name]
     except KeyError as exc:
@@ -713,10 +793,12 @@ def prompt_versions_for_set(
             f"Unknown prompt set {name!r}: no version registry entry "
             f"(known sets: {known})"
         ) from exc
-    if not enabled:
+    if not enabled and not arms:
         return default
-    entries = [_overlay_entry(key, name) for key in enabled]
-    if len(enabled) == 1:
+    entries = [_overlay_entry(key, name) for key in enabled] + [
+        _experiment_arm_entry(name, field, value) for field, value in arms
+    ]
+    if len(entries) == 1:
         return entries[0]
     # PER-TEMPLATE, and from each contributing arm's OWN value rather than from
     # the default: an arm that swaps in a variant FILE carries that file's own
@@ -1329,6 +1411,7 @@ def build_default_meeting_runner(
     deadline: RunDeadline | None = None,
     env: Mapping[str, str] | None = None,
     public_map: PublicMapView | None = None,
+    profile: MeetingEvidenceProfile | None = None,
 ) -> DefaultMeetingRunner:
     """Construct the production default meeting runner (DESIGN.md §5.1, §11.4).
 
@@ -1363,6 +1446,18 @@ def build_default_meeting_runner(
     not share a runner across a tournament. A fresh per-game budget may have a
     shared parent to enforce cumulative limits. An optional tournament deadline
     cancels the entire meeting and retains its calls instead of defaulting a turn.
+
+    ``profile`` serves a declared experiment config's meeting profile
+    (:func:`meetings.evidence_profile.profile_from_config`) in place of the four
+    environment switches, and the stamp fold of :func:`prompt_versions_for_set`
+    reads the same profile, so the versions a runner records and the profile it
+    renders come from one source. An environment exporting any of those
+    switches ON beside a declared profile raises: the declared config is then
+    the only source. The config-only ballot fields reach a runner only this way,
+    and a profile carrying a value the pending guard lists is refused. An
+    explicit ``prompt_versions`` pin, or the public-account versions, bypass
+    the experiment-arm fold; an arm card that registers templates refuses
+    those combinations itself.
     """
 
     # Provenance must match the rendered set (DESIGN.md §11.4). Resolve the
@@ -1377,7 +1472,22 @@ def build_default_meeting_runner(
     frozen_env = dict(os.environ if env is None else env)
     frozen_flags = substrate_flag_snapshot(frozen_env)
     active_prompt_set = resolve_prompt_set(env=frozen_env)
-    profile = MeetingEvidenceProfile.from_environment(frozen_env)
+    ambient_profile = MeetingEvidenceProfile.from_environment(frozen_env)
+    if profile is None:
+        profile = ambient_profile
+    else:
+        exported = sorted(
+            name
+            for name, field in EXPERIMENT_ENV_NAMES.items()
+            if getattr(ambient_profile, field) is not None
+        )
+        if exported:
+            raise ValueError(
+                "a declared meeting profile is the one source of the meeting "
+                f"experiments, but the environment also exports {exported} ON; "
+                "unset them or build the runner from the environment alone"
+            )
+    refuse_pending_values(profile.model_dump(), source="meeting profile")
     if (
         profile.evidence_reasoning_version == 2
         or profile.public_account_version is not None
@@ -1421,7 +1531,11 @@ def build_default_meeting_runner(
         if prompt_versions is not None
         else account_versions
         if account_versions is not None
-        else prompt_versions_for_set(active_prompt_set, env=frozen_env)
+        else prompt_versions_for_set(
+            active_prompt_set,
+            env=frozen_env,
+            experiment_config=_profile_arm_config(profile),
+        )
     )
     if account_versions is not None and dict(resolved_versions) != dict(
         account_versions
@@ -1516,6 +1630,24 @@ def build_default_meeting_runner(
         public_map=public_map
         if public_map is not None
         else public_map_from_engine_map(load_canonical_map()),
+    )
+
+
+def _profile_arm_config(profile: MeetingEvidenceProfile) -> RecordedExperimentConfig:
+    """The meeting-layer arms a runner's profile carries, as a config to fold stamps from.
+
+    The profile's fields are the config's meeting layer, so the stamp fold reads
+    the values the runner renders with and no second source. Version-2 evidence
+    and account profiles need experiment format 2, as they do in a recording.
+    """
+
+    needs_format_two = (
+        profile.evidence_reasoning_version == 2
+        or profile.public_account_version is not None
+        or profile.attributed_testimony_version is not None
+    )
+    return RecordedExperimentConfig.model_validate(
+        {"format_version": 2 if needs_format_two else 1, **profile.model_dump()}
     )
 
 
@@ -2225,6 +2357,11 @@ class HeadlessGame:
                 "explicit substrate_flags disagree with DefaultMeetingRunner"
             )
         experiment = experiment_config or RecordedExperimentConfig()
+        # Re-checked here because ``model_construct`` skips validation.
+        refuse_pending_values(
+            {field: getattr(experiment, field) for field in FIELD_LAYER},
+            source="experiment_config",
+        )
         selected_temporal = temporal_observation_version
         if selected_temporal is None:
             selected_temporal = (
@@ -2262,6 +2399,11 @@ class HeadlessGame:
                 served_version = getattr(profile, key)
                 if recorded_version is not None and recorded_version != served_version:
                     raise ValueError(f"experiment_config disagrees with runner {key}")
+            # A config-only field has no environment switch that could have set
+            # it on the runner alone, so the two must be equal both ways.
+            for key in CONFIG_ONLY_PROFILE_FIELDS:
+                if getattr(experiment, key) != getattr(profile, key):
+                    raise ValueError(f"experiment_config disagrees with runner {key}")
             payload = experiment.model_dump()
             payload.update(profile.model_dump())
             if (
@@ -2286,6 +2428,7 @@ class HeadlessGame:
                 "new evidence and public accounts require temporal observations version 2"
             )
         self._experiment_config = normalize_experiment_config(experiment)
+        self._engine_arguments = engine_arguments(self._experiment_config)
         self._deadline = deadline
         self._seed = seed
         self._game_map = game_map
@@ -2568,11 +2711,7 @@ class HeadlessGame:
                 actions,
                 game_map=self._game_map,
                 rng_hash_policy=self._rng_hash_policy,
-                redistribution_policy=(
-                    self._experiment_config.redistribution_policy
-                    if self._experiment_config is not None
-                    else "lowest_id"
-                ),
+                **self._engine_arguments,
             )
             last_events = tuple(events)
             if replay is not None:
@@ -2679,7 +2818,14 @@ class HeadlessGame:
                     dead_ids=dead_ids,
                 )
         trigger, triggering_body_id, trigger_kind = _build_meeting_trigger(
-            state=state, events=events, temporal_observations=temporal_observations
+            state=state,
+            events=events,
+            temporal_observations=temporal_observations,
+            report_body_handle_version=(
+                self._experiment_config.report_body_handle_version
+                if self._experiment_config is not None
+                else None
+            ),
         )
         meeting_id = f"{self._game_id()}:meeting-{meeting_index}"
         side_records: _MeetingSideRecords | None = None
@@ -3401,6 +3547,7 @@ def _build_meeting_trigger(
     state: WorldState,
     events: Sequence[EngineEvent],
     temporal_observations: bool = False,
+    report_body_handle_version: Literal[1] | None = None,
 ) -> tuple[MeetingTrigger, BodyId | None, Literal["report", "emergency"]]:
     """Construct a :class:`MeetingTrigger` from the engine's transition events.
 
@@ -3441,8 +3588,17 @@ def _build_meeting_trigger(
     trigger's ``kind``, consumed by the Task 10.8 post-meeting pacing
     notification (an ``emergency`` meeting spends its caller's one
     emergency call per game).
+
+    ``report_body_handle_version`` is the recorded config's body-handle arm.
+    ``None`` builds today's text byte for byte; any other value raises, because
+    the substitution it names is not built yet.
     """
 
+    if report_body_handle_version is not None:
+        raise ValueError(
+            f"report_body_handle_version={report_body_handle_version!r} names a "
+            "trigger text that is not built yet"
+        )
     trigger_event: MeetingTriggeredEvent | None = None
     for event in events:
         if isinstance(event, MeetingTriggeredEvent):
@@ -4434,6 +4590,7 @@ def _tactical_experiment_options(
     return TacticalExperimentOptions(
         crew_idle_policy=config.crew_idle_policy,
         vent_exit_policy=config.vent_exit_policy,
+        vent_entry_policy=config.vent_entry_policy,
         post_meeting_retarget=config.post_meeting_retarget,
         self_report=config.self_report,
         sabotage_threshold=config.sabotage_threshold,
@@ -4484,6 +4641,7 @@ __all__ = [
     "DEFAULT_PROMPT_VERSIONS",
     "DEFAULT_TASKS_PER_CREWMATE",
     "DefaultMeetingRunner",
+    "EXPERIMENT_ARM_TEMPLATES",
     "HEADLESS_MEETING_DEADLINES",
     "HeadlessGame",
     "HeadlessGameResult",
@@ -4508,6 +4666,8 @@ __all__ = [
     "apply_meeting_result",
     "build_default_agent_factory",
     "build_default_meeting_runner",
+    "enabled_experiment_arms",
     "enabled_prompt_version_overlays",
+    "experiment_arm_suffix",
     "prompt_versions_for_set",
 ]

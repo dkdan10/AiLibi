@@ -222,6 +222,12 @@ from engine.world import Map, WorldState
 from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
 from observation.service import ObservationService
+from orchestrator.experiment_config import (
+    FIELD_LAYER,
+    ConfigLayer,
+    engine_arguments,
+    wave_settings,
+)
 from orchestrator.game import apply_meeting_result
 from orchestrator.policy_reconstruction import (
     PolicyReconstruction,
@@ -246,6 +252,13 @@ from orchestrator.seeder import seed_initial_state
 from orchestrator.replay_integrity import ReplayIntegrityValidator
 
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
+
+# The layers a profile may declare in ``threaded_layers``. Engine fields are
+# threaded (or refused) by ``engine_arguments`` at every advance, and the format
+# field is read by every walk.
+_DECLARABLE_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
+    {"orchestrator", "tactical", "meeting"}
+)
 
 WalkViolationKind: TypeAlias = Literal[
     "duplicate_meeting_rows",
@@ -333,6 +346,15 @@ class ReplayWalkConfig:
     no-check profile's declared refusal with an unclassifiable ``ValueError``
     and charged that profile the reconstruction's cost. Default ``False``, so a
     profile that wants the re-decision asks for it.
+    ``supports_experiments`` covers every experiment field and value that
+    existed before the Stage-B wave. ``threaded_layers`` names the layers
+    besides the engine whose later fields the profile's consumer reads: before
+    its first advance, the walk refuses a recording that sets a Stage-B field,
+    or a Stage-B value of an older field, in any other layer, naming the field
+    and the profile. Engine-layer fields reach every advance through
+    :func:`orchestrator.experiment_config.engine_arguments`, which refuses one
+    it does not thread. Every profile declares no layer until its owner reviews
+    what its consumer reads.
     """
 
     profile: str
@@ -354,6 +376,21 @@ class ReplayWalkConfig:
     supports_temporal_observations: bool = False
     supports_experiments: bool = False
     reconstruct_v3_policies: bool = False
+    threaded_layers: frozenset[ConfigLayer] = frozenset()
+
+    def __post_init__(self) -> None:
+        extra = self.threaded_layers - _DECLARABLE_LAYERS
+        if extra:
+            raise ValueError(
+                f"replay profile {self.profile!r} declares {sorted(extra)}; a "
+                f"profile declares only {sorted(_DECLARABLE_LAYERS)} (engine "
+                "fields go through the engine-arguments helper)"
+            )
+        if self.threaded_layers and not self.supports_experiments:
+            raise ValueError(
+                f"replay profile {self.profile!r} declares layers it reads but "
+                "does not support experimental recordings"
+            )
 
 
 @dataclass(frozen=True)
@@ -506,6 +543,17 @@ def _walk_replay(
         raise ValueError(
             f"replay profile {config.profile!r} does not support experimental recordings"
         )
+    if experiment is not None:
+        for field, value in wave_settings(experiment):
+            layer = FIELD_LAYER[field]
+            if layer != "engine" and layer not in config.threaded_layers:
+                raise ValueError(
+                    f"replay profile {config.profile!r} does not read the recorded "
+                    f"{field}={value!r}: its {layer} layer is not among the layers "
+                    "the profile declares"
+                )
+    # Engine-layer fields: the helper threads them or refuses, before any advance.
+    engine = engine_arguments(experiment)
     if (
         recorded_temporal_observation_version(entries) is not None
         and not config.supports_temporal_observations
@@ -633,14 +681,7 @@ def _walk_replay(
                         tick=mismatch.tick,
                     ),
                 )
-        state, raw_events = advance_tick(
-            state,
-            actions,
-            game_map=game_map,
-            redistribution_policy=experiment.redistribution_policy
-            if experiment
-            else "lowest_id",
-        )
+        state, raw_events = advance_tick(state, actions, game_map=game_map, **engine)
         events = tuple(raw_events)
         actual = _state_hash(state) if hash_needed else None
         if config.verify_tick_hashes and actual != entry.state_hash:
