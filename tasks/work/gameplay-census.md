@@ -1,6 +1,6 @@
 # A1: the gameplay census report
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -121,6 +121,29 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction (round 3): the grace window and the ballot floor each follow their source,
+  planted. A carrier walked on a map whose kill cooldown is 6 breaches on a kill at T+6, not on
+  one at T+7, and publishes `grace_window_ticks` 6
+  (`test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds`). The loader loads its map
+  once, every game walks on it, and the carrier's cooldown follows a planted map
+  (`test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads`). A meeting that recorded
+  `skip_confidence_threshold` 0.75 reads `ballot_floor` 0.75, and one that recorded none reads the
+  tally's historical 0.6 (`test_the_ballot_floor_is_the_threshold_the_meeting_recorded`). The
+  other constants bound from a source are planted the same way
+  (`test_the_constants_bound_from_a_source_follow_it`,
+  `test_the_own_kill_join_reads_the_scorecards_clock_offset`). Each probe is red with a literal
+  and green with the read (Results, Review corrections, round 3).
+- [x] Review correction (round 3): with the arm spine merged, the census-local defaults for five
+  fields and the tripwire test that pinned them are deleted, one history line each. Every default
+  is read from `RecordedExperimentConfig`'s own declaration (`_field_default`), and the
+  classification is held equal to the model's fields both ways. Planted:
+  `test_a_classification_naming_an_undeclared_field_fails`,
+  `test_a_classified_field_the_config_does_not_declare_has_no_default` and
+  `test_a_default_follows_the_config_models_declaration`. The walk-profile item below is closed.
+- [x] Review correction (round 3): the Delivery sentence names the house trailer,
+  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, and every commit of this pass ends
+  with it. Mechanism: the commit bodies of this pass, read back after the push. Results names the
+  trailer each earlier commit carries.
 - [x] Review correction (round 2): on baseline 9 the two added cells that count what a setting's
   own mechanism did, among things every era has, read `n/a`, not a measured 0. "Vent trips ended
   by a regroup" is counted only in games recorded with `meeting_reset = hub_with_grace`.
@@ -154,7 +177,7 @@ over hand-built carriers, with no replay on disk.
   recomputes rates from pooled numerators and denominators. Enforced by a test that walks the
   carrier's fields and fails on any string-typed field outside a named allow-list of id, room, kind
   and label fields. Planted: a carrier class with a `rationale: str` field fails it.
-- [ ] **Walk profile and thread-or-refuse.** The census walks with
+- [x] **Walk profile and thread-or-refuse.** The census walks with
   `replace(_CURRENT_REPORT_WALK_CONFIG, profile="gameplay-census",
   missing_meeting_row="violation", reject_duplicate_meeting_rows=True, require_terminal_tick=True)`,
   threads engine-layer arms through the spine's engine-arguments helper and layer classification,
@@ -163,6 +186,18 @@ over hand-built carriers, with no replay on disk.
   `RecordedExperimentConfig` field as read by a named cell predicate or deliberately not read.
   Enforced by a test enumerating `RecordedExperimentConfig.model_fields`. Planted: a classification
   with one field removed fails that test, and a carrier with an unknown recorded arm key raises.
+  Mechanism: `CENSUS_THREADED_LAYERS` (orchestrator, tactical, meeting) set in the census's own
+  `replace`; the walk's layer check before its first advance; the spine's `engine_arguments`,
+  which every advance of `walk_replay` takes; and `FIELD_CLASSIFICATION` held equal to the
+  model's fields both ways. Proved by
+  `test_the_walk_profile_is_the_current_report_profile_plus_three_refusals`,
+  `test_the_census_declares_its_own_layers_every_one_it_classifies`,
+  `test_the_census_walk_reads_every_later_setting_it_declares` (a full-config copy of one
+  committed game walks with every hash verified, and its era reads each recorded value),
+  `test_a_census_walk_without_a_layer_refuses_its_setting_before_advancing` (five settings),
+  `test_the_census_walk_takes_its_engine_settings_from_the_spines_helper`,
+  `test_a_recorded_setting_no_one_declared_is_refused_before_advancing` and
+  `test_a_declared_setting_the_census_has_not_classified_is_refused`.
 - [x] **The figures reproduce.** The committed JSON reproduces the Evidence table: 20/849, 73/587,
   313/512 with 251 from the exit room and 62 only from the room left, 330/355, 13/89, 26/56, 330
   meetings with vent proof and 346 without of 676, 326 vent-band impostor ejections (253 exit only,
@@ -340,9 +375,9 @@ labels and never rewrites. No scorecard cell and no D1 amendment (R13). No ML co
 `.github/pull_request_template.md` filled: Summary, Definition of done, Decisions and Questions,
 the body ending with the Claude Code attribution line. Merge or fast-forward, never squash; never
 amend a pushed commit; take `main` by merging it in, never by rebasing. Every commit body ends
-`Card: tasks/work/gameplay-census.md` immediately followed by
-the `Co-Authored-By:` attribution line the worker's own session supplies (never a model name copied from this card). No agent posts PR comments. The merge is
-the owner's.
+`Card: tasks/work/gameplay-census.md` immediately followed by the exact line
+`Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the house trailer, verbatim, whichever
+model the worker session runs). No agent posts PR comments. The merge is the owner's.
 
 **Status and the task index.** `tasks/README.md` is the orchestrator's: its inventory sentence is
 derived from every card's `**Status:**`, so the worker fills Results and leaves the Status line to
@@ -430,6 +465,7 @@ engine-arguments helper and `FIELD_LAYER`, declaring the census's own `threaded_
 stubbing it. The card therefore stays `active`, and the pull request is open for review. When the
 spine lands, `main` is merged in and three things finish the item: the `threaded_layers` declaration,
 the refusal test, and the equality form of the classification test (see Decisions, item 3).
+Review round 3 finished all three after the spine merged (Review corrections, round 3).
 
 **References.** `docs/architecture.md` on layering: `eval/` is an offline reader over the engine and
 the orchestrator, `agents/` is untouched, and the four import-linter contracts are kept. It also
@@ -541,6 +577,7 @@ things, and the difference is fully attributed:
    historical defaults sit in `_UNDECLARED_DEFAULTS`, and every other default is read from the model.
    `test_the_names_read_before_the_spine_declares_them` pins the five as exactly the difference, so
    the spine's merge turns it red and forces the retirement. This is not a stub of any spine symbol.
+   (Retired in review round 3, after the spine merged; see Review corrections, round 3.)
 4. The kill-tick handle pattern is a census constant pinned equal to
    `experiments.held_out_prefixes.LEGACY_BODY_HANDLE_PATTERN` by a test. `eval/` does not import the
    held-out generator.
@@ -690,7 +727,7 @@ Five more perturbations outside the two files each went red, with each file rest
 - the availability tree without the census pair.
 
 **Limitations.**
-- The spine half of the walk-profile item is open (above).
+- The spine half of the walk-profile item is open (above). (Closed in review round 3.)
 - Fifteen cells read `n/a` on baseline 9 because no committed recording carries a regroup,
   a rebuttal, a served own-kill row, an in-place surfacing or a trip that waited. Their meaning rests on planted carriers until an
   arm card's end-to-end test and the round-1 record fill them. (At this head. Review round 2
@@ -1107,3 +1144,257 @@ No `docs/artifacts.md` row moved: the census row states files, not bytes, and no
   1, and its harness is scratch.
 - The two pre-registered before values above wait for the orchestrator.
 - The walk-profile item is still open until the spine merges (State, above).
+
+### Review corrections, round 3 (2026-09-25)
+
+**State: done.** The three round-3 findings are repaired, and the three `Review correction (round
+3)` items at the top of Acceptance record them. The arm spine merged into `main` (`8df69e15`), so
+the walk-profile item is finished and ticked, and no box is left open. The Status line flips to
+`done` in this pass on the dispatch's instruction. `tasks/README.md`'s inventory sentence is
+re-derived with `scripts/validate_task_docs.py`: 88 cards, 9 ready, 79 done.
+
+**References.** The walk follows the arm spine's contract as `docs/experiment-arms.md` states it
+(the eight fields, what a missing key means, the one engine-arguments helper and a profile's
+`threaded_layers`), under decision memo sections 0.3 (items 2, 6 and 9) and 3.4 (this card's
+brief). `docs/architecture.md`'s layering is unchanged: `eval/` reads the orchestrator's config
+module and never touches `agents/`, and the four import-linter contracts are kept.
+
+**Merging `main`.** `b5772553` merges `origin/main` at `52a6ac58` into the branch, never a rebase.
+That brings docs-truth-typed-trigger (#482), the arm spine (#484), and the commit that states the
+house trailer in eight other cards. The one conflict was `tasks/README.md`'s derived sentence,
+re-derived for this card still active (9 ready, 1 active, 78 done). `tests/_helpers/committed.py`
+merged without conflict; A3's trigger-kind region and this card's census cache region are both
+kept. From here the diff base is `52a6ac58`: `git diff 52a6ac58 <head>` shows only this card's
+work.
+
+**Finding 1: the grace window and the ballot floor read their sources, but no test pinned it.**
+Every committed map and meeting holds the value a literal would, so a literal passed every test.
+Each source now moves in a planted case, and the output follows:
+- The fold: a carrier walked on a map whose kill cooldown is 6. A kill at T+6 after a regroup
+  raises, one at T+7 counts as outside the window, and the published `grace_window_ticks` reads 6
+  (`test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds`).
+- The loader: its map loader is stubbed to hand out a map whose cooldown is 6. The carrier's
+  cooldown follows it, the map is loaded once, and every game walks on it
+  (`test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads`).
+- The ballot floor: one meeting's recorded `skip_confidence_threshold` is moved to 0.75, and
+  `ballot_floor` reads 0.75. With nothing recorded it reads the tally's historical 0.6
+  (`test_the_ballot_floor_is_the_threshold_the_meeting_recorded`).
+
+The same lesson applies to every other constant the module binds from a source, and each is
+planted the same way:
+- `test_the_constants_bound_from_a_source_follow_it` executes the module's source a second time,
+  under its own name, after moving each source. The button cooldown follows the crew policy's,
+  the two set lists follow the scorecard's, the defaults table follows the config model's
+  declaration, and the walk profile follows the current-report profile it is a `replace` of.
+  The imported module is untouched.
+- `test_the_own_kill_join_reads_the_scorecards_clock_offset` moves the agent clock offset, and the
+  citation that joins a kill moves with it.
+
+**Finding 2: the spine has declared the fields the census read ahead of it.**
+- `_UNDECLARED_DEFAULTS` and `test_the_names_read_before_the_spine_declares_them` are deleted
+  (craft rule 3). Each leaves one history line: the docstring of `_field_default`, and a comment
+  above the classification tests.
+- `_field_default` reads every default from `RecordedExperimentConfig`'s own declaration. It
+  raises on a name the census has not classified, and on a classified name the config does not
+  declare.
+- The classification test is now its equality form: the recorded fields and `FIELD_CLASSIFICATION`
+  name the same set, both ways. The planted cases are a classification missing `meeting_reset`
+  and one naming an undeclared `hidden_travel`.
+- The census reads arm values as before. The loader dumps the recorded config, where the spine's
+  serializer omits each Stage-B field at its default, and a missing key reads the declared default.
+  No predicate builds a `RecordedExperimentConfig`.
+- The walk profile declares its own `threaded_layers` in its `replace`: `CENSUS_THREADED_LAYERS`
+  is orchestrator, tactical and meeting. That is every layer a profile can declare, because the
+  census classifies every field in them. The declaration is the census's own, so record plumbing's
+  change to the current-report profile's layers cannot reach it.
+- Engine-layer settings reach each advance through the spine's `engine_arguments`, inside
+  `walk_replay`. The census walks nothing else.
+
+The walk-profile proofs (Acceptance names each test):
+- **A full-config copy is read.** One committed game (`samples/4p1i` seed 5) is copied with every
+  tick row and its footer recording each Stage-B setting outside the engine layer at its ON value.
+  The settings are derived from the spine's own `wave_settings`, not listed by hand. The pending
+  set is patched open. The census walk verifies every hash, the facts equal the committed game's,
+  and the era reads each recorded value.
+- **A missing layer refuses.** The census profile with one layer taken out refuses that layer's
+  setting before its first advance, naming the field, the value and `'gameplay-census'`. The walk
+  yields no event. This runs once for each of the five settings.
+- **Engine settings come from the helper.** A copy recording `redistribution_policy =
+  least_remaining_work` walks, and its era reads the value. With the helper patched to thread no
+  engine field, the same copy is refused before any event.
+- **Unknown settings are refused.** A recorded key the config does not declare is refused before
+  any event. A stand-in field added to the config model, which the census never classified, raises
+  `GameplayCensusFieldError`.
+- **End to end.** With `report_body_handle_version = 1` recorded, the committed opening that
+  carries the kill-tick handle raises the body-handle guard, naming set, seed and meeting.
+  Without that setting the same game folds.
+
+Decisions made while repairing it:
+1. The full-config recording is a copy of a committed game, not of a fake-provider recording as
+   the spine card suggests for its profile owners. The committed game's prompts carry the real
+   kill-tick handle, so a recorded setting can be carried to its guard end to end, and the copy
+   reuses the cached loader facts it is compared with.
+2. `vent_witness_rule = physical` is not stamped, and no census test depends on which arms are
+   still pending. The helper refuses `physical` until the physical-witness card threads it, and
+   the arm cards cannot edit this file. The engine proof patches the helper instead. The pending
+   set is opened with `raising=False`, so the tests keep working once the ballot card deletes
+   `WAVE_ARMS_PENDING`.
+3. The census declares the meeting layer although it deliberately reads no predicate from
+   `impostor_ballot_version`. Its counts read the recorded ballots, and the tally does not enforce
+   that setting, so the classification's reason holds under either value.
+
+**Finding 3: the Delivery sentence.** It now names the exact house line,
+`Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, in the wording `52a6ac58` gave the
+eight other open cards. This pass's commits end with it: `b5772553`, `3283181f`, `420e95f8` and
+the card commit after them. Earlier commits are pushed and are never rewritten:
+- `612bbeaa`, `d75ff36c`, `9800b718` and `727baa84` carry
+  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`;
+- `f91aa8eb`, `a0403021`, `64b9ef28` and `ea1e3aa1` carry
+  `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
+
+**The neuter pass.** A scratch harness (not shipped) applied each mutant on disk as one exact span
+of `eval/gameplay_census.py`. It ran both census suites with `-x`, then restored the file from a
+copy taken before the pass, never from git. The sha256 of the module and its test file matched
+before and after every pass.
+
+"Before" means the pre-round module and tests at the merged head `b5772553`, with only the retired
+tripwire deselected. "After" means `420e95f8`: the module of `3283181f` and the final tests. The
+before column is the finding's evidence reproduced: the verifiers' three probes and nine more of
+the same kind were all green.
+
+| probe | before | after | the test that turns red |
+|---|---|---|---|
+| the fold's window as the literal 4 | green | red | `test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds` |
+| the published window from `_constants(4)` | green | red | the same |
+| the constants table's window as 4 | green | red | the same |
+| `ballot_floor=0.6` | green | red | `test_the_ballot_floor_is_the_threshold_the_meeting_recorded` |
+| the loader's cooldown as 4 | green | red | `test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads` |
+| each game walked on a second map load | green | red, second run | the same |
+| the button cooldown as 6 | green | red | `test_the_constants_bound_from_a_source_follow_it` |
+| the set list as a literal | green | red | the same |
+| the nine-player list as a literal | green | red | the same |
+| the defaults table as a literal | green | red | the same |
+| the clock offset as 1 | green | red | `test_the_own_kill_join_reads_the_scorecards_clock_offset` |
+| the walk profile as a literal `ReplayWalkConfig` with the same flags | green | red | `test_the_constants_bound_from_a_source_follow_it` |
+
+This round's production lines:
+
+| probe | after | the test that turns red |
+|---|---|---|
+| the classification check dropped, or its raise made `pass` (2) | red | `test_a_default_is_read_only_for_a_classified_field` |
+| the declaration check negated | red | the module does not import (8 collection errors) |
+| the declaration raise made `pass` | red | `test_a_classified_field_the_config_does_not_declare_has_no_default` |
+| one default read from a literal | red | `test_a_default_follows_the_config_models_declaration` |
+| one of the three layers dropped (3) | red | `test_the_census_declares_its_own_layers_every_one_it_classifies` |
+| `threaded_layers` left out of the `replace`, inherited, or empty (3) | red | `test_the_walk_profile_is_the_current_report_profile_plus_three_refusals` |
+| the `ConfigLayer` import dropped | red | `uv run mypy` (the name is an annotation only) |
+
+Totals: 12 probes red after and green before, and 12 more over this round's lines, all red. Two
+probes first came back green on the after side:
+- Each game walked on a second map load. The stub handed out the same planted map on every call.
+  The test now also requires that the map is loaded once, and the second run is red.
+- The walk-profile probe was added after the first pass, when a scan of the module's constants
+  bound from an imported name found the profile beside the three already planted. Its first run
+  was green, and `420e95f8` extends the re-execution test to move the current-report profile. The
+  final pass is red.
+
+`__all__`'s new entry is not mutated, as in rounds 1 and 2.
+
+**Changed expectations.** No test was skipped or weakened. The one deletion is the tripwire,
+retired as the finding directs.
+- `unclassified` becomes `classification_problems`, which reports both directions.
+  `test_a_classification_missing_one_field_fails` now expects `"unclassified meeting_reset"`
+  instead of `"meeting_reset"`: the same planted case, in the new message shape.
+- The walk-profile test gains `threaded_layers` in its `replace`, and asserts the three
+  verification flags the full-config proof relies on.
+
+**Tests added.** The two census suites go from 197 tests to 216. The twenty new tests are:
+- `test_the_census_declares_its_own_layers_every_one_it_classifies`;
+- `test_a_classification_naming_an_undeclared_field_fails`;
+- `test_a_default_follows_the_config_models_declaration`;
+- `test_a_classified_field_the_config_does_not_declare_has_no_default`;
+- `test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds`;
+- `test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads`;
+- `test_the_constants_bound_from_a_source_follow_it`;
+- `test_the_own_kill_join_reads_the_scorecards_clock_offset`;
+- `test_the_ballot_floor_is_the_threshold_the_meeting_recorded`;
+- `test_the_later_settings_cover_every_layer_the_census_declares`;
+- `test_the_census_walk_reads_every_later_setting_it_declares`;
+- `test_the_recorded_body_handle_setting_reaches_its_guard`;
+- `test_a_census_walk_without_a_layer_refuses_its_setting_before_advancing`, five cases;
+- `test_the_census_walk_takes_its_engine_settings_from_the_spines_helper`;
+- `test_a_recorded_setting_no_one_declared_is_refused_before_advancing`;
+- `test_a_declared_setting_the_census_has_not_classified_is_refused`.
+
+**Every figure, re-measured at the merged head.** On the merged tree,
+`uv run python scripts/publish_gameplay_census.py --check` recomputes both pages from the
+recordings and reads consistent. No page byte moved in this round.
+- A count-only scratch script re-read the implementation table from `docs/gameplay-census.json`.
+  All 42 rows match in all three columns, 0 mismatches. Moves thrown away still read 188, 754
+  and 809.
+- So every Evidence figure and before value quoted above still holds. That includes 20/849,
+  73/587, 313/512 (251 and 62), 330/355, 13/89, 26/56, 330/676 with 326/369 and 43/369,
+  253+10+63, 50/326, 167/551, 335/676, 521/676, 0/676, 38/42, 52/85 beside 31/85, and 0 of 411.
+- The pooled column has 67 cells, 17 of them `n/a`. It has 8 tables, 2 of them out of scope on
+  baseline 9.
+- The constants read: grace window 4, button cooldown 6, fresh-kill window 3, in-vent cap 4,
+  short window 2.
+
+**Verification.** Each exit code was captured directly, never through a pipe. Every row except the
+first and the last three was measured at `3283181f`. `420e95f8` changes one test, so the census
+suites were re-run on it; `check.sh` re-runs mypy, ruff and the whole default tier. The card
+commit after it changes only this card and `tasks/README.md`.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 216 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section; `git status --porcelain` empty before and after |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 501 source files |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0, on the card commit's tree |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards, on the card commit's tree |
+| `bash scripts/check.sh` | exit 0 on the card commit's tree at `420e95f8` with this subsection in place, before this cell was filled: 8,730 Python passed, 20 skipped, 3 xfailed; 559 frontend tests passed. `npm ci` in `frontend/` ran first in this fresh worktree |
+
+**Scope check** (the demo-bundle proof).
+`git diff --stat 52a6ac58 -- replays api frontend agents meetings engine orchestrator observation
+scripts/build_demo_bundle.py` prints nothing at the head, so no path the bundle reads moved and the
+republished bundle is byte-identical. `git diff --stat 52a6ac58` names only this card's 14 files:
+the census module, the publisher, the two pages, the three test files,
+`tests/_helpers/committed.py`, `tests/_helpers/test_committed_single_home.py`,
+`docs/artifacts.md`, `scripts/verify_ml_evidence.py`, the direction file, `tasks/README.md` and
+this card.
+
+No `docs/artifacts.md` row moved: the census row states files, not bytes, and no `audits/` or
+`tests/fixtures/` byte changed. No frontend e2e: nothing under `api/` or `frontend/` moved.
+
+**Closing greps**, run at the card commit. Each one excludes this card, which quotes the old names
+as history:
+- `git grep -n -E "_UNDECLARED_DEFAULTS|names_read_before_the_spine|[^_]unclassified\("`
+  prints nothing.
+- `git grep -n -i -E "before the (arm )?spine declares|read here before"` prints nothing.
+- `git grep -n -F "attribution line the worker's own session supplies"` prints only the two merged
+  cards whose wording `52a6ac58` deliberately kept (`docs-truth-typed-trigger`,
+  `stage-b-arm-spine`).
+
+**Limitations of this round.**
+- The neuter pass covers this round's production lines and the constants the module binds from a
+  source. It is hand-written, and its harness is scratch.
+- The full-config proof stamps every Stage-B setting outside the engine layer. The physical
+  witness rule is refused by the spine's helper until its arm card threads it, and that card's
+  own end-to-end test is where a census walk first reads it.
+- The shipped profile declares every layer a profile can declare. So a refusal in the shipped
+  census comes from the engine helper, from the config model's refusal of an undeclared key, or
+  from the census's classification. The layer refusal is proved on a copy of the profile with one
+  layer taken out.
+- The re-execution test shows each module-level binding follows its source when the module is
+  executed, which is when those bindings are made.
+- The round-2 question on the two pre-registered before values still waits for the orchestrator
+  (the PR's Questions).
