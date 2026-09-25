@@ -140,6 +140,13 @@ the corrected text states the rule, not the tally.
 
 ## Acceptance
 
+- [x] Review correction: the lockstep property no longer fails on Hypothesis's
+  per-example deadline. `test_the_lockstep_pin_holds_over_every_generated_engine_trigger`
+  carries `@settings(deadline=None)`; its strategies, assertions and 100 examples are
+  unchanged. Proved by the standalone stress run in Results (round 1): at 30 concurrent
+  runs the previous head failed 45 of 60 on the deadline and the repaired head passed 60 of
+  60. A scratch copy that slows every example by 250 ms fails with `DeadlineExceeded`
+  without the setting and passes with it.
 - [x] **The kind is typed and required.** `MeetingTrigger` gains `kind: MeetingTriggerKind` with no
   default. A dataclass field without a default cannot follow the defaulted `body_victim_id`, so the
   field goes before it or is keyword-only; every construction names it either way. An unknown
@@ -725,3 +732,110 @@ frontend: lint, tsc:check, vitest (Test Files 20 passed, Tests 558 passed), buil
 ```
 
 The commit that adds this subsection changes only this card.
+
+### Review corrections, round 1 (2026-09-25)
+
+One review lens (correctness and planted proofs) returned one blocking finding over the head
+`32a77ab2`. Codex reviewed `32a77ab2` and left no inline comment. The repair is `9b1ed920`, which
+changes only `tests/meetings/test_meeting_trigger_kind.py`; the commit that adds this subsection
+changes only this card. Nothing recorded, rendered, derived or published moves (re-measured
+below).
+
+**The lockstep property failed intermittently on Hypothesis's per-example deadline.**
+`test_the_lockstep_pin_holds_over_every_generated_engine_trigger` ran under Hypothesis's default
+200 ms deadline (the repo registers no Hypothesis profile), while every example parses the map
+YAML and seeds a world through `_meeting_state`. Timed once at a load average near 7,
+`load_canonical_map` took 11.7 ms and `seed_initial_state` 0.1 ms; under heavier load an example
+ran past 200 ms and Hypothesis raised `FlakyFailure` ("Unreliable test timings"). The property now
+carries `@settings(deadline=None)` beneath its `@given`, where the costly properties in
+`tests/engine/test_tick_properties.py`, `tests/meetings/test_contradictions.py` and
+`tests/observation/test_leak_property.py` carry theirs, with a comment saying why. Its strategies,
+assertions and example count are unchanged: `--hypothesis-show-statistics` reports 100 passing
+examples, stopped at `settings.max_examples=100`. The file's only other property, the
+undeclared-kind one, builds a dataclass per example and keeps the default deadline. With the
+deadline off, a slowdown in this property shows as a slow test, not a failure; nothing else about
+its strength changes.
+
+Stress measurement, count-only: a scratch script ran
+`uv run pytest tests/meetings/test_meeting_trigger_kind.py -k generated_engine_trigger -q -p no:cacheprovider`
+standalone N times, P at a time, and counted exit codes and deadline messages. macOS, 10 cores,
+with other worktrees' jobs also running.
+
+| head | runs | at a time | pass | fail | deadline failures |
+|---|---|---|---|---|---|
+| `32a77ab2` (before) | 18 | 1 | 18 | 0 | 0 |
+| `32a77ab2` (before) | 36 | 18 | 36 | 0 | 0 |
+| `32a77ab2` (before) | 60 | 30 | 15 | 45 | 45 |
+| `9b1ed920` (after) | 60 | 30 | 60 | 0 | 0 |
+| `9b1ed920` (after) | 18 | 1 | 18 | 0 | 0 |
+
+At 1 and 18 at a time the old head did not reproduce the verifier's 3 of 18 on this machine. At 30
+it did, for example `Unreliable test timings! On an initial run, this test took 294.12ms, which
+exceeded the deadline of 200.00ms`.
+
+**Perturbed probe for the setting.** A scratch script inserted `time.sleep(0.25)` at the top of the
+property's body, in place, first into the repaired file and then into the `32a77ab2` copy; the
+repaired file was then restored by copying its saved copy back (`cmp` identical; no
+`git checkout`).
+
+| file under the 250 ms slowdown | result |
+|---|---|
+| `9b1ed920`, with the setting | `1 passed` in 28.01 s |
+| `32a77ab2`, without it | `1 failed`: `hypothesis.errors.DeadlineExceeded: Test took 264.92ms, which exceeds the deadline of 200.00ms` |
+
+Both probes came back as expected the first time. The setting is test configuration, so no
+committed test pins it; this probe and the stress table are its evidence. After the restore the
+two new test files ran: 38 passed.
+
+**Changed expectations: none.** No test was weakened, skipped or deleted; the property keeps its
+examples and assertions, and only the per-example wall-time limit is lifted.
+
+**Validation re-measured at `9b1ed920`** (the card's Validation block, each command on its own,
+exit codes captured directly; the worktree was clean before and after):
+
+```
+uv run python -c "... MeetingTrigger(..., kind='report') ..."   False
+uv run pytest tests/meetings/test_meeting_trigger_kind.py tests/scripts/test_architecture_truth.py -q
+                                               38 passed, exit 0
+git grep -c "MeetingTrigger(" -- '*.py'        41 in 16 files
+git grep -n "in trigger.description" -- meetings/manager.py        prints nothing (exit 1)
+git grep -n "EMERGENCY_TRIGGER_PHRASE" -- meetings/manager.py      :603 definition, :5425 __all__
+git grep -n 'set [a-z_]* = "called an emergency meeting"' -- 'agents/strategic/prompts/*.j2' | wc -l
+                                               15
+uv run pytest tests/meetings tests/orchestrator tests/agents tests/training -q -n auto --dist loadfile
+                                               3923 passed, 3 xfailed, exit 0
+comment/docstring-only guard (the card's script, base copies from e886b663)
+                                               code changed in: none (exit 0)
+git diff --stat e886b663 HEAD -- engine/maps/  prints nothing
+shasum -a 256: base 070346ceabc3, head 070346ceabc3
+uv run pytest tests/meetings/test_prompt_byte_golden.py -q        25 passed, exit 0
+bash scripts/verify_samples.sh replays/samples/9p2i               All 50 samples verified clean.
+bash scripts/verify_samples.sh replays/samples/4p1i               All 50 samples verified clean.
+bash scripts/verify_samples.sh replays/ml_corpus/9p2i             All 150 samples verified clean.
+bash scripts/verify_samples.sh replays/ml_corpus/4p1i             All 50 samples verified clean.
+build_sample_report.py --sample-dir <each of the four sets> --check   consistent x4, exit 0
+uv run python scripts/publish_process_scorecard.py --check         consistent, exit 0
+uv run python scripts/verify_ml_evidence.py    checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5
+uv run pytest -m campaign -q -n auto           336 passed, exit 0
+git diff --stat e886b663 HEAD -- replays api frontend docs/process-scorecard.md docs/process-scorecard.json agents/strategic/prompts
+                                               prints nothing
+uv run python -c "print(len(open('docs/architecture.md').read().split()))"     1266
+uv run python scripts/check_doc_facts.py       exit 0
+uv run python scripts/validate_task_docs.py    exit 0 (88 work cards)
+```
+
+`bash scripts/check.sh > <log> 2>&1`, run as its own command in this worktree, clean at
+`9b1ed920`, macOS: **exit code 0**.
+
+```
+ruff check: All checks passed!         ruff format --check: 525 files already formatted
+lint-imports: Contracts: 4 kept, 0 broken.
+validate_task_docs: passed, 390 historical phase tasks and 390 prompts; 88 work cards.
+generate_prompts --check: All 390 prompts are in sync.
+mypy: Success: no issues found in 496 source files
+pytest -n auto --dist loadfile: 8345 passed, 20 skipped, 3 xfailed in 735.74s
+frontend: lint, tsc:check, vitest (Test Files 20 passed, Tests 558 passed), build
+```
+
+An earlier `check.sh` run at `9b1ed920` was stopped part-way through pytest and is not quoted: this
+card was edited in the worktree while it ran.
