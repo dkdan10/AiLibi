@@ -121,6 +121,20 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction (round 2): on baseline 9 the two added cells that count what a setting's
+  own mechanism did, among things every era has, read `n/a`, not a measured 0. "Vent trips ended
+  by a regroup" is counted only in games recorded with `meeting_reset = hub_with_grace`.
+  "Surfacings at the cap" is counted only in games recorded with
+  `vent_exit_policy = look_and_wait`. The two added tables whose rows only a setting's mechanism
+  makes (the trigger-tick events a regroup drops, and who received a rebuttal) read `n/a`
+  instead of `(none)` with a 0. Mechanism: `CellSpec.scope` and `TableSpec.scope`, applied in
+  the fold's accumulator and published as `scope` and `in_scope`. Planted:
+  `test_where_no_meeting_regroups_no_trip_is_ended_by_a_regroup`,
+  `test_without_the_look_and_wait_exit_no_surfacing_is_at_a_cap`,
+  `test_where_no_meeting_regroups_the_dropped_events_table_reads_n_a` and
+  `test_the_rebuttal_beneficiaries_table_is_counted_only_with_the_rebuttal_on`. A property over
+  every cell and table is `test_every_cell_and_table_counts_exactly_when_its_scope_holds`, and
+  `test_on_baseline_9_every_scoped_cell_and_table_reads_n_a` reads the committed JSON and page.
 - [x] Review correction: an own-kill row that names the holder's fellow impostor as its killer is
   a breach whether or not it cites anything, and every served row is in the cell's denominator:
   a row citing nothing joins no kill and is a breach too, because the ballot card specifies that
@@ -679,7 +693,8 @@ Five more perturbations outside the two files each went red, with each file rest
 - The spine half of the walk-profile item is open (above).
 - Fifteen cells read `n/a` on baseline 9 because no committed recording carries a regroup,
   a rebuttal, a served own-kill row, an in-place surfacing or a trip that waited. Their meaning rests on planted carriers until an
-  arm card's end-to-end test and the round-1 record fill them.
+  arm card's end-to-end test and the round-1 record fill them. (At this head. Review round 2
+  moved two more cells and two tables to `n/a`; see Review corrections, round 2.)
 - The census is count-only over recorded events and states. It cannot tell why a policy acted.
 - The own-kill extraction depends on the ballot card rendering the row with the template's
   evidence-row line around `OWN_KILL_ROW_TEXT`. A different line format reads `n/a`, never 0.
@@ -901,4 +916,194 @@ No `docs/artifacts.md` row moved: the census row states files, not bytes, and no
   example one witness list for the other outside a `|`) is outside it.
 - The harness is scratch and not shipped, as in the round-0 pass. Its counts reproduce only by
   re-running an equivalent harness over the same two files.
+- The walk-profile item is still open until the spine merges (State, above).
+
+### Review corrections, round 2 (2026-09-25)
+
+**State: still active.** The one round-2 finding is repaired, and the `Review correction (round 2)`
+item at the top of Acceptance records it. The walk-profile item stays open for the same reason as
+before: `stage-b-arm-spine` has not merged (`origin/main` is still `13f2c4d3`), so there is no
+`main` to merge in. The code, tests and pages are commit `64b9ef28`; the card commit after it adds
+this subsection.
+
+**Finding: two arm-dependent added cells published a measured 0 on baseline 9.** "Vent trips
+ended by a regroup" read 0 of 587 and "Surfacings at the cap" 0 of 512 in every column, while the
+sibling regroup cells read `n/a`. Both cells counted every vent trip or exit in every era, but a
+trip can only end by a regroup, and an exit can only be forced by the cap, under a setting no
+committed recording carries.
+
+**Repair.**
+- `CellSpec` and `TableSpec` gain `scope`: the setting predicate the counted thing exists under.
+  The fold's accumulator counts a cell, or tallies a table, only while its scope holds for the
+  group's recorded settings. Out of scope it counts nothing, so the denominator stays empty and
+  the cell reads `n/a`. Every game in a set shares the set's era (the fold refuses a set that does
+  not), so this is the per-game rule the finding asked for.
+- `trips_closed_by_regroup` is scoped to `meeting_reset = hub_with_grace`, and `forced_surfacings`
+  to `vent_exit_policy = look_and_wait`.
+- The finding offered two rules for the cap cell. The recorded exit policy was chosen, not "trips
+  that reached the cap": under look-and-wait every trip that reaches the cap surfaces at it, so
+  that denominator would read 100% by construction and say nothing.
+- The same defect sat in two added tables the finding did not name: the trigger-tick events a
+  regroup drops, and who received a rebuttal. On baseline 9 both printed `(none)` with a 0 in
+  every column, which reads as a measured count. They are scoped to
+  `meeting_reset = hub_with_grace` and `bounded_rebuttal_version = 1`, and the page prints `n/a`
+  for a table out of its scope.
+- Each published cell and table carries `scope` (the predicate's description, or null) and
+  `in_scope`. The models refuse an entry with no scope marked out of scope, and an out-of-scope
+  entry that counts anything.
+- The page copy follows:
+  - the `n/a` term names both causes;
+  - the paragraph under the terms says a cell or table counted only with some setting reads
+    `n/a` without it;
+  - each scoped definition ends "Counted only in games recorded with `X`; in any other era it
+    reads n/a.";
+  - the settings heading reads "Recorded settings a count depends on", because those settings now
+    decide whether a count exists as well as whether it is zero.
+- `SCHEMA_VERSION` stays 1. The JSON gains two keys per cell and table, but it has never been
+  published on `main`, so version 1 is still its first publication.
+
+**Which cells are arm-dependent, at the head.** On the pooled column 17 of 67 cells read `n/a`
+(15 before this round), and so do the two scoped tables.
+- Scoped, so `n/a` in every era without their setting: the two cells and two tables above.
+- `n/a` because their denominator is made only by a setting's mechanism, with no scope:
+  - the four other regroup cells (grace-window kills, reported corpses older than the last
+    regroup, kill-witness button calls, sabotage at a regroup);
+  - the seven rebuttal cells;
+  - the two own-kill row cells.
+
+  The loader marks a regroup only under the recorded reset, and at the historical default any
+  rebuttal raises the repeat-speaker guard, so those denominators are empty in every other era.
+  No committed recording serves an own-kill row. The guarded cells among these must publish 1 of
+  N with their setting off under the Conformance guards item, so a scope would break that item.
+- `n/a` from the data, and measured as before values rather than arm-dependent: trips longer than
+  the cap (no trip stays inside more than one tick) and in-place surfacings (no exit returns to
+  the room it left).
+- Every other added cell is measured on baseline 9. That includes kills soon after the killer
+  surfaced (11 of 849), which counts kills after any exit.
+
+**A question for the orchestrator, not blocking.** Two tables pre-register "s9 before" values of 0
+for "forced exits" and "trips closed by a regroup": the decision memo's section 4 table
+(`tasks/decision-2026-09-24-stage-b-wave.md`, the B1 exit and B2 rows) and the assessment table in
+`tasks/work/stage-b-record-r1.md`. The census now publishes `n/a` for both on s9. Both rows are
+"reported", so nothing gates on them, and neither file is this card's to edit. The orchestrator
+either restates those two before values as `n/a`, or rules they are real baseline zeros; in that
+case this correction is reverted and the ticked item is restated at that strength. The PR's
+Questions carry it.
+
+**Planted tests added.** The two census suites go from 185 tests to 197.
+- `test_where_no_meeting_regroups_no_trip_is_ended_by_a_regroup`: under the historical reset the
+  cell reads `n/a`. That includes a carrier whose meeting is marked regrouped, so the `n/a` comes
+  from the recorded reset.
+- `test_without_the_look_and_wait_exit_no_surfacing_is_at_a_cap`, for the default exit policy and
+  `observed_risk`: the same four-tick trip reads `n/a`.
+- `test_where_no_meeting_regroups_the_dropped_events_table_reads_n_a` and
+  `test_the_rebuttal_beneficiaries_table_is_counted_only_with_the_rebuttal_on`.
+- `test_the_scoped_cells_and_tables_are_exactly_these`: pins the four scope rows.
+- `test_every_cell_and_table_counts_exactly_when_its_scope_holds`: a Hypothesis property over
+  every cell and table and a generated family of settings. Its expectation restates the rule
+  without the module's helper.
+- `test_every_setting_a_guard_or_scope_reads_has_its_meaning_on_the_page`: the page's setting
+  meanings name exactly the fields a guard or scope reads. Planted: a meanings map missing
+  `meeting_reset`, and one with an extra field, each fail it.
+- `test_a_published_cell_or_table_out_of_its_scope_counts_nothing`: the model checks, each
+  operand planted.
+- `test_on_baseline_9_every_scoped_cell_and_table_reads_n_a`: reads every section of the committed
+  JSON, and the page.
+- Publisher: `test_a_table_out_of_its_scope_reads_n_a_and_in_scope_reads_its_count` and
+  `test_the_definitions_name_the_setting_a_scoped_count_needs`.
+
+**Changed expectations.** No test was deleted, skipped or weakened.
+- `test_a_trip_is_closed_by_a_regroup_an_ejection_or_the_game_end`:
+  - The preserve-reset trip that read (0, 1, 0) now reads (0, 0, 0), which
+    `test_where_no_meeting_regroups_no_trip_is_ended_by_a_regroup` asserts.
+  - The regroup, ejection, game-end and unrecorded-winner cases moved into a `hub_with_grace`
+    carrier with their old expectations.
+  - The ejection case now also marks its meeting regrouped, so it proves an ejection wins over a
+    regroup.
+  - The game-end case no longer holds a meeting. The preserve carrier with its meeting keeps the
+    `trips_longer_than_cap` (0, 1, 0) assertion.
+- `test_the_regroup_cells_read_regroups_only`: the dropped-events assertion reads a
+  `hub_with_grace` carrier holding only the regroup meeting. The test's main carrier holds a kill
+  inside the grace window, which that era refuses. The `kept` carrier moved into the regroup era,
+  so its empty table belongs to a meeting that did not regroup rather than to an out-of-scope table.
+- `test_a_new_trip_after_a_regroup_closes_the_old_one_first`: the carrier moved into the regroup
+  era, with the same (1, 2, 0).
+- Test-only: the `CensusCell` field dicts in
+  `test_a_published_cell_cannot_carry_a_nonzero_count_by_construction` and in the publisher test's
+  `rendered()` gain `scope=None` and `in_scope=True`, their values for an unscoped cell.
+
+**The neuter pass over this round's diff.** A scratch harness (not shipped) applied 47
+hand-written mutants one at a time on disk.
+- Each mutant replaced one exact span of `eval/gameplay_census.py` or
+  `scripts/publish_gameplay_census.py`.
+- It then ran both census suites with `-x` and restored the file from a copy taken before the
+  pass, never from git.
+- The sha256 of both files matched before and after the pass.
+- All 47 were red on their first run; no probe came back green.
+
+| group | perturbed | red | green |
+|---|---|---|---|
+| the scope helper: each operand dropped, `is None` swapped, `or` to `and`, always true, the predicate negated | 6 | 6 | 0 |
+| the four scope rows: each removed, and two re-pointed to another predicate | 6 | 6 | 0 |
+| the accumulator's two scope checks: dropped, negated, `return` to `pass`, reading the guard | 7 | 7 | 0 |
+| the cell model's two checks: each to `pass`, each operand dropped, `is None` swapped | 8 | 8 | 0 |
+| the table model's two checks | 7 | 7 | 0 |
+| the published `scope` and `in_scope`, for cells and tables | 4 | 4 | 0 |
+| the `n/a` term reverted | 1 | 1 | 0 |
+| the publisher: the empty-table value both ways, the scope sentence's guard and body, both definition joins, the paragraph, the heading | 8 | 8 | 0 |
+| total | 47 | 47 | 0 |
+
+The round-1 sub-expression pass (1,049 mutants) was measured at `f91aa8eb` and is not re-run here.
+This pass covers only this round's diff.
+
+**Closing greps**, run at the head. The first two exclude this card, which quotes them:
+- `git grep -n -i "empty denominator: nothing of that kind" -- . ':!tasks/work/gameplay-census.md'`
+  prints nothing (the old `n/a` term).
+- `git grep -n -i "zero depends on" -- . ':!tasks/work/gameplay-census.md'` prints nothing (the old
+  heading).
+- `git grep -n -F "| (none) | 0" -- docs/gameplay-census.md` prints nothing.
+- `git grep -n -w -E "0/587|0/512" -- docs/gameplay-census.md docs/gameplay-census.json` prints
+  nothing.
+- The pattern `trips (closed|ended) by (a )?regroup|surfacings? at the cap|forced (cap )?(exits|surfacings)`,
+  run as `git grep -n -i -E` over the tree without `docs/gameplay-census.json` and `tests/`,
+  prints, besides the cells' own titles and definitions and this card:
+  - the decision memo's list of the added cells (`:525`), and the two pre-registered before
+    values in the question above (the memo's `:1178` and `:1181`, and `stage-b-record-r1.md:149`
+    and `:152`);
+  - `tasks/work/meeting-reset-coherence.md`, which expects a count and not `n/a` on trips closed
+    by a regroup with the reset on (still true);
+  - planning text in `tasks/investigations-2026-09-24/` and `tasks/work/vent-look-and-wait.md`
+    that projects forced exits under the arm.
+
+**Verification, measured on the tree of `64b9ef28`.** Each exit code was captured directly, never
+through a pipe. One module-docstring sentence was reworded and folded into that commit before it
+was pushed. The census suites, `--check` and `check.sh` ran after that edit. The other rows, and
+the neuter pass, ran just before it; the edit changes no code and no page byte.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 197 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section, where both scoped cells read 0 of 0 with `in_scope` false; `git status --porcelain` identical before and after |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 498 source files |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `git diff --stat 13f2c4d3 -- replays api frontend agents meetings engine orchestrator observation scripts/build_demo_bundle.py` | prints nothing, so the demo bundle cannot move |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `bash scripts/check.sh` | exit 0, with this subsection in place before this cell was filled: 8,504 Python passed, 20 skipped, 3 xfailed; 558 frontend tests passed |
+
+No `docs/artifacts.md` row moved: the census row states files, not bytes, and no `audits/` or
+`tests/fixtures/` byte changed. No frontend e2e: nothing under `api/` or `frontend/` moved.
+
+**Limitations of this round.**
+- The neuter pass is hand-written over this round's diff, not the twelve-operator pass of round
+  1, and its harness is scratch.
+- The two pre-registered before values above wait for the orchestrator.
 - The walk-profile item is still open until the spine merges (State, above).
