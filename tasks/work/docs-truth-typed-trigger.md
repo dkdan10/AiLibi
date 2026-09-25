@@ -963,3 +963,57 @@ now confirms that over both tiers.
 
 **Changed expectations: none.** No test was weakened, skipped or deleted, and no test or code
 changed in this round.
+
+**Validation re-measured at `745b4de6`**, the commit that rewrote the table. Its code is identical
+to `39c84cad`'s, since it changes only this card. Each command ran on its own with its exit code
+captured directly, and the worktree was clean before and after:
+
+```
+uv run python -c "... MeetingTrigger(..., kind='report') ..."   False
+uv run pytest tests/meetings/test_meeting_trigger_kind.py tests/scripts/test_architecture_truth.py -q
+                                               38 passed, exit 0
+git grep -c "MeetingTrigger(" -- '*.py'        41 in 16 files
+git grep -n "in trigger.description" -- meetings/manager.py        prints nothing (exit 1)
+git grep -n "EMERGENCY_TRIGGER_PHRASE" -- meetings/manager.py      :603 definition, :5425 __all__
+git grep -n 'set [a-z_]* = "called an emergency meeting"' -- 'agents/strategic/prompts/*.j2' | wc -l
+                                               15
+uv run pytest tests/meetings tests/orchestrator tests/agents tests/training -q -n auto --dist loadfile
+                                               3923 passed, 3 xfailed, exit 0
+comment/docstring-only guard (the card's script, base copies from e886b663)
+                                               code changed in: none (exit 0)
+git diff --stat e886b663 HEAD -- engine/maps/  prints nothing
+shasum -a 256: base 070346ceabc3, head 070346ceabc3
+uv run pytest tests/meetings/test_prompt_byte_golden.py -q        25 passed, exit 0
+bash scripts/verify_samples.sh replays/samples/9p2i               All 50 samples verified clean.
+bash scripts/verify_samples.sh replays/samples/4p1i               All 50 samples verified clean.
+bash scripts/verify_samples.sh replays/ml_corpus/9p2i             All 150 samples verified clean.
+bash scripts/verify_samples.sh replays/ml_corpus/4p1i             All 50 samples verified clean.
+build_sample_report.py --sample-dir <each of the four sets> --check   consistent x4, exit 0
+uv run python scripts/publish_process_scorecard.py --check         consistent, exit 0
+uv run python scripts/verify_ml_evidence.py    checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5
+uv run pytest -m campaign -q -n auto           336 passed, exit 0
+git diff --stat e886b663 HEAD -- replays api frontend docs/process-scorecard.md docs/process-scorecard.json agents/strategic/prompts
+                                               prints nothing
+uv run python -c "print(len(open('docs/architecture.md').read().split()))"     1266
+uv run python scripts/check_doc_facts.py       exit 0
+uv run python scripts/validate_task_docs.py    exit 0 (88 work cards)
+```
+
+`bash scripts/check.sh > <log> 2>&1` ran as its own command in this worktree, clean at
+`745b4de6`, on macOS. It gave **exit code 0**:
+
+```
+ruff check: All checks passed!         ruff format --check: 525 files already formatted
+lint-imports: Contracts: 4 kept, 0 broken.
+validate_task_docs: passed, 390 historical phase tasks and 390 prompts; 88 work cards.
+generate_prompts --check: All 390 prompts are in sync.
+mypy: Success: no issues found in 496 source files
+pytest -n auto --dist loadfile: 8345 passed, 20 skipped, 3 xfailed in 459.65s
+frontend: lint, tsc:check, vitest (Test Files 20 passed, Tests 558 passed), build
+```
+
+An earlier `check.sh` run at `745b4de6` exited 127 at the first frontend step, `eslint: command
+not found`, after its Python legs had passed (8345 passed, 20 skipped, 3 xfailed). This fresh
+worktree had not yet installed the frontend's dependencies. `npm --prefix frontend ci` installed
+them from the committed lockfile and changed no tracked file. The run quoted above came next. The
+commit that adds this paragraph changes only this card.
