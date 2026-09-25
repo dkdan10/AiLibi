@@ -2272,7 +2272,7 @@ def test_the_constants_bound_from_a_source_follow_it(
     """Planted: each source moves, and the census constant bound to it follows."""
 
     from agents.tactical import crewmate_policy
-    from eval import process_scorecard
+    from eval import balance_eval, process_scorecard
 
     class _Moved(RecordedExperimentConfig):
         vent_entry_policy: typing.Literal["any_body", "own_fresh_kill"] = (
@@ -2281,16 +2281,20 @@ def test_the_constants_bound_from_a_source_follow_it(
 
     button = crewmate_policy.EMERGENCY_COOLDOWN_TICKS + 3
     sets = ("replays/planted/9p2i", "replays/planted/4p1i")
+    base = replace(_CURRENT_REPORT_WALK_CONFIG, supports_temporal_observations=False)
     monkeypatch.setattr(crewmate_policy, "EMERGENCY_COOLDOWN_TICKS", button)
     monkeypatch.setattr(process_scorecard, "COMMITTED_SETS", sets)
     monkeypatch.setattr(process_scorecard, "NINE_PLAYER_SETS", sets[:1])
     monkeypatch.setattr(experiment_config, "RecordedExperimentConfig", _Moved)
+    monkeypatch.setattr(balance_eval, "_CURRENT_REPORT_WALK_CONFIG", base)
     again = _census_executed_again(monkeypatch)
     assert again.BUTTON_COOLDOWN_TICKS == button
     assert again.CENSUS_SETS == sets
     assert again.CENSUS_NINE_PLAYER_SETS == sets[:1]
     assert again.SETTING_DEFAULTS["vent_entry_policy"] == "own_fresh_kill"
     assert census.SETTING_DEFAULTS["vent_entry_policy"] == "any_body"
+    assert not again.CENSUS_WALK_CONFIG.supports_temporal_observations
+    assert CENSUS_WALK_CONFIG.supports_temporal_observations
 
 
 def test_the_own_kill_join_reads_the_scorecards_clock_offset(
