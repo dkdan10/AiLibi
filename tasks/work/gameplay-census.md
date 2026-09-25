@@ -121,6 +121,19 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction: an own-kill row that names the holder's fellow impostor as its killer is
+  a breach whether or not it cites anything, and every served row is in the cell's denominator:
+  a row citing nothing joins no kill and is a breach too, because the ballot card specifies that
+  each row cites its kill. Mechanism: `_own_kill_row_breaches` tests the teammate before the
+  citation. Planted: three new `GUARD_PAIRS` rows in
+  `test_a_breach_raises_with_the_setting_on_and_publishes_with_it_off` (a teammate row citing
+  nothing, a witness row citing nothing, and a row naming someone other than the cited kill's
+  killer), and `test_the_rows_found_are_the_denominator_so_a_mismatch_reads_n_a`.
+- [x] Review correction: the census module's and the publisher's sub-expressions are pinned. Of
+  1,049 mutants from twelve sub-expression operators over both files, the two census suites
+  catch 1,018 (a failing test, a module that no longer imports, or one hang); the other 31 are
+  named in Results one by one, each with the reason no input can tell it apart from the source. The method, the operators and the tables are in Results (Review
+  corrections, round 1).
 - [x] **Shape.** `eval/gameplay_census.py` holds an impure `load_census_inputs(set_dir)` that walks
   one set and a pure fold over a frozen carrier holding only ids, rooms, ticks, kinds, labels,
   dispositions, plain recorded arm values and loader-computed booleans; `pool` adds counts and
@@ -503,8 +516,9 @@ things, and the difference is fully attributed:
 1. The own-kill pattern constant is `eval.gameplay_census.OWN_KILL_ROW_TEXT`
    (`"you watched them KILL in {room} at tick {tick}"`). Rows are found by the ballot template's
    evidence-row line around that text. The row joins to its kill through the cited observation id:
-   agent-frame tick minus `AGENT_CLOCK_OFFSET`, with the killer equal to the row's subject. A row
-   citing nothing is not evaluable.
+   agent-frame tick minus `AGENT_CLOCK_OFFSET`, with the killer equal to the row's subject. At this
+   head a row citing nothing was not evaluable; review round 1 made it a breach (Review
+   corrections, round 1).
 2. `WALKERS` in `tests/_helpers/test_committed_single_home.py` gains `load_census_inputs`, the
    permitted line. The same file's docstring "six committed-set walks" becomes "seven" so the
    sentence stays true. `test_a_census_walk_outside_the_shared_cache_is_flagged` plants the case.
@@ -615,8 +629,10 @@ scripts/build_demo_bundle.py` printed nothing at the head. Perturbed: with one c
 appended to `api/schemas.py` from a saved copy, it printed ` api/schemas.py | 2 ++`. After
 restoring from the copy it printed nothing again.
 
-**The mechanical neuter pass**, over every production line of the census module and the
-publisher, run with a scratch harness. The harness does not ship.
+**The mechanical neuter pass**, statement-level, over every production line of the census module
+and the publisher, run with a scratch harness. The harness does not ship. It did not perturb the
+sub-expressions inside a condition, and review round 1 found conditions it left unpinned; the
+sub-expression pass in Review corrections, round 1 replaces this pass's coverage claim.
 - Each mutation was generated from the AST: every `acc.count` hit set to `False`, every
   `acc.tally` and `acc.not_evaluable` call dropped, every cell guard set to `None`, every `raise`
   replaced by `pass`, and every carrier constructor argument set to a neutral value. To these were
@@ -668,3 +684,221 @@ Five more perturbations outside the two files each went red, with each file rest
 - The own-kill extraction depends on the ballot card rendering the row with the template's
   evidence-row line around `OWN_KILL_ROW_TEXT`. A different line format reads `n/a`, never 0.
 - Nothing in this card joins the scorecard, gates a decision, or feeds any agent.
+
+### Review corrections, round 1 (2026-09-25)
+
+**State: still active.** Both review findings are repaired, and the two `Review correction`
+items at the top of Acceptance record them. The walk-profile item stays open for the same reason
+as before: `stage-b-arm-spine` has not merged (`origin/main` is still `13f2c4d3`), so there is no
+`main` to merge in yet. The code, tests and pages are commit `f91aa8eb`; this subsection is the
+card commit after it.
+
+**Finding 1: an own-kill row naming a teammate and citing nothing was not a breach.** The join
+returned "not evaluable" for a row with no citation before it compared the row's named killer
+with the holder's teammates, so an uncited teammate row folded without raising. The row names its
+killer, so no citation is needed to see the teammate. `_own_kill_row_breaches` now tests the
+teammate first. A row citing nothing joins no kill, and the ballot card specifies that every row
+cites its kill, so an uncited row is a breach too. Every served row is therefore in the
+denominator, and the cell has no not-evaluable count. The cell's published definition says so.
+That one definition is the only byte change in `docs/gameplay-census.*`; every committed figure is
+unchanged.
+- Planted: three new `GUARD_PAIRS` rows, each raising with `ballot_kill_row_version = 1` and
+  publishing 1 of 1 with it off. They are a teammate row citing nothing, a witness row citing
+  nothing, and a row naming someone other than the cited kill's killer.
+- The round-0 order, rebuilt as a mutant (an uncited row let through before the teammate test),
+  fails `test_a_breach_raises_with_the_setting_on_and_publishes_with_it_off` on its
+  `_own_kill_row_of_teammate_citing_nothing` case.
+
+**Finding 2: production conditions no test enforced.** Each condition the review listed now has
+a planted case:
+- the two regroup equalities (a kill on the regroup tick, a button press at the cooldown tick);
+- a vent and a kill on the trigger tick;
+- a dead room-left witness, and empty sightings under the physical rule;
+- a row naming someone other than the cited killer, and the cited-by-holder join;
+- a non-witness ballot for the killer;
+- an alibi about another player, and an observation of someone other than the opener;
+- both leg edges, and both edges of the unseen seed band.
+
+A sub-expression mutation pass then found the rest. Each survivor was either planted or, where no
+input could reach it, removed as dead code:
+- The meeting carrier now couples its outcome and its ejected player, as `MeetingResult` does, and
+  raises otherwise. Four re-checks of `outcome == "EJECTED"` in the fold are gone.
+- The carrier's terminal tick is required. The census walk profile already refuses a game that
+  never ends, and the loader raises if a walk yields none. The unreachable "open" trip kind is
+  gone.
+- `load_census_inputs(set_dir)` loses its `game_map` parameter, which no caller passed.
+- Meeting rows no longer enter the era's entry list; the era helpers read only tick and game-over
+  rows. The regroup flag is read from the game's era after the walk, not from the first tick row.
+- `prompt_stamps_from_cell` loses an empty-list check that `str.split` can never meet.
+
+**The sub-expression pass.** The method:
+- A scratch harness, not shipped, generates each mutant from the AST of
+  `eval/gameplay_census.py` and `scripts/publish_gameplay_census.py`. Each mutant replaces one
+  node's exact source span with a re-rendered variant.
+- The twelve operators:
+  - swap each comparison operator in place (`<`/`<=`, `>`/`>=`, `==`/`!=`, `in`/`not in`,
+    `is`/`is not`);
+  - drop each operand of `and`/`or`, and swap the two;
+  - drop each `not`, and flip each boolean literal;
+  - move each integer literal by +1 and -1;
+  - swap `any`/`all`, swap `+`/`-`, and keep one side of each `&`/`|`;
+  - replace each conditional expression by either branch, and negate each `if`/`while` test;
+  - replace each `raise`, `continue`, bare `return` and call statement by `pass`.
+
+  Docstrings, annotations, f-strings and `__all__` are not mutated.
+- Each mutant is compiled from the file's bytes and installed in `sys.modules` before pytest
+  imports anything. The files are never written. Eight processes each run both census suites with
+  `-x`, with a 300-second timeout.
+- The sha256 of both source files, both test files and both pages was identical before and after
+  every pass.
+- The publisher's path bootstrap and its `raise SystemExit(main())` are seen only by the test
+  that runs the script as a subprocess, so their eight mutants were also neutered on disk. The
+  harness saved a copy of the file, wrote the mutant, ran both suites, restored the file from the
+  copy (never from git) and checked the sha256.
+
+| pass | state | mutants | caught | survived |
+|---|---|---|---|---|
+| 1 | finding 1 fixed, the review's list planted | 1,026 | 928 | 98 |
+| 2 | survivors planted or removed | 997 | 961 | 36 |
+| 3 | final, at `f91aa8eb` | 1,049 | 1,012 in memory, then 6 more on disk | 31 |
+
+Pass 3's 1,049 mutants are 917 in the census module and 132 in the publisher. The 1,012 caught in
+memory are:
+- 998 failing tests;
+- 11 modules that no longer import, because a class invariant, the module-level defaults table or
+  the row pattern was turned against itself;
+- 2 exits at import, where the `__main__` test is negated;
+- 1 hang, where the in-place walk-out loop stops advancing.
+
+Between passes 2 and 3, `&`/`|` operand drops and boolean flips were added to the operators. They
+found four more reachable conditions, each now planted:
+- the entry witness list the moment table reads;
+- the pairing of dispositions with actions;
+- the JSON's text bytes;
+- the frozen record types, checked by a property over every dataclass and model in the module,
+  with only the fold's own accumulator exempt.
+
+Every expression the review listed is red in pass 3.
+
+The 31 survivors, none observable by any input:
+- `keys[1:]` in `resolve_era` read as `keys[0:]`: this only compares the first key with itself.
+- The `player is not None` operand of `_is_impostor` and of `_vent_flag_names`: `roles.get(None)`
+  is `None`, and no flag names `None`. Both operands only narrow the type.
+- `entry_tick <= t` read as `<` in the ticks-inside anchor: a meeting on the entry tick adds the
+  entry tick to the `max` either way.
+- Five mutants of the same-tick order key in `_trips` (both constants, and the key reading the
+  tick twice): vents are listed before meetings and the sort is stable, so the key only restates
+  the list order.
+- The `player != exit_fact.actor` operand of the in-view test: the surfacing impostor is inside
+  the vent at the pre-tick, and a frame lists no one inside a vent
+  (`test_the_frame_holds_living_players_outside_the_vents_and_live_sabotage`).
+- The `trigger_body is None` operand of the corpse join: `None not in bodies` raises the same way.
+- `first_charge + 1` read as `first_charge` in the accused-opener cell: the charging turn's
+  speaker is never the opener.
+- `repeats[0]` read as `repeats[-1]`: it differs only with two repeat-speaker turns, which the
+  always-on guard refuses earlier in the same fold.
+- `other.index < turn.index` read as `<=`: this adds the repeat speaker, who had already spoken.
+- The `reply_to is not None` conditional read as `by_id.get(turn.reply_to)`: `get(None)` is
+  `None`.
+- The `spec.guard is not None` operand of `by_construction`: `holds` already requires a guard.
+- `zip(tallies, inputs, strict=True)` without `strict`: the tallies are built one per input.
+- Six constants of `_row_order`, and the same six in the publisher's table-row sort: they only
+  order a numeric row against a text row, and every table's rows are all one or the other.
+- The publisher's `sys.path.insert` at position 1 or at the end instead of 0: the root is still on
+  the path, and nothing shadows it. On disk these two stay green; the other six bootstrap mutants
+  are red on disk.
+
+**Changed expectations.** No test was deleted, skipped or weakened. Two expectations changed:
+- `test_the_rows_found_are_the_denominator_so_a_mismatch_reads_n_a`: an uncited row read (0, 0,
+  1) under the setting. It now reads (1, 1, 0) with the setting off and raises with it on.
+- `test_a_trip_is_closed_by_a_regroup_an_ejection_or_the_game_end`: the carrier without a
+  terminal tick, whose open trip left the denominator, can no longer be built. It became a game
+  without a recorded winner, whose trip closes at the game end.
+  `test_the_loader_refuses_a_walk_that_never_ended` plants the refusal.
+
+Test-only refactors keep their old behaviour at their defaults. `_planted_inputs` in the
+publisher test gains `era`, `label` and `rows_without_dispositions` parameters, and the
+charged-tick test's builder gains `charged`.
+
+**Planted tests added.** The two census suites go from 146 tests to 185.
+- Fold: `test_a_corpse_killed_on_the_regroup_tick_is_older_than_the_regroup`,
+  `test_a_vent_on_the_trigger_tick_came_before_the_meeting`,
+  `test_resting_on_the_room_left_needs_a_living_crew_sighting`,
+  `test_a_kill_on_the_trigger_tick_is_held_by_that_meeting`,
+  `test_only_a_living_witness_naming_the_killer_votes_the_killer`,
+  `test_a_kill_witness_button_at_the_cooldown_tick_counts`,
+  `test_an_alibi_about_another_player_is_no_alibi_of_the_rebuttal`,
+  `test_an_impostors_teammates_exclude_the_impostor_itself`,
+  `test_a_meeting_carrier_couples_the_outcome_and_the_ejected_player`,
+  `test_a_new_trip_after_a_regroup_closes_the_old_one_first`,
+  `test_an_entry_seen_through_either_witness_list_is_seen`,
+  `test_a_kill_on_the_surfacing_tick_is_not_after_the_surfacing`,
+  `test_a_crewmate_on_the_first_tick_after_an_in_place_surfacing_counts`,
+  `test_only_an_undiscovered_corpse_other_than_the_reported_one_counts`,
+  `test_a_button_soon_after_a_regroup_with_no_kill_since_is_no_witness_call`,
+  `test_the_opener_accusing_themself_is_no_one_accusing_the_opener`,
+  `test_rebuttal_claim_kinds_are_told_apart`,
+  `test_the_charged_tick_cell_reads_opener_rebuttals_only`,
+  `test_a_row_joins_the_one_kill_it_cites_among_several`,
+  `test_the_impostor_only_floor_reads_only_confident_ballots_for_the_ejected`,
+  `test_every_census_record_type_is_frozen` and `test_the_json_keeps_text_as_written`.
+- Two existing tests gained cases. The charged-tick test gained an observation of another player,
+  both leg edges and a leg past the tick. The own-kill join test gained three cited-by-holder
+  mismatches.
+- Loader: `test_the_frame_holds_living_players_outside_the_vents_and_live_sabotage`,
+  `test_the_meeting_fact_reads_living_impostor_cooldowns_and_live_sabotage`,
+  `test_an_unrewritten_ballot_was_authored_as_recorded`,
+  `test_the_loader_refuses_a_meeting_applied_under_another_id`,
+  `test_the_game_over_row_joins_the_era_and_names_the_winner`,
+  `test_the_loader_refuses_dispositions_that_do_not_pair_with_the_actions`,
+  `test_the_loader_refuses_a_walk_that_never_ended`,
+  `test_the_loader_reads_a_recording_without_substrate_flags`,
+  `test_the_manifest_reader_skips_prose_and_reads_a_three_cell_row`,
+  `test_the_loader_refuses_both_edges_of_the_unseen_band` and
+  `test_the_unseen_band_ends_at_its_edges`.
+- Publisher: `test_a_not_evaluable_row_shows_when_any_group_has_one` and
+  `test_the_era_lines_name_every_recorded_part_or_say_none`.
+
+**Closing greps**, run at the card commit:
+- `git grep -n -i -E "citing nothing|cites nothing|cite nothing|uncited" --
+  eval/gameplay_census.py scripts/publish_gameplay_census.py docs/gameplay-census.md
+  tasks/work/gameplay-census.md` prints only sentences stating the new rule, plus the dated
+  Decision 1 above, which is now annotated.
+- `git grep -n -F '"open"' -- eval/gameplay_census.py` prints nothing.
+- `git grep -n game_map -- eval/gameplay_census.py` prints only `_load_game`'s parameter, its walk
+  call, and the two places `load_census_inputs` passes the canonical map.
+- `git grep -n -i -E "citing nothing|not evaluable" --
+  tasks/work/ballot-kill-row-and-impostor-strategy.md tasks/work/stage-b-record-r1.md` prints
+  nothing, so no other card describes the old own-kill rule.
+
+**Verification, measured on the tree of `f91aa8eb` (`e144483a`).** Each exit code was captured directly, never through a
+pipe. The card commit after it changes only this card.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 185 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section; `git status --porcelain` identical before and after |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 498 source files |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `git diff --stat 13f2c4d3 -- replays api frontend agents meetings engine orchestrator observation scripts/build_demo_bundle.py` | prints nothing, so the demo bundle cannot move |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `bash scripts/check.sh` | exit 0 on the card commit's tree, before this cell was filled: 8,492 Python passed, 20 skipped, 3 xfailed; 558 frontend tests passed. A first run exited 127 because this fresh worktree had no `eslint`; after `npm --prefix frontend ci` it passed |
+
+No `docs/artifacts.md` row moved: the census row states files, not bytes, and no `audits/` or
+`tests/fixtures/` byte changed. No frontend e2e: nothing under `api/` or `frontend/` moved.
+
+**Limitations of this round.**
+- The pass claims only the twelve operators above. Swapping one name or field for another (for
+  example one witness list for the other outside a `|`) is outside it.
+- The harness is scratch and not shipped, as in the round-0 pass. Its counts reproduce only by
+  re-running an equivalent harness over the same two files.
+- The walk-profile item is still open until the spine merges (State, above).
