@@ -1,6 +1,6 @@
 # A3: documentation truth and a typed meeting trigger
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -140,17 +140,17 @@ the corrected text states the rule, not the tally.
 
 ## Acceptance
 
-- [ ] **The kind is typed and required.** `MeetingTrigger` gains `kind: MeetingTriggerKind` with no
+- [x] **The kind is typed and required.** `MeetingTrigger` gains `kind: MeetingTriggerKind` with no
   default. A dataclass field without a default cannot follow the defaulted `body_victim_id`, so the
   field goes before it or is keyword-only; every construction names it either way. An unknown
   value raises `ValueError` in `__post_init__` (AGENTS.md load-bearing rule 5). Planted: omitting
   `kind` raises `TypeError`, and `kind="Emergency"` raises `ValueError`. Perturbed: giving `kind`
   a default of `"report"` turns the omission test red.
-- [ ] **The builder carries the engine's kind.** `_build_meeting_trigger` sets `kind` from
+- [x] **The builder carries the engine's kind.** `_build_meeting_trigger` sets `kind` from
   `MeetingTriggeredEvent.trigger`, and its third return element equals `trigger.kind` for both
   engine triggers. Enforced by a test over a report event and an emergency event; perturbed: a
   builder that hard-codes `kind="report"` fails it on the emergency event.
-- [ ] **The planted case: the wording no longer decides.** A report-kind trigger whose description
+- [x] **The planted case: the wording no longer decides.** A report-kind trigger whose description
   contains "called an emergency meeting" runs through `MeetingManager.run` as a report: the ballot
   render receives `reporter_id == trigger.triggered_by` (`_collect_one_ballot`), and
   `_detect_contradictions` receives `trigger_kind="report"`. The mirror case also runs: an
@@ -158,12 +158,12 @@ the corrected text states the rule, not the tally.
   `"emergency"`). The Evidence reproduction shows today's code answers the other way. On the
   branch, restoring the substring body of `_trigger_is_emergency` turns the planted test red on
   those semantic assertions, not on a `TypeError`, and Results quotes that red output.
-- [ ] **Every manager decision reads the kind.** All five consumers go through
+- [x] **Every manager decision reads the kind.** All five consumers go through
   `_trigger_is_emergency`, which returns `trigger.kind == "emergency"`, including the direct
   substring test at `:2138`. `git grep -n "in trigger.description" -- meetings/manager.py` prints
   nothing, and `EMERGENCY_TRIGGER_PHRASE` appears in `meetings/manager.py` only at its definition
   and in `__all__`; the producer in `orchestrator/game.py` keeps using it.
-- [ ] **The lockstep pin.** For every trigger shape the production builder constructs (emergency;
+- [x] **The lockstep pin.** For every trigger shape the production builder constructs (emergency;
   report naming a present body; report whose body was already consumed, "a body"; report with
   `temporal_observations=True`, naming the public handle), `trigger.kind` equals `"emergency" if
   EMERGENCY_TRIGGER_PHRASE in trigger.description else "report"`: the templates' own test. A
@@ -172,7 +172,7 @@ the corrected text states the rule, not the tally.
   Perturbed: a builder variant whose report description contains the phrase fails the first
   assertion; a planted template copy with an edited literal fails the second. No template is
   edited.
-- [ ] **All construction sites pass the kind.** The two production sites and every test site name
+- [x] **All construction sites pass the kind.** The two production sites and every test site name
   `kind=` (34 at `e886b663`; re-count). `eval/reasoning_evidence.py:284` passes
   `kind="emergency"`. `tests/_helpers/committed.py::meeting_trigger_kind` returns the rebuilt
   trigger's typed `kind` (the engine event's), with no description read, and its docstring says
@@ -180,7 +180,7 @@ the corrected text states the rule, not the tally.
   read the kind; tests that read the phrase out of recorded prompt text
   (`tests/agents/test_beliefs.py:77-86`) read what the model saw and may stay. Results gives each
   such site's disposition.
-- [ ] **The comments that describe the trigger tell the truth.** The comment above
+- [x] **The comments that describe the trigger tell the truth.** The comment above
   `EMERGENCY_TRIGGER_PHRASE` (`meetings/manager.py:590-597`), the `MeetingTrigger` and
   `_trigger_is_emergency` docstrings, and the `_build_meeting_trigger` docstring stop saying the
   meeting layer carries no structured kind. They say instead that the DTO carries the typed kind,
@@ -190,7 +190,7 @@ the corrected text states the rule, not the tally.
   whitespace, and fails if any still contains "no structured trigger kind" or "the one structured
   trigger fact", or does not name `kind`. Planted: the same check over each passage's `e886b663`
   wording, held in the test as fixed strings, fails on all four.
-- [ ] **Every stale passage in the Evidence table is corrected**, each to a statement that names
+- [x] **Every stale passage in the Evidence table is corrected**, each to a statement that names
   its enforcing symbol. In code files the edits are comments and docstrings only. Enforced by the
   AST guard in Validation: `meetings/schemas.py`, `meetings/voting.py`, `agents/memory/beliefs.py`,
   `agents/memory/store.py`, `engine/tick.py` and `observation/service.py` parse to equal trees at
@@ -198,13 +198,13 @@ the corrected text states the rule, not the tally.
   an equal tree with them kept (a comment-only edit). Planted: changing
   `HARD_EVIDENCE_GATE_RENDER_CEIL` to `0.58` in a scratch copy makes the guard exit 1. Results
   quotes both runs.
-- [ ] **The map file stays byte-identical.** `engine/maps/canonical_1.yaml` is not edited: its
+- [x] **The map file stays byte-identical.** `engine/maps/canonical_1.yaml` is not edited: its
   sha256 at the head equals the base's (`070346ce...`), and `git diff --stat <base> <head> --
   engine/maps/` is empty. The stale visibility sentence at `:50-53` is answered by the game-shape
   note, which states the crewmate same-room downgrade with its enforcing symbol. Mechanism: the
   Results reproduction block (below) compares the digests. Planted: a scratch copy with the comment
   edited makes the digest comparison exit 1.
-- [ ] **The game-shape note** in `docs/architecture.md` states the four facts, each with its
+- [x] **The game-shape note** in `docs/architecture.md` states the four facts, each with its
   enforcing symbol:
   - the vent tell: `engine.rules.resolve_vent` makes vent use observable, and the meeting layer
     certifies a spoken vent claim grounded in the speaker's record as a `vent_sighting` flag
@@ -227,7 +227,7 @@ the corrected text states the rule, not the tally.
   enforcing symbol per fact: `resolve_vent`, `ImpostorPolicy`, `order_actions_for_tick` and
   `apply_meeting_result`. Planted: the note with any one of the four removed fails, one case per
   symbol.
-- [ ] **Baseline 9 is named** in the substrate-ladder paragraph (`docs/architecture.md:116-120`)
+- [x] **Baseline 9 is named** in the substrate-ladder paragraph (`docs/architecture.md:116-120`)
   as the current adopting record, citing its audit. The glossary's "hard evidence" heading and
   anchor are unchanged while its body is corrected. The `training/README.md` table carries a
   baseline-6 history label pointing at the current reports. Mechanism for the ladder: the same
@@ -239,13 +239,13 @@ the corrected text states the rule, not the tally.
   `training/README.md` label are reviewed prose, not an invariant gate (craft rule 2 does not
   apply): Results quotes each before and after, and `bash scripts/check.sh`, which runs
   `check_doc_facts`, stays green on all three.
-- [ ] **Nothing recorded, rendered or derived moves.** The prompt-byte golden passes on s9 and s4.
+- [x] **Nothing recorded, rendered or derived moves.** The prompt-byte golden passes on s9 and s4.
   `bash scripts/verify_samples.sh replays/<set>` passes once per set directory for all four sets.
   The four `build_sample_report.py --check` runs and `publish_process_scorecard.py --check` exit 0.
   `uv run pytest -m campaign` passes, and the offline `verify_ml_evidence.py` reports FAIL 0.
   `git diff --stat e886b663 HEAD -- replays api frontend docs/process-scorecard.md
   docs/process-scorecard.json agents/strategic/prompts` prints nothing.
-- [ ] **The full gate.** `bash scripts/check.sh` exits 0 in a clean worktree at the branch head,
+- [x] **The full gate.** `bash scripts/check.sh` exits 0 in a clean worktree at the branch head,
   and Results quotes the real exit code with the pass counts. `uv run python
   scripts/validate_task_docs.py` and `uv run python scripts/check_doc_facts.py` exit 0.
 
@@ -466,4 +466,245 @@ beside), and each follow-through site. It closes with its limitations.
 
 ## Results
 
-Not started. Dispatched by this card's path on `work/docs-truth-typed-trigger` from `e886b663`.
+Delivered on `work/docs-truth-typed-trigger`, branched from `13f2c4d3`. That commit's code is the
+card's `e886b663`: `git diff --name-only e886b663 13f2c4d3` lists only files under `tasks/`. Commits:
+`81288720` (the typed trigger and its tests), `d1ea113a` (documentation truth and its tests), and
+this card's Results commit. Record impact as declared: nothing recorded, rendered, derived or
+published moves (the Verification block below).
+
+References: `docs/architecture.md` "Enforced boundaries" (the kind crosses from the orchestrator
+into `meetings/` as a plain `Literal`; no import contract changes and `lint-imports` stays green)
+and "Determinism and the substrate ladder" (baseline 9 is now named there);
+[the observation contract](../../docs/observation-contract.md) for the vent-witness and visibility
+facts; the decision memo `tasks/decision-2026-09-24-stage-b-wave.md` sections 0.1, 2.6 "A3", 3.1
+row 1, 3.2 and 3.4 brief 1; `tasks/investigations-2026-09-24/census_and_record.md` section 6.
+
+### What changed
+
+- `meetings/manager.py`: `MeetingTrigger` gains `kind: MeetingTriggerKind` with no default,
+  validated in `__post_init__` against `get_args(MeetingTriggerKind)` (held as
+  `_MEETING_TRIGGER_KINDS`). `_trigger_is_emergency` returns `trigger.kind == "emergency"`. The
+  reply's `is_body_report` (the base's direct substring test) now reads
+  `not _trigger_is_emergency(trigger)`, so all five trigger decisions go through the one function.
+  The phrase comment, the `MeetingTrigger` and `_trigger_is_emergency` docstrings, the
+  `_collect_vote` references (now `_collect_one_ballot`) and the `_reporter_context_for` docstring
+  are corrected.
+- `orchestrator/game.py::_build_meeting_trigger` passes `kind=trigger_event.trigger`; its docstring
+  says the manager decides from the kind and the renderers still receive only the description.
+- `eval/reasoning_evidence.py` passes `kind="emergency"`. `tests/_helpers/committed.py::meeting_trigger_kind`
+  returns the rebuilt trigger's `kind` and reads no description.
+- Stale prose, comments and docstrings only: `meetings/schemas.py`, `meetings/voting.py`,
+  `agents/memory/beliefs.py`, `agents/memory/store.py`, `engine/tick.py`, `observation/service.py`,
+  `training/rewards.py` (a `#` comment only), `docs/glossary.md` ("hard evidence" body; heading and
+  anchor unchanged), `docs/architecture.md`, `training/README.md` (history label) and the new
+  `docs/game-shape.md`.
+- New tests: `tests/meetings/test_meeting_trigger_kind.py` (28 tests) and
+  `tests/scripts/test_architecture_truth.py` (10 tests).
+
+### Decisions
+
+1. **Field order, not keyword-only.** `kind` is a plain field placed before `body_victim_id`; every
+   construction in the tree passes it by keyword. A missing kind is a `TypeError` at runtime and a
+   strict-mypy `call-arg` error at every site.
+2. **The map comment.** `engine/maps/canonical_1.yaml` is not edited (the orchestrator ruling of
+   2026-09-24). The crewmate same-room fact, with
+   `engine.visibility._resolve_observer_visibility_mode`, is stated on the game-shape page, which
+   also says the map comment describes the base setting, not what each role sees.
+3. **The word budget: the fallback page.** The page stood at 1,295 of 1,300 words. The one
+   subsection that only restates another document, "Observation timing and public identities",
+   was condensed: four sentences the observation contract already carries (exact-once delivery,
+   tick-row versions, the duplicate typed-handle sentence and the reserved audio position) and the
+   spectator version-5 sentence (the contract's version-5 paragraph) were removed, and the link
+   sentence now names delivery, recording versions and spectator versions. The baseline-9 sentence
+   (15 words) and the linking sentence (15 words) were added. The page is **1,266 words**, which
+   leaves 34 words beside the spine's linking sentence. Without the linking sentence the room for
+   an in-page note would have been 49 words including its heading, and the five facts with their
+   symbols take 398 words on `docs/game-shape.md` (`wc -w`). The only other restating candidate,
+   "Current model evidence", holds facts the training README does not carry, and "Explicit cleanup
+   experiments" is the spine's region, so the facts went to `docs/game-shape.md`, linked from one
+   sentence in the `engine/` paragraph.
+4. **A fifth fact.** The game-shape page states the four facts the card names plus the crewmate
+   same-room visibility fact (decision 2), and `test_architecture_truth.py` requires a symbol for
+   all five.
+5. **Three test sites whose description is the bare word "emergency"**
+   (`tests/orchestrator/test_meeting_integration.py`, the parity eject; `tests/training/test_conviction_serving.py:744`;
+   `tests/training/test_surrogate_runner.py`, the duo runner) take `kind="emergency"`, the word's
+   intent. Nothing at those sites reads the kind (the eject-result builder and the surrogate and
+   conviction runners read only `triggered_by` and `trigger_tick`), so no expectation moved.
+6. **A source scan as well as the grep.** `test_the_manager_hands_the_wording_on_and_decides_nothing_from_it`
+   parses `meetings/manager.py` and fails on any load of the phrase constant and on any read of
+   `trigger.description` other than the renderer's `meeting_trigger=` argument, with a planted
+   source that fails it. This keeps the card's two greps true after this card.
+
+**Follow-through sites** (comment or docstring only unless marked):
+
+| site | disposition |
+|---|---|
+| `eval/reporter_justice.py` `_meeting_trigger` docstring | outside Expected scope; it said the layer keeps no structured kind. Now says a recorded meeting carries neither kind nor description. Strings-dropped AST comparison with the base: `code changed: False` |
+| `meetings/manager.py` `_reporter_context_for` docstring | said the description is the trigger surface; now names `body_victim_id` and `_discoveries_in_window` |
+| `meetings/schemas.py` `BallotDecisionBasis` and `primary_reason_observation_id` docstrings | the same "every committed recording reads None" claim as the two listed rows, adjacent; corrected to the rule |
+| `tests/eval/test_deduction_metrics.py:2083`, `tests/meetings/test_grounding_label.py:745` | `_collect_vote` renamed `_collect_one_ballot` (the permitted follow-through) |
+| `tests/meetings/test_manager.py` | `test_detection_keys_off_the_trigger_description` renamed `test_detection_reads_the_typed_trigger_kind`, comment rewritten, both assertions kept |
+| `tests/meetings/test_manager_reporter_render.py:384` helper | reads `trigger.kind == "report"` (it mirrored the substring); the unused phrase import is dropped; the two-corpse comment names `body_victim_id` |
+| `tests/agents/test_beliefs.py` `_recorded_reporter` (`:73-88`) and the comment at `:3587` | keep reading the phrase out of the recorded prompt, which is what the model saw; both now say the manager reads the typed kind and the lockstep pin makes the phrase agree |
+
+**Construction sites.** Every `MeetingTrigger` construction names `kind=`. At `e886b663`
+`git grep -c "MeetingTrigger(" -- '*.py'` counted 34 in 15 files; mypy found one more,
+`trigger.__class__(...)` in `tests/orchestrator/test_meeting_integration.py` (the second meeting of
+the client-swap test). At the head the grep counts 41 in 16 files (the 34 plus seven in the new test
+file). A count-only AST scan over tracked `.py` files finds 42 constructions (2 production), 41
+naming `kind=`, and the one that omits it is the planted `TypeError` test. Kinds: production
+builder `trigger_event.trigger`; `eval/reasoning_evidence.py` `"emergency"`. Of the 33 pre-existing
+test sites, 9 whose description carries the phrase take `"emergency"`, 21 take `"report"` (both
+equal to the base's substring answer, so their behaviour is unchanged), and the 3 bare-word sites of
+decision 5 take `"emergency"`.
+
+### Verification
+
+Measured at `d1ea113a`, the implementation head; the Results commit changes only this card and
+`tasks/README.md`'s inventory sentence.
+
+```
+# base reproduction, on a `git archive e886b663` extraction via PYTHONPATH=<extract> python -P -c ...
+True
+# the same call at the head
+TypeError: MeetingTrigger.__init__() missing 1 required positional argument: 'kind'
+# with kind="report" at the head
+False
+
+uv run pytest tests/meetings/test_meeting_trigger_kind.py tests/scripts/test_architecture_truth.py -q
+38 passed
+git grep -n "in trigger.description" -- meetings/manager.py        # prints nothing
+git grep -n "EMERGENCY_TRIGGER_PHRASE" -- meetings/manager.py      # :603 definition, :5425 __all__
+git grep -n 'set [a-z_]* = "called an emergency meeting"' -- 'agents/strategic/prompts/*.j2' | wc -l
+15
+uv run pytest tests/meetings tests/orchestrator tests/agents tests/training -q   (run with -n auto --dist loadfile)
+3923 passed, 3 xfailed
+
+# comment/docstring-only guard, the card's script verbatim, base copies from e886b663
+code changed in: none                                   (exit 0)
+# planted: HARD_EVIDENCE_GATE_RENDER_CEIL = 0.58 in a scratch copy of the base
+code changed in: ['agents/memory/beliefs.py']           (exit 1)
+
+# the map
+git diff --stat e886b663 HEAD -- engine/maps/            # prints nothing
+shasum -a 256: base 070346ceabc3... head 070346ceabc3...  -> "map digest unchanged"
+# planted: a scratch copy with the visibility comment edited hashes cc9153c4...; the comparison exits 1
+git grep -l 070346ce    # 11 files: the nine audit records, this card and tasks/work/semantic-validation.md
+
+# nothing recorded, rendered or derived moves
+uv run pytest tests/meetings/test_prompt_byte_golden.py -q          25 passed
+bash scripts/verify_samples.sh replays/samples/9p2i                 All 50 samples verified clean.
+bash scripts/verify_samples.sh replays/samples/4p1i                 All 50 samples verified clean.
+bash scripts/verify_samples.sh replays/ml_corpus/9p2i               All 150 samples verified clean.
+bash scripts/verify_samples.sh replays/ml_corpus/4p1i               All 50 samples verified clean.
+build_sample_report.py --sample-dir <each of the four sets> --check   "... is consistent with its replays." x4, exit 0
+uv run python scripts/publish_process_scorecard.py --check           consistent, exit 0
+uv run python scripts/verify_ml_evidence.py    checks: 61 | OK 49 | FAIL 0 | ABSENT 7 | INFO 5
+uv run pytest -m campaign -q                   336 passed (-n auto), exit 0
+git diff --stat e886b663 HEAD -- replays api frontend docs/process-scorecard.md docs/process-scorecard.json agents/strategic/prompts
+                                               # prints nothing
+
+# docs
+uv run python -c "print(len(open('docs/architecture.md').read().split()))"     1266
+uv run python scripts/check_doc_facts.py        exit 0
+uv run python scripts/validate_task_docs.py     exit 0
+```
+
+The full gate, `bash scripts/check.sh`, is quoted in the dated subsection below, pinned to the
+commit it ran at.
+
+The ballot census the Evidence quotes, re-run count-only in this worktree before any edit (the diff
+guard above shows the recordings unchanged at the head): s9 845/845/382, s4 117/117/65, c9
+2,539/2,539/1,202, c4 129/129/56. The same walk also
+counted `decision_basis` present on every one of the 3,630 ballots, which is why the
+`BallotDecisionBasis` docstring was corrected too.
+
+`npm --prefix frontend test` and the e2e were not required: the diff guard prints no path under
+`api/` or `frontend/`, and no featured entry moved, so the demo bundle rebuilt on merge has the
+committed bundle's bytes.
+
+### Reviewed prose, before and after
+
+These two are reviewed prose, not invariant gates; `check_doc_facts` and `validate_task_docs` stay
+green on both.
+
+`docs/glossary.md`, "hard evidence" (heading and anchor unchanged). Before: "In this game's rules,
+an attributed witnessed vent or kill establishes an impostor role. The meeting layer grounds a
+spoken vent claim against the speaker's actual observation before publishing its proof flag. Other
+spoken placements, contradictions and agreement are different evidence classes; a citation alone
+does not certify their inference." After: "In this game's rules, an attributed witnessed vent or
+kill establishes an impostor role, but the meeting layer certifies only the vent. It grounds a
+spoken vent claim against the speaker's own witness record before publishing a `vent_sighting`
+proof flag (meeting detector, `detect_contradictions`). A witnessed kill stays with its witness: it
+enters the witness's own memory and raises the witness's own suspicion of the killer
+(`WITNESSED_KILL_SUSPICION_DELTA`). It publishes no flag, because no contradiction kind names a kill
+(`ContradictionRef.kind`), and it adds no row to the witness's ballot evidence
+(`_own_channel_evidence_rows`). Other spoken placements, contradictions and agreement are different
+evidence classes; a citation alone does not certify their inference." (The linked file names
+after each symbol, and the link targets, are omitted here.)
+
+`training/README.md`, section 2. Before: no label; the corpus row read "The frozen baseline-6 corpus
+and its committed by-game splits are the substrate every instrument below was measured on", in the
+present tense, under a "Measured basis" column. After, above the first table: "History label:
+baseline 6. The tables in this section record the baseline-6 corpus and its fits as they stood when
+the map was ruled. Their 'Measured basis' numbers and line citations are that record; the reports
+have since been re-grounded, so a cited line may now hold a different figure. The committed corpus
+under `replays/ml_corpus/` is the baseline-9 re-record, and its current fits are in each report's
+baseline-9 re-ground section" (the ballot surrogate, conviction model, composed runner and anchor
+study reports, linked). The rows themselves are unchanged.
+
+### Planted and perturbed evidence
+
+Each row: the production line or document changed, the perturbation, the command, and the result.
+Every perturbation was made in place, run, and restored by copying the saved file back
+(`cmp` confirmed each restore); none used `git checkout`. The new test files alone ran after each
+restore: 28 and 10 passed.
+
+| changed thing | perturbation | red tests | green before this card? |
+|---|---|---|---|
+| `_trigger_is_emergency` body | restore the base substring body | 4 red in the new file: the planted report, its mirror, the declared-kind case and the source scan. The planted report reads `assert {None} == {'p-1'}` (ballot `reporter_id`), the mirror `assert {'p-1'} == {None}`; a diagnostic run over the pair showed all five decisions flipped: report kind with the phrase gave reporter `None`, detector kind `emergency`, no opener reporter context, `is_body_report` False and the stale body stripped, and the mirror gave `p-1`, `report`, a context, True and the body kept | the planted pair is new |
+| same | `return False` | 7 red: the mirror, the declared-kind case, and five existing emergency tests in `test_manager.py` | no |
+| `kind` field | give it a default of `"report"` | `test_omitting_the_kind_raises_type_error` | new |
+| `__post_init__` check | `if False:` | the miscased and the Hypothesis undeclared-kind tests | new |
+| `_MEETING_TRIGGER_KINDS` | add `"Emergency"` | the miscased test | the Hypothesis property alone stayed green |
+| reply `is_body_report` site | revert to the base substring test | the planted pair (`assert {False} == {True}` and the reverse) and the source scan | new |
+| each of the other four decision sites (reporter render id, detector kind, body strip, ballot reporter) | swap `_trigger_is_emergency(trigger)` for the substring, one site at a time | the planted pair, every time | new |
+| builder `kind=trigger_event.trigger` | hard-code `kind="report"` | the builder emergency case, the emergency lockstep shape, the lockstep property, the committed-helper emergency case | new |
+| builder report description | append the phrase to the report wording | the four report lockstep shapes and the lockstep property | new |
+| `eval/reasoning_evidence.py` `kind="emergency"` | `kind="report"` | `test_the_reasoning_evidence_scenario_opens_a_typed_emergency` only (the existing reasoning-scorecard and reasoning-evidence tests: 66 passed) | **yes: green under every existing test** |
+| `committed.py::meeting_trigger_kind` | `return "report"` | the committed-helper emergency case only; the four committed-walk suites (`test_evidence_honesty`, `test_contradictions`, `test_schemas_pooling`, `test_transcript`) stayed green, 499 passed | **yes: green under every existing test** |
+| the phrase comment block | reintroduce "no structured trigger kind" | the four-passage test | new |
+| the four trigger passages | the `e886b663` wordings held as fixed strings | fail the check, one case each | planted in-test |
+| ladder paragraph | drop "Baseline 9" | `test_the_ladder_paragraph_names_the_current_baseline`; the `e886b663` paragraph is also planted in-test | new |
+| the architecture link | unlink `game-shape.md` | the committed-note test and the link test | new |
+| a game-shape symbol | rename `resolve_vent` | the committed-note test and its planted case; one planted case per symbol runs in-test | new |
+| a test-site `kind=` | delete it (`tests/meetings/_manager_helpers.py`) | `mypy`: `Missing positional argument "kind" in call to "MeetingTrigger"` | n/a |
+
+### Follow-ups (count-only; not done here)
+
+- The retired "MUST-vote / MUST-skip" directive vocabulary: `git grep -c -i -e "MUST-vote" -e "MUST-skip" -- '*.py'`
+  finds 67 lines in 16 files, including the sites the card lists. Much of it names the instruments'
+  historical verdict classes, so it needs its own card.
+- The same "every committed recording reads `None`" claim in `api/replay_loader.py` (the ballot
+  view mirror) and `tests/api/test_view_model.py` (a docstring): out of scope, because `api/` edits
+  need the bundle proof.
+- "83 committed ballots carry the redirect and 6 the uncited coercion" in
+  `meetings/schemas.py` (`BallotTargetRewriteReason`) and `tests/meetings/test_grounding_label.py`:
+  the four baseline-9 sets carry 0 of each, so those counts describe earlier records.
+- `VoteBallot`'s serializer docstring still speaks of moving report bytes "before the re-record".
+- `DESIGN.md` section 3.5 still describes the `drop` rule; it is historical and not edited.
+
+### Limitations
+
+- The lockstep pin covers the triggers the production builder constructs, over the engine's id
+  shapes (`p-N` players, `body-p-N-T` ids, `body-p-N` public handles). A hand-built trigger can
+  still disagree, and then the manager follows the kind while the templates follow the wording.
+  The one other production construction (`eval/reasoning_evidence.py`) is pinned to agree.
+- The source scan recognizes reads spelled `trigger.description`; a read through another name
+  would escape it.
+- `test_architecture_truth.py` checks that each game-shape fact names its enforcing symbol, not
+  that the fact holds; the behaviour itself is covered by the existing engine, policy and
+  orchestrator tests.
+- The Hypothesis property draws random text for undeclared kinds, so it did not find the planted
+  `"Emergency"` widening; the explicit miscased test does.
