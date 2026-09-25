@@ -24,11 +24,11 @@ This page is generated. Do not edit it by hand: run `uv run python scripts/publi
 * **rebuttal**: a turn by a player who already spoke in the same meeting; the only such turn the meeting layer can produce is the bounded rebuttal.
 * **era**: the recorded settings a group of games shares: its experiment settings, its observation delivery version, its substrate-flag stamp and its prompt versions. Games of different eras are never pooled.
 * **by construction**: a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and the meeting or tick if it is not, and the page says 0 by construction instead of presenting a measured improvement.
-* **n/a**: an empty denominator: nothing of that kind happened, so no rate exists.
+* **n/a**: nothing to count, so no rate exists: either nothing of that kind happened, or the cell or table counts only games recorded with a setting these games were not recorded with.
 
-Each cell reads `numerator/denominator (rate)`. A cell whose count a recorded setting forces to zero reads `0/N by construction` while that setting is on, and every cell with nothing to count reads `n/a`.
+Each cell reads `numerator/denominator (rate)`. A cell whose count a recorded setting forces to zero reads `0/N by construction` while that setting is on, and every cell with nothing to count reads `n/a`. A cell or table that counts only games recorded with some setting reads `n/a` in every era without it, never a measured 0.
 
-## Recorded settings a zero depends on
+## Recorded settings a count depends on
 
 * `vent_witness_rule`: who sees a vent exit: under physical, only the room surfaced into.
 * `vent_entry_policy`: when an impostor enters a vent: under own_fresh_kill, only at its own fresh kill.
@@ -103,7 +103,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 | Vent entries not after the impostor's own fresh kill | 103/587 (17.5%) | 101/501 (20.2%) | 88/396 (22.2%) | 13/105 (12.4%) | 0/42 (0.0%) | 2/44 (4.5%) |
 | Surfacings before the cap with someone in view | 299/512 (58.4%) | 264/435 (60.7%) | 212/350 (60.6%) | 52/85 (61.2%) | 18/38 (47.4%) | 17/39 (43.6%) |
 | Vent trips longer than the cap | n/a | n/a | n/a | n/a | n/a | n/a |
-| Surfacings at the cap | 0/512 (0.0%) | 0/435 (0.0%) | 0/350 (0.0%) | 0/85 (0.0%) | 0/38 (0.0%) | 0/39 (0.0%) |
+| Surfacings at the cap | n/a | n/a | n/a | n/a | n/a | n/a |
 | Vent exits into a room a crewmate stood in | 250/512 (48.8%) | 226/435 (52.0%) | 173/350 (49.4%) | 53/85 (62.4%) | 15/38 (39.5%) | 9/39 (23.1%) |
 | Vent exits into a room the impostor could see a crewmate in | 134/512 (26.2%) | 122/435 (28.0%) | 91/350 (26.0%) | 31/85 (36.5%) | 8/38 (21.1%) | 4/39 (10.3%) |
 | Vent exits while a crewmate stood in the room left | 24/512 (4.7%) | 18/435 (4.1%) | 17/350 (4.9%) | 1/85 (1.2%) | 2/38 (5.3%) | 4/39 (10.3%) |
@@ -184,7 +184,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 | --- | --- | --- | --- | --- | --- | --- |
 | Kills in the grace window after a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
 | Reported corpses older than the last regroup | n/a | n/a | n/a | n/a | n/a | n/a |
-| Vent trips ended by a regroup | 0/587 (0.0%) | 0/501 (0.0%) | 0/396 (0.0%) | 0/105 (0.0%) | 0/42 (0.0%) | 0/44 (0.0%) |
+| Vent trips ended by a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
 | Kill witnesses pressing the button soon after a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
 | Sabotage active at a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
 
@@ -192,7 +192,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 | row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
 | --- | --- | --- | --- | --- | --- | --- |
-| (none) | 0 | 0 | 0 | 0 | 0 | 0 |
+| (none) | n/a | n/a | n/a | n/a | n/a | n/a |
 
 ### Meeting structure
 
@@ -253,7 +253,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 | row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
 | --- | --- | --- | --- | --- | --- | --- |
-| (none) | 0 | 0 | 0 | 0 | 0 | 0 |
+| (none) | n/a | n/a | n/a | n/a | n/a | n/a |
 
 ### Ballots
 
@@ -302,7 +302,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 **Vent trips longer than the cap** (`trips_longer_than_cap`). Vent trips whose ticks inside exceed the in-vent cap, over vent trips that stayed inside for more than one tick. Reads `VentEntered`, `VentExited`, `meeting row`. Zero by construction while `vent_exit_policy = look_and_wait`.
 
-**Surfacings at the cap** (`forced_surfacings`). Vent exits made exactly at the in-vent cap, over all vent exits. Reads `VentEntered`, `VentExited`, `meeting row`.
+**Surfacings at the cap** (`forced_surfacings`). Vent exits made exactly at the in-vent cap, over all vent exits. Reads `VentEntered`, `VentExited`, `meeting row`. Counted only in games recorded with `vent_exit_policy = look_and_wait`; in any other era it reads n/a.
 
 **Vent exits into a room a crewmate stood in** (`vent_exits_into_occupied_room`). Vent exits whose destination room held a living crewmate just before the exit tick, over all vent exits. Reads `VentExited`, `state before the tick`.
 
@@ -348,7 +348,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 **Reported corpses older than the last regroup** (`report_corpses_older_than_last_close`). Report meetings whose reported victim was killed on or before the previous meeting's tick, over report meetings whose previous meeting regrouped. Reads `Killed`, `MeetingTriggered`, `meeting row`. Zero by construction while `meeting_reset = hub_with_grace`.
 
-**Vent trips ended by a regroup** (`trips_closed_by_regroup`). Vent trips that ended because a regroup cleared the vent, with no exit, over all vent trips that ended. Reads `VentEntered`, `VentExited`, `meeting row`.
+**Vent trips ended by a regroup** (`trips_closed_by_regroup`). Vent trips that ended because a regroup cleared the vent, with no exit, over all vent trips that ended. Reads `VentEntered`, `VentExited`, `meeting row`. Counted only in games recorded with `meeting_reset = hub_with_grace`; in any other era it reads n/a.
 
 **Kill witnesses pressing the button soon after a regroup** (`kill_witness_button_calls_soon_after_regroup`). Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped. Reads `Killed`, `MeetingTriggered`, `meeting row`.
 
@@ -420,7 +420,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 **Corpse age at report** (`corpse_age_at_report`). Report meetings by the ticks between the reported victim's kill and the meeting. Reads `Killed`, `MeetingTriggered`.
 
-**Trigger-tick movement and task events a regroup drops** (`trigger_tick_events_dropped_by_regroup`). Movement and task events on the trigger tick of every regroup meeting, by kind. Reads `Moved`, `TaskProgressed`, `TaskCompleted`.
+**Trigger-tick movement and task events a regroup drops** (`trigger_tick_events_dropped_by_regroup`). Movement and task events on the trigger tick of every regroup meeting, by kind. Reads `Moved`, `TaskProgressed`, `TaskCompleted`. Counted only in games recorded with `meeting_reset = hub_with_grace`; in any other era it reads n/a.
 
 **Meetings by trigger** (`meetings_by_trigger`). Meetings by what opened them: a reported corpse or a button press. Reads `MeetingTriggered`.
 
@@ -428,4 +428,4 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 **Actions thrown away on trigger ticks** (`actions_thrown_away_on_trigger_ticks`). Submitted actions the engine never ran because an earlier action on the same tick opened a meeting, by action type, read from the recorded dispositions; tick rows recorded without dispositions are not evaluable. Reads `recorded action dispositions`.
 
-**Who received the rebuttal, and who had accused them** (`rebuttal_beneficiaries`). Repeat-speaker turns by the speaker's seat (the opener, or another crewmate or impostor) and the role of the speaker of the turn answered. Reads `meeting row turns`.
+**Who received the rebuttal, and who had accused them** (`rebuttal_beneficiaries`). Repeat-speaker turns by the speaker's seat (the opener, or another crewmate or impostor) and the role of the speaker of the turn answered. Reads `meeting row turns`. Counted only in games recorded with `bounded_rebuttal_version = 1`; in any other era it reads n/a.

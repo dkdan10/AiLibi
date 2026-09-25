@@ -410,6 +410,8 @@ def test_cell_values_render_counts_n_a_and_the_by_construction_zero() -> None:
             "rate": 0.375,
             "guard": None,
             "by_construction": None,
+            "scope": None,
+            "in_scope": True,
         }
         fields.update(overrides)
         return command._value(CensusCell(**fields))
@@ -425,6 +427,53 @@ def test_cell_values_render_counts_n_a_and_the_by_construction_zero() -> None:
         rendered(numerator=0, rate=0.0, guard="x = 1", by_construction="x = 1")
         == "0/8 by construction"
     )
+    out_of_scope = rendered(
+        numerator=0, denominator=0, rate=None, scope="x = 1", in_scope=False
+    )
+    assert out_of_scope == "n/a"
+
+
+def _table_block(page: str, title: str) -> list[str]:
+    """The table rows under one bold table title, up to the blank line."""
+
+    lines = page.splitlines()
+    start = lines.index(f"**{title}.**") + 4
+    return lines[start : lines.index("", start)]
+
+
+def test_a_table_out_of_its_scope_reads_n_a_and_in_scope_reads_its_count() -> None:
+    """Planted: the regroup table in an era without and with the regroup."""
+
+    title = census.TABLES["trigger_tick_events_dropped_by_regroup"].title
+    without = command.render_markdown(_planted())
+    assert _table_block(without, title) == ["| (none) | n/a | n/a | n/a |"]
+    regroup_era = EraKey(
+        settings=(("meeting_reset", "hub_with_grace"),),
+        temporal_observation_version=None,
+        substrate_flags=PLANTED_ERA.substrate_flags,
+        prompt_stamps=PLANTED_ERA.prompt_stamps,
+    )
+    with_regroup = command.render_markdown(
+        census_from_inputs([_planted_inputs(era=regroup_era)])
+    )
+    assert _table_block(with_regroup, title) == ["| (none) | 0 | 0 | 0 |"]
+    beneficiaries = census.TABLES["rebuttal_beneficiaries"].title
+    assert _table_block(without, beneficiaries) == ["| (none) | n/a | n/a | n/a |"]
+    thrown = census.TABLES["actions_thrown_away_on_trigger_ticks"].title
+    assert _table_block(without, thrown)[0] == "| move | 1 | 1 | 1 |"
+
+
+def test_the_definitions_name_the_setting_a_scoped_count_needs() -> None:
+    page = command.render_markdown(_planted())
+    counted = "Counted only in games recorded with `{}`; in any other era it reads n/a."
+    scopes = {key: spec.scope for key, spec in census.CELLS.items()}
+    scopes.update((key, spec.scope) for key, spec in census.TABLES.items())
+    for key, scope in scopes.items():
+        line = next(item for item in page.splitlines() if f"(`{key}`)." in item)
+        if scope is None:
+            assert "Counted only" not in line, key
+        else:
+            assert line.endswith(counted.format(scope.describe())), key
 
 
 def test_the_page_renders_tables_and_their_not_evaluable_rows() -> None:

@@ -20,6 +20,9 @@ from types import MappingProxyType
 from typing import Any, get_args, get_origin
 
 import pytest
+from hypothesis import given
+from hypothesis import settings as hypothesis_settings
+from hypothesis import strategies as st
 from pydantic import BaseModel
 
 import eval.gameplay_census as census
@@ -48,6 +51,7 @@ from eval.gameplay_census import (
     CellCount,
     CensusCell,
     CensusInputs,
+    CensusTable,
     CensusTally,
     DiscardedAction,
     EraKey,
@@ -743,6 +747,36 @@ def test_the_committed_sets_are_one_era() -> None:
     eras = [section["era"] for section in payload["sets"]]
     assert all(item == payload["pooled"]["era"] for item in eras)
     assert payload["pooled"]["era"]["settings"] == {}
+
+
+def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
+    """No committed recording carries the in-vent cap, a regroup or a rebuttal.
+
+    So each cell and table counted only under one of those settings publishes
+    nothing in every column, and the page shows n/a rather than a measured 0.
+    """
+
+    payload = _published()
+    for section in (*payload["sets"], payload["pooled_9p2i"], payload["pooled"]):
+        for key, view in section["cells"].items():
+            scope = SCOPED_CELLS.get(key)
+            assert view["scope"] == (None if scope is None else scope.describe()), key
+            assert view["in_scope"] is (scope is None), key
+            if scope is not None:
+                counted = (view["numerator"], view["denominator"], view["rate"])
+                assert counted == (0, 0, None), key
+                assert view["not_evaluable"] == 0, key
+        for key, view in section["tables"].items():
+            scope = SCOPED_TABLES.get(key)
+            assert view["scope"] == (None if scope is None else scope.describe()), key
+            assert view["in_scope"] is (scope is None), key
+            if scope is not None:
+                assert (view["counts"], view["not_evaluable"]) == ({}, 0), key
+    page = (repo_root / "docs" / "gameplay-census.md").read_text(encoding="utf-8")
+    six = " n/a |" * 6
+    assert f"| Vent trips ended by a regroup |{six}" in page
+    assert f"| Surfacings at the cap |{six}" in page
+    assert page.count(f"| (none) |{six}") == len(SCOPED_TABLES)
 
 
 # --------------------------------------------------------------------------- #
@@ -1705,6 +1739,8 @@ def test_a_published_cell_cannot_carry_a_nonzero_count_by_construction() -> None
         "rate": 0.5,
         "guard": "always",
         "by_construction": None,
+        "scope": None,
+        "in_scope": True,
     }
     CensusCell(**fields)
     with pytest.raises(ValueError, match="by construction"):
@@ -1717,6 +1753,169 @@ def test_a_published_cell_cannot_carry_a_nonzero_count_by_construction() -> None
         CensusCell(**{**fields, "numerator": 3, "rate": 1.5})
     with pytest.raises(ValueError, match="non-negative"):
         CensusCell(**{**fields, "not_evaluable": -1})
+
+
+def test_a_published_cell_or_table_out_of_its_scope_counts_nothing() -> None:
+    """Out of its scope a cell has an empty denominator and a table no rows."""
+
+    empty: dict[str, Any] = {
+        "title": "t",
+        "heading": "h",
+        "definition": "d",
+        "reads": (),
+        "numerator": 0,
+        "denominator": 0,
+        "not_evaluable": 0,
+        "rate": None,
+        "guard": None,
+        "by_construction": None,
+        "scope": "meeting_reset = hub_with_grace",
+        "in_scope": False,
+    }
+    CensusCell(**empty)
+    with pytest.raises(ValueError, match="out of its scope"):
+        CensusCell(**{**empty, "denominator": 2, "rate": 0.0})
+    with pytest.raises(ValueError, match="out of its scope"):
+        CensusCell(**{**empty, "not_evaluable": 1})
+    with pytest.raises(ValueError, match="without a scope"):
+        CensusCell(**{**empty, "scope": None})
+    table_fields: dict[str, Any] = {
+        "title": "t",
+        "heading": "h",
+        "definition": "d",
+        "reads": (),
+        "counts": {},
+        "not_evaluable": 0,
+        "scope": "meeting_reset = hub_with_grace",
+        "in_scope": False,
+    }
+    CensusTable(**table_fields)
+    with pytest.raises(ValueError, match="out of its scope"):
+        CensusTable(**{**table_fields, "counts": {"Moved": 1}})
+    with pytest.raises(ValueError, match="out of its scope"):
+        CensusTable(**{**table_fields, "not_evaluable": 1})
+    with pytest.raises(ValueError, match="without a scope"):
+        CensusTable(**{**table_fields, "scope": None})
+    CensusTable(**{**table_fields, "scope": None, "in_scope": True, "counts": {"a": 1}})
+
+
+# --------------------------------------------------------------------------- #
+# Scopes: counted only in games recorded with a setting                        #
+# --------------------------------------------------------------------------- #
+
+#: Every cell counted only under a recorded setting, with that setting. Each has
+#: a planted case reading n/a outside it: ``forced_surfacings`` in
+#: ``test_without_the_look_and_wait_exit_no_surfacing_is_at_a_cap`` and
+#: ``trips_closed_by_regroup`` in
+#: ``test_where_no_meeting_regroups_no_trip_is_ended_by_a_regroup``.
+SCOPED_CELLS: Mapping[str, SettingPredicate] = MappingProxyType(
+    {
+        "forced_surfacings": census.LOOK_AND_WAIT_EXIT,
+        "trips_closed_by_regroup": census.MEETING_REGROUP,
+    }
+)
+
+#: Every table counted only under a recorded setting. Planted in
+#: ``test_where_no_meeting_regroups_the_dropped_events_table_reads_n_a`` and
+#: ``test_the_rebuttal_beneficiaries_table_is_counted_only_with_the_rebuttal_on``.
+SCOPED_TABLES: Mapping[str, SettingPredicate] = MappingProxyType(
+    {
+        "trigger_tick_events_dropped_by_regroup": census.MEETING_REGROUP,
+        "rebuttal_beneficiaries": census.BOUNDED_REBUTTAL,
+    }
+)
+
+
+def test_the_scoped_cells_and_tables_are_exactly_these() -> None:
+    cells = {key: spec.scope for key, spec in CELLS.items() if spec.scope is not None}
+    tables = {key: spec.scope for key, spec in TABLES.items() if spec.scope is not None}
+    assert cells == dict(SCOPED_CELLS)
+    assert tables == dict(SCOPED_TABLES)
+    for scope in (*cells.values(), *tables.values()):
+        assert PREDICATES[scope.key] is scope
+
+
+def _expected_in_scope(
+    scope: SettingPredicate | None, values: Mapping[str, SettingValue]
+) -> bool:
+    """The scope rule restated independently of the module's helper."""
+
+    if scope is None:
+        return True
+    return all(
+        values.get(name, SETTING_DEFAULTS[name]) == value
+        for name, value in scope.conditions
+    )
+
+
+_SCOPE_SETTINGS = st.fixed_dictionaries(
+    {},
+    optional={
+        "meeting_reset": st.sampled_from(("preserve", "hub_with_grace")),
+        "vent_exit_policy": st.sampled_from(
+            ("target_distance", "observed_risk", "look_and_wait")
+        ),
+        "bounded_rebuttal_version": st.sampled_from((None, 1)),
+        "vent_witness_rule": st.sampled_from(("both_rooms", "physical")),
+    },
+)
+
+
+@hypothesis_settings(max_examples=60, deadline=None)
+@given(values=_SCOPE_SETTINGS, hits=st.lists(st.booleans(), min_size=1, max_size=4))
+def test_every_cell_and_table_counts_exactly_when_its_scope_holds(
+    values: dict[str, SettingValue], hits: list[bool]
+) -> None:
+    """Property over every cell and table and a generated family of settings.
+
+    A cell out of its scope keeps an empty denominator whatever it is handed,
+    and a table out of its scope keeps no row; in scope both count as usual.
+    """
+
+    for key, spec in CELLS.items():
+        accumulator = census._Accumulator(label=PLANTED, values=values)
+        guard_on = spec.guard is not None and spec.guard.holds(values)
+        for hit in hits:
+            accumulator.count(key, hit and not guard_on, seed=SEED, where="tick 1")
+        numerator = sum(hit and not guard_on for hit in hits)
+        expected = (
+            [numerator, len(hits), 0]
+            if _expected_in_scope(spec.scope, values)
+            else [0, 0, 0]
+        )
+        assert accumulator.cells[key] == expected, key
+    for name, table_spec in TABLES.items():
+        accumulator = census._Accumulator(label=PLANTED, values=values)
+        accumulator.tally(name, "row", len(hits))
+        rows = dict(accumulator.tables[name])
+        counted = _expected_in_scope(table_spec.scope, values)
+        assert rows == ({"row": len(hits)} if counted else {}), name
+
+
+def setting_meaning_gaps(meanings: Mapping[str, str]) -> tuple[set[str], set[str]]:
+    """Fields a guard or scope reads with no meaning, and meanings naming none."""
+
+    predicates = [
+        predicate
+        for spec in CELLS.values()
+        for predicate in (spec.guard, spec.scope)
+        if predicate is not None
+    ]
+    predicates.extend(spec.scope for spec in TABLES.values() if spec.scope is not None)
+    named = {name for predicate in predicates for name, _ in predicate.conditions}
+    return named - set(meanings), set(meanings) - named
+
+
+def test_every_setting_a_guard_or_scope_reads_has_its_meaning_on_the_page() -> None:
+    assert setting_meaning_gaps(census.SETTING_MEANINGS) == (set(), set())
+    missing = {
+        name: meaning
+        for name, meaning in census.SETTING_MEANINGS.items()
+        if name != "meeting_reset"
+    }
+    assert setting_meaning_gaps(missing) == ({"meeting_reset"}, set())
+    extra = {**census.SETTING_MEANINGS, "sabotage_threshold": "a win rule."}
+    assert setting_meaning_gaps(extra) == (set(), {"sabotage_threshold"})
 
 
 # --------------------------------------------------------------------------- #
@@ -1854,16 +2053,37 @@ def test_without_sabotage_a_neighbour_is_in_view_and_a_teammate_never_is() -> No
     assert counts("surfacings_before_cap_in_view", teammate) == (0, 1, 0)
 
 
-def test_a_surfacing_at_the_cap_is_forced_not_a_breach() -> None:
-    capped = game(
-        {"vent_exit_policy": "look_and_wait"},
+def _capped_trip(settings: Mapping[str, SettingValue]) -> GameFacts:
+    return game(
+        settings,
         vents=(entry(10), exit_(10 + IN_VENT_CAP_TICKS)),
         frames={10 + IN_VENT_CAP_TICKS: frame({"p-2": ROOM})},
     )
+
+
+def test_a_surfacing_at_the_cap_is_forced_not_a_breach() -> None:
+    capped = _capped_trip({"vent_exit_policy": "look_and_wait"})
     assert counts("surfacings_before_cap_in_view", capped) == (0, 1, 0)
     assert counts("forced_surfacings", capped) == (1, 1, 0)
     assert counts("trips_longer_than_cap", capped) == (0, 1, 0)
     assert table("ticks_inside_per_trip", capped) == {str(IN_VENT_CAP_TICKS): 1}
+
+
+@pytest.mark.parametrize("settings", ({}, {"vent_exit_policy": "observed_risk"}))
+def test_without_the_look_and_wait_exit_no_surfacing_is_at_a_cap(
+    settings: Mapping[str, SettingValue],
+) -> None:
+    """Planted: the same four-tick trip reads n/a where no cap exists."""
+
+    uncapped = _capped_trip(settings)
+    forced = cell("forced_surfacings", uncapped)
+    assert (forced.numerator, forced.denominator, forced.rate) == (0, 0, None)
+    assert (forced.scope, forced.in_scope) == (
+        "vent_exit_policy = look_and_wait",
+        False,
+    )
+    assert table("ticks_inside_per_trip", uncapped) == {str(IN_VENT_CAP_TICKS): 1}
+    assert counts("surfacings_before_cap_in_view", uncapped) == (0, 1, 0)
 
 
 def test_a_surfacing_with_no_recorded_state_before_it_raises() -> None:
@@ -1922,21 +2142,47 @@ def test_ticks_inside_restart_at_a_meeting_the_trip_spans() -> None:
     assert counts("trips_longer_than_cap", spanning) == (0, 1, 0)
 
 
+REGROUP: Mapping[str, SettingValue] = MappingProxyType(
+    {"meeting_reset": "hub_with_grace"}
+)
+
+
 def test_a_trip_is_closed_by_a_regroup_an_ejection_or_the_game_end() -> None:
-    regrouped = game(vents=(entry(10),), meetings=(meeting(tick=12, regrouped=True),))
+    regrouped = game(
+        REGROUP, vents=(entry(10),), meetings=(meeting(tick=12, regrouped=True),)
+    )
     assert counts("trips_closed_by_regroup", regrouped) == (1, 1, 0)
     assert counts("trips_longer_than_cap", regrouped) == (0, 1, 0)
     ejected = game(
+        REGROUP,
         vents=(entry(10),),
-        meetings=(meeting(tick=12, outcome="EJECTED", ejected="p-0"),),
+        meetings=(meeting(tick=12, outcome="EJECTED", ejected="p-0", regrouped=True),),
     )
     assert counts("trips_closed_by_regroup", ejected) == (0, 1, 0)
-    preserved = game(vents=(entry(10),), meetings=(meeting(tick=12),), terminal_tick=14)
-    assert counts("trips_closed_by_regroup", preserved) == (0, 1, 0)
-    assert counts("trips_longer_than_cap", preserved) == (0, 1, 0)
-    unrecorded_winner = game(vents=(entry(10),), winner=None)
+    ended = game(REGROUP, vents=(entry(10),), terminal_tick=14)
+    assert counts("trips_closed_by_regroup", ended) == (0, 1, 0)
+    unrecorded_winner = game(REGROUP, vents=(entry(10),), winner=None)
     assert counts("trips_closed_by_regroup", unrecorded_winner) == (0, 1, 0)
     assert counts("impostor_wins", unrecorded_winner) == (0, 0, 1)
+    preserved = game(vents=(entry(10),), meetings=(meeting(tick=12),), terminal_tick=14)
+    assert counts("trips_longer_than_cap", preserved) == (0, 1, 0)
+
+
+def test_where_no_meeting_regroups_no_trip_is_ended_by_a_regroup() -> None:
+    """Planted: under the historical reset the cell reads n/a, not 0 of N.
+
+    Even a carrier whose meeting is marked regrouped counts nothing there, so
+    the n/a comes from the recorded reset and not from the trips it holds.
+    """
+
+    for meetings in ((meeting(tick=12),), (meeting(tick=12, regrouped=True),)):
+        preserved = game(vents=(entry(10),), meetings=meetings, terminal_tick=14)
+        closed = cell("trips_closed_by_regroup", preserved)
+        assert (closed.numerator, closed.denominator, closed.rate) == (0, 0, None)
+        assert (closed.scope, closed.in_scope) == (
+            "meeting_reset = hub_with_grace",
+            False,
+        )
 
 
 def test_a_long_trip_closed_without_an_exit_counts_against_the_cap() -> None:
@@ -2038,7 +2284,9 @@ def test_the_regroup_cells_read_regroups_only() -> None:
     button = meeting(meeting_id="meeting-1", tick=15, opener="p-3")
     planted = game(kills=(kill(12, witnesses=("p-3",)),), meetings=(regroup, button))
     assert counts("sabotage_active_at_regroup", planted) == (1, 1, 0)
-    assert table("trigger_tick_events_dropped_by_regroup", planted) == {
+    assert table(
+        "trigger_tick_events_dropped_by_regroup", game(REGROUP, meetings=(regroup,))
+    ) == {
         "Moved": 2,
         "TaskProgressed": 1,
     }
@@ -2060,9 +2308,27 @@ def test_the_regroup_cells_read_regroups_only() -> None:
         meetings=(regroup, report(15, "body-x", meeting_id="meeting-1", opener="p-3")),
     )
     assert counts("kill_witness_button_calls_soon_after_regroup", reported) == (0, 0, 0)
-    kept = game(meetings=(replace(regroup, regrouped=False),))
+    kept = game(REGROUP, meetings=(replace(regroup, regrouped=False),))
     assert counts("sabotage_active_at_regroup", kept) == (0, 0, 0)
     assert table("trigger_tick_events_dropped_by_regroup", kept) == {}
+
+
+def test_where_no_meeting_regroups_the_dropped_events_table_reads_n_a() -> None:
+    """Planted: under the historical reset the table counts nothing at all.
+
+    Even a carrier whose meeting is marked regrouped adds no row there, so the
+    table is out of scope rather than an empty count.
+    """
+
+    regroup = meeting(regrouped=True, trigger_tick_dropped_events=(("Moved", 2),))
+    for settings in (REGROUP, {}):
+        dropped = section_from_tally(
+            fold_set(inputs(game(settings, meetings=(regroup,))))
+        ).tables["trigger_tick_events_dropped_by_regroup"]
+        expected = settings == REGROUP
+        assert dropped.in_scope is expected
+        assert dict(dropped.counts) == ({"Moved": 2} if expected else {})
+        assert dropped.scope == "meeting_reset = hub_with_grace"
 
 
 def test_a_kill_witness_button_at_the_cooldown_tick_counts() -> None:
@@ -2274,6 +2540,26 @@ def test_rebuttal_beneficiaries_name_the_accusers_role() -> None:
     }
 
 
+def test_the_rebuttal_beneficiaries_table_is_counted_only_with_the_rebuttal_on() -> (
+    None
+):
+    """Planted: with no rebuttal setting the table is out of scope, not empty.
+
+    At the historical default any rebuttal already raises the repeat-speaker
+    guard, so there the table can only be out of scope; with the setting on and
+    no rebuttal it is an empty count.
+    """
+
+    quiet = meeting(turns=(turn(0, "p-2"), turn(1, "p-3", reply_to="t0")))
+    for settings, expected in (({}, False), ({"bounded_rebuttal_version": 1}, True)):
+        beneficiaries = section_from_tally(
+            fold_set(inputs(game(settings, meetings=(quiet,))))
+        ).tables["rebuttal_beneficiaries"]
+        assert beneficiaries.in_scope is expected
+        assert dict(beneficiaries.counts) == {}
+        assert beneficiaries.scope == "bounded_rebuttal_version = 1"
+
+
 def test_opener_rebuttals_answer_the_charged_tick() -> None:
     def answered(
         *evidence: ObservationFact,
@@ -2368,6 +2654,7 @@ def test_a_meeting_carrier_couples_the_outcome_and_the_ejected_player() -> None:
 
 def test_a_new_trip_after_a_regroup_closes_the_old_one_first() -> None:
     planted = game(
+        REGROUP,
         vents=(entry(5), entry(15), exit_(16)),
         frames={16: frame({})},
         meetings=(meeting(tick=10, regrouped=True),),

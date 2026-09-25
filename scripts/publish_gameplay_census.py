@@ -119,7 +119,10 @@ def _heading_block(census: GameplayCensus, heading: str) -> list[str]:
             )
             lines.append(f"| {row} | {values} |")
         if not rows:
-            lines.append("| (none) |" + " 0 |" * len(groups))
+            values = " | ".join(
+                "0" if section.tables[key].in_scope else "n/a" for _, section in groups
+            )
+            lines.append(f"| (none) | {values} |")
         if any(section.tables[key].not_evaluable for _, section in groups):
             values = " | ".join(
                 str(section.tables[key].not_evaluable) for _, section in groups
@@ -161,6 +164,17 @@ def _era_lines(census: GameplayCensus) -> list[str]:
     ]
 
 
+def _scope_sentence(scope: str | None) -> str:
+    """The definition's closing sentence for a cell or table with a scope."""
+
+    if scope is None:
+        return ""
+    return (
+        f" Counted only in games recorded with `{scope}`; in any other era it reads "
+        "n/a."
+    )
+
+
 def _definition_lines(census: GameplayCensus) -> list[str]:
     lines = ["## Definitions", ""]
     for key, cell in census.pooled.cells.items():
@@ -172,13 +186,23 @@ def _definition_lines(census: GameplayCensus) -> list[str]:
             if cell.guard == "always"
             else f" Zero by construction while `{cell.guard}`."
         )
+        scope = _scope_sentence(cell.scope)
         lines.extend(
-            [f"**{cell.title}** (`{key}`). {cell.definition} Reads {reads}.{guard}", ""]
+            [
+                f"**{cell.title}** (`{key}`). {cell.definition} Reads {reads}."
+                f"{guard}{scope}",
+                "",
+            ]
         )
     for key, table in census.pooled.tables.items():
         reads = ", ".join(f"`{kind}`" for kind in table.reads)
+        scope = _scope_sentence(table.scope)
         lines.extend(
-            [f"**{table.title}** (`{key}`). {table.definition} Reads {reads}.", ""]
+            [
+                f"**{table.title}** (`{key}`). {table.definition} Reads {reads}."
+                f"{scope}",
+                "",
+            ]
         )
     return lines
 
@@ -212,9 +236,11 @@ def render_markdown(census: GameplayCensus) -> str:
             "",
             "Each cell reads `numerator/denominator (rate)`. A cell whose count a "
             "recorded setting forces to zero reads `0/N by construction` while that "
-            "setting is on, and every cell with nothing to count reads `n/a`.",
+            "setting is on, and every cell with nothing to count reads `n/a`. A "
+            "cell or table that counts only games recorded with some setting reads "
+            "`n/a` in every era without it, never a measured 0.",
             "",
-            "## Recorded settings a zero depends on",
+            "## Recorded settings a count depends on",
             "",
         ]
     )

@@ -51,6 +51,18 @@ setting's predicate. While the predicate holds, the fold raises
 tick) of the first breach, and the page renders the zero as "0 by construction"
 naming the setting, never as a measured improvement. An empty denominator is
 ``n/a``, never 0.
+
+Some cells count what a setting's own mechanism did among things every era has:
+the vent trips a regroup ended, the vent exits the in-vent cap forced. Some
+tables have rows only that mechanism makes: the events a regroup drops, who
+received a rebuttal. Each such cell or table carries the setting's predicate as
+its scope (:attr:`CellSpec.scope`, :attr:`TableSpec.scope`). It is counted only
+in games whose recorded settings satisfy the scope; in every other era it counts
+nothing and reads ``n/a``, never a measured 0. A cell whose denominator is itself
+made only by a setting's mechanism (regroup meetings, rebuttal turns) has no
+scope. On a walked recording that denominator is empty in every other era: the
+loader marks a meeting regrouped only under the recorded regroup reset, and at
+the historical rebuttal setting the fold raises on any rebuttal.
 """
 
 from __future__ import annotations
@@ -679,19 +691,39 @@ class CensusInputs:
 
 @dataclass(frozen=True)
 class CellSpec:
+    """One cell's published definition.
+
+    ``guard`` is the setting predicate that forces the count to zero while it
+    holds. ``scope`` is the setting predicate the counted thing exists under: a
+    cell with a scope is counted only in games whose recorded settings satisfy
+    it, and reads ``n/a`` in every other era instead of a measured zero.
+    """
+
     title: str
     heading: str
     definition: str
     reads: tuple[str, ...]
     guard: SettingPredicate | None = None
+    scope: SettingPredicate | None = None
 
 
 @dataclass(frozen=True)
 class TableSpec:
+    """One table's published definition; ``scope`` as on :class:`CellSpec`."""
+
     title: str
     heading: str
     definition: str
     reads: tuple[str, ...]
+    scope: SettingPredicate | None = None
+
+
+def _in_scope(
+    scope: SettingPredicate | None, values: Mapping[str, SettingValue]
+) -> bool:
+    """Whether a cell or table with ``scope`` is counted under ``values``."""
+
+    return scope is None or scope.holds(values)
 
 
 _WITNESSES: Final[str] = "Witnesses"
@@ -810,6 +842,7 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             _TRIPS,
             "Vent exits made exactly at the in-vent cap, over all vent exits.",
             (*_VENTS, "meeting row"),
+            scope=LOOK_AND_WAIT_EXIT,
         ),
         "vent_exits_into_occupied_room": CellSpec(
             "Vent exits into a room a crewmate stood in",
@@ -979,6 +1012,7 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "Vent trips that ended because a regroup cleared the vent, with no exit, "
             "over all vent trips that ended.",
             (*_VENTS, "meeting row"),
+            scope=MEETING_REGROUP,
         ),
         "kill_witness_button_calls_soon_after_regroup": CellSpec(
             "Kill witnesses pressing the button soon after a regroup",
@@ -1250,6 +1284,7 @@ TABLES: Final[Mapping[str, TableSpec]] = MappingProxyType(
             "Movement and task events on the trigger tick of every regroup meeting, "
             "by kind.",
             _REGROUP_DROPPED_KINDS,
+            scope=MEETING_REGROUP,
         ),
         "meetings_by_trigger": TableSpec(
             "Meetings by trigger",
@@ -1278,6 +1313,7 @@ TABLES: Final[Mapping[str, TableSpec]] = MappingProxyType(
             "Repeat-speaker turns by the speaker's seat (the opener, or another "
             "crewmate or impostor) and the role of the speaker of the turn answered.",
             ("meeting row turns",),
+            scope=BOUNDED_REBUTTAL,
         ),
     }
 )
@@ -1335,9 +1371,12 @@ class _Accumulator:
     def count(self, key: str, hit: bool, *, seed: int, where: str) -> None:
         """Add one denominator entry to ``key``; a hit adds to the numerator.
 
-        A hit on a cell whose setting predicate holds is a breach and raises.
+        A hit on a cell whose setting predicate holds is a breach and raises. A
+        cell whose scope does not hold for this group counts nothing.
         """
 
+        if not _in_scope(CELLS[key].scope, self.values):
+            return
         cell = self.cells[key]
         cell[1] += 1
         if not hit:
@@ -1355,6 +1394,10 @@ class _Accumulator:
         self.cells[key][2] += 1
 
     def tally(self, name: str, row: str, amount: int = 1) -> None:
+        """Add ``amount`` to one row; a table out of scope counts nothing."""
+
+        if not _in_scope(TABLES[name].scope, self.values):
+            return
         self.tables[name][row] += amount
 
 
@@ -2780,7 +2823,11 @@ TERMS: Final[Mapping[str, str]] = MappingProxyType(
             "game and the meeting or tick if it is not, and the page says 0 by "
             "construction instead of presenting a measured improvement."
         ),
-        "n/a": "an empty denominator: nothing of that kind happened, so no rate exists.",
+        "n/a": (
+            "nothing to count, so no rate exists: either nothing of that kind "
+            "happened, or the cell or table counts only games recorded with a "
+            "setting these games were not recorded with."
+        ),
     }
 )
 
@@ -2824,11 +2871,14 @@ class _FrozenModel(BaseModel):
 
 
 class CensusCell(_FrozenModel):
-    """One published cell: its counts, its definition and its guard.
+    """One published cell: its counts, its definition, its guard and its scope.
 
     ``rate`` is ``None`` iff the denominator is 0. ``by_construction`` names the
     setting predicate that forces the cell to zero for this group, when it holds;
-    a published cell carrying it must count zero.
+    a published cell carrying it must count zero. ``scope`` names the setting
+    predicate the cell is counted under, and ``in_scope`` says whether this
+    group's era satisfies it; a cell out of its scope counts nothing, so it reads
+    ``n/a``.
     """
 
     title: str
@@ -2841,6 +2891,8 @@ class CensusCell(_FrozenModel):
     rate: float | None
     guard: str | None
     by_construction: str | None
+    scope: str | None
+    in_scope: bool
 
     @model_validator(mode="after")
     def _counts_are_coherent(self) -> CensusCell:
@@ -2857,16 +2909,32 @@ class CensusCell(_FrozenModel):
             )
         if self.by_construction is not None and self.numerator:
             raise ValueError("a cell forced to zero by construction must count zero")
+        if self.scope is None and not self.in_scope:
+            raise ValueError("a cell without a scope is counted in every era")
+        if not self.in_scope and (self.denominator or self.not_evaluable):
+            raise ValueError("a cell out of its scope must count nothing")
         return self
 
 
 class CensusTable(_FrozenModel):
+    """One published table; ``scope`` and ``in_scope`` as on :class:`CensusCell`."""
+
     title: str
     heading: str
     definition: str
     reads: tuple[str, ...]
     counts: dict[str, int]
     not_evaluable: int
+    scope: str | None
+    in_scope: bool
+
+    @model_validator(mode="after")
+    def _scope_is_coherent(self) -> CensusTable:
+        if self.scope is None and not self.in_scope:
+            raise ValueError("a table without a scope is counted in every era")
+        if not self.in_scope and (self.counts or self.not_evaluable):
+            raise ValueError("a table out of its scope must count nothing")
+        return self
 
 
 class EraView(_FrozenModel):
@@ -2936,6 +3004,8 @@ def section_from_tally(tally: CensusTally) -> CensusSection:
             by_construction=(
                 spec.guard.describe() if spec.guard is not None and holds else None
             ),
+            scope=spec.scope.describe() if spec.scope is not None else None,
+            in_scope=_in_scope(spec.scope, values),
         )
     tables = {
         key: CensusTable(
@@ -2945,6 +3015,8 @@ def section_from_tally(tally: CensusTally) -> CensusSection:
             reads=spec.reads,
             counts=dict(sorted(tally.tables[key].items(), key=_row_order)),
             not_evaluable=tally.table_not_evaluable[key],
+            scope=spec.scope.describe() if spec.scope is not None else None,
+            in_scope=_in_scope(spec.scope, values),
         )
         for key, spec in TABLES.items()
     }
