@@ -2546,7 +2546,9 @@ def _movement_census(sample_dir: Path) -> _MovementCensus:
                         for pid, player in walk_event.state.players.items()
                         if player.alive
                     )
-                    trigger_kind = meeting_trigger_kind(walk_event)
+                    trigger_kind = meeting_trigger_kind(
+                        walk_event, experiment_config=None
+                    )
                     moves = {
                         pid: move_witness_records_for_meeting(
                             memories[pid], holder=pid, roles=roles
