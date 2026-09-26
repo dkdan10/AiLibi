@@ -319,6 +319,7 @@ from meetings.constants import (
     MAP_ARBITRATION_MAX_HOPS,
     MAP_ARBITRATION_MAX_TICK_GAP,
 )
+from meetings.rebuttal import select_bounded_rebuttal
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -482,7 +483,10 @@ class ChainWalk:
 
 
 def walk_chain(
-    transcript: MeetingTranscript, *, living_ids: frozenset[PlayerId]
+    transcript: MeetingTranscript,
+    *,
+    living_ids: frozenset[PlayerId],
+    bounded_rebuttal_version: Literal[1] | None = None,
 ) -> ChainWalk:
     """Replay-walk a recorded transcript without the LLM (DESIGN.md §5.2).
 
@@ -495,14 +499,28 @@ def walk_chain(
     replay never re-calls the model. ``living_ids`` is the living-player
     set the meeting ran with (at replay time, the set of ballot voters).
 
+    ``bounded_rebuttal_version`` is the meeting's recorded rebuttal setting.
+    ``None`` (the default, and every recording made without the setting)
+    reads the tail as opt-in turns only, so a trailing ``reply`` raises.
+    Under version 1 the manager may add one reply after the roll call: the
+    one :func:`meetings.rebuttal.select_bounded_rebuttal` picks on the turns
+    before it, which answers the earliest unanswered new charge against a
+    living player who already spoke, whatever that player's seat or role.
+    The walk then accepts exactly one trailing ``reply`` whose speaker and
+    ``reply_to`` equal that pick, and raises when the selector picks and no
+    reply is recorded, when the recorded reply is not the pick, or when
+    anything follows it. It checks the recorded turns and never repairs
+    them.
+
     Raises:
         ValueError: if the transcript is not a well-formed chain (a
             reply whose speaker is not the predicted accused, a missing
-            ``opening`` head, a broken ``reply_to`` link, or a non-
-            ``opt_in`` turn after the chain). Failing loud here surfaces a
-            non-deterministic / corrupted record rather than silently
-            accepting an un-replayable meeting (AGENTS.md "no silent
-            fallbacks").
+            ``opening`` head, a broken ``reply_to`` link, a non-``opt_in``
+            turn after the chain other than the selected rebuttal, or a
+            rebuttal the selector picked but the transcript lacks).
+            Failing loud here surfaces a non-deterministic / corrupted
+            record rather than silently accepting an un-replayable meeting
+            (AGENTS.md "no silent fallbacks").
     """
 
     turns = transcript.turns
@@ -558,19 +576,81 @@ def walk_chain(
         prev = turn
         index += 1
 
-    opt_in_turns = turns[index:]
-    for turn in opt_in_turns:
-        if turn.turn_kind != "opt_in":
-            raise ValueError(
-                f"walk_chain: turn {turn.turn_index} after the chain must be "
-                f"opt_in, got turn_kind={turn.turn_kind!r}"
-            )
+    tail = turns[index:]
+    opt_in_count = 0
+    while opt_in_count < len(tail) and tail[opt_in_count].turn_kind == "opt_in":
+        opt_in_count += 1
+    opt_in_turns = tail[:opt_in_count]
+    trailing = tail[opt_in_count:]
+    if bounded_rebuttal_version is not None:
+        _check_bounded_rebuttal_tail(
+            turns[: index + opt_in_count], trailing, living_ids=living_ids
+        )
+    elif trailing:
+        turn = trailing[0]
+        raise ValueError(
+            f"walk_chain: turn {turn.turn_index} after the chain must be "
+            f"opt_in, got turn_kind={turn.turn_kind!r}"
+        )
 
     return ChainWalk(
         chain_speakers=tuple(turn.speaker for turn in chain),
         termination=termination,
         opt_in_speakers=tuple(turn.speaker for turn in opt_in_turns),
     )
+
+
+def _check_bounded_rebuttal_tail(
+    before: Sequence[MeetingTurn],
+    trailing: Sequence[MeetingTurn],
+    *,
+    living_ids: frozenset[PlayerId],
+) -> None:
+    """Raise unless ``trailing`` is exactly the reply the selector picks.
+
+    ``before`` is the chain and the opt-in turns; the selector runs on them
+    exactly as the manager ran it after the roll call.
+    """
+
+    pick = select_bounded_rebuttal(
+        MeetingTranscript(turns=tuple(before)), living_ids=living_ids
+    )
+    if pick is None:
+        if trailing:
+            turn = trailing[0]
+            raise ValueError(
+                f"walk_chain: turn {turn.turn_index} follows the opt-in turns, but "
+                "no charge is left unanswered, so the rebuttal setting adds no "
+                f"reply (got turn_kind={turn.turn_kind!r})"
+            )
+        return
+    if not trailing:
+        raise ValueError(
+            f"walk_chain: the rebuttal setting gives {pick.speaker!r} one reply "
+            f"to {pick.reply_to!r}, but the transcript records none"
+        )
+    turn = trailing[0]
+    if turn.turn_kind != "reply":
+        raise ValueError(
+            f"walk_chain: turn {turn.turn_index} after the opt-in turns must be "
+            f"the rebuttal reply, got turn_kind={turn.turn_kind!r}"
+        )
+    if turn.speaker != pick.speaker:
+        raise ValueError(
+            f"walk_chain: the rebuttal at turn {turn.turn_index} is by "
+            f"{turn.speaker!r} but the selector gives the reply to {pick.speaker!r}"
+        )
+    if turn.reply_to != pick.reply_to:
+        raise ValueError(
+            f"walk_chain: the rebuttal at turn {turn.turn_index} links to "
+            f"{turn.reply_to!r}, expected the charge {pick.reply_to!r}"
+        )
+    if len(trailing) > 1:
+        extra = trailing[1]
+        raise ValueError(
+            f"walk_chain: turn {extra.turn_index} follows the one rebuttal reply; "
+            "the rebuttal setting adds exactly one turn"
+        )
 
 
 # ---------------------------------------------------------------------------
