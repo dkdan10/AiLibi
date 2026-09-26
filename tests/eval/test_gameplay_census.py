@@ -91,6 +91,7 @@ from eval.replay_walk import (
     TickOpened,
     WalkComplete,
 )
+from eval.validity import roles_by_seed
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -2117,6 +2118,75 @@ def test_without_sabotage_a_neighbour_is_in_view_and_a_teammate_never_is() -> No
     assert counts("surfacings_before_cap_in_view", teammate) == (0, 1, 0)
 
 
+def _with_room_neighbours(
+    game_facts: GameFacts, room_neighbours: tuple[str, ...]
+) -> CensusInputs:
+    """A carrier for ``game_facts`` whose table gives ``ROOM`` the planted rooms."""
+
+    carrier = inputs(game_facts)
+    planted = {**carrier.neighbours, ROOM: room_neighbours}
+    return replace(carrier, neighbours=MappingProxyType(planted))
+
+
+def _counts_on(carrier: CensusInputs, key: str) -> tuple[int, int, int]:
+    folded = section_from_tally(fold_set(carrier)).cells[key]
+    return (folded.numerator, folded.denominator, folded.not_evaluable)
+
+
+def _surfacing_beside(
+    crew_room: str, settings: Mapping[str, SettingValue]
+) -> GameFacts:
+    """A two-tick trip out of ``ROOM`` into ``crew_room``, where one crewmate stands."""
+
+    return game(
+        settings,
+        vents=(entry(10), exit_(11, destination_room=crew_room)),
+        frames={11: frame({"p-2": crew_room})},
+    )
+
+
+def test_the_in_vent_view_follows_the_neighbours_the_carrier_holds() -> None:
+    """Planted: the carrier's neighbour table, not the canonical map, gives the view.
+
+    On the canonical map the vent room's one neighbour is ``NEIGHBOUR``. A carrier
+    that gives the vent room no neighbour hides a crewmate in ``NEIGHBOUR``, and
+    one that joins it to ``FAR`` alone shows a crewmate in ``FAR``.
+    """
+
+    in_view = "surfacings_before_cap_in_view"
+    visibly = "vent_exits_into_visibly_occupied_room"
+    near = _surfacing_beside(NEIGHBOUR, {})
+    far = _surfacing_beside(FAR, {})
+    assert _counts_on(inputs(near), in_view) == (1, 1, 0)
+    assert _counts_on(inputs(near), visibly) == (1, 1, 0)
+    assert _counts_on(inputs(far), in_view) == (0, 1, 0)
+    assert _counts_on(inputs(far), visibly) == (0, 1, 0)
+    isolated = _with_room_neighbours(near, ())
+    assert _counts_on(isolated, in_view) == (0, 1, 0)
+    assert _counts_on(isolated, visibly) == (0, 1, 0)
+    joined = _with_room_neighbours(far, (FAR,))
+    assert _counts_on(joined, in_view) == (1, 1, 0)
+    assert _counts_on(joined, visibly) == (1, 1, 0)
+    # The exit is counted as occupied on every table: only the view moves.
+    for carrier in (inputs(near), inputs(far), isolated, joined):
+        assert _counts_on(carrier, "vent_exits_into_occupied_room") == (1, 1, 0)
+
+
+def test_the_exit_policy_guard_judges_on_the_neighbours_the_carrier_holds() -> None:
+    """Planted: under ``look_and_wait`` the breach follows the carrier's table."""
+
+    in_view = "surfacings_before_cap_in_view"
+    look_and_wait = {"vent_exit_policy": "look_and_wait"}
+    near = _surfacing_beside(NEIGHBOUR, look_and_wait)
+    far = _surfacing_beside(FAR, look_and_wait)
+    with pytest.raises(GameplayCensusConformanceError, match="in view"):
+        fold_set(inputs(near))
+    assert _counts_on(_with_room_neighbours(near, ()), in_view) == (0, 1, 0)
+    assert _counts_on(inputs(far), in_view) == (0, 1, 0)
+    with pytest.raises(GameplayCensusConformanceError, match="in view"):
+        fold_set(_with_room_neighbours(far, (FAR,)))
+
+
 def _capped_trip(settings: Mapping[str, SettingValue]) -> GameFacts:
     return game(
         settings,
@@ -2212,15 +2282,37 @@ def test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds() -> None:
 def test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Planted: the loaded map's cooldown moves, and the carrier's follows it.
+    """Planted: the loaded map's cooldown and connections move, and the carrier's follow.
 
-    The set is loaded on one map, once: the carrier's cooldown and every game's
-    walk come from it.
+    The set is loaded on one map, once: the carrier's cooldown, its neighbour
+    table, the role seeding and every game's walk come from it. The planted map adds a room and
+    reconnects the vent room: it loses its one canonical neighbour and is joined
+    to ``FAR`` and to the added room.
     """
 
-    planted_map = MAP.model_copy(
-        update={"kill_cooldown_ticks": MAP.kill_cooldown_ticks + 2}
+    added = "PLANTED_ANNEX"
+    assert added not in MAP.rooms
+    rewired = tuple(
+        edge for edge in MAP.edges if ROOM not in (edge.from_room, edge.to_room)
     )
+    template = next(
+        edge for edge in MAP.edges if ROOM in (edge.from_room, edge.to_room)
+    )
+    planted_map = MAP.model_copy(
+        update={
+            "kill_cooldown_ticks": MAP.kill_cooldown_ticks + 2,
+            "rooms": MappingProxyType(
+                {**MAP.rooms, added: MAP.rooms[ROOM].model_copy(update={"id": added})}
+            ),
+            "edges": (
+                *rewired,
+                template.model_copy(update={"from_room": ROOM, "to_room": FAR}),
+                template.model_copy(update={"from_room": added, "to_room": ROOM}),
+            ),
+        }
+    )
+    assert planted_map.room_neighbors(ROOM) == tuple(sorted((FAR, added)))
+    assert MAP.room_neighbors(ROOM) == (NEIGHBOUR,)
     set_dir = tmp_path / "planted" / "4p1i"
     set_dir.mkdir(parents=True)
     (set_dir / f"replay-seed-{LOADER_SEED}.jsonl").write_text("", encoding="utf-8")
@@ -2230,21 +2322,35 @@ def test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads(
     committed = _committed_game()
     loads: list[object] = []
     walked_on: list[object] = []
+    seeded_on: list[object] = []
 
     def load_map() -> object:
         loads.append(planted_map)
         return planted_map
+
+    def seed_roles(sample_dir: Path, **kwargs: Any) -> Mapping[int, Mapping[str, str]]:
+        seeded_on.append(kwargs.get("game_map"))
+        return roles_by_seed(sample_dir, **kwargs)
 
     def load_game(path: Path, **kwargs: Any) -> GameFacts:
         walked_on.append(kwargs["game_map"])
         return committed
 
     monkeypatch.setattr(census, "load_canonical_map", load_map)
+    monkeypatch.setattr(census, "roles_by_seed", seed_roles)
     monkeypatch.setattr(census, "_load_game", load_game)
     loaded = census.load_census_inputs(set_dir)
     assert loaded.kill_cooldown_ticks == planted_map.kill_cooldown_ticks
-    # One map per set: loaded once, and every game walks on it.
+    assert dict(loaded.neighbours) == {
+        room: planted_map.room_neighbors(room) for room in sorted(planted_map.rooms)
+    }
+    assert loaded.neighbours[ROOM] == tuple(sorted((FAR, added)))
+    assert loaded.neighbours[added] == (ROOM,)
+    assert ROOM not in loaded.neighbours[NEIGHBOUR]
+    # One map per set: loaded once, the roles are seeded on it, and every game
+    # walks on it.
     assert loads == [planted_map]
+    assert seeded_on == [planted_map]
     assert walked_on == [planted_map]
 
 
