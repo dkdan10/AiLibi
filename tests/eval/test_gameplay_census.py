@@ -501,6 +501,19 @@ def test_every_census_record_type_is_frozen() -> None:
     }
     assert thawed == {"_Accumulator"}
     assert all(model.model_config.get("frozen") for model in models)
+    assert all(model.model_config.get("extra") == "forbid" for model in models)
+
+
+def test_a_published_model_refuses_a_field_it_does_not_declare() -> None:
+    fields: dict[str, Any] = {
+        "settings": {},
+        "temporal_observation_version": None,
+        "substrate_flags": None,
+        "prompt_stamps": None,
+    }
+    assert census.EraView(**fields).settings == {}
+    with pytest.raises(ValueError, match="stray"):
+        census.EraView.model_validate({**fields, "stray": 1})
 
 
 def test_the_json_keeps_text_as_written() -> None:
@@ -541,6 +554,35 @@ def test_pool_adds_tables_and_their_not_evaluable_counts() -> None:
     thrown = pooled.tables["actions_thrown_away_on_trigger_ticks"]
     assert dict(thrown.counts) == {"move": 2}
     assert thrown.not_evaluable == 2
+
+
+def test_not_evaluable_counts_add_up_within_one_set() -> None:
+    """Planted: two games, and two not-evaluable entries of one cell in a game.
+
+    Rows recorded without dispositions add across the set's games. Two report
+    meetings without a recorded opener prompt, and two crew-witnessed kills no
+    meeting followed, each read 2 not evaluable.
+    """
+
+    two_games = fold_set(
+        inputs(
+            game(rows_without_dispositions=2),
+            replace(game(rows_without_dispositions=3), seed=SEED + 1),
+        )
+    )
+    assert two_games.table_not_evaluable["actions_thrown_away_on_trigger_ticks"] == 5
+    unrecorded = game(
+        bodies=(body("body-a", 18), body("body-b", 28)),
+        meetings=(
+            report(20, "body-a"),
+            report(30, "body-b", meeting_id="meeting-1"),
+        ),
+    )
+    assert counts("report_openings_with_kill_tick_handle", unrecorded) == (0, 0, 2)
+    unfollowed = game(
+        kills=(kill(12, witnesses=("p-3",)), kill(14, witnesses=("p-4",))),
+    )
+    assert counts("crew_witnessed_kills_held_at_next_meeting", unfollowed) == (0, 0, 2)
 
 
 # --------------------------------------------------------------------------- #
@@ -738,6 +780,30 @@ def test_a_predicate_describes_its_setting_and_value() -> None:
     assert census.NO_REBUTTAL.holds({})
     assert census.OWN_KILL_BALLOT_ROW.holds({"ballot_kill_row_version": 1})
     assert "on" == census._render_value(True)
+
+
+def test_every_predicate_is_listed_under_its_own_key() -> None:
+    assert dict(PREDICATES) == {
+        "physical_vent_witness": census.PHYSICAL_VENT_WITNESS,
+        "own_fresh_kill_entry": census.OWN_FRESH_KILL_ENTRY,
+        "look_and_wait_exit": census.LOOK_AND_WAIT_EXIT,
+        "meeting_regroup": census.MEETING_REGROUP,
+        "public_body_handle": census.PUBLIC_BODY_HANDLE,
+        "bounded_rebuttal": census.BOUNDED_REBUTTAL,
+        "no_rebuttal": census.NO_REBUTTAL,
+        "no_impostor_self_report": census.NO_IMPOSTOR_SELF_REPORT,
+        "own_kill_ballot_row": census.OWN_KILL_BALLOT_ROW,
+        "always": census.ALWAYS,
+    }
+    assert all(key == predicate.key for key, predicate in PREDICATES.items())
+
+
+def test_the_census_errors_are_the_standard_kinds() -> None:
+    """A caller catching the standard kind also catches the census's refusal."""
+
+    assert issubclass(GameplayCensusConformanceError, RuntimeError)
+    assert issubclass(GameplayCensusEraError, ValueError)
+    assert issubclass(GameplayCensusFieldError, ValueError)
 
 
 # --------------------------------------------------------------------------- #
@@ -2104,6 +2170,89 @@ def test_the_row_is_found_in_the_specified_wording_and_nowhere_else(
     assert capsys.readouterr() == ("", "")
 
 
+def test_a_row_is_its_whole_line_and_cites_the_one_code_span_after_cite() -> None:
+    """Planted: row shapes the ballot template never renders.
+
+    Text after the closing parenthesis is no row. The citation is the code span
+    right after ``cite``: a later span is not part of it, and an empty span, or
+    one that follows an earlier span, cites nothing.
+    """
+
+    exact = OWN_KILL_ROW_TEXT.format(room="STORAGE", tick=13)
+    trailing = _row_line(exact, "cite `p-2:13:0`") + " and more"
+    assert served_own_kill_rows(trailing, holder="p-2") == ()
+
+    def citation(cite: str) -> str | None:
+        (found,) = served_own_kill_rows(_row_line(exact, cite), holder="p-2")
+        return found.citation_id
+
+    assert citation("cite `p-2:13:0`") == "p-2:13:0"
+    assert citation("cite `p-2:13:0` or `p-2:13:1`") == "p-2:13:0"
+    assert citation("cite ``") is None
+    assert citation("`p-2:13:1` first; cite `p-2:13:0`") is None
+
+
+def test_a_row_joins_only_a_well_formed_observation_id() -> None:
+    """Planted: ``p-<digits>:<digits>:<digits>`` joins; any other citation breaches.
+
+    Each carrier records the holder's role and a kill at tick 12 it witnessed,
+    so only the citation's shape decides. Two-digit parts join; a missing part,
+    a trailing character, or a non-digit in any part joins nothing.
+    """
+
+    def breaching(holder: str, citation: str) -> tuple[int, int, int]:
+        planted = game(
+            roles={**ROLES, holder: "CREWMATE"},
+            kills=(kill(12, witnesses=(holder,)),),
+            meetings=(
+                meeting(
+                    own_kill_rows=(OwnKillRowFact(holder, "p-0", ROOM, 13, citation),)
+                ),
+            ),
+        )
+        return counts("own_kill_rows_breaching", planted)
+
+    assert breaching("p-12", "p-12:13:10") == (0, 1, 0)
+    for holder, malformed in (
+        ("p-3", "p-3:13:"),
+        ("p-3", "p-3::0"),
+        ("p-3", "p-3:13:0x"),
+        ("p-3", "p-3:1x:0"),
+        ("p-", "p-:13:0"),
+        ("p-3x", "p-3x:13:0"),
+    ):
+        assert breaching(holder, malformed) == (1, 1, 0), malformed
+
+
+def test_the_row_grammar_refuses_every_other_shape() -> None:
+    """Planted: a subject, separator, room or tick outside the template's grammar.
+
+    The row starts its line, the subject is ``p-`` and digits, one token of any
+    length separates it from the row text, the room is an upper-case name and
+    the tick is digits. Any other shape is no row.
+    """
+
+    exact = OWN_KILL_ROW_TEXT.format(room="STORAGE", tick=13)
+    cite = "cite `p-2:13:0`"
+    two_digit = f"- `p-12` -- {exact} (seen; {cite})"
+    assert served_own_kill_rows(two_digit, holder="p-2") == (
+        OwnKillRowFact("p-2", "p-12", "STORAGE", 13, "p-2:13:0"),
+    )
+    killed_in = "you watched them KILL in"
+    for line in (
+        f"- `p-1x` — {exact} (seen; {cite})",
+        f"- `p-` — {exact} (seen; {cite})",
+        f"- `p-0`  {exact} (seen; {cite})",
+        f"- `p-0` — and so {exact} (seen; {cite})",
+        f"  - `p-0` — {exact} (seen; {cite})",
+        f"- `p-0` — {killed_in} _STORAGE at tick 13 (seen; {cite})",
+        f"- `p-0` — {killed_in} Storage at tick 13 (seen; {cite})",
+        f"- `p-0` — {killed_in} STORAGE at tick  (seen; {cite})",
+        f"- `p-0` — {killed_in} STORAGE at tick 1x (seen; {cite})",
+    ):
+        assert served_own_kill_rows(line, holder="p-2") == (), line
+
+
 def test_the_rows_found_are_the_denominator_so_a_mismatch_reads_n_a() -> None:
     silent = game({"ballot_kill_row_version": 1}, meetings=(meeting(),))
     breaching = cell("own_kill_rows_breaching", silent)
@@ -2629,10 +2778,80 @@ def test_in_place_surfacings_count_a_crewmate_arriving_before_the_walk_out() -> 
         }
     )
     assert counts("in_place_surfacings_near_crew", walked_away) == (0, 1, 0)
+    # The impostor is missing from a later state: back inside a vent (the engine
+    # lets it re-enter on the next tick), or ejected at a meeting. Either ends
+    # the watch before the crewmate arrives.
+    back_in_vent = game(
+        vents=(entry(10), exit_(11, destination_room=ROOM), entry(12)),
+        frames={
+            11: frame({}),
+            12: frame({"p-0": ROOM}),
+            13: frame({"p-3": ROOM}),
+        },
+    )
+    assert counts("in_place_surfacings_near_crew", back_in_vent) == (0, 1, 0)
+    ejected_first = game(
+        vents=(entry(10), exit_(11, destination_room=ROOM)),
+        frames={
+            11: frame({}),
+            12: frame({"p-0": ROOM}),
+            13: frame({"p-3": ROOM}),
+        },
+        meetings=(meeting(tick=12, outcome="EJECTED", ejected="p-0"),),
+    )
+    assert counts("in_place_surfacings_near_crew", ejected_first) == (0, 1, 0)
     teammate_only = in_place({12: frame({"p-0": ROOM, "p-1": ROOM})})
     assert counts("in_place_surfacings_near_crew", teammate_only) == (0, 1, 0)
     elsewhere = game(vents=(entry(10), exit_(11)), frames={11: frame({})})
     assert counts("in_place_surfacings_near_crew", elsewhere) == (0, 0, 0)
+
+
+def test_a_player_without_a_recorded_role_raises_where_a_role_is_read() -> None:
+    """Planted: ``p-9`` has no recorded role, which no walked game produces.
+
+    The loader records every player's role, so a read of a missing one raises
+    instead of counting that player as neither side. Each carrier reaches one
+    read: a kill witness, a meeting's opener, a player in the state at a vent
+    exit, a player in a later state while a surfaced impostor waits, and the
+    holder of an own-kill row, even one that cites nothing.
+    """
+
+    witnessed = game(kills=(kill(12, witnesses=("p-9",)),))
+    opened = game(meetings=(meeting(opener="p-9"),))
+    beside_exit = game(vents=(entry(10), exit_(11)), frames={11: frame({"p-9": ROOM})})
+    beside_surfacing = game(
+        vents=(entry(10), exit_(11, destination_room=ROOM)),
+        frames={11: frame({}), 12: frame({"p-0": ROOM, "p-9": FAR})},
+    )
+    uncited_row = game(
+        meetings=(
+            meeting(own_kill_rows=(OwnKillRowFact("p-9", "p-0", ROOM, 13, None),)),
+        )
+    )
+    for planted in (witnessed, opened, beside_exit, beside_surfacing, uncited_row):
+        with pytest.raises(KeyError, match="p-9"):
+            fold_set(inputs(planted))
+
+
+def test_an_answered_speaker_whose_role_the_row_cannot_name_raises() -> None:
+    """Planted: ``p-3`` carries a role the rebuttal-beneficiaries row has no name for."""
+
+    planted = game(
+        {"bounded_rebuttal_version": 1},
+        roles={**ROLES, "p-3": "GHOST"},
+        meetings=(
+            meeting(
+                turns=(
+                    turn(0, "p-2"),
+                    turn(1, "p-3", accuses=("p-2",), reply_to="t0"),
+                    turn(2, "p-2", reply_to="t1"),
+                ),
+                selector_pick=("p-2", "t1"),
+            ),
+        ),
+    )
+    with pytest.raises(KeyError, match="GHOST"):
+        fold_set(inputs(planted))
 
 
 def test_kills_soon_after_the_killer_surfaced() -> None:
@@ -3503,6 +3722,48 @@ def test_the_loader_counts_rows_without_dispositions(
     stripped = _load(monkeypatch, events)
     assert stripped.rows_without_dispositions == 1
     assert len(stripped.discarded) < len(committed.discarded)
+
+
+def test_the_loader_counts_every_row_without_dispositions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = _events()
+    advanced_rows = [
+        position
+        for position, event in enumerate(events)
+        if isinstance(event, TickAdvanced)
+    ]
+    for index in advanced_rows[:2]:
+        advanced = events[index]
+        assert isinstance(advanced, TickAdvanced)
+        events[index] = replace(
+            advanced,
+            entry=advanced.entry.model_copy(update={"action_dispositions": None}),
+        )
+    assert _load(monkeypatch, events).rows_without_dispositions == 2
+
+
+def test_the_loader_refuses_a_meeting_applied_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the first meeting's applied event, repeated with no second opening."""
+
+    events = _events()
+    _opened, applied = _first_meeting(events)
+    position = next(index for index, event in enumerate(events) if event is applied)
+    events.insert(position + 1, applied)
+    with _refusal(ValueError, f"seed {LOADER_SEED}: a meeting applied without opening"):
+        _load(monkeypatch, events)
+
+
+def test_the_loader_refuses_a_walk_that_stops_before_its_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = [event for event in _events() if not isinstance(event, WalkComplete)]
+    with _refusal(
+        ValueError, f"seed {LOADER_SEED}: the walk never reached its terminal tick"
+    ):
+        _load(monkeypatch, events)
 
 
 def test_the_loader_refuses_a_meeting_applied_without_opening(

@@ -191,6 +191,25 @@ def test_a_missing_published_file_is_red(
     assert f"no committed census at {root / missing}" in capsys.readouterr().out
 
 
+def test_check_reports_an_absent_census_before_computing_one(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    computed: list[Path] = []
+
+    def computing(root: Path, load: Any) -> GameplayCensus:
+        computed.append(root)
+        return _planted()
+
+    monkeypatch.setattr(command, "compute_gameplay_census", computing)
+    assert command.check_report(tmp_path) == 1
+    assert computed == []
+    assert capsys.readouterr().out == (
+        f"--check: no committed census at {tmp_path / command.MARKDOWN_PATH}\n"
+    )
+
+
 @pytest.mark.parametrize("destination", ("MARKDOWN_PATH", "JSON_PATH"))
 @pytest.mark.parametrize(
     "relative",
@@ -354,10 +373,26 @@ def test_set_dir_exits_non_zero_on_a_conformance_breach(
         ["--check", "--set-dir", "anywhere", "--json-stdout"],
     ),
 )
-def test_set_dir_and_json_stdout_go_together(argv: Sequence[str]) -> None:
+def test_set_dir_and_json_stdout_go_together(
+    argv: Sequence[str], capsys: pytest.CaptureFixture[str]
+) -> None:
     with pytest.raises(SystemExit) as exited:
         command.main(list(argv))
     assert exited.value.code == 2
+    assert "--set-dir and --json-stdout go together, without --check" in (
+        capsys.readouterr().err
+    )
+
+
+def test_set_dir_lets_a_failure_other_than_a_breach_propagate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def failing(_path: Path) -> CensusInputs:
+        raise RuntimeError("not a breach")
+
+    monkeypatch.setattr(command, "load_census_inputs", failing)
+    with pytest.raises(RuntimeError, match="^not a breach$"):
+        command.main(["--set-dir", "anywhere", "--json-stdout"])
 
 
 def test_main_publishes_and_checks_the_tree_it_is_given(
@@ -400,8 +435,28 @@ def test_help_prints_the_commands_own_description(
     with pytest.raises(SystemExit) as exited:
         command.main(["--help"])
     assert exited.value.code == 0
-    assert "Publish the gameplay census over the committed recordings." in (
-        capsys.readouterr().out
+    printed = " ".join(capsys.readouterr().out.split())
+    assert "Publish the gameplay census over the committed recordings." in printed
+    for option, meaning in (
+        (
+            "--check",
+            "Recompute both files and diff against the committed ones; exit 1 on "
+            "drift.",
+        ),
+        (
+            "--set-dir SET_DIR",
+            "Fold one replay directory instead of the committed sets.",
+        ),
+        (
+            "--json-stdout",
+            "With --set-dir: print that directory's section as JSON; write nothing.",
+        ),
+    ):
+        assert f"{option} {meaning}" in printed, option
+    assert (
+        printed.index("--check Recompute")
+        < printed.index("--set-dir SET_DIR Fold")
+        < printed.index("--json-stdout With")
     )
 
 
@@ -582,6 +637,11 @@ def test_a_not_evaluable_row_shows_when_any_group_has_one() -> None:
         )
     )
     assert "| not evaluable | 1 | 1 | 1 | 0 |" in page
+
+
+def test_a_table_with_no_rows_lists_none_before_its_not_evaluable_row() -> None:
+    page = command.render_markdown(census_from_inputs([_planted_inputs(discarded=())]))
+    assert "| (none) | 0 | 0 | 0 |\n| not evaluable | 1 | 1 | 1 |\n" in page
 
 
 def test_the_era_lines_name_every_recorded_part_or_say_none() -> None:

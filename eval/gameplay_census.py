@@ -195,7 +195,7 @@ _SIGHTING_KINDS: Final[frozenset[str]] = frozenset(
 )
 
 #: The role of an answered turn's speaker, as a rebuttal-beneficiaries row names
-#: it. A speaker without a recorded role raises.
+#: it. A speaker without a recorded role, or with a role this table lacks, raises.
 _ROLE_WITH_ARTICLE: Final[Mapping[Role, str]] = MappingProxyType(
     {"CREWMATE": "a crewmate", "IMPOSTOR": "an impostor"}
 )
@@ -1471,11 +1471,15 @@ def pool(tallies: Sequence[CensusTally], *, label: str) -> CensusTally:
 
 
 def _crew(game: GameFacts, players: Iterable[PlayerId]) -> frozenset[PlayerId]:
-    return frozenset(pid for pid in players if game.roles.get(pid) == "CREWMATE")
+    """The crewmates among ``players``. A player with no recorded role raises."""
+
+    return frozenset(pid for pid in players if game.roles[pid] == "CREWMATE")
 
 
 def _is_impostor(game: GameFacts, player: PlayerId | None) -> bool:
-    return player is not None and game.roles.get(player) == "IMPOSTOR"
+    """Whether ``player`` is an impostor. A player with no recorded role raises."""
+
+    return player is not None and game.roles[player] == "IMPOSTOR"
 
 
 def _teammates(game: GameFacts, player: PlayerId) -> frozenset[PlayerId]:
@@ -1712,7 +1716,7 @@ def _fold_trips(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> Non
         crew_rooms = {
             room
             for player, room in frame.rooms.items()
-            if game.roles.get(player) == "CREWMATE"
+            if game.roles[player] == "CREWMATE"
         }
         acc.count(
             "vent_exits_into_occupied_room",
@@ -1769,7 +1773,7 @@ def _crew_arrives_before_walk_out(game: GameFacts, exit_fact: VentFact) -> bool:
         if any(
             room == exit_fact.destination_room
             for player, room in frame.rooms.items()
-            if game.roles.get(player) == "CREWMATE"
+            if game.roles[player] == "CREWMATE"
         ):
             return True
         tick += 1
