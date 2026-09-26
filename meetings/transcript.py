@@ -21,7 +21,9 @@ reconstruct the discussion byte-for-byte without re-calling the model
   rule: no new accusation / re-accusation cycle / turn-count cap).
 * :func:`walk_chain` -- replays a recorded transcript through
   :func:`next_chain_step`, validating that every recorded ``reply`` is
-  exactly the turn the rule predicts and that the tail is ``opt_in``.
+  exactly the turn the rule predicts and that the tail is ``opt_in``
+  turns, except for the one selected rebuttal reply the recorded
+  ``bounded_rebuttal_version`` setting may add after them.
 
 :class:`meetings.manager.MeetingManager` records turns in turn-index
 order, so consumers may read ``transcript.turns`` in tuple order;

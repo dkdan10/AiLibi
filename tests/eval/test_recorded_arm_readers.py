@@ -534,6 +534,12 @@ def test_the_refusal_checks_the_first_tick_and_passes_every_event_through(
         )
 
 
+def _exactly(message: str) -> str:
+    """A ``match`` pattern that accepts ``message`` and nothing else."""
+
+    return f"^{re.escape(message)}$"
+
+
 def test_refusing_unread_settings_names_the_reader_and_the_field() -> None:
     config = RecordedExperimentConfig(
         crew_idle_policy="patrol", meeting_reset="hub_with_grace"
@@ -544,10 +550,33 @@ def test_refusing_unread_settings_names_the_reader_and_the_field() -> None:
         RecordedExperimentConfig(format_version=2), reader="r", reads=frozenset()
     )
     with pytest.raises(
-        ValueError, match=r"^r does not read the recorded crew_idle_policy='patrol'"
+        ValueError,
+        match=_exactly(
+            "r does not read the recorded crew_idle_policy='patrol': it reads a "
+            "recording's own settings only for " + ", ".join(sorted(READABLE_SETTINGS))
+        ),
     ):
         refuse_unread_settings(config, reader="r", reads=READABLE_SETTINGS)
-    with pytest.raises(ValueError, match="only recordings made without experiment"):
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            "replay profile 'solvability' does not read the recorded "
+            "self_report=True: it reads a recording's own settings only for "
+            "meeting_reset, vent_witness_rule"
+        ),
+    ):
+        refuse_unread_settings(
+            RecordedExperimentConfig(self_report=True, meeting_reset="hub_with_grace"),
+            reader="replay profile 'solvability'",
+            reads=frozenset({"vent_witness_rule", "meeting_reset"}),
+        )
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            "r does not read the recorded meeting_reset='hub_with_grace': it reads "
+            "only recordings made without experiment settings"
+        ),
+    ):
         refuse_unread_settings(
             RecordedExperimentConfig(meeting_reset="hub_with_grace"),
             reader="r",
@@ -558,8 +587,57 @@ def test_refusing_unread_settings_names_the_reader_and_the_field() -> None:
         reader="r",
         reads=frozenset({"meeting_reset"}),
     )
-    with pytest.raises(ValueError, match="no reader is reviewed for"):
-        refuse_unread_settings(None, reader="r", reads=frozenset({"crew_idle_policy"}))
+
+
+@pytest.mark.parametrize(
+    ("reader", "config", "version"),
+    [
+        (
+            "r",
+            RecordedExperimentConfig(format_version=2, bounded_rebuttal_version=1),
+            2,
+        ),
+        (
+            "replay profile 'kill-craft'",
+            RecordedExperimentConfig(format_version=3, evidence_reasoning_version=2),
+            3,
+        ),
+    ],
+    ids=["format-2", "format-3"],
+)
+def test_a_later_settings_format_is_refused_with_the_reader_and_the_format(
+    reader: str, config: RecordedExperimentConfig, version: int
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            f"{reader} does not read the recorded format_version={version}: it "
+            "reads recordings made in the first settings format only"
+        ),
+    ):
+        refuse_unread_settings(config, reader=reader, reads=READABLE_SETTINGS)
+
+
+@pytest.mark.parametrize(
+    ("reader", "reads", "outside"),
+    [
+        ("r", frozenset({"crew_idle_policy"}), "['crew_idle_policy']"),
+        (
+            "replay profile 'funnel-instrument'",
+            frozenset({"self_report", "meeting_reset", "crew_idle_policy"}),
+            "['crew_idle_policy', 'self_report']",
+        ),
+    ],
+    ids=["one-outside", "two-outside"],
+)
+def test_a_field_list_outside_the_reviewed_set_is_refused_with_the_reader(
+    reader: str, reads: frozenset[str], outside: str
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match=_exactly(f"{reader} names settings no reader is reviewed for: {outside}"),
+    ):
+        refuse_unread_settings(None, reader=reader, reads=reads)
 
 
 # --------------------------------------------------------------------------- #
@@ -604,10 +682,13 @@ def test_without_a_config_the_default_is_the_live_policy(
     assert default.impostor_targeting.policy_mode == LIVE_POLICY_FOLD
 
 
+@pytest.mark.parametrize("seed", [_SEED, _SEED + 2])
 def test_a_recording_from_a_custom_factory_is_refused_by_name(
-    recordings: dict[str, Path], tmp_path: Path
+    tmp_path: Path, seed: int
 ) -> None:
-    source = recordings["plain"]
+    # Two seeds, so the game the refusal names is the recording's own.
+    source = tmp_path / "source" / "9p2i"
+    record_game(source, seed=seed, config=None)
     target = tmp_path / "custom" / "9p2i"
     target.mkdir(parents=True)
     for name in ("roster.json", "MANIFEST.md"):
@@ -620,7 +701,14 @@ def test_a_recording_from_a_custom_factory_is_refused_by_name(
         (target / replay.name).write_text(
             "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
         )
-    with pytest.raises(EvidenceHonestyReconstructionError, match="custom factory"):
+    with pytest.raises(
+        EvidenceHonestyReconstructionError,
+        match=_exactly(
+            f"headless-seed-{seed}: the recording's agents came from a custom "
+            "factory, so the impostor policy it ran cannot be rebuilt from its "
+            "settings; pass a policy explicitly to fold a counterfactual"
+        ),
+    ):
         compute_evidence_honesty(target)
     # An explicit policy is the caller's counterfactual, so it still folds.
     folded = compute_evidence_honesty(target, impostor_policy=live_impostor_policy)
@@ -637,7 +725,17 @@ def test_a_set_whose_games_name_different_policies_raises(
         seed=_SEED + 1,
         config=RecordedExperimentConfig(vent_exit_policy="observed_risk"),
     )
-    with pytest.raises(EvidenceHonestyReconstructionError, match="different impostor"):
+    # The only mixed set the recorded policies can make: one game without
+    # tactical settings, one with.
+    both = sorted([LIVE_POLICY_FOLD, RECORDED_ARM_POLICY_FOLD])
+    assert both == ["live-policy-fold", "recorded-arm-policy-fold"]
+    with pytest.raises(
+        EvidenceHonestyReconstructionError,
+        match=_exactly(
+            f"{mixed}: its games name different impostor policies ({both}), and "
+            "one set's block carries one policy_mode"
+        ),
+    ):
         compute_evidence_honesty(mixed)
 
 
@@ -1236,15 +1334,18 @@ def _new_copy(recordings: Mapping[str, Path]) -> dict[str, str]:
     )
     with tempfile.TemporaryDirectory() as scratch:
         # A directory the caller named is the caller's text, not this card's copy,
-        # so each is replaced by a placeholder before the scan.
+        # so each is replaced by a placeholder before the scan, once the refusal
+        # is shown to name that directory.
         empty = Path(scratch) / "empty"
         empty.mkdir()
         texts["--set-dir without --json-stdout"] = _parser_refusal(
             ["--set-dir", str(empty)]
         ).replace(str(empty), "DIR")
-        texts["--set-dir holding no replay"] = _parser_refusal(
-            ["--set-dir", str(empty), "--json-stdout"]
-        ).replace(str(empty), "DIR")
+        no_replay = _parser_refusal(["--set-dir", str(empty), "--json-stdout"])
+        assert no_replay.splitlines()[-1].endswith(
+            f": error: --set-dir {empty} holds no replay files"
+        )
+        texts["--set-dir holding no replay"] = no_replay.replace(str(empty), "DIR")
         mixed = Path(scratch) / "mixed" / "9p2i"
         record_game(mixed, seed=_SEED, config=None)
         record_game(
@@ -1252,9 +1353,9 @@ def _new_copy(recordings: Mapping[str, Path]) -> dict[str, str]:
             seed=_SEED + 1,
             config=RecordedExperimentConfig(vent_exit_policy="observed_risk"),
         )
-        texts["different impostor policies"] = _raised(
-            lambda: compute_evidence_honesty(mixed)
-        ).replace(str(mixed), "DIR")
+        different = _raised(lambda: compute_evidence_honesty(mixed))
+        assert different.startswith(f"{mixed}: its games name different")
+        texts["different impostor policies"] = different.replace(str(mixed), "DIR")
     return texts
 
 

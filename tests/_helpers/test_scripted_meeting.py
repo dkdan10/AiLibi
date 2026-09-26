@@ -17,6 +17,7 @@ No test here prints a prompt; every prompt assertion is a containment check.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -30,6 +31,7 @@ from eval.funnel import compute_information_funnel, compute_pooling_funnel
 from eval.kill_craft import compute_kill_craft_report
 from eval.solvability import compute_solvability_report
 from eval.win_condition_selfcheck import check_replay_win_condition
+from meetings.rebuttal import select_bounded_rebuttal
 from meetings.transcript import walk_chain
 from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.game import PROMPT_VERSION_SETS
@@ -276,7 +278,21 @@ def test_the_same_script_without_the_setting_records_no_rebuttal(
     assert recorded_experiment_config(read_all_entries(path)) is None
     assert _rebuttals(path) == []
     first = _meetings(path)[0]
-    with pytest.raises(ValueError, match="records none"):
+    pick = select_bounded_rebuttal(first.transcript, living_ids=_living(first))
+    assert pick is not None
+    # The script's turn 1 accuses the opener, so the pick names the opener and
+    # that charge.
+    turns = first.transcript.turns
+    assert (pick.speaker, pick.reply_to) == (turns[0].speaker, turns[1].turn_id)
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"walk_chain: the rebuttal setting gives {pick.speaker!r} one reply to "
+            f"{pick.reply_to!r}, but the transcript records none"
+        )
+        + "$",
+    ):
         walk_chain(
             first.transcript, living_ids=_living(first), bounded_rebuttal_version=1
         )
@@ -306,7 +322,6 @@ def _projected_rebuttals(directory: Path) -> dict[str, int]:
 
     from engine.world import load_canonical_map
     from eval.validity import resolve_roster_knobs, roles_by_seed
-    from meetings.rebuttal import select_bounded_rebuttal
     from meetings.schemas import AccusationClaim
 
     num_players, num_impostors, tasks = resolve_roster_knobs(directory)

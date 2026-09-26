@@ -353,7 +353,9 @@ def test_set_dir_refuses_what_it_cannot_serve(
         command.main(resolved)
     assert refused.value.code == 2
     error = capsys.readouterr().err
+    # argparse prints the usage, then "<prog>: error: <message>" as its last line.
     if "{empty}" in arguments:
-        assert "holds no replay files" in error
+        message = f"error: --set-dir {tmp_path} holds no replay files"
     else:
-        assert "--set-dir and --json-stdout go together, without --check" in error
+        message = "error: --set-dir and --json-stdout go together, without --check"
+    assert error.splitlines()[-1].endswith(f": {message}")
