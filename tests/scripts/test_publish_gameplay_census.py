@@ -289,7 +289,12 @@ def test_a_hard_link_to_a_recording_is_refused_by_file_identity(
 def test_the_script_runs_from_any_directory_and_exits_with_mains_code(
     tmp_path: Path,
 ) -> None:
-    """Run as a program from outside the tree: the path bootstrap and exit code."""
+    """Run as a program from outside the tree: the path bootstrap and exit code.
+
+    The directory is handed relative to the working directory, outside the
+    checkout, so the printed source is the copy's resolved absolute path and
+    every other field is the committed ``samples/4p1i`` section's.
+    """
 
     copy = tmp_path / "samples" / "4p1i"
     shutil.copytree(SAMPLES_4P1I, copy)
@@ -298,7 +303,7 @@ def test_the_script_runs_from_any_directory_and_exits_with_mains_code(
     }
     script = ROOT / "scripts" / "publish_gameplay_census.py"
     finished = subprocess.run(
-        [sys.executable, str(script), "--set-dir", str(copy), "--json-stdout"],
+        [sys.executable, str(script), "--set-dir", "samples/4p1i", "--json-stdout"],
         cwd=tmp_path,
         env=environment,
         capture_output=True,
@@ -306,7 +311,10 @@ def test_the_script_runs_from_any_directory_and_exits_with_mains_code(
         check=False,
     )
     assert finished.returncode == 0, finished.stderr[-2000:]
-    assert json.loads(finished.stdout) == _section("samples/4p1i")
+    assert json.loads(finished.stdout) == {
+        **_section("samples/4p1i"),
+        "sources": [copy.resolve().as_posix()],
+    }
     refused = subprocess.run(
         [sys.executable, str(script), "--set-dir", str(copy)],
         cwd=tmp_path,
@@ -345,12 +353,77 @@ def test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing(
     monkeypatch.setattr(command, "preflight_report_output", forbidden)
     assert command.main(["--set-dir", str(copy), "--json-stdout"]) == 0
     printed = json.loads(capsys.readouterr().out)
-    assert printed == _section("samples/4p1i")
+    assert printed == {
+        **_section("samples/4p1i"),
+        "sources": [copy.resolve().as_posix()],
+    }
     assert _listing(tmp_path) == before
     assert [
         (ROOT / path).read_bytes()
         for path in (command.MARKDOWN_PATH, command.JSON_PATH)
     ] == published
+
+
+@pytest.mark.parametrize(
+    ("walked", "cwd", "argument", "printed"),
+    (
+        (
+            "checkout/replays/candidates/stage-b-r1/9p2i",
+            None,
+            None,
+            "replays/candidates/stage-b-r1/9p2i",
+        ),
+        (
+            "checkout/replays/candidates/stage-b-r1/9p2i",
+            "checkout",
+            "replays/candidates/stage-b-r1/9p2i",
+            "replays/candidates/stage-b-r1/9p2i",
+        ),
+        ("scratch/stage-b-r1/9p2i", "scratch", "stage-b-r1/9p2i", None),
+        ("scratch/stage-b-r1/9p2i", None, None, None),
+    ),
+    ids=(
+        "candidate inside the checkout",
+        "relative inside the checkout",
+        "relative outside the checkout",
+        "scratch copy outside the checkout",
+    ),
+)
+def test_set_dir_prints_the_directory_it_walked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    walked: str,
+    cwd: str | None,
+    argument: str | None,
+    printed: str | None,
+) -> None:
+    """Planted: a checkout at ``tmp_path/checkout`` and a set at ``walked``.
+
+    ``argument`` is handed to ``--set-dir`` relative to ``cwd``, or absolute
+    when ``None``. The printed source is the path relative to the checkout
+    inside it, and the resolved absolute path outside it (``printed`` is
+    ``None``). The contents are a copy of ``samples/4p1i``; each game's walk is
+    stubbed.
+    """
+
+    from tests.eval.test_gameplay_census import game
+
+    directory = tmp_path / walked
+    shutil.copytree(SAMPLES_4P1I, directory)
+    monkeypatch.setattr(census, "_CHECKOUT_ROOT", (tmp_path / "checkout").resolve())
+    monkeypatch.setattr(
+        census, "_load_game", lambda _path, **kwargs: game(seed=kwargs["seed"])
+    )
+    if cwd is not None:
+        monkeypatch.chdir(tmp_path / cwd)
+    handed = str(directory) if argument is None else argument
+    assert command.main(["--set-dir", handed, "--json-stdout"]) == 0
+    section = json.loads(capsys.readouterr().out)
+    assert section["label"] == "stage-b-r1/9p2i"
+    assert section["sources"] == [
+        directory.resolve().as_posix() if printed is None else printed
+    ]
 
 
 def test_set_dir_exits_non_zero_on_a_conformance_breach(

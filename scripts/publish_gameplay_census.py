@@ -8,7 +8,8 @@ drift, naming the stale file and the command that regenerates it.
 ``--set-dir DIR --json-stdout`` folds one directory (a candidate record, or a
 scratch rehearsal), prints that one section as JSON and writes nothing; it exits
 1 on a conformance breach, which names the set, the seed and the meeting or
-tick.
+tick. The section's source is the directory walked, resolved: relative to the
+checkout when it lies inside it, else absolute.
 
 Destinations are pre-flighted through ``scripts/_report_output.py`` before
 anything is computed, with the recording root itself and every ``replays/**``

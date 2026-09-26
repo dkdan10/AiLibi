@@ -13,7 +13,9 @@ import dataclasses
 import importlib.util
 import json
 import re
+import os
 import shutil
+import subprocess
 import sys
 import typing
 from collections import Counter
@@ -6339,7 +6341,11 @@ def test_trips_open_at_the_game_end_count_from_their_own_entry_or_meeting() -> N
 def test_the_set_label_keeps_its_directories_whole_names(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Planted: a set in ``rehearsal.v1/4p1i.copy``; each game's walk is stubbed."""
+    """Planted: a set in ``rehearsal.v1/4p1i.copy``; each game's walk is stubbed.
+
+    The copy lies outside the checkout, so its source is its absolute path. Read
+    as ``.`` from inside it, the label and source still name the copy.
+    """
 
     copy = tmp_path / "rehearsal.v1" / "4p1i.copy"
     shutil.copytree(SAMPLES_4P1I, copy)
@@ -6348,7 +6354,126 @@ def test_the_set_label_keeps_its_directories_whole_names(
     )
     loaded = census.load_census_inputs(copy)
     assert loaded.label == "rehearsal.v1/4p1i.copy"
-    assert loaded.source == "replays/rehearsal.v1/4p1i.copy"
+    assert loaded.source == copy.resolve().as_posix()
+    assert loaded.source.startswith("/")
+    monkeypatch.chdir(copy)
+    here = census.load_census_inputs(Path("."))
+    assert (here.label, here.source) == (loaded.label, loaded.source)
+
+
+def test_the_checkout_root_is_the_one_the_module_lies_in(tmp_path: Path) -> None:
+    """Imported through a link to the checkout, the root is still the resolved one.
+
+    A root named through the link would place no resolved directory inside it,
+    and every committed set would publish its absolute path.
+    """
+
+    assert census._CHECKOUT_ROOT == repo_root.resolve()
+    link = tmp_path / "linked-checkout"
+    link.symlink_to(repo_root.resolve(), target_is_directory=True)
+    printed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import eval.gameplay_census as census; print(census._CHECKOUT_ROOT)",
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(link)},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert printed.stdout.strip() == str(repo_root.resolve())
+
+
+def test_a_link_to_a_candidate_names_the_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: a candidate inside a planted checkout, reached through a link.
+
+    The link lies outside the checkout, and a ``..`` step leads back into it;
+    both resolve to the candidate, so the label and source name the candidate.
+    """
+
+    checkout = tmp_path / "checkout"
+    candidate = checkout / "replays" / "candidates" / "stage-b-r1" / "9p2i"
+    shutil.copytree(SAMPLES_4P1I, candidate)
+    link = tmp_path / "scratch" / "rehearsal"
+    link.parent.mkdir()
+    link.symlink_to(candidate, target_is_directory=True)
+    monkeypatch.setattr(census, "_CHECKOUT_ROOT", checkout.resolve())
+    monkeypatch.setattr(
+        census, "_load_game", lambda _path, **kwargs: game(seed=kwargs["seed"])
+    )
+    monkeypatch.chdir(tmp_path)
+    for handed in (
+        link,
+        Path("scratch/rehearsal"),
+        candidate.parent / ".." / "stage-b-r1" / "9p2i",
+    ):
+        loaded = census.load_census_inputs(handed)
+        assert (loaded.label, loaded.source) == (
+            "stage-b-r1/9p2i",
+            "replays/candidates/stage-b-r1/9p2i",
+        ), handed
+
+
+@pytest.mark.parametrize(
+    ("layout", "cwd", "argument", "expected"),
+    (
+        (
+            "checkout/replays/candidates/stage-b-r1/9p2i",
+            None,
+            None,
+            "replays/candidates/stage-b-r1/9p2i",
+        ),
+        (
+            "checkout/replays/candidates/stage-b-r1/9p2i",
+            "checkout/replays",
+            "candidates/stage-b-r1/9p2i",
+            "replays/candidates/stage-b-r1/9p2i",
+        ),
+        ("scratch/stage-b-r1/9p2i", "scratch", "stage-b-r1/9p2i", None),
+        ("scratch/stage-b-r1/9p2i", None, None, None),
+    ),
+    ids=(
+        "candidate inside the checkout",
+        "relative inside the checkout",
+        "relative outside the checkout",
+        "scratch copy outside the checkout",
+    ),
+)
+def test_the_source_names_the_directory_walked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    layout: str,
+    cwd: str | None,
+    argument: str | None,
+    expected: str | None,
+) -> None:
+    """Planted: a checkout at ``tmp_path/checkout``, and the set at ``layout``.
+
+    ``argument`` is the path handed to the loader, relative to ``cwd``, or the
+    absolute path when ``None``. Inside the planted checkout the source is the
+    path relative to it; outside it, the resolved absolute path (``expected``
+    is ``None``). The contents are a copy of ``samples/4p1i``; each game's walk
+    is stubbed.
+    """
+
+    walked = tmp_path / layout
+    shutil.copytree(SAMPLES_4P1I, walked)
+    monkeypatch.setattr(census, "_CHECKOUT_ROOT", (tmp_path / "checkout").resolve())
+    monkeypatch.setattr(
+        census, "_load_game", lambda _path, **kwargs: game(seed=kwargs["seed"])
+    )
+    if cwd is not None:
+        monkeypatch.chdir(tmp_path / cwd)
+    loaded = census.load_census_inputs(walked if argument is None else Path(argument))
+    assert loaded.label == "stage-b-r1/9p2i"
+    assert loaded.source == (
+        walked.resolve().as_posix() if expected is None else expected
+    )
+    assert Path(loaded.source).is_absolute() is (expected is None)
 
 
 def test_the_published_schema_version_is_the_modules(

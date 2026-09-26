@@ -703,9 +703,10 @@ class GameFacts:
 class CensusInputs:
     """Everything the pure fold needs about one replay set.
 
-    ``kill_cooldown_ticks`` and ``neighbours`` are read from the loaded map: the
-    grace window after a regroup and the rooms an in-vent impostor infers it can
-    see.
+    ``label`` names the set on the page and ``source`` is the path of the
+    directory walked. ``kill_cooldown_ticks`` and ``neighbours`` are read from
+    the loaded map: the grace window after a regroup and the rooms an in-vent
+    impostor infers it can see.
     """
 
     label: str
@@ -2724,12 +2725,32 @@ def _load_game(
     )
 
 
+#: The checkout this module lies in. A walked directory inside it is named
+#: relative to it, so a committed set reads ``replays/<set>`` on every machine.
+_CHECKOUT_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
+
+
+def _walked_source(walked: Path) -> str:
+    """The resolved directory a walk read, as the published section names it.
+
+    Relative to the checkout when it lies inside it (a candidate at
+    ``replays/candidates/<run>/9p2i`` reads that path), else absolute (a scratch
+    copy outside the checkout).
+    """
+
+    if walked.is_relative_to(_CHECKOUT_ROOT):
+        return walked.relative_to(_CHECKOUT_ROOT).as_posix()
+    return walked.as_posix()
+
+
 def load_census_inputs(set_dir: Path) -> CensusInputs:
     """Walk one replay set on the canonical map into the census carrier.
 
     The one impure step. Roles come from :func:`eval.validity.roles_by_seed`,
     the seeder the sample report takes them from. No model is called and
-    nothing is written.
+    nothing is written. The label and the source both name the directory
+    actually walked, resolved: the label its two innermost names, the source its
+    path (:func:`_walked_source`).
     """
 
     resolved_map = load_canonical_map()
@@ -2764,10 +2785,10 @@ def load_census_inputs(set_dir: Path) -> CensusInputs:
         )
         for seed in seeds
     )
-    label = f"{set_dir.parent.name}/{set_dir.name}"
+    walked = set_dir.resolve()
     return CensusInputs(
-        label=label,
-        source=f"replays/{label}",
+        label=f"{walked.parent.name}/{walked.name}",
+        source=_walked_source(walked),
         era=resolve_era(tuple(game.era for game in games)),
         kill_cooldown_ticks=resolved_map.kill_cooldown_ticks,
         neighbours=MappingProxyType(

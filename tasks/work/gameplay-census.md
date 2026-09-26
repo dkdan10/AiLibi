@@ -121,6 +121,22 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction (round 9): `--set-dir` names the directory it walked. The loader resolves
+  the directory it is handed; the source is that path relative to the checkout when it lies inside
+  it (a candidate at `replays/candidates/stage-b-r1/9p2i` prints that path), else the absolute path,
+  and the label is its two innermost names. `test_the_source_names_the_directory_walked` plants the
+  candidate layout, a relative directory inside and outside a planted checkout, and a scratch copy
+  outside it; `test_a_link_to_a_candidate_names_the_candidate` reaches the candidate through a link
+  and a `..` step; `test_the_checkout_root_is_the_one_the_module_lies_in` imports the module through
+  a linked checkout; and `test_set_dir_prints_the_directory_it_walked` asserts the printed source of
+  each layout through `main()`. `test_the_set_label_keeps_its_directories_whole_names`,
+  `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` and
+  `test_the_script_runs_from_any_directory_and_exits_with_mains_code` now expect the copy's absolute
+  path. No page byte moves: `publish_gameplay_census.py --check` exits 0 and `git status` names no
+  page.
+- [x] Review correction (round 9): round 3's References carries a dated correction note stating
+  what the census imports, and round 8's restatement and closing grep cover round 3's wording.
+  `` git grep -n 'never touches `agents/`' `` outside this card prints nothing.
 - [x] Review correction (round 8): every tick of the grace window lies inside it.
   `test_every_tick_of_the_grace_window_lies_inside_it` plants a kill on each tick from T+1 to
   T+cooldown after a regroup at tick 10, on the canonical kill cooldown (4) and on a carrier walked
@@ -1303,6 +1319,11 @@ re-derived with `scripts/validate_task_docs.py`: 88 cards, 9 ready, 79 done.
 `threaded_layers`), under decision memo sections 0.3 (items 2, 6 and 9) and 3.4 (this card's
 brief). `docs/architecture.md`'s layering is unchanged: `eval/` reads the orchestrator's config
 module and never touches `agents/`, and the four import-linter contracts are kept.
+
+Correction (2026-09-26, round 9): the sentence above understates what `eval/` reads. The census
+imports one `agents/tactical` constant, `crewmate_policy.EMERGENCY_COOLDOWN_TICKS`, beside modules
+of `engine/`, `orchestrator/`, `meetings/` and sibling `eval/` modules. The restatement is in
+Results, round 8.
 
 **Merging `main`.** `b5772553` merges `origin/main` at `52a6ac58` into the branch, never a rebase.
 That brings docs-truth-typed-trigger (#482), the arm spine (#484), and the commit that states the
@@ -2565,8 +2586,9 @@ rule 5). `eval/gameplay_census.py` imports from:
 `eval/` paragraph) and sets no narrower list of what `eval/` may import. The four import-linter
 contracts constrain `agents/` and `observation/`, and `uv run lint-imports` keeps all four. Rounds 6
 and 7 said `eval/` still reads only the orchestrator's config module, the meeting schema and the
-engine's events. That was never true of this module, and each of those subsections now carries a
-dated correction note.
+engine's events, and round 3 said `eval/` reads the orchestrator's config module and never touches
+`agents/`. Neither was ever true of this module, and each of those three subsections now carries a
+dated correction note (round 3's added in round 9).
 
 **Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
 round merges nothing, and the diff base stays `52a6ac58`.
@@ -2926,8 +2948,9 @@ row moved: no `audits/`, `tests/fixtures/` or page byte changed, and no hashed s
 module. No frontend e2e: nothing under `api/` or `frontend/` moved.
 
 **Closing greps**, run at the card commit. `git grep -n "still reads only the orchestrator"`
-outside this card prints nothing. `grep -n "impostors = {pid" eval/gameplay_census.py` prints
-nothing: the ballot fold's membership set is gone.
+outside this card prints nothing, and so does `` git grep -n 'never touches `agents/`' `` (round 3's
+wording; added in round 9 and run at that round's card commit). `grep -n "impostors = {pid"
+eval/gameplay_census.py` prints nothing: the ballot fold's membership set is gone.
 
 **Limitations of this round.**
 - The pass's harness is scratch and not shipped, as in rounds 1 to 7. Its counts reproduce by
@@ -2939,5 +2962,137 @@ nothing: the ballot fold's membership set is gone.
 - The operators are the ones listed, together with round 7's classes, which ran on round 7's
   module. This round's changed lines (the role reads, the closed types, the in-vent and walk-out
   sets) ran under this round's operators only.
+- The round-2 question on the two pre-registered before values still waits for the orchestrator
+  (the PR's Questions).
+
+### Review corrections, round 9 (2026-09-26)
+
+**State: done.** This is the tenth review of PR #483, of head `175007c5`, scoped to two findings.
+The dispatch calls it round 9, and so does the card. Both findings are repaired: one on the
+correctness lens and one on the docs lens. Two `Review correction (round 9)` items at the top of
+Acceptance record this. Status stays `done` and no box is open. `tasks/README.md`'s inventory
+sentence is unchanged (88 cards, 9 ready, 79 done), and `scripts/validate_task_docs.py` re-derives
+it at this head.
+
+**References.** The Outcome's `--set-dir DIR --json-stdout` folds "the round-1 candidate, or a
+scratch rehearsal", and the record card (`tasks/work/stage-b-record-r1.md`) lands that candidate at
+`replays/candidates/stage-b-r1/9p2i/` and folds it through this mode into its audit, under decision
+memo 3.4 (this card's brief) and ruling R13 (candidate columns live in the record's audit).
+`docs/architecture.md`'s layering is unchanged; the module's imports are those Results, round 8
+lists, and this round adds none.
+
+**Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
+round merges nothing, and the diff base stays `52a6ac58`.
+
+**Finding 1: `--set-dir` named a directory it did not walk.** The loader built the source as
+`replays/` plus the handed path's last two names. A candidate at
+`replays/candidates/stage-b-r1/9p2i` printed `replays/stage-b-r1/9p2i`, and a scratch copy at
+`tmp/samples/4p1i` printed `replays/samples/4p1i`. Now `load_census_inputs` resolves the directory
+it is handed and names that one:
+- the source (`_walked_source`) is the resolved path relative to the checkout when it lies inside
+  it, else the resolved absolute path. The checkout is `_CHECKOUT_ROOT`, the resolved parent of the
+  module's own package, the root the publisher's `_REPO_ROOT` already names;
+- the label is the resolved directory's two innermost names, so a relative `.` or a path through a
+  link names the directory walked as well.
+
+A committed set is walked at `<checkout>/replays/<set>` and still reads `replays/<set>`, so the
+nine-player pool, which selects by source, and every committed byte stay as they were. The tests:
+- `test_the_source_names_the_directory_walked` plants a checkout at `tmp_path/checkout` and folds
+  the candidate layout by its absolute path and relative to `checkout/replays` (both read
+  `replays/candidates/stage-b-r1/9p2i`). It also folds a scratch set outside it, relative to its
+  parent and by its absolute path (both read the resolved absolute path);
+- `test_a_link_to_a_candidate_names_the_candidate` reaches the planted candidate through a link
+  outside the checkout, the same link relative to the working directory, and a `..` step; each
+  reads the candidate's label and source;
+- `test_the_checkout_root_is_the_one_the_module_lies_in` pins `_CHECKOUT_ROOT` to the resolved
+  checkout, and imports the module in a subprocess through a linked checkout, where it still prints
+  the resolved root;
+- `test_set_dir_prints_the_directory_it_walked` runs `main(["--set-dir", ..., "--json-stdout"])`
+  over the same four layouts and asserts the printed `label` and `sources`;
+- `test_the_set_label_keeps_its_directories_whole_names` now expects the copy's absolute path, and
+  the same from inside the copy handed as `.`;
+- `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` and
+  `test_the_script_runs_from_any_directory_and_exits_with_mains_code` still compare every field with
+  the committed `samples/4p1i` section, except `sources`, which is now the copy's absolute path. The
+  second now hands the program the directory relative to its working directory, outside the
+  checkout.
+
+The docstrings of `CensusInputs`, `load_census_inputs` and the publisher say what the source names.
+
+**Finding 2: round 3's References still said `eval/` never touches `agents/`.** Round 8 corrected
+the same understatement in rounds 6 and 7 but not round 3's wording. Round 3's References now
+carries a dated correction note in the form of rounds 6 and 7: the census imports one
+`agents/tactical` constant, `crewmate_policy.EMERGENCY_COOLDOWN_TICKS`, beside `engine/`,
+`orchestrator/`, `meetings/` and sibling `eval/` modules. Round 8's restatement now names round 3's
+wording beside rounds 6 and 7, and its closing greps add ``git grep -n 'never touches `agents/`'``,
+which prints only this card's lines. Text only; no code moved for this finding.
+
+**The probe over the changed spans.** No exhaustive sweep ran this round. A scratch harness applied
+28 mutants to the changed lines of `eval/gameplay_census.py`, one at a time, and ran both census
+suites against each. The mutants: the checkout root read as `parents[0]`, `parents[2]`, without
+its `resolve()`, and as the working directory; the inside test inverted, read against the root's
+parent, and its branches swapped; the inside branch returning the absolute path, the old
+`replays/<parent>/<name>` literal, or the bare name, and relative to the root's parent; the outside
+branch returning a path relative to the root's parent, the old literal, or the bare name; the
+walked directory unresolved or made absolute without resolving; the label read from the unresolved
+path, from one name, from the parent alone, from the grandparent, or as a constant; the source read
+from the unresolved path, from the parent, as the old literal, as a constant, or always absolute;
+and `as_posix()` read as `str()` in each branch.
+
+On the first run 24 failed a test and 4 survived: the root's dropped `resolve()`, the directory made
+absolute without resolving, and the two `str()` reads. The linked-checkout import and the link test
+were added for the first two, and on the second run 26 of 28 fail a test. The two `str()` reads are
+equivalent: on a POSIX path, `str()` is its posix form, and the project runs on macOS and Linux.
+The publisher changed only its docstring. The harness is scratch and not shipped; the list above
+reproduces it.
+
+**Tests.** The two census suites go from 320 tests to 330 (279 and 51). No test was skipped,
+weakened or deleted: the three tests whose expected source moved still compare every other field
+of the section.
+
+**Figures.** No page byte moved: `publish_gameplay_census.py --check` is consistent at this head,
+and `--set-dir replays/samples/9p2i --json-stdout` prints the committed `samples/9p2i` section,
+`sources` included. Every figure quoted in earlier rounds stands as re-measured in round 3.
+
+**Verification.** Each exit code was captured directly, never through a pipe. The code, tests and
+this subsection are one commit; every row was measured on its tree with this subsection in place.
+`check.sh` ran once, before its cell was filled, and the task-doc rows were re-run on the final
+text.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 330 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section, whose `sources` reads `replays/samples/9p2i`; `git status --porcelain` identical before and after, naming no page |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 501 source files |
+| `uv run ruff check .` and `uv run ruff format --check .` | clean; 530 files formatted |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `bash scripts/check.sh` | exit 0 on this tree with this subsection in place, before this cell was filled: 8,844 Python passed, 20 skipped, 3 xfailed; 559 frontend tests passed. `npm ci` in `frontend/` ran first in this fresh worktree |
+
+**Scope check** (the demo-bundle proof). `git diff --stat 52a6ac58 -- replays api frontend agents
+meetings engine orchestrator observation scripts/build_demo_bundle.py` prints nothing at the head,
+so no path the bundle reads moved and the republished bundle is byte-identical. `git diff
+175007c5` names only the census module, the publisher's docstring, the two census test files and
+this card. No `docs/artifacts.md` row moved: no `audits/`, `tests/fixtures/` or page byte changed,
+and no hashed source reads the module. No frontend e2e: nothing under `api/` or `frontend/` moved.
+
+**Limitations of this round.**
+- The probe covers only the changed spans, under the operators listed; the three earlier
+  exhaustive passes ran on earlier heads and were not re-run.
+- `publish` and `--check` walk the committed sets of the checkout the module lies in, the only tree
+  `main()` hands them. Handed a copied tree outside it, the four sources would be absolute, the
+  nine-player pool would select no set, and `pool` would refuse it (`GameplayCensusEraError`: no
+  games to take an era from) rather than publish.
+- The label stays the two innermost names, so two candidates that share them (say
+  `stage-b-r1/9p2i` under two roots) share a label; the source tells them apart.
 - The round-2 question on the two pre-registered before values still waits for the orchestrator
   (the PR's Questions).
