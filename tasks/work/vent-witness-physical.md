@@ -132,6 +132,17 @@ byte-identical under `both_rooms`.
 
 ## Acceptance
 
+- [x] Review correction (round 1): both oracles pin their whole unknown-rule message.
+  `test_an_unknown_rule_raises` (`tests/eval/test_witness_entitlement.py`) and
+  `test_the_temporal_oracle_raises_on_an_unknown_rule` (`tests/observation/test_temporal_v2.py`)
+  match `unknown vent witness rule: {rule!r}`, escaped and anchored at both ends, for each
+  parametrised rule, as the engine's unknown-rule test does. Proof, at `c7c3ad06`: the interpolated
+  rule replaced by a constant (M21, M22) or dropped (M21b, M22b) fails 3 cases in the matching
+  oracle's test; with the earlier prefix match both tests passed under all four.
+- [x] Review correction (round 1): the neuter and mutation tables are measured at the tree that
+  states them. All 27 neuters and 39 mutants were re-run at `c7c3ad06` through one copy-restore
+  harness and the 272 targeted tests; the Results tables carry those counts, and the dated round-1
+  subsection gives the command and every row that moved from the published count.
 - [x] **The engine arm, and the exit that proves it.** `resolve_vent` takes the rule as a keyword.
   `_apply_vent`, `_apply_action` and `advance_tick` take `vent_witness_rule: VentWitnessRule =
   "both_rooms"`; the alias sits beside `RedistributionPolicy`. Mechanism: the physical branch in
@@ -452,8 +463,10 @@ Implemented on `work/vent-witness-physical` from `bdfa5b19`: `8a9c93d0` (the eng
 helper line, the pending removal, the contract paragraph) and `c99a8dd9` (temporal delivery, both
 oracles, the leak scan and its profile, the reader gate and the census end to end), then
 `947b986f`, which formats one call in `engine/tick.py` and changes nothing else. The validation
-commands below ran at `c99a8dd9`, and the neuter and mutation passes on the working tree committed
-as `c99a8dd9`, all in a bare shell with no `AILIBI_*` export, unless a line names another commit.
+commands below ran at `c99a8dd9`, all in a bare shell with no `AILIBI_*` export, unless a line
+names another commit. The neuter and mutation tables were re-measured in round 1 at `c7c3ad06`,
+whose production files equal `d15f6a85`'s; the dated round-1 subsection gives the command and
+the rows that moved.
 
 **Sections relied on.** The spine's arm page, `docs/experiment-arms.md` (linked from
 `docs/architecture.md`, "Explicit cleanup experiments"): the engine layer, omit-at-default, the
@@ -565,14 +578,15 @@ tests/orchestrator/test_experiment_arms.py tests/eval/test_replay_walk.py`, 272 
   (`FAILED tests/engine/test_tick.py::test_vent_can_exit_through_connected_destination_vent`).
 
 **Neuter pass.** Every production line, argument and row this card adds or changes, neutered one
-at a time. All 27 went red; none first came back green.
+at a time. All 27 went red; none first came back green. Counts at `c7c3ad06` (272 targeted
+tests); the named test is one of the row's failures, chosen as its proof.
 
-| neuter | targeted result | first failing test |
+| neuter | targeted result at `c7c3ad06` | a failing test |
 |---|---|---|
 | N01 rules: physical branch removed | 18 failed, 254 passed | `test_physical_vent_exit_is_witnessed_only_from_the_room_surfaced_into` |
-| N02 rules: room-difference gate dropped | 8 failed, 264 passed | `test_an_entry_is_witnessed_from_its_one_room_under_both_rules` |
+| N02 rules: room-difference gate dropped | 10 failed, 262 passed | `test_an_entry_is_witnessed_from_its_one_room_under_both_rules` |
 | N03 rules: rule test dropped | 19 failed, 253 passed | `test_vent_can_exit_through_connected_destination_vent` |
-| N04 rules: gate on is-an-exit alone | 3 failed, 269 passed | `test_an_exit_in_place_is_witnessed_by_every_occupant_under_both_rules` |
+| N04 rules: gate on is-an-exit alone | 5 failed, 267 passed | `test_an_exit_in_place_is_witnessed_by_every_occupant_under_both_rules` |
 | N05 tick: unknown-rule validation removed | 4 failed, 268 passed | `test_an_unknown_rule_raises_before_any_action_applies[PHYSICAL]` |
 | N06 tick: `_apply_vent` passes `both_rooms` | 18 failed, 254 passed | `test_physical_vent_exit_is_witnessed_only_from_the_room_surfaced_into` |
 | N07 tick: `_apply_action` drops the rule | 18 failed, 254 passed | `test_physical_vent_exit_is_witnessed_only_from_the_room_surfaced_into` |
@@ -585,7 +599,7 @@ at a time. All 27 went red; none first came back green.
 | N14 temporal: room predicate restored | 6 failed, 266 passed | `test_a_room_left_crewmate_sees_the_exit_only_under_both_rooms[physical]` |
 | N15 witness oracle: validation removed | 3 failed, 269 passed | `test_an_unknown_rule_raises[PHYSICAL]` |
 | N16 witness oracle: physical branch removed | 8 failed, 264 passed | `test_a_correct_physical_exit_fails_an_oracle_left_at_both_rooms` |
-| N17 witness oracle: room gate dropped | 5 failed, 267 passed | `test_an_entry_and_an_exit_in_place_keep_their_one_room_witnesses[physical]` |
+| N17 witness oracle: room gate dropped | 6 failed, 266 passed | `test_an_entry_and_an_exit_in_place_keep_their_one_room_witnesses[physical]` |
 | N18 witness oracle: rule test dropped | 8 failed, 264 passed | `test_leak_scan_profile_tolerates_doubled_meeting_row` |
 | N19 temporal oracle: validation removed | 3 failed, 269 passed | `test_the_temporal_oracle_raises_on_an_unknown_rule[PHYSICAL]` |
 | N20 temporal oracle: physical set removed | 4 failed, 268 passed | `test_a_room_left_crewmate_sees_the_exit_only_under_both_rooms[physical]` |
@@ -606,9 +620,10 @@ itself no neuter came back green.
 **Mutation pass.** One bounded pass over the lines this card added or changed and the vent branches
 they sit in (`engine/rules.py`, `engine/tick.py`, `observation/temporal.py`, both oracles,
 `eval/leak_scan.py`), with exactly the eight operator classes, each mutant run against the same
-targeted suites. 37 mutants: 34 killed, 3 equivalent.
+targeted suites. 39 mutants: 36 killed, 3 equivalent. Counts at `c7c3ad06`; the named test is
+one of the row's failures.
 
-| mutant [class] | targeted result | first failing test |
+| mutant [class] | targeted result at `c7c3ad06` | a failing test |
 |---|---|---|
 | M01 [1] temporal: watch guard dropped | 1 failed | `test_a_vent_listing_a_vented_or_dead_observer_still_reaches_neither` |
 | M02 [1] leak scan: helper dropped from the reader | 272 passed | equivalent (below) |
@@ -618,20 +633,22 @@ targeted suites. 37 mutants: 34 killed, 3 equivalent.
 | M06 [2] temporal oracle: physical room set reads the room left | 4 failed | `test_a_room_left_crewmate_sees_the_exit_only_under_both_rooms[physical]` |
 | M07 [2] witness oracle: arrival read for the room left | 6 failed | `test_leak_scan_profile_tolerates_doubled_meeting_row` |
 | M08 [3] rules: rule test becomes is-not-None | 19 failed | `test_vent_can_exit_through_connected_destination_vent` |
-| M09 [3] rules: room test becomes is-not-None | 8 failed | `test_an_entry_is_witnessed_from_its_one_room_under_both_rules` |
+| M09 [3] rules: room test becomes is-not-None | 10 failed | `test_an_entry_is_witnessed_from_its_one_room_under_both_rules` |
 | M10 [3] tick: validation becomes is-None | 4 failed | `test_an_unknown_rule_raises_before_any_action_applies[PHYSICAL]` |
 | M11 [3] witness oracle: rule test becomes is-None | 8 failed | `test_a_correct_physical_exit_fails_an_oracle_left_at_both_rooms` |
-| M12 [3] witness oracle: room test becomes is-not-None | 5 failed | `test_an_entry_and_an_exit_in_place_keep_their_one_room_witnesses[physical]` |
+| M12 [3] witness oracle: room test becomes is-not-None | 6 failed | `test_an_entry_and_an_exit_in_place_keep_their_one_room_witnesses[physical]` |
 | M13 [3] temporal oracle: rule test becomes is-None | 4 failed | `test_a_room_left_crewmate_sees_the_exit_only_under_both_rooms[physical]` |
 | M14 [3] temporal oracle: validation becomes is-None | 3 failed | `test_the_temporal_oracle_raises_on_an_unknown_rule[PHYSICAL]` |
-| M15 [4] rules: room left read as ADMIN | 7 failed | `test_the_rule_changes_only_a_cross_room_exits_room_left` |
-| M16 [4] rules: destination room read as REACTOR | 7 failed | `test_an_entry_is_witnessed_from_its_one_room_under_both_rules` |
-| M17 [4] witness oracle: actor room read as ADMIN | 4 failed | `test_a_physical_set_passes_the_scan_with_vent_views` |
+| M15 [4] rules: room left read as ADMIN | 9 failed | `test_the_rule_changes_only_a_cross_room_exits_room_left` |
+| M16 [4] rules: destination room read as REACTOR | 9 failed | `test_an_entry_is_witnessed_from_its_one_room_under_both_rules` |
+| M17 [4] witness oracle: actor room in the physical condition read as ADMIN | 5 failed | `test_a_physical_set_passes_the_scan_with_vent_views` |
 | M18 [4] temporal: reported room read as the destination | 3 failed | `test_a_room_left_crewmate_sees_the_exit_only_under_both_rooms[both_rooms]` |
 | M19 [4] temporal oracle: destination room read as REACTOR | 1 failed | `test_a_temporal_physical_set_passes_the_scan_with_event_batches` |
-| M20 [5] tick: unknown-rule message constant | 4 failed | `test_an_unknown_rule_raises_before_any_action_applies[PHYSICAL]` |
-| M21 [5] witness oracle: unknown-rule message constant | 3 failed | `test_an_unknown_rule_raises[PHYSICAL]` |
-| M22 [5] temporal oracle: unknown-rule message constant | 3 failed | `test_the_temporal_oracle_raises_on_an_unknown_rule[PHYSICAL]` |
+| M20 [5] tick: whole unknown-rule message replaced by the constant `invalid` | 4 failed | `test_an_unknown_rule_raises_before_any_action_applies[PHYSICAL]` |
+| M21 [5] witness oracle: interpolated rule in the unknown-rule message replaced by the constant `?` | 3 failed | `test_an_unknown_rule_raises[PHYSICAL]` |
+| M21b [5] witness oracle: interpolated rule dropped from the unknown-rule message | 3 failed | `test_an_unknown_rule_raises[both]` |
+| M22 [5] temporal oracle: interpolated rule in the unknown-rule message replaced by the constant `?` | 3 failed | `test_the_temporal_oracle_raises_on_an_unknown_rule[PHYSICAL]` |
+| M22b [5] temporal oracle: interpolated rule dropped from the unknown-rule message | 3 failed | `test_the_temporal_oracle_raises_on_an_unknown_rule[both]` |
 | M23 [6] leak scan: orchestrator layer dropped | 1 failed | `test_the_factory_profile_scans_a_full_config_copy_with_every_hash_verified` |
 | M24 [6] leak scan: tactical layer dropped | 1 failed | same |
 | M25 [6] leak scan: meeting layer dropped | 1 failed | same |
@@ -653,6 +670,9 @@ planted relocated-vent map only exercised a cross-room exit; an exit in place th
 was added to both planted-map tests. M01, M04 and M05 first came back as collection errors, because
 the in-test reference copy was located by the production predicate's own text; the reference now
 locates the vent clause by the branch around it, and M01 and M04 then failed on semantic tests.
+Round 1: M21 and M22 as first published replaced the whole message with `"invalid"`, which the
+prefix match caught; the verifier's argument-level variants (M21, M21b, M22, M22b above)
+survived it, and the anchored whole-message match kills all four.
 
 Equivalent mutants:
 - M02: the reader's value is the recorded field either way, and an engine field the helper does not
@@ -755,3 +775,107 @@ prompts valid, strict mypy clean on 503 files, 8900 passed, 20 skipped and 3 xfa
 frontend legs (559 vitest tests and the build). The first run, at `aee21bab` (the commit that
 recorded these Results), exited 1 at `ruff format --check` on one call in `engine/tick.py`;
 `947b986f` formats that call and changes nothing else.
+
+### Review corrections, round 1 (2026-09-26)
+
+**State: done.** Both round-1 findings are repaired, and the two `Review correction (round 1)`
+items at the top of Acceptance record them. The one code commit is `c7c3ad06`, which changes only
+`tests/eval/test_witness_entitlement.py` and `tests/observation/test_temporal_v2.py`
+(`git diff --stat d15f6a85 c7c3ad06`); no production file moved. This subsection is the card commit
+after it.
+
+**Finding 1: the oracles' unknown-rule message argument survived a class-5 mutant.**
+`test_an_unknown_rule_raises` and `test_the_temporal_oracle_raises_on_an_unknown_rule` matched only
+the prefix `unknown vent witness rule`. Replacing the interpolated `vent_witness_rule!r` with a
+constant, or dropping it, left every targeted test green. The M21 and M22 rows claimed a kill for a
+different mutant, the whole message replaced with `"invalid"`, which the prefix match does catch.
+- Both tests now match the whole message, escaped and anchored:
+  `f"^{re.escape(f'unknown vent witness rule: {rule!r}')}$"`, for each of the three parametrised
+  rules. The engine's test already pinned the same message.
+- The M21, M21b, M22 and M22b rows above are the argument-level mutants. Each fails the three cases
+  of its oracle's test at `c7c3ad06`.
+- Reproduced before the fix: the two test files as they stood at `d15f6a85` were written into the
+  tree from `git show d15f6a85:<path>`. The same four mutants then gave `6 passed, 51 deselected`
+  on `-k unknown_rule`. Every file was restored from a copy and sha256-checked afterwards.
+
+**Finding 2: the published counts did not reproduce at the tree the Results named.** Most rows
+were measured before the planted-map tests gained their exit in place (the M32 and M33 fix), and
+eight of them move because of it. Those tests are
+`test_a_physical_exit_follows_the_maps_vent_room` and
+`test_the_physical_expectation_follows_the_maps_vent_room`. The Results still said every row was
+measured on the tree committed as `c99a8dd9`. All 27 neuters and all 39 mutants were re-run at
+`c7c3ad06`, and the two tables above now carry those counts. Each moved row's count rose by exactly
+the number of planted-map tests in the last column, all of which are among its failures now:
+
+| row | published | at `c7c3ad06` | planted-map tests added to its failures |
+|---|---|---|---|
+| N02 | 8 failed | 10 failed | both |
+| N04 | 3 failed | 5 failed | both |
+| N17 | 5 failed | 6 failed | the witness oracle's |
+| M09 | 8 failed | 10 failed | both |
+| M12 | 5 failed | 6 failed | the witness oracle's |
+| M15 | 7 failed | 9 failed | both |
+| M16 | 7 failed | 9 failed | both |
+| M17 | 4 failed | 5 failed | the witness oracle's |
+
+- Every other row reproduced its published count, and every named test is in its row's failure
+  list. The column is now headed "a failing test", because the named test was chosen as the row's
+  proof, not taken first from a report order.
+- M17 is the actor-room read in the physical condition (`destination != "ADMIN"`), the variant the
+  verifier ran; its row now says so.
+- N07's edit is unchanged, re-anchored to the one-line call that `947b986f` formatted.
+- M02, M05 and M31, the three named equivalents, gave `272 passed` again.
+
+The harness, kept in scratch and not shipped, handles each row in three steps:
+1. copy the production file and apply one exact-text edit, which must occur exactly once;
+2. run the command below;
+3. restore the file from the copy and check its sha256.
+
+```
+.venv/bin/pytest -q -n 6 --dist loadfile -p no:cacheprovider \
+  tests/engine/test_vent_witness_rule.py tests/engine/test_tick.py \
+  tests/eval/test_witness_entitlement.py tests/observation/test_temporal_v2.py \
+  tests/scripts/test_scan_recording_packets.py tests/eval/test_vent_witness_readers.py \
+  tests/orchestrator/test_experiment_arms.py tests/eval/test_replay_walk.py
+```
+
+The same command gave `272 passed` before the first row and after the last, and
+`git status --short` was empty afterwards. The pass stayed within the eight operator classes: the
+39 mutants are the published rows, with M21 and M22 redefined and M21b and M22b added.
+
+**Validation, at `c7c3ad06`** (each exit code captured directly, bare shell, no `AILIBI_*` export):
+
+| command | exit | result |
+|---|---|---|
+| `uv run lint-imports` | 0 | 4 contracts kept |
+| `bash scripts/verify_samples.sh replays/samples/9p2i` | 0 | 50 verified clean |
+| `bash scripts/verify_samples.sh replays/samples/4p1i` | 0 | 50 verified clean |
+| `bash scripts/verify_samples.sh replays/ml_corpus/9p2i` | 0 | 150 verified clean |
+| `bash scripts/verify_samples.sh replays/ml_corpus/4p1i` | 0 | 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, four sets | 0 each | consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | passed |
+| `uv run python scripts/validate_task_docs.py` | 0 | 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0 | every check passed, 7 evidence-branch-absent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 0 | 25 passed |
+| `uv run python scripts/scan_recording_packets.py replays/ml_corpus/9p2i` and `.../4p1i` | 0, 0 | both outputs byte-identical (`cmp`) to the same script run on a `git archive` of `bdfa5b19` |
+| the card's targeted pytest line | 0 | 146 passed |
+| `uv run pytest -m campaign -q` | 0 | 336 passed |
+
+**The bundle, at `c7c3ad06`.** This round changes no file under `api/`, `frontend/` or `replays/`.
+The data half was re-baked to confirm it:
+- a scratch driver loads `scripts/build_demo_bundle.py` and calls its `bake_data` twice, once with
+  the code of a `git archive` of `bdfa5b19` and once with this tree's, asserting where
+  `api.replay_loader` and `engine.tick` were imported from;
+- both calls read the same `replays/samples` directory, so every file's modification time is equal;
+- each wrote 156 JSON files, and `diff -r` of the two `data/` trees printed nothing and exited 0.
+
+The frontend build is unchanged and runs inside `check.sh`.
+
+**Closing greps**, over the tree at this commit and the PR body:
+- `git grep -n -i -E 'message constant|first failing test|37 mutants|34 killed'` finds only this
+  line. M20, the engine's row, is renamed for what it mutates (the whole message); the engine's
+  test pins the message with the rule's repr, as the two oracle tests now do.
+- `grep -n 'committed as .c99a8dd9.' tasks/work/vent-witness-physical.md` finds only the Finding 2
+  paragraph above and this line.
