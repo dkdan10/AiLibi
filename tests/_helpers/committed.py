@@ -6,6 +6,7 @@ fixtures: each re-seeds every game in a set, replays every recorded action
 through the engine and verifies every state hash. The sixth walk,
 :func:`committed_meetings`, rebuilds every speaker's memory through the real
 perception path and projects the three private channels the meeting layer reads.
+The seventh, :func:`census_inputs`, is the gameplay census's carrier.
 Each is a pure deterministic function of frozen committed bytes, so computing
 one twice is repeated work and nothing else. Every test-side walk over a
 committed set goes through this module.
@@ -44,9 +45,11 @@ if TYPE_CHECKING:
     from agents.memory.episodic import MemoryStore
     from eval.deception_instruments import DeceptionInstrumentsReport
     from eval.funnel import InformationFunnelReport
+    from eval.gameplay_census import CensusInputs
     from eval.kill_craft import KillCraftReport
     from eval.meeting_quality import TournamentEvalReport
     from eval.replay_walk import MeetingOpened
+    from eval.replay_walk import ReplayWalkEvent
     from eval.solvability import SolvabilityReport
     from meetings.schemas import (
         ContradictionRef,
@@ -167,6 +170,53 @@ def solvability_report(sample_dir: Path) -> SolvabilityReport:
     from eval.solvability import compute_solvability_report
 
     return compute_solvability_report(sample_dir)
+
+
+# --------------------------------------------------------------------------- #
+# The gameplay census carrier.                                                 #
+# --------------------------------------------------------------------------- #
+
+
+@cache
+def census_inputs(sample_dir: Path) -> CensusInputs:
+    """``sample_dir``'s gameplay-census carrier, walked once.
+
+    ``eval.gameplay_census.load_census_inputs`` re-seeds and verifies every game
+    through the census walk profile. The carrier is frozen dataclasses whose
+    collections are tuples, frozensets and read-only mappings, so one instance is
+    safe to share.
+    """
+
+    from eval.gameplay_census import load_census_inputs
+
+    return load_census_inputs(sample_dir)
+
+
+@cache
+def census_walk_events(sample_dir: Path, seed: int) -> tuple[ReplayWalkEvent, ...]:
+    """One game's walk under the census profile, as the loader receives it.
+
+    The loader's own tests replay a perturbed copy of this stream, so each
+    loader check is exercised on the events a real game produces.
+    """
+
+    from engine.world import load_canonical_map
+    from eval.gameplay_census import CENSUS_WALK_CONFIG
+    from eval.replay_walk import walk_replay
+    from eval.validity import resolve_roster_knobs
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    return tuple(
+        walk_replay(
+            sample_dir / f"replay-seed-{seed}.jsonl",
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=load_canonical_map(),
+            config=CENSUS_WALK_CONFIG,
+        )
+    )
 
 
 def sighting_records_from_recorded_flags(

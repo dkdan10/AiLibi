@@ -445,3 +445,7 @@ ML work and the featured tour wait until gameplay is finished (owner rulings 11 
 The owner also ruled that a record covers 50 seeds, not all 300. Each Stage-B round records `samples/9p2i`'s
 seeds 0-49 into its own candidate directory, and the owner assesses it against readings fixed before the first
 seed. The ladder tip stays at baseline 9 until an adopting decision.
+
+On 2026-09-25 the gameplay census counted the meeting structure this addendum describes: the first reply accuses the
+opener in 521 of 676 meetings and the opener speaks a second time in 0 of 676, and
+`uv run python scripts/publish_gameplay_census.py --check` recomputes both from the recordings.

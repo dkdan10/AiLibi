@@ -1,6 +1,6 @@
 """Pin ``tests/_helpers/committed.py`` as the only home for committed-set walks.
 
-A second copy of one of the six committed-set walks is invisible: it passes, it
+A second copy of one of the seven committed-set walks is invisible: it passes, it
 asserts the same numbers, and it silently doubles the most expensive fixture in
 the suite. This module reads every test file, finds each call to a walk whose set
 argument is a committed directory, and fails on any that does not go through the
@@ -57,6 +57,7 @@ WALKERS: Final[frozenset[str]] = frozenset(
         "compute_information_funnel",
         "compute_kill_craft_report",
         "compute_solvability_report",
+        "load_census_inputs",
         "walk_committed_meetings",
     }
 )

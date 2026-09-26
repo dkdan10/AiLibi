@@ -164,6 +164,9 @@ def _availability_tree(root: Path) -> None:
         # reason this scratch tree is not about.
         "docs/process-scorecard.md",
         "docs/process-scorecard.json",
+        # The gameplay census's row probes its pair the same way.
+        "docs/gameplay-census.md",
+        "docs/gameplay-census.json",
         "design/phase-12",
         "experiments/lab",
         "experiments/model_probe",
