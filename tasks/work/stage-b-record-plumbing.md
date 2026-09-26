@@ -145,6 +145,22 @@ The test config uses arms that exist today, because the spine's pending guard re
 new values:
 `{"format_version": 1, "meeting_reset": "hub_with_grace", "vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}`.
 
+- [x] Review correction: on a case-insensitive filesystem a case-variant spelling of a canonical tree or of one
+  of its ancestors is refused like the plain path (round 1, correctness). The target rule now decides a
+  target's place on disk, by device and inode, not by spelling. Proof in `tests/scripts/test_refresh_samples.py`:
+  `test_case_variant_spellings_name_the_same_directories`; the script cases `a case-variant spelling of samples`
+  and `a case-variant ancestor into ml_corpus` of `test_a_switched_on_config_is_refused_at_every_unsafe_target`;
+  and `test_no_accepted_target_resolves_inside_a_canonical_tree`, with case-flipped segments and root and an
+  oracle that makes the target in a copy and finds where it landed.
+- [x] Review correction: a switched-on config cannot record into `replays/samples/` or `replays/ml_corpus/`
+  through a case, firmlink or second-mount alias (round 1, integrity). Proof: the script case
+  `a firmlink into samples`, `test_a_firmlink_spelling_names_the_same_directories`,
+  `test_the_target_rule_decides_each_tree_by_identity_not_spelling` (a second mount of each tree, planted on every
+  platform) and `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped`; the recorder's dry
+  run exits 1 at each alias the verifiers named (Results, round 1).
+- [x] Review correction: the one-sha rule runs only when it is declared, also beside `--expected-seeds` on a set
+  whose MANIFEST names two shas (round 1, integrity). Proof: `test_the_seed_flag_alone_does_not_apply_the_one_sha_rule`
+  in `tests/eval/test_validity.py`, which kills the guard reduced to its None test.
 - [x] **`run_tournament.py --experiment-config FILE` records exactly the file.**
   - Mechanism: the file is parsed once as a `RecordedExperimentConfig` (`extra="forbid"`) and
     threaded to `run_tournament_eval(experiment_config=...)`, `HeadlessGame(experiment_config=...)`,
@@ -646,8 +662,10 @@ each mutant run against its targeted test files only. It ran at `f8bf9e3d`; 56 m
   `describe_settings` through the existing `scripts/` edge; `scripts/validity_gate.py` reads a declared file
   through it.
 - **The depth rule.** A switched-on config needs an explicit `AILIBI_SAMPLE_DIR`. Its sample directory and its
-  manifest are resolved physically (`os.path.realpath`, the repository's own `replays/` resolved the same
-  way). Inside `replays/samples/` or `replays/ml_corpus/` they are refused; elsewhere inside `replays/` the
+  manifest have their symlinks and `..` resolved (`os.path.realpath`), and each one's place is then decided on
+  disk (round 1, below): its nearest existing directory is looked up by device and inode among the directories
+  under the repository's `replays/`, and the segments that do not exist yet follow as spelled. Inside
+  `replays/samples/` or `replays/ml_corpus/` they are refused; elsewhere inside `replays/` the
   sample directory must be exactly `replays/candidates/<round>/<set>/` and the manifest must sit directly in
   such a directory; a round or set name starts with a letter or digit (`[A-Za-z0-9][A-Za-z0-9._-]*`), so the
   verifier's `*/*/` glob sees every set. Outside `replays/` anything goes. A config of historical defaults
@@ -729,3 +747,198 @@ each mutant run against its targeted test files only. It ran at `f8bf9e3d`; 56 m
 - The MANIFEST is read through two existing readers that differ on a malformed row; a row the sha reader skips
   counts as naming no sha, which fails closed.
 - The bundle comparison was built on macOS; CI builds on Linux.
+
+### Review corrections, round 1 (2026-09-26)
+
+Three blocking findings from the round-1 verifiers of PR 487, repaired in `25d6f574` (production:
+`scripts/_declared_experiment.py` only; tests: `tests/scripts/test_refresh_samples.py`,
+`tests/eval/test_validity.py`). The commit that carries this subsection changes only this card. Every number
+below was measured at `25d6f574` unless a row says otherwise. The Status stays `active`: the third box still
+waits on the readers card, which has not merged into `main` (`origin/main` is still `bdfa5b19`).
+
+**Findings 1 and 2 (correctness and integrity, one defect): the target rule compared spellings.** The rule
+resolved each target with `os.path.realpath` and compared the result with `replays/samples/` and
+`replays/ml_corpus/` as path prefixes. On this macOS checkout (APFS, case-insensitive), `realpath` keeps the
+typed case and the `/System/Volumes/Data` firmlink prefix, so `REPLAYS/Samples/9p2i`, `Replays/ml_corpus/9p2i`,
+a lower-cased checkout path and the firmlinked path all named a committed tree and were accepted. The
+integrity verifier reports a fake run through such an alias that recorded a switched-on seed into
+`replays/samples/9p2i` (restored). The fake-provider guard, a separate and older check with a hole of its own
+(Limitations, round 1), did not stop it.
+
+- **The rule now decides on disk.** `refuse_unsafe_target` lists every directory under the repository's
+  `replays/` once, keyed by device and inode (`_replays_places`, an `os.walk` that does not enter a symlinked
+  directory and raises on a directory it cannot read). Each target still has its symlinks and `..` resolved
+  first. Its nearest existing directory is then looked up in that list (`_place_in_replays`), and the segments
+  that do not exist yet are appended as spelled, which is where the recorder creates them. A case-variant
+  spelling, the firmlink, or a second mount of any directory under `replays/` therefore reaches the verdict of
+  the plain path. The depth and name rules read the same place, so `REPLAYS/candidates/r1/9p2i` and
+  `replays/CANDIDATES/r1/9p2i` are accepted: they are the candidate set directory on disk.
+- **Stated strength.** The rule knows directories, not single files. A manifest is placed by the directory that
+  holds it, so a hard link elsewhere to a committed `MANIFEST.md` is not recognised. That link cannot change the
+  committed bytes, because `_manifest_writer._atomic_write_text` writes a temporary file and `os.replace`s it
+  onto the name it was given. That name then points at a new file, and the committed file keeps its bytes.
+
+**Finding 3 (integrity): a mutant of the sha guard survived.** Reducing
+`if inventory is not None and require_one_recording_sha:` in `check_cost_and_provenance` to
+`if inventory is not None:` survived `tests/eval/test_validity.py`. The only sha-flag-off case gated without
+`--expected-seeds`, so the inventory was `None` and the sha rule could not run. New:
+`test_the_seed_flag_alone_does_not_apply_the_one_sha_rule` gives seed 0's MANIFEST row a second sha and gates
+the set by its exact seeds. Check 9 passes without the sha flag and fails with it, naming both shas. This is the
+two-pass shape the card cites for c9.
+
+**Planted proofs, run against the round-0 rule.** The round-0 `scripts/_declared_experiment.py` (from
+`3ed462b0`) was copied into the tree. The new and widened tests were run against it with
+`uv run pytest tests/scripts/test_refresh_samples.py -k "reads_physical_paths or unreadable_directory or target or identity or case_variant or firmlink or canonical or candidate_set_directory"`:
+8 failed and 22 passed. The file was then restored from a byte copy (sha256 compared). The eight red tests:
+
+| Test | What it plants |
+| --- | --- |
+| `test_a_switched_on_config_is_refused_at_every_unsafe_target[a case-variant spelling of samples]` | the real recorder, a real run (no key), `AILIBI_SAMPLE_DIR=<checkout>/REPLAYS/Samples/9p2i` |
+| `...[a case-variant ancestor into ml_corpus]` | the checkout's own directory name case-flipped, then `replays/ml_corpus/9p2i` |
+| `...[a firmlink into samples]` | `/System/Volumes/Data<checkout>/replays/samples/9p2i` |
+| `test_case_variant_spellings_name_the_same_directories` | flipped segments (`REPLAYS/Samples`, `Replays/samples`, `REPLAYS/ML_CORPUS`), a flipped `tmp_path` ancestor, and flipped candidate spellings that must still be accepted |
+| `test_a_firmlink_spelling_names_the_same_directories` | a planted repository reached through the firmlink |
+| `test_the_target_rule_decides_each_tree_by_identity_not_spelling` | four scratch directories whose identity is patched to be `replays/samples`, `replays/ml_corpus`, `replays/` and `replays/candidates`: a second mount, planted on every platform. Before the patch each is accepted, and that half passes on the round-0 rule; the rest errors there, because the round-0 rule reads no on-disk identity to patch |
+| `test_no_accepted_target_resolves_inside_a_canonical_tree` | the property, widened: case-flipped segments (`SAMPLES`, `Ml_Corpus`, `Candidates`, `Replays`, `INTO-SAMPLES`, `R1`), case-flipped bases and a flipped planted root. The oracle compares no spellings: it copies the planted repository, makes the target there as the recorder would, and finds the made directory by device and inode among the copy's `replays/` directories |
+| `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped` | `replays/samples` made unreadable (mode 0), the sample directory aimed at it and the manifest at scratch; the rule must raise |
+
+Where a filesystem tells case-variant names apart, or has no firmlink, the case-variant and firmlink cases skip
+by name. The patched second-mount test and the property run everywhere; on such a filesystem a flipped name is
+simply a new directory, and the oracle expects that verdict. On this checkout nothing skipped. The widened
+`test_the_target_rule_reads_physical_paths` passes on both rules; its new lines pin the new rule's edges:
+- a canonical tree the repository does not have yet is refused;
+- `replays/` itself is refused;
+- a file inside a canonical tree, and a path below that file, are refused;
+- a path below a scratch file is accepted.
+The seed-only sha test is red on the finding's mutant (below).
+
+**The recorder at the verifiers' aliases** (a bare environment, `refresh_samples.sh --seeds 0 --dry-run
+--expect-levers "" --experiment-config <the test config>`, `AILIBI_MANIFEST` beside each directory):
+
+| `AILIBI_SAMPLE_DIR` | Provider | Result |
+| --- | --- | --- |
+| `REPLAYS/samples/9p2i` | featherless | exit 1, "inside replays/samples/", no slate line |
+| `Replays/samples/9p2i` | featherless | exit 1, "inside replays/samples/" |
+| `REPLAYS/ml_corpus/9p2i` | featherless | exit 1, "inside replays/ml_corpus/" |
+| `/System/Volumes/Data<checkout>/replays/samples/9p2i` | featherless | exit 1, "inside replays/samples/" |
+| the checkout path lower-cased, then `/replays/samples/9p2i` | featherless | exit 1, "inside replays/samples/" |
+| `REPLAYS/samples/9p2i` | fake | exit 1, "inside replays/samples/" (the declared-config check runs before the fake-provider guard) |
+| `REPLAYS/candidates/r1/9p2i` | featherless | exit 0, "Substrate slate OK", nothing created |
+
+`git status --porcelain --untracked-files=all` showed only the three edited files before and after.
+
+### Mutation and neutering, round 1
+
+One bounded pass over the spans this round changed and the span finding 3 names, with the eight listed operator
+classes. The same harness ran eight neutering probes over the new lines. Each mutant or probe ran against its
+targeted suite only: the rule's tests (`tests/scripts/test_refresh_samples.py -k "target or identity or
+case_variant or firmlink or canonical or candidate_set_directory or unreadable_directory"`) or
+`tests/eval/test_validity.py`, with `-x -n 6 --dist loadfile`. Each file was restored from a byte copy and its
+sha256 compared. The pass ran at `25d6f574`'s production bytes: 22 mutants and 8 probes, 30 restored.
+
+The first red test is named as `-x` reported it; `[case]` is a case of `test_a_switched_on_config_is_refused_at_every_unsafe_target`.
+
+| Id | Class | Mutant | Verdict (first red test) |
+| --- | --- | --- | --- |
+| D1 | drop a filter | nearest ancestor without `is_dir()` | killed (`[a scratch dir with a committed manifest]`) |
+| D2 | drop a wrapper | `os.walk` without `onerror` | first SURVIVED, see below; killed by `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped` |
+| D3 | swap a collection | `path.parents` for `(path, *path.parents)` | killed (`test_no_accepted_target_resolves_inside_a_canonical_tree`) |
+| D4 | None test inverse | `place is not None` in `_place_in_replays` | killed (`[samples 9p2i]`) |
+| D5 | None test inverse | `place is not None` in `target_problem` | killed (`[samples 9p2i]`) |
+| D6 | swap branches | the manifest and sample-dir depth swapped | killed (`[a hidden round name]`) |
+| D7 | drop a filter | `place[0]` without the empty-place guard | killed (`test_the_target_rule_reads_physical_paths`, `replays/` itself) |
+| D8 | message argument | `tree="replays/samples/"` | killed (`[ml_corpus 9p2i]`) |
+| D9 | message argument | `path=Path("replays")` | killed (`[samples 9p2i]`) |
+| D10 | swap a collection | the place without its unmade tail | killed (`[a hidden round name]`) |
+| D11 | swap a collection | the walk over the repository, not `replays/` | killed (`[samples 9p2i]`) |
+| D12 | loaded source to literal | `CANONICAL_TREES` as `("samples", "ml_corpus")` | survives, equivalent: the constant is that literal, in this module, read from no other source |
+| D13 | None test | `directory[0] is None` for the family test | killed (`test_no_accepted_target_resolves_inside_a_canonical_tree`) |
+| D14 | read to constant | `is_manifest=False` at the call | killed (`test_a_switched_on_config_is_accepted_at_a_candidate_set_directory`) |
+| D15 | swap branches | `None` and the place swapped | killed (`[samples 9p2i]`) |
+| D16 | loaded source to literal | `CANDIDATES_TREE` as `"candidates"` | survives, equivalent, as D12 |
+| V1 | None test | the sha guard as `inventory is not None` (the finding) | killed (`test_the_seed_flag_alone_does_not_apply_the_one_sha_rule`) |
+| V2 | None test | the seed guard as `inventory is not None` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V3 | None test | the sha guard as `inventory is None and ...` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V4 | None test | the seed guard as `... and expected_seeds is None` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V5 | drop a filter | the inventory read only for `expected_seeds` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V6 | drop a filter | the inventory read only for the sha flag | killed (`test_the_seed_flag_alone_does_not_apply_the_one_sha_rule`) |
+
+| Probe | Neutered | Red (first red test) |
+| --- | --- | --- |
+| N1 | `_identity` returns `(0, 0)` | `[samples 9p2i]` |
+| N2 | the walk's error handler returns instead of raising | `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped` |
+| N3 | every listed directory placed at `()` | `[samples 9p2i]` |
+| N4 | the identity of the target, not of its nearest directory | `[a scratch dir with a committed manifest]` |
+| N5 | only the set name checked, not the round name | `[a hidden round name]` |
+| N6 | the depth test without the length | `[one-level candidates/<round>]` |
+| N7 | an empty directory list at the call | `[samples 9p2i]` |
+| N8 | the target without `realpath` | `[a .. alias into samples]` |
+
+**The one that first came back green.** D2 survived its first run: the unreadable-directory test aimed the
+manifest inside the unreadable tree, and `Path.is_dir()` on it raised `PermissionError` before the walk
+mattered. The test now aims the manifest at scratch, so only the walk can see the tree, and D2 is killed. The
+finding's own mutant, V1, survives at `3ed462b0` (the verifier's run) and is killed at `25d6f574`.
+
+### Verification at `25d6f574`
+
+Run in a bare environment (`HOME` and `PATH` only), each exit code captured directly from the process, never
+through a pipe.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | ran once, at the commit carrying this subsection (the card's only change is this text); its exit code and counts are quoted in the PR body |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| the card's eight test files (`-q -n 6 --dist loadfile`) | exit 0: 482 passed, 1 xfailed (the post-step's strict xfail); 474 passed at `17cd2e65`, plus the eight new tests |
+| `bash scripts/verify_samples.sh` (no argument) | exit 0: the two sample sets verified clean (50 each), no candidate set |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/validity_gate.py <set> --json`, the four sets | exit 0 each, every check passed (2994, 2980, 3008 and 2982 bytes of JSON). The gate's production files are unchanged since `17cd2e65`, whose JSON was byte-identical to `bdfa5b19`'s (`cmp`) |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO; `replays/candidates/ [(a) + (b)]` OK |
+| `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run mypy .` | all clean: 532 files formatted, 4 contracts kept, 503 source files |
+| `git diff --stat 3ed462b0..25d6f574 -- eval scripts/validity_gate.py scripts/refresh_samples.sh scripts/run_tournament.py api frontend replays tests/fixtures audits docs` | empty: no gate, recorder, served, committed-replay, fixture, audit or doc byte moved, so no artifacts row and no bundle changes |
+
+### Closing greps, round 1
+
+- `git grep -niE "resolv(e|es|ed|ing) physically|resolved physically|os\.path\.realpath|string prefix|by spelling" -- ':!tasks/phase-*' ':!agent_prompts' ':!audits'`,
+  after the edit. The hits:
+  - the rule itself (`scripts/_declared_experiment.py`: the `realpath` step, which still resolves symlinks and
+    `..`, and the docstring saying the lookup is "not by spelling");
+  - the tests;
+  - this card: the Acceptance contract ("resolve physically outside", which the on-disk decision now meets), the
+    new review items, the rewritten Decisions bullet "The depth rule" and this subsection;
+  - three unrelated uses: string prefixes of observation ids in `meetings/citation_relevance.py` and
+    `tasks/work/relevance-aware-citation-guard.md`, and "spelling one word" in `tasks/work/alibi-as-route.md`.
+
+  The PR body's "depth rule" bullet is rewritten to match.
+- `git grep -niE "case.insensitive|case-variant|firmlink" -- scripts replays docs`: the new rule's module
+  docstring, and the process scorecard's room-id matching ("matched case-insensitively"), which is unrelated.
+- `replays/candidates/README.md` says the recorder refuses a switched-on config "aimed at the committed sets ...
+  or anywhere inside `replays/` other than `replays/candidates/<round>/<set>/`". That is true at the new strength
+  and is not edited, so the family's registered bytes do not move.
+
+### Limitations, round 1
+
+- CI runs on a case-sensitive filesystem with no firmlink, so there the case-variant and firmlink cases skip by
+  name. The second-mount test (patched identity) and the property carry the identity rule on every platform.
+- The rule places directories, not single files; the hard-link case above is covered by the manifest writer's
+  atomic replace, not by the rule.
+- An unreadable directory under `replays/` stops the check with the `PermissionError` traceback (exit 1, nothing
+  staged) rather than a worded refusal.
+- **A pre-existing hole of the same kind, outside this round's findings.** The fake-provider guard in both
+  recorders (`scripts/refresh_samples.sh`, the `fake` branch with `resolve_physical_path`; its twin in
+  `scripts/record_ml_corpus.sh`) compares strings made by bash's builtin `pwd -P`. On this macOS checkout that
+  builtin keeps the typed case and the firmlink prefix: `bash -c 'cd REPLAYS/Samples && pwd -P'` prints
+  `.../REPLAYS/Samples`, where `/bin/pwd -P` prints `.../replays/samples`. The guard's own comparison, applied to
+  the two helper functions sourced from the script, accepts `REPLAYS/samples/9p2i`, `Replays/Samples/9p2i` and
+  the firmlinked path. This explains the verifier's fake run into `replays/samples/9p2i`. Since this round, a
+  switched-on config is refused at those paths by the declared-config check, which runs first. A fake run with no
+  config through such an alias is still accepted, as it is on `main`. The card forbids editing
+  `scripts/record_ml_corpus.sh`, and the findings name only the declared-config rule, so both guards are left
+  as they are and the fix is flagged as a separate task (see the PR's Questions).
+- The dispatch asked to keep the Status `done`. The card was `active` with its third box open, and it stays so:
+  the readers card has not merged, so that box is still unmet. The inventory sentence in `tasks/README.md` is
+  unchanged.
