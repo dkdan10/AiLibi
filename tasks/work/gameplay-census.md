@@ -121,6 +121,43 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction (round 6): the three added-cell conditions the review neutered are
+  planted. A vent-band ejection whose exit, or entry, only the ejected impostor's teammate saw
+  reads that moment as unseen: "neither", or "entry only" / "exit only" beside a crewmate's
+  sighting of the other moment (`test_the_moment_table_reads_crew_sightings_only`). A kill two
+  ticks before the regroup, or one tick after the button, that the button's opener witnessed reads
+  0 of 1 on the kill-witness button cell and is no kill after the regroup
+  (`test_the_regroup_cells_read_only_kills_between_the_regroup_and_the_next_meeting`). An in-place
+  surfacing whose impostor stands in the neighbouring room when a crewmate reaches the vent room
+  reads 0 of 1 (`walked_away` in
+  `test_in_place_surfacings_count_a_crewmate_arriving_before_the_walk_out`). Each of the review's
+  three probes is green on the round-5 files and red on these (Results, round 6).
+- [x] Review correction (round 6): the breach location of the three guards outside
+  `GUARD_PAIRS` is asserted. `assert_breach_names_its_place` folds a breach twice, as planted and
+  under another set label, another seed and every meeting renamed, and requires
+  `set <label>, seed <seed>, <where> breaches it` each time. The teammate-ballot guard is checked
+  for voters `p-0` and `p-1` (`test_the_always_guards_raise_under_every_setting`), the
+  second-repeat guard under both rebuttal values (the same test and
+  `test_the_second_repeat_turn_is_its_own_guard`), and the selector guard and its default-setting
+  twin (`test_a_rebuttal_off_the_selector_raises_under_either_value`). Every `GUARD_PAIRS` row
+  runs through the same helper. The three probes the review ran are green on the round-5 files and
+  red on these.
+- [x] Review correction (round 6): the rebuttal-beneficiaries row reads the answered speaker's
+  recorded role and names it with its article, from `_ROLE_WITH_ARTICLE` ("a crewmate", "an
+  impostor"; a speaker with no recorded role raises). The opener, a crewmate and an impostor each
+  answer an impostor's turn (`test_a_rebuttal_answering_an_impostors_turn_names_an_impostor`). The
+  table reads `n/a` on every committed set, so no page byte moves.
+- [x] Review correction (round 6): an exhaustive mutation pass over `eval/gameplay_census.py`
+  and `scripts/publish_gameplay_census.py` ends with no survivor. Of 10,260 mutants from the
+  round-1 operators plus eight more classes (a filter or wrapper dropped, a related expression
+  swapped in, a comparison replaced by a None test or its inverse, a read replaced by a constant,
+  a message argument replaced by a constant, a member dropped from a tuple of kinds or types,
+  adjacent branches swapped, a loaded source replaced by its canonical literal), 9,267 fail a
+  test, 52 fail strict mypy, 15 fail a test when written on disk, and 926 are named equivalent in
+  24 classes, each with its reason. 45 new tests, and assertions added to three publisher tests,
+  close what the pass found, and four dead or redundant pieces of the trip and rebuttal folds are
+  deleted with no count moving. The method, the per-operator table and the classes are in Results
+  (Review corrections, round 6).
 - [x] Review correction (round 5): every sighting kind and the trigger tick's task events are
   planted. Each of `saw_player`, `saw_vent`, `saw_kill` and `saw_move` makes a redirecting
   rebuttal read "carrying a sighting" and not "only redirect", whether it names another player or
@@ -1680,5 +1717,353 @@ nothing under `api/` or `frontend/` moved.
 - The committed trigger-tick test pins counts from `samples/9p2i`'s bytes. A re-record of that set
   would move them; the partial-record principle records only into a candidate directory, so the
   committed bytes stay.
+- The round-2 question on the two pre-registered before values still waits for the orchestrator
+  (the PR's Questions).
+
+### Review corrections, round 6 (2026-09-26)
+
+**State: done.** This is the seventh review of PR #483, which the dispatch calls round 7; the card
+numbers its correction rounds from the first review, so it is round 6 here. The three findings are
+repaired, and the pattern behind them (a production condition no test pinned, found by a probe the
+tests did not see) is answered by an exhaustive mutation pass run before review. Four `Review
+correction (round 6)` items at the top of Acceptance record this. Status stays `done` and no box is
+open. `tasks/README.md`'s inventory sentence is unchanged (88 cards, 9 ready, 79 done), and
+`scripts/validate_task_docs.py` re-derives it at this head.
+
+**References.** The cells follow the Acceptance items "The added cells" and "Conformance guards"
+under decision memo 2.6 and 3.4 (this card's brief); the breach message is the one the module
+docstring states ("naming the set, seed and meeting (or tick) of the first breach").
+`docs/architecture.md`'s layering is unchanged: `eval/` still reads only the orchestrator's config
+module, the meeting schema and the engine's events, and the four import-linter contracts are kept.
+
+**Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
+round merges nothing, and the diff base stays `52a6ac58`.
+
+**Finding 1: three added-cell conditions could be neutered.** Each is now planted:
+- The moment table's crew filter. `test_the_moment_table_reads_crew_sightings_only` puts the
+  ejected impostor's teammate `p-1` in either witness list of the exit, then of the entry. The
+  moment reads as unseen: "neither" alone, "entry only" or "exit only" beside a crewmate's sighting
+  of the other moment. With `_crew(...)` dropped from the exit sighting, the teammate-only exit
+  reads "exit only".
+- The kills since the regroup.
+  `test_the_regroup_cells_read_only_kills_between_the_regroup_and_the_next_meeting` has the
+  button's opener `p-3` witness a kill two ticks before the regroup meeting at tick 10, or one tick
+  after the button at tick 13. Each reads 0 of 1 on "Kill witnesses pressing the button soon after
+  a regroup" and 0 of 0 on "Kills in the grace window after a regroup". Reading `game.kills`
+  instead of `after` reads 1 of 1 on both.
+- The walk-out test. `walked_away`, added to
+  `test_in_place_surfacings_count_a_crewmate_arriving_before_the_walk_out`, keeps `p-0` in
+  `NEIGHBOUR` on tick 13 while `p-3` stands in the vent room: 0 of 1. With the room test read as
+  `is None`, it reads 1 of 1. The existing `walked_out` case is kept as it was.
+
+**Finding 2: the breach location of three guards was never asserted.** A new helper,
+`assert_breach_names_its_place(planted, key, where)`, folds the breach twice: as planted, and again
+under the set label `other/set`, seed 11 and every `meeting-N` renamed `gathering-N`. Each time the
+message must hold the cell's title and `set <label>, seed <seed>, <where> breaches it`, so neither
+the set, the seed nor the meeting can be a constant. It is applied to:
+- the teammate-ballot guard, for voter `p-0` and for voter `p-1`
+  (`test_the_always_guards_raise_under_every_setting`, both rebuttal values);
+- the repeat-speaker guards: the second-repeat guard at version 1, and at the historical default
+  the repeat-speaker guard that fires first (the same test), and
+  `test_the_second_repeat_turn_is_its_own_guard`;
+- the selector guard at version 1, and its default-setting twin, the accused-opener guard
+  (`test_a_rebuttal_off_the_selector_raises_under_either_value`);
+- every `GUARD_PAIRS` row, which keeps its existing assertions as well.
+
+**Finding 3: the accuser's role was never planted.** The row now reads
+`_ROLE_WITH_ARTICLE[game.roles[answered.speaker]]`, a read-only table giving "a crewmate" and "an
+impostor". The old f-string would have printed "answering a impostor". A speaker with no recorded
+role raises a `KeyError`, as the old `game.roles[...]` read did.
+`test_a_rebuttal_answering_an_impostors_turn_names_an_impostor` has the opener, another crewmate and
+an impostor each answer an impostor's turn, and reads "the opener, answering an impostor", "another
+crewmate, answering an impostor" and "another impostor, answering an impostor". The table reads
+`n/a` on every committed set, so no page byte moves.
+
+**The findings' probes.** A scratch harness (not shipped) wrote each probe on disk as one exact
+span of `eval/gameplay_census.py`, ran both census suites without `-x`, and restored every touched
+file from a copy taken before the run, never from git. The sha256 of every touched file matched
+afterwards. "Before" installs the round-5 module and both test files of `b636a67b` (module sha256
+`a722b817`, as the review measured); "after" is this head (module `2a727c17`, test files
+`97c968b5` and `5e8581aa`). Finding 3's probe replaces the role read with the constant crewmate in
+each version's own form.
+
+| probe | before | after | the tests that turn red |
+|---|---|---|---|
+| (none) | green, 227 passed | green, 275 passed | |
+| F1a: the exit sighting reads both witness lists raw, without `_crew` | green, 227 passed | red, 1 failed | the moment-table test |
+| F1b: the button cell reads `game.kills`, not `after` | green, 227 passed | red, 1 failed | the regroup-kills test |
+| F1c: the walk-out room test reads `is None` | green, 227 passed | red, 1 failed | the in-place surfacing test |
+| F2a: the teammate-ballot guard's `where` is `"?"` | green, 227 passed | red, 2 failed | both runs of the always-guards test |
+| F2b: the second-repeat guard's `where` is `"?"` | green, 227 passed | red, 2 failed | the always-guards test at version 1, the second-repeat test |
+| F2c: the selector guard's `where` is `"?"` | green, 227 passed | red, 1 failed | the selector test |
+| F3: the answered speaker's role is the constant crewmate | green, 227 passed | red, 1 failed | the impostor-answered test |
+
+**The mutation pass.** A scratch harness (not shipped) generated every mutant from the AST of
+`eval/gameplay_census.py` and `scripts/publish_gameplay_census.py`. Each mutant replaces one node's
+exact source span with a re-rendered variant. Docstrings, annotations, imports and `__all__` are
+not mutated. The operators:
+- **R**, round 1's operators: compare swap, `and`/`or` operand drop and swap, `not` drop, boolean
+  flip, integer +1 and -1, `any`/`all`, `+`/`-`, one side of `&`/`|`, either branch of an
+  if-expression, `if`/`while` negation, and a `raise`, `continue`, bare `return` or call statement
+  replaced by `pass`.
+- **a**, drop a filter or wrapper: a call replaced by each positional argument (`_crew`, `sorted`,
+  `frozenset`, `bool`, `isinstance`, every lowercase function or method), a comprehension's `if`
+  dropped, a slice dropped, a set difference replaced by its left side.
+- **b**, swap one expression for a related one: every name, attribute or subscript read replaced
+  by each other expression of the same mypy type in scope in the same function, including every
+  same-typed field of an in-scope carrier (`game.kills` for `after`, `destination_witnesses` for
+  `source_witnesses`). A local whose one binding in the function is `name = expression` is not
+  swapped with that expression.
+- **c**, a comparison replaced by a None test of either side, or by its inverse.
+- **d**, a scalar read (role, kind, room, id, tick, confidence) replaced by a constant of its type:
+  both roles, every literal a kind is compared with, `"p-0"` and `"p-2"` for player ids, three
+  rooms, 0 and 20 for ticks, `"?"`.
+- **e**, a message argument replaced by a constant: every `seed=` (0) and `where=` (`"?"`), every
+  f-string field, and every whole f-string.
+- **f**, one member dropped from a tuple, list, set or dict display of constants, names or starred
+  names (kinds, event types, reads, cell and term tables).
+- **g**, adjacent branches swapped: `if`/`else`, adjacent `elif` bodies, and if-expression arms.
+- **h**, a read of a loaded source replaced by its canonical literal: the button cooldown, the
+  clock offset, the two set lists, the defaults table, the recordings root, the carrier's and the
+  loaded map's kill cooldown and neighbour table, the map's rooms, the ballot floor and the
+  recorded threshold, the roster knobs, the seeds on disk, the recorded config and temporal
+  version, and the loaded map itself.
+
+Each mutant runs in a process forked from a parent that has imported every dependency except the
+two modules and their tests. The child compiles the mutant from the file's bytes, installs it in
+`sys.modules`, and runs both suites with `-x` and a 150-second limit, with Hypothesis's example
+database off. The files are never written. A mutant that makes `publish` write to a relative path
+wrote the committed page during a first run. The runner therefore hashes both pages, both test
+files and both modules after every child. If one moved, it restores them from in-memory copies,
+flags that mutant and re-queues the children that ran beside it. The flagged mutants were rerun one
+at a time: every one fails a test. The page was restored from a copy of its committed bytes, and
+`--check` is consistent.
+
+Stages, in order: a failing test in memory; then strict `mypy` with `--shadow-file`, so the real
+file is never written; then, for module-level code that only a subprocess or a re-execution of the
+source can see, the mutant written on disk, both suites run, and the file restored from a copy. The
+disk stage checked the sha256 of every touched file after each mutant.
+
+The first pass, on the round-6 fixes before the pass's own plants, generated 10,384 mutants: 508
+survived the tests and 448 survived mypy as well. Its survivors drove the plants below. The second
+pass, on this head's module (`2a727c17`), is the table. Its survivors were rerun with each later
+test added, and adding a test can only kill more.
+
+| file | operator | mutants | killed by a test | killed by mypy | killed on disk | equivalent | survivors |
+|---|---|---|---|---|---|---|---|
+| census | R compare swap | 202 | 201 | 0 | 0 | 1 | 0 |
+| census | R `and`/`or` operand drop | 121 | 117 | 2 | 0 | 2 | 0 |
+| census | R `and`/`or` swap | 58 | 58 | 0 | 0 | 0 | 0 |
+| census | R `not` drop | 30 | 30 | 0 | 0 | 0 | 0 |
+| census | R boolean flip | 38 | 37 | 0 | 0 | 1 | 0 |
+| census | R integer +1 | 63 | 59 | 0 | 0 | 4 | 0 |
+| census | R integer -1 | 63 | 55 | 0 | 0 | 8 | 0 |
+| census | R `any`/`all` | 24 | 24 | 0 | 0 | 0 | 0 |
+| census | R `+`/`-` | 23 | 23 | 0 | 0 | 0 | 0 |
+| census | R one side of a set intersection or union | 14 | 14 | 0 | 0 | 0 | 0 |
+| census | R if-expression branch | 62 | 61 | 1 | 0 | 0 | 0 |
+| census | R `if`/`while` negation | 107 | 107 | 0 | 0 | 0 | 0 |
+| census | R statement to `pass` | 162 | 162 | 0 | 0 | 0 | 0 |
+| census | a wrapper dropped | 584 | 546 | 29 | 0 | 9 | 0 |
+| census | a comprehension filter dropped | 37 | 35 | 0 | 0 | 2 | 0 |
+| census | a slice dropped | 3 | 2 | 0 | 0 | 1 | 0 |
+| census | a set difference dropped | 2 | 2 | 0 | 0 | 0 | 0 |
+| census | b related expression swapped | 5,110 | 4,471 | 10 | 0 | 629 | 0 |
+| census | c None test | 480 | 479 | 0 | 0 | 1 | 0 |
+| census | c inverse | 144 | 144 | 0 | 0 | 0 | 0 |
+| census | d read to constant | 1,328 | 1,177 | 5 | 0 | 146 | 0 |
+| census | e `seed=`/`where=` constant | 133 | 39 | 0 | 0 | 94 | 0 |
+| census | e f-string field constant | 75 | 65 | 0 | 0 | 10 | 0 |
+| census | e whole f-string constant | 45 | 43 | 0 | 0 | 2 | 0 |
+| census | f member dropped | 279 | 278 | 1 | 0 | 0 | 0 |
+| census | g `if`/`elif` bodies swapped | 11 | 11 | 0 | 0 | 0 | 0 |
+| census | g if-expression arms swapped | 31 | 31 | 0 | 0 | 0 | 0 |
+| census | h canonical literal | 23 | 19 | 0 | 4 | 0 | 0 |
+| publisher | R compare swap | 14 | 13 | 0 | 1 | 0 | 0 |
+| publisher | R `and`/`or` operand drop | 17 | 17 | 0 | 0 | 0 | 0 |
+| publisher | R `and`/`or` swap | 8 | 8 | 0 | 0 | 0 | 0 |
+| publisher | R `not` drop | 4 | 4 | 0 | 0 | 0 | 0 |
+| publisher | R integer +1 | 13 | 9 | 0 | 1 | 3 | 0 |
+| publisher | R integer -1 | 13 | 9 | 0 | 1 | 3 | 0 |
+| publisher | R `any`/`all` | 1 | 1 | 0 | 0 | 0 | 0 |
+| publisher | R `+`/`-` | 3 | 3 | 0 | 0 | 0 | 0 |
+| publisher | R if-expression branch | 12 | 12 | 0 | 0 | 0 | 0 |
+| publisher | R `if`/`while` negation | 14 | 13 | 0 | 1 | 0 | 0 |
+| publisher | R statement to `pass` | 39 | 37 | 0 | 2 | 0 | 0 |
+| publisher | a wrapper dropped | 105 | 101 | 2 | 2 | 0 | 0 |
+| publisher | a comprehension filter dropped | 4 | 4 | 0 | 0 | 0 | 0 |
+| publisher | b related expression swapped | 538 | 528 | 0 | 0 | 10 | 0 |
+| publisher | c None test | 22 | 17 | 0 | 3 | 2 | 0 |
+| publisher | c inverse | 7 | 7 | 0 | 0 | 0 | 0 |
+| publisher | d read to constant | 61 | 59 | 2 | 0 | 0 | 0 |
+| publisher | e f-string field constant | 63 | 63 | 0 | 0 | 0 | 0 |
+| publisher | e whole f-string constant | 35 | 35 | 0 | 0 | 0 | 0 |
+| publisher | f member dropped | 28 | 27 | 0 | 0 | 1 | 0 |
+| publisher | g if-expression arms swapped | 6 | 6 | 0 | 0 | 0 | 0 |
+| publisher | h canonical literal | 1 | 1 | 0 | 0 | 0 | 0 |
+| **all** | | **10,260** | **9,267** | **52** | **15** | **926** | **0** |
+
+"Killed by a test" includes 38 mutants after which the module no longer imports, and 5 hangs cut at
+the limit. The 52 mypy kills are mostly a wrapper whose type the signature pins (`tuple(...)`,
+`frozenset(...)`, `bool(...)`), or a None test whose narrowing a later read needs. The 15 disk kills
+are the four module-level source reads, which `test_the_constants_bound_from_a_source_follow_it`
+re-executes from the file, and eleven path-bootstrap and `__main__` mutants of the publisher, which
+`test_the_script_runs_from_any_directory_and_exits_with_mains_code` runs as a subprocess.
+
+**The 926 equivalent mutants, by class.** Lines are this head's. No input the carrier, the walk or
+the publisher accepts tells any of them from the source.
+
+| class | mutants | why no input can tell it apart | where |
+|---|---|---|---|
+| E1 | 784 | The `seed=` or `where=` argument, or any read inside it, of a count whose cell has no guard. `_Accumulator.count` reads both only in the breach it raises, and a breach needs a guard. The one local `where` in the held-kill block, which feeds only unguarded cells, is in this class too. | every such argument, found from the module's AST |
+| E2 | 41 | At most one repeat-speaker turn reaches the rebuttal fold: a second raises the always-on guard in the structure fold, which runs first. So `turn` is `first`, and `repeats[0]` is `repeats[-1]`. | `_fold_rebuttals` 2081-2155 |
+| E3 | 2 | Past `if turn.speaker != meeting.opener: continue`, the rebuttal speaker is the opener. | `_fold_rebuttals` 2137, 2146 |
+| E4 | 1 | Reading `<=` for `<` among earlier speakers adds the rebuttal's own speaker, who already spoke. | `_fold_rebuttals` 2090 |
+| E5 | 2 | The walk-out check runs only for an exit whose source and destination are one room. | `_crew_arrives_before_walk_out` 1767, 1770 |
+| E6 | 1 | The answer slice may include the charging turn, whose speaker is never the opener. | `_fold_structure` 2039 |
+| E7 | 1 | An exit trip closes on its own exit tick. | `_fold_trips` 1698 |
+| E8 | 9 | A None guard that only narrows the type: None is never a player id or a body id, so `None in subjects` is false, a None ejection is never an impostor, and `None not in bodies` raises as the None test does. | `_fold_meetings` 1788, `_fold_witnesses` 1634, `_vent_flag_names` 1915 |
+| E9 | 13 | Order only: the three impostor-fate counts add in any order; the same-tick sort key restates a stable sort that already lists vents before meetings; the neighbour table is read by key. | `_fold_witnesses` 1635, `_trips` 1516-1519, `load_census_inputs` 2738 |
+| E10 | 6 | An alias: the local was bound to exactly that expression (`meeting = closers[tick]`, `body = bodies[meeting.trigger_body]`, `next_tick`, `acc.label`, the comprehension's `rows`). | `_trips` 1538, 1540, `_fold_meetings` 1801, 1862, `fold_set` 1430, `pool` 1467 |
+| E11 | 15 | One value by construction, on every walk the census profile accepts. The engine keys players and bodies by their own id, stamps each event with the tick it runs on, and gives a vent event the destination vent's room as its `room`. A corpse appears on its kill's tick. The walk keys each meeting row by the tick row it follows, opens it on that tick's state, and applies it from that row. A trigger tick always has events, so the event loop's last variable carries that tick. | `_frame_of` 2399, `_load_game` 2603-2647, `_meeting_fact` 2479-2554 |
+| E12 | 3 | The kinds tuple then selects by type name the same three event types the `isinstance` filter admits. | `_meeting_fact` 2487, 2490 |
+| E13 | 1 | `WalkComplete` is the last of the walk's five event types, and the only one that reaches that branch. | `_load_game` 2660 |
+| E14 | 4 | A copy no reader can tell from its source: `model_dump` returns a fresh dict, a `Counter` reads like the dict made from it, and the accumulator is discarded. | `_game_era` 2384, `fold_set` 1439, 1441, `pool` 1467 |
+| E15 | 11 | Only the count and emptiness of the refused-seed and missing-row lists are read, never their members. | `load_census_inputs` 2699, 2713 |
+| E16 | 9 | A monotone shift of a row-sort key: numeric rows still sort before text rows and in the same order. | `_row_order` 3047, publisher `_heading_block` 113 |
+| E17 | 10 | The publisher renders only `census_from_inputs`' output. Its all-sets pool holds every row and every not-evaluable count any group holds, and every group shares its era, so `in_scope` agrees too. | publisher `_heading_block` 112, 123, 126 |
+| E18 | 2 | The era loop would compare the first key with itself. | `resolve_era` 488 |
+| E19 | 2 | The early return only skips a search that cannot match without the row's text. | `served_own_kill_rows` 2329 |
+| E20 | 1 | The always predicate has no conditions, and `all` of nothing is true. | `SettingPredicate.holds` 252 |
+| E21 | 1 | One tally is built per input, so `strict` never fires. | `census_from_inputs` 3088 |
+| E22 | 1 | The equality that follows makes the two not-None tests agree. | `_fold_ballots` 2249 |
+| E23 | 2 | Only membership in `{"exit from the room left"}` is read, and a room-entered label never equals it. | `_fold_vent_proof` 1986 |
+| E24 | 4 | On disk: the path bootstrap still puts the root on the path, at index 1, before the last entry, or even when already present, and nothing shadows it. | publisher 34, 35 |
+
+Two classes were first drafted as equivalent and are planted instead. A game without a recorded
+winner kills a swap of `meeting.trigger_body` or `meeting.ejected` for `game.winner` inside a None
+guard. An entry whose carrier gives it another destination pins the fresh-kill room to the source.
+
+**What the pass planted.** 45 new tests, one or two per condition, plus assertions added to three
+publisher tests:
+- Structure and rebuttals:
+  - turns listed out of index order;
+  - an opener other than `p-2`;
+  - an opener who speaks again before being charged;
+  - turn indices with gaps;
+  - an accusation of a player who speaks only later;
+  - the alibi cell alone;
+  - a non-opener rebuttal's own alibi;
+  - a charge over a tick range, answered at its first tick, before it, after it, and by a spanning
+    answer;
+  - an alibi leg ending before the charge.
+- Trips:
+  - the in-vent cap against a map whose kill cooldown is 6;
+  - a short surfacing in view, and one not forced;
+  - the surfacing impostor listed in its own frame;
+  - an in-place surfacing by `p-1` in `NEIGHBOUR`;
+  - a sabotage surfacing from `NEIGHBOUR`;
+  - trips closed by the game end, an ejection and a regroup, their ticks counted and their breach
+    naming the close;
+  - a fresh kill read in the room the vent was entered from.
+- Meetings and ballots:
+  - a regroup without a live sabotage;
+  - proof naming another player;
+  - a crewmate in a vent at an opening;
+  - a game without a recorded winner;
+  - impostor ballots against themselves;
+  - own-kill rows by holders `p-3` and `p-0`, naming `p-0` and `p-1`;
+  - a dead witness's ballot.
+- The published record:
+  - negative counts refused;
+  - mixed numeric and text rows ordered;
+  - canonical settings sorted.
+- Refusals, each message matched whole: the carrier and fold refusals, the loader refusals, and the
+  set refusals.
+- The loader:
+  - three distinct roster knobs reaching the seeder and every walk;
+  - the walk's terminal tick;
+  - a copied role table;
+  - each vent witness list read from its own side;
+  - the opening floor, the resumed vents and sorted cooldowns;
+  - the opener's own first prompt;
+  - a turn's range, alibi subject and room;
+  - the selector pick on reordered, gapped and third-party turns;
+  - sorted substrate flags;
+  - a MANIFEST row with surrounding whitespace.
+- The publisher:
+  - `--help`;
+  - the protected root following `RECORDINGS_ROOT`;
+  - era lines in name order;
+  - a row and a not-evaluable count only a four-player set holds;
+  - mixed rows ordered on the page.
+  - The refusal, `--check` and `main` tests now match their messages whole, record the tree each
+    computation is handed, and check that `--check` on a drifted file exits 1 and leaves it as it
+    was.
+
+`_planted_inputs` in the publisher test gains a `discarded` parameter, and its default keeps the
+old behaviour.
+
+**Deleted, with no count moving.** Four pieces of the trip and rebuttal folds could only ever
+produce equivalent mutants:
+- `_Trip`'s `actor` and `entry_tick` fields. Nothing read them except the `where` of an unguarded
+  cell, which now names the close tick.
+- The rebuttal fold's own sort of the turns. Its turn-id table and its earlier-speaker set do not
+  depend on order, and `_repeat_turns` sorts for itself.
+- The ticks-inside anchor's lower bound, `entry_tick <= t`. A meeting before the entry cannot raise
+  `max(entry_tick, ...)`.
+- The game-end loop's sort. The trips it closes are counted, never ordered.
+
+Round 1 named the anchor bound read as `entry_tick < t` as equivalent. That line no longer exists.
+
+**Tests.** The two census suites go from 227 tests to 275. No test was skipped, weakened or
+deleted. Existing tests only gained assertions or cases.
+
+**Figures.** No page byte moved: `publish_gameplay_census.py --check` is consistent at this head,
+and `--set-dir replays/samples/9p2i --json-stdout` prints the committed `samples/9p2i` section.
+Every figure quoted in earlier rounds stands as re-measured in round 3.
+
+**Verification.** Each exit code was captured directly, never through a pipe. The code and tests are
+commit `48320dd2`, and this subsection is the card commit after it. Every row was measured on the
+tree of `48320dd2` with this subsection in place, before the `check.sh` cell was filled; the two
+task-doc rows were re-run on the final text.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 275 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section; `git status --porcelain` identical before and after |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 501 source files |
+| `uv run ruff check .` and `uv run ruff format --check .` | clean; 530 files formatted |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `bash scripts/check.sh` | exit 0 on this head's tree with this subsection in place, before this cell was filled: 8,789 Python passed, 20 skipped, 3 xfailed; 559 frontend tests passed. `npm ci` in `frontend/` ran first in this fresh worktree |
+
+**Scope check** (the demo-bundle proof). `git diff --stat 52a6ac58 -- replays api frontend agents
+meetings engine orchestrator observation scripts/build_demo_bundle.py` prints nothing at the head,
+so no path the bundle reads moved and the republished bundle is byte-identical. `git diff --stat
+52a6ac58` names the same 14 files as rounds 3 to 5. `git diff b636a67b` names only the census
+module, its two test files and this card. No `docs/artifacts.md` row moved: no `audits/`,
+`tests/fixtures/` or page byte changed. No frontend e2e: nothing under `api/` or `frontend/` moved.
+
+**Closing greps**, run at the card commit. `git grep -n "answering a impostor" --
+':!tasks/work/gameplay-census.md'` prints nothing. `git grep -n -E "trip\.(actor|entry_tick)" --
+eval scripts tests` prints nothing.
+
+**Limitations of this round.**
+- The pass's harness is scratch and not shipped. Its counts reproduce by re-running an equivalent
+  harness over the same two files with the operators above.
+- The equivalence classes are argued, not proved by a tool. Each rests on the mechanism its row
+  names, and E11 rests on the engine and the walk.
+- The operators are the ones listed. A mutation outside them, such as swapping two statements or
+  changing a string constant a test does not read, is outside this pass.
 - The round-2 question on the two pre-registered before values still waits for the orchestrator
   (the PR's Questions).
