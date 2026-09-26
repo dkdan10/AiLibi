@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -791,7 +792,9 @@ def test_the_temporal_oracle_takes_the_rule_the_events_were_made_under(
 @pytest.mark.parametrize("rule", ["PHYSICAL", "both", ""])
 def test_the_temporal_oracle_raises_on_an_unknown_rule(rule: str) -> None:
     before, after, actions, events = _cross_room_exit("both_rooms")
-    with pytest.raises(ValueError, match="unknown vent witness rule"):
+    with pytest.raises(
+        ValueError, match=f"^{re.escape(f'unknown vent witness rule: {rule!r}')}$"
+    ):
         assert_temporal_batch_entitled(
             None,
             agent_id="p-5",

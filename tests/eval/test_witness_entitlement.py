@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -306,7 +307,9 @@ def test_the_physical_expectation_follows_the_maps_vent_room() -> None:
 @pytest.mark.parametrize("rule", ["PHYSICAL", "both", ""])
 def test_an_unknown_rule_raises(rule: str) -> None:
     before, after, events = _cross_room_exit("both_rooms")
-    with pytest.raises(ValueError, match="unknown vent witness rule"):
+    with pytest.raises(
+        ValueError, match=f"^{re.escape(f'unknown vent witness rule: {rule!r}')}$"
+    ):
         _check(before, after, events, rule)  # type: ignore[arg-type]
 
 
