@@ -121,6 +121,20 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction (round 5): every sighting kind and the trigger tick's task events are
+  planted. Each of `saw_player`, `saw_vent`, `saw_kill` and `saw_move` makes a redirecting
+  rebuttal read "carrying a sighting" and not "only redirect", whether it names another player or
+  the speaker, and makes an opener rebuttal on the charged tick answer it
+  (`test_every_sighting_kind_is_a_sighting_on_the_three_rebuttal_cells`); the kinds naming no
+  player seen read the other way (`test_an_observation_naming_no_player_seen_is_no_sighting`); the
+  census's kinds equal the meeting schema's observation shapes that carry a subject
+  (`test_the_sighting_kinds_are_the_observations_that_name_a_player_seen`). The trigger-tick
+  loader test runs on `samples/9p2i`, whose trigger ticks hold task progressions and completions,
+  with literal expected counts
+  (`test_the_loader_counts_task_events_on_committed_trigger_ticks_that_hold_them`). The sighting
+  cell's published definition states the speaker is included, as the code counts. The nine
+  probes green on the round-4 tests are red on these, and every other probe stays red (Results,
+  Review corrections, round 5).
 - [x] Review correction (round 4): the neighbour table the in-vent view and the exit-policy guard
   read follows its source, planted at both ends. The fold: a carrier that gives the vent room no
   neighbour hides a crewmate in its one canonical neighbour, and one that joins it to a far room
@@ -1534,5 +1548,137 @@ so no path the bundle reads moved and the republished bundle is byte-identical. 
 - The planted maps are built with `model_copy`, which skips the map validator. The added room and
   rewired edges need not form a map the engine would load. They move only the values the census
   reads, and the loader test stubs each game's walk.
+- The round-2 question on the two pre-registered before values still waits for the orchestrator
+  (the PR's Questions).
+
+### Review corrections, round 5 (2026-09-25)
+
+**State: done.** The one round-5 finding is repaired, and the `Review correction (round 5)` item at
+the top of Acceptance records it. Status stays `done` and no box is open. `tasks/README.md`'s
+inventory sentence is unchanged (88 cards, 9 ready, 79 done), and `scripts/validate_task_docs.py`
+re-derives it at this head.
+
+**References.** The rebuttal cells follow the Acceptance item "The added cells" (claim structure
+and opener rebuttals answering the charged tick) under decision memo 2.6 and 3.4 (this card's
+brief); the sighting kinds are the meeting schema's observation shapes (`meetings/schemas.py`,
+`ObservationClaim`). `docs/architecture.md`'s layering is unchanged: `eval/` reads the meeting
+schema and the engine's events, and the four import-linter contracts are kept.
+
+**Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
+round merges nothing, and the diff base stays `52a6ac58`.
+
+**The finding: sighting kinds and trigger-tick task events were read but never planted.** Every
+planted rebuttal carried `saw_player`, and the loader test's game (`samples/4p1i` seed 5) holds
+only moves on its trigger tick, with an expectation derived from the loader's own event types. So
+cutting `_SIGHTING_KINDS` to `saw_player`, or the trigger-tick `isinstance` to `MovedEvent`, kept
+all 218 tests green. The repair is `f91a7864`:
+- **Every sighting kind, on every cell that reads one.**
+  `test_every_sighting_kind_is_a_sighting_on_the_three_rebuttal_cells` runs once per kind. A
+  redirecting rebuttal with one observation of the kind reads 1 of 1 on "Rebuttals carrying a
+  sighting" and 0 of 1 on "Rebuttals that only redirect", for a sighting of another player and of
+  the speaker. An opener rebuttal with the kind on the tick its accuser saw the opener reads 1 of 1
+  on "Opener rebuttals answering the charged tick", and two ticks later 0 of 1.
+- **The other kinds, the other way.** `test_an_observation_naming_no_player_seen_is_no_sighting`
+  runs once for `completed_task`, `found_body` and `task_activity`: 0 of 1, 1 of 1 and 0 of 1 on
+  the same three cells.
+- **The kinds pinned to their source.**
+  `test_the_sighting_kinds_are_the_observations_that_name_a_player_seen` reads the members of the
+  meeting schema's observation union. The ones with a `subject` field are the four sighting kinds,
+  `_SIGHTING_KINDS` equals them, and the rest are exactly the three kinds above plus
+  `whereabouts`. A kind the schema adds with a subject turns it red.
+- **The trigger tick's task events, on committed bytes.**
+  `test_the_loader_counts_task_events_on_committed_trigger_ticks_that_hold_them` reads
+  `samples/9p2i`. Seed 19's first trigger tick holds, by the walk's own event types, one trigger,
+  two moves, one progression and two completions; the loaded meeting reads the three dropped
+  kinds and not the trigger. Seed 19's third meeting (one progression, one completion, no move)
+  and seed 44's first (two moves, three progressions, one completion) are pinned too, as are the
+  set's totals: 145 trigger ticks, 89 moves, 43 progressions and 17 completions, with a task event
+  on 42 ticks. Every expected count is a literal, measured once count-only from the walk's event
+  types; none is derived from the loader's event types. The 4p1i test keeps its assertions.
+
+**The sighting definition, restated at the code's strength.** The published definition of
+"Rebuttals carrying a sighting" said "an observation of another player". The code counts any
+observation of a sighting kind, including one naming the speaker: the turn schema accepts it, and
+`meetings/transcript.py` indexes a sighting whose subject is its speaker as that speaker's own
+account. The definition now
+reads "a sighting (an observation naming a player seen in a room, venting, killing or moving, the
+speaker included)", and the planted test above holds the speaker case. The code does not move. The
+pages were regenerated for that one string (once in the page, six times in the JSON). Every count
+is unchanged: the cell reads `n/a` on every committed set, and `--check` is consistent.
+
+**The neuter pass.** A scratch harness (not shipped) applied each probe on disk as one exact span
+of `eval/gameplay_census.py`. It ran both census suites without `-x` and restored the file from a
+copy read before the pass, never from git. The module's sha256 matched before and after every
+probe: `09c604e2` on the before side, `a722b817` on the after side. "Before" is the round-4 test
+file of `354d3bae`, "after" is `f91a7864`.
+
+| probe | before | after | the tests that turn red |
+|---|---|---|---|
+| S1: `_SIGHTING_KINDS` cut to `saw_player` | green, 218 passed | red, 4 failed | the three-cell test (three kinds), the schema pin |
+| S2: `saw_vent` dropped | green, 218 passed | red, 2 failed | the three-cell test, the schema pin |
+| S3: `saw_kill` dropped | green, 218 passed | red, 2 failed | the same |
+| S4: `saw_move` dropped | green, 218 passed | red, 2 failed | the same |
+| S5: the with-sighting read as `== "saw_player"` | green, 218 passed | red, 3 failed | the three-cell test |
+| S6: the charged-tick read as `== "saw_player"` | green, 218 passed | red, 3 failed | the three-cell test |
+| S7: `completed_task` added to the kinds | red, 1 failed | red, 3 failed | the no-sighting test, the charged-tick test, the schema pin |
+| S8: the definition's old wording | not run | red, 4 failed | four publisher tests |
+| T1: the trigger-tick `isinstance` cut to `MovedEvent` | green, 218 passed | red, 1 failed | the committed trigger-tick test |
+| T2: `TaskCompletedEvent` dropped from it | green, 218 passed | red, 1 failed | the same |
+| T3: `TaskProgressedEvent` dropped from it | green, 218 passed | red, 1 failed | the same |
+| T4: `TaskProgressed` dropped from the kinds read | red, 4 failed | red, 5 failed | the same, and four publisher tests |
+| T5: `TaskCompleted` dropped from the kinds read | red, 4 failed | red, 5 failed | the same |
+
+S1 to S4 and T1 are the finding's probes; S5, S6, T2 and T3 were added as their neighbours. Those
+nine were green before and are red after. S7, T4 and T5 were already red and stay red; S8 checks
+the new wording, which did not exist before. No probe came back green on the after side.
+
+**Tests.** The two census suites go from 218 tests to 227. The new tests are the four above: the
+three-cell test (four cases), the no-sighting test (three cases), the schema pin and the committed
+trigger-tick test. No test was skipped, weakened or deleted.
+
+**Figures.** No count moved. `publish_gameplay_census.py --check` reads consistent after the
+regeneration, and the `--set-dir replays/samples/9p2i --json-stdout` output equals the committed
+`samples/9p2i` section. Every figure quoted in earlier rounds stands as re-measured in round 3.
+
+**Verification.** Each exit code was captured directly, never through a pipe. Every row was measured
+on the tree of `f91a7864` plus this card's round-5 edits, before the `check.sh` cell was filled.
+The card commit after `f91a7864` changes only this card.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 227 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section; `git status --porcelain` identical before and after |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 501 source files |
+| `uv run ruff check .` and `uv run ruff format --check .` | clean; 530 files formatted |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `bash scripts/check.sh` | exit 0 on the tree of `f91a7864` with this subsection in place, before this cell was filled: 8,741 Python passed, 20 skipped, 3 xfailed; 559 frontend tests passed. `npm ci` in `frontend/` ran first in this fresh worktree |
+
+**Scope check** (the demo-bundle proof). `git diff --stat 52a6ac58 -- replays api frontend agents
+meetings engine orchestrator observation scripts/build_demo_bundle.py` prints nothing at the head,
+so no path the bundle reads moved and the republished bundle is byte-identical. `git diff --stat
+52a6ac58` names the same 14 files as rounds 3 and 4, and `git diff 354d3bae` names only the census
+module, its test file, the two pages and this card. No `docs/artifacts.md` row moved: the census
+row states files, not bytes, and no `audits/` or `tests/fixtures/` byte changed. No frontend e2e:
+nothing under `api/` or `frontend/` moved.
+
+**Closing greps**, run at the card commit. `git grep -n -i "observation of another player" -- .
+':!tasks/work/gameplay-census.md'` prints nothing, so no other file states the old definition.
+
+**Limitations of this round.**
+- The neuter pass is hand-written over the finding's lines and their neighbours, and its harness
+  is scratch.
+- The committed trigger-tick test pins counts from `samples/9p2i`'s bytes. A re-record of that set
+  would move them; the partial-record principle records only into a candidate directory, so the
+  committed bytes stay.
 - The round-2 question on the two pre-registered before values still waits for the orchestrator
   (the PR's Questions).
