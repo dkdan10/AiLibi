@@ -386,9 +386,12 @@ def test_honesty_refuses_the_meeting_reset_until_its_room_table_is_coherent(
         compute_evidence_honesty(recordings["reset"])
     assert "replay profile 'evidence-honesty'" in str(refused.value)
     assert "meeting_reset='hub_with_grace'" in str(refused.value)
-    seed_path = recordings["reset"]
-    with pytest.raises(ValueError, match="meeting_reset='hub_with_grace'"):
-        reconstruct_impostor_decisions(seed_path, seed=_SEED)
+    with pytest.raises(ValueError) as rebuilt:
+        reconstruct_impostor_decisions(recordings["reset"], seed=_SEED)
+    assert str(rebuilt.value).startswith(
+        "replay profile 'evidence-honesty' does not read the recorded "
+        "meeting_reset='hub_with_grace'"
+    )
 
 
 def test_the_refusal_checks_the_first_tick_and_passes_every_event_through(
@@ -554,6 +557,11 @@ def test_a_living_experimental_policy_receives_the_announced_dead_roster(
         if row.kind == "tick"
     )
     policies.open(entry)
+    built = dict(policies.policies)
+    assert policies.mode == evidence_honesty.CUSTOM_POLICY_FOLD
+    # Opening again, as every later tick does, keeps the policies built once.
+    policies.open(entry)
+    assert all(policies.policies[pid] is built[pid] for pid in built)
     state = _state_with(alive={"p-1": True, "p-2": False, "p-3": True, "p-4": False})
     policies.meeting_concluded(state)
     assert heard == {"p-1": ("p-2", "p-4"), "p-3": ("p-2", "p-4")}
@@ -774,7 +782,7 @@ def test_the_golden_threads_the_helper_and_its_rendered_memory_changes(
     stand_in.install(monkeypatch, golden)
     after = _memories()
     assert stand_in.seen
-    assert len(stand_in.seen) <= _ticks(recordings["plain"])
+    assert len(stand_in.seen) == _ticks(recordings["plain"])
     assert set(stand_in.seen) == {"surfaced-room-only"}
     assert len(before) == len(after)
     assert before != after
@@ -1170,3 +1178,112 @@ def test_the_copy_this_card_adds_carries_no_identifier(
 @pytest.mark.parametrize("planted", ["see Task 20.33 for the reason", "the R7 rule"])
 def test_the_copy_scan_bites_an_identifier(planted: str) -> None:
     assert copy_problems({"planted": planted}) != []
+
+
+# --------------------------------------------------------------------------- #
+# A module that reuses a widened profile and keeps refusing                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_offline_counterfactual_still_refuses_any_recorded_setting(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import counterfactual_phase20
+
+    assert (
+        counterfactual_phase20.walk_set(recordings["plain"], set_name="plain").games
+        == 1
+    )
+    _refuse_every_advance(monkeypatch)
+    for arm, setting in (
+        ("workload", "redistribution_policy='least_remaining_work'"),
+        ("reset_rebuttal", "meeting_reset='hub_with_grace'"),
+    ):
+        with pytest.raises(ValueError) as refused:
+            counterfactual_phase20.walk_set(recordings[arm], set_name=arm)
+        assert str(refused.value).startswith(
+            f"the offline lever counterfactual does not read the recorded {setting}"
+        )
+        assert "only recordings made without experiment settings" in str(refused.value)
+
+
+def test_every_applied_meeting_reaches_the_meeting_concluded_hook(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = recordings["observed_risk_rebuttal"]
+    path = next(directory.glob("replay-seed-*.jsonl"))
+    meetings = sum(1 for row in read_all_entries(path) if row.kind == "meeting")
+    assert meetings > 0
+    calls: list[int] = []
+    real = evidence_honesty._ImpostorPolicies.meeting_concluded
+
+    def _counting(self: Any, state: WorldState) -> None:
+        calls.append(state.tick)
+        real(self, state)
+
+    monkeypatch.setattr(
+        evidence_honesty._ImpostorPolicies, "meeting_concluded", _counting
+    )
+    compute_evidence_honesty(directory)
+    assert len(calls) == meetings
+    calls.clear()
+    reconstruct_impostor_decisions(directory, seed=_SEED)
+    assert len(calls) == meetings
+
+
+@pytest.mark.parametrize(
+    ("reader", "label"),
+    [
+        ("committed-meeting walk", "the committed-meeting channel walk"),
+        ("golden", "the prompt-byte golden"),
+    ],
+)
+def test_the_reconstructors_refuse_an_unread_setting_by_name(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    reader: str,
+    label: str,
+) -> None:
+    _refuse_every_advance(monkeypatch)
+    monkeypatch.setattr(golden, "advance_tick", _advance_refused)
+    with pytest.raises(ValueError) as refused:
+        _EVERY_READER[reader](recordings["patrol"])
+    assert str(refused.value).startswith(
+        f"{label} does not read the recorded crew_idle_policy='patrol'"
+    )
+
+
+@pytest.mark.parametrize("reader", ["committed-meeting walk", "golden"])
+def test_the_reconstructors_hand_the_recorded_trigger_setting_to_the_builder(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reader: str,
+) -> None:
+    # The body-handle setting names a trigger text no builder writes yet, so the
+    # builder refuses it; reaching that refusal proves the recorded value got
+    # there, where a reader that dropped it would build the default text.
+    _open_the_pending_guard(monkeypatch)
+    copy = _with_settings(
+        recordings["plain"], tmp_path / "handle" / "9p2i", report_body_handle_version=1
+    )
+    with pytest.raises(
+        ValueError, match="report_body_handle_version=1 names a trigger"
+    ):
+        _EVERY_READER[reader](copy)
+
+
+def test_the_golden_builds_the_recorded_arms_agents(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The default factory builds the experimental policy a recorded tactical
+    # setting names, and refuses a value whose behaviour is not built yet; an
+    # agent built without the recorded settings would not reach that refusal.
+    from agents.tactical.experimental import UnbuiltTacticalOptionError
+
+    _open_the_pending_guard(monkeypatch)
+    copy = _with_settings(
+        recordings["plain"], tmp_path / "unbuilt" / "9p2i", **_PENDING_TACTICAL
+    )
+    with pytest.raises(UnbuiltTacticalOptionError, match="vent_exit_policy"):
+        golden.walk_directory(copy)

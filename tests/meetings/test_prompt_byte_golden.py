@@ -2232,6 +2232,12 @@ def test_the_sample_sets_come_first_and_candidates_are_discovered() -> None:
     found = golden_directories()
     assert found[: len(_SAMPLE_SETS)] == _SAMPLE_SETS
     assert all(path.parent.parent == _CANDIDATES_ROOT for path in found[2:])
+    # The sample sets keep the case ids they were collected under.
+    assert [_directory_id(path) for path in _SAMPLE_SETS] == ["9p2i", "4p1i"]
+    assert (
+        _directory_id(_CANDIDATES_ROOT / "round-1" / "9p2i")
+        == "candidates/round-1/9p2i"
+    )
 
 
 def test_a_planted_candidate_root_is_discovered_and_walked(tmp_path: Path) -> None:
@@ -2327,3 +2333,123 @@ def test_a_setting_beyond_the_readable_ones_is_refused_before_the_first_advance(
     monkeypatch.setattr(sys.modules[__name__], "advance_tick", _refused)
     with pytest.raises(ValueError, match="the prompt-byte golden does not read"):
         walk_directory(directory)
+
+
+def test_an_applied_meeting_takes_the_recorded_redistribution_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests._helpers.scripted_meeting import (
+        Ejection,
+        ScriptedMeetingClient,
+        record_game,
+    )
+
+    # Every voter ejects the opener of the first meeting, so the meeting applies
+    # an ejection whose unfinished tasks the recorded rule hands out.
+    directory = tmp_path / "workload" / "9p2i"
+    record_game(
+        directory,
+        seed=0,
+        config=RecordedExperimentConfig(redistribution_policy="least_remaining_work"),
+        client=ScriptedMeetingClient(
+            script=(), ejections=(Ejection(meeting=0, target_turn=0),)
+        ),
+    )
+    first = next(
+        entry
+        for entry in read_all_entries(next(directory.glob("replay-seed-*.jsonl")))
+        if isinstance(entry, MeetingReplayEntry)
+    )
+    assert first.outcome == "EJECTED"
+    walk = walk_directory(directory)
+    assert all(prompt.reproduced for prompt in walk.prompts)
+
+    real = apply_meeting_result
+
+    def _default_rule(*args: Any, **kwargs: Any) -> Any:
+        return real(*args, **{**kwargs, "redistribution_policy": "lowest_id"})
+
+    monkeypatch.setattr(sys.modules[__name__], "apply_meeting_result", _default_rule)
+    with pytest.raises(AssertionError, match="state_hash_after"):
+        walk_directory(directory)
+
+
+def test_a_recording_made_with_a_registered_arm_resolves_through_its_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Planted registry entry: the runner stamps the rebuttal reply's template
+    # with the arm's derived stamp, and the walk resolves that stamp only
+    # through the recording's own settings.
+    monkeypatch.setattr(
+        game_module,
+        "EXPERIMENT_ARM_TEMPLATES",
+        MappingProxyType({"bounded_rebuttal_version": ("accusation_round",)}),
+    )
+    directory = _scripted_rebuttal_game(tmp_path / "arm" / "9p2i")
+    stamps = [
+        entry.prompt_versions["accusation_round"]
+        for entry in read_all_entries(next(directory.glob("replay-seed-*.jsonl")))
+        if isinstance(entry, MeetingReplayEntry)
+    ]
+    assert stamps and set(stamps) == {
+        "accusation_round.qwen3_6_27b.v6.bounded_rebuttal_v1"
+    }
+    walk = walk_directory(directory)
+    assert walk.prompts and all(prompt.reproduced for prompt in walk.prompts)
+    assert stamp_window_problems(recorded_stamps((directory,))) == []
+
+    # Perturbed: resolved without the recording's settings, the stamp is no set's.
+    real = resolve_prompt_set
+
+    def _bare(
+        prompt_versions: Mapping[str, str],
+        *,
+        experiment_config: RecordedExperimentConfig | None = None,
+    ) -> str:
+        return real(prompt_versions)
+
+    monkeypatch.setattr(sys.modules[__name__], "resolve_prompt_set", _bare)
+    with pytest.raises(AssertionError, match="matched 0 registered sets"):
+        walk_directory(directory)
+
+
+def test_consumption_counts_hits_against_the_recorded_calls() -> None:
+    """A miss the manager defaulted on is not a consumed call, and a call hit twice fails."""
+
+    from types import SimpleNamespace
+
+    def _meeting(recorded: Sequence[str], asked: Sequence[tuple[str, bool]]) -> Any:
+        return SimpleNamespace(
+            entry=SimpleNamespace(
+                llm_calls=[SimpleNamespace(prompt=prompt) for prompt in recorded]
+            ),
+            complete_calls=[
+                _CompleteCall(prompt=prompt, agent_id=None, hit=hit)
+                for prompt, hit in asked
+            ],
+        )
+
+    assert consumed_exactly_once(
+        _meeting(["a", "b"], [("a", True), ("defaulted", False), ("b", True)])
+    )
+    assert not consumed_exactly_once(_meeting(["a", "b"], [("a", True)]))
+    assert not consumed_exactly_once(_meeting(["a"], [("a", True), ("a", True)]))
+
+
+def test_candidate_sets_are_listed_in_path_order_whatever_the_filesystem_returns(
+    tmp_path: Path,
+) -> None:
+    root_type = type(tmp_path)
+
+    class _Reversing(root_type):  # type: ignore[valid-type,misc]
+        """A root whose listing comes back in reverse path order."""
+
+        def glob(self, pattern: str) -> Iterator[Path]:
+            return iter(sorted(super().glob(pattern), reverse=True))
+
+    for round_name in ("round-1", "round-2"):
+        planted = tmp_path / round_name / "4p1i"
+        planted.mkdir(parents=True)
+        (planted / "replay-seed-0.jsonl").write_text("", encoding="utf-8")
+    found = golden_directories(samples=(), candidates_root=_Reversing(tmp_path))
+    assert [path.parent.name for path in found] == ["round-1", "round-2"]

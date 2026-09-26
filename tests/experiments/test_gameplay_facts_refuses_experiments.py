@@ -80,6 +80,13 @@ def test_the_message_names_every_setting_the_recording_turned_on() -> None:
         "bounded_rebuttal_version = 1); this extractor reads only recordings made "
         "without experiment settings"
     )
+    # The settings format is not a setting: a later-format recording names only
+    # the settings it turned on.
+    with pytest.raises(SystemExit) as later:
+        _facts.refuse_experiment_settings(
+            7, RecordedExperimentConfig(format_version=2, bounded_rebuttal_version=1)
+        )
+    assert "(bounded_rebuttal_version = 1)" in str(later.value)
     _facts.refuse_experiment_settings(7, None)
 
 

@@ -5,8 +5,10 @@ with no claim, so a fake game never accuses anyone and the one-reply rebuttal
 (``bounded_rebuttal_version``) never fires in it. :class:`ScriptedMeetingClient`
 answers exactly as the fake provider does, except on the turns a script names:
 there it returns an accusation against the speaker of an earlier turn of the
-same meeting. Only the responses are scripted; the manager decides who speaks,
-in what order, and whether the rebuttal is due, as it does in a recorded game.
+same meeting, and on the ballots of a meeting an :class:`Ejection` names, where
+every voter but the named player votes to eject that player. Only the responses
+are scripted; the manager decides who speaks, in what order, whether the
+rebuttal is due and what the tally ejects, as it does in a recorded game.
 
 :func:`record_game` records one ``HeadlessGame`` into a directory from a declared
 experiment config, with the meeting runner built from that config
@@ -34,7 +36,7 @@ from engine.world import load_canonical_map
 from llm.client import CallKind, LLMClient, LLMResponse
 from llm.fake_provider import FakeProvider
 from meetings.evidence_profile import profile_from_config
-from meetings.schemas import MeetingTurn, VoteBallot
+from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot
 from orchestrator.experiment_config import RecordedExperimentConfig, meeting_values
 from orchestrator.game import (
     HeadlessGame,
@@ -68,6 +70,19 @@ class Accusation:
     def __post_init__(self) -> None:
         if not 0 <= self.against_turn < self.turn:
             raise ValueError("a scripted accusation names a turn spoken before it")
+
+
+@dataclass(frozen=True)
+class Ejection:
+    """Every voter of scripted meeting ``meeting`` but one ejects turn ``target_turn``'s speaker.
+
+    The named player's own ballot stays the fake provider's; every other voter
+    names them at a confidence the tally's ejection floor accepts.
+    """
+
+    meeting: int
+    target_turn: int
+    confidence: float = 0.9
 
 
 #: Turn 1 of the first meeting accuses the opener, who has already spoken, so
@@ -111,6 +126,7 @@ class ScriptedMeetingClient:
     """
 
     script: Sequence[Accusation]
+    ejections: Sequence[Ejection] = ()
     fake: FakeProvider = field(default_factory=FakeProvider)
     meeting: int = -1
     speakers: list[str] = field(default_factory=list)
@@ -137,8 +153,26 @@ class ScriptedMeetingClient:
             model=model,
             agent_id=agent_id,
         )
-        if schema is VoteBallot:
+        if schema is ModelAuthoredVoteBallot:
             self.in_ballots = True
+            for ejection in self.ejections:
+                if ejection.meeting != self.meeting:
+                    continue
+                target = self.speakers[ejection.target_turn]
+                if agent_id is None or agent_id == target:
+                    return response
+                text = json.dumps(
+                    {
+                        "voter": agent_id,
+                        "target": target,
+                        "confidence": ejection.confidence,
+                        "primary_reason_id": None,
+                        "considered_alternatives": [],
+                        "rationale_text": f"I vote to eject {target}.",
+                    }
+                )
+                ModelAuthoredVoteBallot.model_validate_json(text)
+                return response.model_copy(update={"text": text})
             return response
         if schema is not MeetingTurn:
             return response
@@ -243,6 +277,7 @@ __all__ = [
     "ACCUSE_THE_OPENER",
     "PROMPT_SET",
     "Accusation",
+    "Ejection",
     "ScriptedMeetingClient",
     "record_game",
 ]

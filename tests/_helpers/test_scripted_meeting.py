@@ -369,3 +369,24 @@ def test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets(
         "opener_accused": 561,
         "opener_accused_loses_slot": 13,
     }
+
+
+def test_a_script_counts_turns_from_each_meetings_opening(tmp_path: Path) -> None:
+    # The same accusation scripted for the second meeting fires there and not in
+    # the first: a turn call after the ballots opens the next meeting's count.
+    second = (
+        Accusation(
+            meeting=1,
+            turn=1,
+            against_turn=0,
+            reason="you stood over the body before anyone else arrived",
+        ),
+    )
+    path = _record(tmp_path / "9p2i", second, rebuttal=True)
+    meetings = _meetings(path)
+    assert len(meetings) >= 2
+    rebuttals = _rebuttals(path)
+    assert [index for index, _turn in rebuttals] == [1]
+    _index, turn = rebuttals[0]
+    turns = meetings[1].transcript.turns
+    assert (turn.speaker, turn.reply_to) == (turns[0].speaker, turns[1].turn_id)
