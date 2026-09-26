@@ -83,7 +83,7 @@ from orchestrator.experiment_config import (
     RecordedExperimentConfig,
     engine_arguments,
 )
-from orchestrator.replay import read_all_entries
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from tests._helpers.committed import walk_committed_meetings
 from tests._helpers.scripted_meeting import (
     ACCUSE_THE_OPENER,
@@ -285,6 +285,112 @@ def test_a_widened_reader_verifies_every_arm_that_exists_today(
 ) -> None:
     _name, _reads, run = _READERS[reader]
     assert run(recordings[arm]) is not None
+
+
+def _meeting_ids(directory: Path) -> list[str]:
+    return [
+        row.meeting_id
+        for path in sorted(directory.glob("replay-seed-*.jsonl"))
+        for row in read_all_entries(path)
+        if isinstance(row, MeetingReplayEntry)
+    ]
+
+
+@pytest.mark.parametrize(
+    "arm", ["plain", "workload", "reset", "reset_rebuttal", "observed_risk_rebuttal"]
+)
+def test_the_reconstructors_walk_every_meeting_of_every_arm_that_exists_today(
+    recordings: dict[str, Path], arm: str
+) -> None:
+    # The committed-meeting walk and the golden read every readable setting, the
+    # meeting reset included, so each walks every recorded meeting of each arm.
+    directory = recordings[arm]
+    recorded = _meeting_ids(directory)
+    assert recorded
+    walked = walk_committed_meetings(directory)
+    assert [meeting.entry.meeting_id for meeting in walked] == recorded
+    walk = golden.walk_directory(directory)
+    assert walk.meetings == len(recorded)
+    assert walk.prompts and all(prompt.reproduced for prompt in walk.prompts)
+    assert walk.miscounted_meetings == ()
+
+
+_BALLOT_VALUES: Final[dict[str, object]] = {
+    "ballot_kill_row_version": 1,
+    "impostor_ballot_version": 1,
+}
+
+
+@pytest.mark.parametrize("arm", ["reset_rebuttal", "observed_risk_rebuttal"])
+def test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_pending_values(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    arm: str,
+) -> None:
+    # The pending values each reconstructor reads without reaching a builder that
+    # refuses them: the committed-meeting walk builds no agents, so it takes the
+    # pending tactical values too; the golden takes the ballot values. (The body
+    # handle and the golden's tactical values reach their builders' refusals,
+    # pinned below.)
+    _open_the_pending_guard(monkeypatch)
+    committed_copy = _with_settings(
+        recordings[arm],
+        tmp_path / "committed" / "9p2i",
+        **_PENDING_TACTICAL,
+        **_BALLOT_VALUES,
+    )
+    walked = walk_committed_meetings(committed_copy)
+    assert [meeting.entry.meeting_id for meeting in walked] == _meeting_ids(
+        committed_copy
+    )
+    golden_copy = _with_settings(
+        recordings[arm], tmp_path / "golden" / "9p2i", **_BALLOT_VALUES
+    )
+    walk = golden.walk_directory(golden_copy)
+    assert walk.meetings == len(_meeting_ids(golden_copy)) > 0
+    assert walk.prompts and all(prompt.reproduced for prompt in walk.prompts)
+    assert walk.miscounted_meetings == ()
+
+
+@pytest.mark.parametrize("reader", ["committed-meeting walk", "golden"])
+def test_the_reconstructors_hand_the_recorded_witness_rule_to_the_engine_helper(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reader: str,
+) -> None:
+    # The recorded witness rule reaches the engine helper; the spy then runs the
+    # default rule, which this copy of a default-rule recording holds, so the
+    # walk goes on to every meeting. A reader that refused the rule as unread
+    # would never call the helper.
+    _open_the_pending_guard(monkeypatch)
+    copy = _with_settings(
+        recordings["plain"], tmp_path / "witness" / "9p2i", vent_witness_rule="physical"
+    )
+    seen: list[object] = []
+
+    def _spy(config: RecordedExperimentConfig | None) -> object:
+        assert config is not None
+        seen.append(config.vent_witness_rule)
+        return engine_arguments(
+            config.model_copy(
+                update={
+                    "vent_witness_rule": RecordedExperimentConfig.model_fields[
+                        "vent_witness_rule"
+                    ].default
+                }
+            )
+        )
+
+    monkeypatch.setattr(replay_walk_module, "engine_arguments", _spy)
+    monkeypatch.setattr(golden, "engine_arguments", _spy)
+    if reader == "golden":
+        assert golden.walk_directory(copy).meetings == len(_meeting_ids(copy))
+    else:
+        walked = walk_committed_meetings(copy)
+        assert [meeting.entry.meeting_id for meeting in walked] == _meeting_ids(copy)
+    assert seen == ["physical"]
 
 
 def test_kill_craft_reads_the_regroup_reset_with_every_hash_verified(
@@ -1128,7 +1234,48 @@ def _new_copy(recordings: Mapping[str, Path]) -> dict[str, str]:
     texts["custom factory"] = _raised(
         lambda: compute_evidence_honesty(_custom_copy(recordings["plain"]))
     )
+    with tempfile.TemporaryDirectory() as scratch:
+        # A directory the caller named is the caller's text, not this card's copy,
+        # so each is replaced by a placeholder before the scan.
+        empty = Path(scratch) / "empty"
+        empty.mkdir()
+        texts["--set-dir without --json-stdout"] = _parser_refusal(
+            ["--set-dir", str(empty)]
+        ).replace(str(empty), "DIR")
+        texts["--set-dir holding no replay"] = _parser_refusal(
+            ["--set-dir", str(empty), "--json-stdout"]
+        ).replace(str(empty), "DIR")
+        mixed = Path(scratch) / "mixed" / "9p2i"
+        record_game(mixed, seed=_SEED, config=None)
+        record_game(
+            mixed,
+            seed=_SEED + 1,
+            config=RecordedExperimentConfig(vent_exit_policy="observed_risk"),
+        )
+        texts["different impostor policies"] = _raised(
+            lambda: compute_evidence_honesty(mixed)
+        ).replace(str(mixed), "DIR")
     return texts
+
+
+def _parser_refusal(argv: list[str]) -> str:
+    """What the scorecard script prints when its parser refuses ``argv``."""
+
+    import contextlib
+    import io
+
+    import publish_process_scorecard
+
+    stderr = io.StringIO()
+    with (
+        pytest.MonkeyPatch.context() as patch,
+        contextlib.redirect_stderr(stderr),
+        pytest.raises(SystemExit) as exited,
+    ):
+        patch.setattr(sys, "argv", ["publish_process_scorecard.py"])
+        publish_process_scorecard.main(argv)
+    assert exited.value.code == 2
+    return stderr.getvalue()
 
 
 def _custom_copy(source: Path) -> Path:
@@ -1176,7 +1323,23 @@ def test_the_copy_this_card_adds_carries_no_identifier(
     recordings: dict[str, Path],
 ) -> None:
     texts = _new_copy(recordings)
-    assert {"--set-dir help", "--json-stdout help", "extractor"} <= set(texts)
+    # Each text is the refusal it names, so no entry can scan as clean by being
+    # empty or by being some other error.
+    expected = {
+        "--set-dir help": "Fold one replay directory",
+        "--json-stdout help": "With --set-dir",
+        "extractor": "reads only recordings made without",
+        "custom factory": "came from a custom factory",
+        "--set-dir without --json-stdout": (
+            "error: --set-dir and --json-stdout go together, without --check"
+        ),
+        "--set-dir holding no replay": "error: --set-dir DIR holds no replay files",
+        "different impostor policies": (
+            "DIR: its games name different impostor policies"
+        ),
+    }
+    for label, phrase in expected.items():
+        assert phrase in texts[label], label
     assert copy_problems(texts) == []
 
 

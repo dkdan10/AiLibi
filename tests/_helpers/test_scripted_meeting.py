@@ -20,7 +20,7 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 
@@ -283,6 +283,18 @@ def test_the_same_script_without_the_setting_records_no_rebuttal(
     walk_chain(first.transcript, living_ids=_living(first))
 
 
+#: The counts :func:`_projected_rebuttals` returns, every one present even at 0.
+_PROJECTED_COUNTS: Final[tuple[str, ...]] = (
+    "meetings",
+    "fires",
+    "to_opener",
+    "to_impostor",
+    "to_other_crewmate",
+    "opener_accused",
+    "opener_accused_loses_slot",
+)
+
+
 def _projected_rebuttals(directory: Path) -> dict[str, int]:
     """Count-only: who the selector would give the one reply to, meeting by meeting.
 
@@ -309,6 +321,7 @@ def _projected_rebuttals(directory: Path) -> dict[str, int]:
     for path in sorted(directory.glob("replay-seed-*.jsonl")):
         seed = int(path.stem.rsplit("-", 1)[1])
         for meeting in _meetings(path):
+            counts["meetings"] += 1
             turns = meeting.transcript.turns
             opener = turns[0].speaker
             accused = any(
@@ -335,7 +348,7 @@ def _projected_rebuttals(directory: Path) -> dict[str, int]:
             counts["opener_accused_loses_slot"] += int(
                 accused and pick.speaker != opener
             )
-    return dict(counts)
+    return {key: counts[key] for key in _PROJECTED_COUNTS}
 
 
 def test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets() -> (
@@ -343,25 +356,57 @@ def test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets(
 ):
     # MEASURED, count-only, on the four committed sets: the one reply goes to the
     # opener in most meetings, and to a non-opener (mostly an accused impostor)
-    # wherever an earlier new charge named someone else.
+    # wherever an earlier new charge named someone else. Every row of the card's
+    # table is pinned here, each set's meeting count included.
     from tests._helpers.committed import COMMITTED_SETS
 
     projected = {
         f"{directory.parent.name}/{directory.name}": _projected_rebuttals(directory)
         for directory in COMMITTED_SETS
     }
-    assert projected["samples/9p2i"] == {
-        "fires": 144,
-        "to_opener": 123,
-        "to_impostor": 19,
-        "to_other_crewmate": 2,
-        "opener_accused": 125,
-        "opener_accused_loses_slot": 2,
+    assert projected == {
+        "samples/9p2i": {
+            "meetings": 145,
+            "fires": 144,
+            "to_opener": 123,
+            "to_impostor": 19,
+            "to_other_crewmate": 2,
+            "opener_accused": 125,
+            "opener_accused_loses_slot": 2,
+        },
+        "samples/4p1i": {
+            "meetings": 39,
+            "fires": 39,
+            "to_opener": 37,
+            "to_impostor": 2,
+            "to_other_crewmate": 0,
+            "opener_accused": 37,
+            "opener_accused_loses_slot": 0,
+        },
+        "ml_corpus/9p2i": {
+            "meetings": 449,
+            "fires": 447,
+            "to_opener": 351,
+            "to_impostor": 86,
+            "to_other_crewmate": 10,
+            "opener_accused": 362,
+            "opener_accused_loses_slot": 11,
+        },
+        "ml_corpus/4p1i": {
+            "meetings": 43,
+            "fires": 43,
+            "to_opener": 37,
+            "to_impostor": 6,
+            "to_other_crewmate": 0,
+            "opener_accused": 37,
+            "opener_accused_loses_slot": 0,
+        },
     }
     pooled: Counter[str] = Counter()
     for counts in projected.values():
         pooled.update(counts)
-    assert dict(pooled) == {
+    assert {key: pooled[key] for key in _PROJECTED_COUNTS} == {
+        "meetings": 676,
         "fires": 673,
         "to_opener": 548,
         "to_impostor": 113,
