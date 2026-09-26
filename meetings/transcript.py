@@ -493,7 +493,8 @@ def walk_chain(
     Re-derives the chain by feeding the recorded turns back through
     :func:`next_chain_step` and asserting that every recorded ``reply``
     is exactly the turn the rule predicts (right speaker, ``reply_to``
-    linked to the prior turn) and that the tail turns are ``opt_in``.
+    linked to the prior turn) and that the tail turns are ``opt_in``,
+    save the one selected rebuttal the recorded setting may add (below).
     This is the load-bearing replay invariant: the recorded
     ``transcript.turns`` reconstruct the discussion deterministically, so
     replay never re-calls the model. ``living_ids`` is the living-player
