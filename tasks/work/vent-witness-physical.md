@@ -450,8 +450,10 @@ bundle diff is the publication proof. `check.sh` still runs the frontend legs.
 
 Implemented on `work/vent-witness-physical` from `bdfa5b19`: `8a9c93d0` (the engine arm, the
 helper line, the pending removal, the contract paragraph) and `c99a8dd9` (temporal delivery, both
-oracles, the leak scan and its profile, the reader gate and the census end to end). Every command
-below ran at `c99a8dd9` in a bare shell with no `AILIBI_*` export, unless it names another commit.
+oracles, the leak scan and its profile, the reader gate and the census end to end), then
+`947b986f`, which formats one call in `engine/tick.py` and changes nothing else. The validation
+commands below ran at `c99a8dd9`, and the neuter and mutation passes on the working tree committed
+as `c99a8dd9`, all in a bare shell with no `AILIBI_*` export, unless a line names another commit.
 
 **Sections relied on.** The spine's arm page, `docs/experiment-arms.md` (linked from
 `docs/architecture.md`, "Explicit cleanup experiments"): the engine layer, omit-at-default, the
@@ -736,8 +738,10 @@ stratify sets recorded under different rules; the census era key does.
   outside `tasks/`, `audits/`, `agent_prompts/`, `replays/`, `training/reports/` and the census
   pages finds `DESIGN.md:351` (historical), `api/replay_loader.py:2188` and `api/schemas.py:429`
   (a vent transition's two endpoints, not its witnesses), `docs/game-shape.md:13` (the default, as
-  above) and this card's own new sentences; `git grep -n -i physical` filtered for pending,
-  unbuilt, refused or unthreaded finds only the new test's name.
+  above), `frontend/e2e/journey.spec.ts:724` (a layout comment),
+  `tests/eval/test_gameplay_census.py:6305` (a census fixture's own witnesses) and this card's own
+  new sentences; `git grep -n -i physical` filtered for pending, unbuilt, refused or unthreaded
+  finds only the new test's name.
 
 **Deviations from Expected scope, all direct follow-through.** `tests/orchestrator/test_experiment_arms.py`
 (which the card said this card would not edit) and `tests/eval/test_replay_walk.py`, for the three
@@ -745,5 +749,9 @@ expectations above; `docs/experiment-arms.md`, whose pending-guard sentence list
 card's Status line and the `tasks/README.md` inventory sentence, which the dispatch asked this card
 to flip and re-derive.
 
-**The full gate.** `bash scripts/check.sh` runs at the commit that records these Results; its
-exit code and counts are recorded in the commit after it.
+**The full gate.** `bash scripts/check.sh; echo "check.sh exit $?"` at `947b986f` printed
+`check.sh exit 0`: ruff clean, 532 files formatted, 4 import contracts kept, task docs and
+prompts valid, strict mypy clean on 503 files, 8900 passed, 20 skipped and 3 xfailed, then the
+frontend legs (559 vitest tests and the build). The first run, at `aee21bab` (the commit that
+recorded these Results), exited 1 at `ruff format --check` on one call in `engine/tick.py`;
+`947b986f` formats that call and changes nothing else.
