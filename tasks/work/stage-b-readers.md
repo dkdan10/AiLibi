@@ -1,6 +1,6 @@
 # Instruments and reconstructors read the recorded arms, including the one-reply follow-through (B3)
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -135,7 +135,7 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
 
 ## Acceptance
 
-- [ ] **Five profiles widened, each after a written review.** Kill-craft, the funnel, solvability,
+- [x] **Five profiles widened, each after a written review.** Kill-craft, the funnel, solvability,
   the win-condition self-check and evidence honesty set `supports_experiments=True`. Each declares,
   through the spine's thread-or-refuse mechanism, the fields it threads: at most the eight wave
   fields (`vent_witness_rule`, `vent_exit_policy`, `vent_entry_policy`, `meeting_reset`,
@@ -155,14 +155,14 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
     checked. A planted recording carrying `crew_idle_policy="patrol"`, and one carrying
     `evidence_reasoning_version=1`, are each refused with an error naming the profile and the field.
   - Results holds one review paragraph per instrument, covering the modules that reuse its profile.
-- [ ] **R7 is a required keyword at every reader call site this card owns.** Each `advance_tick`,
+- [x] **R7 is a required keyword at every reader call site this card owns.** Each `advance_tick`,
   `apply_meeting_result` and `_build_meeting_trigger` call in the golden, `tests/_helpers/committed.py`
   and `tests/_helpers/scripted_meeting.py` passes the spine helper's engine arguments, the recorded
   `meeting_reset` and the recorded config explicitly. The vent witness rule then reaches each site
   as soon as B0 adds it to the helper, with no edit here and no engine default relied on (B0 keeps a
   default on `advance_tick`). Enforced by an AST test over those files. Proof: a planted module with
   a bare `advance_tick(state, actions, game_map=...)` call fails it.
-- [ ] **A planted event-level thread-or-refuse test for each reader.** The test monkeypatches the
+- [x] **A planted event-level thread-or-refuse test for each reader.** The test monkeypatches the
   spine's engine-arguments helper to add one stand-in field, and replaces `advance_tick` with a
   double that accepts it and changes only the witness lists of vent exits: R7's shape, with state
   hashes unchanged and events different.
@@ -176,7 +176,7 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
     stand-in field the helper does not thread is refused by name.
   - If B0 has merged before this card's last merge of `main`, the same test also runs on a fake
     `vent_witness_rule="physical"` recording.
-- [ ] **Evidence honesty rebuilds decisions with the recorded policy.** By default each game's
+- [x] **Evidence honesty rebuilds decisions with the recorded policy.** By default each game's
   impostor decisions are rebuilt with the policy its recorded config names.
   - With tactical arms: `ExperimentalImpostorPolicy` with the options that
     `build_default_agent_factory(experiment_config=...)` derives, read through
@@ -190,7 +190,7 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
     `live_impostor_policy` passed explicitly; the test asserts the positive count. Every committed
     honesty pin stays green, and `scripts/measure_baseline.py --honesty` prints byte-identical
     output at the merge base and at the head.
-- [ ] **The golden reads any directory with its recorded config.** A public directory walk replaces
+- [x] **The golden reads any directory with its recorded config.** A public directory walk replaces
   the fixed-set entry.
   - The committed parametrization is the two sample sets plus every `replays/candidates/*/*/`
     directory holding replay files, discovered from a root a test can redirect. None exists at
@@ -203,7 +203,7 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
     exactly once. Dropping the profile leaves the rebuttal call unconsumed and fails. Dropping the
     reset on a `hub_with_grace` fake recording fails the meeting post-hash. A planted candidate root
     is discovered and walked. The 25 cases collected at `e886b663` stay green on s9 and s4.
-- [ ] **Arm stamps resolve only on recordings that carry the arm.** `resolve_prompt_set` extends
+- [x] **Arm stamps resolve only on recordings that carry the arm.** `resolve_prompt_set` extends
   `_overlay_stamp_owners` to experiment-bound arms through
   `prompt_versions_for_set(name, experiment_config=recorded)`, over the spine's experiment-arm
   registry, which stays empty until B6. The window test accepts a stamp other than the live default
@@ -211,7 +211,7 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
   entry, a recording carrying the arm resolves, and the same stamp on a recording without the arm
   fails the window test. With the registry empty, every committed stamp resolves to the live
   default mapping.
-- [ ] **`walk_chain` accepts the selected rebuttal and nothing else.** It gains a keyword-only
+- [x] **`walk_chain` accepts the selected rebuttal and nothing else.** It gains a keyword-only
   `bounded_rebuttal_version: Literal[1] | None = None`. `None` is the fail-closed reading, under which
   a trailing reply raises, so the existing callers in `tests/meetings/test_manager.py` (owned by A3,
   then B6) keep their meaning unedited.
@@ -222,7 +222,7 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
     replies, a trailing reply under `None`, and a missing pick each raise. With the equality check
     removed, the wrong-speaker case passes and its test fails.
   - The docstring describes the rebuttal case.
-- [ ] **The scripted rebuttal game.** A new `tests/_helpers/scripted_meeting.py` records a
+- [x] **The scripted rebuttal game.** A new `tests/_helpers/scripted_meeting.py` records a
   `HeadlessGame` into `tmp_path` from a declared config with `bounded_rebuttal_version=1`, using the
   spine's runner from a config and no environment export. A scripted client makes turn 1 accuse the
   opener. The helper is built so B6 can add ballot cases.
@@ -238,7 +238,7 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
     non-opener, who gets the slot, and the opener gets none.
   - Perturbed: the same script without the field records no rebuttal, and `walk_chain` under
     version 1 then raises on the missing pick.
-- [ ] **The scorecard's `--set-dir DIR --json-stdout`.** `scripts/publish_process_scorecard.py`
+- [x] **The scorecard's `--set-dir DIR --json-stdout`.** `scripts/publish_process_scorecard.py`
   prints one set's scorecard to stdout, through the committed serializer with sorted keys, naming
   the directory's own repo-relative path as its source. It writes nothing.
   - It refuses `--check` beside it, `--set-dir` without `--json-stdout`, and a directory holding no
@@ -255,35 +255,35 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
     misnamed one; each refusal fires.
   - On `replays/samples/9p2i` the output equals that set's entry in `docs/process-scorecard.json`.
     This is a Validation command, not a committed-set test walk.
-- [ ] **The rubric extractor refuses experiment recordings by name.** Before any re-simulation, a
+- [x] **The rubric extractor refuses experiment recordings by name.** Before any re-simulation, a
   seed whose recording carries an experiment config raises `SystemExit`. The message names the seed
   and its recorded settings in plain words, and says the extractor reads only recordings made
   without them. Its acceptance of the rebuttal waits for adoption. Proof: the scripted rebuttal
   recording is refused with that message, not by a later extraction invariant, and an unstamped
   fake recording still extracts.
-- [ ] **The frozen and policy-re-running instruments keep refusing.** Off-menu, the anchor study,
+- [x] **The frozen and policy-re-running instruments keep refusing.** Off-menu, the anchor study,
   the surrogate meeting table, the conviction table and the watchability referee each raise their
   named refusal on an arms-ON fake recording before the first advance. None of their code changes.
   Proof: each case matches the refusal text, so a refusal that is removed and replaced by a later
   hash or reconstruction error fails it.
-- [ ] **The OFF path is byte-identical, and the bundle is unchanged.** No byte under `replays/`, and
+- [x] **The OFF path is byte-identical, and the bundle is unchanged.** No byte under `replays/`, and
   no derived report, fixture, prompt template, doc fact or ML artifact, moves. Enforced by the gates
   in Validation. Each gate is a byte comparison with its own planted failure: the golden's one-byte
   template perturbation (`:1690`), `build_sample_report --check`'s drift case and the scorecard
   `--check`'s. `api/replay_loader.py` imports `meetings/transcript.py`, so the demo bundle is built at
   the merge base and at the head, and `diff -r` between them is empty.
-- [ ] **The copy this card adds is plain.** Mechanism: a test scans every new refusal message and
+- [x] **The copy this card adds is plain.** Mechanism: a test scans every new refusal message and
   the `--set-dir` help text for task or audit identifiers (`Task \d`, `audit-`, and memo-style
   short ids such as `R7` or `B3`) and bare threshold arithmetic. Planted: a message containing
   "Task 20.33" fails the scan, and so does one containing "R7".
-- [ ] **The registry row follows the audit bytes.** This card edits
+- [x] **The registry row follows the audit bytes.** This card edits
   `audits/workflows/extract_gameplay_facts.py`, so the `audits/` row of `docs/artifacts.md` (`:109`,
   26,635,440 tracked bytes / 329 files at `e886b663`) is recomputed with `git ls-files` as the last
   step, after the final merge of `main`. Mechanism: `test_every_counted_registry_row_matches_the_index`
   (`tests/scripts/test_verify_ml_evidence.py`, run by `check.sh`) and the offline
   `scripts/verify_ml_evidence.py`. Perturbed: with the row left stale after the extractor edit, that
   test fails; Results quotes the red run.
-- [ ] **The deviation goes to the owner.** The PR's Decisions state v1's beneficiaries with the
+- [x] **The deviation goes to the owner.** The PR's Decisions state v1's beneficiaries with the
   re-measured counts from Evidence. Its Questions ask the owner to confirm v1, or to ask, before the
   record card, for an opener-only value under a new `bounded_rebuttal_version`. That would be new
   selector code with planted tests, and it would land before the record card. Enforced by the
@@ -466,10 +466,330 @@ git diff --stat "$(git merge-base origin/main HEAD)" HEAD -- replays agents engi
 
 ## Results
 
-Not started. When done, it records: the `docs/architecture.md` sections relied on ("Determinism and
-the substrate ladder", "Enforced boundaries", "Explicit cleanup experiments" with the spine's
-arm page, `docs/experiment-arms.md`); the per-instrument review, one paragraph per instrument and reusing module, naming
-each wave field threaded or refused and why; each planted case and its perturbation, by test id;
-every Validation command with its real exit code and the merge-base comparisons; the re-measured B3
-counts with their count-only command; decisions, including each refusal pending a later card; and
-limitations.
+Implemented on `work/stage-b-readers` from base `bdfa5b19` (the spine and the census merged). What it
+implements: `docs/architecture.md` "Determinism and the substrate ladder" (every re-simulation takes
+the recorded settings; replays stay byte-identical), "Enforced boundaries" (no `agents/` import of
+`engine/`; `lint-imports` 4 kept, 0 broken) and "Explicit cleanup experiments" with the spine's arm
+page `docs/experiment-arms.md` (one engine-arguments helper, thread-or-refuse by layer, the empty
+experiment-arm stamp registry); the decision memo's sections 0.3 items 7 and 10, 2.4 (B3 with its
+rider) and the card-4 brief in 3.4. Rulings relied on: "We should implement stage B", "B3. Allow one
+reply for the opener", "B3 adopts bounded_rebuttal_version=1 ALONE, reporter_reasoning does NOT ride
+along", "Hold off on ML as D suggests until gameplay is finished", and R7 through the event-level
+cases. No agent behaviour changes, no committed byte moves, nothing is re-recorded.
+
+### The per-instrument review
+
+Every recorded setting reaches a reader one of three ways: the engine settings through the spine's
+`engine_arguments` at every advance (it refuses one it does not thread, today `vent_witness_rule`'s
+`physical`), the meeting reset through the walk's `apply_meeting_result`, and every other setting
+only as the recorded actions, turns, flags, ballots and prompts the walk replays. A reviewed reader
+names the fields it reads in its own `*_READS` constant, a subset of
+`eval.recorded_settings.READABLE_SETTINGS` (the eight wave fields and `redistribution_policy`), and
+its profile's `threaded_layers` is derived from that constant (`layers_read`). Any other non-default
+field, a settings format other than 1, and temporal delivery are refused by name at the walk's first
+tick, before its first advance (`read_recorded_settings`; temporal by the walk's own
+`supports_temporal_observations=False`).
+
+- **Kill-craft** (`kill-craft`; reused by `scripts/build_sample_report.py::build_report`, the
+  `eval.deduction_metrics` / `eval.meeting_quality` cells that read its report, and
+  `tests/_helpers/committed.py::kill_craft_report`). Both folds read pre-advance engine states and
+  `KilledEvent`s only. Threads all nine: the witness rule changes no kill witness list, the reset's
+  post-meeting positions are the next pre-advance frame, the tactical, rebuttal, trigger and ballot
+  settings are recorded actions and rows it never reads. Reads a `hub_with_grace` recording with every
+  hash verified (`test_kill_craft_reads_the_regroup_reset_with_every_hash_verified`), so the record
+  plumbing card's post-step can walk one. Refuses nothing pending a later card.
+- **The information funnel** (`funnel-instrument`, both walks; reused by `eval/vj_instruments.py`
+  and `eval/deception_instruments.py` through `_walk_set_vj`, `training/surrogate/dataset.py`
+  through `_walk_game_vj` after its own refusal, `scripts/measure_baseline.py --funnel/--vj`, and
+  `committed.py::funnel_report`). Threads all nine. Stage 2 and the pooled perception read the vent
+  witness lists the advances produce, so a changed witness rule reaches them
+  (`test_the_funnel_folds_the_stand_ins_vent_witness_lists`). Under the reset the per-tick perception
+  across a meeting reads the pre-meeting play events plus the meeting's events, as the live loop and
+  the loader do, and the belief fold mirrors the live loop's default path (the public regroup row is
+  written only under evidence version 2, which is refused). The meeting-reset card changes the live
+  loop and this walk together (the relevance window through its `extract_belief_evidence` and
+  `reconstruct_stated_paths` calls), so nothing is refused pending it. A rebuttal is one more recorded
+  turn; the ballot settings are recorded ballots. `eval/deception_instruments.py` (FROZEN) and
+  `eval/vj_instruments.py` inherit the funnel's refusal through the shared walk and need no edit.
+- **Solvability** (`solvability`; reused by `scripts/measure_baseline.py --solvability`, both
+  counterfactual scripts and `committed.py::solvability_report`). Reads pre-advance states, kill
+  events, the engine trigger's body id and the recorded ejection; sight comes from
+  `compute_visibility_for_player`, never a recorded witness list. Threads all nine; the body-handle
+  setting changes only the trigger's description, which it never reads.
+- **The win-condition self-check** (`win-condition-selfcheck`; its logic is mirrored, not called, by
+  `eval.validity`). Reads the living impostors after each advance and applied meeting and the
+  recorded `game_over` row. Threads all nine.
+- **Evidence honesty** (`evidence-honesty`; reused by `tests/_helpers/committed.py`'s channel walk,
+  `tests/agents/test_reported_testimony.py` and `tests/eval/test_evidence_honesty.py` over committed
+  sets, `scripts/counterfactual_phase20.py`'s walk, and `scripts/counterfactual_phase21.py` and
+  `scripts/measure_baseline.py --honesty` through `compute_evidence_honesty`). Reads every readable
+  setting except `meeting_reset`: the regroup moves every survivor to the hub between the trigger
+  tick's frame and the resume tick, so `room_at` and `_assert_clock_alignment` would read honest
+  post-regroup sightings as a moved clock; the meeting-reset card owns that fix and lifts this
+  refusal. Perception reads the advances' witness lists
+  (`test_honestys_perception_folds_the_stand_ins_vent_witness_lists`). The vent exit and entry
+  policies reach I-11 as the recorded policy: `recorded_impostor_policy` builds, per impostor, what
+  `build_default_agent_factory(experiment_config=...)` builds, read back through
+  `tactical_experiment_options` (no edit to `orchestrator/game.py`), and `_ImpostorPolicies` gives
+  each living experimental policy the announced dead roster after every applied meeting, as
+  `TacticalAgent.note_meeting_concluded` does. Until the look-and-wait card builds `look_and_wait`
+  and `own_fresh_kill`, building that policy raises `UnbuiltTacticalOptionError`, so an honesty run
+  on such a recording raises that named error. A rebuttal, the body handle and both ballot settings
+  reach the cells only as recorded turns, flags and prompts: the prompt folds count fixed row shapes
+  and phrases in recorded prompts, and the ballot card adds its own family beside `_fold_grounding`.
+  Reusers: the committed-meeting channel walk reads all nine including the reset (it mirrors the
+  live resume perception, like the golden) and threads the trigger setting into
+  `meeting_trigger_kind`; `scripts/counterfactual_phase20.py` is defined over recordings made
+  without settings and now refuses any recorded setting by name (the meeting-reset card threads it or
+  keeps that refusal); `scripts/counterfactual_phase21.py` adds no setting logic of its own and
+  reads recordings only through the golden walk and `compute_evidence_honesty`, so it takes their
+  thread-or-refuse behaviour.
+- **The prompt-byte golden and `tests/_helpers/committed.py`** read at most the same nine and refuse
+  the rest by name before the first advance (`the prompt-byte golden does not read ...`,
+  `the committed-meeting channel walk does not read ...`). The golden threads the engine settings,
+  the reset and the redistribution rule of each applied meeting, the trigger setting, the evidence
+  profile (`profile_from_config`), the agents (the default factory for the recorded settings, then
+  `bind_experiment`) and the stamp resolution. Until the body-handle card builds the handle text,
+  `_build_meeting_trigger` refuses the recorded value, and until the look-and-wait card builds its
+  policy the factory refuses those values; both refusals are reached by these readers, which is the
+  proof the recorded values arrive (`test_the_reconstructors_hand_the_recorded_trigger_setting_to_the_builder`,
+  `test_the_golden_builds_the_recorded_arms_agents`).
+
+### Planted and perturbed cases
+
+Each is a committed test; each was seen red with its defect (the neutering and mutation table
+below lists the probe that shows it) and is green at the head.
+
+| Claim | Case (test id) | What bites |
+| --- | --- | --- |
+| walk_chain accepts the pick and nothing else | `tests/meetings/test_transcript.py::TestWalkChainBoundedRebuttal` (9 cases) and `test_walk_chain_accepts_exactly_the_selected_rebuttal` (Hypothesis, 200 generated manager-shaped chains, `deadline=None`) | a wrong speaker, a wrong `reply_to`, two trailing replies, a trailing opt-in, a trailing reply without the setting, a missing pick, a non-reply in the slot, a reply where nothing is pending; with the speaker check removed the wrong-speaker case passes and its test fails (probe T10) |
+| five profiles widened | `tests/eval/test_recorded_arm_readers.py::test_a_widened_reader_verifies_every_arm_that_exists_today` (5 readers x 5 fake recordings: plain, workload, regroup reset, reset + real rebuttal, observed-risk + real rebuttal), `..._verifies_a_copy_carrying_every_wave_value`, `test_honesty_verifies_every_arm_it_reads`, `test_kill_craft_reads_the_regroup_reset_with_every_hash_verified` | every hash the profile checks verified; the copies carry `look_and_wait`, `own_fresh_kill`, body handle 1 and both ballot values with the pending guard patched open |
+| a field outside the list is refused before the first advance | `test_a_setting_outside_the_reviewed_fields_is_refused_before_the_first_advance` (6 readers x `crew_idle_policy='patrol'`, `evidence_reasoning_version=1`), `test_a_later_settings_format_is_refused_by_name`, `test_the_reconstructors_refuse_an_unread_setting_by_name`, the golden's `test_a_setting_beyond_the_readable_ones_is_refused_before_the_first_advance` | the walk's `advance_tick` patched to raise, so a refusal after the first advance would surface as that error; each message names the profile or reader and the field |
+| honesty refuses the reset pending its card | `test_honesty_refuses_the_meeting_reset_until_its_room_table_is_coherent` | both entry points, before any advance |
+| event-level thread-or-refuse | `test_every_widened_reader_threads_the_helpers_arguments_to_every_advance` (6 readers), `test_the_funnel_folds_the_stand_ins_vent_witness_lists`, `test_honestys_perception_folds_the_stand_ins_vent_witness_lists`, `test_the_committed_meeting_walk_threads_the_helper_and_its_vent_records_change`, `test_the_golden_threads_the_helper_and_its_rendered_memory_changes`, `test_the_plain_recording_holds_exits_the_stand_in_changes` | the planted helper adds a stand-in field and the stand-in engine accepts it and rewrites vent exits to R7's shape (source witnesses dropped); the recording holds exits with living source-room witnesses; the double saw the stand-in on every advance; kill-craft, solvability and the win-condition check are unchanged; the four vent-folding outputs change |
+| bypassing the helper fails | `test_a_call_site_that_bypasses_the_helper_fails_its_case` (the walk's site, the golden's site) | the stand-in engine without the planted helper raises `TypeError` naming the stand-in, and never advances |
+| an engine setting the helper does not thread is refused | `test_an_engine_setting_the_helper_does_not_thread_is_refused_by_name` (8 readers) | `_THREADED_ENGINE_FIELDS` patched empty; the workload rule is refused by name before the first advance |
+| recorded policy | `test_honesty_rebuilds_decisions_with_the_recorded_policy`, `test_without_a_config_the_default_is_the_live_policy`, `test_a_recording_from_a_custom_factory_is_refused_by_name`, `test_a_set_whose_games_name_different_policies_raises`, `test_a_living_experimental_policy_receives_the_announced_dead_roster`, `test_every_applied_meeting_reaches_the_meeting_concluded_hook` | observed-risk game: 0 mismatches recorded, more than 0 live, every disagreement at a vent action; plain game: default equals explicit live; custom refused, explicit still folds; mixed set raises; hook gets the dead roster, once per applied meeting |
+| the golden reads any directory | the golden's `test_a_planted_candidate_root_is_discovered_and_walked`, `test_the_sample_sets_come_first_and_candidates_are_discovered` | an empty round directory and a stray file are not listed; the planted set walks byte-equal |
+| recorded profile, reset, redistribution, trigger, agents | `test_the_scripted_rebuttal_game_re_renders_byte_equal`, `test_dropping_the_recorded_reset_fails_the_meeting_post_hash`, `test_an_applied_meeting_takes_the_recorded_redistribution_rule`, `test_the_reconstructors_hand_the_recorded_trigger_setting_to_the_builder`, `test_the_golden_builds_the_recorded_arms_agents` | profile dropped: the rebuttal call goes unconsumed; reset dropped or redistribution defaulted: `state_hash_after` fails; the trigger builder and the factory refuse the recorded unbuilt values, which a reader that dropped them never reaches |
+| arm stamps | `test_an_arm_stamp_resolves_only_on_a_recording_that_carries_the_arm`, `test_a_recording_made_with_a_registered_arm_resolves_through_its_settings`, the window test over every golden directory | planted registry entry: the arm stamp resolves and passes only with the arm; the same stamp without it matches 0 sets; the default stamp on an arm recording fails the window; a recording made under the planted entry walks byte-equal and fails without its settings |
+| the scripted game | `tests/_helpers/test_scripted_meeting.py` (13 cases) | bare-shell load with `outcome_verified`, memory and belief frames; exactly one rebuttal, by the opener, replying to turn 1, whose prompt carries the charge; default stamps, `reporter_reasoning` false, no `<who_reported>`; the five walks, `walk_chain`, the golden, the scorecard and census `--set-dir`; the deviation case; no rebuttal without the setting and `walk_chain` then raises on the missing pick; a script counts from each meeting's opening |
+| scorecard `--set-dir` | `tests/scripts/test_process_scorecard.py::test_set_dir_*` (6 cases) | equals the in-process fold; no writer reached; set directory and `docs/` unchanged; true path two levels down, misnamed without the replacement; four refusals |
+| extractor refusal | `tests/experiments/test_gameplay_facts_refuses_experiments.py` (3 cases) | exact message, no advance; unstamped fake recording extracts |
+| kept refusals | `test_a_frozen_or_policy_rerunning_instrument_keeps_refusing` (5), `test_the_referee_floors_an_experiment_recording`, `test_the_offline_counterfactual_still_refuses_any_recorded_setting` | exact refusal text, every `advance_tick` patched to raise |
+| call sites pass the recorded settings | `test_every_owned_call_site_passes_the_recorded_settings` (3 modules), `test_the_scan_bites_a_planted_call_site` (8 planted sources) | a bare `advance_tick(state, actions, game_map=...)`, a by-hand engine field, another spread, an apply without the reset or the redistribution rule, a trigger without its setting, an aliased import |
+| plain copy | `test_the_copy_this_card_adds_carries_no_identifier`, `test_the_copy_scan_bites_an_identifier` | "Task 20.33" and "R7" each fail the scan |
+
+### The neutering and mutation pass
+
+One bounded pass over every production line and call-site argument this card added or changed (and
+the golden's and `committed.py`'s reader threading), with exactly the named operator classes: drop a
+filter or wrapper, swap a collection for a related one, replace a comparison with a `None` test or
+its inverse, replace a role, kind or setting read with a constant, replace a message argument with a
+constant, drop one member of a tuple or set of kinds, swap related types, replace a read of a loaded
+source with the canonical literal; plus neutering a whole statement. Each probe edited one file in
+place from a byte copy, ran only its targeted suites (`pytest -x -q -n 6`: `test_transcript.py -k
+walk_chain` for `walk_chain`; `tests/eval/test_recorded_arm_readers.py` for the readers, adding
+`tests/_helpers/test_scripted_meeting.py` or `test_evidence_honesty.py -k policy` where the probe
+touches them; the golden; the scorecard's `-k set_dir`; the extractor's file), restored the copy and
+compared sha256 (all 156 restored). The probe script is a scratch file, not committed.
+
+| File | Probes | Red on the first pass | Green on the first pass |
+| --- | --- | --- | --- |
+| `meetings/transcript.py` | 15 | 15 | none |
+| `eval/recorded_settings.py` | 25 | 23 | R17, R21 |
+| `eval/kill_craft.py` | 6 | 6 | none |
+| `eval/funnel.py` | 9 | 9 | none |
+| `eval/solvability.py` | 6 | 6 | none |
+| `eval/win_condition_selfcheck.py` | 6 | 6 | none |
+| `eval/evidence_honesty.py` | 34 | 31 | H8, H13, H14 |
+| `scripts/counterfactual_phase20.py` | 3 | 3 | none |
+| `scripts/publish_process_scorecard.py` | 11 | 11 | none |
+| `audits/workflows/extract_gameplay_facts.py` | 6 | 5 | X4 |
+| `tests/_helpers/committed.py` | 6 | 6 | none |
+| `tests/meetings/test_prompt_byte_golden.py` | 29 (one a no-op control, green) | 22 | G11, G12, G18, G21, G22, G29 |
+
+The twelve probes that first came back green, and what became of each:
+
+- **Killed by a new planted case** (re-run red at `5d6d640a`):
+  - H8 (the reconstruction's reader label replaced with a constant): the reset refusal test now
+    asserts `reconstruct_impostor_decisions`' message names `replay profile 'evidence-honesty'`.
+  - X4 (the extractor's `format_version` exclusion dropped): a format-2 config must name only
+    `bounded_rebuttal_version = 1`.
+  - G18 (the `hit` filter dropped from `consumed_exactly_once`): a unit case with a defaulted miss
+    beside two hits, one missing hit and one double hit.
+  - G22 (`sorted` dropped from `golden_directories`): a root whose `glob` returns reverse path order.
+- **Equivalent, with the reason:**
+  - R17: the `format_version` clause in the field loop: a config reaching the loop is format 1, which
+    is the field's default, so the value check skips it anyway.
+  - R21: checking every `TickOpened` instead of the first: every tick row carries the same settings,
+    which the walk has already checked agree.
+  - H13: `normalize_experiment_config` dropped before the factory: a config that normalizes to `None`
+    has no tactical change, and the factory builds the default policy for it either way.
+  - H14: the factory asked for a crewmate: it derives one options object for both roles, and the
+    recorded policy is always built as the impostor class from those options.
+  - G11, G12: `bind_experiment` given `None`, or not called: everything it binds (the evidence,
+    account and testimony versions, format-3 decisions, the public map the evidence context reads)
+    is reachable only under settings the golden refuses before it builds agents.
+  - G21: `is_dir()` dropped from the candidate listing: a file two levels down holds no replay files,
+    so `_seed_paths` already excludes it.
+  - G29: `_first_meeting_state`'s advance given `engine_arguments(None)`: it walks only the committed
+    9p2i seed 0, which records no settings; the `ast` scan still holds the call to the helper form.
+
+### Verification at `f489cf13`
+
+Every command from the card's Validation, with its real exit code, at `f489cf13` (main unchanged at
+`bdfa5b19`). The `verify_samples`, report, scorecard, census, honesty, bundle, doc-fact and
+evidence runs were made on production bytes identical to `f489cf13`'s (the commits after them change
+only tests, one docstring and the registry row, all present when they ran). The commit that carries
+this section changes only this card and `tasks/README.md`.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/eval/test_recorded_arm_readers.py tests/meetings/test_transcript.py tests/meetings/test_prompt_byte_golden.py tests/_helpers tests/experiments/test_gameplay_facts_refuses_experiments.py tests/scripts/test_process_scorecard.py -q -n 6` | exit 0, 370 passed |
+| `uv run pytest tests/eval/test_evidence_honesty.py tests/eval/test_funnel.py tests/eval/test_kill_craft.py tests/eval/test_solvability.py tests/eval/test_win_condition_selfcheck.py tests/meetings/test_reasoning_evidence.py tests/meetings/test_manager.py -q -n 6` | exit 0, 491 passed |
+| `bash scripts/verify_samples.sh replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/measure_baseline.py --honesty replays/samples/9p2i` and `... replays/samples/4p1i`, at the merge base (a `git archive` export of `bdfa5b19` reading the same replay bytes) and at the head | exit 0 each; byte-identical (sha256 `97aa858e...` for 9p2i, `d0500f96...` for 4p1i). Run with no set argument the two outputs differ only in the absolute checkout path each prints in its header lines, and are identical once that root is normalised |
+| `uv run python scripts/publish_process_scorecard.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; equal to the `samples/9p2i` entry of `docs/process-scorecard.json` as parsed JSON and byte for byte under the committed serializer settings |
+| `uv run python scripts/build_demo_bundle.py --out <scratch>/bundle-head`, and `--out <scratch>/bundle-base` in the base export (the replays copied in with their mtimes, since the loader bakes `created_at` from them) | exit 0 each: 7 featured games, 156 baked JSON files |
+| `diff -r bundle-base bundle-head` | empty, exit 0 (194 files each) |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 62 checks, 50 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 329 files; 26,636,557 bytes (the `docs/artifacts.md` row) |
+| `uv run pytest -m campaign -q` | exit 0, 336 passed |
+| `bash scripts/check.sh; echo "check.sh exit $?"` (clean worktree) | exit 0: 8,994 passed, 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 vitest tests and the build pass |
+| `git diff --stat $(git merge-base origin/main HEAD) HEAD -- replays agents engine observation orchestrator api frontend docs/process-scorecard.md docs/process-scorecard.json` | empty |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+
+The first `check.sh` run at `4a5067d5` stopped at `uv run mypy .` (exit 2): the copy scan imported
+`audits/workflows/extract_gameplay_facts.py` statically, so mypy saw it under two module names.
+`f489cf13` imports it dynamically, as the extractor's own tests do; the run above is after it.
+
+### Publication and record impact
+
+Nothing moves. No byte under `replays/`, no derived report, fixture, prompt template, doc fact or ML
+artifact changed (`git diff --stat` above is empty over the protected paths; the four
+`build_sample_report --check` runs, the scorecard and census `--check` runs, the golden on s9 and s4
+and the four `verify_samples` runs are the byte comparisons, each with its own planted failure: the
+golden's one-byte template case, `build_sample_report --check`'s drift case and the scorecard
+`--check`'s edited-cell case, all in the suite `check.sh` ran). This card edits nothing under `api/`
+or `frontend/`; `api/replay_loader.py` imports `meetings/transcript.py`, so the demo bundle was built
+at the merge base and at the head and `diff -r` is empty: the merge republishes identical bytes. A
+first base build read the replays through a symlink out of the export, and its bundle README then
+said the data came from outside the repository (the only difference); the export was rebuilt with
+the replays copied in, mtimes kept, and the comparison above is that one. The only tracked audit byte
+change is the extractor's refusal, reflected in the `audits/` row of `docs/artifacts.md` (26,635,440
+to 26,636,557 bytes, 329 files; recomputed after merging `main`, which had not moved from
+`bdfa5b19`). With the row stale, `test_every_counted_registry_row_matches_the_index` failed:
+"audits/: docs/artifacts.md promises 26,635,440 tracked bytes, the tracked files contain 26,636,557
+bytes".
+
+### B3, re-measured
+
+Count-only, keyed by set, by projecting `select_bounded_rebuttal` over the recorded transcripts (the
+manager runs it on exactly those turns after the roll call). The projection is pinned by
+`tests/_helpers/test_scripted_meeting.py::test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets`,
+so `uv run pytest tests/_helpers/test_scripted_meeting.py -k projected` reproduces it; no transcript
+text leaves the test.
+
+| Set | Meetings | Fires | To the opener | To impostors | To other crewmates | Opener accused | Opener loses the slot |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `samples/9p2i` | 145 | 144 | 123 | 19 | 2 | 125 | 2 |
+| `ml_corpus/9p2i` | 449 | 447 | 351 | 86 | 10 | 362 | 11 |
+| `samples/4p1i` | 39 | 39 | 37 | 2 | 0 | 37 | 0 |
+| `ml_corpus/4p1i` | 43 | 43 | 37 | 6 | 0 | 37 | 0 |
+| pooled | 676 | 673 | 548 | 113 | 12 | 561 | 13 |
+
+These equal the Evidence section's figures. Today the opener answers 0 of 561
+(`docs/gameplay-census.md`, `accused_opener_answers`). The deviation from ruling 4's words and the
+question to the owner are in the PR's Decisions and Questions; the rule is pinned by
+`test_the_one_reply_goes_to_the_earliest_charge_not_to_the_opener`.
+
+### Closing greps
+
+Case-insensitive, over the whole tree except `tasks/`, `audits/` and `agent_prompts/`:
+
+- `git grep -niE 'walk_chain.{0,80}(any|every) non|tail turns are .?.?opt_in|non-.?.?opt_in.?.?.? turn after the chain'`:
+  one hit, `meetings/transcript.py:496`, `walk_chain`'s opening sentence, which since `d575b12c`
+  continues "save the one selected rebuttal the recorded setting may add"; none describes the old
+  rule.
+- `git grep -niE '(eight|8) (walk )?profiles|profiles? refuses? (any|every) experiment'`: one hit,
+  `eval/replay_walk.py:121` ("the eight profiles that already verify tick hashes"), about action
+  dispositions and still true.
+- `git grep -niE 'defaults? to the (one|policy) in the tree|impostor_policy.{0,40}defaults? to'`: none.
+- `git grep -niE 'golden.{0,60}(two|fixed|committed) (sample )?sets? only|walks the fixed'`: none.
+- `git grep -ni 'does not support experimental'` outside tests: the walk's two messages, off-menu, the
+  anchor study and `require_baseline_experiments`, each a kept refusal or check and still true.
+
+### Decisions
+
+- **One field list per reader, in a new module.** The spine's walk check is by layer, and
+  `supports_experiments` accepts every pre-wave setting, so a per-field refusal needs its own home.
+  `eval/replay_walk.py` is the spine's and out of scope, so it lives in a new
+  `eval/recorded_settings.py` (a deviation from Expected scope, reported in the PR): the readable set,
+  `layers_read` deriving each profile's `threaded_layers` from its field list, and the refusal. The
+  refusal reads the first tick row's settings, which the walk has already checked agree across every
+  row, so nothing is parsed twice.
+- **Refusals pending a later card.** Evidence honesty refuses `meeting_reset` (the meeting-reset
+  card lifts it with its `room_at` and clock-alignment fix). `scripts/counterfactual_phase20.py`
+  refuses every recorded setting (the meeting-reset card threads it or keeps the refusal). The engine
+  helper still refuses `vent_witness_rule='physical'` in every reader (the physical-witness card
+  threads it). `_build_meeting_trigger` refuses `report_body_handle_version=1` in the golden and the
+  committed walk (the body-handle card). The default factory refuses `look_and_wait` and
+  `own_fresh_kill` in the golden and in honesty's recorded policy (the look-and-wait card). No other
+  refusal is pending: the pre-wave settings (crew idle policy, retarget, self-report, sabotage timing,
+  evidence, accounts, testimony, investigation, contextual self-report), formats 2 and 3 and temporal
+  delivery stay refused with no card to lift them.
+- **The recorded policy is the default, by game, with one label per set.** `impostor_policy=None`
+  means the policy each game's settings name; a set whose games name different kinds raises rather
+  than mixing labels. An explicit factory still folds a counterfactual and keeps its old label, so
+  `impostor_policy=live_impostor_policy` on an arm recording is the live-policy counterfactual the
+  proof compares against. The custom-factory refusal applies to the recorded policy only.
+- **The golden reads the same nine settings as the instruments.** It could thread more (evidence
+  version 1 through the profile and `bind_experiment`), but the absorb fold, the public regroup row
+  and the account renderers would each need threading with no recording to prove them, so it refuses
+  them by name instead. `bind_experiment` and the factory are called as `HeadlessGame` calls them;
+  within the readable settings their only observable effect is the factory's refusal of unbuilt
+  tactical values.
+- **Consumption, not only count.** The golden's consumption case counted one `RerenderedPrompt` per
+  recorded call, which cannot fail; `walk_directory` now records every meeting whose calls the
+  manager did not ask for exactly once, and the case asserts none.
+- **The scripted helper also scripts an ejection.** The golden's applied-meeting redistribution rule
+  is observable only when a meeting ejects someone, and the fake provider never ejects, so
+  `Ejection` makes every voter but the target eject a named speaker. It is the one ballot case this
+  card adds; the ballot card adds its own. The helper's meeting boundary is read off the ballot
+  schema the manager actually requests (`ModelAuthoredVoteBallot`).
+- **The B3 projection is pinned as a test**, count-only
+  (`test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets`), so the figures in
+  the PR's Decisions are reproducible from a committed command rather than a scratch script.
+- **Status and inventory.** The card reserves the Status line and the index sentence for the
+  orchestrator; the dispatch delegated the flip, so the Results commit flips Status to done and
+  re-derives the sentence with `scripts/validate_task_docs.py`, as the spine card did.
+
+### Limitations
+
+- The pending wave values are proved read only on rewritten copies (the pending guard patched
+  open), never on a recording that ran them: no behaviour exists for them yet. Evidence honesty's
+  recorded policy for `look_and_wait` and `own_fresh_kill` raises `UnbuiltTacticalOptionError` until
+  the look-and-wait card, which then proves it reconstructs with 0 mismatches.
+- The meeting-concluded hook is proved called once per applied meeting and proved to pass the
+  announced dead roster, but no built tactical value within honesty's fields reads it today
+  (`observed_risk` does not), so its effect on a decision is unexercised until the look-and-wait card.
+- The golden and the committed walk mirror the live loop's current resume perception under the
+  reset; the meeting-reset card changes the live loop and these readers together. The scorecard
+  `--set-dir` tests use no reset fixture, since the scorecard's room table under the reset is that
+  card's.
+- `vent_witness_rule='physical'` is still refused by the engine helper everywhere; the event-level
+  test proves the readers take a stand-in engine setting through the helper, and the physical run is
+  the physical-witness card's once it threads the rule.
+- `scripts/counterfactual_phase21.py` gains no refusal of its own; it reads recordings only through
+  the golden walk and evidence honesty and takes their behaviour.
+- The B3 figures are a projection of the selector over transcripts recorded without it; a game
+  recorded with the setting would diverge after the first reply.
+- The scorecard `--set-dir` "writes nothing" proof checks the set directory, the checkout's `docs/`
+  status and the two published files, and that no writer is reached; it does not snapshot the whole
+  checkout, which other test workers may touch concurrently.
