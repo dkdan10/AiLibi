@@ -1375,17 +1375,19 @@ def test_the_seed_and_sha_declarations_read_each_inventory_part() -> None:
     assert recording_sha_violations(stray) == []
     with pytest.raises(ValueError, match="at least one seed"):
         seed_set_violations(stray, frozenset())
-    # The seeds a line names are sorted, whatever order the set would give.
+    # The seeds a line names are sorted, whatever order the set would give. A
+    # two-seed set of small ints fills an eight-slot table by value modulo 8,
+    # with no collision here, so {1, 8} iterates 8 first and {9, 16} 16 first.
     short = SetInventory(
-        replay_seeds=frozenset({20, 33, 17}),
+        replay_seeds=frozenset({20, 9, 16}),
         manifest_seeds=frozenset({20}),
         manifest_shas=((20, _FAKE_SHA),),
     )
-    assert list(frozenset({1, 8, 20}) - short.manifest_seeds) != [1, 8]
-    assert list(short.replay_seeds - frozenset({1, 8, 20})) != [17, 33]
+    assert list(frozenset({1, 8, 20}) - short.manifest_seeds) == [8, 1]
+    assert list(short.replay_seeds - frozenset({1, 8, 20})) == [16, 9]
     assert seed_set_violations(short, frozenset({1, 8, 20})) == [
         "the replay files do not hold exactly the declared seeds: missing [1, 8], "
-        "unexpected [17, 33]",
+        "unexpected [9, 16]",
         "the MANIFEST.md rows do not hold exactly the declared seeds: missing "
         "[1, 8], unexpected []",
     ]
