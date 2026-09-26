@@ -1907,7 +1907,7 @@ def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]
         ),
         "a hidden round name": (
             replays / "candidates" / ".stage-b-r1" / "9p2i",
-            "must start with a letter or digit",
+            "name '.stage-b-r1' must start with a letter or digit",
         ),
     }
     if case == "a scratch dir with a committed manifest":
@@ -1951,6 +1951,13 @@ def test_a_switched_on_config_is_refused_at_every_unsafe_target(
             assert proc.returncode == 1
             assert refusal in proc.stderr
             assert _NOTHING_STAGED in proc.stderr
+            # The refusal names the offending path as it resolves physically.
+            offending = {
+                "default target": None,
+                "a scratch dir with a committed manifest": env.get("AILIBI_MANIFEST"),
+            }.get(case, env.get("AILIBI_SAMPLE_DIR"))
+            if offending is not None:
+                assert f"resolves to {os.path.realpath(offending)}" in proc.stderr
             # The check ran before every preflight: the key gate never spoke.
             assert "ANTHROPIC_API_KEY" not in proc.stderr
             assert "Substrate slate OK" not in proc.stdout
@@ -2122,10 +2129,13 @@ def test_the_snapshot_refuses_a_file_edited_after_the_check(tmp_path: Path) -> N
     config.write_text(_TEST_CONFIG_JSON.replace("observed_risk", "target_distance"))
     dest = tmp_path / "stage" / "experiment-config.json"
     dest.parent.mkdir()
+    edited = hashlib.sha256(config.read_bytes()).hexdigest()
     with pytest.raises(
         de.DeclaredExperimentError, match="changed after it was checked"
-    ):
+    ) as refused:
         de.write_snapshot(config, dest, expected_sha256=checked.sha256)
+    assert f"it now reads sha256 {edited}" in str(refused.value)
+    assert f"the checked copy read {checked.sha256}" in str(refused.value)
     assert not dest.exists()
     config.write_text(_TEST_CONFIG_JSON)
     line = de.write_snapshot(config, dest, expected_sha256=checked.sha256)

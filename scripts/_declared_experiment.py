@@ -17,14 +17,17 @@ Three rules live here, each raising :class:`DeclaredExperimentError`:
 * **The environment.** Any of the four meeting-experiment variables
   (``meetings.evidence_profile.EXPERIMENT_ENV_NAMES``) present in the
   environment, whatever its value, is refused: a declared config is the only
-  source of a recording's switches.
+  source of a recording's switches. The sample recorder refuses them with or
+  without a config; ``run_tournament.py`` refuses them beside
+  ``--experiment-config``.
 * **The target.** A config that turns any switch on records only into an
   explicitly named sample directory. Its sample directory and its manifest must
   both resolve, symlinks and ``..`` included, outside ``replays/samples/`` and
   ``replays/ml_corpus/``; inside ``replays/`` the sample directory must be
   exactly ``replays/candidates/<round>/<set>/`` and the manifest must sit
-  directly in such a directory. A config holding only the historical defaults
-  records nothing new and goes anywhere.
+  directly in such a directory, with round and set names that start with a
+  letter or digit. A config holding only the historical defaults records
+  nothing new and goes anywhere.
 
 Every message here is user-facing copy: it names the setting and the rule in
 plain words (``tests/scripts/test_candidate_sets.py`` scans
