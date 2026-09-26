@@ -135,6 +135,35 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
 
 ## Acceptance
 
+- [x] Review correction (round 2): `walk_chain`'s missing-pick and extra-turn refusals name the
+  recorded pick and turn, pinned whole. `tests/meetings/test_transcript.py::TestWalkChainBoundedRebuttal`
+  runs every case over two shapes whose pick speaker, charge and reply index all differ (`p-1`,
+  `m-1:turn-1`, turn 4; `p-3`, `m-1:turn-2`, turn 3) and matches each message in full, and
+  `test_walk_chain_accepts_exactly_the_selected_rebuttal` matches them in full with the generated
+  values. The verifier's two probes (the pick's speaker set to `'p-1'`, the extra turn's index set
+  to 5) are red: MA1 and MA16 in Results, "Review corrections, round 2".
+- [x] Review correction (round 2): the settings, honesty and scorecard refusals name the values they
+  were given, pinned whole. In `tests/eval/test_recorded_arm_readers.py`: formats 2 and 3 with two
+  readers (`test_a_later_settings_format_is_refused_with_the_reader_and_the_format`), the reviewed
+  field list joined in the unread-setting message for two lists
+  (`test_refusing_unread_settings_names_the_reader_and_the_field`), a custom-factory recording at
+  seeds 0 and 2 naming `headless-seed-0` and `headless-seed-2`, both policy labels and the real
+  directory in the mixed-set raise. In `tests/scripts/test_process_scorecard.py`: the no-replay
+  refusal names the real directory. Probes RS3, RS5, MA7, MA8 and MA10 are red.
+- [x] Review correction (round 2): every message argument of `_check_bounded_rebuttal_tail` and of
+  the no-setting tail refusal is pinned, the picked speaker and charge in the records-none message
+  and the turn index, kind and speaker in the others, by the same two-shape class and property and,
+  for the records-none message on a recorded game, by
+  `tests/_helpers/test_scripted_meeting.py::test_the_same_script_without_the_setting_records_no_rebuttal`.
+  Sixteen probes (MA1, MA12 to MA24 with MA15I and MA15E): fifteen red; MA15E is named equivalent.
+- [x] Review correction (round 2): the outside-list refusal names its reader and fields
+  (`test_a_field_list_outside_the_reviewed_set_is_refused_with_the_reader`, two readers), and the
+  plain-copy scan asserts the real directory in the no-replay and mixed-policy refusals before
+  replacing it with `DIR`. Probes MA6, RS2, H3 are red; MA8E is named equivalent.
+- [x] Review correction (round 2): the `walk_chain` bullet in `meetings/transcript.py`'s module
+  docstring now says the tail is opt-in turns except for the one selected rebuttal reply the
+  recorded setting may add. Its closing grep, which now finds only the two corrected sentences, is
+  quoted in Results.
 - [x] Review correction: the committed-meeting walk and the golden walk every meeting of every arm
   that exists today, the meeting reset included, so a walk that stopped reading the reset (or any
   other readable setting) fails a positive case, not only a refusal case.
@@ -581,7 +610,7 @@ below lists the probe that shows it) and is green at the head.
 
 | Claim | Case (test id) | What bites |
 | --- | --- | --- |
-| walk_chain accepts the pick and nothing else | `tests/meetings/test_transcript.py::TestWalkChainBoundedRebuttal` (9 cases) and `test_walk_chain_accepts_exactly_the_selected_rebuttal` (Hypothesis, 200 generated manager-shaped chains, `deadline=None`) | a wrong speaker, a wrong `reply_to`, two trailing replies, a trailing opt-in, a trailing reply without the setting, a missing pick, a non-reply in the slot, a reply where nothing is pending; with the speaker check removed the wrong-speaker case passes and its test fails (probe T10) |
+| walk_chain accepts the pick and nothing else | `tests/meetings/test_transcript.py::TestWalkChainBoundedRebuttal` (9 tests; since round 2, 22 cases over two shapes and both trailing kinds) and `test_walk_chain_accepts_exactly_the_selected_rebuttal` (Hypothesis, 200 generated manager-shaped chains, `deadline=None`) | a wrong speaker, a wrong `reply_to`, two trailing replies, a trailing opt-in, a trailing reply without the setting, a missing pick, a non-reply in the slot, a reply where nothing is pending; with the speaker check removed the wrong-speaker case passes and its test fails (probe T10); since round 2 every message is matched whole with the values it names |
 | five profiles widened | `tests/eval/test_recorded_arm_readers.py::test_a_widened_reader_verifies_every_arm_that_exists_today` (5 readers x 5 fake recordings: plain, workload, regroup reset, reset + real rebuttal, observed-risk + real rebuttal), `..._verifies_a_copy_carrying_every_wave_value`, `test_honesty_verifies_every_arm_it_reads`, `test_kill_craft_reads_the_regroup_reset_with_every_hash_verified` | every hash the profile checks verified; the copies carry `look_and_wait`, `own_fresh_kill`, body handle 1 and both ballot values with the pending guard patched open |
 | a field outside the list is refused before the first advance | `test_a_setting_outside_the_reviewed_fields_is_refused_before_the_first_advance` (6 readers x `crew_idle_policy='patrol'`, `evidence_reasoning_version=1`), `test_a_later_settings_format_is_refused_by_name`, `test_the_reconstructors_refuse_an_unread_setting_by_name`, the golden's `test_a_setting_beyond_the_readable_ones_is_refused_before_the_first_advance` | the walk's `advance_tick` patched to raise, so a refusal after the first advance would surface as that error; each message names the profile or reader and the field |
 | honesty refuses the reset pending its card | `test_honesty_refuses_the_meeting_reset_until_its_room_table_is_coherent` | both entry points, before any advance |
@@ -630,9 +659,17 @@ compared sha256 (all 156 restored). The probe script is a scratch file, not comm
 | `tests/_helpers/committed.py`, review round 1: the walk's readable list with one setting dropped (C2.1 to C2.9) | 9 | 1 at `f3473b61` (C2.6) | C2.1 to C2.5, C2.7 to C2.9 at `f3473b61`; all nine red at `078ab37a` |
 | `tests/meetings/test_prompt_byte_golden.py`, review round 1: the same at the golden's list (GR.1 to GR.9) | 9 | 6 at `f3473b61` | GR.1, GR.7, GR.8 at `f3473b61`; all nine red at `078ab37a` |
 | review round 1: an identifier planted in each refusal the copy scan missed (CP1 to CP3, two plants each) | 6 | 0 at `f3473b61` | all six at `f3473b61`; all six red at `078ab37a` |
+| `meetings/transcript.py`, review round 2: a message argument of the rebuttal-tail and no-setting refusals replaced with a constant (MA1, MA12 to MA24, MA15I, MA15E) | 16 | 0 at `9bab8d16` | all 16 at `9bab8d16`; 15 red at `29707b99`, MA15E equivalent |
+| `eval/recorded_settings.py`, review round 2: the same over the three refusal messages (MA6, RS2 to RS8) | 8 | 4 at `9bab8d16` (RS4, RS6, RS7, RS8) | MA6, RS2, RS3, RS5 at `9bab8d16`; all 8 red at `29707b99` |
+| `eval/evidence_honesty.py`, review round 2: the same over the custom-factory and mixed-set raises (MA7, MA8, MA8E, H3) | 4 | 0 at `9bab8d16` | all 4 at `9bab8d16`; 3 red at `29707b99`, MA8E equivalent |
+| `scripts/publish_process_scorecard.py`, review round 2: the same over the no-replay refusal (MA10) | 1 | 0 at `9bab8d16` | green at `9bab8d16`; red at `29707b99` |
 
-The review-round-1 rows are detailed in "Review corrections, round 1 (2026-09-26)" below. The
-twelve probes of the first pass that first came back green, and what became of each:
+The review-round-1 and round-2 rows are detailed in "Review corrections, round 1 (2026-09-26)" and
+"Review corrections, round 2 (2026-09-26)" below. The first pass did not probe every message
+argument: round 2 found 25 message-argument probes green at `9bab8d16` in four files, so each of
+those files' first-pass rows (the "none" for `meetings/transcript.py` included) held only for the
+probes it ran, and round 1's "no survivor remains" covered only round 1's own probes. The twelve
+probes of the first pass that first came back green, and what became of each:
 
 - **Killed by a new planted case** (re-run red at `5d6d640a`):
   - H8 (the reconstruction's reader label replaced with a constant): the reset refusal test now
@@ -910,3 +947,161 @@ above; the commit carrying this subsection adds that row too and changes nothing
 validator was re-run on it, exit 0). A first run stopped at the frontend lint with exit 127
 (`eslint: command not found`) after every Python stage had passed, because this worktree had no
 `frontend/node_modules`; after `npm ci` in `frontend/` the run above passed.
+
+### Review corrections, round 2 (2026-09-26)
+
+Five blocking findings from the round-2 verifiers on `9bab8d16`, all repaired in `29707b99`. That
+commit changes tests and one docstring. No production logic, recording, derived view, fixture, doc
+fact or `audits/` byte moved: `git diff --stat 9bab8d16 29707b99` lists `meetings/transcript.py`
+(one docstring bullet) and four test files. No Codex comment was posted on the PR beyond its review
+summary, so there is none to answer.
+
+- **Survivors in `walk_chain`'s rebuttal errors (correctness).** The missing-pick message with the
+  pick's speaker set to `'p-1'`, and the extra-turn message with its index set to 5, left every test
+  green. The tests matched fixed phrases, and their only pick and index equalled those constants.
+  `TestWalkChainBoundedRebuttal` now runs every case over two shapes. The opener of four has pick
+  `p-1`, charge `m-1:turn-1`, reply at turn 4 and extra turn 5. The first speaker of three has pick
+  `p-3`, charge `m-1:turn-2`, reply at turn 3 and extra turn 4. Each shape also has its own wrong
+  speaker and wrong charge. Every message is matched whole (`^...$`). The no-setting and no-pick
+  cases take both kinds that can reach the trailing slot (`reply`, `opening`), and the no-pick case
+  runs over two transcripts, three turns long and two. `test_walk_chain_accepts_exactly_the_selected_rebuttal`
+  matches all seven messages whole with the generated index, kind, speaker and charge. It gains the
+  wrong-charge, extra-turn and non-reply cases, and it checks the no-setting refusal on every
+  generated chain. `test_the_same_script_without_the_setting_records_no_rebuttal` pins the
+  records-none message on a recorded game, with the pick read back and checked against the opener
+  and turn 1.
+- **Survivors in the new refusal messages of three modules (correctness).** Each message is now
+  matched whole, with values that differ between cases:
+  - `eval/recorded_settings.py`: formats 2 and 3 under two reader names; the unread-setting message
+    for two field lists, the nine readable settings and `meeting_reset, vent_witness_rule`, with two
+    fields, two values and two readers; the outside-list refusal with two readers and two outside
+    lists.
+  - `eval/evidence_honesty.py`: the custom-factory raise on recordings made at seeds 0 and 2, naming
+    `headless-seed-0` and `headless-seed-2`. The mixed-set raise names the real directory and
+    `['live-policy-fold', 'recorded-arm-policy-fold']`.
+  - `scripts/publish_process_scorecard.py`: the no-replay parser refusal's last line ends with the
+    real temporary directory.
+- **Survivors MA1 and MA12 to MA17 in `_check_bounded_rebuttal_tail` (docs lens).** The round-1
+  table claimed 15 of 15 red and no survivor for this file. That held only for the probes that pass
+  ran. The same cases now pin each argument, and the round-2 probes below cover every message
+  argument of the tail check and the no-setting refusal, 16 in all.
+- **Survivors MA6, MA7, MA8 and MA10 (docs lens).** They are covered by the cases above. The
+  plain-copy scan now asserts, before it swaps in `DIR`, that the no-replay refusal's last line
+  names the real directory and that the mixed-set raise starts with it. The rewrite can no longer
+  hide a refusal that named a constant.
+- **The module docstring (docs lens).** The `walk_chain` bullet in `meetings/transcript.py`'s module
+  docstring said the tail is `opt_in`. It now says the tail is opt-in turns except for the one
+  selected rebuttal reply the recorded `bounded_rebuttal_version` setting may add after them.
+
+**Changed and renamed tests** (none weakened, skipped or deleted; every old `match` fragment is a
+substring of the new whole message for the first shape):
+
+- `TestWalkChainBoundedRebuttal`: its 9 tests are parametrized over the two shapes (22 cases).
+  - `test_a_trailing_reply_without_the_setting_raises` is renamed
+    `test_a_trailing_turn_without_the_setting_raises` and takes both trailing kinds.
+  - `test_no_pick_and_no_reply_passes_and_a_reply_then_raises` is renamed
+    `test_no_pick_and_no_reply_passes_and_a_trailing_turn_then_raises` and runs over two
+    transcripts and both kinds.
+- `test_walk_chain_accepts_exactly_the_selected_rebuttal` draws the trailing kind as well.
+- `test_refusing_unread_settings_names_the_reader_and_the_field` matches whole. Its outside-list
+  assertion moves to the new `test_a_field_list_outside_the_reviewed_set_is_refused_with_the_reader`.
+  `test_a_later_settings_format_is_refused_with_the_reader_and_the_format` is new.
+- `test_a_recording_from_a_custom_factory_is_refused_by_name` now records its own source game at
+  seeds 0 and 2, where it used to read the module fixture's seed-0 recording.
+- `test_a_set_whose_games_name_different_policies_raises` and
+  `test_set_dir_refuses_what_it_cannot_serve` match whole.
+
+**Round-2 probes.** One edit per probe, made in place from a byte copy. Each probe ran only its
+targeted suites (`pytest -x -q -n 6 -p no:cacheprovider`): for `meetings/transcript.py`,
+`tests/meetings/test_transcript.py`, `tests/_helpers/test_scripted_meeting.py` and
+`tests/meetings/test_manager.py`; for `eval/recorded_settings.py` and `eval/evidence_honesty.py`,
+`tests/eval/test_recorded_arm_readers.py`; for the scorecard, that file and
+`tests/scripts/test_process_scorecard.py`. The file was restored from its copy and its sha256
+compared; all 58 restores matched. Every probe ran twice: first with the four test files installed
+at their `9bab8d16` bytes, then with them restored from copies of the round-2 bytes (sha256 checked).
+The one operator class is a message argument replaced with a constant; each constant is the value
+the round-1 tests used, where they used one. The probe script is a scratch file, not committed.
+
+| Probe | Edit (the argument, and the constant it became) | At `9bab8d16` | At `29707b99` |
+| --- | --- | --- | --- |
+| MA1 | records-none: `pick.speaker` to `'p-1'` | green | red |
+| MA12 | records-none: `pick.reply_to` to `'m-1:turn-1'` | green | red |
+| MA13 | no-charge-left: `turn.turn_index` to 3 | green | red |
+| MA14 | no-charge-left: `turn.turn_kind` to `'reply'` | green | red |
+| MA15 | non-reply slot: `turn.turn_kind` to `'reply'` | green | red |
+| MA15E | non-reply slot: `turn.turn_kind` to `'opening'` | green | green, equivalent |
+| MA15I | non-reply slot: `turn.turn_index` to 4 | green | red |
+| MA16 | extra turn: `extra.turn_index` to 5 | green | red |
+| MA17 | wrong speaker: `turn.speaker` to `'p-5'` | green | red |
+| MA18 | wrong speaker: `turn.turn_index` to 4 | green | red |
+| MA19 | wrong speaker: `pick.speaker` to `'p-1'` | green | red |
+| MA20 | wrong charge: `turn.turn_index` to 4 | green | red |
+| MA21 | wrong charge: `turn.reply_to` to `'m-1:turn-0'` | green | red |
+| MA22 | wrong charge: `pick.reply_to` to `'m-1:turn-1'` | green | red |
+| MA23 | no setting: `turn.turn_index` to 4 | green | red |
+| MA24 | no setting: `turn.turn_kind` to `'reply'` | green | red |
+| MA6 | outside list: `reader` to `'r'` | green | red |
+| RS2 | outside list: `outside` to `['crew_idle_policy']` | green | red |
+| RS3 | later format: `recorded.format_version` to 2 | green | red |
+| RS4 | later format: `reader` to `'r'` | red | red |
+| RS5 | unread setting: the joined field list to `'x'` | green | red |
+| RS6 | unread setting: `reader` to `'r'` | red | red |
+| RS7 | unread setting: `field` to `crew_idle_policy` | red | red |
+| RS8 | unread setting: `value` to `'patrol'` | red | red |
+| MA7 | custom factory: `game_id` to `headless-seed-0` | green | red |
+| MA8 | mixed set: `sorted(modes)` to `['live-policy-fold']` | green | red |
+| MA8E | mixed set: `sorted(modes)` to `['live-policy-fold', 'recorded-arm-policy-fold']` | green | green, equivalent |
+| H3 | mixed set: `sample_dir` to `DIR` | green | red |
+| MA10 | no replay: `args.set_dir` to `DIR` | green | red |
+
+29 probes: 25 green and 4 red against the round-1 tests; 27 red and 2 green against the round-2
+tests. Both greens are equivalent:
+
+- MA15E: a trailing `opt_in` joins the roll call and a `reply` takes the next branch, so the only
+  kind that reaches the non-reply message is `opening`. That literal prints the same bytes.
+- MA8E: an explicit policy gives every game one mode, and the recorded policy gives each game the
+  live fold or the recorded-arm fold. So the only set with two modes names exactly those two
+  labels, which is that literal.
+
+The verifier's probes are MA1 and MA16 (finding 1), MA1 and MA12 to MA17 (finding 3), RS3, RS5,
+MA7, MA8, MA10 (finding 2) and MA6, MA7, MA8, MA10 (finding 4). MA1 fails
+`test_a_missing_pick_raises[first-speaker-of-three]` and the scripted-game case. MA16 fails
+`test_two_trailing_replies_raise[first-speaker-of-three]`. MA10 fails
+`test_set_dir_refuses_what_it_cannot_serve[no-replays]`.
+
+**Closing greps.** Case-insensitive, over the whole tree except `tasks/`, `audits/` and
+`agent_prompts/`:
+
+- `git grep -niE 'tail (is|are|turns are|must be) .{0,4}opt.?in'`: two hits, the two corrected
+  sentences. One is the module docstring's bullet (`meetings/transcript.py:24`), which continues
+  "except for the one selected rebuttal reply". The other is `walk_chain`'s opening sentence
+  (`:498`), which continues "save the one selected rebuttal".
+- `git grep -niE 'tail.{0,40}opt.?in|opt.?in.{0,40}tail'` outside `tests/`: those two, the
+  docstring's line on a recording made without the setting (`:507`) and three code lines.
+- `git grep -niE 'terminal opt.?ins?'` outside `tests/`: two hits.
+  `agents/strategic/prompts/qwen3_5_9b/accusation_round.j2:20` is a frozen prompt template about the
+  roll-call turn. It is true under both settings and out of scope: a prompt byte change needs an
+  adopting record. `design/phase-12/stage-0-understand.md:86` is the phase-12 understanding
+  snapshot. It describes a meeting made without the setting, which is every committed recording.
+  The seven hits under `tests/` describe fake games recorded without the setting.
+
+**Verification.** These runs used `29707b99`'s production and test bytes, before the commit that
+carries this subsection. That commit changes only this card.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/eval/test_recorded_arm_readers.py tests/meetings/test_transcript.py tests/meetings/test_prompt_byte_golden.py tests/_helpers tests/experiments/test_gameplay_facts_refuses_experiments.py tests/scripts/test_process_scorecard.py -q -n 6` | exit 0, 397 passed (379 before; 13 more rebuttal-class cases, 4 new settings cases, 1 more custom-factory case) |
+| `uv run pytest tests/eval/test_evidence_honesty.py tests/eval/test_funnel.py tests/eval/test_kill_craft.py tests/eval/test_solvability.py tests/eval/test_win_condition_selfcheck.py tests/meetings/test_reasoning_evidence.py tests/meetings/test_manager.py -q -n 6` | exit 0, 491 passed |
+| `bash scripts/verify_samples.sh replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check`; `uv run python scripts/publish_gameplay_census.py --check` | exit 0 each, consistent |
+| `uv run python scripts/measure_baseline.py --honesty replays/samples/9p2i` and `... replays/samples/4p1i` | exit 0 each; sha256 `97aa858e...` and `d0500f96...`, the merge base's values |
+| `uv run python scripts/publish_process_scorecard.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; equal to the `samples/9p2i` entry of `docs/process-scorecard.json` as parsed JSON and byte for byte under the committed serializer settings |
+| `uv run python scripts/build_demo_bundle.py --out <scratch>/bundle-head`, and `--out <scratch>/bundle-prev` with `meetings/transcript.py` at its `9bab8d16` bytes, restored from a copy afterwards (sha256 checked) | exit 0 each: 7 featured games, 156 baked JSON files |
+| `diff -r bundle-prev bundle-head` | empty, exit 0 (194 files each). `9bab8d16`'s production bytes equal `f489cf13`'s, whose bundle equalled the merge base's (above), so the merge republishes identical bytes |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | exit 0 each (88 work cards) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 62 checks, 50 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `uv run pytest -m campaign -q -n 6` | exit 0, 336 passed |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 329 files; 26,636,557 bytes, the `docs/artifacts.md` row, unchanged (no `audits/` byte moved, and `main` has not moved from `bdfa5b19`) |
+| `git diff --stat $(git merge-base origin/main HEAD) HEAD -- replays agents engine observation orchestrator api frontend docs/process-scorecard.md docs/process-scorecard.json` | empty |
