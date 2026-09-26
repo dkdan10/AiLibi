@@ -14,6 +14,15 @@ Usage::
     uv run python scripts/validity_gate.py replays/ml_corpus/9p2i \
         --expected-model Qwen/Qwen3.6-27B --require-zero-cost \
         --expected-prompt-versions vote_ballot=vote_ballot.qwen3_6_27b.v4,...
+    uv run python scripts/validity_gate.py replays/candidates/<round>/9p2i \
+        --expected-experiment-config replays/candidates/<round>/experiment-config.json \
+        --expected-seeds 0-49 --require-one-recording-sha
+
+``--expected-experiment-config`` declares the config every game must have
+recorded (omitted, the historical defaults: no config), ``--expected-seeds``
+the exact seed set of the replay files and the MANIFEST.md rows, and
+``--require-one-recording-sha`` one recording sha across the MANIFEST.md. All
+three are checked inside ``cost_and_provenance_exact``.
 
 ``--json`` emits the :class:`~eval.validity.ValidityGateReport` as the
 machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consume
@@ -41,7 +50,50 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from _declared_experiment import (  # noqa: E402
+    DeclaredExperimentError,
+    load_declared_config,
+)
 from eval.validity import ValidityGateReport, run_validity_gate  # noqa: E402
+from orchestrator.experiment_config import RecordedExperimentConfig  # noqa: E402
+
+
+def _parse_declared_config(raw: str) -> RecordedExperimentConfig:
+    """Read ``--expected-experiment-config``; a file the config refuses is a usage error."""
+
+    try:
+        return load_declared_config(Path(raw)).config
+    except DeclaredExperimentError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _parse_seed_set(raw: str) -> frozenset[int]:
+    """Parse ``A-B`` (inclusive) or a comma list ``A,B,C`` into a seed set.
+
+    Every token is a non-negative integer and a range runs forwards; anything
+    else raises, which argparse turns into the usage exit (``2``).
+    """
+
+    text = raw.strip()
+    first, dash, last = text.partition("-")
+    if dash:
+        if not (first.strip().isdigit() and last.strip().isdigit()):
+            raise argparse.ArgumentTypeError(
+                f"expected FIRST-LAST or a comma list of seeds, got {raw!r}"
+            )
+        low, high = int(first), int(last)
+        if low > high:
+            raise argparse.ArgumentTypeError(f"the range {raw!r} runs backwards")
+        return frozenset(range(low, high + 1))
+    seeds: set[int] = set()
+    for token in text.split(","):
+        token = token.strip()
+        if not token.isdigit():
+            raise argparse.ArgumentTypeError(
+                f"expected FIRST-LAST or a comma list of seeds, got {raw!r}"
+            )
+        seeds.add(int(token))
+    return frozenset(seeds)
 
 
 def _parse_prompt_versions(raw: str) -> dict[str, str]:
@@ -138,12 +190,47 @@ def main(argv: list[str] | None = None) -> int:
             "baselines); omitted, any finite non-negative cost is accepted"
         ),
     )
+    parser.add_argument(
+        "--expected-experiment-config",
+        type=_parse_declared_config,
+        default=None,
+        metavar="FILE",
+        help=(
+            "require every game to have recorded exactly the experiment config "
+            "this JSON file declares; a file with an unknown field or an invalid "
+            "value is a usage error. Omitted, every game must have recorded "
+            "none: the historical defaults"
+        ),
+    )
+    parser.add_argument(
+        "--expected-seeds",
+        type=_parse_seed_set,
+        default=None,
+        metavar="FIRST-LAST|A,B,C",
+        help=(
+            "require the replay files and the MANIFEST.md rows to hold exactly "
+            "these seeds; omitted, the seed set is not checked"
+        ),
+    )
+    parser.add_argument(
+        "--require-one-recording-sha",
+        action="store_true",
+        help=(
+            "require MANIFEST.md to name one recording sha on every row; "
+            "omitted, a set recorded in more than one pass is accepted"
+        ),
+    )
     args = parser.parse_args(argv)
     replay_set_dir: Path = args.replay_set_dir
     emit_json: bool = args.json
     expected_model: str | None = args.expected_model
     expected_prompt_versions: dict[str, str] | None = args.expected_prompt_versions
     require_zero_cost: bool = args.require_zero_cost
+    expected_experiment_config: RecordedExperimentConfig | None = (
+        args.expected_experiment_config
+    )
+    expected_seeds: frozenset[int] | None = args.expected_seeds
+    require_one_recording_sha: bool = args.require_one_recording_sha
 
     if not replay_set_dir.is_dir():
         print(f"Replay-set directory not found: {replay_set_dir}", file=sys.stderr)
@@ -154,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
             expected_model=expected_model,
             expected_prompt_versions=expected_prompt_versions,
             require_zero_cost=require_zero_cost,
+            expected_experiment_config=expected_experiment_config,
+            expected_seeds=expected_seeds,
+            require_one_recording_sha=require_one_recording_sha,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)

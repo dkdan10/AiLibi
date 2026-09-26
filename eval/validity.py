@@ -50,7 +50,11 @@ Definition of Done plus the Phase-14-close §1 betrayal row:
    canonical snapshot with the canonical key set; a single coherent model +
    prompt set across the run (optionally pinned to exact expected values); a game
    that called the model carries a prompt-version stamp; every aggregate AND
-   per-call cost row finite and non-negative (optionally required to be $0).
+   per-call cost row finite and non-negative (optionally required to be $0);
+   every game's recorded experiment config equals the declared one, which is the
+   historical defaults (no config) unless one is declared; and, when asked, the
+   replay files and ``MANIFEST.md`` rows hold exactly the declared seeds and the
+   ``MANIFEST.md`` names one recording sha.
 10. ``byte_identical_reconstruction`` — the recorded state-hash chain reconstructs
    byte-identically under the current engine (``scripts/_verify_samples.py``);
    a verifier that raises on malformed input is reported as a failure, not a crash.
@@ -111,6 +115,11 @@ from eval.replay_walk import (
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.win_condition_selfcheck import WinConditionSelfCheck
 from meetings.schemas import AccusationClaim
+from orchestrator.experiment_config import (
+    ConfigLayer,
+    RecordedExperimentConfig,
+    normalize_experiment_config,
+)
 from orchestrator.replay import (
     GameEndReplayEntry,
     ReplayLog,
@@ -137,13 +146,16 @@ _MALFORMED_INPUT_ERRORS: Final[tuple[type[Exception], ...]] = (
 # and its ``verify_samples`` IS the tested machinery behind the byte-identity
 # walk this gate must call rather than shelling out. Put ``scripts/`` on
 # ``sys.path`` the same guarded way the scripts themselves bootstrap the repo
-# root, then import the tool. Kept local + commented so the one backwards
-# (eval -> scripts) edge is explicit and swappable.
+# root, then import the tool. Kept local + commented so the backwards
+# (eval -> scripts) edge is explicit and swappable: it also reads the MANIFEST
+# seed list the verifier checks completeness against, and the declared-config
+# helper's rendering of a config's settings.
 _SCRIPTS_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from _verify_samples import verify_samples  # noqa: E402
+from _declared_experiment import describe_settings  # noqa: E402
+from _verify_samples import _manifest_seeds, verify_samples  # noqa: E402
 
 FactValue: TypeAlias = bool | int | float | str | None
 """A JSON scalar surfaced on a :class:`ValidityCheck` ``facts`` map."""
@@ -379,6 +391,106 @@ def assemble_tournament_report(sample_dir: Path) -> TournamentReport:
     )
 
 
+@dataclass(frozen=True)
+class SetInventory:
+    """What a set directory declares beside its games.
+
+    ``replay_seeds`` are the seeds of its replay files; ``manifest_seeds`` the
+    seeds of its ``MANIFEST.md`` rows (``None`` when it has none), read the way
+    the sample verifier reads them for completeness; ``manifest_shas`` the
+    ``(seed, git_sha)`` of each row that names a recording sha, read the way the
+    replay loader reads them.
+    """
+
+    replay_seeds: frozenset[int]
+    manifest_seeds: frozenset[int] | None
+    manifest_shas: tuple[tuple[int, str], ...]
+
+
+def read_set_inventory(sample_dir: Path) -> SetInventory:
+    """``sample_dir``'s replay seeds and ``MANIFEST.md`` rows."""
+
+    manifest = _manifest_seeds(sample_dir)
+    return SetInventory(
+        replay_seeds=frozenset(seeds_on_disk(sample_dir)),
+        manifest_seeds=None if manifest is None else frozenset(manifest),
+        manifest_shas=tuple(
+            (int(seed), sha)
+            for seed, sha in replay_loader._manifest_seed_shas(sample_dir)
+        ),
+    )
+
+
+def experiment_config_violations(
+    games: Sequence[GameReport], expected: RecordedExperimentConfig | None
+) -> list[str]:
+    """One line per game whose recorded experiment config is not ``expected``.
+
+    Each game's config is the one the report fold resolved from its recording
+    (:func:`orchestrator.replay.recorded_experiment_config`, which also requires
+    every tick row and the footer to agree), so a game equal to ``expected`` has
+    ``expected`` on every row. ``None`` expects the historical defaults: a game
+    recorded with no config.
+    """
+
+    want = normalize_experiment_config(expected)
+    return [
+        f"{game.game_id}: recorded experiment config "
+        f"({describe_settings(game.experiment_config)}) differs from the declared "
+        f"config ({describe_settings(want)})"
+        for game in games
+        if normalize_experiment_config(game.experiment_config) != want
+    ]
+
+
+def seed_set_violations(
+    inventory: SetInventory, expected_seeds: frozenset[int]
+) -> list[str]:
+    """Where the replay files or the ``MANIFEST.md`` rows are not ``expected_seeds``."""
+
+    if not expected_seeds:
+        raise ValueError("a declared seed set names at least one seed")
+    violations: list[str] = []
+    for label, seeds in (
+        ("the replay files", inventory.replay_seeds),
+        ("the MANIFEST.md rows", inventory.manifest_seeds),
+    ):
+        if seeds is None:
+            violations.append(
+                "the declared seeds are checked against MANIFEST.md rows, but the "
+                "directory has no MANIFEST.md"
+            )
+            continue
+        missing = sorted(expected_seeds - seeds)
+        unexpected = sorted(seeds - expected_seeds)
+        if missing or unexpected:
+            violations.append(
+                f"{label} do not hold exactly the declared seeds: missing "
+                f"{missing}, unexpected {unexpected}"
+            )
+    return violations
+
+
+def recording_sha_violations(inventory: SetInventory) -> list[str]:
+    """Where the ``MANIFEST.md`` does not name one recording sha on every row."""
+
+    if inventory.manifest_seeds is None:
+        return ["one recording sha is required, but the directory has no MANIFEST.md"]
+    violations: list[str] = []
+    unnamed = sorted(
+        inventory.manifest_seeds - {seed for seed, _sha in inventory.manifest_shas}
+    )
+    if unnamed:
+        violations.append(f"MANIFEST.md rows for seeds {unnamed} name no recording sha")
+    shas = sorted({sha for _seed, sha in inventory.manifest_shas})
+    if len(shas) != 1:
+        violations.append(
+            f"MANIFEST.md names {len(shas)} recording shas "
+            f"({', '.join(shas) or 'none'}); one is required"
+        )
+    return violations
+
+
 # --------------------------------------------------------------------------- #
 # Engine reconstruction (kills + win-condition) — one walk per game            #
 # --------------------------------------------------------------------------- #
@@ -499,12 +611,27 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
     )
 
 
+#: The layers the gate's walk reads a later experiment setting in: every layer a
+#: profile can declare. The terminal, kill and win-condition checks read the
+#: events the walk produces from the recorded actions (whatever tactical policy
+#: chose them) and the recorded meeting outcomes, with the recorded
+#: ``meeting_reset`` threaded into each meeting by the shared walk. The
+#: report-side checks read recorded rows: the ballots and accusations (a
+#: teammate is never a legal impostor target), the suspicion block of each vote
+#: prompt (bounded by the next header, so a ballot block outside it is not
+#: read), the turn ids and the provenance stamps. Engine settings reach the walk
+#: through the engine-arguments helper, which refuses one it does not thread.
+VALIDITY_THREADED_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
+    {"orchestrator", "tactical", "meeting"}
+)
+
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record): verify
 # per-tick hashes + each meeting's state_hash_after; TRUNCATE on a partial
 # meeting — the gate deliberately serves what a recording contains, matching
 # the loader (the completeness checks own game-over/duplicate-row policing) —
 # and REJECT rows recorded after the terminal GAME_OVER, which the walk never
-# reaches and therefore never hash-verifies.
+# reaches and therefore never hash-verifies. It reads experiment recordings in
+# the layers below and still refuses temporal observations.
 _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="validity-gate",
     on_violation=_raise_walk_violation,
@@ -513,6 +640,8 @@ _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
     reject_trailing_rows=True,
+    supports_experiments=True,
+    threaded_layers=VALIDITY_THREADED_LAYERS,
 )
 
 
@@ -933,6 +1062,10 @@ def check_cost_and_provenance(
     expected_model: str | None = None,
     expected_prompt_versions: Mapping[str, str] | None = None,
     require_zero_cost: bool = False,
+    expected_experiment_config: RecordedExperimentConfig | None = None,
+    inventory: SetInventory | None = None,
+    expected_seeds: frozenset[int] | None = None,
+    require_one_recording_sha: bool = False,
 ) -> ValidityCheck:
     """Substrate-flag stamp, model, prompt set, and cost rows all coherent (+ exact).
 
@@ -955,8 +1088,22 @@ def check_cost_and_provenance(
       inside a still-positive aggregate). ``require_zero_cost`` (opt-in, for the
       audit's ``cost rows = 0`` flat-rate baselines) additionally demands every
       row be exactly ``0.0``.
+    * Every game's recorded experiment config equals
+      ``expected_experiment_config`` (:func:`experiment_config_violations`).
+      ``None``, the default, expects the historical defaults, so a set recorded
+      with any switch on fails unless its config is declared.
+    * ``expected_seeds`` (opt-in) requires the replay files and the
+      ``MANIFEST.md`` rows to hold exactly those seeds, and
+      ``require_one_recording_sha`` (opt-in, since a set recorded in two passes
+      legitimately names two) requires the ``MANIFEST.md`` to name one recording
+      sha on every row. Both read ``inventory`` (:func:`read_set_inventory`).
     """
 
+    if (expected_seeds is not None or require_one_recording_sha) and inventory is None:
+        raise ValueError(
+            "the seed and recording-sha declarations are checked against the set's "
+            "inventory, and none was supplied"
+        )
     snapshot = substrate_flag_snapshot()
     canonical_keys = set(SUBSTRATE_FLAG_KEYS)
     violations: list[str] = []
@@ -1039,6 +1186,14 @@ def check_cost_and_provenance(
                 "prompt-version provenance does not match expected "
                 f"{dict(expected_prompt_versions)}"
             )
+
+    violations.extend(
+        experiment_config_violations(report.games, expected_experiment_config)
+    )
+    if inventory is not None and expected_seeds is not None:
+        violations.extend(seed_set_violations(inventory, expected_seeds))
+    if inventory is not None and require_one_recording_sha:
+        violations.extend(recording_sha_violations(inventory))
 
     models = next(iter(model_sets), ())
     model_name = ", ".join(models) if models else None
@@ -1170,6 +1325,9 @@ def run_validity_gate(
     expected_model: str | None = None,
     expected_prompt_versions: Mapping[str, str] | None = None,
     require_zero_cost: bool = False,
+    expected_experiment_config: RecordedExperimentConfig | None = None,
+    expected_seeds: frozenset[int] | None = None,
+    require_one_recording_sha: bool = False,
 ) -> ValidityGateReport:
     """Run every HARD validity check over ``replay_set_dir`` and compose the verdict.
 
@@ -1190,6 +1348,12 @@ def run_validity_gate(
     config, e.g. the 15.7 / 15.12 re-records); omitted, the provenance check
     enforces coherence + well-formedness only (the generic default so an arbitrary
     candidate dir on a different model / paid provider is not falsely rejected).
+
+    ``expected_experiment_config`` declares the config every game must record;
+    omitted, every game must record none (the historical defaults).
+    ``expected_seeds`` and ``require_one_recording_sha`` are the opt-in seed-set
+    and single-recording-sha declarations. All three are checked inside
+    ``cost_and_provenance_exact``, so the gate keeps its ten checks.
     """
 
     if not replay_set_dir.is_dir():
@@ -1218,6 +1382,16 @@ def run_validity_gate(
         }
     except _MALFORMED_INPUT_ERRORS as exc:
         substrate_error = f"{type(exc).__name__}: {exc}"
+
+    # The set's replay seeds and MANIFEST rows, read only for the two opt-in
+    # declarations that need them.
+    inventory: SetInventory | None = None
+    inventory_error: str | None = None
+    if expected_seeds is not None or require_one_recording_sha:
+        try:
+            inventory = read_set_inventory(replay_set_dir)
+        except _MALFORMED_INPUT_ERRORS as exc:
+            inventory_error = f"{type(exc).__name__}: {exc}"
 
     reconstructions: list[_GameReconstruction] | None = None
     reconstruction_error: str | None = None
@@ -1261,17 +1435,22 @@ def run_validity_gate(
             "no_dangling_primary_reason_id", report_error
         )
 
-    if report is not None and substrate_by_seed is not None:
+    if report is not None and substrate_by_seed is not None and inventory_error is None:
         provenance_check = check_cost_and_provenance(
             report,
             substrate_by_seed,
             expected_model=expected_model,
             expected_prompt_versions=expected_prompt_versions,
             require_zero_cost=require_zero_cost,
+            expected_experiment_config=expected_experiment_config,
+            inventory=inventory,
+            expected_seeds=expected_seeds,
+            require_one_recording_sha=require_one_recording_sha,
         )
     else:
         provenance_check = _check_unavailable(
-            "cost_and_provenance_exact", report_error or substrate_error
+            "cost_and_provenance_exact",
+            report_error or substrate_error or inventory_error,
         )
 
     checks = (
@@ -1315,7 +1494,9 @@ def _check_unavailable(name: str, error: str | None) -> ValidityCheck:
 __all__ = [
     "FactValue",
     "MEETING_RATE_FLOOR",
+    "SetInventory",
     "TRUNCATED_REPLAY_REASON",
+    "VALIDITY_THREADED_LAYERS",
     "ValidityCheck",
     "ValidityGateReport",
     "assemble_tournament_report",
@@ -1329,8 +1510,12 @@ __all__ = [
     "check_no_friendly_fire_kills",
     "check_no_railroaded_crew_ejections",
     "check_no_tick_1_kills",
+    "experiment_config_violations",
+    "read_set_inventory",
+    "recording_sha_violations",
     "resolve_roster_knobs",
     "roles_by_seed",
     "run_validity_gate",
+    "seed_set_violations",
     "seeds_on_disk",
 ]

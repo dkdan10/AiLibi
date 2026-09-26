@@ -53,6 +53,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Final, Literal, NoReturn
 
@@ -90,6 +91,13 @@ from orchestrator.game import (
     MeetingRunner,
     build_default_agent_factory,
     build_default_meeting_runner,
+)
+from meetings.evidence_profile import profile_from_config
+from orchestrator.experiment_config import (
+    ConfigLayer,
+    RecordedExperimentConfig,
+    meeting_values,
+    normalize_experiment_config,
 )
 from orchestrator.replay import (
     AbortedMeetingReplayEntry,
@@ -257,6 +265,7 @@ def run_tournament_eval(
     meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
     tournament_budget: GameBudget | None = None,
     deadline: RunDeadline | None = None,
+    experiment_config: RecordedExperimentConfig | None = None,
 ) -> TournamentReport:
     """Run one :class:`HeadlessGame` per seed and assemble a typed report.
 
@@ -347,6 +356,17 @@ def run_tournament_eval(
     asynchronous meeting work. These limits require the default budgeted runner;
     an opaque custom runner cannot promise to enforce provider limits.
 
+    ``experiment_config`` is a declared experiment config, recorded exactly: it
+    reaches every per-seed :class:`HeadlessGame`, the default agent factory
+    (:func:`orchestrator.game.build_default_agent_factory`) and each game's
+    default meeting runner, which is built from the config's meeting profile
+    (:func:`meetings.evidence_profile.profile_from_config`) and so refuses a
+    meeting-experiment environment variable exported ON beside it. A config
+    that turns any switch on cannot run beside a custom
+    ``meeting_runner_factory``, which could render settings the config does not
+    record. ``None`` (the default) makes every call exactly as it was before the
+    keyword existed.
+
     Raises ``RuntimeError`` if any game ends at ``MEETING_PHASE_REACHED`` (the
     Task 3.13 runner wire-up regressed). Re-raises any non-parse-failure
     exception from a game unchanged (AGENTS.md "no silent fallbacks").
@@ -358,13 +378,32 @@ def run_tournament_eval(
         tournament_budget is not None or deadline is not None
     ):
         raise ValueError("Whole-run limits require the budgeted default meeting runner")
+    if (
+        meeting_runner_factory is not None
+        and normalize_experiment_config(experiment_config) is not None
+    ):
+        raise ValueError(
+            "a declared experiment config that turns switches on needs the default "
+            "meeting runner built from it, not a custom meeting_runner_factory"
+        )
     seeds_tuple = tuple(seeds)
     if len(set(seeds_tuple)) != len(seeds_tuple):
         raise ValueError("seeds must be unique")
 
     resolved_map = game_map if game_map is not None else load_canonical_map()
+    # A declared config adds its keyword to the factory, each runner and each
+    # game; with none, every call below is the one this function always made.
+    profile = (
+        profile_from_config(meeting_values(experiment_config))
+        if experiment_config is not None
+        else None
+    )
     resolved_factory = (
-        agent_factory if agent_factory is not None else build_default_agent_factory()
+        agent_factory
+        if agent_factory is not None
+        else build_default_agent_factory()
+        if experiment_config is None
+        else build_default_agent_factory(experiment_config=experiment_config)
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -378,12 +417,20 @@ def run_tournament_eval(
             game_budget = _resolve_game_budget(
                 num_players=num_players, parent=tournament_budget
             )
-            meeting_runner = (
-                build_default_meeting_runner(budget=game_budget)
-                if deadline is None
-                else build_default_meeting_runner(budget=game_budget, deadline=deadline)
-            )
-        game = HeadlessGame(
+            if profile is None:
+                meeting_runner = (
+                    build_default_meeting_runner(budget=game_budget)
+                    if deadline is None
+                    else build_default_meeting_runner(
+                        budget=game_budget, deadline=deadline
+                    )
+                )
+            else:
+                meeting_runner = build_default_meeting_runner(
+                    budget=game_budget, deadline=deadline, profile=profile
+                )
+        build_game = partial(
+            HeadlessGame,
             deadline=deadline,
             seed=seed,
             game_map=resolved_map,
@@ -397,6 +444,11 @@ def run_tournament_eval(
             force=force,
             tactical_policy_stamp=tactical_policy_stamp,
             crew_tactical_policy_stamp=crew_policy_stamp,
+        )
+        game = (
+            build_game()
+            if experiment_config is None
+            else build_game(experiment_config=experiment_config)
         )
         try:
             result = game.run()
@@ -908,9 +960,22 @@ def _raise_kill_gift_walk_violation(violation: WalkViolation) -> NoReturn:
     )
 
 
+#: The layers the kill-gift walk reads a later experiment setting in. The fold
+#: counts task instances and kills from the events the walk produces: it applies
+#: the recorded actions, whatever tactical policy chose them, and the recorded
+#: meeting outcomes, whatever meeting settings produced them, with the recorded
+#: ``meeting_reset`` threaded into each meeting by the shared walk. It renders no
+#: prompt and decides no ballot, so no orchestrator, tactical or meeting setting
+#: changes what it counts. Engine settings reach it through the engine-arguments
+#: helper, which refuses one it does not thread.
+KILL_GIFT_THREADED_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
+    {"orchestrator", "tactical", "meeting"}
+)
+
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record): verify
 # per-tick hashes + each meeting's state_hash_after; TRUNCATE on a partial
-# meeting, mirroring the loader's partial-replay handling.
+# meeting, mirroring the loader's partial-replay handling. It reads experiment
+# recordings in the layers above and still refuses temporal observations.
 _KILL_GIFT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="kill-gift",
     on_violation=_raise_kill_gift_walk_violation,
@@ -918,6 +983,8 @@ _KILL_GIFT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     verify_action_dispositions=True,
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
+    supports_experiments=True,
+    threaded_layers=KILL_GIFT_THREADED_LAYERS,
 )
 
 
@@ -930,10 +997,24 @@ def _raise_current_report_violation(violation: WalkViolation) -> NoReturn:
     )
 
 
+#: The layers the current-report walk reads a later experiment setting in. Its
+#: consumers are the kill-gift facts of every assembled report and the tactical
+#: lab's two derived profiles, which count recorded actions and events: each
+#: applies the recorded actions and the recorded meeting outcomes, with the
+#: recorded ``meeting_reset`` threaded by the shared walk. The one check that
+#: decides anything again, the format-3 policy reconstruction, builds its agents
+#: from the recorded config, so a recorded tactical setting is decided as it was
+#: recorded. The census derives its own profile from this one and declares its
+#: own layers.
+CURRENT_REPORT_THREADED_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
+    {"orchestrator", "tactical", "meeting"}
+)
+
 _CURRENT_REPORT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     supports_temporal_observations=True,
     profile="current-report",
     supports_experiments=True,
+    threaded_layers=CURRENT_REPORT_THREADED_LAYERS,
     on_violation=_raise_current_report_violation,
     verify_tick_hashes=True,
     verify_action_dispositions=True,
