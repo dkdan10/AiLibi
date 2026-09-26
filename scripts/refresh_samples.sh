@@ -309,9 +309,6 @@ fi
 # the snapshot below must match.
 declared_args=(check --sample-dir "$SAMPLE_DIR" --manifest "$MANIFEST")
 if [[ -n "$experiment_config" ]]; then
-  if [[ "$experiment_config" != /* ]]; then
-    experiment_config="$PWD/$experiment_config"
-  fi
   declared_args+=(--config "$experiment_config")
 fi
 if [[ -n "${AILIBI_SAMPLE_DIR:-}" ]]; then
@@ -324,14 +321,12 @@ if ! declared_out="$(uv run python "$REPO_ROOT/scripts/_declared_experiment.py" 
   exit 1
 fi
 printf '%s\n' "$declared_out"
+# The sha256 the check printed; the snapshot below copies the file only if it
+# still reads this (an empty value matches no file, so the snapshot refuses).
 declared_sha=""
 declared_sha_pattern='\(sha256 ([0-9a-f]{64})\)'
 if [[ "$declared_out" =~ $declared_sha_pattern ]]; then
   declared_sha="${BASH_REMATCH[1]}"
-fi
-if [[ -n "$experiment_config" && -z "$declared_sha" ]]; then
-  echo "Error: the experiment config check printed no sha256; nothing was staged." >&2
-  exit 1
 fi
 
 # One human-readable rendering of the expected slate, used by the dry-run echoes
