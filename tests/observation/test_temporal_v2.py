@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
+import observation.temporal as temporal_module
 from agents.memory.store import AgentMemory, render_for_prompt
 from agents.perception import ingest_event_observations, ingest_packet
-from engine.tick import advance_tick
+from engine.actions import Action
+from engine.events import EngineEvent, VentExitedEvent
+from engine.tick import VentWitnessRule, advance_tick
 from engine.world import WorldState, load_canonical_map
 from eval.temporal_entitlement import assert_temporal_batch_entitled
 from observation.packet import (
@@ -22,6 +29,9 @@ from observation.packet import (
 )
 from observation.service import ObservationService
 from observation.version import temporal_observation_version
+from observation.temporal import project_temporal_events
+from tests.engine.test_vent_witness_rule import _player as _scene_player
+from tests.engine.test_vent_witness_rule import _scene, _vent, _vent_scenes
 from tests.observation.test_service import (
     _action,
     _base_world_state,
@@ -108,6 +118,7 @@ def test_event_position_order_preserves_both_crossing_outcomes(
             events=events,
             submitted_actions=actions,
             game_map=game_map,
+            vent_witness_rule="both_rooms",
         )
         moves = [
             row
@@ -204,6 +215,7 @@ def test_independent_oracle_rejects_planted_temporal_defects(
                 events=events,
                 submitted_actions=actions,
                 game_map=game_map,
+                vent_witness_rule="both_rooms",
             )
     finally:
         service.close()
@@ -279,6 +291,7 @@ def test_actor_task_rejection_is_private_and_never_completion(tmp_path: Path) ->
                 events=events,
                 submitted_actions=actions,
                 game_map=game_map,
+                vent_witness_rule="both_rooms",
             )
             payload = batch.ordered_events[0].event
             if recipient == "p-4":
@@ -306,7 +319,11 @@ def test_engine_movement_metadata_is_checked_independently(
         source, [_move("p-2", "ENGINEERING")], game_map=game_map
     )
     assert_event_witnesses_match_source_state(
-        pre_state=source, state=state, events=events, game_map=game_map
+        pre_state=source,
+        state=state,
+        events=events,
+        game_map=game_map,
+        vent_witness_rule="both_rooms",
     )
     forged = [
         replace(event, witnesses=witnesses) if isinstance(event, MovedEvent) else event
@@ -314,7 +331,11 @@ def test_engine_movement_metadata_is_checked_independently(
     ]
     with pytest.raises(AssertionError, match="movement witness"):
         assert_event_witnesses_match_source_state(
-            pre_state=source, state=state, events=forged, game_map=game_map
+            pre_state=source,
+            state=state,
+            events=forged,
+            game_map=game_map,
+            vent_witness_rule="both_rooms",
         )
 
 
@@ -362,6 +383,7 @@ def test_witness_remembers_before_death_but_receives_nothing_after(
             events=events,
             submitted_actions=actions,
             game_map=game_map,
+            vent_witness_rule="both_rooms",
         )
         assert len(batch.ordered_events) == 1
         witnessed = batch.ordered_events[0].event
@@ -457,6 +479,7 @@ def test_real_owned_task_receipts_distinguish_progress_and_completion(
                 events=events,
                 submitted_actions=[action],
                 game_map=game_map,
+                vent_witness_rule="both_rooms",
             )
             if tick == 2:
                 passive_state, passive_events = advance_tick(
@@ -629,6 +652,335 @@ def test_a_vented_observer_perceives_nothing_in_the_room_above_it(
             events=events,
             submitted_actions=actions,
             game_map=game_map,
+            vent_witness_rule="both_rooms",
         )
+    finally:
+        service.close()
+
+
+# --------------------------------------------------------------------------- #
+# The vent witness rule: a vent reaches exactly the event's own witnesses     #
+# --------------------------------------------------------------------------- #
+
+_MAP = load_canonical_map()
+
+
+def _cross_room_exit(
+    rule: VentWitnessRule,
+) -> tuple[WorldState, WorldState, list[Action], list[EngineEvent]]:
+    """p-0 exits ADMIN_VENT through REACTOR_VENT.
+
+    p-2 stands in ADMIN, the room left; p-4 in REACTOR, where the impostor
+    surfaces; p-5 in UPPER_HALL, which sees neither room.
+    """
+
+    before = _scene(
+        actor_room="ADMIN",
+        actor_in_vent=True,
+        bystanders=(
+            _scene_player("p-2", "ADMIN"),
+            _scene_player("p-4", "REACTOR"),
+            _scene_player("p-5", "UPPER_HALL"),
+        ),
+    )
+    actions = [_vent("REACTOR_VENT")]
+    after, events = advance_tick(before, actions, game_map=_MAP, vent_witness_rule=rule)
+    return before, after, actions, events
+
+
+@pytest.mark.parametrize("rule", ["both_rooms", "physical"])
+def test_a_room_left_crewmate_sees_the_exit_only_under_both_rooms(
+    tmp_path: Path, rule: VentWitnessRule
+) -> None:
+    before, after, actions, events = _cross_room_exit(rule)
+    room_left_sees = rule == "both_rooms"
+    legacy = ObservationService(game_map=_MAP, audit_log_path=tmp_path / "legacy")
+    temporal = ObservationService(
+        game_map=_MAP,
+        audit_log_path=tmp_path / "temporal",
+        temporal_observation_version=2,
+    )
+    try:
+        for agent_id, room, sees in (
+            ("p-2", "ADMIN", room_left_sees),
+            ("p-4", "REACTOR", True),
+            ("p-5", "UPPER_HALL", False),
+        ):
+            packet = legacy.build_packet(
+                world_state=after, agent_id=agent_id, engine_events=events
+            )
+            assert [
+                (view.id, view.room)
+                for view in packet.visible_players
+                if view.action == "vent"
+            ] == ([("p-0", room)] if sees else [])
+            batch = temporal.build_event_observations(
+                world_state=after,
+                source_state=before,
+                submitted_actions=actions,
+                engine_events=events,
+                agent_id=agent_id,
+            )
+            if sees:
+                assert batch is not None
+                (row,) = batch.ordered_events
+                assert isinstance(row.event, WitnessedActionEvent)
+                assert (row.event.player.id, row.event.player.room) == ("p-0", room)
+                assert row.event.player.action == "vent"
+            else:
+                assert batch is None
+            assert_temporal_batch_entitled(
+                batch,
+                agent_id=agent_id,
+                source_state=before,
+                state=after,
+                events=events,
+                submitted_actions=actions,
+                game_map=_MAP,
+                vent_witness_rule=rule,
+            )
+    finally:
+        legacy.close()
+        temporal.close()
+
+
+def test_the_temporal_oracle_takes_the_rule_the_events_were_made_under(
+    tmp_path: Path,
+) -> None:
+    service = ObservationService(
+        game_map=_MAP, audit_log_path=tmp_path / "audit", temporal_observation_version=2
+    )
+    try:
+        pairs: tuple[tuple[VentWitnessRule, VentWitnessRule], ...] = (
+            ("physical", "both_rooms"),
+            ("both_rooms", "physical"),
+        )
+        for rule, other in pairs:
+            before, after, actions, events = _cross_room_exit(rule)
+            batch = service.build_event_observations(
+                world_state=after,
+                source_state=before,
+                submitted_actions=actions,
+                engine_events=events,
+                agent_id="p-2",
+            )
+            assert (batch is None) is (rule == "physical")
+            arguments: dict[str, Any] = {
+                "agent_id": "p-2",
+                "source_state": before,
+                "state": after,
+                "events": events,
+                "submitted_actions": actions,
+                "game_map": _MAP,
+            }
+            assert_temporal_batch_entitled(batch, **arguments, vent_witness_rule=rule)
+            # Planted: the oracle handed the other rule rejects the same batch.
+            message = (
+                "entitled event batch was not delivered"
+                if rule == "physical"
+                else "empty v2 evidence must not produce a batch"
+            )
+            with pytest.raises(AssertionError, match=message):
+                assert_temporal_batch_entitled(
+                    batch, **arguments, vent_witness_rule=other
+                )
+    finally:
+        service.close()
+
+
+@pytest.mark.parametrize("rule", ["PHYSICAL", "both", ""])
+def test_the_temporal_oracle_raises_on_an_unknown_rule(rule: str) -> None:
+    before, after, actions, events = _cross_room_exit("both_rooms")
+    with pytest.raises(ValueError, match="unknown vent witness rule"):
+        assert_temporal_batch_entitled(
+            None,
+            agent_id="p-5",
+            source_state=before,
+            state=after,
+            events=events,
+            submitted_actions=actions,
+            game_map=_MAP,
+            vent_witness_rule=rule,  # type: ignore[arg-type]
+        )
+
+
+# The vent predicate before the rule existed, kept here as the reference: a
+# watching observer standing in either room the event names.
+_ROOM_PREDICATE = """            elif can_watch and observer.room in (
+                event.source_room,
+                event.destination_room,
+            ):
+"""
+# The vent branch, and the clause in it that hands a watching observer the
+# vent: located by the branch header and the body it opens, so the reference
+# replaces whatever condition the module holds today.
+_VENT_BRANCH = "        elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):\n"
+_CLAUSE_START = "            elif "
+_CLAUSE_BODY = "                perceived = WitnessedActionEvent(\n"
+
+_Projection = Callable[..., EventObservationBatch | None]
+
+
+def _room_predicate_projection() -> _Projection:
+    """``project_temporal_events`` with the old room predicate in place of today's."""
+
+    source = inspect.getsource(temporal_module)
+    assert source.count(_VENT_BRANCH) == 1
+    start = source.index(_CLAUSE_START, source.index(_VENT_BRANCH))
+    end = source.index(_CLAUSE_BODY, start)
+    reference = source[:start] + _ROOM_PREDICATE + source[end:]
+    namespace: dict[str, object] = {"__name__": "room_predicate_reference"}
+    # The module's own source with only the vent clause's condition swapped, so
+    # the comparisons below isolate that one condition.
+    exec(compile(reference, "<room-predicate reference>", "exec"), namespace)
+    return cast(_Projection, namespace["project_temporal_events"])
+
+
+_REFERENCE = _room_predicate_projection()
+
+
+def _projections(
+    projection: _Projection,
+    before: WorldState,
+    actions: Sequence[Action],
+    events: Sequence[EngineEvent],
+) -> dict[str, EventObservationBatch | None]:
+    return {
+        agent_id: projection(
+            source_state=before,
+            submitted_actions=actions,
+            engine_events=events,
+            agent_id=agent_id,
+            game_map=_MAP,
+        )
+        for agent_id in sorted(before.players)
+    }
+
+
+def test_the_room_predicate_would_hand_the_physical_exit_to_the_room_left() -> None:
+    """Planted: the old predicate restored fails the physical case above."""
+
+    before, _after, actions, events = _cross_room_exit("physical")
+    today = _projections(project_temporal_events, before, actions, events)
+    restored = _projections(_REFERENCE, before, actions, events)
+    assert today["p-2"] is None
+    assert restored["p-2"] is not None
+    assert {agent: today[agent] for agent in today if agent != "p-2"} == {
+        agent: restored[agent] for agent in restored if agent != "p-2"
+    }
+
+
+@st.composite
+def _scenes_with_moves(
+    draw: st.DrawFn,
+) -> tuple[WorldState, list[Action]]:
+    """A vent scene plus bystander moves, in a drawn order around the vent."""
+
+    state, vent_id, _kind = draw(_vent_scenes())
+    moves: list[Action] = []
+    for player_id, player in sorted(state.players.items()):
+        if player_id == "p-0" or not draw(st.booleans()):
+            continue
+        to_room = draw(st.sampled_from(_MAP.room_neighbors(player.room)))
+        moves.append(_move(player_id, to_room))
+    position = draw(st.integers(min_value=0, max_value=len(moves)))
+    return state, [*moves[:position], _vent(vent_id), *moves[position:]]
+
+
+@settings(deadline=None, max_examples=200)
+@given(_scenes_with_moves())
+def test_on_both_rooms_scenes_the_witness_lists_deliver_as_the_room_predicate(
+    scene: tuple[WorldState, list[Action]],
+) -> None:
+    """Byte identity for every temporal recording made under the default rule."""
+
+    before, actions = scene
+    _after, events = advance_tick(
+        before, actions, game_map=_MAP, vent_witness_rule="both_rooms"
+    )
+    assert _projections(project_temporal_events, before, actions, events) == (
+        _projections(_REFERENCE, before, actions, events)
+    )
+
+
+def test_a_vent_listing_a_vented_or_dead_observer_still_reaches_neither() -> None:
+    """Planted metadata: the watch guard stands between the lists and delivery.
+
+    The engine never lists a vented or dead player, so this event is forged:
+    it names p-6, hidden in a vent in ADMIN, and p-7, dead in ADMIN, among the
+    room-left witnesses.
+    """
+
+    before = _scene(
+        actor_room="ADMIN",
+        actor_in_vent=True,
+        bystanders=(
+            _scene_player("p-2", "ADMIN"),
+            _scene_player("p-6", "ADMIN", role="IMPOSTOR", in_vent=True),
+            _scene_player("p-7", "ADMIN", alive=False),
+        ),
+    )
+    actions = [_vent("REACTOR_VENT")]
+    _after, events = advance_tick(
+        before, actions, game_map=_MAP, vent_witness_rule="both_rooms"
+    )
+    exit_event = events[0]
+    assert isinstance(exit_event, VentExitedEvent)
+    assert exit_event.source_witnesses == ("p-2",)
+    forged = [
+        replace(exit_event, source_witnesses=("p-2", "p-6", "p-7")),
+        *events[1:],
+    ]
+    batches = _projections(project_temporal_events, before, actions, forged)
+    assert batches["p-2"] is not None
+    assert batches["p-6"] is None and batches["p-7"] is None
+
+
+def test_the_scan_context_hands_its_rule_to_the_temporal_oracle(
+    tmp_path: Path,
+) -> None:
+    """A context left at its default checks under ``both_rooms``."""
+
+    from eval.leak_scan import PacketContext, assert_event_observations_are_entitled
+
+    service = ObservationService(
+        game_map=_MAP, audit_log_path=tmp_path / "audit", temporal_observation_version=2
+    )
+    try:
+        for rule in ("both_rooms", "physical"):
+            before, after, actions, events = _cross_room_exit(rule)
+            batch = service.build_event_observations(
+                world_state=after,
+                source_state=before,
+                submitted_actions=actions,
+                engine_events=events,
+                agent_id="p-2",
+            )
+            context = PacketContext(
+                events,
+                after,
+                _MAP,
+                temporal_observations=True,
+                temporal_observation_version=2,
+                source_state=before,
+                submitted_actions=actions,
+            )
+            if rule == "both_rooms":
+                assert context.vent_witness_rule == "both_rooms"
+                assert_event_observations_are_entitled(batch, context)
+                with pytest.raises(AssertionError):
+                    assert_event_observations_are_entitled(
+                        batch, replace(context, vent_witness_rule="physical")
+                    )
+            else:
+                with pytest.raises(AssertionError):
+                    assert_event_observations_are_entitled(
+                        batch, context, agent_id="p-2"
+                    )
+                assert_event_observations_are_entitled(
+                    batch,
+                    replace(context, vent_witness_rule="physical"),
+                    agent_id="p-2",
+                )
     finally:
         service.close()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final, Literal
 
 from engine.actions import Action, DoTaskAction
 from engine.events import (
@@ -21,6 +21,10 @@ from engine.events import (
 from engine.world import Map, WorldState
 from observation.packet import EventObservationBatch
 
+#: The vent witness rules this oracle states for itself, kept apart from the
+#: engine's own statement so the two are compared rather than shared.
+VENT_WITNESS_RULES: Final[tuple[str, ...]] = ("both_rooms", "physical")
+
 
 def assert_temporal_batch_entitled(
     batch: EventObservationBatch | None,
@@ -31,6 +35,7 @@ def assert_temporal_batch_entitled(
     events: Sequence[EngineEvent],
     submitted_actions: Sequence[Action],
     game_map: Map,
+    vent_witness_rule: Literal["both_rooms", "physical"],
 ) -> None:
     """Assert exact channels without using the producer or its visibility helper.
 
@@ -38,7 +43,15 @@ def assert_temporal_batch_entitled(
     Both missing and extra evidence fail, including altered endpoints/order and
     the observer's event-local position. Player state after folding must match
     the actual engine result so an omitted transition cannot hide a bad frame.
+
+    ``vent_witness_rule`` is the rule the events were recorded under, with no
+    default. Under ``both_rooms`` a watching observer in the room a vent leaves
+    or surfaces in is entitled to it; under ``physical`` only one in the room
+    surfaced into, which for an entry or an exit in place is the one room. An
+    unknown rule raises.
     """
+    if vent_witness_rule not in VENT_WITNESS_RULES:
+        raise ValueError(f"unknown vent witness rule: {vent_witness_rule!r}")
     positions = {pid: player.room for pid, player in source_state.players.items()}
     alive = {pid for pid, player in source_state.players.items() if player.alive}
     vented = {pid for pid, player in source_state.players.items() if player.in_vent}
@@ -128,7 +141,11 @@ def assert_temporal_batch_entitled(
                     "was_in_vent": agent_id in vented,
                     "in_vent": isinstance(event, VentEnteredEvent),
                 }
-            elif outside and room in {event.source_room, event.destination_room}:
+            elif outside and room in (
+                {event.destination_room}
+                if vent_witness_rule == "physical"
+                else {event.source_room, event.destination_room}
+            ):
                 payload = {
                     "kind": "witnessed_action",
                     "player": {"id": event.actor, "room": room, "action": "vent"},

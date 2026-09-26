@@ -46,6 +46,7 @@ from engine.events import (
     VentEnteredEvent,
     VentExitedEvent,
 )
+from engine.tick import VentWitnessRule
 from engine.visibility import compute_visibility_for_player
 from engine.world import Map, WorldState, load_canonical_map
 from eval.replay_walk import (
@@ -67,8 +68,14 @@ from orchestrator.game import (
     HeadlessGame,
     build_default_meeting_runner,
 )
+from orchestrator.experiment_config import engine_arguments
 from orchestrator.observation_delivery import event_observation_batches
-from orchestrator.replay import read_all_entries, recorded_temporal_observation_version
+from orchestrator.replay import (
+    ReplayLogEntry,
+    read_all_entries,
+    recorded_experiment_config,
+    recorded_temporal_observation_version,
+)
 from orchestrator.scheduler import TickScheduler
 
 _FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
@@ -613,6 +620,9 @@ class PacketContext:
     entitlement. ``engine_events`` are the events the packet was BUILT with
     (the live loop hands agents the prior tick's events alongside the current
     state), and ``world_state`` is the state it was built from.
+    ``vent_witness_rule`` is the rule those events were produced under, which
+    the temporal entitlement oracle needs to re-derive who saw a vent; the
+    factory reconstruction sets it from the recording's own config.
     """
 
     engine_events: Sequence[EngineEvent]
@@ -623,6 +633,7 @@ class PacketContext:
     temporal_observation_version: Literal[1, 2] | None = None
     source_state: WorldState | None = None
     submitted_actions: Sequence[Action] | None = None
+    vent_witness_rule: VentWitnessRule = "both_rooms"
 
 
 def assert_visible_entities_match_engine_truth(
@@ -834,6 +845,7 @@ def assert_event_observations_are_entitled(
             events=context.engine_events,
             submitted_actions=context.submitted_actions,
             game_map=context.game_map,
+            vent_witness_rule=context.vent_witness_rule,
         )
         return
     assert batch is None or batch.temporal_observation_version is None, (
@@ -947,13 +959,32 @@ def _raise_factory_walk_violation(violation: WalkViolation) -> NoReturn:
 # moments earlier in the same process, and it performed neither hash
 # verification nor doubled-record detection before 19.25; enabling either
 # would change what it accepts.
+#
+# Its declared layers: the scan rebuilds packets and event batches from the
+# recorded actions and the engine events alone, and never re-decides a policy,
+# renders a meeting prompt or reads a ballot. So no tactical, orchestrator or
+# meeting setting changes what it checks, and it reads recordings carrying any
+# of them. The engine's settings reach it through ``engine_arguments`` and
+# :func:`_recorded_vent_witness_rule`.
 _FACTORY_WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
     supports_experiments=True,
     supports_temporal_observations=True,
     profile="leak-scan-factory",
     on_violation=_raise_factory_walk_violation,
     missing_meeting_row="violation",
+    threaded_layers=frozenset({"orchestrator", "tactical", "meeting"}),
 )
+
+
+def _recorded_vent_witness_rule(entries: Sequence[ReplayLogEntry]) -> VentWitnessRule:
+    """The vent witness rule one recording was made under.
+
+    The one reading both entitlement oracles are handed. It goes through the
+    engine-arguments helper every re-simulation takes, so a recording without an
+    experiment config, or without the key, reads as ``both_rooms``.
+    """
+
+    return engine_arguments(recorded_experiment_config(entries))["vent_witness_rule"]
 
 
 def _reconstruct_factory_records(
@@ -985,12 +1016,12 @@ def _reconstruct_factory_records(
 
     records: list[PacketRecord] = []
     audit_path = audit_dir / f"_leak_audit_{replay_path.stem}.jsonl"
+    entries = read_all_entries(replay_path)
+    vent_witness_rule = _recorded_vent_witness_rule(entries)
     service = ObservationService(
         game_map=game_map,
         audit_log_path=audit_path,
-        temporal_observation_version=recorded_temporal_observation_version(
-            read_all_entries(replay_path)
-        ),
+        temporal_observation_version=recorded_temporal_observation_version(entries),
     )
     try:
         for walk_event in walk_replay(
@@ -1008,6 +1039,7 @@ def _reconstruct_factory_records(
                     state=walk_event.state,
                     events=walk_event.events,
                     game_map=game_map,
+                    vent_witness_rule=vent_witness_rule,
                 )
                 context = PacketContext(
                     walk_event.events,
@@ -1017,6 +1049,7 @@ def _reconstruct_factory_records(
                     temporal_observation_version=service.temporal_observation_version,
                     source_state=walk_event.pre_state,
                     submitted_actions=walk_event.actions,
+                    vent_witness_rule=vent_witness_rule,
                 )
                 batches = event_observation_batches(
                     service=service,

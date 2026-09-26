@@ -71,7 +71,9 @@ resolves actions, `observation/temporal.py` folds the actual pre-state and order
 events to project each recipient's entitled observations. Its inputs include the
 actual submitted actions, so a resolved task attempt can be distinguished from
 a discarded action or passive task continuation. Existing engine witness lists
-continue serving version 1; version 2 derives entitlement independently.
+continue serving version 1. Version 2 derives movement, kill and task
+entitlement independently, and delivers a vent to exactly the engine event's
+own witnesses, so it follows the recorded vent witness rule.
 
 `EventObservationBatch.ordered_events` is authoritative in version 2. Each row
 contains `observation_order`, `observer_before_event` (room and vent occupancy),
