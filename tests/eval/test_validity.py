@@ -1383,7 +1383,7 @@ def test_the_seed_and_sha_declarations_read_each_inventory_part() -> None:
         manifest_seeds=frozenset({20}),
         manifest_shas=((20, _FAKE_SHA),),
     )
-    assert list(frozenset({1, 8, 20}) - short.manifest_seeds) == [8, 1]
+    assert list(frozenset({1, 8, 20}) - frozenset({20})) == [8, 1]
     assert list(short.replay_seeds - frozenset({1, 8, 20})) == [16, 9]
     assert seed_set_violations(short, frozenset({1, 8, 20})) == [
         "the replay files do not hold exactly the declared seeds: missing [1, 8], "
