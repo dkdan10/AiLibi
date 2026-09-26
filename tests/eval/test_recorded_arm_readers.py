@@ -1078,9 +1078,14 @@ def _raised(run: Callable[[], object]) -> str:
 
 
 def _new_copy(recordings: Mapping[str, Path]) -> dict[str, str]:
+    import importlib
+
     import publish_process_scorecard
 
-    from audits.workflows.extract_gameplay_facts import refuse_experiment_settings
+    # Imported dynamically, as the extractor's own tests do: audits/workflows/ is
+    # not a package, and a static import makes mypy see the file twice.
+    facts: Any = importlib.import_module("audits.workflows.extract_gameplay_facts")
+    refuse_experiment_settings = facts.refuse_experiment_settings
 
     parser_help = publish_process_scorecard.__doc__ or ""
     texts: dict[str, str] = {"scorecard module docstring": parser_help}
