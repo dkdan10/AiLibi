@@ -879,3 +879,12 @@ The frontend build is unchanged and runs inside `check.sh`.
   test pins the message with the rule's repr, as the two oracle tests now do.
 - `grep -n 'committed as .c99a8dd9.' tasks/work/vent-witness-physical.md` finds only the Finding 2
   paragraph above and this line.
+
+**The full gate.** `bash scripts/check.sh; echo "check.sh exit $?"` at `ce0b0627` printed
+`check.sh exit 0`: ruff clean, 532 files formatted, 4 import contracts kept, task docs and prompts
+valid, strict mypy clean on 503 files, 8900 passed, 20 skipped and 3 xfailed, then the frontend
+legs (559 vitest tests in 20 files, and the build). The first run at the same commit exited 127 at
+the frontend lint (`eslint: command not found`), after every Python leg had passed, because this
+worktree had no `frontend/node_modules`. `npm --prefix frontend ci` installed them from the
+lockfile and changed no tracked file; the second run is the one quoted. The commit after
+`ce0b0627` adds only this paragraph to the card.
