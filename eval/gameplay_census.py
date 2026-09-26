@@ -194,6 +194,12 @@ _SIGHTING_KINDS: Final[frozenset[str]] = frozenset(
     {"saw_player", "saw_vent", "saw_kill", "saw_move"}
 )
 
+#: The role of an answered turn's speaker, as a rebuttal-beneficiaries row names
+#: it. A speaker without a recorded role raises.
+_ROLE_WITH_ARTICLE: Final[Mapping[Role, str]] = MappingProxyType(
+    {"CREWMATE": "a crewmate", "IMPOSTOR": "an impostor"}
+)
+
 #: The trigger-tick event kinds a regroup drops from the resume perception.
 _REGROUP_DROPPED_KINDS: Final[tuple[str, ...]] = (
     "Moved",
@@ -1482,8 +1488,6 @@ def _teammates(game: GameFacts, player: PlayerId) -> frozenset[PlayerId]:
 
 @dataclass(frozen=True)
 class _Trip:
-    actor: PlayerId
-    entry_tick: int
     close_tick: int
     close: Literal["exit", "regroup", "ejected", "game_end"]
     ticks_inside: int
@@ -1505,9 +1509,7 @@ def _trips(game: GameFacts) -> tuple[_Trip, ...]:
     open_entry: dict[PlayerId, int] = {}
 
     def inside(entry_tick: int, close_tick: int) -> int:
-        anchor = max(
-            [entry_tick, *(t for t in meeting_ticks if entry_tick <= t < close_tick)]
-        )
+        anchor = max([entry_tick, *(t for t in meeting_ticks if t < close_tick)])
         return close_tick - anchor
 
     events: list[tuple[int, int, VentFact | MeetingFact]] = [
@@ -1528,16 +1530,7 @@ def _trips(game: GameFacts) -> tuple[_Trip, ...]:
                 raise ValueError(
                     f"seed {game.seed}: {item.actor} left a vent never entered at {tick}"
                 )
-            trips.append(
-                _Trip(
-                    item.actor,
-                    entry_tick,
-                    tick,
-                    "exit",
-                    inside(entry_tick, tick),
-                    item,
-                )
-            )
+            trips.append(_Trip(tick, "exit", inside(entry_tick, tick), item))
             continue
         meeting = closers[tick]
         for actor in sorted(open_entry):
@@ -1549,14 +1542,10 @@ def _trips(game: GameFacts) -> tuple[_Trip, ...]:
             if reason is None:
                 continue
             entry_tick = open_entry.pop(actor)
-            trips.append(
-                _Trip(actor, entry_tick, tick, reason, inside(entry_tick, tick), None)
-            )
+            trips.append(_Trip(tick, reason, inside(entry_tick, tick), None))
     end = game.terminal_tick
-    for actor, entry_tick in sorted(open_entry.items()):
-        trips.append(
-            _Trip(actor, entry_tick, end, "game_end", inside(entry_tick, end), None)
-        )
+    for entry_tick in open_entry.values():
+        trips.append(_Trip(end, "game_end", inside(entry_tick, end), None))
     return tuple(trips)
 
 
@@ -1686,7 +1675,7 @@ def _fold_trips(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> Non
             "trips_closed_by_regroup",
             trip.close == "regroup",
             seed=game.seed,
-            where=f"tick {trip.entry_tick}",
+            where=f"tick {trip.close_tick}",
         )
         if trip.ticks_inside > 1:
             acc.count(
@@ -2086,8 +2075,7 @@ def _fold_rebuttals(game: GameFacts, acc: _Accumulator) -> None:
     for meeting in game.meetings:
         where = f"meeting {meeting.meeting_id}"
         seed = game.seed
-        turns = sorted(meeting.turns, key=lambda item: item.index)
-        by_id = {turn.turn_id: turn for turn in turns}
+        by_id = {turn.turn_id: turn for turn in meeting.turns}
         repeats = _repeat_turns(meeting)
         if repeats:
             first = repeats[0]
@@ -2098,7 +2086,9 @@ def _fold_rebuttals(game: GameFacts, acc: _Accumulator) -> None:
                 where=where,
             )
         for turn in repeats:
-            earlier = {other.speaker for other in turns if other.index < turn.index}
+            earlier = {
+                other.speaker for other in meeting.turns if other.index < turn.index
+            }
             has_alibi = any(alibi.subject == turn.speaker for alibi in turn.alibis)
             has_whereabouts = any(
                 observation.kind == "whereabouts" for observation in turn.observations
@@ -2129,7 +2119,7 @@ def _fold_rebuttals(game: GameFacts, acc: _Accumulator) -> None:
             accuser = (
                 "no recorded turn"
                 if answered is None
-                else f"a {game.roles[answered.speaker].lower()}"
+                else _ROLE_WITH_ARTICLE[game.roles[answered.speaker]]
             )
             seat = (
                 "the opener"

@@ -88,6 +88,7 @@ def _planted_inputs(
     era: EraKey = PLANTED_ERA,
     label: str = "samples/9p2i",
     rows_without_dispositions: int = 1,
+    discarded: tuple[str, ...] = ("move",),
 ) -> CensusInputs:
     game = GameFacts(
         seed=7,
@@ -98,7 +99,7 @@ def _planted_inputs(
         bodies=(),
         frames=MappingProxyType({}),
         meetings=meetings,
-        discarded=(census.DiscardedAction(5, "move"),),
+        discarded=tuple(census.DiscardedAction(5, kind) for kind in discarded),
         rows_without_dispositions=rows_without_dispositions,
         winner="IMPOSTORS",
         terminal_tick=5,
@@ -123,11 +124,21 @@ def test_one_edited_cell_turns_check_red(
     """Publish, verify green, move ONE integer, and watch the gate go red."""
 
     planted = _planted()
-    monkeypatch.setattr(command, "compute_gameplay_census", lambda _root, load: planted)
+    received: list[Path] = []
+
+    def computed(tree: Path, load: Any) -> GameplayCensus:
+        received.append(tree)
+        return planted
+
+    monkeypatch.setattr(command, "compute_gameplay_census", computed)
     root = tmp_path / "tree"
     (root / "docs").mkdir(parents=True)
     command.publish(root)
     assert command.check_report(root) == 0
+    assert capsys.readouterr().out == (
+        f"--check: {command.MARKDOWN_PATH} and {command.JSON_PATH} are consistent "
+        "with the committed recordings.\n"
+    )
 
     published = root / command.JSON_PATH
     original = published.read_text(encoding="utf-8")
@@ -141,12 +152,26 @@ def test_one_edited_cell_turns_check_red(
     message = capsys.readouterr().out
     assert str(command.JSON_PATH) in message
     assert command.REGENERATE_COMMAND in message
+    assert message == _stale_message(command.JSON_PATH)
 
     published.write_text(original, encoding="utf-8")
     page = root / command.MARKDOWN_PATH
     page.write_text(page.read_text(encoding="utf-8") + "edited\n", encoding="utf-8")
     assert command.check_report(root) == 1
-    assert str(command.MARKDOWN_PATH) in capsys.readouterr().out
+    message = capsys.readouterr().out
+    assert str(command.MARKDOWN_PATH) in message
+    assert message == _stale_message(command.MARKDOWN_PATH)
+    assert received == [root, root, root, root]
+
+
+def _stale_message(stale: Path) -> str:
+    """The whole of ``--check``'s report when ``stale`` alone has drifted."""
+
+    return (
+        f"--check: {stale} is STALE: it does not match a recomputation from the "
+        f"committed recordings. Re-run `{command.REGENERATE_COMMAND}` and commit "
+        "the result.\n"
+    )
 
 
 @pytest.mark.parametrize("missing", (command.JSON_PATH, command.MARKDOWN_PATH))
@@ -189,8 +214,14 @@ def test_the_writer_refuses_a_recording_destination_before_computing(
 
     monkeypatch.setattr(command, "compute_gameplay_census", forbidden)
     monkeypatch.setattr(command, destination, Path(relative))
-    with pytest.raises(ValueError, match="overlaps"):
+    with pytest.raises(ValueError, match="overlaps") as refused:
         command.publish(ROOT)
+    # The refusal names the destination under the tree it was given and the
+    # recording root that contains it.
+    assert str(refused.value) == (
+        "Report destination overlaps a recording output: "
+        f"{ROOT / relative} and {ROOT / RECORDINGS_ROOT}"
+    )
     if before is None:
         assert not source.exists(), "the refusal must leave nothing behind"
     else:
@@ -333,16 +364,57 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     planted = _planted()
-    monkeypatch.setattr(command, "compute_gameplay_census", lambda _root, load: planted)
+    received: list[Path] = []
+
+    def computed(tree: Path, load: Any) -> GameplayCensus:
+        received.append(tree)
+        return planted
+
+    monkeypatch.setattr(command, "compute_gameplay_census", computed)
     root = tmp_path / "tree"
     (root / "docs").mkdir(parents=True)
     monkeypatch.setattr(command, "_REPO_ROOT", root)
     assert command.main([]) == 0
-    assert "1 games" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert "1 games" in printed
+    assert printed == (
+        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}: 1 games, "
+        f"{planted.pooled.meetings} meetings; role-correctness is reported and "
+        "gates nothing.\n"
+    )
     assert (root / command.JSON_PATH).read_text(
         encoding="utf-8"
     ) == census.serialize_json(planted)
     assert command.main(["--check"]) == 0
+    # --check checks: a drifted file stays as it is and the exit is 1.
+    drifted = (root / command.JSON_PATH).read_text(encoding="utf-8") + "\n"
+    (root / command.JSON_PATH).write_text(drifted, encoding="utf-8")
+    assert command.main(["--check"]) == 1
+    assert (root / command.JSON_PATH).read_text(encoding="utf-8") == drifted
+    assert received == [root, root, root]
+
+
+def test_help_prints_the_commands_own_description(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exited:
+        command.main(["--help"])
+    assert exited.value.code == 0
+    assert "Publish the gameplay census over the committed recordings." in (
+        capsys.readouterr().out
+    )
+
+
+def test_the_protected_root_is_the_recordings_root_the_scorecard_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the recording root moves, and the protected list follows it."""
+
+    (tmp_path / "elsewhere" / "set").mkdir(parents=True)
+    recording = tmp_path / "elsewhere" / "set" / "replay-seed-0.jsonl"
+    recording.write_text("", encoding="utf-8")
+    monkeypatch.setattr(command, "RECORDINGS_ROOT", "elsewhere")
+    assert command.protected_inputs(tmp_path) == [tmp_path / "elsewhere", recording]
 
 
 # --------------------------------------------------------------------------- #
@@ -552,3 +624,78 @@ def test_the_era_lines_name_every_recorded_part_or_say_none() -> None:
         )
     )
     assert "substrate flags on: none; off: absence_prior;" in all_off
+
+
+def test_the_era_lines_list_settings_and_flags_in_name_order() -> None:
+    """Planted: an era whose settings and flags arrive out of name order."""
+
+    unsorted_flags = EraKey(
+        settings=(),
+        temporal_observation_version=None,
+        substrate_flags=(
+            ("zeta_flag", True),
+            ("alpha_flag", True),
+            ("omega_flag", False),
+            ("beta_flag", False),
+        ),
+        prompt_stamps=None,
+    )
+    planted = census_from_inputs([_planted_inputs(era=unsorted_flags)])
+    pooled_era = planted.pooled.era.model_copy(
+        update={
+            "settings": {
+                "vent_witness_rule": "physical",
+                "meeting_reset": "hub_with_grace",
+            }
+        }
+    )
+    reordered = planted.model_copy(
+        update={"pooled": planted.pooled.model_copy(update={"era": pooled_era})}
+    )
+    text = "\n".join(command._era_lines(reordered))
+    assert (
+        "recorded experiment settings: `meeting_reset = hub_with_grace`, "
+        "`vent_witness_rule = physical`;"
+    ) in text
+    assert "substrate flags on: alpha_flag, zeta_flag; off: beta_flag, omega_flag;" in (
+        text
+    )
+
+
+def test_a_row_only_a_four_player_set_holds_is_published_for_every_group() -> None:
+    """Planted: only the four-player set throws a report away or lacks dispositions."""
+
+    page = command.render_markdown(
+        census_from_inputs(
+            [
+                _planted_inputs(rows_without_dispositions=0),
+                _planted_inputs(
+                    label="samples/4p1i",
+                    discarded=("move", "report"),
+                    rows_without_dispositions=2,
+                ),
+            ]
+        )
+    )
+    thrown = census.TABLES["actions_thrown_away_on_trigger_ticks"].title
+    assert _table_block(page, thrown) == [
+        "| move | 2 | 1 | 1 | 1 |",
+        "| report | 1 | 0 | 0 | 1 |",
+        "| not evaluable | 2 | 0 | 0 | 2 |",
+    ]
+
+
+def test_a_tables_rows_are_listed_numeric_first_then_alphabetically() -> None:
+    """Planted: one table holding numeric and text rows, thrown away out of order."""
+
+    page = command.render_markdown(
+        census_from_inputs([_planted_inputs(discarded=("b", "10", "a", "2"))])
+    )
+    thrown = census.TABLES["actions_thrown_away_on_trigger_ticks"].title
+    assert [line.split(" | ")[0] for line in _table_block(page, thrown)] == [
+        "| 2",
+        "| 10",
+        "| a",
+        "| b",
+        "| not evaluable",
+    ]
