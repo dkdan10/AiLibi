@@ -987,6 +987,55 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
     assert event_to_dict(exit_events[0])["details"]["destination_witnesses"] == ("p-4",)
 
 
+def test_physical_vent_exit_is_witnessed_only_from_the_room_surfaced_into() -> None:
+    # The physical twin of the pin above: the same scene, the same two ticks.
+    # p-2 stays in ADMIN, the room left, while the impostor is unseen inside
+    # ADMIN_VENT; only p-4, in REACTOR where it surfaces, witnesses the exit.
+    game_map = load_canonical_map()
+    base_state = _state()
+    state = replace(
+        base_state,
+        players={
+            **dict(base_state.players),
+            "p-3": replace(base_state.players["p-3"], room="ADMIN"),
+            "p-4": replace(base_state.players["p-4"], room="REACTOR"),
+        },
+    )
+
+    in_vent_state, enter_events = advance_tick(
+        state,
+        [
+            _action(
+                {"type": "vent", "actor": "p-3", "payload": {"vent_id": "ADMIN_VENT"}}
+            )
+        ],
+        game_map=game_map,
+        vent_witness_rule="physical",
+    )
+    exited_state, exit_events = advance_tick(
+        in_vent_state,
+        [
+            _action(
+                {"type": "vent", "actor": "p-3", "payload": {"vent_id": "REACTOR_VENT"}}
+            )
+        ],
+        game_map=game_map,
+        vent_witness_rule="physical",
+    )
+
+    assert enter_events[0].type == "VentEntered"
+    assert event_to_dict(enter_events[0])["details"]["witnesses"] == ("p-2",)
+    assert exited_state.players["p-3"].room == "REACTOR"
+    assert not exited_state.players["p-3"].in_vent
+    assert exit_events[0].type == "VentExited"
+    details = event_to_dict(exit_events[0])["details"]
+    assert details["source_room"] == "ADMIN"
+    assert details["destination_room"] == "REACTOR"
+    assert details["witnesses"] == ("p-4",)
+    assert details["source_witnesses"] == ()
+    assert details["destination_witnesses"] == ("p-4",)
+
+
 def test_vent_rejects_unconnected_destination_vent() -> None:
     game_map = load_canonical_map()
     state = replace(

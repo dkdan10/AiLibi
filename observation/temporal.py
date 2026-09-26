@@ -1,4 +1,10 @@
-"""V2 projection from event-local state; historical witness metadata stays v1."""
+"""V2 projection from event-local state.
+
+Movement, kill and task entitlement is derived from event-local state, not
+from the engine's witness metadata. A vent is the exception: it reaches
+exactly the engine event's own witnesses, so the recorded vent witness rule
+decides who sees it.
+"""
 
 from __future__ import annotations
 
@@ -50,7 +56,9 @@ def project_temporal_events(
     """Keep source order after entitlement filtering, without global ordinals.
 
     Walking is atomic: watching a visible actor take a public connecting door
-    entitles its endpoint. Vent observations expose only the witnessed endpoint.
+    entitles its endpoint. Vent observations expose only the witnessed endpoint:
+    a watching observer the vent event lists among its source or destination
+    witnesses sees it in the observer's own event-local room.
     Own transitions locate the observer before later actions in the same tick.
     """
 
@@ -129,9 +137,9 @@ def project_temporal_events(
                     was_in_vent=actor.in_vent,
                     in_vent=isinstance(event, VentEnteredEvent),
                 )
-            elif can_watch and observer.room in (
-                event.source_room,
-                event.destination_room,
+            elif can_watch and (
+                agent_id in event.source_witnesses
+                or agent_id in event.destination_witnesses
             ):
                 perceived = WitnessedActionEvent(
                     player=PlayerView(id=event.actor, room=observer.room, action="vent")
