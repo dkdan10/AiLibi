@@ -13,6 +13,7 @@ import dataclasses
 import importlib.util
 import json
 import re
+import shutil
 import sys
 import typing
 from collections import Counter
@@ -70,6 +71,7 @@ from eval.gameplay_census import (
     KillFact,
     MeetingFact,
     ObservationFact,
+    ObservationKind,
     OwnKillRowFact,
     SettingPredicate,
     SettingValue,
@@ -97,6 +99,7 @@ from eval.replay_walk import (
 from eval.validity import roles_by_seed
 from meetings.schemas import (
     AccusationClaim,
+    BallotGroundingLabel,
     AlibiClaim,
     AlibiSegment,
     MeetingTranscript,
@@ -232,7 +235,9 @@ def turn(
     )
 
 
-def seen(kind: str, tick: int, subject: str | None = None) -> ObservationFact:
+def seen(
+    kind: ObservationKind, tick: int, subject: str | None = None
+) -> ObservationFact:
     return ObservationFact(kind=kind, from_tick=tick, to_tick=tick, subject=subject)
 
 
@@ -242,7 +247,7 @@ def ballot(
     *,
     authored: str | None = None,
     confidence: float = 0.9,
-    label: str | None = None,
+    label: BallotGroundingLabel | None = None,
     cited: str | None = None,
 ) -> BallotFact:
     return BallotFact(
@@ -504,6 +509,83 @@ def test_every_census_record_type_is_frozen() -> None:
     assert all(model.model_config.get("extra") == "forbid" for model in models)
 
 
+def mutable_values(value: object, where: str = "value") -> list[str]:
+    """Every place under ``value`` holding a container a reader could change.
+
+    Walks dataclass fields, mappings, tuples and frozensets. A mapping must be a
+    read-only proxy; a list, dict, set or any other container is reported.
+    """
+
+    if value is None or isinstance(value, (str, int, float, bool, re.Pattern)):
+        return []
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        params = getattr(type(value), "__dataclass_params__")  # noqa: B009
+        problems = [] if params.frozen else [f"{where} is a thawed record"]
+        for item in dataclasses.fields(value):
+            problems += mutable_values(
+                getattr(value, item.name), f"{where}.{item.name}"
+            )
+        return problems
+    if isinstance(value, MappingProxyType):
+        problems = []
+        for key, item in value.items():
+            problems += mutable_values(key, f"{where} key")
+            problems += mutable_values(item, f"{where}[{key!r}]")
+        return problems
+    if isinstance(value, (tuple, frozenset)):
+        problems = []
+        for index, item in enumerate(value):
+            problems += mutable_values(item, f"{where}[{index}]")
+        return problems
+    return [f"{where} is a {type(value).__name__}"]
+
+
+def test_every_value_the_census_holds_is_read_only() -> None:
+    """Explicit objects own state: every table, carrier and tally is read-only.
+
+    Walks the module's tables, a set's carrier walked from committed bytes, and
+    its fold. Planted: a carrier holding a plain dict, list or set is reported.
+    """
+
+    tables = {
+        "_ROLE_WITH_ARTICLE": census._ROLE_WITH_ARTICLE,
+        "_SIGHTING_KINDS": census._SIGHTING_KINDS,
+        "_REGROUP_DROPPED_KINDS": census._REGROUP_DROPPED_KINDS,
+        "PREDICATES": PREDICATES,
+        "FIELD_CLASSIFICATION": FIELD_CLASSIFICATION,
+        "SETTING_DEFAULTS": SETTING_DEFAULTS,
+        "CELLS": CELLS,
+        "TABLES": TABLES,
+        "HEADINGS": census.HEADINGS,
+        "TERMS": census.TERMS,
+        "SETTING_MEANINGS": census.SETTING_MEANINGS,
+        "CENSUS_THREADED_LAYERS": CENSUS_THREADED_LAYERS,
+    }
+    for name, value in tables.items():
+        assert mutable_values(value, name) == [], name
+    carrier = census_inputs(SAMPLES_4P1I)
+    assert mutable_values(carrier, "carrier") == []
+    tally = fold_set(carrier)
+    assert mutable_values(tally, "tally") == []
+    assert mutable_values(tally.era.values, "era values") == []
+    pooled = pool([tally, tally], label="twice")
+    assert mutable_values(pooled, "pooled") == []
+    planted = inputs(game(kills=(kill(5, witnesses=("p-2",)),)))
+    assert mutable_values(planted, "planted") == []
+    thawed = replace(planted, neighbours=dict(planted.neighbours))
+    assert mutable_values(thawed, "thawed") == ["thawed.neighbours is a dict"]
+    kills: Any = [kill(5)]
+    listed = replace(planted, games=(replace(planted.games[0], kills=kills),))
+    assert mutable_values(listed, "listed") == ["listed.games[0].kills is a list"]
+    loose = replace(
+        planted,
+        games=(replace(planted.games[0], meetings=(meeting(living={"p-2"}),)),),
+    )
+    assert mutable_values(loose, "loose") == [
+        "loose.games[0].meetings[0].living is a set"
+    ]
+
+
 def test_a_published_model_refuses_a_field_it_does_not_declare() -> None:
     fields: dict[str, Any] = {
         "settings": {},
@@ -729,13 +811,24 @@ def test_an_unknown_recorded_setting_raises() -> None:
 
 
 def test_an_era_holding_a_default_value_is_refused() -> None:
-    with pytest.raises(GameplayCensusFieldError, match="canonical"):
-        EraKey(
-            settings=(("meeting_reset", "preserve"),),
-            temporal_observation_version=None,
-            substrate_flags=None,
-            prompt_stamps=None,
-        )
+    """Planted: settings that sort before, and after, their canonical form.
+
+    A default value listed first sorts before the canonical settings, and two
+    values listed out of name order sort after them; both are refused.
+    """
+
+    for settings in (
+        (("meeting_reset", "preserve"),),
+        (("bounded_rebuttal_version", None), ("meeting_reset", "hub_with_grace")),
+        (("vent_witness_rule", "physical"), ("meeting_reset", "hub_with_grace")),
+    ):
+        with pytest.raises(GameplayCensusFieldError, match="canonical"):
+            EraKey(
+                settings=settings,
+                temporal_observation_version=None,
+                substrate_flags=None,
+                prompt_stamps=None,
+            )
 
 
 def test_a_missing_setting_reads_its_historical_default() -> None:
@@ -964,6 +1057,19 @@ def test_the_loader_reads_the_game_ending_trigger_tick_of_samples_4p1i_seed_3() 
         item.tick == game_three.terminal_tick and item.action_type == "move"
         for item in game_three.discarded
     )
+
+
+def test_every_thrown_away_action_is_carried_on_its_trigger_tick() -> None:
+    """Each discarded action sits on a meeting's tick or the game-ending tick."""
+
+    games = census_inputs(SAMPLES_4P1I).games
+    on_meeting_ticks = 0
+    for item in games:
+        trigger_ticks = {meeting.tick for meeting in item.meetings}
+        for discarded in item.discarded:
+            assert discarded.tick in trigger_ticks | {item.terminal_tick}, item.seed
+            on_meeting_ticks += discarded.tick in trigger_ticks
+    assert on_meeting_ticks > 0
 
 
 # --------------------------------------------------------------------------- #
@@ -1373,11 +1479,15 @@ def test_a_set_mixing_two_eras_raises() -> None:
 
 def test_eras_differ_by_temporal_version_substrate_or_prompt_stamps() -> None:
     base = era()
-    for changed in (
-        replace(base, temporal_observation_version=2),
-        replace(base, substrate_flags=(("reporter_reasoning", True),)),
+    for changed, component in (
+        (replace(base, temporal_observation_version=2), "temporal_observation_version"),
+        (
+            replace(base, substrate_flags=(("reporter_reasoning", True),)),
+            "substrate_flags",
+        ),
+        (era(meeting_reset="hub_with_grace"), "settings"),
     ):
-        with pytest.raises(GameplayCensusEraError):
+        with pytest.raises(GameplayCensusEraError, match=f"differ in {component};"):
             resolve_era((base, changed))
     stamped = replace(base, prompt_stamps=("vote_ballot.qwen3_6_27b.v8",))
     restamped = replace(base, prompt_stamps=("vote_ballot.qwen3_6_27b.v9",))
@@ -1974,6 +2084,13 @@ def test_a_published_cell_cannot_carry_a_nonzero_count_by_construction() -> None
         CensusCell(**{**fields, "numerator": 3, "rate": 1.5})
     with pytest.raises(ValueError, match="non-negative"):
         CensusCell(**{**fields, "not_evaluable": -1})
+    # One hit in three million rounds to a rate of 0.0; the hit is still refused.
+    tiny = {**fields, "numerator": 1, "denominator": 3_000_000}
+    tiny["rate"] = round(1 / 3_000_000, 6)
+    assert tiny["rate"] == 0.0
+    CensusCell(**tiny)
+    with pytest.raises(ValueError, match="by construction must count zero"):
+        CensusCell(**{**tiny, "by_construction": "always"})
 
 
 def test_a_published_cell_or_table_out_of_its_scope_counts_nothing() -> None:
@@ -2307,6 +2424,54 @@ def test_a_row_joined_to_a_kill_its_holder_saw_is_no_breach() -> None:
         assert counts("own_kill_rows_cited_by_holder", wrong) == (0, 1, 0)
 
 
+def test_a_row_joins_only_its_own_kill_on_each_side_of_every_join_field() -> None:
+    """Planted: ``p-3`` watched ``p-1`` kill at tick 12, and holds a row about it.
+
+    The row that cites ``p-3:13:0`` and names ``p-1`` joins that kill. Each
+    variant moves one join field to a value on either side of the right one: the
+    citation's agent, the citation's tick, or the player the row names. Each
+    joins no kill, so it breaches with the row setting on and counts with it off.
+    """
+
+    def held(
+        subject: str, citation: str, settings: Mapping[str, SettingValue]
+    ) -> GameFacts:
+        return game(
+            settings,
+            kills=(kill(12, killer="p-1", witnesses=("p-3",)),),
+            meetings=(
+                meeting(
+                    own_kill_rows=(OwnKillRowFact("p-3", subject, ROOM, 13, citation),)
+                ),
+            ),
+        )
+
+    row_on = {"ballot_kill_row_version": 1}
+    assert counts("own_kill_rows_breaching", held("p-1", "p-3:13:0", row_on)) == (
+        0,
+        1,
+        0,
+    )
+    for subject, citation in (
+        ("p-1", "p-2:13:0"),
+        ("p-1", "p-4:13:0"),
+        ("p-1", "p-3:12:0"),
+        ("p-1", "p-3:14:0"),
+        ("p-1", "p-3:40:0"),
+        ("p-0", "p-3:13:0"),
+        ("p-2", "p-3:13:0"),
+    ):
+        with pytest.raises(
+            GameplayCensusConformanceError, match="meeting meeting-0, holder p-3 "
+        ):
+            fold_set(inputs(held(subject, citation, row_on)))
+        assert counts("own_kill_rows_breaching", held(subject, citation, {})) == (
+            1,
+            1,
+            0,
+        ), (subject, citation)
+
+
 def test_the_kill_tick_handle_pattern_is_the_held_out_generators() -> None:
     from experiments.held_out_prefixes import LEGACY_BODY_HANDLE_PATTERN
 
@@ -2518,6 +2683,48 @@ def test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds() -> None:
     assert published.constants["grace_window_ticks"] == cooldown
 
 
+@pytest.mark.parametrize(
+    "cooldown", (MAP.kill_cooldown_ticks, MAP.kill_cooldown_ticks + 2)
+)
+def test_every_tick_of_the_grace_window_lies_inside_it(cooldown: int) -> None:
+    """Planted: a kill on each tick after a regroup at tick 10, on two cooldowns.
+
+    Every tick from the one after the meeting through the carrier's kill
+    cooldown is inside the window: the guard raises with the regroup on and the
+    kill counts with it off. The tick after the window is an ordinary kill.
+    """
+
+    def walked(settings: Mapping[str, SettingValue], kill_tick: int) -> CensusInputs:
+        return replace(
+            inputs(
+                game(
+                    settings,
+                    kills=(kill(kill_tick),),
+                    meetings=(meeting(tick=10, regrouped=True),),
+                )
+            ),
+            kill_cooldown_ticks=cooldown,
+        )
+
+    def grace(carrier: CensusInputs) -> tuple[int, int, int]:
+        folded = section_from_tally(fold_set(carrier))
+        count = folded.cells["kills_in_grace_window_after_regroup"]
+        return (count.numerator, count.denominator, count.not_evaluable)
+
+    regroup = {"meeting_reset": "hub_with_grace"}
+    inside = range(1, cooldown + 1)
+    assert {1, cooldown - 1, cooldown} <= set(inside)
+    for offset in inside:
+        tick = 10 + offset
+        with pytest.raises(
+            GameplayCensusConformanceError, match=f"tick {tick} after meeting"
+        ):
+            fold_set(walked(regroup, tick))
+        assert grace(walked({}, tick)) == (1, 1, 0), offset
+    assert grace(walked(regroup, 10 + cooldown + 1)) == (0, 1, 0)
+    assert grace(walked({}, 10 + cooldown + 1)) == (0, 1, 0)
+
+
 def test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2638,6 +2845,11 @@ def test_the_constants_bound_from_a_source_follow_it(
     assert again.CENSUS_NINE_PLAYER_SETS == sets[:1]
     assert again.SETTING_DEFAULTS["vent_entry_policy"] == "own_fresh_kill"
     assert census.SETTING_DEFAULTS["vent_entry_policy"] == "any_body"
+    assert again.setting_value({}, "vent_entry_policy") == "own_fresh_kill"
+    assert again.canonical_settings({"vent_entry_policy": "own_fresh_kill"}) == ()
+    assert census.canonical_settings({"vent_entry_policy": "own_fresh_kill"}) == (
+        ("vent_entry_policy", "own_fresh_kill"),
+    )
     assert not again.CENSUS_WALK_CONFIG.supports_temporal_observations
     assert CENSUS_WALK_CONFIG.supports_temporal_observations
 
@@ -2812,25 +3024,85 @@ def test_a_player_without_a_recorded_role_raises_where_a_role_is_read() -> None:
     The loader records every player's role, so a read of a missing one raises
     instead of counting that player as neither side. Each carrier reaches one
     read: a kill witness, a meeting's opener, a player in the state at a vent
-    exit, a player in a later state while a surfaced impostor waits, and the
-    holder of an own-kill row, even one that cites nothing.
+    exit (also where the exit policy's guard would read it first), a player in a
+    later state while a surfaced impostor waits (also listed after a crewmate
+    who already stands in the room), a player inside a vent at an opening beside
+    an impostor, the holder of an own-kill row, even one that cites nothing, the
+    player an own-kill row names, a ballot's voter (a skip, and a confident
+    ballot for the ejected player beside an impostor's), and a ballot's recorded
+    target (an impostor's ballot, and a crewmate's).
     """
 
     witnessed = game(kills=(kill(12, witnesses=("p-9",)),))
     opened = game(meetings=(meeting(opener="p-9"),))
     beside_exit = game(vents=(entry(10), exit_(11)), frames={11: frame({"p-9": ROOM})})
+    in_view_of_the_exit = game(
+        {"vent_exit_policy": "look_and_wait"},
+        vents=(entry(10), exit_(11)),
+        frames={11: frame({"p-9": ROOM})},
+    )
     beside_surfacing = game(
         vents=(entry(10), exit_(11, destination_room=ROOM)),
         frames={11: frame({}), 12: frame({"p-0": ROOM, "p-9": FAR})},
+    )
+    after_an_arrival = game(
+        vents=(entry(10), exit_(11, destination_room=ROOM)),
+        frames={11: frame({}), 12: frame({"p-0": ROOM, "p-3": ROOM, "p-9": FAR})},
+    )
+    inside_a_vent = game(
+        meetings=(meeting(in_vent_at_open=frozenset({"p-0", "p-9"})),),
     )
     uncited_row = game(
         meetings=(
             meeting(own_kill_rows=(OwnKillRowFact("p-9", "p-0", ROOM, 13, None),)),
         )
     )
-    for planted in (witnessed, opened, beside_exit, beside_surfacing, uncited_row):
+    row_naming = game(
+        kills=(kill(12, killer="p-0", witnesses=("p-2",)),),
+        meetings=(
+            meeting(
+                own_kill_rows=(OwnKillRowFact("p-2", "p-9", ROOM, 13, "p-2:13:0"),)
+            ),
+        ),
+    )
+    skipping_voter = game(meetings=(meeting(ballots=(ballot("p-9", "SKIP"),)),))
+    floor_voter = game(
+        meetings=(
+            meeting(
+                outcome="EJECTED",
+                ejected="p-2",
+                ballots=(ballot("p-0", "p-2"), ballot("p-9", "p-2")),
+            ),
+        )
+    )
+    impostors_target = game(meetings=(meeting(ballots=(ballot("p-0", "p-9"),)),))
+    crewmates_target = game(meetings=(meeting(ballots=(ballot("p-3", "p-9"),)),))
+    for planted in (
+        witnessed,
+        opened,
+        beside_exit,
+        in_view_of_the_exit,
+        beside_surfacing,
+        after_an_arrival,
+        inside_a_vent,
+        uncited_row,
+        row_naming,
+        skipping_voter,
+        floor_voter,
+        impostors_target,
+        crewmates_target,
+    ):
         with pytest.raises(KeyError, match="p-9"):
             fold_set(inputs(planted))
+    beneath_skip = game(meetings=(meeting(ballots=(ballot("p-0", "ANYONE"),)),))
+    with pytest.raises(KeyError, match="ANYONE"):
+        fold_set(inputs(beneath_skip))
+    # The authored target is only tested for membership: a rewritten one may
+    # name no player at all, so it reads as no teammate and raises nothing.
+    hallucinated = game(
+        meetings=(meeting(ballots=(ballot("p-0", "SKIP", authored="p-9"),)),)
+    )
+    assert counts("authored_teammate_ballot_targets", hallucinated) == (0, 1, 0)
 
 
 def test_an_answered_speaker_whose_role_the_row_cannot_name_raises() -> None:
@@ -3388,6 +3660,19 @@ def test_only_an_undiscovered_corpse_other_than_the_reported_one_counts() -> Non
         0,
     )
     assert counts(key, opened_with((("body-x", "p-2"), ("body-y", None)))) == (1, 1, 0)
+    # A button meeting reports no corpse, so an undiscovered one on its floor
+    # counts, whether or not an earlier report in the game named that corpse.
+    button = meeting(tick=20, bodies_at_open=(("body-x", None),))
+    assert counts(key, game(meetings=(button,))) == (1, 1, 0)
+    after_report = game(
+        kills=(kill(8),),
+        bodies=(body("body-x", 8),),
+        meetings=(
+            report(10, "body-x", meeting_id="meeting-0"),
+            replace(button, meeting_id="meeting-1"),
+        ),
+    )
+    assert counts(key, after_report) == (1, 2, 0)
 
 
 def test_a_button_soon_after_a_regroup_with_no_kill_since_is_no_witness_call() -> None:
@@ -3475,11 +3760,20 @@ def test_rebuttal_claim_kinds_are_told_apart() -> None:
 
 #: The observation kinds that name a player seen, written out here from the
 #: meeting schema's observation shapes, never read from the census.
-SIGHTING_KINDS = ("saw_player", "saw_vent", "saw_kill", "saw_move")
+SIGHTING_KINDS: tuple[ObservationKind, ...] = (
+    "saw_player",
+    "saw_vent",
+    "saw_kill",
+    "saw_move",
+)
 
 #: The other observation kinds a turn can carry, besides whereabouts: each names
 #: a task or a body, never a player seen.
-NAMING_NO_PLAYER_SEEN = ("completed_task", "found_body", "task_activity")
+NAMING_NO_PLAYER_SEEN: tuple[ObservationKind, ...] = (
+    "completed_task",
+    "found_body",
+    "task_activity",
+)
 
 
 def test_the_sighting_kinds_are_the_observations_that_name_a_player_seen() -> None:
@@ -3532,7 +3826,7 @@ def _opener_answering(evidence: ObservationFact) -> GameFacts:
 
 @pytest.mark.parametrize("kind", SIGHTING_KINDS)
 def test_every_sighting_kind_is_a_sighting_on_the_three_rebuttal_cells(
-    kind: str,
+    kind: ObservationKind,
 ) -> None:
     """Planted, one kind at a time, on each cell that reads a sighting.
 
@@ -3553,7 +3847,9 @@ def test_every_sighting_kind_is_a_sighting_on_the_three_rebuttal_cells(
 
 
 @pytest.mark.parametrize("kind", NAMING_NO_PLAYER_SEEN)
-def test_an_observation_naming_no_player_seen_is_no_sighting(kind: str) -> None:
+def test_an_observation_naming_no_player_seen_is_no_sighting(
+    kind: ObservationKind,
+) -> None:
     """Planted: the same three cells read these kinds as no sighting."""
 
     backed = _one_rebuttal(accuses=("p-3",), observations=(seen(kind, 4),))
@@ -3656,12 +3952,13 @@ def _load(
     events: Sequence[ReplayWalkEvent],
     *,
     manifest_cell: str = "a.x.v1, b.x.v1",
+    seed: int = LOADER_SEED,
 ) -> GameFacts:
     loaded = census_inputs(SAMPLES_4P1I)
     monkeypatch.setattr(census, "walk_replay", lambda *args, **kwargs: iter(events))
     return census._load_game(
         Path("unused"),
-        seed=LOADER_SEED,
+        seed=seed,
         roles=next(item.roles for item in loaded.games if item.seed == LOADER_SEED),
         manifest_cell=manifest_cell,
         num_players=4,
@@ -3945,14 +4242,19 @@ def test_the_loader_reads_the_openers_first_prompt_and_served_rows(
         if call.agent_id != opened.entry.triggered_by
         else call
         for call in opened.entry.llm_calls
+    ) + (
+        opened.entry.llm_calls[0].model_copy(update={"agent_id": None, "prompt": row}),
     )
     events[index] = replace(
         opened, entry=opened.entry.model_copy(update={"llm_calls": calls})
     )
     served = _load(monkeypatch, events)
     holders = {
-        call.agent_id for call in calls if call.agent_id != opened.entry.triggered_by
+        call.agent_id
+        for call in calls
+        if call.agent_id not in (opened.entry.triggered_by, None)
     }
+    assert None not in holders and len(holders) > 1
     assert {item.holder for item in served.meetings[0].own_kill_rows} == holders
     silent = tuple(
         call
@@ -4139,7 +4441,10 @@ def test_turn_facts_keep_ids_ticks_and_alibi_legs() -> None:
             AlibiClaim(
                 type="alibi",
                 subject="p-2",
-                route=(AlibiSegment(room=ROOM, from_tick=1, to_tick=5),),
+                route=(
+                    AlibiSegment(room=ROOM, from_tick=1, to_tick=5),
+                    AlibiSegment(room=NEIGHBOUR, from_tick=6, to_tick=8),
+                ),
             ),
         ),
         free_text="words",
@@ -4155,7 +4460,7 @@ def test_turn_facts_keep_ids_ticks_and_alibi_legs() -> None:
             ObservationFact("whereabouts", 5, 5, None),
             ObservationFact("task_activity", 2, 3, None),
         ),
-        alibis=(AlibiFact("p-2", ((ROOM, 1, 5),)),),
+        alibis=(AlibiFact("p-2", ((ROOM, 1, 5), (NEIGHBOUR, 6, 8))),),
     )
 
 
@@ -4236,17 +4541,64 @@ def test_an_unrewritten_ballot_was_authored_as_recorded() -> None:
     assert pairs and all(authored == target for authored, target in pairs)
 
 
+def test_a_ballot_that_never_parsed_authored_no_target() -> None:
+    """Planted: a parse-default ballot whose recorded target names a player.
+
+    The voter authored nothing, whatever the ballot records; a rewritten ballot
+    authored the target its guard names; an unrewritten ballot authored its
+    recorded target, at a meeting that ejected someone as at any other.
+    """
+
+    opened, applied = _first_meeting(_events())
+    first = opened.entry.ballots[0]
+    candidate = next(pid for pid in sorted(opened.state.players) if pid != first.voter)
+    unparsed = first.model_copy(
+        update={
+            "target": candidate,
+            "guard_rewrite_reason": "parse_default",
+            "guard_redirected_from": None,
+        }
+    )
+    rewritten = first.model_copy(
+        update={
+            "target": "SKIP",
+            "guard_rewrite_reason": "invalid_target",
+            "guard_redirected_from": "p-9",
+        }
+    )
+    plain = first.model_copy(
+        update={"guard_rewrite_reason": None, "guard_redirected_from": None}
+    )
+    ejecting = {"outcome": "EJECTED", "ejected_player_id": candidate}
+    for ballot_, authored, update in (
+        (unparsed, None, {}),
+        (rewritten, "p-9", {}),
+        (plain, plain.target, ejecting),
+    ):
+        entry = opened.entry.model_copy(
+            update={"ballots": (ballot_, *opened.entry.ballots[1:]), **update}
+        )
+        fact = census._meeting_fact(
+            replace(opened, entry=entry), applied, regroup_recorded=False
+        )
+        assert fact.ballots[0].authored_target == authored
+        assert fact.ballots[0].target == ballot_.target
+
+
 def test_the_loader_refuses_a_meeting_applied_under_another_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    events = [
-        replace(event, entry=event.entry.model_copy(update={"meeting_id": "other"}))
-        if isinstance(event, MeetingApplied)
-        else event
-        for event in _events()
-    ]
-    with pytest.raises(ValueError, match="applied without opening"):
-        _load(monkeypatch, events)
+    """Planted: the applied id sorts after, and before, the opened meeting's id."""
+
+    for other in ("other", "~after-every-id", "!before-every-id"):
+        events = [
+            replace(event, entry=event.entry.model_copy(update={"meeting_id": other}))
+            if isinstance(event, MeetingApplied)
+            else event
+            for event in _events()
+        ]
+        with pytest.raises(ValueError, match="applied without opening"):
+            _load(monkeypatch, events)
 
 
 def test_the_game_over_row_joins_the_era_and_names_the_winner(
@@ -4361,6 +4713,8 @@ def test_the_selector_pick_reads_the_turns_before_the_first_repeat() -> None:
     assert selector_pick(turns[:2], living) is None
     unanswerable = (spoken(0, "p-2"), spoken(1, "p-3"), spoken(2, "p-2"))
     assert selector_pick(unanswerable, living) is None
+    # A charged speaker the living set leaves out is offered no rebuttal.
+    assert selector_pick(turns, living - {"p-2"}) is None
 
 
 # --------------------------------------------------------------------------- #
@@ -4758,6 +5112,8 @@ def test_the_meeting_structure_reads_the_turns_in_index_order() -> None:
         ),
     )
     assert counts("first_reply_accuses_opener", shuffled) == (1, 1, 0)
+    assert counts("opener_accused_after_opening", shuffled) == (1, 1, 0)
+    assert counts("accused_opener_answers", shuffled) == (1, 1, 0)
     assert counts("meetings_with_repeat_speaker", shuffled) == (1, 1, 0)
     assert counts("rebuttals_differing_from_selector", shuffled) == (0, 1, 0)
     assert table("rebuttal_beneficiaries", shuffled) == {
@@ -5318,6 +5674,13 @@ def test_every_loader_refusal_names_its_seed_and_what_it_refuses(
         "with no kill of its victim on that tick",
     ):
         _load(monkeypatch, unkilled)
+    # Handed another seed, which no tick of this walk equals, it names that seed.
+    with _refusal(
+        ValueError,
+        f"seed {LOADER_SEED + 40}: a corpse appeared at tick "
+        f"{advanced.entry.tick} with no kill of its victim on that tick",
+    ):
+        _load(monkeypatch, unkilled, seed=LOADER_SEED + 40)
     unopened = [event for event in events if not isinstance(event, MeetingOpened)]
     with _refusal(ValueError, f"seed {LOADER_SEED}: a meeting applied without opening"):
         _load(monkeypatch, unopened)
@@ -5348,6 +5711,9 @@ def test_every_set_refusal_names_the_set_and_the_count(tmp_path: Path) -> None:
     )
     with _refusal(ValueError, f"{banded}: 1 seed(s) in a band no census walk may read"):
         census.load_census_inputs(banded)
+    (banded / "replay-seed-5.jsonl").write_text("not a recording\n", encoding="utf-8")
+    with _refusal(ValueError, f"{banded}: 1 seed(s) in a band no census walk may read"):
+        census.load_census_inputs(banded)
     unlisted = tmp_path / "unlisted"
     unlisted.mkdir()
     source = SAMPLES_4P1I / "replay-seed-0.jsonl"
@@ -5359,6 +5725,9 @@ def test_every_set_refusal_names_the_set_and_the_count(tmp_path: Path) -> None:
         census.load_census_inputs(unlisted)
     (unlisted / "MANIFEST.md").write_text("| 1 | m | a.x.v1 |\n", encoding="utf-8")
     with _refusal(ValueError, f"{unlisted}: 2 seed(s) have no MANIFEST row"):
+        census.load_census_inputs(unlisted)
+    (unlisted / "MANIFEST.md").write_text("| 0 | m | a.x.v1 |\n", encoding="utf-8")
+    with _refusal(ValueError, f"{unlisted}: 1 seed(s) have no MANIFEST row"):
         census.load_census_inputs(unlisted)
 
 
@@ -5693,3 +6062,335 @@ def test_the_era_sorts_the_recorded_substrate_flags(
     flags = loaded.era.substrate_flags
     assert flags is not None and len(flags) > 1
     assert flags == tuple(sorted(flags)) == _committed_game().era.substrate_flags
+
+
+# --------------------------------------------------------------------------- #
+# Each side of every ordering, and the conditions a mutation pass found open  #
+# --------------------------------------------------------------------------- #
+
+
+def test_an_impostor_opener_who_answers_is_seated_as_the_opener() -> None:
+    """Planted: with self-reports on, the impostor ``p-0`` opens and is answered."""
+
+    planted = game(
+        {"bounded_rebuttal_version": 1, "self_report": True},
+        meetings=(
+            meeting(
+                opener="p-0",
+                turns=(
+                    turn(0, "p-0"),
+                    turn(1, "p-3", accuses=("p-0",), reply_to="t0"),
+                    turn(2, "p-0", reply_to="t1"),
+                ),
+                selector_pick=("p-0", "t1"),
+            ),
+        ),
+    )
+    assert table("rebuttal_beneficiaries", planted) == {
+        "the opener, answering a crewmate": 1
+    }
+
+
+@pytest.mark.parametrize("speaker", ("p-2", "p-4"))
+def test_a_rebuttal_by_a_player_on_either_side_of_the_opener_is_not_the_openers(
+    speaker: str,
+) -> None:
+    """Planted: ``p-3`` opens; ``p-2`` (sorting before) or ``p-4`` (after) answers.
+
+    The accuser observed the opener, so an opener rebuttal would have a charged
+    tick to answer; this one is another crewmate's and counts nowhere there.
+    """
+
+    accuser = "p-4" if speaker == "p-2" else "p-2"
+    planted = game(
+        BOUNDED,
+        meetings=(
+            meeting(
+                opener="p-3",
+                turns=(
+                    turn(0, "p-3"),
+                    turn(1, speaker),
+                    turn(
+                        2,
+                        accuser,
+                        accuses=(speaker,),
+                        reply_to="t1",
+                        observations=(seen("saw_player", 5, "p-3"),),
+                    ),
+                    turn(
+                        3,
+                        speaker,
+                        reply_to="t2",
+                        observations=(seen("whereabouts", 5),),
+                    ),
+                ),
+                selector_pick=(speaker, "t2"),
+            ),
+        ),
+    )
+    assert counts("opener_rebuttals_answering_charged_tick", planted) == (0, 0, 0)
+    assert table("rebuttal_beneficiaries", planted) == {
+        "another crewmate, answering a crewmate": 1
+    }
+
+
+def test_an_impostors_row_breaches_as_a_teammate_row_only_naming_the_other() -> None:
+    """Planted: the impostor ``p-0`` holds rows naming a crewmate and itself.
+
+    Each cites a kill the named player made with ``p-0`` among its witnesses, so
+    each joins its kill and is no breach. Only a row naming ``p-1`` is a teammate
+    row.
+    """
+
+    row_on = {"ballot_kill_row_version": 1}
+    for subject in ("p-2", "p-0"):
+        planted = game(
+            row_on,
+            kills=(kill(12, killer=subject, witnesses=("p-0",)),),
+            meetings=(
+                meeting(
+                    own_kill_rows=(
+                        OwnKillRowFact("p-0", subject, ROOM, 13, "p-0:13:0"),
+                    )
+                ),
+            ),
+        )
+        assert counts("own_kill_rows_breaching", planted) == (0, 1, 0), subject
+
+
+def test_the_opener_who_never_speaks_does_not_speak_again() -> None:
+    silent = game(meetings=(meeting(turns=(turn(0, "p-3"), turn(1, "p-4"))),))
+    assert counts("opener_speaks_again", silent) == (0, 1, 0)
+    once = game(meetings=(meeting(turns=(turn(0, "p-2"), turn(1, "p-4"))),))
+    assert counts("opener_speaks_again", once) == (0, 1, 0)
+
+
+def test_a_cooldown_below_zero_is_not_a_zero_cooldown() -> None:
+    planted = game(
+        meetings=(meeting(impostor_cooldowns_at_open=(("p-0", -1), ("p-1", 0))),)
+    )
+    assert counts("impostor_cooldown_zero_at_open", planted) == (1, 2, 0)
+
+
+@pytest.mark.parametrize(
+    "pick", (None, ("p-2", "t0"), ("p-3", "t0")), ids=("none", "before", "after")
+)
+def test_a_selector_pick_on_either_side_of_the_rebuttal_or_none_is_a_breach(
+    pick: tuple[str, str] | None,
+) -> None:
+    """Planted: the rebuttal is ``("p-2", "t1")``; the pick sorts before or after it.
+
+    A pick that differs from the rebuttal, or no pick at all, breaches the
+    selector guard.
+    """
+
+    planted = game(
+        BOUNDED,
+        meetings=(
+            meeting(
+                turns=(
+                    turn(0, "p-2"),
+                    turn(1, "p-3", accuses=("p-2",), reply_to="t0"),
+                    turn(2, "p-2", reply_to="t1"),
+                ),
+                selector_pick=pick,
+            ),
+        ),
+    )
+    with pytest.raises(GameplayCensusConformanceError, match="would not have chosen"):
+        fold_set(inputs(planted))
+
+
+def test_an_exit_breach_names_its_own_tick_when_later_vents_follow() -> None:
+    """Planted: the surfacing in view at tick 11 is followed by a trip at 30."""
+
+    planted = game(
+        LOOK_AND_WAIT,
+        vents=(entry(10), exit_(11), entry(30), exit_(31)),
+        frames={11: frame({"p-2": ROOM}), 31: frame({})},
+    )
+    with pytest.raises(
+        GameplayCensusConformanceError, match="seed 7, tick 11 breaches"
+    ):
+        fold_set(inputs(planted))
+
+
+@pytest.mark.parametrize("other", ("p-2", "p-4"))
+def test_a_charge_is_the_accusers_observation_of_the_opener_alone(other: str) -> None:
+    """Planted: ``p-3`` opens; its accuser saw ``other`` at tick 5 and ``p-3`` at 9.
+
+    ``other`` sorts before or after the opener. The opener's rebuttal places
+    itself at tick 5, which answers no charge: only tick 9 is charged.
+    """
+
+    accuser = "p-4" if other == "p-2" else "p-2"
+    planted = game(
+        BOUNDED,
+        meetings=(
+            meeting(
+                opener="p-3",
+                turns=(
+                    turn(0, "p-3"),
+                    turn(
+                        1,
+                        accuser,
+                        accuses=("p-3",),
+                        reply_to="t0",
+                        observations=(
+                            seen("saw_player", 5, other),
+                            seen("saw_player", 9, "p-3"),
+                        ),
+                    ),
+                    turn(
+                        2,
+                        "p-3",
+                        reply_to="t1",
+                        observations=(seen("whereabouts", 5),),
+                    ),
+                ),
+                selector_pick=("p-3", "t1"),
+            ),
+        ),
+    )
+    assert counts("opener_rebuttals_answering_charged_tick", planted) == (0, 1, 0)
+
+
+def test_the_teammate_target_cell_reads_the_recorded_target_against_the_voter() -> None:
+    """Planted: ``p-0``'s recorded target is ``p-1``, rewritten from ``p-0``."""
+
+    planted = game(meetings=(meeting(ballots=(ballot("p-0", "p-1", authored="p-0"),)),))
+    with pytest.raises(GameplayCensusConformanceError, match="voter p-0 breaches"):
+        fold_set(inputs(planted))
+
+
+def test_the_impostor_only_floor_reads_recorded_targets_on_either_side() -> None:
+    """Planted: ``p-2`` is ejected; the other confident ballots skip or name ``p-3``.
+
+    ``SKIP`` sorts before ``p-2`` and ``p-3`` after it; neither joins the
+    ejection. The impostor's ballot was rewritten to ``p-2`` from ``p-4``, and the
+    floor reads the recorded target.
+    """
+
+    planted = game(
+        meetings=(
+            meeting(
+                outcome="EJECTED",
+                ejected="p-2",
+                ballots=(
+                    ballot("p-0", "p-2", authored="p-4"),
+                    ballot("p-3", "SKIP"),
+                    ballot("p-4", "p-3"),
+                ),
+            ),
+        )
+    )
+    assert counts("ejections_carried_only_by_impostor_ballots", planted) == (1, 1, 0)
+
+
+def test_a_held_kill_witness_votes_the_killer_by_the_recorded_target() -> None:
+    """Planted: the witness ``p-3``'s ballot was rewritten to ``p-0`` from SKIP."""
+
+    planted = game(
+        kills=(kill(12, killer="p-0", witnesses=("p-3",)),),
+        meetings=(meeting(ballots=(ballot("p-3", "p-0", authored="SKIP"),)),),
+    )
+    assert counts("held_kill_witnesses_voting_killer", planted) == (1, 1, 0)
+
+
+def test_an_entry_seen_from_the_room_left_is_no_exit_seen_from_it() -> None:
+    """Planted: a crewmate saw the ejected impostor's entry and another its exit.
+
+    Both saw from the room the impostor left, so the band rests on an entry as
+    well as an exit and does not rest only on the exit from the room left.
+    """
+
+    planted = game(
+        vents=(entry(10, source=("p-2",)), exit_(11, source=("p-3",))),
+        frames={11: frame({})},
+        meetings=(
+            meeting(
+                outcome="EJECTED",
+                ejected="p-0",
+                vent_flag_subjects=(frozenset({"p-0"}),),
+            ),
+        ),
+    )
+    assert counts("vent_band_resting_only_on_room_left", planted) == (0, 1, 0)
+
+
+def test_trips_open_at_the_game_end_count_from_their_own_entry_or_meeting() -> None:
+    """Planted: ``p-0`` enters at 10, ``p-1`` at 27, a meeting at 27, the end at 30.
+
+    Neither trip ends. ``p-0``'s counts from the meeting at 27 (3 ticks), and
+    ``p-1``'s from its own entry at 27. With no meeting, ``p-0``'s counts from
+    its entry (20 ticks, over the cap).
+    """
+
+    across = game(
+        vents=(entry(10), entry(27, "p-1")),
+        meetings=(meeting(tick=27),),
+        terminal_tick=30,
+    )
+    assert counts("trips_longer_than_cap", across) == (0, 2, 0)
+    unmet = game(vents=(entry(10), entry(27, "p-1")), terminal_tick=30)
+    assert counts("trips_longer_than_cap", unmet) == (1, 2, 0)
+
+
+def test_the_set_label_keeps_its_directories_whole_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: a set in ``rehearsal.v1/4p1i.copy``; each game's walk is stubbed."""
+
+    copy = tmp_path / "rehearsal.v1" / "4p1i.copy"
+    shutil.copytree(SAMPLES_4P1I, copy)
+    monkeypatch.setattr(
+        census, "_load_game", lambda _path, **kwargs: game(seed=kwargs["seed"])
+    )
+    loaded = census.load_census_inputs(copy)
+    assert loaded.label == "rehearsal.v1/4p1i.copy"
+    assert loaded.source == "replays/rehearsal.v1/4p1i.copy"
+
+
+def test_the_published_schema_version_is_the_modules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the schema version moves, and the published payload follows it."""
+
+    assert (
+        census_from_inputs([inputs(game(), label="samples/9p2i")]).schema_version == 1
+    )
+    monkeypatch.setattr(census, "SCHEMA_VERSION", 2)
+    assert (
+        census_from_inputs([inputs(game(), label="samples/9p2i")]).schema_version == 2
+    )
+
+
+def test_a_kill_is_held_only_by_its_living_crew_witnesses() -> None:
+    """Planted: the crew witness ``p-3`` died before the meeting; ``p-1`` lives.
+
+    ``p-1`` is the killer's fellow impostor, so the kill is held by no one.
+    """
+
+    planted = game(
+        kills=(kill(12, killer="p-0", witnesses=("p-3", "p-1")),),
+        meetings=(meeting(living=frozenset(ROLES) - {"p-3"}),),
+    )
+    assert counts("crew_witnessed_kills_held_at_next_meeting", planted) == (0, 1, 0)
+
+
+def test_a_group_takes_the_era_its_games_resolve_to_whatever_their_order() -> None:
+    """Planted: the stamped game or group first, one without a stamp last.
+
+    A game that recorded no meeting carries no prompt stamp; the set's era, and
+    a pool's, is the stamp its other games agree on.
+    """
+
+    stamped = game(era=replace(era(), prompt_stamps=("a.x.v1",)))
+    unstamped = game()
+    folded = fold_set(inputs(stamped, unstamped))
+    assert folded.era.prompt_stamps == ("a.x.v1",)
+    pooled = pool(
+        [fold_set(inputs(stamped)), fold_set(inputs(unstamped, label="other/set"))],
+        label="both",
+    )
+    assert pooled.era.prompt_stamps == ("a.x.v1",)

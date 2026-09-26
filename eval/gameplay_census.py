@@ -116,6 +116,8 @@ from meetings.rebuttal import select_bounded_rebuttal
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    BallotGroundingLabel,
+    MeetingOutcome,
     MeetingTranscript,
     MeetingTurn,
     TaskActivityAccount,
@@ -124,6 +126,7 @@ from orchestrator.experiment_config import ConfigLayer, RecordedExperimentConfig
 from orchestrator.replay import (
     GameEndReplayEntry,
     ReplayLogEntry,
+    WinnerSide,
     recorded_experiment_config,
     recorded_substrate_flags,
     recorded_temporal_observation_version,
@@ -136,6 +139,24 @@ SCHEMA_VERSION: Final[int] = 1
 
 #: A plain recorded setting value, as the recording serializes it.
 SettingValue: TypeAlias = str | int | bool | None
+
+#: What opened a meeting, as the engine's trigger event names it.
+TriggerKind: TypeAlias = Literal["report", "emergency"]
+
+#: The phase a meeting's result leaves the game in, as the engine's state names it.
+Phase: TypeAlias = Literal["PLAY", "MEETING", "GAME_OVER"]
+
+#: The ``type`` of every observation shape the meeting schema accepts.
+ObservationKind: TypeAlias = Literal[
+    "completed_task",
+    "found_body",
+    "saw_kill",
+    "saw_move",
+    "saw_player",
+    "saw_vent",
+    "task_activity",
+    "whereabouts",
+]
 
 #: The frozen meaning of ``vent_entry_policy = "own_fresh_kill"``: an entry is
 #: conforming only when the impostor's own victim lies in that room, killed at
@@ -556,7 +577,7 @@ class Frame:
 class ObservationFact:
     """One structured observation a speaker gave: kind, ticks, subject if any."""
 
-    kind: str
+    kind: ObservationKind
     from_tick: int
     to_tick: int
     subject: PlayerId | None
@@ -594,7 +615,7 @@ class BallotFact:
     target: str
     authored_target: str | None
     confidence: float
-    grounding_label: str | None
+    grounding_label: BallotGroundingLabel | None
     cited_observation_id: str | None
 
 
@@ -625,7 +646,7 @@ class MeetingFact:
 
     meeting_id: str
     tick: int
-    trigger_kind: str
+    trigger_kind: TriggerKind
     opener: PlayerId
     trigger_body: str | None
     bodies_at_open: tuple[tuple[str, PlayerId | None], ...]
@@ -633,7 +654,7 @@ class MeetingFact:
     impostor_cooldowns_at_open: tuple[tuple[PlayerId, int], ...]
     living: frozenset[PlayerId]
     sabotage_active: bool
-    outcome: str
+    outcome: MeetingOutcome
     ejected: PlayerId | None
     vent_flag_subjects: tuple[frozenset[PlayerId], ...]
     turns: tuple[TurnFact, ...]
@@ -643,7 +664,7 @@ class MeetingFact:
     opener_prompt_has_kill_tick_handle: bool | None
     own_kill_rows: tuple[OwnKillRowFact, ...]
     trigger_tick_dropped_events: tuple[tuple[str, int], ...]
-    phase_after: str
+    phase_after: Phase
     in_vent_after: frozenset[PlayerId]
     bodies_after: frozenset[str]
     regrouped: bool
@@ -674,7 +695,7 @@ class GameFacts:
     meetings: tuple[MeetingFact, ...]
     discarded: tuple[DiscardedAction, ...]
     rows_without_dispositions: int
-    winner: str | None
+    winner: WinnerSide | None
     terminal_tick: int
 
 
@@ -1476,10 +1497,10 @@ def _crew(game: GameFacts, players: Iterable[PlayerId]) -> frozenset[PlayerId]:
     return frozenset(pid for pid in players if game.roles[pid] == "CREWMATE")
 
 
-def _is_impostor(game: GameFacts, player: PlayerId | None) -> bool:
+def _is_impostor(game: GameFacts, player: PlayerId) -> bool:
     """Whether ``player`` is an impostor. A player with no recorded role raises."""
 
-    return player is not None and game.roles[player] == "IMPOSTOR"
+    return game.roles[player] == "IMPOSTOR"
 
 
 def _teammates(game: GameFacts, player: PlayerId) -> frozenset[PlayerId]:
@@ -1700,6 +1721,13 @@ def _fold_trips(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> Non
             where=where,
         )
         frame = _frame(game, exit_fact.tick)
+        # Every player in the state is looked up before any count, so a player
+        # without a recorded role raises before the exit policy's guard is read.
+        crew_rooms = {
+            room
+            for player, room in frame.rooms.items()
+            if game.roles[player] == "CREWMATE"
+        }
         teammates = _teammates(game, exit_fact.actor)
         visible = _inferred_visible(exit_fact.source_room, frame, inputs.neighbours)
         in_view = any(
@@ -1713,11 +1741,6 @@ def _fold_trips(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> Non
             seed=game.seed,
             where=where,
         )
-        crew_rooms = {
-            room
-            for player, room in frame.rooms.items()
-            if game.roles[player] == "CREWMATE"
-        }
         acc.count(
             "vent_exits_into_occupied_room",
             exit_fact.destination_room in crew_rooms,
@@ -1762,7 +1785,8 @@ def _crew_arrives_before_walk_out(game: GameFacts, exit_fact: VentFact) -> bool:
     """Whether a crewmate stands in the room before the surfaced impostor leaves.
 
     Reads the states after the surfacing tick, in order, while the impostor is
-    still in that room and out of the vent.
+    still in that room and out of the vent, looking up the role of every player
+    in each state it reads.
     """
 
     tick = exit_fact.tick + 1
@@ -1770,11 +1794,12 @@ def _crew_arrives_before_walk_out(game: GameFacts, exit_fact: VentFact) -> bool:
         frame = game.frames[tick]
         if frame.rooms.get(exit_fact.actor) != exit_fact.destination_room:
             return False
-        if any(
-            room == exit_fact.destination_room
+        crew_rooms = {
+            room
             for player, room in frame.rooms.items()
             if game.roles[player] == "CREWMATE"
-        ):
+        }
+        if exit_fact.destination_room in crew_rooms:
             return True
         tick += 1
     return False
@@ -1828,9 +1853,12 @@ def _fold_meetings(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> 
             seed=seed,
             where=where,
         )
+        impostors_inside = {
+            player for player in meeting.in_vent_at_open if _is_impostor(game, player)
+        }
         acc.count(
             "meetings_opening_with_impostor_in_vent",
-            any(_is_impostor(game, player) for player in meeting.in_vent_at_open),
+            bool(impostors_inside),
             seed=seed,
             where=where,
         )
@@ -1915,10 +1943,8 @@ def _fold_regroup(
     )
 
 
-def _vent_flag_names(meeting: MeetingFact, player: PlayerId | None) -> bool:
-    return player is not None and any(
-        player in subjects for subjects in meeting.vent_flag_subjects
-    )
+def _vent_flag_names(meeting: MeetingFact, player: PlayerId) -> bool:
+    return any(player in subjects for subjects in meeting.vent_flag_subjects)
 
 
 def _fold_vent_proof(game: GameFacts, meeting: MeetingFact, acc: _Accumulator) -> None:
@@ -2173,10 +2199,14 @@ def _own_kill_row_breaches(game: GameFacts, row: OwnKillRowFact) -> bool:
     breach whatever it cites. Any other row must cite, by the holder's own
     observation id, a kill the named player made on that tick with the holder
     among its witnesses. The ballot card specifies that every own-kill row cites
-    its kill, so a row citing nothing joins no kill and is a breach too.
+    its kill, so a row citing nothing joins no kill and is a breach too. The
+    holder's and the subject's roles are both looked up, so a row naming a
+    player without a recorded role raises.
     """
 
-    if row.subject in _teammates(game, row.holder):
+    holder_is_impostor = _is_impostor(game, row.holder)
+    subject_is_impostor = _is_impostor(game, row.subject)
+    if holder_is_impostor and subject_is_impostor and row.subject != row.holder:
         return True
     if row.citation_id is None:
         return True
@@ -2193,16 +2223,19 @@ def _own_kill_row_breaches(game: GameFacts, row: OwnKillRowFact) -> bool:
 
 
 def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
-    impostors = {pid for pid, role in game.roles.items() if role == "IMPOSTOR"}
     for meeting in game.meetings:
         where = f"meeting {meeting.meeting_id}"
         seed = game.seed
         for ballot in meeting.ballots:
-            if ballot.voter not in impostors:
-                continue
-            teammates = impostors - {ballot.voter}
-            voter_where = f"{where}, voter {ballot.voter}"
+            # Every voter, and every recorded target but SKIP, is looked up, so
+            # a player without a recorded role raises. The authored target is
+            # only tested for membership: a rewritten one may name no player.
             eject = ballot.target != "SKIP"
+            voter_is_impostor = _is_impostor(game, ballot.voter)
+            target_is_impostor = eject and _is_impostor(game, ballot.target)
+            if not voter_is_impostor:
+                continue
+            voter_where = f"{where}, voter {ballot.voter}"
             acc.count("impostor_skip_ballots", not eject, seed=seed, where=voter_where)
             acc.count("impostor_eject_ballots", eject, seed=seed, where=voter_where)
             if eject:
@@ -2214,13 +2247,13 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
                 )
             acc.count(
                 "recorded_teammate_ballot_targets",
-                ballot.target in teammates,
+                target_is_impostor and ballot.target != ballot.voter,
                 seed=seed,
                 where=voter_where,
             )
             acc.count(
                 "authored_teammate_ballot_targets",
-                ballot.authored_target in teammates,
+                ballot.authored_target in _teammates(game, ballot.voter),
                 seed=seed,
                 where=voter_where,
             )
@@ -2233,7 +2266,8 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
             ]
             acc.count(
                 "ejections_carried_only_by_impostor_ballots",
-                bool(confident) and all(voter in impostors for voter in confident),
+                bool(confident)
+                and all(_is_impostor(game, voter) for voter in confident),
                 seed=seed,
                 where=where,
             )
@@ -3190,10 +3224,13 @@ __all__ = [
     "KillFact",
     "MeetingFact",
     "ObservationFact",
+    "ObservationKind",
     "OwnKillRowFact",
+    "Phase",
     "SettingPredicate",
     "SettingValue",
     "TableSpec",
+    "TriggerKind",
     "TurnFact",
     "VentFact",
     "canonical_settings",

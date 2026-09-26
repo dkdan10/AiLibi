@@ -20,6 +20,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+import importlib.util
+
 import pytest
 
 import publish_gameplay_census as command
@@ -398,7 +400,28 @@ def test_set_dir_lets_a_failure_other_than_a_breach_propagate(
 def test_main_publishes_and_checks_the_tree_it_is_given(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    planted = _planted()
+    """Planted: a four-player set beside the nine-player one, so the pools differ.
+
+    The printed summary names the all-sets pool: two games and three meetings,
+    where the nine-player pool holds one game and no meeting.
+    """
+
+    from tests.eval.test_gameplay_census import meeting
+
+    held = frozenset({"p-0", "p-1"})
+    planted = census_from_inputs(
+        [
+            _planted_inputs(),
+            _planted_inputs(
+                meeting(opener="p-1", living=held),
+                meeting(meeting_id="meeting-1", tick=30, opener="p-1", living=held),
+                meeting(meeting_id="meeting-2", tick=40, opener="p-1", living=held),
+                label="samples/4p1i",
+            ),
+        ]
+    )
+    assert (planted.pooled.games, planted.pooled.meetings) == (2, 3)
+    assert (planted.pooled_9p2i.games, planted.pooled_9p2i.meetings) == (1, 0)
     received: list[Path] = []
 
     def computed(tree: Path, load: Any) -> GameplayCensus:
@@ -411,11 +434,9 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
     monkeypatch.setattr(command, "_REPO_ROOT", root)
     assert command.main([]) == 0
     printed = capsys.readouterr().out
-    assert "1 games" in printed
     assert printed == (
-        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}: 1 games, "
-        f"{planted.pooled.meetings} meetings; role-correctness is reported and "
-        "gates nothing.\n"
+        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}: 2 games, "
+        "3 meetings; role-correctness is reported and gates nothing.\n"
     )
     assert (root / command.JSON_PATH).read_text(
         encoding="utf-8"
@@ -427,6 +448,59 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
     assert command.main(["--check"]) == 1
     assert (root / command.JSON_PATH).read_text(encoding="utf-8") == drifted
     assert received == [root, root, root]
+
+
+def test_main_reads_the_command_line_when_given_no_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Planted: run as a program, ``main()`` reads ``--check`` from ``sys.argv``."""
+
+    checked: list[Path] = []
+
+    def check(root: Path, **_kwargs: Any) -> int:
+        checked.append(root)
+        return 0
+
+    monkeypatch.setattr(command, "check_report", check)
+    monkeypatch.setattr(command, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["publish_gameplay_census.py", "--check"])
+    assert command.main() == 0
+    assert checked == [tmp_path]
+    assert not (tmp_path / command.MARKDOWN_PATH).exists()
+
+
+def test_the_path_bootstrap_puts_the_scripts_own_checkout_first_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the script copied into another checkout, reached through a link.
+
+    Executed there, it puts that checkout's resolved root first on the import
+    path, and not a second time when the root is already there. The module name
+    sorts before ``__main__``, so a guard looser than equality would run
+    ``main`` here and fail on a checkout with no recordings.
+    """
+
+    real = tmp_path / "real"
+    (real / "scripts").mkdir(parents=True)
+    shutil.copy(ROOT / "scripts" / "publish_gameplay_census.py", real / "scripts")
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    expected = str(real.resolve())
+    original = list(sys.path)
+    for present in (False, True):
+        monkeypatch.setattr(sys, "path", [*original, *([expected] if present else [])])
+        name = "A_bootstrap_probe"
+        spec = importlib.util.spec_from_file_location(
+            name, link / "scripts" / "publish_gameplay_census.py"
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        monkeypatch.setitem(sys.modules, name, module)
+        spec.loader.exec_module(module)
+        assert module._REPO_ROOT == real.resolve()
+        assert sys.path.count(expected) == 1, present
+        if not present:
+            assert sys.path[0] == expected
 
 
 def test_help_prints_the_commands_own_description(
@@ -554,6 +628,16 @@ def test_cell_values_render_counts_n_a_and_the_by_construction_zero() -> None:
         rendered(numerator=0, rate=0.0, guard="x = 1", by_construction="x = 1")
         == "0/8 by construction"
     )
+    assert (
+        rendered(
+            numerator=0,
+            rate=0.0,
+            not_evaluable=2,
+            guard="x = 1",
+            by_construction="x = 1",
+        )
+        == "0/8 by construction, 2 not evaluable"
+    )
     out_of_scope = rendered(
         numerator=0, denominator=0, rate=None, scope="x = 1", in_scope=False
     )
@@ -601,6 +685,31 @@ def test_the_definitions_name_the_setting_a_scoped_count_needs() -> None:
             assert "Counted only" not in line, key
         else:
             assert line.endswith(counted.format(scope.describe())), key
+
+
+def test_a_definition_names_its_guard_whatever_the_guard_reads() -> None:
+    """Planted: guards that sort before ``always``, and ``always`` itself.
+
+    Only the guard ``always`` reads as zero in every recording, whether or not
+    the cell also carries its by-construction mark; any other guard is named.
+    """
+
+    planted = _planted()
+    key = "kills_seen_by_crew"
+    for guard, by_construction, sentence in (
+        ("a = 1", None, " Zero by construction while `a = 1`."),
+        ("a = 1", "a = 1", " Zero by construction while `a = 1`."),
+        ("always", None, " Zero by construction in every recording."),
+    ):
+        cell = planted.pooled.cells[key].model_copy(
+            update={"guard": guard, "by_construction": by_construction}
+        )
+        pooled = planted.pooled.model_copy(
+            update={"cells": {**planted.pooled.cells, key: cell}}
+        )
+        lines = command._definition_lines(planted.model_copy(update={"pooled": pooled}))
+        line = next(item for item in lines if f"(`{key}`)." in item)
+        assert sentence in line, (guard, by_construction)
 
 
 def test_the_page_renders_tables_and_their_not_evaluable_rows() -> None:
