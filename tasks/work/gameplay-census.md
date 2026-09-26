@@ -121,6 +121,59 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction (round 8): every tick of the grace window lies inside it.
+  `test_every_tick_of_the_grace_window_lies_inside_it` plants a kill on each tick from T+1 to
+  T+cooldown after a regroup at tick 10, on the canonical kill cooldown (4) and on a carrier walked
+  with a cooldown of 6. Each kill raises with the regroup on and reads 1 of 1 with it off; a kill at
+  T+cooldown+1 reads 0 of 1. The review's probe, the window's `<=` read as `==`, is green on the
+  round-7 files (290 passed) and red on these (Results, round 8).
+- [x] Review correction (round 8): an own-kill row joins only its own kill, on either side of each
+  join field. `test_a_row_joins_only_its_own_kill_on_each_side_of_every_join_field` moves one field
+  at a time: the citation's agent (`p-2` and `p-4` around the holder `p-3`), the citation's tick (one
+  before the kill, one after it, far after it) and the player the row names (`p-0` and `p-2` around
+  the killer `p-1`). Each raises with the row setting on and reads 1 of 1 with it off. The review's
+  probe, `kill.tick == engine_tick` read as `<=`, is green on the round-7 files and red on these.
+- [x] Review correction (round 8): the publisher's summary line names the all-sets pool.
+  `test_main_publishes_and_checks_the_tree_it_is_given` publishes a census whose two pools differ
+  (two games and three meetings against one game and no meeting) and asserts the printed line. The
+  review's probe, `census.pooled` read as `census.pooled_9p2i`, is green on the round-7 files and
+  red on these.
+- [x] Review correction (round 8): each id-ordering comparison the review named is planted on both
+  sides of the ordering. A rebuttal by `p-2` or `p-4` around the opener `p-3`
+  (`test_a_rebuttal_by_a_player_on_either_side_of_the_opener_is_not_the_openers`); the own-kill
+  citation's agent and named player (the join test above); a SKIP ballot and a ballot for `p-3`
+  beside the ejection of `p-2` (`test_the_impostor_only_floor_reads_recorded_targets_on_either_side`);
+  an applied meeting id sorting after and before the opened one
+  (`test_the_loader_refuses_a_meeting_applied_under_another_id`); and an era holding a default listed
+  first, and two values out of name order (`test_an_era_holding_a_default_value_is_refused`). The
+  walk-out check's room comparison is now a set test (the next item). Each of the review's six
+  probes on these lines is green on the round-7 files and red on these.
+- [x] Review correction (round 8): the ballot fold looks up the role of every ballot's voter and
+  of every recorded target other than SKIP, so a player without a recorded role raises instead of
+  counting as crew. The own-kill check looks up the named player's role as well as the holder's;
+  the in-vent opening read and the walk-out check look up every player they hold, whatever the
+  iteration order; and the state at a vent exit is looked up before the exit policy's guard.
+  `test_a_player_without_a_recorded_role_raises_where_a_role_is_read` plants 13 carriers, one per
+  read, and a target that names no player and sorts before SKIP. The authored target stays a
+  membership test, because a rewritten one may name no player, and the test pins that too. The
+  fold reads a role at five index expressions, two of them the helpers every other read goes
+  through; Results, round 8, lists the players each is handed. No page byte moves.
+- [x] Review correction (round 8): the References sentence of rounds 6 and 7 is restated at the
+  strength the code has. The census imports from `engine/`, `orchestrator/`, `meetings/`, one
+  `agents/tactical` constant and sibling `eval/` modules; `docs/architecture.md` places `eval/` among
+  the privileged readers, and `uv run lint-imports` keeps the four contracts. Both earlier
+  subsections carry a dated correction note.
+- [x] Review correction (round 8): a third exhaustive mutation pass, over both files, ends with no
+  survivor. Its operators cover the review's classes (a filter or wrapper dropped, a collection or
+  field swapped for a related one, a comparison replaced by a None test or its inverse, a read
+  replaced by a constant, a message argument replaced by a constant, a member of a tuple dropped,
+  adjacent branches swapped, a loaded source replaced by its canonical literal), every comparison
+  operator replaced by each other one, and any value read swapped for another read of a compatible
+  type in the same function. Of 16,445 mutants, 15,357 fail a test, 145 fail strict mypy, 23 fail a
+  test when written on disk, and 920 are named equivalent in 32 classes, each with its reason. Six
+  carrier fields now carry their source's closed type, which strict mypy checks at the loader. 25
+  new tests, and assertions added to 15, close what the pass found. The method, the table and the
+  classes are in Results (Review corrections, round 8).
 - [x] Review correction (round 7): a surfaced impostor missing from a later state ends the
   walk-out check. An impostor back inside a vent, and one ejected at a meeting, before a crewmate
   arrives each read 0 of 1 on "in-place surfacings near crew" (`back_in_vent` and `ejected_first`
@@ -1764,6 +1817,11 @@ docstring states ("naming the set, seed and meeting (or tick) of the first breac
 `docs/architecture.md`'s layering is unchanged: `eval/` still reads only the orchestrator's config
 module, the meeting schema and the engine's events, and the four import-linter contracts are kept.
 
+Correction (2026-09-26, round 8): the sentence above understates what `eval/` reads, and
+`docs/architecture.md` states no such limit. The census imports from `engine/`, `orchestrator/`,
+`meetings/`, one `agents/tactical` constant and sibling `eval/` modules. The restatement is in
+Results, round 8.
+
 **Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
 round merges nothing, and the diff base stays `52a6ac58`.
 
@@ -2116,6 +2174,9 @@ under decision memo 2.6 and 3.4 (this card's brief). The role reads follow the h
 invalid input raises (AGENTS.md, load-bearing rule 5). `docs/architecture.md`'s layering is
 unchanged: `eval/` still reads only the orchestrator's config module, the meeting schema and the
 engine's events, and the four import-linter contracts are kept.
+
+Correction (2026-09-26, round 8): the same understatement as round 6's References; the restatement
+is in Results, round 8.
 
 **Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
 round merges nothing, and the diff base stays `52a6ac58`.
@@ -2477,5 +2538,406 @@ module and its one test docstring, each saying such a player raises, and one unr
   of one game tells a swap apart by which failure it names first.
 - The operators are the ones listed. A mutation outside them, such as reordering a pair of
   statements that are not adjacent, is outside this pass.
+- The round-2 question on the two pre-registered before values still waits for the orchestrator
+  (the PR's Questions).
+
+### Review corrections, round 8 (2026-09-26)
+
+**State: done.** This is the ninth review of PR #483, of head `23104a67`. The dispatch calls it
+round 8, and so does the card. All six findings are repaired: five on the correctness lens and one
+on the docs lens. A third exhaustive mutation pass ran before review with the review's operator
+classes, every comparison operator and every same-typed value swap, and it ends with no survivor.
+Seven `Review correction (round 8)` items at the top of Acceptance record this. Status stays `done`
+and no box is open. `tasks/README.md`'s inventory sentence is unchanged (88 cards, 9 ready, 79
+done), and `scripts/validate_task_docs.py` re-derives it at this head.
+
+**References** (restated at the strength the code has; finding 6). The cells follow the Acceptance
+items "The added cells" and "Conformance guards" under decision memo 2.6 and 3.4 (this card's
+brief). The role reads follow the house rule that invalid input raises (AGENTS.md, load-bearing
+rule 5). `eval/gameplay_census.py` imports from:
+- `engine/`: `entities`, `events` and `world`;
+- `orchestrator/`: `experiment_config`, `replay` and `replay_integrity`;
+- `meetings/`: `rebuttal` and `schemas`;
+- one `agents/tactical` constant, `crewmate_policy.EMERGENCY_COOLDOWN_TICKS`;
+- sibling `eval/` modules: `balance_eval`, `process_scorecard`, `replay_walk` and `validity`.
+
+`docs/architecture.md` places `eval/` among the privileged readers (its layer diagram and its
+`eval/` paragraph) and sets no narrower list of what `eval/` may import. The four import-linter
+contracts constrain `agents/` and `observation/`, and `uv run lint-imports` keeps all four. Rounds 6
+and 7 said `eval/` still reads only the orchestrator's config module, the meeting schema and the
+engine's events. That was never true of this module, and each of those subsections now carries a
+dated correction note.
+
+**Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
+round merges nothing, and the diff base stays `52a6ac58`.
+
+**Finding 1: kills strictly inside the grace window.** Every planted grace kill sat at T+cooldown or
+one tick past it. So the window's `<=` read as `==` kept all 290 tests green.
+`test_every_tick_of_the_grace_window_lies_inside_it` runs once on the canonical cooldown (4) and
+once on a carrier walked with a cooldown of 6. After a regroup at tick 10 it plants a kill on each
+tick from 11 to 10 plus the cooldown:
+- with the regroup on, each raises, naming its tick;
+- with the regroup off, each reads 1 of 1.
+
+A kill one tick past the window reads 0 of 1 either way.
+
+**Finding 2: a citation one tick after its kill.** Every planted citation named the kill's tick or
+an earlier one, so `kill.tick == engine_tick` read as `<=` passed a row citing a later observation.
+`test_a_row_joins_only_its_own_kill_on_each_side_of_every_join_field` starts from a row that joins
+its kill (`p-3` watched `p-1` kill at tick 12 and cites `p-3:13:0`). It moves one join field at a
+time to a value on either side of the right one:
+- the citation's agent: `p-2` and `p-4`;
+- the citation's tick: `p-3:12:0`, `p-3:14:0` and `p-3:40:0`;
+- the named player: `p-0` and `p-2`.
+
+Each variant raises with the row setting on and reads 1 of 1 with it off.
+
+**Finding 3: the publisher's summary pool.** `test_main_publishes_and_checks_the_tree_it_is_given`
+now publishes a census with a four-player set beside the nine-player one. Its all-sets pool holds
+two games and three meetings, and its nine-player pool one game and no meeting. The test asserts
+the printed line reads the former. Games and meetings differ from each other too, so neither can be
+printed for the other.
+
+**Finding 4: seven id-ordering comparisons.** Each negative is now planted on both sides of the
+ordering:
+- the rebuttal fold's `turn.speaker != meeting.opener`: a rebuttal by `p-2`, and one by `p-4`, in a
+  meeting `p-3` opened (`test_a_rebuttal_by_a_player_on_either_side_of_the_opener_is_not_the_openers`);
+- the own-kill check's `match["agent"] != row.holder` and `kill.killer == row.subject`: finding 2's
+  test;
+- the ejection floor's `ballot.target == meeting.ejected`: beside the ejection of `p-2`, a
+  confident SKIP (sorting before) and a confident ballot for `p-3` (after)
+  (`test_the_impostor_only_floor_reads_recorded_targets_on_either_side`);
+- the loader's applied meeting id: the existing case, plus one id sorting after every id and one
+  sorting before (`test_the_loader_refuses_a_meeting_applied_under_another_id`);
+- `EraKey`'s canonical check: a default listed first (sorting before the canonical settings) and two
+  values out of name order (after) (`test_an_era_holding_a_default_value_is_refused`);
+- the walk-out check's `room == exit_fact.destination_room`: the line is now a set test,
+  `exit_fact.destination_room in crew_rooms` (finding 5), which has no ordering to mutate. The pass
+  covers the new line.
+
+**Finding 5: the ballot fold's role reads.** The fold built the impostors from `game.roles` and
+tested voters and targets for membership. So a ballot cast by, or naming, a player with no recorded
+role counted as crew. Now each ballot's voter, and each recorded target other than SKIP, is looked
+up through `_is_impostor`, for every ballot of every meeting, and a missing role raises. This round
+found four more reads of the same kind, and each now looks every player up:
+- the own-kill check looks up the named player as well as the holder;
+- the in-vent opening read collects the impostors among all players inside a vent. The old `any()`
+  stopped at the first impostor, so whether a role-less player was reached depended on a
+  frozenset's iteration order;
+- the walk-out check collects the crew rooms of each later state before testing the room;
+- at a vent exit, the state's crew rooms are collected before the exit policy's guard is read. A
+  role-less player in view therefore raises `KeyError`, not a misattributed breach.
+
+The authored target is still only tested for membership, because a guard-rewritten authored target
+may be an id that names no player (the `invalid_target` rewrite in `meetings/voting.py`).
+
+`test_a_player_without_a_recorded_role_raises_where_a_role_is_read` now plants 13 carriers. Its
+round-7 five are joined by eight more:
+- the exit state under the look-and-wait exit;
+- a later state that lists a crewmate before the role-less player;
+- a vent holding `p-0` and `p-9` at an opening;
+- a row naming `p-9`;
+- a skipping voter, and a confident voter beside an impostor's at an ejection;
+- the target of an impostor's ballot, and of a crewmate's.
+
+It also plants a target that names no player and sorts before `SKIP` (it raises), and a
+hallucinated authored target (it reads as no teammate and raises nothing).
+
+At the strength delivered: the fold reads a role at five index expressions. Two are the helpers
+`_crew` (9 call sites) and `_is_impostor` (12, one of them inside `_teammates`). The others are the
+two crew-room sets and the answered speaker's article. The helpers are handed:
+- every kill witness and every vent witness on either side, read for every kill and vent in
+  `_fold_witnesses`;
+- every player in the state before each vent exit, and in each later state the walk-out check
+  reads;
+- every player inside a vent at an opening;
+- each meeting's opener and ejected player;
+- the speaker of each repeat-speaker turn and of the turn it answers;
+- each own-kill row's holder and named player;
+- each ballot's voter and recorded target other than SKIP;
+- the surfacing impostor at each exit.
+
+Three kinds of read short-circuit, and each reaches only players an earlier total read already
+looked up: the ejection floor's `all()` reads voters the ballot loop looked up, and the
+impostor-fate and vent-proof `any()`s read witnesses the first loop of `_fold_witnesses` looked
+up. `_teammates` and the fate loop iterate `game.roles` itself, where no role can be missing. A player the fold never asks about has no role read: a
+meeting's other living players, a first-time speaker, and an authored target. No page byte moves.
+
+**Finding 6: the References sentence.** Restated above, with dated correction notes under rounds 6
+and 7. No code change.
+
+**The carrier's closed fields.** Six carrier fields now carry their source's closed type:
+- `MeetingFact.trigger_kind`: `TriggerKind`, the engine trigger event's `Literal["report",
+  "emergency"]`;
+- `MeetingFact.outcome`: the meeting schema's `MeetingOutcome`;
+- `MeetingFact.phase_after`: `Phase`, the engine state's phase literal;
+- `GameFacts.winner`: the replay's `WinnerSide`, or `None`;
+- `BallotFact.grounding_label`: the meeting schema's `BallotGroundingLabel`, or `None`;
+- `ObservationFact.kind`: `ObservationKind`, the `type` of each of the meeting schema's eight
+  observation shapes.
+
+Strict mypy checks each loader assignment against the source's type, so a new value in a source
+fails the type check until the census lists it. This is what makes 26 ordering mutants equivalent
+(class E38 below): on every value of the declared type the ordering selects what the equality did.
+No runtime behaviour or page byte moves. Two test helpers, `seen` and `ballot`, take the narrowed
+types.
+
+**The probes.** A scratch harness (not shipped) wrote each probe on disk as one exact span of the
+census module or the publisher. It ran both census suites without `-x`, then restored every
+touched file from a copy taken before the run, never from git, and checked the sha256 of each.
+"Before" installs the module, the publisher and both test files of `23104a67` (census `42238a7e`,
+publisher `5048c8bc`). "After" is this head (census `44a49b1a`, publisher unchanged).
+
+| probe | before | after | the test that turns red |
+|---|---|---|---|
+| (none) | green, 290 passed | green, 320 passed | |
+| P1: the grace window's `<=` read as `==` | green, 290 passed | red, 2 failed | `test_every_tick_of_the_grace_window_lies_inside_it` (both cooldowns) |
+| P2: `kill.tick == engine_tick` read as `<=` | green, 290 passed | red, 1 failed | `test_a_row_joins_only_its_own_kill_on_each_side_of_every_join_field` |
+| P3: `main` prints `census.pooled_9p2i` | green, 290 passed | red, 1 failed | `test_main_publishes_and_checks_the_tree_it_is_given` |
+| P4a: the walk-out `room == destination` read as `<=` | green, 290 passed | the line is a set test now | |
+| P4b: the rebuttal fold's `speaker != opener` read as `>` | green, 290 passed | red, 1 failed | `test_a_rebuttal_by_a_player_on_either_side_of_the_opener_is_not_the_openers` |
+| P4c: the citation's `agent != holder` read as `>` | green, 290 passed | red, 1 failed | the join test |
+| P4d: `killer == subject` read as `<=` | green, 290 passed | red, 1 failed | the join test |
+| P4e: the floor's `target == ejected` read as `<=` | green, 290 passed | red, 1 failed | `test_the_impostor_only_floor_reads_recorded_targets_on_either_side` |
+| P4f: the applied meeting id's `!=` read as `<` | green, 290 passed | red, 1 failed | `test_the_loader_refuses_a_meeting_applied_under_another_id` |
+| P4g: `EraKey`'s canonical `!=` read as `<` | green, 290 passed | red, 1 failed | `test_an_era_holding_a_default_value_is_refused` |
+| R5: the voter's role read as `roles.get(...) == "IMPOSTOR"` | the round-7 code (membership), green | red, 1 failed | the role-less player test |
+| R6: the target's role read the same way | the round-7 code, green | red, 1 failed | the role-less player test |
+| R7: the named player's role read the same way | the round-7 code (membership), green | red, 1 failed | the role-less player test |
+
+**The mutation pass.** A scratch harness (not shipped) generated every mutant as one exact source
+span of `eval/gameplay_census.py` or `scripts/publish_gameplay_census.py` and its replacement. Each
+replacement is re-parsed, and a mutant whose syntax tree equals the source's, or another mutant's,
+is dropped. Docstrings, annotations, imports, `__all__` and type aliases are not mutated. The
+published text's f-strings, tuples and dicts are mutated like any other code, and the recomputation
+test reads every byte of the pages. The operators:
+- **a**, a filter or wrapper dropped: a comprehension filter (a1); a call replaced by each
+  positional argument, which covers `_crew(game, x)` read as `x` (a2); a subscript or slice (a3);
+  one side of a set difference, intersection or union (a4); one `and`/`or` operand (a5); a method
+  call replaced by its receiver (a6).
+- **b**, a related expression swapped in, by the types strict mypy infers: an attribute for each
+  sibling field of a compatible type, such as `census.pooled` for `census.pooled_9p2i` (b1); a name
+  for each compatible name in scope (b2); the operands of an ordering or membership comparison
+  (b3); and any value read (a name, or an attribute chain) for any other read in the same function
+  whose type is compatible, collections of one element type counting as compatible, such as
+  `after` for `game.kills` or `exit_fact.source_room` for `room` (b4).
+- **c**, comparisons: every comparison operator replaced by each other one, `==`, `!=`, `<`,
+  `<=`, `>` and `>=` among themselves, `is` and `is not`, `in` and `not in` (c1); a comparison
+  replaced by a None test of each operand (c2); a comparison inverted (c3).
+- **d**, a value read (name, attribute or subscript) replaced by a constant of its type: 0 and 1,
+  `True` and `False`, `''`, each value of a closed string type, a player id, SKIP or a room for an
+  id or room read, an empty collection, and `None` where the type allows it (d1).
+- **e**, a message argument replaced by a constant: a `seed=`, `where=`, `label=` or `holder=`
+  argument, or any integer or text keyword argument (e1); one f-string field (e2); a whole f-string
+  (e3).
+- **f**, one member dropped from a tuple, list or set display, or one entry from a dict display (f1).
+- **g**, adjacent branches swapped: the last branch's body with the `else` body, and each pair of
+  adjacent `if`/`elif` branches, by test and body or by body alone (g1); an if-expression's arms, and
+  adjacent arms of a chained one (g2); adjacent `and`/`or` operands (g3).
+- **h**, each read of a loaded source replaced by the canonical literal it holds today: the map's
+  kill cooldown and neighbour table, the sorted room list, the button cooldown, the clock offset,
+  the two set lists, the legacy ballot floor, the roster knobs, the defaults table, the seeds on
+  disk, the recorded settings and delivery version, the recordings root, and the checkout's root
+  (h1).
+
+Stages, in order:
+1. In memory. Each mutant runs in a process forked from a parent that has imported every
+   dependency except the two modules and their tests. The child installs the mutant in
+   `sys.modules`; the census module's `__file__` names a scratch copy holding the mutant, so the
+   test that re-executes the module's file reads the mutant. It then runs both suites with `-x`,
+   with Hypothesis derandomized, its example database off and no deadline. Each child runs in its
+   own scratch directory. The parent checks the two modules, their tests and the two pages
+   between children, restores a moved page from memory at once, and marks every mutant running at
+   the time for a rerun.
+2. Strict `mypy` over the mutated module, the publisher, `tests/_helpers/committed.py` and both
+   suites. The mutant reaches mypy through `--shadow-file`, from a fresh clone of a warm cache
+   holding none of those five modules.
+3. On disk, for the publisher's survivors. The mutant is written to the real file, both suites
+   run, and the file and the pages are restored from memory and their sha256 checked after each.
+
+The pass ran on this head's module (`44a49b1a`) and the publisher (`5048c8bc`). The in-memory stage
+first ran against the tests as they stood. Every mutant still alive was then run again, three
+times, as the plants below landed, and last against the final test files. Adding a test or an
+assertion can only kill more. One publisher mutant (`_REPO_ROOT` read as this checkout's path
+inside `main`) wrote both pages, and the runner restored them from memory at once. The four mutants
+running beside it were rerun with no writer running, and the writer was rerun alone; it fails a
+test.
+
+| file | operator | span (lines) | mutants | killed by a test | killed by mypy | killed on disk | equivalent | survivors |
+|---|---|---|---|---|---|---|---|---|
+| census | a1 comprehension filter dropped | 460-3124 | 37 | 35 | 0 | 0 | 2 | 0 |
+| census | a2 call replaced by one of its arguments | 189-3163 | 941 | 909 | 22 | 0 | 10 | 0 |
+| census | a3 subscript or slice dropped | 442-3084 | 51 | 50 | 0 | 0 | 1 | 0 |
+| census | a4 one side of a set difference, intersection or union | 454-2302 | 32 | 32 | 0 | 0 | 0 | 0 |
+| census | a5 one `and`/`or` operand dropped | 758-3052 | 124 | 122 | 1 | 0 | 1 | 0 |
+| census | a6 method call replaced by its receiver | 200-3164 | 159 | 158 | 0 | 0 | 1 | 0 |
+| census | b1 attribute swapped for a compatible sibling field | 427-3127 | 974 | 908 | 2 | 0 | 64 | 0 |
+| census | b2 name swapped for a compatible name in scope | 179-3156 | 3,553 | 3,492 | 7 | 0 | 54 | 0 |
+| census | b3 ordering or membership operands swapped | 420-3127 | 59 | 59 | 0 | 0 | 0 | 0 |
+| census | b4 value read swapped for another read in the function | 267-3133 | 4,427 | 3,988 | 90 | 0 | 349 | 0 |
+| census | c1 comparison operator replaced by each other one | 267-3127 | 621 | 590 | 0 | 0 | 31 | 0 |
+| census | c2 comparison replaced by a None test of an operand | 267-3127 | 478 | 477 | 0 | 0 | 1 | 0 |
+| census | c3 comparison inverted | 267-3127 | 193 | 193 | 0 | 0 | 0 | 0 |
+| census | d1 value read replaced by a typed constant | 179-3156 | 2,216 | 2,038 | 3 | 0 | 175 | 0 |
+| census | e1 keyword argument replaced by a constant | 363-3143 | 322 | 181 | 0 | 0 | 141 | 0 |
+| census | e2 f-string field replaced by a constant | 269-3093 | 75 | 65 | 0 | 0 | 10 | 0 |
+| census | e3 whole f-string replaced by a constant | 269-3093 | 55 | 46 | 0 | 0 | 9 | 0 |
+| census | f1 one member of a tuple, list, set or dict dropped | 215-3100 | 292 | 289 | 2 | 0 | 1 | 0 |
+| census | g1 if/elif/else branches or bodies swapped | 1563-2681 | 18 | 12 | 0 | 0 | 6 | 0 |
+| census | g2 if-expression arms swapped | 291-3091 | 34 | 33 | 0 | 0 | 1 | 0 |
+| census | g3 adjacent `and`/`or` operands swapped | 758-3052 | 65 | 13 | 0 | 0 | 52 | 0 |
+| census | h1 loaded source read replaced by its canonical literal | 179-3112 | 17 | 17 | 0 | 0 | 0 | 0 |
+| publisher | a1 comprehension filter dropped | 73-299 | 4 | 4 | 0 | 0 | 0 | 0 |
+| publisher | a2 call replaced by one of its arguments | 33-366 | 99 | 92 | 5 | 2 | 0 | 0 |
+| publisher | a3 subscript or slice dropped | 33-128 | 7 | 6 | 1 | 0 | 0 | 0 |
+| publisher | a5 one `and`/`or` operand dropped | 138-346 | 17 | 17 | 0 | 0 | 0 | 0 |
+| publisher | a6 method call replaced by its receiver | 33-349 | 60 | 58 | 0 | 2 | 0 | 0 |
+| publisher | b1 attribute swapped for a compatible sibling field | 80-359 | 134 | 127 | 4 | 0 | 3 | 0 |
+| publisher | b2 name swapped for a compatible name in scope | 33-365 | 460 | 449 | 4 | 6 | 1 | 0 |
+| publisher | b3 ordering or membership operands swapped | 34-34 | 1 | 1 | 0 | 0 | 0 | 0 |
+| publisher | b4 value read swapped for another read in the function | 83-359 | 459 | 459 | 0 | 0 | 0 | 0 |
+| publisher | c1 comparison operator replaced by each other one | 34-365 | 38 | 34 | 0 | 3 | 1 | 0 |
+| publisher | c2 comparison replaced by a None test of an operand | 34-365 | 22 | 17 | 0 | 5 | 0 | 0 |
+| publisher | c3 comparison inverted | 34-365 | 14 | 13 | 0 | 1 | 0 | 0 |
+| publisher | d1 value read replaced by a typed constant | 33-365 | 187 | 181 | 4 | 2 | 0 | 0 |
+| publisher | e1 keyword argument replaced by a constant | 328-328 | 2 | 2 | 0 | 0 | 0 | 0 |
+| publisher | e2 f-string field replaced by a constant | 73-359 | 63 | 63 | 0 | 0 | 0 | 0 |
+| publisher | e3 whole f-string replaced by a constant | 73-359 | 36 | 36 | 0 | 0 | 0 | 0 |
+| publisher | f1 one member of a tuple, list, set or dict dropped | 71-303 | 77 | 75 | 0 | 0 | 2 | 0 |
+| publisher | g2 if-expression arms swapped | 82-185 | 7 | 6 | 0 | 0 | 1 | 0 |
+| publisher | g3 adjacent `and`/`or` operands swapped | 138-346 | 9 | 6 | 0 | 0 | 3 | 0 |
+| publisher | h1 loaded source read replaced by its canonical literal | 34-356 | 6 | 4 | 0 | 2 | 0 | 0 |
+| **all** | | | **16,445** | **15,357** | **145** | **23** | **920** | **0** |
+
+The census accounts for 14,743 mutants and the publisher for 1,702. The publisher has no a4 or g1
+row: it holds no set operator and no `if` with an `else`. "Killed by a test" includes 476 mutants
+after which a module no longer imports, 12 that stop the suite while it collects, and 4 killed by
+the runner for memory; no mutant hung. On the review's classes the pass is exhaustive in two
+directions the earlier passes were not: c1 replaces every comparison operator by each of the
+others, and b1, b2 and b4 swap every compatible read that strict mypy's types admit.
+
+**The 920 equivalent mutants, by class.** Lines are this head's. E1 to E28 keep round 7's reasons,
+extended where the table says so. E38 to E47 are new.
+
+| class | mutants | why no input the carrier, the walk or the publisher accepts can tell it apart | where |
+|---|---|---|---|
+| E1 | 672 | The `seed=` or `where=` argument of a count whose cell has no guard, or a local only such arguments read: `_Accumulator.count` reads both only in the breach message, which needs a guard. Each replacement reads only names bound, and of their declared type, on every path that reaches that count (the loop's own item, the exit narrowed from `None`, the report branch's corpse, the held kill's next meeting). Each was checked mutant by mutant. | the nine fold functions |
+| E2 | 18 | At most one repeat-speaker turn reaches the rebuttal fold (a second raises the always-on guard first), so `turn` is `first`. | `_fold_rebuttals` |
+| E3 | 3 | Past `if turn.speaker != meeting.opener: continue`, the rebuttal's speaker is the opener. | `_fold_rebuttals` |
+| E4 | 1 | Reading `<=` for `<` among earlier speakers adds the rebuttal's own speaker, who already spoke. | `_fold_rebuttals` |
+| E5 | 2 | The walk-out check runs only for an exit whose source and destination are one room. | `_crew_arrives_before_walk_out` |
+| E7 | 2 | An exit trip closes on its own exit tick. | `_fold_trips` |
+| E8 | 19 | `None` is never a player id or a body id: a `None` test that only narrows a type, or a set that also holds `None`, is read only against ids. | `_fold_witnesses`, `_fold_meetings` |
+| E9 | 6 | Order only: the impostor-fate counts add in any order; a stable sort already lists vents before meetings; the neighbour table is read by key; a count over the turns reads no order. | `_trips`, `_fold_witnesses`, `_fold_structure`, `load_census_inputs` |
+| E10 | 45 | An alias: the local was bound to exactly that expression (`seed`, `opener`, `ejected`, `end`, `values`, `entry`); or a value equal to it by the line before (the one meeting on its tick, the era the set was checked against, the corpse keyed by its own id, the length of the sorted turns, the button cooldown bound to the policy's, the path the publisher's existence loop left bound). | 13 census functions and the cell table; publisher `check_report` |
+| E11 | 6 | One value by construction on every walk: a kill event carries its tick's number; a tick that throws an action away ends on the event that opened its meeting, stamped with that tick; a vent event's room is its destination; the engine keys cooldowns by its own players. | `_load_game`, `_meeting_fact` |
+| E12 | 3 | Only the three movement and task kinds are read from the dropped-events counter, whatever else it counts. | `_meeting_fact` |
+| E13 | 1 | `WalkComplete` is the last of the walk's event types, and the only one that reaches that branch. | `_load_game` |
+| E14 | 5 | A copy no reader can tell from its source: a fresh dict, a proxy over a counter that is only read by its items, a mapping only the loader reads. | `_game_era`, `_manifest_prompt_cells`, `fold_set`, `pool` |
+| E15 | 9 | Only the count and emptiness of the refused-seed and missing-row lists are read. | `load_census_inputs` |
+| E16 | 2 | A monotone shift of a row-sort key. | publisher `_heading_block` |
+| E17 | 3 | The publisher renders only `census_from_inputs`' output, and every group shares the all-sets pool's cell and table definitions and order, so reading them from the nine-player pool renders alike (lines 102, 108 and 197). Line 180's twin is killed: the new definitions test plants a guard in the all-sets pool alone. | publisher `_heading_block`, `_definition_lines` |
+| E18 | 1 | The era loop would compare the first key with itself. | `resolve_era` |
+| E19 | 2 | The early return only skips a search that cannot match. | `served_own_kill_rows` |
+| E20 | 1 | The always predicate has no conditions, and `all` of nothing is true. | `SettingPredicate.holds` |
+| E22 | 1 | The equality that follows makes the two not-None tests agree. | `_fold_ballots` |
+| E23 | 17 | Only membership in `{"exit from the room left"}` and emptiness are read from the sightings, so any other non-empty text for a room-entered sighting reads alike. | `_fold_vent_proof` |
+| E28 | 1 | Every recorded setting value is a string, integer, boolean or `None`; iterating the model yields them as the JSON dump does. | `_game_era` |
+| E38 | 26 | An ordering where the source compared for equality, against the least or greatest value of the operand's closed type: `Role`, the vent kind, `TriggerKind`, `MeetingOutcome`, `Phase`, `WinnerSide` (after its `None` check), the trip's close, `ObservationKind`, and the replay's contradiction kind. On every value of the type the two select alike. Named by a script that evaluates both comparisons on each value. | 15 functions |
+| E39 | 1 | Testing "any sighting" before "never vented": `any` over an impostor's empty vent list is false, so the same branch is taken. | `_fold_witnesses` |
+| E40 | 52 | Adjacent `and`/`or` operands with no side effect. Each operand is a precomputed boolean, an attribute or membership test, or a call whose only failure (a missing role) an earlier total read has already raised. | 17 functions; publisher `main` |
+| E41 | 5 | An `isinstance` chain over classes no event belongs to two of (the walk's five event types, a kill event and the vent events), so the order of the tests cannot change the branch. | `_load_game` |
+| E42 | 2 | A bound the line before fixes: the cooldown set is not empty (an empty input list raised), and an `enumerate` index is below the length. | `census_from_inputs`, `_fold_meetings` |
+| E43 | 2 | Exclusive branches: after "both", the exit-only and entry-only tests cannot both hold; a guard cannot be both `None` and `always`. | `_fold_vent_proof`, publisher `_definition_lines` |
+| E44 | 1 | Within its scope (the look-and-wait exit), a trip longer than the cap raises the longer-trip guard, counted just before, so the forced-surfacing test never sees one: `>=` and `==` agree. | `_fold_trips` |
+| E45 | 9 | Only the emptiness of the set of impostors inside a vent at an opening is read, so its elements may be any value. | `_fold_meetings` |
+| E46 | 1 | `holds` is already false when a cell has no guard. | `section_from_tally` |
+| E47 | 1 | A published cell's counts are never negative (its validator), so `denominator <= 0` is `denominator == 0`. | publisher `_value` |
+
+**What the pass planted.** 25 new tests, and assertions added to 15, close what the first runs left
+alive. Each kills the mutants named:
+- the rebuttal fold: an impostor opener who answers is seated as the opener (the seat's chained
+  arms); a rebuttal by a player on either side of the opener; a selector pick that is `None`, or
+  sorts before or after the rebuttal; a charge that is the accuser's observation of the opener
+  alone, with other players on either side;
+- the own-kill check: an impostor's rows naming a crewmate and itself join their kills (each
+  operand of the teammate test); finding 2's join test;
+- the ballot fold: a recorded target rewritten from the voter itself; the floor with recorded
+  targets on either side and a rewritten impostor ballot; a held kill voted by the recorded target;
+  a kill whose only living witness is the killer's fellow impostor is held by no one;
+- structure and trips: an opener who never speaks; the shuffled-turns test now also asserts the
+  opener's charge and answer; a cooldown below zero; an exit breach named by its own tick when
+  later vents follow; trips open at the game end, from their own entry or the meeting they span; an
+  entry seen from the room left beside an exit seen from it;
+- eras and publication: a set and a pool take the era their games resolve to, whatever the order;
+  the era refusal names the component that differs; the schema version follows the module's; one
+  hit in three million is still refused by construction; the defaults a missing key reads follow
+  the moved config source; every table, carrier and tally is read-only, a property over the
+  module's tables, a committed carrier and its fold, with planted dict, list and set values;
+- the loader: a call no agent made serves no row; a ballot that never parsed authored no target,
+  and an unrewritten ballot at an ejecting meeting authored its recorded target; every thrown-away
+  action sits on its trigger tick; the loader's refusals name the seed they were handed; a set's
+  label keeps its directories' whole names; each set refusal counts only what it refuses; the alibi
+  legs keep their own ticks; the selector counts only living targets; a button meeting's
+  undiscovered corpse counts;
+- the publisher: `main()` reads `--check` from the command line; a definition names its guard
+  whatever the guard reads, and only `always` reads as every recording; a by-construction value
+  keeps its not-evaluable suffix; the path bootstrap puts the script's own resolved checkout first,
+  once, and a module name sorting before `__main__` does not run `main`.
+
+**Tests.** The two census suites go from 290 tests to 320 (273 and 47). No test was skipped,
+weakened or deleted. Existing tests gained assertions or cases, one gained a second planted census
+in place of its first (the summary line now reads the differing pools), and the test helpers `seen`,
+`ballot` and `_load` gained the narrowed types and a seed parameter.
+
+**Figures.** No page byte moved: `publish_gameplay_census.py --check` is consistent at this head,
+and `--set-dir replays/samples/9p2i --json-stdout` prints the committed `samples/9p2i` section.
+Every figure quoted in earlier rounds stands as re-measured in round 3.
+
+**Verification.** Each exit code was captured directly, never through a pipe. The code and tests
+are commit `00e3c6eb`, and this subsection is the card commit after it. Every row was measured on
+the code and tests of `00e3c6eb`, with this subsection in place; `check.sh` ran before its cell was
+filled, and the task-doc rows were re-run on the final text.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 320 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section; `git status --porcelain` identical before and after |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 501 source files |
+| `uv run ruff check .` and `uv run ruff format --check .` | clean; 530 files formatted |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `bash scripts/check.sh` | exit 0 on this head's tree with this subsection in place, before this cell was filled: 8,834 Python passed, 20 skipped, 3 xfailed; 559 frontend tests passed. `npm ci` in `frontend/` ran first in this fresh worktree |
+
+**Scope check** (the demo-bundle proof). `git diff --stat 52a6ac58 -- replays api frontend agents
+meetings engine orchestrator observation scripts/build_demo_bundle.py` prints nothing at the head,
+so no path the bundle reads moved and the republished bundle is byte-identical. `git diff
+23104a67` names only the census module, its two test files and this card. No `docs/artifacts.md`
+row moved: no `audits/`, `tests/fixtures/` or page byte changed, and no hashed source reads the
+module. No frontend e2e: nothing under `api/` or `frontend/` moved.
+
+**Closing greps**, run at the card commit. `git grep -n "still reads only the orchestrator"`
+outside this card prints nothing. `grep -n "impostors = {pid" eval/gameplay_census.py` prints
+nothing: the ballot fold's membership set is gone.
+
+**Limitations of this round.**
+- The pass's harness is scratch and not shipped, as in rounds 1 to 7. Its counts reproduce by
+  re-running an equivalent harness over the same two files with the operators above. The
+  mutants' types come from a pure-Python build of the same mypy version (1.20.2), because the
+  compiled build cannot be subclassed to read them.
+- The equivalence classes are argued, not proved by a tool, except E38, which a script checks on
+  every value of each closed type. E1's safety was read mutant by mutant from the control flow.
+- The operators are the ones listed, together with round 7's classes, which ran on round 7's
+  module. This round's changed lines (the role reads, the closed types, the in-vent and walk-out
+  sets) ran under this round's operators only.
 - The round-2 question on the two pre-registered before values still waits for the orchestrator
   (the PR's Questions).
