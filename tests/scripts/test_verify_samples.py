@@ -501,3 +501,39 @@ def test_state_hash_divergence_still_renders_both_hashes(tmp_path: Path) -> None
     assert failures[0].expected is not None
     assert f"recorded {failures[0].expected!r}" in rendered
     assert f"reconstructed {failures[0].actual!r}" in rendered
+
+
+@_NEEDS_SHELL
+def test_verify_sh_no_arg_walks_replays_candidates_by_default(tmp_path: Path) -> None:
+    """With no override, the candidates root is the checkout's replays/candidates.
+
+    A planted checkout: a copy of the wrapper beside a link to the verifier, so
+    the wrapper's own location names the root, with no environment override.
+    """
+
+    checkout = tmp_path / "checkout"
+    (checkout / "scripts").mkdir(parents=True)
+    shutil.copy(_VERIFY_SH, checkout / "scripts" / "verify_samples.sh")
+    (checkout / "scripts" / "_verify_samples.py").symlink_to(
+        _REPO_ROOT / "scripts" / "_verify_samples.py"
+    )
+    _one_seed_set(checkout / "replays" / "samples" / "4p1i", _REAL_SAMPLES)
+    _one_seed_set(checkout / "replays" / "candidates" / "round-1" / "9p2i", _REAL_9P2I)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("AILIBI_SAMPLES_ROOT", "AILIBI_CANDIDATES_ROOT")
+    }
+    proc = subprocess.run(
+        ["bash", str(checkout / "scripts" / "verify_samples.sh")],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.count("samples verified clean") == 2
+    assert (
+        f"=== verifying candidate set {checkout}/replays/candidates/round-1/9p2i/ ==="
+        in proc.stdout
+    )

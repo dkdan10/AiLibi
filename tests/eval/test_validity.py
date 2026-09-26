@@ -20,6 +20,8 @@ from types import MappingProxyType, ModuleType
 from typing import Any, Final, Literal, NoReturn
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
@@ -1687,3 +1689,122 @@ def test_validity_and_kill_gift_still_refuse_temporal_observations(
         _walk_with(profile, path, _MEETING_SEED)
     # The report profile reads them, so the plant is what the two refuse.
     _walk_with("current-report", path, _MEETING_SEED)
+
+
+@settings(deadline=None, max_examples=100)
+@given(st.lists(st.integers(min_value=0, max_value=100_000), min_size=1, max_size=20))
+def test_a_comma_list_of_seeds_parses_to_exactly_those_seeds(seeds: list[int]) -> None:
+    parse = _gate_cli()._parse_seed_set
+    assert parse(",".join(str(seed) for seed in seeds)) == frozenset(seeds)
+
+
+@settings(deadline=None, max_examples=100)
+@given(
+    low=st.integers(min_value=0, max_value=100_000),
+    width=st.integers(min_value=0, max_value=200),
+)
+def test_a_seed_range_parses_inclusive_of_both_ends(low: int, width: int) -> None:
+    parse = _gate_cli()._parse_seed_set
+    assert parse(f"{low}-{low + width}") == frozenset(range(low, low + width + 1))
+    if width:
+        with pytest.raises(argparse.ArgumentTypeError, match="backwards"):
+            parse(f"{low + width}-{low}")
+
+
+@settings(deadline=None, max_examples=60)
+@given(
+    declared=st.sampled_from(["test", "none", "no-rebuttal"]),
+    recorded=st.lists(
+        st.sampled_from(["test", "none", "no-rebuttal"]), min_size=1, max_size=6
+    ),
+)
+def test_exactly_the_games_off_the_declared_config_are_named(
+    nine_report: TournamentReport, declared: str, recorded: list[str]
+) -> None:
+    """Over any mix of recorded configs, a game is named iff it differs."""
+
+    configs: dict[str, RecordedExperimentConfig | None] = {
+        "test": _TEST_CONFIG,
+        "none": None,
+        "no-rebuttal": _TEST_CONFIG.model_copy(
+            update={"bounded_rebuttal_version": None}
+        ),
+    }
+    template = nine_report.games[0]
+    games = [
+        template.model_copy(
+            update={
+                "game_id": f"headless-seed-{index}",
+                "experiment_config": configs[name],
+            }
+        )
+        for index, name in enumerate(recorded)
+    ]
+    named = experiment_config_violations(games, configs[declared])
+    assert [line.split(":", 1)[0] for line in named] == [
+        f"headless-seed-{index}"
+        for index, name in enumerate(recorded)
+        if name != declared
+    ]
+
+
+def test_a_declared_config_of_historical_defaults_is_the_same_as_none(
+    nine_report: TournamentReport,
+) -> None:
+    """Both sides are normalized: a default config object equals no config."""
+
+    assert (
+        experiment_config_violations(nine_report.games, RecordedExperimentConfig())
+        == []
+    )
+    carrying_default = nine_report.games[0].model_copy(
+        update={"experiment_config": RecordedExperimentConfig()}
+    )
+    assert experiment_config_violations([carrying_default], None) == []
+    assert experiment_config_violations([carrying_default], _TEST_CONFIG) != []
+
+
+def test_a_manifest_naming_no_sha_at_all_fails_the_sha_declaration() -> None:
+    bare = SetInventory(
+        replay_seeds=frozenset({0}), manifest_seeds=frozenset({0}), manifest_shas=()
+    )
+    assert recording_sha_violations(bare) == [
+        "MANIFEST.md rows for seeds [0] name no recording sha",
+        "MANIFEST.md names 0 recording shas (none); one is required",
+    ]
+
+
+def test_an_unreadable_manifest_fails_check_nine_closed(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    """A MANIFEST the inventory cannot read leaves check 9 unavailable, not a crash."""
+
+    broken = _copied(arms_on_set, tmp_path)
+    (broken / "MANIFEST.md").write_bytes(b"| 0 | \xff\xfe |\n")
+    report = run_validity_gate(
+        broken,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+    )
+    provenance = _provenance(report)
+    assert not provenance.passed
+    assert provenance.facts == {"input_available": False}
+    assert "UnicodeDecodeError" in provenance.violations[0]
+
+
+def test_the_gate_cli_passes_the_sha_flag_through(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    foreign = _copied(arms_on_set, tmp_path)
+    manifest = foreign / "MANIFEST.md"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            f"| {_FAKE_SHA} |", "| def5678 |", 1
+        ),
+        encoding="utf-8",
+    )
+    good = tmp_path / "good.json"
+    good.write_text(_TEST_CONFIG_JSON)
+    arguments = [str(foreign), "--expected-experiment-config", str(good)]
+    assert _gate_cli().main(arguments) == 0
+    assert _gate_cli().main([*arguments, "--require-one-recording-sha"]) == 1

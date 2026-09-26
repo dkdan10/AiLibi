@@ -26,8 +26,11 @@ import time
 from collections.abc import Iterator, Sequence
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 import _declared_experiment as de
 from api.replay_loader import ReplayLoader
@@ -2221,3 +2224,223 @@ def test_the_target_rule_reads_physical_paths(tmp_path: Path) -> None:
         sample_dir_explicit=False,
         repo_root=repo,
     )
+
+
+# -- the helper's rules as properties over generated families -----------------
+
+#: Path segments the target property composes, including the ones a string
+#: prefix test would mishandle: ``..``, ``.``, a link into a canonical tree, and
+#: names that look like trees one level off.
+_SEGMENTS = st.sampled_from(
+    [
+        "..",
+        ".",
+        "samples",
+        "ml_corpus",
+        "candidates",
+        "records",
+        "into-samples",
+        "into-corpus",
+        "r1",
+        "9p2i",
+        "a.b",
+        ".hidden",
+    ]
+)
+
+
+@pytest.fixture(scope="module")
+def planted_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A repository whose replays/ tree carries both canonical trees and links."""
+
+    root = tmp_path_factory.mktemp("planted-repo")
+    replays = root / "repo" / "replays"
+    for tree in ("samples/4p1i", "ml_corpus/9p2i", "candidates/r1/9p2i", "records"):
+        (replays / tree).mkdir(parents=True)
+    (replays / "candidates" / "into-samples").symlink_to(replays / "samples")
+    (root / "outside").mkdir()
+    (root / "outside" / "into-corpus").symlink_to(replays / "ml_corpus")
+    return root
+
+
+def _target_outcome(repo: Path, target: Path, manifest: Path) -> str | None:
+    try:
+        de.refuse_unsafe_target(
+            _TEST_CONFIG,
+            sample_dir=target,
+            manifest=manifest,
+            sample_dir_explicit=True,
+            repo_root=repo,
+        )
+    except de.DeclaredExperimentError as exc:
+        return str(exc)
+    return None
+
+
+@settings(deadline=None, max_examples=300)
+@given(
+    base=st.sampled_from(
+        ["repo/replays", "repo", "outside", "repo/replays/candidates"]
+    ),
+    segments=st.lists(_SEGMENTS, max_size=5),
+)
+def test_no_accepted_target_resolves_inside_a_canonical_tree(
+    planted_repo: Path, base: str, segments: list[str]
+) -> None:
+    """Whatever the path's spelling, the physical place decides.
+
+    A target accepted for a switched-on config never resolves inside
+    ``replays/samples/`` or ``replays/ml_corpus/``, and inside ``replays/`` it is
+    exactly a candidate set directory with names the verifier's glob can see.
+    """
+
+    repo = planted_repo / "repo"
+    target = Path(planted_repo, base, *segments)
+    physical = Path(os.path.realpath(target))
+    replays = Path(os.path.realpath(repo / "replays"))
+    outcome = _target_outcome(repo, target, target / "MANIFEST.md")
+    parts = physical.relative_to(replays).parts if replays in physical.parents else None
+    if physical == replays:
+        parts = ()
+    if parts is None:
+        assert outcome is None, (target, outcome)
+    elif parts[:1] in (("samples",), ("ml_corpus",)):
+        assert outcome is not None and f"inside replays/{parts[0]}/" in outcome
+    elif (
+        len(parts) == 3
+        and parts[0] == "candidates"
+        and all(not name.startswith(".") for name in parts[1:])
+    ):
+        assert outcome is None, (target, outcome)
+    else:
+        assert outcome is not None, (target, physical)
+
+
+@settings(deadline=None, max_examples=100)
+@given(
+    round_name=st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,8}", fullmatch=True),
+    set_name=st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,8}", fullmatch=True),
+)
+def test_every_well_named_candidate_set_directory_is_accepted(
+    planted_repo: Path, round_name: str, set_name: str
+) -> None:
+    repo = planted_repo / "repo"
+    if "into-samples" in (round_name, set_name) or ".." in (round_name, set_name):
+        return
+    target = repo / "replays" / "candidates" / round_name / set_name
+    assert _target_outcome(repo, target, target / "MANIFEST.md") is None
+    # The same set's manifest aimed one level up is refused.
+    assert _target_outcome(repo, target, target.parent / "MANIFEST.md") is not None
+
+
+@settings(deadline=None, max_examples=200)
+@given(
+    exported=st.sets(st.sampled_from(sorted(EXPERIMENT_ENV_NAMES))),
+    others=st.dictionaries(
+        st.from_regex(r"AILIBI_[A-Z_]{1,12}", fullmatch=True), st.text(max_size=5)
+    ),
+    value=st.text(max_size=8),
+)
+def test_any_meeting_experiment_export_is_refused_whatever_its_value(
+    exported: set[str], others: dict[str, str], value: str
+) -> None:
+    environ = {
+        key: item for key, item in others.items() if key not in EXPERIMENT_ENV_NAMES
+    }
+    environ.update({name: value for name in exported})
+    names = de.ambient_experiment_exports(environ)
+    assert names == tuple(sorted(exported))
+    for recorder in ("refresh", "tournament"):
+        if exported:
+            with pytest.raises(de.DeclaredExperimentError) as refused:
+                de.refuse_ambient_exports(environ, recorder=recorder)
+            assert ", ".join(sorted(exported)) in str(refused.value)
+        else:
+            de.refuse_ambient_exports(environ, recorder=recorder)
+
+
+def test_the_refused_names_follow_the_experiment_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a fifth switch registered is refused too, with no edit here."""
+
+    monkeypatch.setattr(
+        de,
+        "EXPERIMENT_ENV_NAMES",
+        MappingProxyType({**EXPERIMENT_ENV_NAMES, "AILIBI_PLANTED_SWITCH": "planted"}),
+    )
+    with pytest.raises(de.DeclaredExperimentError, match="AILIBI_PLANTED_SWITCH"):
+        de.refuse_ambient_exports({"AILIBI_PLANTED_SWITCH": "1"}, recorder="refresh")
+
+
+def test_the_settings_follow_the_config_model() -> None:
+    """Planted: a field added to the config model is listed once it is set."""
+
+    class _Wider(RecordedExperimentConfig):
+        planted_rule: str = "old"
+
+    wider = _Wider(meeting_reset="hub_with_grace", planted_rule="new")
+    assert de.non_default_settings(wider) == (
+        ("meeting_reset", "hub_with_grace"),
+        ("planted_rule", "new"),
+    )
+    assert de.describe_settings(wider) == (
+        "meeting_reset='hub_with_grace', planted_rule='new'"
+    )
+    assert de.describe_settings(None) == "none: historical defaults"
+    assert de.describe_settings(RecordedExperimentConfig(format_version=2)) == (
+        "none: historical defaults"
+    )
+
+
+def test_an_unreadable_config_is_refused_by_name(tmp_path: Path) -> None:
+    missing = tmp_path / "absent.json"
+    with pytest.raises(de.DeclaredExperimentError, match="it cannot be read"):
+        de.load_declared_config(missing)
+    with pytest.raises(de.DeclaredExperimentError, match="it cannot be read"):
+        de.write_snapshot(missing, tmp_path / "copy.json", expected_sha256="0" * 64)
+    assert not (tmp_path / "copy.json").exists()
+
+
+def test_the_target_rule_resolves_the_repository_itself(tmp_path: Path) -> None:
+    """Planted: the repository reached through a link, the target by its real path.
+
+    Both sides are compared physically, so a checkout opened through a link
+    still refuses its own canonical trees and still accepts its candidates.
+    """
+
+    repo = tmp_path / "repo"
+    (repo / "replays" / "samples" / "9p2i").mkdir(parents=True)
+    (repo / "replays" / "records").mkdir(parents=True)
+    linked = tmp_path / "linked-checkout"
+    linked.symlink_to(repo)
+    for root, target in (
+        (linked, repo / "replays" / "samples" / "9p2i"),
+        (repo, linked / "replays" / "samples" / "9p2i"),
+    ):
+        with pytest.raises(de.DeclaredExperimentError, match="inside replays/samples/"):
+            de.refuse_unsafe_target(
+                _TEST_CONFIG,
+                sample_dir=target,
+                manifest=target / "MANIFEST.md",
+                sample_dir_explicit=True,
+                repo_root=root,
+            )
+    candidate = repo / "replays" / "candidates" / "r1" / "9p2i"
+    de.refuse_unsafe_target(
+        _TEST_CONFIG,
+        sample_dir=candidate,
+        manifest=candidate / "MANIFEST.md",
+        sample_dir_explicit=True,
+        repo_root=linked,
+    )
+    # The candidate depth is not enough on its own: the family must be candidates.
+    records = repo / "replays" / "records" / "r1" / "9p2i"
+    with pytest.raises(de.DeclaredExperimentError, match="records only into"):
+        de.refuse_unsafe_target(
+            _TEST_CONFIG,
+            sample_dir=records,
+            manifest=records / "MANIFEST.md",
+            sample_dir_explicit=True,
+            repo_root=repo,
+        )

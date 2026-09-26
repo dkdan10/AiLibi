@@ -22,6 +22,7 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -661,3 +662,46 @@ def test_the_new_copy_carries_no_identifier_and_no_threshold_arithmetic(
 def test_the_copy_scan_catches_a_planted_identifier_or_threshold(planted: str) -> None:
     assert copy_problems(planted)
     assert copy_problems("Refused: the recorder rule, stated plainly.") == []
+
+
+def _ignored(relative: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "check-ignore", "-q", "--no-index", relative],
+            cwd=repo_root,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def test_a_rounds_recording_stage_is_ignored_and_its_sets_are_not() -> None:
+    """The recorder stages a round's seeds beside its sets; only the stage is ignored."""
+
+    assert _ignored("replays/candidates/r1/.ailibi-refresh-stage-a1b2c3/seed-0/x.jsonl")
+    assert _ignored("replays/samples/.ailibi-refresh-stage-a1b2c3/seed-0/x.jsonl")
+    for kept in (
+        "replays/candidates/r1/9p2i/replay-seed-0.jsonl",
+        "replays/candidates/r1/9p2i/MANIFEST.md",
+        "replays/candidates/r1/experiment-config.json",
+        "replays/candidates/r1/README.md",
+    ):
+        assert not _ignored(kept), kept
+
+
+def test_every_message_template_is_in_the_scanned_tuple() -> None:
+    """The copy scan reads the helper's tuple; every template must be in it."""
+
+    templates = {
+        name: value
+        for name, value in vars(de).items()
+        if re.fullmatch(r"_[A-Z][A-Z_]*", name) and isinstance(value, str)
+    }
+    assert len(templates) == len(de.USER_FACING_TEMPLATES) >= 15
+    assert set(templates.values()) == set(de.USER_FACING_TEMPLATES)
+
+
+def test_the_family_readme_names_the_declared_config_file() -> None:
+    text = (CANDIDATES_ROOT / _FAMILY_README).read_text(encoding="utf-8")
+    assert f"    {de.CONFIG_FILENAME}     the declared config" in text
+    assert f"`shasum -a 256\n{de.CONFIG_FILENAME}`" in text

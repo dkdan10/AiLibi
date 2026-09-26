@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 import run_tournament as rt
 from api.replay_loader import ReplayLoader
@@ -37,6 +39,7 @@ from orchestrator.replay import (
     read_all_entries,
     read_tactical_policy_stamp,
 )
+from orchestrator.run_limits import RunDeadline
 
 
 def test_force_rerun_preserves_fresh_replay_and_audit_bytes(
@@ -612,3 +615,90 @@ def test_the_harness_runner_refuses_an_export_beside_the_declared_profile(
             tasks_per_crewmate=1,
             experiment_config=RecordedExperimentConfig(meeting_reset="hub_with_grace"),
         )
+
+
+@pytest.fixture(scope="module")
+def declared_config_file(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _config_file(tmp_path_factory.mktemp("declared"))
+
+
+@settings(deadline=None, max_examples=60)
+@given(
+    exported=st.sets(st.sampled_from(sorted(EXPERIMENT_ENV_NAMES)), min_size=1),
+    value=st.text(max_size=8),
+)
+def test_any_export_at_any_value_beside_the_flag_is_refused(
+    declared_config_file: Path, exported: set[str], value: str
+) -> None:
+    args = rt._parse_args(
+        ["--output-dir", "unused", "--experiment-config", str(declared_config_file)]
+    )
+    with pytest.raises(SystemExit, match="environment also exports"):
+        rt._resolve_experiment_config(args, {name: value for name in exported})
+    assert rt._resolve_experiment_config(args, {"AILIBI_OTHER": value}) == _TEST_CONFIG
+
+
+def test_without_the_flag_nothing_is_parsed_or_refused() -> None:
+    args = rt._parse_args(
+        ["--output-dir", "unused", "--agent-factory", "learned-champion"]
+    )
+    assert (
+        rt._resolve_experiment_config(args, dict.fromkeys(EXPERIMENT_ENV_NAMES, "1"))
+        is None
+    )
+
+
+def test_the_runner_profile_follows_the_declared_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: a second config, whose meeting values differ, reaches its runner."""
+
+    profiles: list[object] = []
+
+    def runner(**kwargs: Any) -> Any:
+        profiles.append(kwargs.get("profile"))
+        return build_default_meeting_runner(**kwargs)
+
+    monkeypatch.setattr(balance_eval, "build_default_meeting_runner", runner)
+    other = _TEST_CONFIG.model_copy(update={"bounded_rebuttal_version": None})
+    for index, config in enumerate((_TEST_CONFIG, other)):
+        _real_run_tournament_eval(
+            seeds=[0],
+            output_dir=tmp_path / str(index),
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            max_ticks=2,
+            experiment_config=config,
+        )
+    assert profiles == [
+        profile_from_config(meeting_values(_TEST_CONFIG)),
+        profile_from_config(meeting_values(other)),
+    ]
+    assert profiles[0] != profiles[1]
+
+
+def test_the_runner_built_from_the_config_keeps_the_run_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def runner(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return build_default_meeting_runner(**kwargs)
+
+    monkeypatch.setattr(balance_eval, "build_default_meeting_runner", runner)
+    deadline = RunDeadline(3600.0)
+    _real_run_tournament_eval(
+        seeds=[0],
+        output_dir=tmp_path,
+        num_players=4,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        max_ticks=2,
+        deadline=deadline,
+        experiment_config=_TEST_CONFIG,
+    )
+    (call,) = calls
+    assert call["deadline"] is deadline
+    assert call["profile"] == profile_from_config(meeting_values(_TEST_CONFIG))
