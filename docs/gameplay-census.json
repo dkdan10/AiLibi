@@ -758,7 +758,7 @@
       },
       "rebuttals_with_sighting": {
         "by_construction": null,
-        "definition": "Repeat-speaker turns carrying an observation of another player, over all repeat-speaker turns.",
+        "definition": "Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns.",
         "denominator": 0,
         "guard": null,
         "heading": "Rebuttals",
@@ -2073,7 +2073,7 @@
       },
       "rebuttals_with_sighting": {
         "by_construction": null,
-        "definition": "Repeat-speaker turns carrying an observation of another player, over all repeat-speaker turns.",
+        "definition": "Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns.",
         "denominator": 0,
         "guard": null,
         "heading": "Rebuttals",
@@ -3389,7 +3389,7 @@
         },
         "rebuttals_with_sighting": {
           "by_construction": null,
-          "definition": "Repeat-speaker turns carrying an observation of another player, over all repeat-speaker turns.",
+          "definition": "Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns.",
           "denominator": 0,
           "guard": null,
           "heading": "Rebuttals",
@@ -4699,7 +4699,7 @@
         },
         "rebuttals_with_sighting": {
           "by_construction": null,
-          "definition": "Repeat-speaker turns carrying an observation of another player, over all repeat-speaker turns.",
+          "definition": "Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns.",
           "denominator": 0,
           "guard": null,
           "heading": "Rebuttals",
@@ -6001,7 +6001,7 @@
         },
         "rebuttals_with_sighting": {
           "by_construction": null,
-          "definition": "Repeat-speaker turns carrying an observation of another player, over all repeat-speaker turns.",
+          "definition": "Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns.",
           "denominator": 0,
           "guard": null,
           "heading": "Rebuttals",
@@ -7290,7 +7290,7 @@
         },
         "rebuttals_with_sighting": {
           "by_construction": null,
-          "definition": "Repeat-speaker turns carrying an observation of another player, over all repeat-speaker turns.",
+          "definition": "Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns.",
           "denominator": 0,
           "guard": null,
           "heading": "Rebuttals",

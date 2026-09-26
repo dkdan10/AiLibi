@@ -188,7 +188,8 @@ _OBSERVATION_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<agent>p-\d+):(?P<tick>\d+):(?P<seq>\d+)$"
 )
 
-#: The observation kinds that describe seeing a player.
+#: The observation kinds that name a player seen: the meeting schema's
+#: observation shapes that carry a ``subject``, whoever it names.
 _SIGHTING_KINDS: Final[frozenset[str]] = frozenset(
     {"saw_player", "saw_vent", "saw_kill", "saw_move"}
 )
@@ -1132,8 +1133,9 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
         "rebuttals_with_sighting": CellSpec(
             "Rebuttals carrying a sighting",
             _REBUTTALS,
-            "Repeat-speaker turns carrying an observation of another player, over "
-            "all repeat-speaker turns.",
+            "Repeat-speaker turns carrying a sighting (an observation naming a "
+            "player seen in a room, venting, killing or moving, the speaker "
+            "included), over all repeat-speaker turns.",
             ("meeting row turns",),
         ),
         "rebuttals_redirect_only": CellSpec(

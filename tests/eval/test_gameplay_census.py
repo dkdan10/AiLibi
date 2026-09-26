@@ -98,6 +98,7 @@ from meetings.schemas import (
     AlibiSegment,
     MeetingTranscript,
     MeetingTurn,
+    ObservationClaim,
     SawPlayerObservation,
     TaskActivityAccount,
     WhereaboutsClaim,
@@ -110,6 +111,7 @@ from orchestrator.experiment_config import (
 )
 from tests._helpers.committed import (
     SAMPLES_4P1I,
+    SAMPLES_9P2I,
     census_inputs,
     census_walk_events,
     repo_root,
@@ -3078,6 +3080,96 @@ def test_rebuttal_claim_kinds_are_told_apart() -> None:
     )
 
 
+#: The observation kinds that name a player seen, written out here from the
+#: meeting schema's observation shapes, never read from the census.
+SIGHTING_KINDS = ("saw_player", "saw_vent", "saw_kill", "saw_move")
+
+#: The other observation kinds a turn can carry, besides whereabouts: each names
+#: a task or a body, never a player seen.
+NAMING_NO_PLAYER_SEEN = ("completed_task", "found_body", "task_activity")
+
+
+def test_the_sighting_kinds_are_the_observations_that_name_a_player_seen() -> None:
+    """Pinned to the schema: a sighting is an observation with a ``subject``.
+
+    A turn's observation kinds are the members of the meeting schema's
+    observation union. The members with a ``subject`` field name the player the
+    speaker saw; the others name a task, a body or the speaker's own room. The
+    census's kinds, the list above and the schema's subject-carrying kinds are
+    one set, so a kind the schema adds with a subject turns this red until the
+    census decides whether it is a sighting.
+    """
+
+    union, _discriminator = get_args(ObservationClaim)
+    by_kind = {
+        get_args(model.model_fields["type"].annotation)[0]: model
+        for model in get_args(union)
+    }
+    with_subject = {
+        kind for kind, model in by_kind.items() if "subject" in model.model_fields
+    }
+    assert with_subject == set(SIGHTING_KINDS)
+    assert census._SIGHTING_KINDS == with_subject
+    assert set(by_kind) - with_subject == {*NAMING_NO_PLAYER_SEEN, "whereabouts"}
+
+
+def _opener_answering(evidence: ObservationFact) -> GameFacts:
+    """An opener rebuttal to a turn that saw the opener at tick 5."""
+
+    return game(
+        {"bounded_rebuttal_version": 1},
+        meetings=(
+            meeting(
+                turns=(
+                    turn(0, "p-2"),
+                    turn(
+                        1,
+                        "p-3",
+                        accuses=("p-2",),
+                        reply_to="t0",
+                        observations=(seen("saw_player", 5, "p-2"),),
+                    ),
+                    turn(2, "p-2", reply_to="t1", observations=(evidence,)),
+                ),
+                selector_pick=("p-2", "t1"),
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize("kind", SIGHTING_KINDS)
+def test_every_sighting_kind_is_a_sighting_on_the_three_rebuttal_cells(
+    kind: str,
+) -> None:
+    """Planted, one kind at a time, on each cell that reads a sighting.
+
+    A rebuttal that redirects and carries one observation of this kind carries a
+    sighting and does not only redirect, whether the observation names another
+    player or the speaker. An opener rebuttal whose observation of this kind
+    falls on the tick its accuser saw the opener answers that tick; one two
+    ticks later does not.
+    """
+
+    for subject in ("p-0", "p-2"):
+        backed = _one_rebuttal(accuses=("p-3",), observations=(seen(kind, 4, subject),))
+        assert counts("rebuttals_with_sighting", backed) == (1, 1, 0), subject
+        assert counts("rebuttals_redirect_only", backed) == (0, 1, 0), subject
+    key = "opener_rebuttals_answering_charged_tick"
+    assert counts(key, _opener_answering(seen(kind, 5, "p-4"))) == (1, 1, 0)
+    assert counts(key, _opener_answering(seen(kind, 7, "p-4"))) == (0, 1, 0)
+
+
+@pytest.mark.parametrize("kind", NAMING_NO_PLAYER_SEEN)
+def test_an_observation_naming_no_player_seen_is_no_sighting(kind: str) -> None:
+    """Planted: the same three cells read these kinds as no sighting."""
+
+    backed = _one_rebuttal(accuses=("p-3",), observations=(seen(kind, 4),))
+    assert counts("rebuttals_with_sighting", backed) == (0, 1, 0)
+    assert counts("rebuttals_redirect_only", backed) == (1, 1, 0)
+    key = "opener_rebuttals_answering_charged_tick"
+    assert counts(key, _opener_answering(seen(kind, 5))) == (0, 1, 0)
+
+
 def test_the_charged_tick_cell_reads_opener_rebuttals_only() -> None:
     key = "opener_rebuttals_answering_charged_tick"
     other = game(
@@ -3454,6 +3546,64 @@ def test_the_loader_counts_the_trigger_ticks_movement_and_task_events(
     loaded = _load(monkeypatch, events)
     assert dict(loaded.meetings[0].trigger_tick_dropped_events) == dict(expected)
     assert sum(expected.values()) > 0
+
+
+def test_the_loader_counts_task_events_on_committed_trigger_ticks_that_hold_them() -> (
+    None
+):
+    """Pinned on committed bytes whose trigger ticks hold task events.
+
+    The harness game above holds only moves on its trigger tick. On
+    ``samples/9p2i``, 42 of the 145 trigger ticks hold a task event. Seed 19
+    opens its first meeting on a tick where two players moved, one task
+    progressed and two completed, beside the trigger itself, which the loader
+    does not count. Its third meeting opens on a tick with one progress, one
+    completion and no move. The counts were measured once, count-only, from the
+    walk's own event types, and are written here as literals, never derived
+    from the event types the loader reads.
+    """
+
+    opened = next(
+        event
+        for event in census_walk_events(SAMPLES_9P2I, 19)
+        if isinstance(event, MeetingOpened)
+    )
+    assert Counter(event.type for event in opened.events) == {
+        "MeetingTriggered": 1,
+        "Moved": 2,
+        "TaskProgressed": 1,
+        "TaskCompleted": 2,
+    }
+    dropped = {
+        meeting.meeting_id: dict(meeting.trigger_tick_dropped_events)
+        for game in census_inputs(SAMPLES_9P2I).games
+        for meeting in game.meetings
+    }
+    assert dropped[opened.entry.meeting_id] == {
+        "Moved": 2,
+        "TaskProgressed": 1,
+        "TaskCompleted": 2,
+    }
+    assert dropped["headless-seed-19:meeting-2"] == {
+        "TaskProgressed": 1,
+        "TaskCompleted": 1,
+    }
+    assert dropped["headless-seed-44:meeting-0"] == {
+        "Moved": 2,
+        "TaskProgressed": 3,
+        "TaskCompleted": 1,
+    }
+    totals: Counter[str] = Counter()
+    for kinds in dropped.values():
+        totals.update(kinds)
+    assert len(dropped) == 145
+    assert totals == {"Moved": 89, "TaskProgressed": 43, "TaskCompleted": 17}
+    with_task_events = [
+        kinds
+        for kinds in dropped.values()
+        if "TaskProgressed" in kinds or "TaskCompleted" in kinds
+    ]
+    assert len(with_task_events) == 42
 
 
 def test_the_loader_takes_the_selector_pick_and_the_turn_facts(

@@ -380,7 +380,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 **Rebuttals carrying a whereabouts claim** (`rebuttals_with_whereabouts`). Repeat-speaker turns carrying a whereabouts observation, over all repeat-speaker turns. Reads `meeting row turns`.
 
-**Rebuttals carrying a sighting** (`rebuttals_with_sighting`). Repeat-speaker turns carrying an observation of another player, over all repeat-speaker turns. Reads `meeting row turns`.
+**Rebuttals carrying a sighting** (`rebuttals_with_sighting`). Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns. Reads `meeting row turns`.
 
 **Rebuttals that only redirect** (`rebuttals_redirect_only`). Repeat-speaker turns carrying an accusation and no alibi, whereabouts or sighting, over all repeat-speaker turns. Reads `meeting row turns`.
 
