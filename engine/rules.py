@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from engine.actions import (
     EmergencyMeetingAction,
@@ -20,6 +21,9 @@ from engine.events import (
 )
 from engine.win_conditions import WinResult, evaluate_win_conditions
 from engine.world import Map, WorldState
+
+if TYPE_CHECKING:
+    from engine.tick import VentWitnessRule
 
 
 class ActionRejectedError(ValueError):
@@ -109,7 +113,11 @@ def resolve_kill(
 
 
 def resolve_vent(
-    state: WorldState, game_map: Map, action: VentAction
+    state: WorldState,
+    game_map: Map,
+    action: VentAction,
+    *,
+    vent_witness_rule: VentWitnessRule,
 ) -> VentEnteredEvent | VentExitedEvent:
     actor = _get_live_player(state, action.actor)
     if actor.role != "IMPOSTOR":
@@ -153,6 +161,11 @@ def resolve_vent(
         room=destination_vent.room,
         exclude={actor.id},
     )
+    # Physical rule: the impostor was invisible inside the vent it left, so an
+    # exit into another room is seen only from the room surfaced into. Only an
+    # exit can change rooms; an entry and an exit in place stay one-room.
+    if vent_witness_rule == "physical" and destination_vent.room != source_room:
+        source_witnesses = ()
     witnesses = tuple(sorted(set(source_witnesses) | set(destination_witnesses)))
 
     if is_exit:

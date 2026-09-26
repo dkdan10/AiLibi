@@ -245,7 +245,6 @@ OMITTED_AT_DEFAULT: Final[tuple[str, ...]] = (
 #: behaviour; the last one deletes this guard, its call sites and its test.
 WAVE_ARMS_PENDING: Final[Mapping[str, frozenset[object]]] = MappingProxyType(
     {
-        "vent_witness_rule": frozenset({"physical"}),
         "vent_exit_policy": frozenset({"look_and_wait"}),
         "vent_entry_policy": frozenset({"own_fresh_kill"}),
         "report_body_handle_version": frozenset({1}),
@@ -342,6 +341,7 @@ class EngineArguments(TypedDict):
     """The ``advance_tick`` keyword arguments a recorded config selects."""
 
     redistribution_policy: Literal["lowest_id", "least_remaining_work"]
+    vent_witness_rule: Literal["both_rooms", "physical"]
 
 
 #: The engine-layer fields :func:`engine_arguments` threads, in the order the

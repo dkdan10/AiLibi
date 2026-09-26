@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Literal, TypeAlias
+from typing import Literal, TypeAlias, get_args
 
 from engine.actions import (
     Action,
@@ -56,6 +56,10 @@ from engine.world import Map, WorldState
 from engine.visibility import compute_visibility_for_player
 
 RedistributionPolicy: TypeAlias = Literal["lowest_id", "least_remaining_work"]
+#: Who witnesses a vent action. ``both_rooms`` (the default) lists the living,
+#: non-vented occupants of the room left and of the room surfaced into;
+#: ``physical`` drops the room left from an exit into another room.
+VentWitnessRule: TypeAlias = Literal["both_rooms", "physical"]
 
 
 def _decrement_cooldowns(
@@ -444,9 +448,13 @@ def _apply_kill(
 
 
 def _apply_vent(
-    state: WorldState, game_map: Map, action: VentAction
+    state: WorldState,
+    game_map: Map,
+    action: VentAction,
+    *,
+    vent_witness_rule: VentWitnessRule = "both_rooms",
 ) -> tuple[WorldState, VentEnteredEvent | VentExitedEvent]:
-    event = resolve_vent(state, game_map, action)
+    event = resolve_vent(state, game_map, action, vent_witness_rule=vent_witness_rule)
     vent = game_map.vents[action.payload.vent_id]
     players = _with_actor_last_action(state, action)
     actor = players[action.actor]
@@ -567,6 +575,7 @@ def _apply_action(
     action: Action,
     *,
     redistribution_policy: RedistributionPolicy = "lowest_id",
+    vent_witness_rule: VentWitnessRule = "both_rooms",
 ) -> tuple[WorldState, EngineEvent]:
     if state.phase != "PLAY":
         raise ActionRejectedError(f"cannot apply gameplay action during {state.phase}")
@@ -581,7 +590,9 @@ def _apply_action(
             state, game_map, action, redistribution_policy=redistribution_policy
         )
     if isinstance(action, VentAction):
-        return _apply_vent(state, game_map, action)
+        return _apply_vent(
+            state, game_map, action, vent_witness_rule=vent_witness_rule
+        )
     if isinstance(action, ReportBodyAction):
         return _apply_report(state, action)
     if isinstance(action, EmergencyMeetingAction):
@@ -602,6 +613,7 @@ def advance_tick(
     game_map: Map,
     rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
     redistribution_policy: RedistributionPolicy = "lowest_id",
+    vent_witness_rule: VentWitnessRule = "both_rooms",
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Advance one engine tick using the DESIGN.md §3.1 seven-step loop.
 
@@ -612,12 +624,19 @@ def advance_tick(
     opt-in :attr:`RngStateHashPolicy.TRAINING_FAST` skips the ~43%-of-engine-cost
     ``json.dumps`` snapshot for non-recorded training rollouts; the DRAW is
     unchanged, so the action / event stream is identical under either policy
-    (only the ``rng_state`` encoding, and hence any hash of it, differs)."""
+    (only the ``rng_state`` encoding, and hence any hash of it, differs).
+
+    ``vent_witness_rule`` (:data:`VentWitnessRule`) selects who witnesses a
+    vent action; an unknown value raises before any action applies. It changes
+    only the witness lists on vent events, never the state, so the state hash
+    cannot tell which rule a tick ran under."""
 
     if state.phase != "PLAY":
         raise ValueError(f"cannot advance tick during {state.phase}")
     if redistribution_policy not in ("lowest_id", "least_remaining_work"):
         raise ValueError(f"unknown redistribution policy: {redistribution_policy!r}")
+    if vent_witness_rule not in get_args(VentWitnessRule):
+        raise ValueError(f"unknown vent witness rule: {vent_witness_rule!r}")
     if (
         redistribution_policy != "lowest_id"
         and game_map.dead_task_rule != "redistribute"
@@ -638,6 +657,7 @@ def advance_tick(
                 game_map,
                 action,
                 redistribution_policy=redistribution_policy,
+                vent_witness_rule=vent_witness_rule,
             )
             events.append(event)
             if event.type == "Killed":

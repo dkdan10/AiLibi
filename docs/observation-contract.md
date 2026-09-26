@@ -15,6 +15,14 @@ knowing when or where the kill occurred.
 | Global status and alarm | Public aggregates; alarm available to every scheduled recipient | Task totals, sabotage status; exactly one roomless alarm while active | Snapshot tick | Before decision; dead players are not scheduled | Global aggregate inferred; alarm observed |
 | Dead roster and ejection | Public meeting announcement | Public dead/ejected identities and meeting result; no hidden kill time or role | Announcement tick | Meeting opening/conclusion | Meeting outcome memory; not a private kill observation |
 
+Who witnesses a vent is set by the recording's `vent_witness_rule`. Under the
+default, `both_rooms`, a vent exit is witnessed from the room the impostor left
+and from the room it surfaced into. Under `physical`, an exit into another room
+is witnessed only from the room surfaced into, because the impostor was unseen
+inside the vent it left. An entry, and an exit in place, happen in one room and
+are witnessed from that room under both rules. A recording without the key
+reads as `both_rooms`.
+
 `EventObservationBatch` separates source-time evidence from current-state
 snapshots. In temporal mode the next snapshot does not repeat kill, vent, own
 kill or movement actions. A witness killed later in the action batch still
