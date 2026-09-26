@@ -1,0 +1,1172 @@
+"""The instruments and reconstructors read a recording's own arms, or refuse them.
+
+Every reader that re-reads a recording does one of two things for every recorded
+setting: it threads the setting the way the live game did, or it refuses the
+recording by name before its first advance. This module holds that contract for
+the readers the Stage-B readers card widened and for the ones it keeps refusing:
+
+* the five widened walk profiles (kill-craft, the information funnel's two
+  walks, solvability, the win-condition self-check, evidence honesty) read
+  arms-ON fake recordings with every hash verified, and refuse any other
+  recorded setting by name before the first advance;
+* evidence honesty rebuilds each game's impostor decisions with the policy the
+  recording names, and refuses the meeting reset until that setting's own card
+  makes its room table coherent;
+* an event-level planted test threads a stand-in engine setting through the
+  spine's engine-arguments helper and a stand-in engine that changes only the
+  witness lists of vent exits, so every reader's call site is shown to take the
+  helper's arguments, and the readers that fold vent observations change;
+* the frozen and policy-re-running instruments keep refusing;
+* every call site the card owns passes the recorded engine, reset and trigger
+  settings explicitly (an ``ast`` scan with planted modules);
+* the refusal copy this card adds names no task or audit identifier.
+
+Every recording here is a fake-provider game recorded into a temporary directory
+from a declared config (``tests/_helpers/scripted_meeting.py``); no test reads a
+committed set. No prompt is printed.
+"""
+
+from __future__ import annotations
+
+import ast
+import dataclasses
+import json
+import re
+import sys
+import tempfile
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Final, TypedDict
+
+import pytest
+
+import eval.replay_walk as replay_walk_module
+import tests.meetings.test_prompt_byte_golden as golden
+from agents.memory.episodic import MemoryStore
+from agents.tactical.experimental import (
+    ExperimentalImpostorPolicy,
+    TacticalExperimentOptions,
+)
+from agents.tactical.impostor_policy import ImpostorPolicy
+from engine.entities import PlayerId, Role
+from engine.events import VentExitedEvent
+from engine.tick import advance_tick as real_advance_tick
+from engine.world import WorldState, load_canonical_map
+from eval import evidence_honesty, funnel
+from eval.evidence_honesty import (
+    HONESTY_READS,
+    LIVE_POLICY_FOLD,
+    RECORDED_ARM_POLICY_FOLD,
+    EvidenceHonestyReconstructionError,
+    compute_evidence_honesty,
+    live_impostor_policy,
+    reconstruct_impostor_decisions,
+)
+from eval.funnel import FUNNEL_READS, compute_information_funnel, compute_pooling_funnel
+from eval.kill_craft import KILL_CRAFT_READS, compute_kill_craft_report
+from eval.recorded_settings import (
+    READABLE_SETTINGS,
+    layers_read,
+    read_recorded_settings,
+    refuse_unread_settings,
+)
+from eval.replay_walk import ReplayWalkConfig, TickOpened, walk_replay
+from eval.solvability import SOLVABILITY_READS, compute_solvability_report
+from eval.win_condition_selfcheck import (
+    WIN_CONDITION_READS,
+    check_replay_win_condition,
+)
+from orchestrator import experiment_config
+from orchestrator.experiment_config import (
+    FIELD_LAYER,
+    RecordedExperimentConfig,
+    engine_arguments,
+)
+from orchestrator.replay import read_all_entries
+from tests._helpers.committed import walk_committed_meetings
+from tests._helpers.scripted_meeting import (
+    ACCUSE_THE_OPENER,
+    ScriptedMeetingClient,
+    record_game,
+)
+
+_REPO: Final[Path] = Path(__file__).resolve().parents[2]
+_SCRIPTS: Final[Path] = _REPO / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+#: A 9p2i fake game with vent exits whose source rooms held living witnesses who
+#: were still alive at a later meeting (asserted below, so no case goes vacuous).
+_SEED: Final[int] = 0
+
+
+class _Roster(TypedDict):
+    num_players: int
+    num_impostors: int
+    tasks_per_crewmate: int
+
+
+_ROSTER: Final[_Roster] = {
+    "num_players": 9,
+    "num_impostors": 2,
+    "tasks_per_crewmate": 2,
+}
+
+# --------------------------------------------------------------------------- #
+# Recordings                                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _record(
+    root: Path, name: str, config: RecordedExperimentConfig | None, **kwargs: Any
+) -> Path:
+    directory = root / name / "9p2i"
+    record_game(directory, seed=_SEED, config=config, **kwargs)
+    return directory
+
+
+def _open_the_pending_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+
+
+def _with_settings(source: Path, target: Path, **settings: object) -> Path:
+    """A copy of a recorded set whose every stamped row also carries ``settings``."""
+
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("roster.json", "MANIFEST.md"):
+        (target / name).write_bytes((source / name).read_bytes())
+    for replay in source.glob("replay-seed-*.jsonl"):
+        rows = [json.loads(line) for line in replay.read_text().splitlines()]
+        stamped = 0
+        for row in rows:
+            if isinstance(row.get("experiment_config"), dict):
+                row["experiment_config"].update(settings)
+                stamped += 1
+            elif row.get("kind") in ("tick", "game_over"):
+                row["experiment_config"] = {"format_version": 1, **settings}
+                stamped += 1
+        assert stamped > 1
+        (target / replay.name).write_text(
+            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+        )
+    return target
+
+
+@pytest.fixture(scope="module")
+def recordings(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Fake 9p2i recordings on arms that exist today, one directory each."""
+
+    root = tmp_path_factory.mktemp("arms")
+    return {
+        "plain": _record(root, "plain", None),
+        "workload": _record(
+            root,
+            "workload",
+            RecordedExperimentConfig(redistribution_policy="least_remaining_work"),
+        ),
+        "reset": _record(
+            root, "reset", RecordedExperimentConfig(meeting_reset="hub_with_grace")
+        ),
+        "reset_rebuttal": _record(
+            root,
+            "reset_rebuttal",
+            RecordedExperimentConfig(
+                meeting_reset="hub_with_grace", bounded_rebuttal_version=1
+            ),
+            client=ScriptedMeetingClient(script=ACCUSE_THE_OPENER),
+        ),
+        "observed_risk_rebuttal": _record(
+            root,
+            "observed_risk_rebuttal",
+            RecordedExperimentConfig(
+                vent_exit_policy="observed_risk", bounded_rebuttal_version=1
+            ),
+            client=ScriptedMeetingClient(script=ACCUSE_THE_OPENER),
+        ),
+        "patrol": _record(
+            root, "patrol", RecordedExperimentConfig(crew_idle_policy="patrol")
+        ),
+        "evidence_one": _record(
+            root, "evidence_one", RecordedExperimentConfig(evidence_reasoning_version=1)
+        ),
+    }
+
+
+# The wave fields no behaviour exists for yet, carried by rewritten copies while
+# the pending guard is patched open: the readers take the recorded bytes, so the
+# walk reads them exactly as it would a recording that ran them.
+_PENDING_TACTICAL: Final[dict[str, object]] = {
+    "vent_exit_policy": "look_and_wait",
+    "vent_entry_policy": "own_fresh_kill",
+}
+_PENDING_MEETING_AND_TRIGGER: Final[dict[str, object]] = {
+    "report_body_handle_version": 1,
+    "ballot_kill_row_version": 1,
+    "impostor_ballot_version": 1,
+}
+
+
+# --------------------------------------------------------------------------- #
+# The five profiles                                                           #
+# --------------------------------------------------------------------------- #
+
+
+def _win_condition(directory: Path) -> object:
+    return [
+        check_replay_win_condition(path, seed=_SEED, **_ROSTER)
+        for path in sorted(directory.glob("replay-seed-*.jsonl"))
+    ]
+
+
+#: Each widened reader: its walk profile's name, its field list, and an entry
+#: point that walks a whole directory.
+_READERS: Final[dict[str, tuple[str, frozenset[str], Callable[[Path], object]]]] = {
+    "kill-craft": ("kill-craft", KILL_CRAFT_READS, compute_kill_craft_report),
+    "funnel": ("funnel-instrument", FUNNEL_READS, compute_information_funnel),
+    "pooling-funnel": ("funnel-instrument", FUNNEL_READS, compute_pooling_funnel),
+    "solvability": ("solvability", SOLVABILITY_READS, compute_solvability_report),
+    "win-condition": ("win-condition-selfcheck", WIN_CONDITION_READS, _win_condition),
+    "evidence-honesty": ("evidence-honesty", HONESTY_READS, compute_evidence_honesty),
+}
+
+
+def test_each_reader_declares_its_fields_and_the_layers_they_cover() -> None:
+    profiles: dict[str, ReplayWalkConfig] = {
+        "kill-craft": __import__("eval.kill_craft", fromlist=["_"])._WALK_CONFIG,
+        "funnel-instrument": funnel._WALK_CONFIG,
+        "solvability": __import__("eval.solvability", fromlist=["_"])._WALK_CONFIG,
+        "win-condition-selfcheck": __import__(
+            "eval.win_condition_selfcheck", fromlist=["_"]
+        )._WALK_CONFIG,
+        "evidence-honesty": evidence_honesty._WALK_CONFIG,
+    }
+    for name, reads, _run in _READERS.values():
+        profile = profiles[name]
+        assert profile.profile == name
+        assert profile.supports_experiments
+        assert reads <= READABLE_SETTINGS
+        assert profile.threaded_layers == layers_read(reads)
+        assert not profile.supports_temporal_observations
+    for reads in (
+        KILL_CRAFT_READS,
+        FUNNEL_READS,
+        SOLVABILITY_READS,
+        WIN_CONDITION_READS,
+    ):
+        assert reads == READABLE_SETTINGS
+    assert HONESTY_READS == READABLE_SETTINGS - {"meeting_reset"}
+    assert layers_read(HONESTY_READS) == frozenset(
+        {"orchestrator", "tactical", "meeting"}
+    )
+
+
+def test_the_readable_settings_are_the_wave_fields_and_redistribution() -> None:
+    wave = {
+        "vent_witness_rule",
+        "vent_exit_policy",
+        "vent_entry_policy",
+        "meeting_reset",
+        "bounded_rebuttal_version",
+        "report_body_handle_version",
+        "ballot_kill_row_version",
+        "impostor_ballot_version",
+    }
+    assert READABLE_SETTINGS == frozenset(wave | {"redistribution_policy"})
+    assert set(READABLE_SETTINGS) <= set(FIELD_LAYER)
+
+
+@pytest.mark.parametrize("reader", sorted(set(_READERS) - {"evidence-honesty"}))
+@pytest.mark.parametrize(
+    "arm", ["plain", "workload", "reset", "reset_rebuttal", "observed_risk_rebuttal"]
+)
+def test_a_widened_reader_verifies_every_arm_that_exists_today(
+    recordings: dict[str, Path], reader: str, arm: str
+) -> None:
+    _name, _reads, run = _READERS[reader]
+    assert run(recordings[arm]) is not None
+
+
+def test_kill_craft_reads_the_regroup_reset_with_every_hash_verified(
+    recordings: dict[str, Path],
+) -> None:
+    report = compute_kill_craft_report(recordings["reset"])
+    entries = read_all_entries(next(recordings["reset"].glob("replay-seed-*.jsonl")))
+    assert any(row.kind == "meeting" for row in entries)
+    assert report.games_total == 1
+
+
+@pytest.mark.parametrize("reader", sorted(set(_READERS) - {"evidence-honesty"}))
+def test_a_widened_reader_verifies_a_copy_carrying_every_wave_value(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reader: str,
+) -> None:
+    _open_the_pending_guard(monkeypatch)
+    copy = _with_settings(
+        recordings["reset_rebuttal"],
+        tmp_path / "wave" / "9p2i",
+        **_PENDING_TACTICAL,
+        **_PENDING_MEETING_AND_TRIGGER,
+    )
+    _name, _reads, run = _READERS[reader]
+    assert run(copy) is not None
+
+
+def test_honesty_verifies_every_arm_it_reads(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for arm in ("plain", "workload", "observed_risk_rebuttal"):
+        assert compute_evidence_honesty(recordings[arm]).games_total == 1
+    _open_the_pending_guard(monkeypatch)
+    copy = _with_settings(
+        recordings["observed_risk_rebuttal"],
+        tmp_path / "wave" / "9p2i",
+        **_PENDING_MEETING_AND_TRIGGER,
+    )
+    report = compute_evidence_honesty(copy)
+    assert report.impostor_targeting.reconstruction_mismatches == 0
+
+
+def _advance_refused(*args: object, **kwargs: object) -> object:
+    raise AssertionError("a refused recording advanced")
+
+
+def _refuse_every_advance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(replay_walk_module, "advance_tick", _advance_refused)
+
+
+@pytest.mark.parametrize("reader", sorted(_READERS))
+@pytest.mark.parametrize(
+    ("arm", "setting"),
+    [
+        ("patrol", "crew_idle_policy='patrol'"),
+        ("evidence_one", "evidence_reasoning_version=1"),
+    ],
+)
+def test_a_setting_outside_the_reviewed_fields_is_refused_before_the_first_advance(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    reader: str,
+    arm: str,
+    setting: str,
+) -> None:
+    name, _reads, run = _READERS[reader]
+    _refuse_every_advance(monkeypatch)
+    with pytest.raises(ValueError) as refused:
+        run(recordings[arm])
+    message = str(refused.value)
+    assert f"replay profile {name!r}" in message
+    assert setting in message
+
+
+@pytest.mark.parametrize("reader", sorted(_READERS))
+def test_a_later_settings_format_is_refused_by_name(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reader: str,
+) -> None:
+    copy = _with_settings(
+        recordings["reset_rebuttal"], tmp_path / "format" / "9p2i", format_version=2
+    )
+    name, _reads, run = _READERS[reader]
+    _refuse_every_advance(monkeypatch)
+    with pytest.raises(ValueError, match=re.escape(f"replay profile {name!r}")) as got:
+        run(copy)
+    assert "format_version=2" in str(got.value)
+
+
+def test_honesty_refuses_the_meeting_reset_until_its_room_table_is_coherent(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _refuse_every_advance(monkeypatch)
+    with pytest.raises(ValueError) as refused:
+        compute_evidence_honesty(recordings["reset"])
+    assert "replay profile 'evidence-honesty'" in str(refused.value)
+    assert "meeting_reset='hub_with_grace'" in str(refused.value)
+    seed_path = recordings["reset"]
+    with pytest.raises(ValueError, match="meeting_reset='hub_with_grace'"):
+        reconstruct_impostor_decisions(seed_path, seed=_SEED)
+
+
+def test_the_refusal_checks_the_first_tick_and_passes_every_event_through(
+    recordings: dict[str, Path],
+) -> None:
+    path = next(recordings["workload"].glob("replay-seed-*.jsonl"))
+    profile = evidence_honesty._WALK_CONFIG
+    walked = list(
+        walk_replay(
+            path, seed=_SEED, game_map=load_canonical_map(), config=profile, **_ROSTER
+        )
+    )
+    read = list(
+        read_recorded_settings(
+            walk_replay(
+                path,
+                seed=_SEED,
+                game_map=load_canonical_map(),
+                config=profile,
+                **_ROSTER,
+            ),
+            reader="a reader",
+            reads=READABLE_SETTINGS,
+        )
+    )
+    assert [type(event) for event in read] == [type(event) for event in walked]
+    with pytest.raises(
+        ValueError, match="redistribution_policy='least_remaining_work'"
+    ):
+        next(
+            read_recorded_settings(
+                iter(walked), reader="a reader", reads=frozenset({"meeting_reset"})
+            )
+        )
+
+
+def test_refusing_unread_settings_names_the_reader_and_the_field() -> None:
+    config = RecordedExperimentConfig(
+        crew_idle_policy="patrol", meeting_reset="hub_with_grace"
+    )
+    refuse_unread_settings(None, reader="r", reads=frozenset())
+    refuse_unread_settings(RecordedExperimentConfig(), reader="r", reads=frozenset())
+    refuse_unread_settings(
+        RecordedExperimentConfig(format_version=2), reader="r", reads=frozenset()
+    )
+    with pytest.raises(
+        ValueError, match=r"^r does not read the recorded crew_idle_policy='patrol'"
+    ):
+        refuse_unread_settings(config, reader="r", reads=READABLE_SETTINGS)
+    with pytest.raises(ValueError, match="only recordings made without experiment"):
+        refuse_unread_settings(
+            RecordedExperimentConfig(meeting_reset="hub_with_grace"),
+            reader="r",
+            reads=frozenset(),
+        )
+    refuse_unread_settings(
+        RecordedExperimentConfig(meeting_reset="hub_with_grace"),
+        reader="r",
+        reads=frozenset({"meeting_reset"}),
+    )
+    with pytest.raises(ValueError, match="no reader is reviewed for"):
+        refuse_unread_settings(None, reader="r", reads=frozenset({"crew_idle_policy"}))
+
+
+# --------------------------------------------------------------------------- #
+# Evidence honesty: the recorded policy                                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_honesty_rebuilds_decisions_with_the_recorded_policy(
+    recordings: dict[str, Path],
+) -> None:
+    directory = recordings["observed_risk_rebuttal"]
+    recorded = compute_evidence_honesty(directory).impostor_targeting
+    live = compute_evidence_honesty(
+        directory, impostor_policy=live_impostor_policy
+    ).impostor_targeting
+    assert recorded.policy_mode == RECORDED_ARM_POLICY_FOLD
+    assert recorded.reconstruction_mismatches == 0
+    assert live.policy_mode == LIVE_POLICY_FOLD
+    assert live.reconstruction_mismatches > 0
+    assert recorded.decisions_reconstructed == live.decisions_reconstructed > 0
+    # The two policies disagree at a vent exit, which is where the arm acts.
+    by_recorded = reconstruct_impostor_decisions(directory, seed=_SEED)
+    by_live = reconstruct_impostor_decisions(
+        directory, seed=_SEED, impostor_policy=live_impostor_policy
+    )
+    disagreements = [
+        (left, right)
+        for left, right in zip(by_recorded, by_live, strict=True)
+        if left.intent != right.intent
+    ]
+    assert disagreements
+    assert all(left.recorded["type"] == "vent" for left, _right in disagreements)
+
+
+def test_without_a_config_the_default_is_the_live_policy(
+    recordings: dict[str, Path],
+) -> None:
+    directory = recordings["plain"]
+    default = compute_evidence_honesty(directory)
+    explicit = compute_evidence_honesty(directory, impostor_policy=live_impostor_policy)
+    assert default == explicit
+    assert default.impostor_targeting.policy_mode == LIVE_POLICY_FOLD
+
+
+def test_a_recording_from_a_custom_factory_is_refused_by_name(
+    recordings: dict[str, Path], tmp_path: Path
+) -> None:
+    source = recordings["plain"]
+    target = tmp_path / "custom" / "9p2i"
+    target.mkdir(parents=True)
+    for name in ("roster.json", "MANIFEST.md"):
+        (target / name).write_bytes((source / name).read_bytes())
+    for replay in source.glob("replay-seed-*.jsonl"):
+        rows = [json.loads(line) for line in replay.read_text().splitlines()]
+        for row in rows:
+            if row.get("agent_factory_kind") is not None:
+                row["agent_factory_kind"] = "custom"
+        (target / replay.name).write_text(
+            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+        )
+    with pytest.raises(EvidenceHonestyReconstructionError, match="custom factory"):
+        compute_evidence_honesty(target)
+    # An explicit policy is the caller's counterfactual, so it still folds.
+    folded = compute_evidence_honesty(target, impostor_policy=live_impostor_policy)
+    assert folded.impostor_targeting.policy_mode == LIVE_POLICY_FOLD
+
+
+def test_a_set_whose_games_name_different_policies_raises(
+    recordings: dict[str, Path], tmp_path: Path
+) -> None:
+    mixed = tmp_path / "mixed" / "9p2i"
+    record_game(mixed, seed=_SEED, config=None)
+    record_game(
+        mixed,
+        seed=_SEED + 1,
+        config=RecordedExperimentConfig(vent_exit_policy="observed_risk"),
+    )
+    with pytest.raises(EvidenceHonestyReconstructionError, match="different impostor"):
+        compute_evidence_honesty(mixed)
+
+
+def test_a_living_experimental_policy_receives_the_announced_dead_roster(
+    recordings: dict[str, Path],
+) -> None:
+    options = TacticalExperimentOptions(vent_exit_policy="observed_risk")
+    heard: dict[str, tuple[str, ...]] = {}
+
+    class _Listening(ExperimentalImpostorPolicy):
+        def note_meeting_concluded(self, *, dead_ids: tuple[str, ...]) -> None:
+            heard[self.agent_id] = dead_ids
+            super().note_meeting_concluded(dead_ids=dead_ids)
+
+    policies = evidence_honesty._ImpostorPolicies(
+        chosen=lambda pid: _Listening(agent_id=pid, options=options),
+        impostor_ids=frozenset({"p-1", "p-2", "p-3"}),
+        game_id="g",
+    )
+    entry = next(
+        row
+        for row in read_all_entries(next(recordings["plain"].glob("*.jsonl")))
+        if row.kind == "tick"
+    )
+    policies.open(entry)
+    state = _state_with(alive={"p-1": True, "p-2": False, "p-3": True, "p-4": False})
+    policies.meeting_concluded(state)
+    assert heard == {"p-1": ("p-2", "p-4"), "p-3": ("p-2", "p-4")}
+    plain = evidence_honesty._ImpostorPolicies(
+        chosen=live_impostor_policy, impostor_ids=frozenset({"p-1"}), game_id="g"
+    )
+    plain.open(entry)
+    plain.meeting_concluded(state)
+    assert type(plain.policies["p-1"]) is ImpostorPolicy
+
+
+def _state_with(*, alive: Mapping[str, bool]) -> WorldState:
+    from orchestrator.seeder import seed_initial_state
+
+    state = seed_initial_state(
+        seed=_SEED,
+        game_map=load_canonical_map(),
+        num_players=len(alive),
+        num_impostors=1,
+        tasks_per_crewmate=1,
+    )
+    return dataclasses.replace(
+        state,
+        players={
+            pid: dataclasses.replace(player, alive=alive[pid])
+            for pid, player in state.players.items()
+        },
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The event-level thread-or-refuse test                                        #
+# --------------------------------------------------------------------------- #
+
+#: A setting the spine's helper does not thread, added by the planted helper.
+_STAND_IN: Final[str] = "stand_in_witness_rule"
+
+
+def _physical_exits(events: Sequence[object]) -> list[object]:
+    """R7's shape on vent exits: witnessed only in the room surfaced into."""
+
+    return [
+        dataclasses.replace(
+            event, source_witnesses=(), witnesses=event.destination_witnesses
+        )
+        if isinstance(event, VentExitedEvent)
+        else event
+        for event in events
+    ]
+
+
+class _StandIn:
+    """The planted helper and the stand-in engine, installed where readers bind them."""
+
+    def __init__(self) -> None:
+        self.seen: list[object] = []
+
+    def arguments(self, config: RecordedExperimentConfig | None) -> dict[str, object]:
+        return {**engine_arguments(config), _STAND_IN: "surfaced-room-only"}
+
+    def advance(
+        self,
+        state: WorldState,
+        actions: Sequence[Any],
+        *,
+        game_map: Any,
+        stand_in_witness_rule: str,
+        **kwargs: Any,
+    ) -> tuple[WorldState, list[object]]:
+        self.seen.append(stand_in_witness_rule)
+        after, events = real_advance_tick(state, actions, game_map=game_map, **kwargs)
+        return after, _physical_exits(events)
+
+    def install(self, monkeypatch: pytest.MonkeyPatch, *modules: object) -> None:
+        for module in modules:
+            monkeypatch.setattr(module, "engine_arguments", self.arguments)
+            monkeypatch.setattr(module, "advance_tick", self.advance)
+
+
+def _ticks(directory: Path) -> int:
+    path = next(directory.glob("replay-seed-*.jsonl"))
+    return sum(1 for row in read_all_entries(path) if row.kind == "tick")
+
+
+def test_the_plain_recording_holds_exits_the_stand_in_changes(
+    recordings: dict[str, Path],
+) -> None:
+    from engine.events import VentExitedEvent as Exited
+
+    path = next(recordings["plain"].glob("replay-seed-*.jsonl"))
+    exits = [
+        event
+        for walk_event in walk_replay(
+            path,
+            seed=_SEED,
+            game_map=load_canonical_map(),
+            config=evidence_honesty._WALK_CONFIG,
+            **_ROSTER,
+        )
+        if hasattr(walk_event, "events")
+        for event in getattr(walk_event, "events")
+        if isinstance(event, Exited) and type(walk_event).__name__ == "TickAdvanced"
+    ]
+    assert exits
+    assert any(event.source_witnesses for event in exits)
+
+
+@pytest.mark.parametrize("reader", sorted(_READERS))
+def test_every_widened_reader_threads_the_helpers_arguments_to_every_advance(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, reader: str
+) -> None:
+    _name, _reads, run = _READERS[reader]
+    baseline = run(recordings["plain"])
+    stand_in = _StandIn()
+    stand_in.install(monkeypatch, replay_walk_module)
+    changed = run(recordings["plain"])
+    assert stand_in.seen == ["surfaced-room-only"] * _ticks(recordings["plain"])
+    if reader in ("kill-craft", "solvability", "win-condition"):
+        # These read state and kills only: the stand-in moves no hash and no cell.
+        assert changed == baseline
+
+
+def test_the_funnel_folds_the_stand_ins_vent_witness_lists(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = next(recordings["plain"].glob("replay-seed-*.jsonl"))
+    roles = _roles(recordings["plain"])
+
+    def _vents() -> tuple[object, ...]:
+        return funnel._walk_game(
+            path, seed=_SEED, roles=roles, game_map=load_canonical_map(), **_ROSTER
+        ).vent_sightings
+
+    before = _vents()
+    _StandIn().install(monkeypatch, replay_walk_module)
+    after = _vents()
+    assert len(before) == len(after)
+    assert before != after
+
+
+def _roles(directory: Path) -> Mapping[PlayerId, Role]:
+    from eval.validity import roles_by_seed
+
+    return roles_by_seed(directory, **_ROSTER, game_map=load_canonical_map())[_SEED]
+
+
+def _honesty_memories(path: Path) -> dict[str, tuple[object, ...]]:
+    """Every agent's memory as the honesty walk's own perception rebuilds it."""
+
+    from observation.service import ObservationService
+
+    game_map = load_canonical_map()
+    memories = {f"p-{index}": MemoryStore() for index in range(1, 10)}
+    with tempfile.TemporaryDirectory() as audit:
+        service = ObservationService(
+            game_map=game_map, audit_log_path=Path(audit) / "audit.jsonl"
+        )
+        try:
+            for walk_event in walk_replay(
+                path,
+                seed=_SEED,
+                game_map=game_map,
+                config=evidence_honesty._WALK_CONFIG,
+                **_ROSTER,
+            ):
+                if isinstance(walk_event, TickOpened):
+                    evidence_honesty._perceive_tick(
+                        walk_event, service=service, memories=memories
+                    )
+        finally:
+            service.close()
+    return {pid: tuple(store.recent(since_tick=0)) for pid, store in memories.items()}
+
+
+def test_honestys_perception_folds_the_stand_ins_vent_witness_lists(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = next(recordings["plain"].glob("replay-seed-*.jsonl"))
+    before = _honesty_memories(path)
+    stand_in = _StandIn()
+    stand_in.install(monkeypatch, replay_walk_module)
+    after = _honesty_memories(path)
+    assert stand_in.seen
+    assert before != after
+
+
+def test_the_committed_meeting_walk_threads_the_helper_and_its_vent_records_change(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = recordings["plain"]
+    before = walk_committed_meetings(directory)
+    stand_in = _StandIn()
+    stand_in.install(monkeypatch, replay_walk_module)
+    after = walk_committed_meetings(directory)
+    assert stand_in.seen == ["surfaced-room-only"] * _ticks(directory)
+    assert [m.entry.meeting_id for m in before] == [m.entry.meeting_id for m in after]
+    assert [m.vent_witness_records for m in before] != [
+        m.vent_witness_records for m in after
+    ]
+
+
+def test_the_golden_threads_the_helper_and_its_rendered_memory_changes(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = next(recordings["plain"].glob("replay-seed-*.jsonl"))
+    renderers = golden._canonical_renderers()
+
+    def _memories() -> list[tuple[str, ...]]:
+        return [
+            tuple(participant.rendered_memory for participant in meeting.participants)
+            for meeting in golden.walk_replay_meetings(
+                path, game_map=load_canonical_map(), renderers_for_set=renderers
+            )
+        ]
+
+    before = _memories()
+    stand_in = _StandIn()
+    stand_in.install(monkeypatch, golden)
+    after = _memories()
+    assert stand_in.seen
+    assert len(stand_in.seen) <= _ticks(recordings["plain"])
+    assert set(stand_in.seen) == {"surfaced-room-only"}
+    assert len(before) == len(after)
+    assert before != after
+
+
+@pytest.mark.parametrize("site", ["walk", "golden"])
+def test_a_call_site_that_bypasses_the_helper_fails_its_case(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, site: str
+) -> None:
+    # Perturbed: the stand-in engine without the planted helper, as a call site
+    # that dropped the helper's arguments would drive it.
+    stand_in = _StandIn()
+    module = replay_walk_module if site == "walk" else golden
+    monkeypatch.setattr(module, "advance_tick", stand_in.advance)
+    path = next(recordings["plain"].glob("replay-seed-*.jsonl"))
+    with pytest.raises(TypeError, match=_STAND_IN):
+        if site == "walk":
+            compute_kill_craft_report(recordings["plain"])
+        else:
+            list(
+                golden.walk_replay_meetings(
+                    path,
+                    game_map=load_canonical_map(),
+                    renderers_for_set=golden._canonical_renderers(),
+                )
+            )
+    assert stand_in.seen == []
+
+
+_EVERY_READER: Final[dict[str, Callable[[Path], object]]] = {
+    **{name: run for name, (_p, _r, run) in _READERS.items()},
+    "committed-meeting walk": walk_committed_meetings,
+    "golden": golden.walk_directory,
+}
+
+
+@pytest.mark.parametrize("reader", sorted(_EVERY_READER))
+def test_an_engine_setting_the_helper_does_not_thread_is_refused_by_name(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, reader: str
+) -> None:
+    # Planted: the helper threads no engine field, so the recorded workload rule
+    # is one it does not thread. Every reader refuses before its first advance.
+    monkeypatch.setattr(experiment_config, "_THREADED_ENGINE_FIELDS", ())
+    _refuse_every_advance(monkeypatch)
+    monkeypatch.setattr(golden, "advance_tick", _advance_refused)
+    with pytest.raises(
+        ValueError, match="redistribution_policy='least_remaining_work'"
+    ):
+        _EVERY_READER[reader](recordings["workload"])
+
+
+# --------------------------------------------------------------------------- #
+# The frozen and policy-re-running instruments keep refusing                    #
+# --------------------------------------------------------------------------- #
+
+_HISTORICAL: Final[str] = (
+    "historical feature reconstruction does not support experimental recordings"
+)
+_SURROGATE: Final[str] = (
+    "frozen surrogate meeting table does not support experimental recordings"
+)
+
+
+def _kept_refusals() -> dict[str, tuple[str, Callable[[Path], object]]]:
+    from eval.off_menu import compute_off_menu_report
+    from eval.watchability import _reconstruct_game_kills
+    from training.anchor_study import walk_corpus_game
+    from training.conviction.dataset import build_conviction_table
+    from training.surrogate.dataset import build_meeting_table
+
+    def _anchor(directory: Path) -> object:
+        return walk_corpus_game(next(directory.glob("replay-seed-*.jsonl")), **_ROSTER)
+
+    def _referee(directory: Path) -> object:
+        return _reconstruct_game_kills(
+            next(directory.glob("replay-seed-*.jsonl")),
+            seed=_SEED,
+            roles=_roles(directory),
+            game_map=load_canonical_map(),
+            **_ROSTER,
+        )
+
+    return {
+        "off-menu": (_HISTORICAL, compute_off_menu_report),
+        "anchor study": (_HISTORICAL, _anchor),
+        "surrogate meeting table": (_SURROGATE, build_meeting_table),
+        # The conviction table is built through the surrogate meeting table.
+        "conviction table": (_SURROGATE, build_conviction_table),
+        "watchability referee": (
+            "replay profile 'watchability-referee' does not support experimental "
+            "recordings",
+            _referee,
+        ),
+    }
+
+
+@pytest.mark.parametrize("instrument", sorted(_kept_refusals()))
+def test_a_frozen_or_policy_rerunning_instrument_keeps_refusing(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, instrument: str
+) -> None:
+    import eval.off_menu
+    import training.anchor_study
+    import training.surrogate.dataset
+
+    def _advance(*args: object, **kwargs: object) -> object:
+        raise AssertionError("a refused recording advanced")
+
+    for module in (
+        replay_walk_module,
+        eval.off_menu,
+        training.anchor_study,
+        training.surrogate.dataset,
+    ):
+        monkeypatch.setattr(module, "advance_tick", _advance)
+    text, run = _kept_refusals()[instrument]
+    with pytest.raises(ValueError, match=re.escape(text)):
+        run(recordings["reset_rebuttal"])
+
+
+def test_the_referee_floors_an_experiment_recording(
+    recordings: dict[str, Path],
+) -> None:
+    from eval.watchability import compute_watchability
+
+    report = compute_watchability(recordings["reset_rebuttal"])
+    assert not report.referee_passed
+
+
+# --------------------------------------------------------------------------- #
+# Every call site this card owns passes the recorded settings explicitly        #
+# --------------------------------------------------------------------------- #
+
+#: The reader modules whose own re-simulation calls this card owns.
+_OWNED_SITES: Final[tuple[str, ...]] = (
+    "tests/meetings/test_prompt_byte_golden.py",
+    "tests/_helpers/committed.py",
+    "tests/_helpers/scripted_meeting.py",
+)
+
+#: Each call, and the keywords it must pass: the helper's spread for an advance,
+#: the recorded reset and redistribution rule for an applied meeting, the
+#: recorded trigger setting for a rebuilt trigger.
+_REQUIRED: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "advance_tick": frozenset(),
+        "apply_meeting_result": frozenset({"meeting_reset", "redistribution_policy"}),
+        "_build_meeting_trigger": frozenset({"report_body_handle_version"}),
+    }
+)
+
+
+def _name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def recorded_setting_problems(source: str) -> tuple[int, list[str]]:
+    """(calls found, problems): every owned call must pass the recorded settings.
+
+    An ``advance_tick`` call must take exactly one ``**`` argument that is a call
+    to ``engine_arguments`` or a name bound to one, and no engine field by hand;
+    ``apply_meeting_result`` and ``_build_meeting_trigger`` must pass their
+    recorded-setting keywords explicitly. An aliased import of any of the three
+    is a problem, since the scan matches by name.
+    """
+
+    tree = ast.parse(source)
+    bound = {
+        ast.unparse(target)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Call)
+        and _name(node.value.func) == "engine_arguments"
+        for target in node.targets
+    }
+    engine_fields = {field for field, layer in FIELD_LAYER.items() if layer == "engine"}
+    problems: list[str] = []
+    calls = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in _REQUIRED and alias.asname is not None:
+                    problems.append(f"line {node.lineno}: aliased {alias.name}")
+        if not isinstance(node, ast.Call):
+            continue
+        name = _name(node.func)
+        if name is None or name not in _REQUIRED:
+            continue
+        calls += 1
+        passed = {keyword.arg for keyword in node.keywords if keyword.arg is not None}
+        missing = sorted(_REQUIRED[name] - passed)
+        if missing:
+            problems.append(f"line {node.lineno}: {name} without {missing}")
+        if name != "advance_tick":
+            continue
+        spread = [keyword.value for keyword in node.keywords if keyword.arg is None]
+        by_hand = sorted(passed & engine_fields)
+        helper = len(spread) == 1 and (
+            (
+                isinstance(spread[0], ast.Call)
+                and _name(spread[0].func) == "engine_arguments"
+            )
+            or ast.unparse(spread[0]) in bound
+        )
+        if not helper or by_hand:
+            problems.append(
+                f"line {node.lineno}: advance_tick without the helper's arguments "
+                f"(by hand: {by_hand})"
+            )
+    return calls, problems
+
+
+@pytest.mark.parametrize("module", _OWNED_SITES)
+def test_every_owned_call_site_passes_the_recorded_settings(module: str) -> None:
+    calls, problems = recorded_setting_problems((_REPO / module).read_text())
+    assert problems == []
+    if module != "tests/_helpers/scripted_meeting.py":
+        assert calls >= 1, f"{module} no longer re-simulates; update the scan"
+
+
+@pytest.mark.parametrize(
+    ("source", "passes"),
+    [
+        (
+            "engine = engine_arguments(config)\n"
+            "advance_tick(state, actions, game_map=m, **engine)\n"
+            "apply_meeting_result(s, r, game_map=m, redistribution_policy=p,"
+            " meeting_reset=q)\n"
+            "_build_meeting_trigger(state=s, events=e, report_body_handle_version=v)\n",
+            True,
+        ),
+        ("advance_tick(state, actions, game_map=m)\n", False),
+        (
+            "advance_tick(state, actions, game_map=m,"
+            " redistribution_policy=config.redistribution_policy)\n",
+            False,
+        ),
+        ("options = {}\nadvance_tick(state, actions, game_map=m, **options)\n", False),
+        ("apply_meeting_result(s, r, game_map=m, redistribution_policy=p)\n", False),
+        ("apply_meeting_result(s, r, game_map=m, meeting_reset=q)\n", False),
+        ("_build_meeting_trigger(state=s, events=e)\n", False),
+        (
+            "from engine.tick import advance_tick as step\nstep(state, actions)\n",
+            False,
+        ),
+    ],
+    ids=[
+        "all-explicit",
+        "bare-advance",
+        "advance-by-hand",
+        "other-spread",
+        "apply-without-reset",
+        "apply-without-redistribution",
+        "trigger-without-setting",
+        "aliased",
+    ],
+)
+def test_the_scan_bites_a_planted_call_site(source: str, passes: bool) -> None:
+    _calls, problems = recorded_setting_problems(source)
+    assert (problems == []) is passes
+
+
+# --------------------------------------------------------------------------- #
+# The copy this card adds is plain                                             #
+# --------------------------------------------------------------------------- #
+
+#: Task and audit identifiers, memo-style short ids, and bare threshold arithmetic.
+_IDENTIFIER: Final[re.Pattern[str]] = re.compile(
+    r"\bTask \d|audit-|\b[ABDR]\d{1,2}\b|[<>]=?\s*\d|\d+\s*/\s*\d+"
+)
+
+
+def copy_problems(texts: Mapping[str, str]) -> list[str]:
+    """Every text that carries an identifier or threshold arithmetic."""
+
+    return [
+        f"{label}: {match.group(0)!r}"
+        for label, text in texts.items()
+        for match in [_IDENTIFIER.search(text)]
+        if match is not None
+    ]
+
+
+def _raised(run: Callable[[], object]) -> str:
+    try:
+        run()
+    except (ValueError, RuntimeError, SystemExit) as refused:
+        return str(refused)
+    raise AssertionError("expected a refusal")
+
+
+def _new_copy(recordings: Mapping[str, Path]) -> dict[str, str]:
+    import publish_process_scorecard
+
+    from audits.workflows.extract_gameplay_facts import refuse_experiment_settings
+
+    parser_help = publish_process_scorecard.__doc__ or ""
+    texts: dict[str, str] = {"scorecard module docstring": parser_help}
+    for action in _scorecard_actions():
+        texts[f"--{action[0]} help"] = action[1]
+    texts["unread setting"] = _raised(
+        lambda: refuse_unread_settings(
+            RecordedExperimentConfig(crew_idle_policy="patrol"),
+            reader="replay profile 'kill-craft'",
+            reads=READABLE_SETTINGS,
+        )
+    )
+    texts["unread setting, nothing read"] = _raised(
+        lambda: refuse_unread_settings(
+            RecordedExperimentConfig(meeting_reset="hub_with_grace"),
+            reader="the offline lever counterfactual",
+            reads=frozenset(),
+        )
+    )
+    texts["later format"] = _raised(
+        lambda: refuse_unread_settings(
+            RecordedExperimentConfig(format_version=2, bounded_rebuttal_version=1),
+            reader="replay profile 'kill-craft'",
+            reads=READABLE_SETTINGS,
+        )
+    )
+    texts["outside the reviewed set"] = _raised(
+        lambda: refuse_unread_settings(
+            None, reader="r", reads=frozenset({"crew_idle_policy"})
+        )
+    )
+    texts["extractor"] = _raised(
+        lambda: refuse_experiment_settings(
+            3,
+            RecordedExperimentConfig(
+                meeting_reset="hub_with_grace", bounded_rebuttal_version=1
+            ),
+        )
+    )
+    texts["custom factory"] = _raised(
+        lambda: compute_evidence_honesty(_custom_copy(recordings["plain"]))
+    )
+    return texts
+
+
+def _custom_copy(source: Path) -> Path:
+    target = Path(tempfile.mkdtemp()) / "9p2i"
+    target.mkdir()
+    for name in ("roster.json", "MANIFEST.md"):
+        (target / name).write_bytes((source / name).read_bytes())
+    for replay in source.glob("replay-seed-*.jsonl"):
+        rows = [json.loads(line) for line in replay.read_text().splitlines()]
+        for row in rows:
+            if row.get("agent_factory_kind") is not None:
+                row["agent_factory_kind"] = "custom"
+        (target / replay.name).write_text(
+            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+        )
+    return target
+
+
+def _scorecard_actions() -> Iterator[tuple[str, str]]:
+    import argparse
+
+    import publish_process_scorecard
+
+    captured: list[argparse.ArgumentParser] = []
+    original = argparse.ArgumentParser.parse_args
+
+    def _capture(self: argparse.ArgumentParser, *args: Any, **kwargs: Any) -> Any:
+        captured.append(self)
+        raise SystemExit(0)
+
+    argparse.ArgumentParser.parse_args = _capture  # type: ignore[method-assign]
+    try:
+        try:
+            publish_process_scorecard.main([])
+        except SystemExit:
+            pass
+    finally:
+        argparse.ArgumentParser.parse_args = original  # type: ignore[method-assign]
+    for action in captured[0]._actions:
+        if action.help and action.dest in ("set_dir", "json_stdout"):
+            yield action.dest.replace("_", "-"), action.help
+
+
+def test_the_copy_this_card_adds_carries_no_identifier(
+    recordings: dict[str, Path],
+) -> None:
+    texts = _new_copy(recordings)
+    assert {"--set-dir help", "--json-stdout help", "extractor"} <= set(texts)
+    assert copy_problems(texts) == []
+
+
+@pytest.mark.parametrize("planted", ["see Task 20.33 for the reason", "the R7 rule"])
+def test_the_copy_scan_bites_an_identifier(planted: str) -> None:
+    assert copy_problems({"planted": planted}) != []

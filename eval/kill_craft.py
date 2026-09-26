@@ -138,6 +138,21 @@ instrument must never silently under-measure (AGENTS.md "no silent fallbacks"), 
 malformed bytes (a corrupt action row, a truncated file) are allowed to raise
 naturally (pydantic / OS errors propagate) rather than being papered over.
 
+Recorded settings
+-----------------
+The ``kill-craft`` profile reads recordings that carry experiment settings, and
+:data:`KILL_CRAFT_READS` names, field by field, the ones it reads: every setting
+in :data:`eval.recorded_settings.READABLE_SETTINGS`. Both folds read engine
+state and kill events only, so each of those settings reaches them through the
+walk and nothing here re-decides it: the engine settings through the
+engine-arguments helper at every advance (which refuses one it does not
+thread), the meeting reset through the walk's applied meetings (the post-reset positions
+are the next tick's pre-advance frame), and the tactical, meeting and trigger
+settings only as the recorded actions and meeting rows the walk replays. Any
+other recorded setting, a settings format other than the first, and temporal
+delivery are refused before the first advance, naming the profile and the
+setting (:func:`eval.recorded_settings.read_recorded_settings`).
+
 Purity: offline, no network, no ``AILIBI_*`` env read, no LLM. The report is a
 pure function of the committed bytes plus the re-seeded role ground truth, so two
 runs produce identical reports.
@@ -201,6 +216,11 @@ from pydantic import BaseModel, ConfigDict
 from engine.entities import PlayerId, PlayerState, Role, RoomId
 from engine.events import KilledEvent
 from engine.world import Map, load_canonical_map
+from eval.recorded_settings import (
+    READABLE_SETTINGS,
+    layers_read,
+    read_recorded_settings,
+)
 from eval.replay_walk import (
     ReplayWalkConfig,
     TickAdvanced,
@@ -417,14 +437,18 @@ def _walk_game(
 
     game_id = f"headless-seed-{seed}"
     walk = _GameWalk()
-    for walk_event in walk_replay(
-        replay_path,
-        seed=seed,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-        game_map=game_map,
-        config=_WALK_CONFIG,
+    for walk_event in read_recorded_settings(
+        walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=_WALK_CONFIG,
+        ),
+        reader=f"replay profile {_WALK_CONFIG.profile!r}",
+        reads=KILL_CRAFT_READS,
     ):
         if isinstance(walk_event, TickOpened):
             # The pre-advance decision state: the recorded actions were decided
@@ -523,6 +547,10 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
     )
 
 
+#: The recorded settings the kill-craft folds read (module docstring,
+#: "Recorded settings"): every setting a reviewed reader may read.
+KILL_CRAFT_READS: Final[frozenset[str]] = READABLE_SETTINGS
+
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record).
 _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="kill-craft",
@@ -536,6 +564,8 @@ _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     require_terminal_tick=True,
     reject_trailing_rows=True,
     require_game_end_row=True,
+    supports_experiments=True,
+    threaded_layers=layers_read(KILL_CRAFT_READS),
 )
 
 
@@ -861,6 +891,7 @@ def _shannon_entropy(counts: Mapping[str, int]) -> float:
 
 
 __all__ = [
+    "KILL_CRAFT_READS",
     "ActionEntropyBucketCell",
     "ActionEntropyCells",
     "KillCraftReconstructionError",

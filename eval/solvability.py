@@ -183,6 +183,22 @@ self-placement forces singleton to 522/626, and the review's figures are neither
 committed pin is this module's own recount under the rule stated above, not the
 review's number.
 
+Recorded settings
+-----------------
+The ``solvability`` profile reads recordings that carry experiment settings, and
+:data:`SOLVABILITY_READS` names, field by field, the ones it reads: every setting
+in :data:`eval.recorded_settings.READABLE_SETTINGS`. The fold reads pre-advance
+engine states, kill events, the engine's own trigger body id and the recorded
+ejection, and computes sight from engine visibility rather than from any
+recorded witness list. So each of those settings reaches it through the walk
+and nothing here re-decides it: the engine settings through the
+engine-arguments helper (which refuses one it does not thread), the meeting
+reset through the walk's applied meetings, and the tactical, meeting and trigger
+settings only as the recorded actions and meeting rows the walk replays; the
+trigger's described body handle is never read. Any other recorded setting, a
+settings format other than the first, and temporal delivery are refused before
+the first advance, naming the profile and the setting.
+
 Purity: offline, no network, no ``AILIBI_*`` env read, no LLM call. The report
 is a pure function of the committed bytes plus the re-seeded role ground truth,
 so two runs over the same bytes produce identical reports.
@@ -227,6 +243,11 @@ from eval.deduction_metrics import (
     _RARE_EVENT_ADVISORY_MAX_NUMERATOR,
     WilsonRateCell,
     _wilson_interval,
+)
+from eval.recorded_settings import (
+    READABLE_SETTINGS,
+    layers_read,
+    read_recorded_settings,
 )
 from eval.replay_walk import (
     MeetingOpened,
@@ -508,14 +529,18 @@ def _walk_game(
     kill_by_body: dict[BodyId, _KillFact] = {}
     kills_in_order: list[_KillFact] = []
 
-    for walk_event in walk_replay(
-        replay_path,
-        seed=seed,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-        game_map=game_map,
-        config=_WALK_CONFIG,
+    for walk_event in read_recorded_settings(
+        walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=_WALK_CONFIG,
+        ),
+        reader=f"replay profile {_WALK_CONFIG.profile!r}",
+        reads=SOLVABILITY_READS,
     ):
         if isinstance(walk_event, TickAdvanced):
             # The recorded tick LABEL is not covered by the hash chain: relabelling
@@ -695,6 +720,10 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
     raise SolvabilityReconstructionError(f"{game_id}: {detail}")
 
 
+#: The recorded settings the solvability fold reads (module docstring,
+#: "Recorded settings"): every setting a reviewed reader may read.
+SOLVABILITY_READS: Final[frozenset[str]] = READABLE_SETTINGS
+
 _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="solvability",
     on_violation=_raise_walk_violation,
@@ -707,4 +736,6 @@ _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     require_terminal_tick=True,
     reject_trailing_rows=True,
     require_game_end_row=True,
+    supports_experiments=True,
+    threaded_layers=layers_read(SOLVABILITY_READS),
 )
