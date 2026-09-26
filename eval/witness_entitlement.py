@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import replace
+from typing import Final, Literal
 
 from engine.events import (
     EngineEvent,
@@ -16,6 +17,10 @@ from engine.events import (
 )
 from engine.world import Map, WorldState
 
+#: The vent witness rules this oracle states for itself, kept apart from the
+#: engine's own statement so the two are compared rather than shared.
+VENT_WITNESS_RULES: Final[tuple[str, ...]] = ("both_rooms", "physical")
+
 
 def assert_event_witnesses_match_source_state(
     *,
@@ -23,6 +28,7 @@ def assert_event_witnesses_match_source_state(
     state: WorldState,
     events: Sequence[EngineEvent],
     game_map: Map,
+    vent_witness_rule: Literal["both_rooms", "physical"],
 ) -> None:
     """Reconstruct position/life/vent changes before each kill or vent event.
 
@@ -30,7 +36,15 @@ def assert_event_witnesses_match_source_state(
     action happens. Later movement or death cannot grant or erase that witness.
     This checks the same-room event contract, not the broader snapshot visibility
     contract. It neither imports the engine's witness helper nor trusts its lists.
+
+    ``vent_witness_rule`` is the rule the events were recorded under, with no
+    default, so a caller cannot check a recording against the wrong rule by
+    omission. Under ``both_rooms`` a vent is witnessed from the room left and
+    the room surfaced into; under ``physical`` an exit into another room is
+    witnessed only from the room surfaced into. An unknown rule raises.
     """
+    if vent_witness_rule not in VENT_WITNESS_RULES:
+        raise ValueError(f"unknown vent witness rule: {vent_witness_rule!r}")
     players = dict(pre_state.players)
     mode = game_map.visibility_defaults.base
     if pre_state.sabotage is not None and pre_state.sabotage.active:
@@ -99,8 +113,12 @@ def assert_event_witnesses_match_source_state(
             assert destination == event.destination_room, (
                 "vent destination contradicts map"
             )
-            source = in_room(actor.room, {event.actor})
             arrival = in_room(destination, {event.actor})
+            source = (
+                ()
+                if vent_witness_rule == "physical" and destination != actor.room
+                else in_room(actor.room, {event.actor})
+            )
             assert event.source_witnesses == source, "vent source witness entitlement"
             assert event.destination_witnesses == arrival, (
                 "vent destination witness entitlement"

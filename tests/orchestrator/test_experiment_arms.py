@@ -378,26 +378,34 @@ def test_every_arm_that_exists_today_still_validates_and_constructs(
 
 
 def test_no_config_threads_todays_engine_arguments() -> None:
-    assert engine_arguments(None) == {"redistribution_policy": "lowest_id"}
+    assert engine_arguments(None) == {
+        "redistribution_policy": "lowest_id",
+        "vent_witness_rule": "both_rooms",
+    }
     assert engine_arguments(RecordedExperimentConfig()) == engine_arguments(None)
     workload = RecordedExperimentConfig(redistribution_policy="least_remaining_work")
     assert engine_arguments(workload) == {
-        "redistribution_policy": "least_remaining_work"
+        "redistribution_policy": "least_remaining_work",
+        "vent_witness_rule": "both_rooms",
     }
     assert set(experiment_config._THREADED_ENGINE_FIELDS) <= set(
         fields_in_layer("engine")
     )
 
 
-@pytest.mark.parametrize(
-    "field",
-    [
-        field
-        for field in fields_in_layer("engine")
-        if field not in experiment_config._THREADED_ENGINE_FIELDS
-    ],
-)
-def test_an_engine_field_the_helper_does_not_thread_is_refused(field: str) -> None:
+@pytest.mark.parametrize("field", fields_in_layer("engine"))
+def test_an_engine_field_the_helper_does_not_thread_is_refused(
+    field: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Planted: the field left out of the threaded set, as it stood before its
+    # arm card threaded it.
+    monkeypatch.setattr(
+        experiment_config,
+        "_THREADED_ENGINE_FIELDS",
+        tuple(
+            name for name in experiment_config._THREADED_ENGINE_FIELDS if name != field
+        ),
+    )
     value = next(
         value
         for value in _literal_values(RecordedExperimentConfig, field)
@@ -426,7 +434,10 @@ def test_a_stand_in_engine_field_raises_where_hand_threading_runs_the_default(
     assert "stand_in_engine_rule" not in hand_threaded
     with pytest.raises(ValueError, match="stand_in_engine_rule='new'"):
         engine_arguments(config)
-    assert engine_arguments(_StandIn()) == {"redistribution_policy": "lowest_id"}
+    assert engine_arguments(_StandIn()) == {
+        "redistribution_policy": "lowest_id",
+        "vent_witness_rule": "both_rooms",
+    }
 
 
 def test_dropping_a_threaded_field_makes_the_helper_refuse_it(
