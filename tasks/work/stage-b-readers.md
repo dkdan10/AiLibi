@@ -1105,3 +1105,8 @@ carries this subsection. That commit changes only this card.
 | `uv run pytest -m campaign -q -n 6` | exit 0, 336 passed |
 | `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 329 files; 26,636,557 bytes, the `docs/artifacts.md` row, unchanged (no `audits/` byte moved, and `main` has not moved from `bdfa5b19`) |
 | `git diff --stat $(git merge-base origin/main HEAD) HEAD -- replays agents engine observation orchestrator api frontend docs/process-scorecard.md docs/process-scorecard.json` | empty |
+| `bash scripts/check.sh` (exit code read directly, no pipe), at `325fd4f9` in this clean worktree | exit 0: ruff and format clean, `lint-imports` 4 kept, task docs valid, mypy clean over 506 files, 9,021 passed (9,003 before, plus the 18 new cases), 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 vitest tests and the build pass |
+
+The gate ran once, on `325fd4f9`, which carries this subsection without the `check.sh` row above.
+The commit that adds the row changes nothing else, and the task-docs validator was re-run on it
+(exit 0).
