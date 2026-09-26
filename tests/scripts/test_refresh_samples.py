@@ -14,6 +14,7 @@ byte is ever written:
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -27,6 +28,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
+
+import _declared_experiment as de
+from api.replay_loader import ReplayLoader
+from eval import kill_craft
+from meetings.evidence_profile import EXPERIMENT_ENV_NAMES
+from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator.replay import GameEndReplayEntry, ReplayEntry, read_all_entries
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _REFRESH_SH = _REPO_ROOT / "scripts" / "refresh_samples.sh"
@@ -1737,3 +1745,479 @@ def test_default_fake_model_mirrors_the_fake_client() -> None:
     match = re.search(r'^DEFAULT_FAKE_MODEL="([^"]+)"$', script, re.MULTILINE)
     assert match is not None, "DEFAULT_FAKE_MODEL constant missing from script"
     assert match.group(1) == _FAKE_MEETING_MODEL
+
+
+# -- the declared experiment config (--experiment-config) ---------------------
+#
+# scripts/_declared_experiment.py holds the three rules the recorder applies
+# before any preflight or staging: the file, the meeting-experiment
+# environment, and the target a switched-on config may record into.
+
+#: The declared test config: three arms that exist today, since the pending
+#: guard refuses the wave's new values.
+_TEST_CONFIG_JSON = (
+    '{"format_version": 1, "meeting_reset": "hub_with_grace", '
+    '"vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}\n'
+)
+_TEST_CONFIG = RecordedExperimentConfig.model_validate_json(_TEST_CONFIG_JSON)
+_TEST_SETTINGS_ECHO = (
+    "Experiment config settings: meeting_reset='hub_with_grace', "
+    "vent_exit_policy='observed_risk', bounded_rebuttal_version=1"
+)
+#: Today's per-seed line, byte for byte: the recorder's seven flags.
+_SEVEN_FLAG_LINE = (
+    "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python "
+    "scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir "
+    "<stage> --num-players 4 --num-impostors 1 --tasks-per-crewmate 1 --force"
+)
+_NOTHING_STAGED = "Nothing was staged."
+
+
+def _test_config(tmp_path: Path, text: str = _TEST_CONFIG_JSON) -> Path:
+    path = tmp_path / "experiment-config.json"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _git_status() -> str:
+    return subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _stage_dirs() -> list[Path]:
+    return sorted((_REPO_ROOT / "replays").rglob(".ailibi-refresh-stage-*"))
+
+
+def test_the_dry_run_echoes_the_config_and_stages_nothing(tmp_path: Path) -> None:
+    config = _test_config(tmp_path)
+    set_dir = tmp_path / "scratch-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir), AILIBI_MANIFEST=str(set_dir / "MANIFEST.md")
+    )
+    before = _git_status()
+    proc = _run(
+        "--seeds",
+        "0,1",
+        "--dry-run",
+        "--expect-levers",
+        "",
+        "--experiment-config",
+        str(config),
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    sha = hashlib.sha256(config.read_bytes()).hexdigest()
+    lines = proc.stdout.splitlines()
+    assert f"[dry-run] Experiment config: {config} (sha256 {sha})" in lines
+    assert f"[dry-run] {_TEST_SETTINGS_ECHO}" in lines
+    assert "[dry-run] Experiment switch exports: none" in lines
+    assert (
+        _SEVEN_FLAG_LINE + " --experiment-config <stage-dir>/experiment-config.json"
+    ) in lines
+    assert any(
+        line.startswith("[dry-run] experiment config: would copy") and sha in line
+        for line in lines
+    )
+    assert not set_dir.exists()
+    assert sorted(tmp_path.iterdir()) == [config]
+    assert _git_status() == before
+
+
+def test_without_the_flag_the_per_seed_line_is_todays_seven_flag_line() -> None:
+    proc = _run("--seeds", "0,1", "--dry-run", "--expect-levers", "", env=_clean_env())
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    lines = proc.stdout.splitlines()
+    assert [line for line in lines if "run_tournament.py" in line] == [_SEVEN_FLAG_LINE]
+    assert (
+        "[dry-run] Experiment config: none declared; the recording keeps the "
+        "historical defaults"
+    ) in lines
+    assert not any("experiment-config" in line for line in lines)
+
+
+def test_the_flag_needs_a_file_argument() -> None:
+    proc = _run("--seeds", "0", "--dry-run", "--experiment-config", env=_clean_env())
+    assert proc.returncode == 1
+    assert "--experiment-config requires a config file path" in proc.stderr
+
+
+@pytest.mark.parametrize("name", sorted(EXPERIMENT_ENV_NAMES))
+@pytest.mark.parametrize("value", ["1", "0"])
+def test_every_meeting_experiment_export_is_refused_before_the_slate_check(
+    name: str, value: str
+) -> None:
+    """The planted case that turned red: the export once passed the slate check.
+
+    ``AILIBI_BOUNDED_REBUTTAL=1`` with ``--expect-levers ""`` printed "Substrate
+    slate OK" before this check existed. Each of the four names is refused, with
+    or without a config, whatever its value.
+    """
+
+    env = _clean_env()
+    env[name] = value
+    proc = _run("--seeds", "0", "--expect-levers", "", "--dry-run", env=env)
+    assert proc.returncode == 1
+    assert f"the environment exports {name}." in proc.stderr
+    assert _NOTHING_STAGED in proc.stderr
+    assert "Substrate slate OK" not in proc.stdout
+    assert "[dry-run] mode:" not in proc.stdout
+
+
+def test_a_run_without_any_export_passes_the_environment_check() -> None:
+    proc = _run("--seeds", "0", "--expect-levers", "", "--dry-run", env=_clean_env())
+    assert proc.returncode == 0
+    assert "[dry-run] Experiment switch exports: none" in proc.stdout
+    assert "Substrate slate OK" in proc.stdout
+
+
+_DECOY = _REPO_ROOT / "replays" / "samples" / ".test-config-decoy"
+
+
+def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]:
+    """The environment aiming a switched-on config at ``case``, and the refusal."""
+
+    env = _clean_env()
+    replays = _REPO_ROOT / "replays"
+    if case == "default target":
+        return env, "needs an explicit AILIBI_SAMPLE_DIR"
+    targets = {
+        "samples 9p2i": (replays / "samples" / "9p2i", "inside replays/samples/"),
+        "ml_corpus 9p2i": (replays / "ml_corpus" / "9p2i", "inside replays/ml_corpus/"),
+        "a .. alias into samples": (
+            Path(f"{_REPO_ROOT}/scripts/../replays/samples/4p1i"),
+            "inside replays/samples/",
+        ),
+        "a symlink into samples": (
+            tmp_path / "looks-like-scratch",
+            "inside replays/samples/",
+        ),
+        "replays/<name>": (replays / "stage-b-r1", "records only into a candidate set"),
+        "one-level candidates/<round>": (
+            replays / "candidates" / "stage-b-r1",
+            "records only into a candidate set",
+        ),
+        "a hidden round name": (
+            replays / "candidates" / ".stage-b-r1" / "9p2i",
+            "must start with a letter or digit",
+        ),
+    }
+    if case == "a scratch dir with a committed manifest":
+        env.update(
+            AILIBI_SAMPLE_DIR=str(tmp_path / "scratch-set"),
+            AILIBI_MANIFEST=str(_COMMITTED_4P1I / "MANIFEST.md"),
+        )
+        return env, "AILIBI_MANIFEST resolves to"
+    target, refusal = targets[case]
+    env.update(AILIBI_SAMPLE_DIR=str(target), AILIBI_MANIFEST=f"{target}/MANIFEST.md")
+    return env, refusal
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "default target",
+        "samples 9p2i",
+        "ml_corpus 9p2i",
+        "a .. alias into samples",
+        "a symlink into samples",
+        "a scratch dir with a committed manifest",
+        "replays/<name>",
+        "one-level candidates/<round>",
+        "a hidden round name",
+    ],
+)
+def test_a_switched_on_config_is_refused_at_every_unsafe_target(
+    case: str, tmp_path: Path
+) -> None:
+    """A real run (no key, so any gate after the check would fail differently)."""
+
+    env, refusal = _refused_target_env(case, tmp_path)
+    config = _test_config(tmp_path)
+    if case == "a symlink into samples":
+        _DECOY.mkdir()
+        (tmp_path / "looks-like-scratch").symlink_to(_DECOY)
+    try:
+        with _replays_tree_restored():
+            proc = _run("--seeds", "0", "--experiment-config", str(config), env=env)
+            assert proc.returncode == 1
+            assert refusal in proc.stderr
+            assert _NOTHING_STAGED in proc.stderr
+            # The check ran before every preflight: the key gate never spoke.
+            assert "ANTHROPIC_API_KEY" not in proc.stderr
+            assert "Substrate slate OK" not in proc.stdout
+            assert _stage_dirs() == []
+            assert not (_REPO_ROOT / "replays" / "stage-b-r1").exists()
+            assert not (_REPO_ROOT / "replays" / "candidates" / "stage-b-r1").exists()
+            assert not (tmp_path / "scratch-set").exists()
+    finally:
+        if _DECOY.exists():
+            shutil.rmtree(_DECOY)
+
+
+def test_a_switched_on_config_is_accepted_at_a_candidate_set_directory(
+    tmp_path: Path,
+) -> None:
+    target = _REPO_ROOT / "replays" / "candidates" / "stage-b-r1" / "9p2i"
+    env = _clean_env()
+    env.update(AILIBI_SAMPLE_DIR=str(target), AILIBI_MANIFEST=f"{target}/MANIFEST.md")
+    config = _test_config(tmp_path)
+    with _replays_tree_restored():
+        proc = _run(
+            "--seeds",
+            "0",
+            "--dry-run",
+            "--expect-levers",
+            "",
+            "--experiment-config",
+            str(config),
+            env=env,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert f"[dry-run] {_TEST_SETTINGS_ECHO}" in proc.stdout.splitlines()
+        assert not target.parent.exists()
+
+
+def test_a_config_of_historical_defaults_goes_anywhere_and_records_no_key(
+    tmp_path: Path,
+) -> None:
+    defaults = _test_config(
+        tmp_path, '{"format_version": 1, "meeting_reset": "preserve"}\n'
+    )
+    proc = _run(
+        "--seeds",
+        "0",
+        "--dry-run",
+        "--expect-levers",
+        "",
+        "--experiment-config",
+        str(defaults),
+        env=_clean_env(),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (
+        "[dry-run] Experiment config settings: none: historical defaults"
+        in proc.stdout.splitlines()
+    )
+    set_dir, env = _fake_set(tmp_path)
+    proc = _run(
+        "--seeds", "0", "--experiment-config", str(defaults), env=env, timeout=600
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert '"experiment_config"' not in (set_dir / "replay-seed-0.jsonl").read_text()
+
+
+def _arms_on_refresh(
+    tmp_path: Path,
+) -> tuple[Path, Path, subprocess.CompletedProcess[str]]:
+    """A fake refresh of seeds 0 and 1 on the test config, traced, in a bare shell."""
+
+    config = _test_config(tmp_path)
+    set_dir, env = _fake_set(tmp_path)
+    proc = subprocess.run(
+        [
+            "bash",
+            "-x",
+            str(_REFRESH_SH),
+            "--seeds",
+            "0,1",
+            "--expect-levers",
+            "",
+            "--experiment-config",
+            str(config),
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=900,
+    )
+    return config, set_dir, proc
+
+
+def test_a_fake_arms_on_refresh_records_exactly_the_file_and_loads_verified(
+    tmp_path: Path,
+) -> None:
+    config, set_dir, proc = _arms_on_refresh(tmp_path)
+    assert "Refresh complete" in proc.stdout, proc.stdout[-4000:] + proc.stderr[-4000:]
+    for seed in (0, 1):
+        entries = read_all_entries(set_dir / f"replay-seed-{seed}.jsonl")
+        stamped = [
+            entry.experiment_config
+            for entry in entries
+            if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+        ]
+        assert len(stamped) > 1 and all(item == _TEST_CONFIG for item in stamped)
+        replay = ReplayLoader(set_dir).load_replay(f"headless-seed-{seed}")
+        assert replay.metadata.outcome_verified
+    # The config was copied into the stage once, and every seed recorded from
+    # that copy, never from the file the operator could still edit.
+    snapshots = re.findall(
+        r"Experiment config snapshot: (\S+) \(sha256 ([0-9a-f]{64})\)", proc.stdout
+    )
+    assert len(snapshots) == 1
+    snapshot, sha = snapshots[0]
+    assert sha == hashlib.sha256(config.read_bytes()).hexdigest()
+    assert ".ailibi-refresh-stage-" in snapshot
+    invocations = [
+        line
+        for line in proc.stderr.splitlines()
+        if "scripts/run_tournament.py" in line
+        and line.lstrip("+").startswith(" uv run")
+    ]
+    assert len(invocations) == 2
+    assert all(
+        line.endswith(f"--force --experiment-config {snapshot}") for line in invocations
+    )
+    assert list(tmp_path.glob(".ailibi-refresh-stage-*")) == []
+
+
+@pytest.mark.xfail(
+    not kill_craft._WALK_CONFIG.supports_experiments,
+    reason=(
+        "the post-step's kill-craft walk refuses experiment recordings until the "
+        "readers card widens it"
+    ),
+    strict=True,
+)
+def test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set(
+    tmp_path: Path,
+) -> None:
+    _config, set_dir, proc = _arms_on_refresh(tmp_path)
+    assert proc.returncode == 0, proc.stdout[-4000:] + proc.stderr[-4000:]
+    check = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            str(_REPO_ROOT / "scripts" / "build_sample_report.py"),
+            "--sample-dir",
+            str(set_dir),
+            "--check",
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=600,
+    )
+    assert check.returncode == 0, check.stdout + check.stderr
+    assert "is consistent with its replays" in check.stdout
+
+
+# -- the helper's own rules, below the script ---------------------------------
+
+
+def test_the_snapshot_refuses_a_file_edited_after_the_check(tmp_path: Path) -> None:
+    config = _test_config(tmp_path)
+    checked = de.load_declared_config(config)
+    config.write_text(_TEST_CONFIG_JSON.replace("observed_risk", "target_distance"))
+    dest = tmp_path / "stage" / "experiment-config.json"
+    dest.parent.mkdir()
+    with pytest.raises(
+        de.DeclaredExperimentError, match="changed after it was checked"
+    ):
+        de.write_snapshot(config, dest, expected_sha256=checked.sha256)
+    assert not dest.exists()
+    config.write_text(_TEST_CONFIG_JSON)
+    line = de.write_snapshot(config, dest, expected_sha256=checked.sha256)
+    assert dest.read_bytes() == config.read_bytes()
+    assert line.endswith("every seed records from this copy")
+
+
+def test_the_snapshot_validates_the_bytes_it_copies(tmp_path: Path) -> None:
+    config = _test_config(tmp_path, '{"hidden_travel": "on"}\n')
+    dest = tmp_path / "copy.json"
+    with pytest.raises(de.DeclaredExperimentError, match="hidden_travel"):
+        de.write_snapshot(
+            config,
+            dest,
+            expected_sha256=hashlib.sha256(config.read_bytes()).hexdigest(),
+        )
+    assert not dest.exists()
+
+
+@pytest.mark.parametrize(
+    ("text", "detail"),
+    [
+        ('{"hidden_travel": "on"}', "hidden_travel"),
+        ('{"meeting_reset": "sometimes"}', "meeting_reset"),
+        ('{"bounded_rebuttal_version": true}', "bounded_rebuttal_version"),
+        (
+            '{"meeting_reset": "hub_with_grace", "meeting_reset": "preserve"}',
+            "more than once",
+        ),
+        ('["meeting_reset"]', "one object"),
+        ("{", "not a valid experiment config"),
+    ],
+)
+def test_the_file_must_be_one_valid_config(
+    tmp_path: Path, text: str, detail: str
+) -> None:
+    with pytest.raises(de.DeclaredExperimentError, match=detail):
+        de.load_declared_config(_test_config(tmp_path, text + "\n"))
+
+
+def test_the_sha256_covers_exactly_the_bytes_read(tmp_path: Path) -> None:
+    config = _test_config(tmp_path)
+    declared = de.load_declared_config(config)
+    assert declared.sha256 == hashlib.sha256(config.read_bytes()).hexdigest()
+    assert declared.config == _TEST_CONFIG
+    assert declared.settings() == (
+        ("meeting_reset", "hub_with_grace"),
+        ("vent_exit_policy", "observed_risk"),
+        ("bounded_rebuttal_version", 1),
+    )
+
+
+def test_the_target_rule_reads_physical_paths(tmp_path: Path) -> None:
+    """The rule over a planted repository: its own replays/ tree, not this one."""
+
+    repo = tmp_path / "repo"
+    (repo / "replays" / "samples" / "4p1i").mkdir(parents=True)
+    (repo / "replays" / "candidates").mkdir(parents=True)
+    link = tmp_path / "link"
+    link.symlink_to(repo / "replays" / "samples")
+    candidate = repo / "replays" / "candidates" / "r1" / "9p2i"
+
+    def refusal(sample_dir: Path, manifest: Path | None = None) -> str | None:
+        try:
+            de.refuse_unsafe_target(
+                _TEST_CONFIG,
+                sample_dir=sample_dir,
+                manifest=manifest
+                if manifest is not None
+                else sample_dir / "MANIFEST.md",
+                sample_dir_explicit=True,
+                repo_root=repo,
+            )
+        except de.DeclaredExperimentError as exc:
+            return str(exc)
+        return None
+
+    assert refusal(candidate) is None
+    assert refusal(tmp_path / "scratch") is None
+    assert "inside replays/samples/" in (refusal(link / "new-set") or "")
+    assert "inside replays/samples/" in (
+        refusal(tmp_path / "gone" / ".." / "link" / "4p1i") or ""
+    )
+    assert "records only into a candidate set" in (
+        refusal(candidate, repo / "replays" / "candidates" / "r1" / "MANIFEST.md") or ""
+    )
+    assert "records only into a candidate set" in (
+        refusal(repo / "replays" / "candidates" / "r1" / "9p2i" / "deeper") or ""
+    )
+    assert refusal(candidate, candidate / "MANIFEST.md") is None
+    # The historical defaults record nothing new, so they go anywhere.
+    de.refuse_unsafe_target(
+        RecordedExperimentConfig(),
+        sample_dir=repo / "replays" / "samples" / "4p1i",
+        manifest=repo / "replays" / "samples" / "4p1i" / "MANIFEST.md",
+        sample_dir_explicit=False,
+        repo_root=repo,
+    )

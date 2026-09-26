@@ -116,6 +116,7 @@ import math
 import os
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
@@ -155,6 +156,16 @@ from orchestrator.replay import (  # noqa: E402
 )
 from orchestrator.recording_fingerprint import (  # noqa: E402
     replay_seed_from_filename,
+)
+from orchestrator.experiment_config import (  # noqa: E402
+    RecordedExperimentConfig,
+    normalize_experiment_config,
+)
+from _declared_experiment import (  # noqa: E402
+    DeclaredExperimentError,
+    load_declared_config,
+    refuse_ambient_exports,
+    refuse_factory_flags,
 )
 from _report_output import atomic_write_report, preflight_report_output  # noqa: E402
 from _tournament_progress import (  # noqa: E402
@@ -459,7 +470,58 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=None,
         help="whole-run elapsed wall limit; interrupts awaited meeting work",
     )
+    parser.add_argument(
+        "--experiment-config",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "record every game with the experimental switches this JSON file "
+            "declares: one RecordedExperimentConfig object, whose unknown fields "
+            "and invalid values are refused before anything is written. The "
+            "config reaches each game, the built-in agent factory, a meeting "
+            "runner built from it and the resume check. With it, the four "
+            "meeting-experiment environment variables, a non-default "
+            "--agent-factory, --candidate-artifact and --crew-artifact are "
+            "refused. Omitted, every game records the historical defaults."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _resolve_experiment_config(
+    args: argparse.Namespace, environ: Mapping[str, str]
+) -> RecordedExperimentConfig | None:
+    """Parse ``--experiment-config`` once and refuse what cannot run beside it.
+
+    ``None`` when the flag is omitted. Otherwise the file is parsed
+    (:func:`_declared_experiment.load_declared_config`), and any
+    meeting-experiment variable present in ``environ`` and every agent-factory
+    flag the run was given are refused, each raising ``SystemExit`` before any
+    file is written.
+    """
+
+    if args.experiment_config is None:
+        return None
+    factory_flags = [
+        flag
+        for flag, given in (
+            (
+                f"--agent-factory {args.agent_factory}",
+                args.agent_factory != FSM_DEFAULT_POLICY_ID,
+            ),
+            ("--candidate-artifact", args.candidate_artifact is not None),
+            ("--crew-artifact", args.crew_artifact is not None),
+        )
+        if given
+    ]
+    try:
+        declared = load_declared_config(args.experiment_config)
+        refuse_ambient_exports(environ, recorder="tournament")
+        refuse_factory_flags(factory_flags)
+    except DeclaredExperimentError as exc:
+        raise SystemExit(str(exc)) from exc
+    return declared.config
 
 
 def _resolve_tactical_policy_stamp(value: str | None) -> TacticalPolicyStamp | None:
@@ -1285,6 +1347,8 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(
                 f"--{name.replace('_', '-')} must be finite and non-negative"
             )
+    # Parsed and checked before the report preflight creates any directory.
+    experiment_config = _resolve_experiment_config(args, os.environ)
     seeds = range(args.start_seed, args.start_seed + args.num_games)
     report_output: Path = (
         args.report_output
@@ -1402,6 +1466,13 @@ def main(argv: list[str] | None = None) -> int:
         "max_total_output_tokens": args.max_total_output_tokens,
         "max_wall_seconds": args.max_wall_seconds,
     }
+    if args.experiment_config is not None:
+        # The normalized config, so a resume with an edited file that records
+        # anything different fails the fingerprint and the saved configuration.
+        normalized = normalize_experiment_config(experiment_config)
+        configuration["experiment_config"] = (
+            None if normalized is None else normalized.model_dump(mode="json")
+        )
     progress = TournamentProgress(
         path=progress_output,
         report_path=report_output,
@@ -1459,6 +1530,8 @@ def main(argv: list[str] | None = None) -> int:
             max(0.0, args.max_wall_seconds - progress.elapsed_seconds)
         )
         run_options["deadline"] = deadline
+    if experiment_config is not None:
+        run_options["experiment_config"] = experiment_config
 
     def run_seed(seed: int) -> TournamentReport:
         if crew_auto_stamp is not None:
