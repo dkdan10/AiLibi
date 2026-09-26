@@ -590,9 +590,7 @@ def _apply_action(
             state, game_map, action, redistribution_policy=redistribution_policy
         )
     if isinstance(action, VentAction):
-        return _apply_vent(
-            state, game_map, action, vent_witness_rule=vent_witness_rule
-        )
+        return _apply_vent(state, game_map, action, vent_witness_rule=vent_witness_rule)
     if isinstance(action, ReportBodyAction):
         return _apply_report(state, action)
     if isinstance(action, EmergencyMeetingAction):
