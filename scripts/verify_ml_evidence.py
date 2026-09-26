@@ -2762,6 +2762,9 @@ _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
         "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
         "replays/records/phase-21-wave2-finding/README.md",
     ),
+    # The family's README states the round layout and is present whether or not
+    # a round is; the rounds themselves are counted by the inventory entry.
+    "replays/candidates/": ("replays/candidates/README.md",),
     "agents/tactical/learned/{weights,crew_weights}.json": (
         "agents/tactical/learned/weights.json",
         "agents/tactical/learned/weights.json.sha256",
@@ -2824,6 +2827,7 @@ _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = 
         ("replays/records/phase-21-wave2-finding",),
         (),
     ),
+    "replays/candidates/": (("replays/candidates",), ()),
     "agents/tactical/learned/{weights,crew_weights}.json": (
         (
             "agents/tactical/learned/weights.json",
@@ -2865,10 +2869,10 @@ _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = 
     "experiments/lab/": (("experiments/lab", "experiments/model_probe"), ()),
 }
 
-#: The registry's own per-row file count, e.g. `1.5 MB / 105 files`. The word
-#: matters: the slate row reads "1,569 digests", which is a digest count and not
-#: an inventory of files on this checkout.
-_STATED_FILES: Final = re.compile(r"([\d,]+) files")
+#: The registry's own per-row file count, e.g. `1.5 MB / 105 files`, or the
+#: singular `1 file`. The word matters: the slate row reads "1,569 digests",
+#: which is a digest count and not an inventory of files on this checkout.
+_STATED_FILES: Final = re.compile(r"([\d,]+) files?\b")
 _STATED_BYTES: Final = re.compile(r"\b([\d,]+) tracked bytes\b")
 
 

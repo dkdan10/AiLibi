@@ -177,13 +177,11 @@ def test_verify_sh_no_arg_walks_every_committed_set(tmp_path: Path) -> None:
         # reconstructs (its absence is a divergence, not a wrapper concern).
         (dst / "roster.json").write_bytes((src / "roster.json").read_bytes())
 
-    proc = subprocess.run(
-        ["bash", str(_VERIFY_SH)],
-        cwd=_REPO_ROOT,
-        capture_output=True,
-        text=True,
-        env={**os.environ, "AILIBI_SAMPLES_ROOT": str(root)},
-    )
+    # The candidates root is pointed at an empty directory, so the two sets
+    # counted below are the samples root's alone.
+    empty = tmp_path / "candidates"
+    empty.mkdir()
+    proc = _bare_verify(root, empty)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     # Both sets are walked (a header each) and both verify clean.
     assert "4p1i" in proc.stdout
@@ -211,14 +209,108 @@ def test_verify_sh_no_arg_fails_when_a_set_drifts(tmp_path: Path) -> None:
     (drift / "roster.json").write_bytes((_REAL_9P2I / "roster.json").read_bytes())
     _corrupt_first_tick_hash(drift_path)
 
-    proc = subprocess.run(
+    empty = tmp_path / "candidates"
+    empty.mkdir()
+    proc = _bare_verify(root, empty)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+def _bare_verify(
+    samples_root: Path, candidates_root: Path
+) -> subprocess.CompletedProcess[str]:
+    """``bash scripts/verify_samples.sh`` with no argument, over the two roots."""
+
+    return subprocess.run(
         ["bash", str(_VERIFY_SH)],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
-        env={**os.environ, "AILIBI_SAMPLES_ROOT": str(root)},
+        env={
+            **os.environ,
+            "AILIBI_SAMPLES_ROOT": str(samples_root),
+            "AILIBI_CANDIDATES_ROOT": str(candidates_root),
+        },
     )
+
+
+def _one_seed_set(set_dir: Path, source: Path) -> Path:
+    """``set_dir`` holding one copied committed seed and its roster descriptor."""
+
+    set_dir.mkdir(parents=True)
+    path = set_dir / f"replay-seed-{_SEED}.jsonl"
+    path.write_bytes((source / f"replay-seed-{_SEED}.jsonl").read_bytes())
+    (set_dir / "roster.json").write_bytes((source / "roster.json").read_bytes())
+    return path
+
+
+def _two_sample_sets(root: Path) -> None:
+    _one_seed_set(root / "4p1i", _REAL_SAMPLES)
+    _one_seed_set(root / "9p2i", _REAL_9P2I)
+
+
+_NEEDS_SHELL = pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="needs uv + bash for the end-to-end shell wrapper",
+)
+
+
+@_NEEDS_SHELL
+def test_verify_sh_no_arg_adds_a_planted_candidate_set(tmp_path: Path) -> None:
+    _two_sample_sets(tmp_path / "samples")
+    candidates = tmp_path / "candidates"
+    _one_seed_set(candidates / "round-1" / "9p2i", _REAL_9P2I)
+    proc = _bare_verify(tmp_path / "samples", candidates)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.count("samples verified clean") == 3
+    assert proc.stdout.count("=== verifying candidate set ") == 1
+    assert f"=== verifying candidate set {candidates}/round-1/9p2i/ ===" in proc.stdout
+
+
+@_NEEDS_SHELL
+def test_verify_sh_no_arg_fails_on_one_corrupted_candidate_hash(tmp_path: Path) -> None:
+    _two_sample_sets(tmp_path / "samples")
+    candidates = tmp_path / "candidates"
+    tick = _corrupt_first_tick_hash(
+        _one_seed_set(candidates / "round-1" / "9p2i", _REAL_9P2I)
+    )
+    proc = _bare_verify(tmp_path / "samples", candidates)
     assert proc.returncode == 1, proc.stdout + proc.stderr
+    # Both sample sets still verified clean; the candidate alone failed.
+    assert proc.stdout.count("samples verified clean") == 2
+    assert f"diverged at tick {tick}" in proc.stdout
+
+
+@_NEEDS_SHELL
+def test_verify_sh_no_arg_accepts_an_absent_candidates_root(tmp_path: Path) -> None:
+    _two_sample_sets(tmp_path / "samples")
+    proc = _bare_verify(tmp_path / "samples", tmp_path / "no-such-root")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.count("samples verified clean") == 2
+    assert "candidate set" not in proc.stdout
+
+
+@_NEEDS_SHELL
+def test_verify_sh_no_arg_fails_on_a_candidate_set_holding_no_replay(
+    tmp_path: Path,
+) -> None:
+    _two_sample_sets(tmp_path / "samples")
+    candidates = tmp_path / "candidates"
+    (candidates / "round-1" / "9p2i").mkdir(parents=True)
+    proc = _bare_verify(tmp_path / "samples", candidates)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "No replay-seed-*.jsonl files" in proc.stderr
+
+
+@_NEEDS_SHELL
+def test_verify_sh_no_arg_still_needs_a_sample_set(tmp_path: Path) -> None:
+    """Exit 2 keeps its meaning: the samples root holds no set."""
+
+    (tmp_path / "samples").mkdir()
+    candidates = tmp_path / "candidates"
+    _one_seed_set(candidates / "round-1" / "9p2i", _REAL_9P2I)
+    proc = _bare_verify(tmp_path / "samples", candidates)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "No committed sample sets" in proc.stderr
 
 
 def _corrupt_meeting_before_hash(path: Path) -> int:

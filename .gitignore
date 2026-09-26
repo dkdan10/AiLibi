@@ -36,6 +36,9 @@ replays/tournament-eval-report.json
 # 14.12), so this dir lingers long enough to surface as untracked — ignore it so
 # it is never accidentally committed with the re-recorded samples.
 replays/samples/.ailibi-refresh-stage-*/
+# The same stage for a candidate round: it lands in the round directory, beside
+# the round's set directories.
+replays/candidates/*/.ailibi-refresh-stage-*/
 
 # Transient per-set staging dir (scripts/record_ml_corpus.sh, Task 15.12): the
 # atomic stage + parallel-worker queue/state live under the set dir and are

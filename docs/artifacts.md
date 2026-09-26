@@ -35,7 +35,10 @@ no extra command. They are small, they are read constantly, and a checkout
 without them is broken rather than merely incomplete.
 
 *Rule:* committed, tracked, diffable. Anything a test opens is class (a) by
-definition — the test is the authority, not the file's size.
+definition — the test is the authority, not the file's size. A candidate round
+under `replays/candidates/` is class (a) plus (b) on the same ground: the sample
+verifier and the candidate test open its recordings, and its README, declared
+config and manifests are the records about them.
 
 ### (b) Manifests, hashes and summaries — **in git**
 
@@ -97,6 +100,7 @@ than its output preserved.
 | `replays/samples/` — the baseline-9 process re-record (100 replays + per-set `MANIFEST.md`), the substrate wave's adopting record; it published cells and no bars, and these are the canonical bytes | (a) + (b) | in git | 40 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus; its `tournament-eval-report.json.gz` is gzipped, as all four sets' are, because the uncompressed report reached 102.70 MB against GitHub's hard 100 MB per-file limit (the owner's delivery decision of 2026-09-22) | (a) | in git | 114 MB / 209 files |
 | `replays/records/phase-21-wave2-finding/` — the pin and the per-file digests for a 300-game recording that is NOT one of the canonical replay sets, plus a README saying why it is not | (b) | in git | 2 files |
+| `replays/candidates/` — candidate rounds: recordings made with a declared experiment config that turns experimental switches on, kept to assess those switches before any adoption. Verified on every change like a sample set, neither served nor published, and never canonical; `replays/candidates/README.md` states the round layout and the rules | (a) + (b) | in git | 1 file |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
 | `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; one frozen format-3 recording and its README for the cross-tree policy check; frozen baseline-8 meetings and their README, for tests whose exhibit the baseline-9 bytes no longer carry; no prompt archive, since every committed replay stamps the live `qwen3_6_27b` set — v6, with `vote_ballot` at v8 — and the baseline-9 re-record retired the v5 bodies) | (a) | in git | 4,064,349 tracked bytes / 35 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |

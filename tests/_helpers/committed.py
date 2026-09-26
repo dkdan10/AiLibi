@@ -698,3 +698,46 @@ MOVEMENT_DECIDED_MEETINGS: Final[frozenset[str]] = frozenset(
         "samples/9p2i:7:headless-seed-7:meeting-0",
     }
 )
+
+
+# --------------------------------------------------------------------------- #
+# Candidate rounds.                                                            #
+# --------------------------------------------------------------------------- #
+#
+# Assessment recordings kept beside the committed sets, never among them:
+# ``replays/candidates/README.md`` states the layout, and
+# ``tests/scripts/test_candidate_sets.py`` walks every round through the two
+# functions below.
+
+#: The candidate family's root, one directory per round.
+CANDIDATES_ROOT: Final[Path] = repo_root / "replays" / "candidates"
+
+
+def candidate_rounds(root: Path = CANDIDATES_ROOT) -> tuple[Path, ...]:
+    """Every round directory under ``root``, sorted by name.
+
+    Only directories count: the family README beside them is not a round, and
+    an absent root holds none. What else the root may hold is the candidate
+    test's check, not this enumerator's.
+    """
+
+    if not root.is_dir():
+        return ()
+    return tuple(sorted(path for path in root.iterdir() if path.is_dir()))
+
+
+@cache
+def candidate_report_check(set_dir: Path) -> int:
+    """``build_sample_report --check`` over one candidate set, computed once.
+
+    ``0`` when the set's committed ``tournament-eval-report.json.gz`` equals a
+    rebuild from its recordings, ``1`` when it does not or is missing. The
+    rebuild walks every game, so a set is checked once per worker.
+    """
+
+    scripts_dir = repo_root / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from build_sample_report import check_report
+
+    return check_report(set_dir)
