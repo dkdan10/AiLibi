@@ -135,6 +135,25 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
 
 ## Acceptance
 
+- [x] Review correction: the committed-meeting walk and the golden walk every meeting of every arm
+  that exists today, the meeting reset included, so a walk that stopped reading the reset (or any
+  other readable setting) fails a positive case, not only a refusal case.
+  `test_the_reconstructors_walk_every_meeting_of_every_arm_that_exists_today` (plain, workload,
+  regroup reset, reset with a real rebuttal, observed risk with a real rebuttal),
+  `test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_pending_values` and
+  `test_the_reconstructors_hand_the_recorded_witness_rule_to_the_engine_helper`, all in
+  `tests/eval/test_recorded_arm_readers.py`. Dropping any one of the nine readable settings from
+  either walk's list fails a case: 18 probes, all red (Results, "Review corrections, round 1").
+- [x] Review correction: the plain-copy scan reads the two `--set-dir` parser refusals (the stderr
+  the script prints, captured) and evidence honesty's mixed-policy raise, besides the settings
+  refusals, the extractor's, the custom-factory raise and the help text it already read; each text
+  is asserted to be the refusal it names, so none can scan clean by being empty.
+  `test_the_copy_this_card_adds_carries_no_identifier`; "see Task 20.33" and "the R7 rule" planted
+  into each of the three messages from a byte copy each turn it red (6 probes).
+- [x] Review correction: every row of the B3 projection table, each set's meeting count included,
+  and the pooled row are pinned by
+  `tests/_helpers/test_scripted_meeting.py::test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets`,
+  so `uv run pytest tests/_helpers/test_scripted_meeting.py -k projected` reproduces the whole table.
 - [x] **Five profiles widened, each after a written review.** Kill-craft, the funnel, solvability,
   the win-condition self-check and evidence honesty set `supports_experiments=True`. Each declares,
   through the spine's thread-or-refuse mechanism, the fields it threads: at most the eight wave
@@ -608,8 +627,12 @@ compared sha256 (all 156 restored). The probe script is a scratch file, not comm
 | `audits/workflows/extract_gameplay_facts.py` | 6 | 5 | X4 |
 | `tests/_helpers/committed.py` | 6 | 6 | none |
 | `tests/meetings/test_prompt_byte_golden.py` | 29 (one a no-op control, green) | 22 | G11, G12, G18, G21, G22, G29 |
+| `tests/_helpers/committed.py`, review round 1: the walk's readable list with one setting dropped (C2.1 to C2.9) | 9 | 1 at `f3473b61` (C2.6) | C2.1 to C2.5, C2.7 to C2.9 at `f3473b61`; all nine red at `078ab37a` |
+| `tests/meetings/test_prompt_byte_golden.py`, review round 1: the same at the golden's list (GR.1 to GR.9) | 9 | 6 at `f3473b61` | GR.1, GR.7, GR.8 at `f3473b61`; all nine red at `078ab37a` |
+| review round 1: an identifier planted in each refusal the copy scan missed (CP1 to CP3, two plants each) | 6 | 0 at `f3473b61` | all six at `f3473b61`; all six red at `078ab37a` |
 
-The twelve probes that first came back green, and what became of each:
+The review-round-1 rows are detailed in "Review corrections, round 1 (2026-09-26)" below. The
+twelve probes of the first pass that first came back green, and what became of each:
 
 - **Killed by a new planted case** (re-run red at `5d6d640a`):
   - H8 (the reconstruction's reader label replaced with a constant): the reset refusal test now
@@ -793,3 +816,97 @@ Case-insensitive, over the whole tree except `tasks/`, `audits/` and `agent_prom
 - The scorecard `--set-dir` "writes nothing" proof checks the set directory, the checkout's `docs/`
   status and the two published files, and that no writer is reached; it does not snapshot the whole
   checkout, which other test workers may touch concurrently.
+
+### Review corrections, round 1 (2026-09-26)
+
+Three blocking findings from the round-1 verifiers on `f3473b61`, each repaired in `078ab37a`
+(tests only: no production module, recording, derived view, fixture or doc fact changed; `git diff
+--stat f489cf13 078ab37a` lists only this card, `tasks/README.md` and the two test files below).
+No Codex comment was posted on the PR beyond its review summary, so there is none to answer.
+
+- **The committed walk reading the meeting reset was untested (correctness).** The verifier's probe
+  C2 (`tests/_helpers/committed.py:583`, `reads=READABLE_SETTINGS` with `meeting_reset` removed)
+  left every test green, though the per-instrument review above says this walk reads all nine
+  settings, the reset included. Three positive cases in `tests/eval/test_recorded_arm_readers.py` now
+  hold it, for the committed walk and the golden alike:
+  - `test_the_reconstructors_walk_every_meeting_of_every_arm_that_exists_today` walks the plain,
+    workload, regroup-reset, reset-with-rebuttal and observed-risk-with-rebuttal fake recordings and
+    asserts the committed walk yields every recorded meeting id in order, and the golden walks as
+    many meetings, re-renders every prompt byte-equal and consumes every call once;
+  - `test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_pending_values` does the same
+    on rewritten copies (the pending guard patched open) carrying the values each reconstructor
+    reads without reaching a builder that refuses them: the committed walk, which builds no agents,
+    takes the pending vent exit and entry values and both ballot values; the golden takes both ballot
+    values. The body handle and the golden's pending tactical values keep their earlier proofs (the
+    builders' refusals, `test_the_reconstructors_hand_the_recorded_trigger_setting_to_the_builder`,
+    `test_the_golden_builds_the_recorded_arms_agents`);
+  - `test_the_reconstructors_hand_the_recorded_witness_rule_to_the_engine_helper` walks a copy
+    stamped `vent_witness_rule="physical"` through a spy on the engine-arguments helper that records
+    the rule it receives and then runs the default rule the copy's events were made with: the spy
+    sees `physical` and the walk reaches every meeting. It holds whether or not the helper threads
+    the rule, so the physical-witness card needs no edit to it.
+- **The plain-copy scan missed three new refusals (integrity).** `_new_copy` now captures the two
+  `--set-dir` parser refusals (the standard error the script prints, with `sys.argv[0]` pinned and
+  the named directory replaced by `DIR`) and evidence honesty's mixed-policy raise (on a directory
+  whose two games name different policies, the directory replaced by `DIR`), and
+  `test_the_copy_this_card_adds_carries_no_identifier` asserts each of its seven named texts is the
+  refusal it names before scanning, so none can pass by being empty or another error. The scan now
+  reads every new refusal message this card adds: the settings refusal in its four shapes (an unread
+  setting, with and without fields read; a later format; a list outside the reviewed set), the
+  extractor's, the custom-factory and mixed-policy raises, the two `--set-dir` parser refusals, and
+  the `--set-dir` and `--json-stdout` help with the script's docstring. `walk_chain`'s mismatch
+  errors and the two unreachable pins (`pragma: no cover`) are invariant errors, not refusals, and
+  are not scanned.
+- **The B3 table rows beyond s9 and pooled were not pinned (docs).**
+  `test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets` now counts each
+  set's meetings and asserts all four per-set dicts in full (every count present, zeros included)
+  and the pooled dict, so `uv run pytest tests/_helpers/test_scripted_meeting.py -k projected`
+  reproduces every row and column of the table in "B3, re-measured" (1 passed at `078ab37a`). The
+  values did not move.
+
+**Round-1 probes**, run from byte copies with the round's scratch script (one edit per probe, the
+targeted suites only, `pytest -x -q -n 6 -rf -p no:cacheprovider`; each file restored from its copy
+and its sha256 compared, all 24 restored). The C2 and GR probes ran
+`tests/eval/test_recorded_arm_readers.py tests/_helpers tests/meetings/test_prompt_byte_golden.py`;
+the CP probes ran `tests/eval/test_recorded_arm_readers.py`. Operator classes: swap one collection
+for a related one (the readable list minus one setting, which is also dropping one member of a set
+of kinds) and a message argument replaced (an identifier planted in a message).
+
+| Probe | Edit | At `f3473b61` | At `078ab37a` |
+| --- | --- | --- | --- |
+| C2.1 to C2.9 | the committed walk's `reads=READABLE_SETTINGS` minus `vent_witness_rule`, `vent_exit_policy`, `vent_entry_policy`, `meeting_reset`, `bounded_rebuttal_version`, `report_body_handle_version`, `ballot_kill_row_version`, `impostor_ballot_version`, `redistribution_policy` in turn | red only C2.6 (the trigger builder case); the other eight green | all nine red |
+| GR.1 to GR.9 | the same nine at the golden's `refuse_unread_settings` call | green GR.1, GR.7, GR.8; the other six red | all nine red |
+| CP1.T, CP1.R | " (see Task 20.33)" or " (the R7 rule)" appended to the `--set-dir and --json-stdout go together` refusal | green (the scan never read it) | both red |
+| CP2.T, CP2.R | the same, appended to the `holds no replay files` refusal | green | both red |
+| CP3.T, CP3.R | the same, appended to evidence honesty's `different impostor policies` raise | green | both red |
+
+C2.4, the verifier's probe, fails
+`test_the_reconstructors_walk_every_meeting_of_every_arm_that_exists_today[reset]`; C2.1 fails
+`test_the_reconstructors_hand_the_recorded_witness_rule_to_the_engine_helper[committed-meeting walk]`;
+GR.7 fails `test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_pending_values`. No
+survivor remains, so none is named equivalent.
+
+**Verification at `078ab37a`**, every command from the card's Validation with its real exit code
+(production bytes are those of `f489cf13`, so the base-and-head bundle comparison above still holds:
+no file under `api/`, `frontend/`, `meetings/` or any production module changed since).
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/eval/test_recorded_arm_readers.py tests/meetings/test_transcript.py tests/meetings/test_prompt_byte_golden.py tests/_helpers tests/experiments/test_gameplay_facts_refuses_experiments.py tests/scripts/test_process_scorecard.py -q -n 6` | exit 0, 379 passed (370 before, plus the nine new cases) |
+| `uv run pytest tests/eval/test_evidence_honesty.py tests/eval/test_funnel.py tests/eval/test_kill_craft.py tests/eval/test_solvability.py tests/eval/test_win_condition_selfcheck.py tests/meetings/test_reasoning_evidence.py tests/meetings/test_manager.py -q -n 6` | exit 0, 491 passed |
+| `bash scripts/verify_samples.sh replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check`; `uv run python scripts/publish_gameplay_census.py --check` | exit 0 each |
+| `uv run python scripts/measure_baseline.py --honesty replays/samples/9p2i` and `... replays/samples/4p1i` | exit 0 each; sha256 `97aa858e...` and `d0500f96...`, the merge base's values above |
+| `uv run python scripts/publish_process_scorecard.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; byte-equal to the `samples/9p2i` entry of `docs/process-scorecard.json` under the committed serializer settings |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 62 checks, 50 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `uv run pytest -m campaign -q -n 6` | exit 0, 336 passed |
+| `bash scripts/check.sh` (exit code read directly, no pipe) | exit 0: ruff and format clean, `lint-imports` 4 kept, task docs valid, mypy clean over 506 files, 9,003 passed, 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 vitest tests and the build pass |
+
+The gate ran on `078ab37a` with this subsection in the working tree, all of it but the `check.sh` row
+above; the commit carrying this subsection adds that row too and changes nothing else (the task-docs
+validator was re-run on it, exit 0). A first run stopped at the frontend lint with exit 127
+(`eslint: command not found`) after every Python stage had passed, because this worktree had no
+`frontend/node_modules`; after `npm ci` in `frontend/` the run above passed.
