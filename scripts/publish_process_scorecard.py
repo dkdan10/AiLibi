@@ -8,6 +8,12 @@ exits 1 on drift, in the remediation shape
 ``scripts/build_sample_report.py::check_report`` uses: it names the stale file
 and the exact command that regenerates it.
 
+``--set-dir DIR --json-stdout`` folds one directory (a candidate record, or a
+scratch rehearsal) into one set's scorecard and prints it to stdout as JSON with
+sorted keys, in the committed file's own format; it writes nothing and adds no
+row. Its source is the directory walked: relative to the checkout when it lies
+inside it, else absolute.
+
 Destinations are pre-flighted through
 ``scripts/_report_output.py`` before anything is computed, exactly as
 ``scripts/measure_reasoning_evidence.py`` does, with every ``replays/**`` path,
@@ -19,11 +25,14 @@ Usage::
 
     python scripts/publish_process_scorecard.py
     python scripts/publish_process_scorecard.py --check
+    python scripts/publish_process_scorecard.py --set-dir DIR --json-stdout
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import json
 import sys
 from pathlib import Path
 
@@ -40,9 +49,13 @@ from eval.process_scorecard import (  # noqa: E402
     RateCell,
     SetScorecard,
     compute_process_scorecard,
+    fold_set,
+    load_set_inputs,
+    scorecard_from_tally,
     scorecard_source_paths,
     serialize_scorecard,
 )
+from eval.validity import seeds_on_disk  # noqa: E402
 
 MARKDOWN_PATH = Path("docs/process-scorecard.md")
 JSON_PATH = Path("docs/process-scorecard.json")
@@ -357,6 +370,40 @@ def check_report(root: Path) -> int:
     return 0
 
 
+def set_source(set_dir: Path, *, root: Path) -> str:
+    """The directory walked, relative to ``root`` when it lies inside it, else absolute."""
+
+    resolved = set_dir.resolve()
+    try:
+        return resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def set_dir_json(set_dir: Path, *, root: Path) -> str:
+    """One directory's scorecard as JSON. Computes; writes nothing.
+
+    Serialized with the committed file's settings (sorted keys, two-space
+    indent, one trailing newline), so a committed set's output equals its entry
+    in ``docs/process-scorecard.json``.
+    """
+
+    inputs = load_set_inputs(set_dir)
+    # ``load_set_inputs`` names every source ``replays/<parent>/<name>``, which is
+    # right for a committed set and wrong for a directory at any other depth, so
+    # the source is replaced with the directory actually walked before folding.
+    inputs = dataclasses.replace(inputs, source=set_source(set_dir, root=root))
+    card = scorecard_from_tally(
+        fold_set(inputs), label=inputs.label, sources=(inputs.source,)
+    )
+    return (
+        json.dumps(
+            card.model_dump(mode="json"), indent=2, sort_keys=True, ensure_ascii=False
+        )
+        + "\n"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -364,7 +411,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Recompute both files and diff against the committed ones; exit 1 on drift.",
     )
+    parser.add_argument(
+        "--set-dir",
+        type=Path,
+        help=(
+            "Fold one replay directory into one set's scorecard instead of "
+            "publishing the committed sets."
+        ),
+    )
+    parser.add_argument(
+        "--json-stdout",
+        action="store_true",
+        help=(
+            "With --set-dir: print that directory's scorecard as JSON to "
+            "standard output and write no file."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.set_dir is not None or args.json_stdout:
+        if args.set_dir is None or not args.json_stdout or args.check:
+            parser.error("--set-dir and --json-stdout go together, without --check")
+        if not seeds_on_disk(args.set_dir):
+            parser.error(f"--set-dir {args.set_dir} holds no replay files")
+        sys.stdout.write(set_dir_json(args.set_dir, root=_REPO_ROOT))
+        return 0
     if args.check:
         return check_report(_REPO_ROOT)
     scorecard = publish(_REPO_ROOT)

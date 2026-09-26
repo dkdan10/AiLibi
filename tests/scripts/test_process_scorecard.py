@@ -224,3 +224,136 @@ def test_the_fifth_run_archive_is_protected_from_the_writer() -> None:
     present = [path for path in archive.iterdir() if path.is_file()]
     assert present, archive
     assert all(path.resolve() in protected for path in present)
+
+
+# --------------------------------------------------------------------------- #
+# ``--set-dir DIR --json-stdout``: one directory's scorecard, written nowhere.  #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(scope="module")
+def candidate_set(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A fake set two levels below a planted ``replays/`` root."""
+
+    from tests._helpers.scripted_meeting import record_game
+
+    root = tmp_path_factory.mktemp("planted")
+    directory = root / "replays" / "candidates" / "round-1" / "9p2i"
+    for seed in (0, 1):
+        record_game(directory, seed=seed, config=None)
+    return directory
+
+
+def _listing(root: Path) -> list[tuple[str, int, int]]:
+    return sorted(
+        (str(path.relative_to(root)), path.stat().st_size, path.stat().st_mtime_ns)
+        for path in root.rglob("*")
+    )
+
+
+def _repository_listing() -> str:
+    """The checkout's own status where this script writes, and its two files."""
+
+    import subprocess
+
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all", "--", "docs"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    published = [
+        (path.name, path.stat().st_size, path.stat().st_mtime_ns)
+        for path in (ROOT / command.MARKDOWN_PATH, ROOT / command.JSON_PATH)
+    ]
+    return f"{status}{published}"
+
+
+def test_set_dir_prints_the_in_process_fold_and_writes_nothing(
+    candidate_set: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    from eval.process_scorecard import fold_set, load_set_inputs
+
+    planted_root = candidate_set.parents[3]
+
+    def _no_writer(*args: object, **kwargs: object) -> None:
+        raise AssertionError("--set-dir reached a writer")
+
+    monkeypatch.setattr(command, "atomic_write_report", _no_writer)
+    monkeypatch.setattr(command, "preflight_report_output", _no_writer)
+    before = (_listing(planted_root), _repository_listing())
+    assert command.main(["--set-dir", str(candidate_set), "--json-stdout"]) == 0
+    printed = capsys.readouterr().out
+    assert (_listing(planted_root), _repository_listing()) == before
+
+    inputs = load_set_inputs(candidate_set)
+    source = command.set_source(candidate_set, root=command._REPO_ROOT)
+    card = scorecard_from_tally(
+        fold_set(replace(inputs, source=source)),
+        label=inputs.label,
+        sources=(source,),
+    )
+    assert json.loads(printed) == card.model_dump(mode="json")
+    assert printed == (
+        json.dumps(
+            card.model_dump(mode="json"), indent=2, sort_keys=True, ensure_ascii=False
+        )
+        + "\n"
+    )
+    assert card.games == 2
+
+
+def test_set_dir_names_the_directory_it_walked(
+    candidate_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    from eval.process_scorecard import load_set_inputs
+
+    planted_root = candidate_set.parents[3]
+    printed = json.loads(command.set_dir_json(candidate_set, root=planted_root))
+    assert printed["sources"] == ["replays/candidates/round-1/9p2i"]
+    # The loader's own naming, which the replacement works around, drops a level.
+    assert load_set_inputs(candidate_set).source == "replays/round-1/9p2i"
+    # Perturbed: without the replacement the misnamed source is printed.
+    monkeypatch.setattr(
+        command,
+        "dataclasses",
+        types.SimpleNamespace(replace=lambda inputs, **changes: inputs),
+    )
+    misnamed = json.loads(command.set_dir_json(candidate_set, root=planted_root))
+    assert misnamed["sources"] == ["replays/round-1/9p2i"]
+    outside = command.set_source(candidate_set, root=ROOT)
+    assert outside == str(candidate_set.resolve())
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--set-dir", "{set}", "--json-stdout", "--check"],
+        ["--set-dir", "{set}"],
+        ["--json-stdout"],
+        ["--set-dir", "{empty}", "--json-stdout"],
+    ],
+    ids=["with-check", "without-json-stdout", "json-stdout-alone", "no-replays"],
+)
+def test_set_dir_refuses_what_it_cannot_serve(
+    candidate_set: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    arguments: list[str],
+) -> None:
+    resolved = [item.format(set=candidate_set, empty=tmp_path) for item in arguments]
+    with pytest.raises(SystemExit) as refused:
+        command.main(resolved)
+    assert refused.value.code == 2
+    error = capsys.readouterr().err
+    if "{empty}" in arguments:
+        assert "holds no replay files" in error
+    else:
+        assert "--set-dir and --json-stdout go together, without --check" in error
