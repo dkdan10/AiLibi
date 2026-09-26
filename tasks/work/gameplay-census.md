@@ -121,6 +121,19 @@ pooled (`docs/process-scorecard.md:164`, `:57`).
 Unless an item names another mechanism, it is enforced by `tests/eval/test_gameplay_census.py`
 over hand-built carriers, with no replay on disk.
 
+- [x] Review correction (round 4): the neighbour table the in-vent view and the exit-policy guard
+  read follows its source, planted at both ends. The fold: a carrier that gives the vent room no
+  neighbour hides a crewmate in its one canonical neighbour, and one that joins it to a far room
+  shows a crewmate there, on both "surfacings before the cap with someone in view" and "vent exits
+  into a visibly occupied room" (`test_the_in_vent_view_follows_the_neighbours_the_carrier_holds`).
+  Under `vent_exit_policy = look_and_wait` the breach follows the same table: the canonical
+  neighbour raises and the isolated room does not, the far room does not and the joined room
+  raises (`test_the_exit_policy_guard_judges_on_the_neighbours_the_carrier_holds`). The loader:
+  the planted map also adds a room and rewires the vent room, the carrier's table equals the
+  planted map's, keys and values, and the role seeder receives the same map as every game's walk
+  (`test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads`). Each of the four probes is
+  green on the round-3 tests and red on these. The round-3 claim about sourced constants is
+  restated at the strength the tests hold (Results, Review corrections, round 4).
 - [x] Review correction (round 3): the grace window and the ballot floor each follow their source,
   planted. A carrier walked on a map whose kill cooldown is 6 breaches on a kill at T+6, not on
   one at T+7, and publishes `grace_window_ticks` 6
@@ -1396,5 +1409,130 @@ as history:
   layer taken out.
 - The re-execution test shows each module-level binding follows its source when the module is
   executed, which is when those bindings are made.
+- The round-2 question on the two pre-registered before values still waits for the orchestrator
+  (the PR's Questions).
+
+### Review corrections, round 4 (2026-09-25)
+
+**State: done.** The one round-4 finding is repaired, and the `Review correction (round 4)` item at
+the top of Acceptance records it. Status stays `done` and no box is open. `tasks/README.md`'s
+inventory sentence is unchanged (88 cards, 9 ready, 79 done), and `scripts/validate_task_docs.py`
+re-derives it at this head.
+
+**References.** The in-vent view is the exit policy's own inference, as the Acceptance item "The
+exit-policy predicate is the policy's own view" states it under decision memo 3.4 (this card's
+brief). `docs/architecture.md`'s layering is unchanged: this round moves one test file and this
+card, and no production line.
+
+**Merging `main`.** `origin/main` is still `52a6ac58`, which round 3 merged at `b5772553`. This
+round merges nothing, and the diff base stays `52a6ac58`.
+
+**The finding: the neighbour table had no planted case.** Every carrier the tests built took its
+neighbour table from the canonical map, and the loader test planted only the kill cooldown. So a
+fold that read the canonical map instead of the carrier, or a loader that bound a literal copy of
+the canonical table, passed all 216 tests. The repair is three tests at `19b55396`, and the census
+module's bytes do not move (sha256 `09c604e2`, before and after):
+- **The fold.** `test_the_in_vent_view_follows_the_neighbours_the_carrier_holds` folds a two-tick
+  trip out of STORAGE, whose one canonical neighbour is ENGINEERING. On the canonical table a
+  crewmate in ENGINEERING is in view (1 of 1 on "surfacings before the cap with someone in view"
+  and on "vent exits into a visibly occupied room"). A carrier that gives STORAGE no neighbour
+  reads 0 of 1 on both. A crewmate in ADMIN reads 0 of 1 on the canonical table and 1 of 1 on a
+  carrier that joins STORAGE to ADMIN alone. "Vent exits into an occupied room" reads 1 of 1 on
+  all four carriers: only the view moves.
+- **The exit-policy guard.** `test_the_exit_policy_guard_judges_on_the_neighbours_the_carrier_holds`
+  records `vent_exit_policy = look_and_wait`. The canonical-neighbour surfacing raises the
+  conformance error and the isolated room reads 0 of 1; the far room reads 0 of 1 on the canonical
+  table and raises on the joined one.
+- **The loader.** `test_the_loader_reads_the_kill_cooldown_from_the_map_it_loads` keeps its name,
+  its cooldown plant and its assertions. Its planted map now also adds a room and rewires STORAGE:
+  STORAGE loses ENGINEERING and is joined to ADMIN and to the added room. The carrier's table
+  equals the planted map's, keys and values. The test also records the map the role seeder
+  receives, which must be the one map every game walks on.
+
+**The round-3 claim, restated.** Round 3 said the lesson "applies to every other constant the
+module binds from a source, and each is planted the same way". That was stronger than its tests:
+the neighbour table, a map value the carrier holds, had no planted case, and neither did the map
+handed to the role seeder. At `19b55396` these are the values the census reads from a source, each
+with a planted case in which the source moves and the output follows:
+- the module-level bindings: the button cooldown, the two set lists, the defaults table and the
+  walk profile (`test_the_constants_bound_from_a_source_follow_it`);
+- the agent clock offset (`test_the_own_kill_join_reads_the_scorecards_clock_offset`);
+- the ballot floor, per meeting (`test_the_ballot_floor_is_the_threshold_the_meeting_recorded`);
+- the loaded map: its kill cooldown (fold and loader), its neighbour table with its room keys
+  (fold, guard and loader, this round), and the one map object the role seeder and every game's
+  walk receive (loader). `load_census_inputs` reads nothing else from the map: `resolved_map`
+  appears at six lines of the module, all in that function.
+
+The roster knobs and the roles are per-set data, not constants. They are pinned by walking the
+committed sets, whose two rosters differ: probe D below turns 35 tests red. The list above comes
+from a hand scan of the module's imports and of `load_census_inputs`, so a sourced read added
+later needs its own planted case.
+
+**The neuter pass.** A scratch harness (not shipped), written the way round 3's was, applied each
+probe on disk as one exact span of `eval/gameplay_census.py`, ran both census suites without `-x`,
+and restored the file from a copy taken before the pass, never from git. The sha256 of the module
+and its test file matched before and after every probe. "Before" is the round-3 test file of
+`6fec7228`, written in place for the pass and restored from a copy afterwards. "After" is
+`19b55396`.
+
+| probe | before | after | the test that turns red |
+|---|---|---|---|
+| A: `_inferred_visible` reads `load_canonical_map().room_neighbors(room)` | green, 216 passed | red, 2 failed | the fold and guard tests |
+| B: the loader binds a literal table equal to the canonical map's | green, 216 passed | red, 1 failed | the loader test |
+| C: the loader iterates a literal tuple of the canonical rooms | green, 216 passed | red, 1 failed | the loader test |
+| E: the role seeder is given no map, so it loads the canonical one | green, 216 passed | red, 1 failed | the loader test |
+| D: the roster knobs as the nine-player literal `(9, 2, 2)` | not run | red, 35 failed | the walk and recomputation tests |
+
+A and B are the finding's two mutants. C and E were added from the scan above. E first came back
+green after the fold and loader-table tests were written, because role seeding reads the seed and
+the roster, not the map (`orchestrator/seeder.py`, `_assign_roles`). The loader test now records
+the map the seeder receives, and E is red. D backs the sentence above about per-set data; no
+finding named it.
+
+**Tests.** The two census suites go from 216 tests to 218. The two new tests are
+`test_the_in_vent_view_follows_the_neighbours_the_carrier_holds` and
+`test_the_exit_policy_guard_judges_on_the_neighbours_the_carrier_holds`. The loader test gains
+assertions and loses none. No test was skipped, weakened or deleted.
+
+**Figures.** No page byte moved: `publish_gameplay_census.py --check` reads consistent, and the
+`--set-dir replays/samples/9p2i --json-stdout` output equals the committed `samples/9p2i` section.
+Every figure quoted in earlier rounds stands as re-measured in round 3.
+
+**Verification.** Each exit code was captured directly, never through a pipe. Every row was measured
+on the tree of `19b55396` plus this card's round-4 edits, before the `check.sh` cell was filled.
+The card commit after `19b55396` changes only this card, and the two task-doc rows were re-run on
+its final text.
+
+| command | result |
+|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py -q` | 218 passed |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, both files consistent |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; the printed JSON equals the committed `samples/9p2i` section; `git status --porcelain` identical before and after |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `bash scripts/verify_samples.sh <set>`, once for each of the four set directories | exit 0 each: 50, 50, 150 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, all four | exit 0 each, consistent |
+| `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` | 25 passed |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: checks 62, OK 50, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` | 82 passed |
+| `uv run lint-imports` | 4 contracts kept, 0 broken |
+| `uv run mypy .` | no issues in 501 source files |
+| `uv run ruff check .` and `uv run ruff format --check .` | clean; 530 files formatted |
+| `uv run pytest -m campaign -q` | 336 passed |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `bash scripts/check.sh` | exit 0 on the tree of `19b55396` with this subsection in place, before this cell was filled: 8,732 Python passed, 20 skipped, 3 xfailed; 559 frontend tests passed. `npm ci` in `frontend/` ran first in this fresh worktree |
+
+**Scope check** (the demo-bundle proof). `git diff --stat 52a6ac58 -- replays api frontend agents
+meetings engine orchestrator observation scripts/build_demo_bundle.py` prints nothing at the head,
+so no path the bundle reads moved and the republished bundle is byte-identical. `git diff --stat
+52a6ac58` names the same 14 files as round 3, and `git diff 6fec7228` names only
+`tests/eval/test_gameplay_census.py` and this card. No `docs/artifacts.md` row moved: no `audits/`,
+`tests/fixtures/` or page byte changed. No frontend e2e: nothing under `api/` or `frontend/` moved.
+
+**Limitations of this round.**
+- The list of sourced values comes from a hand scan, and the harness is scratch.
+- The planted maps are built with `model_copy`, which skips the map validator. The added room and
+  rewired edges need not form a map the engine would load. They move only the values the census
+  reads, and the loader test stubs each game's walk.
 - The round-2 question on the two pre-registered before values still waits for the orchestrator
   (the PR's Questions).
