@@ -22,12 +22,18 @@ Three rules live here, each raising :class:`DeclaredExperimentError`:
   ``--experiment-config``.
 * **The target.** A config that turns any switch on records only into an
   explicitly named sample directory. Its sample directory and its manifest must
-  both resolve, symlinks and ``..`` included, outside ``replays/samples/`` and
-  ``replays/ml_corpus/``; inside ``replays/`` the sample directory must be
-  exactly ``replays/candidates/<round>/<set>/`` and the manifest must sit
-  directly in such a directory, with round and set names that start with a
-  letter or digit. A config holding only the historical defaults records
-  nothing new and goes anywhere.
+  both lie physically outside ``replays/samples/`` and ``replays/ml_corpus/``;
+  inside ``replays/`` the sample directory must be exactly
+  ``replays/candidates/<round>/<set>/`` and the manifest must sit directly in
+  such a directory, with round and set names that start with a letter or
+  digit. Each target has its symlinks and ``..`` resolved first; then its
+  place is decided on disk, not by how the path is spelled: its nearest
+  existing directory is looked up by device and inode among the directories
+  under ``replays/``, and the segments that do not exist yet follow as
+  spelled. So a case-variant spelling on a case-insensitive filesystem, a
+  macOS firmlink or a second mount of any of those directories reaches the
+  same verdict as the plain path. A config holding only the historical
+  defaults records nothing new and goes anywhere.
 
 Every message here is user-facing copy: it names the setting and the rule in
 plain words (``tests/scripts/test_candidate_sets.py`` scans
@@ -280,8 +286,50 @@ def refuse_factory_flags(flags: Sequence[str]) -> None:
         raise DeclaredExperimentError(_FACTORY_FLAGS.format(flags=", ".join(flags)))
 
 
-def _inside(path: Path, root: Path) -> bool:
-    return path == root or root in path.parents
+def _identity(path: Path) -> tuple[int, int]:
+    """The device and inode of the directory ``path`` names on disk."""
+
+    status = path.stat()
+    return (status.st_dev, status.st_ino)
+
+
+def _raise_walk_error(error: OSError) -> None:
+    raise error
+
+
+def _replays_places(replays_root: Path) -> dict[tuple[int, int], tuple[str, ...]]:
+    """Every directory under ``replays_root``, by device and inode.
+
+    The value is the directory's segments below ``replays_root``. ``os.walk``
+    does not enter a symlinked directory, so each directory is listed once,
+    under the name it was made with; a directory the walk cannot read raises
+    rather than being left out.
+    """
+
+    return {
+        _identity(Path(directory)): Path(directory).relative_to(replays_root).parts
+        for directory, _subdirectories, _files in os.walk(
+            replays_root, onerror=_raise_walk_error
+        )
+    }
+
+
+def _place_in_replays(
+    path: Path, places: Mapping[tuple[int, int], tuple[str, ...]]
+) -> tuple[str, ...] | None:
+    """``path``'s segments below ``replays/``, or ``None`` when it lies outside.
+
+    ``path`` has its symlinks and ``..`` resolved (:func:`os.path.realpath`).
+    Its nearest existing directory is looked up in ``places`` by device and
+    inode, not by spelling, and the segments that do not exist yet follow it as
+    spelled, which is where a recorder creates them.
+    """
+
+    nearest = next(ancestor for ancestor in (path, *path.parents) if ancestor.is_dir())
+    place = places.get(_identity(nearest))
+    if place is None:
+        return None
+    return (*place, *path.relative_to(nearest).parts)
 
 
 def target_problem(
@@ -289,28 +337,28 @@ def target_problem(
     variable: str,
     path: Path,
     is_manifest: bool,
-    replays_root: Path,
+    places: Mapping[tuple[int, int], tuple[str, ...]],
 ) -> str | None:
     """Why ``path`` may not receive a recording that turns switches on, if it may not.
 
-    ``path`` and ``replays_root`` are physical: resolved through every symlink
-    and ``..``. A sample directory inside ``replays/`` must be exactly a
-    candidate set directory; a manifest must sit directly in one.
+    ``path`` is physical: resolved through every symlink and ``..``. Its place
+    in ``replays/`` comes from :func:`_place_in_replays`, on disk, over
+    ``places`` (:func:`_replays_places`). A sample directory inside
+    ``replays/`` must be exactly a candidate set directory; a manifest must sit
+    directly in one.
     """
 
-    for tree in CANONICAL_TREES:
-        root = replays_root / tree
-        if _inside(path, root):
-            return _CANONICAL_TARGET.format(
-                variable=variable, path=path, tree=f"replays/{tree}/"
-            )
-    if not _inside(path, replays_root):
+    place = _place_in_replays(path, places)
+    if place is None:
         return None
-    directory = path.parent if is_manifest else path
-    parts = directory.relative_to(replays_root).parts
-    if len(parts) != 3 or parts[0] != CANDIDATES_TREE:
+    if place and place[0] in CANONICAL_TREES:
+        return _CANONICAL_TARGET.format(
+            variable=variable, path=path, tree=f"replays/{place[0]}/"
+        )
+    directory = place[:-1] if is_manifest else place
+    if len(directory) != 3 or directory[0] != CANDIDATES_TREE:
         return _DEPTH_TARGET.format(variable=variable, path=path)
-    for name in parts[1:]:
+    for name in directory[1:]:
         if CANDIDATE_NAME.fullmatch(name) is None:
             return _NAME_TARGET.format(variable=variable, path=path, name=name)
     return None
@@ -333,7 +381,7 @@ def refuse_unsafe_target(
         return
     if not sample_dir_explicit:
         raise DeclaredExperimentError(_DEFAULT_TARGET)
-    replays_root = Path(os.path.realpath(repo_root / "replays"))
+    places = _replays_places(repo_root / "replays")
     for variable, target, is_manifest in (
         ("AILIBI_SAMPLE_DIR", sample_dir, False),
         ("AILIBI_MANIFEST", manifest, True),
@@ -342,7 +390,7 @@ def refuse_unsafe_target(
             variable=variable,
             path=Path(os.path.realpath(target)),
             is_manifest=is_manifest,
-            replays_root=replays_root,
+            places=places,
         )
         if problem is not None:
             raise DeclaredExperimentError(problem)

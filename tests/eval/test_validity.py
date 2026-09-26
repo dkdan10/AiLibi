@@ -1316,6 +1316,52 @@ def test_one_foreign_recording_sha_fails_only_under_the_sha_flag(
     assert run_validity_gate(foreign, expected_experiment_config=_TEST_CONFIG).passed
 
 
+def test_the_seed_flag_alone_does_not_apply_the_one_sha_rule(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    """Planted: a MANIFEST naming two recording shas, gated by its exact seeds.
+
+    This is the shape of a set recorded in two passes (c9 names two shas).
+    ``expected_seeds`` reads the set's inventory as the sha rule does, so this
+    is the case where the sha rule could run without being declared: check 9
+    passes it, and fails it only once ``require_one_recording_sha`` is given.
+    """
+
+    two_shas = _copied(arms_on_set, tmp_path)
+    manifest = two_shas / "MANIFEST.md"
+    lines = manifest.read_text(encoding="utf-8").splitlines()
+    edited = [
+        line.replace(f"| {_FAKE_SHA} |", "| def5678 |")
+        if line.startswith("| 0 |")
+        else line
+        for line in lines
+    ]
+    assert edited != lines
+    manifest.write_text("\n".join(edited) + "\n", encoding="utf-8")
+    assert {sha for _seed, sha in read_set_inventory(two_shas).manifest_shas} == {
+        _FAKE_SHA,
+        "def5678",
+    }
+
+    seeds_only = run_validity_gate(
+        two_shas,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+    )
+    assert seeds_only.passed, seeds_only.failing_checks()
+    assert _provenance(seeds_only).violations == ()
+    both = run_validity_gate(
+        two_shas,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+        require_one_recording_sha=True,
+    )
+    assert both.failing_checks() == ("cost_and_provenance_exact",)
+    assert _provenance(both).violations == (
+        f"MANIFEST.md names 2 recording shas ({_FAKE_SHA}, def5678); one is required",
+    )
+
+
 def test_a_removed_seed_fails_only_under_the_seed_flag(
     arms_on_set: Path, tmp_path: Path
 ) -> None:

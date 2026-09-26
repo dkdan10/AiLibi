@@ -21,6 +21,7 @@ import re
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Iterator, Sequence
@@ -1881,6 +1882,46 @@ def test_a_run_without_any_export_passes_the_environment_check() -> None:
 
 _DECOY = _REPO_ROOT / "replays" / "samples" / ".test-config-decoy"
 
+#: macOS reaches every directory of its data volume through this prefix too (a
+#: firmlink): the same directory on disk under a second spelling.
+_DATA_VOLUME = Path("/System/Volumes/Data")
+
+
+def _case_insensitive(directory: Path) -> bool:
+    """Whether ``directory``'s name, case-flipped, opens the same directory."""
+
+    flipped = directory.parent / directory.name.swapcase()
+    return (
+        flipped.name != directory.name
+        and flipped.exists()
+        and os.path.samefile(flipped, directory)
+    )
+
+
+def _firmlinked(directory: Path) -> Path | None:
+    """``directory`` reached through the data-volume firmlink, where one exists."""
+
+    alias = Path(f"{_DATA_VOLUME}{os.path.realpath(directory)}")
+    if alias.exists() and os.path.samefile(alias, directory):
+        return alias
+    return None
+
+
+def _alias_skip_reason(case: str) -> str | None:
+    """Why this filesystem cannot plant ``case``'s second spelling, if it cannot."""
+
+    if case == "a case-variant spelling of samples" and not _case_insensitive(
+        _REPO_ROOT / "replays"
+    ):
+        return "this filesystem tells case-variant names apart"
+    if case == "a case-variant ancestor into ml_corpus" and not _case_insensitive(
+        _REPO_ROOT
+    ):
+        return "this filesystem tells case-variant names apart"
+    if case == "a firmlink into samples" and _firmlinked(_REPO_ROOT) is None:
+        return "no firmlink reaches this checkout"
+    return None
+
 
 def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]:
     """The environment aiming a switched-on config at ``case``, and the refusal."""
@@ -1909,6 +1950,22 @@ def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]
             replays / "candidates" / ".stage-b-r1" / "9p2i",
             "name '.stage-b-r1' must start with a letter or digit",
         ),
+        "a case-variant spelling of samples": (
+            _REPO_ROOT / "REPLAYS" / "Samples" / "9p2i",
+            "inside replays/samples/",
+        ),
+        "a case-variant ancestor into ml_corpus": (
+            _REPO_ROOT.parent
+            / _REPO_ROOT.name.swapcase()
+            / "replays"
+            / "ml_corpus"
+            / "9p2i",
+            "inside replays/ml_corpus/",
+        ),
+        "a firmlink into samples": (
+            Path(f"{_DATA_VOLUME}{_REPO_ROOT}") / "replays" / "samples" / "9p2i",
+            "inside replays/samples/",
+        ),
     }
     if case == "a scratch dir with a committed manifest":
         env.update(
@@ -1933,13 +1990,25 @@ def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]
         "replays/<name>",
         "one-level candidates/<round>",
         "a hidden round name",
+        "a case-variant spelling of samples",
+        "a case-variant ancestor into ml_corpus",
+        "a firmlink into samples",
     ],
 )
 def test_a_switched_on_config_is_refused_at_every_unsafe_target(
     case: str, tmp_path: Path
 ) -> None:
-    """A real run (no key, so any gate after the check would fail differently)."""
+    """A real run (no key, so any gate after the check would fail differently).
 
+    The last three cases spell a committed tree the way only some filesystems
+    allow (a case-flipped segment or ancestor, the macOS data-volume firmlink),
+    so each runs where its filesystem gives that second spelling and is skipped
+    elsewhere.
+    """
+
+    skip_reason = _alias_skip_reason(case)
+    if skip_reason is not None:
+        pytest.skip(skip_reason)
     env, refusal = _refused_target_env(case, tmp_path)
     config = _test_config(tmp_path)
     if case == "a symlink into samples":
@@ -2226,6 +2295,22 @@ def test_the_target_rule_reads_physical_paths(tmp_path: Path) -> None:
         refusal(repo / "replays" / "candidates" / "r1" / "9p2i" / "deeper") or ""
     )
     assert refusal(candidate, candidate / "MANIFEST.md") is None
+    # A canonical tree this repository lacks is still refused where the recorder
+    # would create it: below the nearest existing directory, spelled exactly.
+    assert "inside replays/ml_corpus/" in (
+        refusal(repo / "replays" / "ml_corpus" / "9p2i") or ""
+    )
+    # The replays/ directory itself is no candidate set directory.
+    assert "records only into a candidate set" in (refusal(repo / "replays") or "")
+    # A path through a regular file is placed by the nearest directory holding
+    # it: outside replays/ it is accepted (the recorder fails to create it), and
+    # a file inside a canonical tree is inside that tree.
+    (tmp_path / "a-file").write_text("not a directory\n", encoding="utf-8")
+    assert refusal(tmp_path / "a-file" / "set") is None
+    committed = repo / "replays" / "samples" / "4p1i" / "MANIFEST.md"
+    committed.write_text("| seed |\n", encoding="utf-8")
+    assert "inside replays/samples/" in (refusal(committed) or "")
+    assert "inside replays/samples/" in (refusal(committed / "set") or "")
     # The historical defaults record nothing new, so they go anywhere.
     de.refuse_unsafe_target(
         RecordedExperimentConfig(),
@@ -2239,8 +2324,9 @@ def test_the_target_rule_reads_physical_paths(tmp_path: Path) -> None:
 # -- the helper's rules as properties over generated families -----------------
 
 #: Path segments the target property composes, including the ones a string
-#: prefix test would mishandle: ``..``, ``.``, a link into a canonical tree, and
-#: names that look like trees one level off.
+#: prefix test would mishandle: ``..``, ``.``, a link into a canonical tree,
+#: names that look like trees one level off, and case-flipped spellings (the
+#: same directory on a case-insensitive filesystem, a new name elsewhere).
 _SEGMENTS = st.sampled_from(
     [
         "..",
@@ -2255,22 +2341,40 @@ _SEGMENTS = st.sampled_from(
         "9p2i",
         "a.b",
         ".hidden",
+        "SAMPLES",
+        "Ml_Corpus",
+        "Candidates",
+        "Replays",
+        "INTO-SAMPLES",
+        "R1",
     ]
 )
 
 
 @pytest.fixture(scope="module")
 def planted_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """A repository whose replays/ tree carries both canonical trees and links."""
+    """A repository whose replays/ tree carries both canonical trees and links.
+
+    The links are relative, so a copy of the tree links within the copy.
+    """
 
     root = tmp_path_factory.mktemp("planted-repo")
     replays = root / "repo" / "replays"
     for tree in ("samples/4p1i", "ml_corpus/9p2i", "candidates/r1/9p2i", "records"):
         (replays / tree).mkdir(parents=True)
-    (replays / "candidates" / "into-samples").symlink_to(replays / "samples")
+    (replays / "candidates" / "into-samples").symlink_to(Path("..") / "samples")
     (root / "outside").mkdir()
-    (root / "outside" / "into-corpus").symlink_to(replays / "ml_corpus")
+    (root / "outside" / "into-corpus").symlink_to(
+        Path("..") / "repo" / "replays" / "ml_corpus"
+    )
     return root
+
+
+@pytest.fixture(scope="module")
+def planted_copies(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Where the target property copies the planted repository, once per example."""
+
+    return Path(os.path.realpath(tmp_path_factory.mktemp("planted-copies")))
 
 
 def _target_outcome(repo: Path, target: Path, manifest: Path) -> str | None:
@@ -2287,31 +2391,72 @@ def _target_outcome(repo: Path, target: Path, manifest: Path) -> str | None:
     return None
 
 
+def _landed_place(replays: Path, target: Path) -> tuple[str, ...] | None:
+    """Where ``mkdir -p`` puts ``target``, as segments below ``replays``.
+
+    The directory is made, then found by device and inode among the directories
+    ``replays`` holds afterwards, under the names they were made with. ``None``
+    when it landed anywhere else.
+    """
+
+    target.mkdir(parents=True, exist_ok=True)
+    landed = target.stat()
+    for directory, _subdirectories, _files in os.walk(replays):
+        status = os.stat(directory)
+        if (status.st_dev, status.st_ino) == (landed.st_dev, landed.st_ino):
+            return Path(directory).relative_to(replays).parts
+    return None
+
+
 @settings(deadline=None, max_examples=300)
 @given(
     base=st.sampled_from(
-        ["repo/replays", "repo", "outside", "repo/replays/candidates"]
+        [
+            "repo/replays",
+            "repo",
+            "outside",
+            "repo/replays/candidates",
+            "REPO/REPLAYS",
+            "Outside",
+        ]
     ),
+    flip_root=st.booleans(),
     segments=st.lists(_SEGMENTS, max_size=5),
 )
 def test_no_accepted_target_resolves_inside_a_canonical_tree(
-    planted_repo: Path, base: str, segments: list[str]
+    planted_repo: Path,
+    planted_copies: Path,
+    base: str,
+    flip_root: bool,
+    segments: list[str],
 ) -> None:
-    """Whatever the path's spelling, the physical place decides.
+    """Whatever the path's spelling, the directory it lands in decides.
 
-    A target accepted for a switched-on config never resolves inside
+    A target accepted for a switched-on config never lands inside
     ``replays/samples/`` or ``replays/ml_corpus/``, and inside ``replays/`` it is
     exactly a candidate set directory with names the verifier's glob can see.
+    The oracle compares no spellings: after the rule has spoken, it makes the
+    target in a fresh copy of the planted repository the way the recorder
+    would, and finds the made directory by device and inode among the copy's
+    ``replays/`` directories. On a case-insensitive filesystem a flipped
+    segment or a flipped planted root opens the same directory; elsewhere it is
+    a new name.
     """
 
-    repo = planted_repo / "repo"
-    target = Path(planted_repo, base, *segments)
-    physical = Path(os.path.realpath(target))
-    replays = Path(os.path.realpath(repo / "replays"))
-    outcome = _target_outcome(repo, target, target / "MANIFEST.md")
-    parts = physical.relative_to(replays).parts if replays in physical.parents else None
-    if physical == replays:
-        parts = ()
+    copy = Path(tempfile.mkdtemp(dir=planted_copies))
+    try:
+        shutil.copytree(planted_repo, copy / "planted", symlinks=True)
+        repo = copy / "planted" / "repo"
+        root = copy / ("PLANTED" if flip_root else "planted")
+        target = Path(root, base, *segments)
+        outcome = _target_outcome(repo, target, target / "MANIFEST.md")
+        if copy not in Path(os.path.realpath(target)).parents:
+            # It climbed out of the copy, so it is nowhere near replays/.
+            assert outcome is None, (target, outcome)
+            return
+        parts = _landed_place(repo / "replays", target)
+    finally:
+        shutil.rmtree(copy)
     if parts is None:
         assert outcome is None, (target, outcome)
     elif parts[:1] in (("samples",), ("ml_corpus",)):
@@ -2323,7 +2468,7 @@ def test_no_accepted_target_resolves_inside_a_canonical_tree(
     ):
         assert outcome is None, (target, outcome)
     else:
-        assert outcome is not None, (target, physical)
+        assert outcome is not None, (target, parts)
 
 
 @settings(deadline=None, max_examples=100)
@@ -2454,3 +2599,169 @@ def test_the_target_rule_resolves_the_repository_itself(tmp_path: Path) -> None:
             sample_dir_explicit=True,
             repo_root=repo,
         )
+
+
+def test_the_target_rule_decides_each_tree_by_identity_not_spelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: a second name for each directory, as a second mount would give.
+
+    Each alias is a real directory elsewhere whose spelling shares nothing with
+    the tree it stands for; the patched identity reports it as that tree's
+    device and inode. Before the patch every alias is an ordinary scratch
+    directory and is accepted, so the patch alone is what refuses them.
+    """
+
+    replays = tmp_path / "repo" / "replays"
+    for tree in ("samples/9p2i", "ml_corpus/9p2i", "candidates"):
+        (replays / tree).mkdir(parents=True)
+    mounts = Path(os.path.realpath(tmp_path)) / "mounts"
+    second_samples = mounts / "second-samples"
+    second_corpus = mounts / "second-corpus"
+    second_replays = mounts / "second-replays"
+    second_candidates = mounts / "second-candidates"
+    aliases = {
+        second_samples: replays / "samples",
+        second_corpus: replays / "ml_corpus",
+        second_replays: replays,
+        second_candidates: replays / "candidates",
+    }
+    for alias in aliases:
+        alias.mkdir(parents=True)
+    repo = tmp_path / "repo"
+    scratch = tmp_path / "scratch"
+    probes = (
+        second_samples,
+        second_samples / "new-set",
+        second_corpus / "9p2i",
+        second_replays / "newset",
+        second_candidates / "r1",
+        second_candidates / "r1" / "9p2i",
+        second_candidates / ".r1" / "9p2i",
+    )
+    for probe in probes:
+        assert _target_outcome(repo, probe, probe / "MANIFEST.md") is None, probe
+
+    unpatched = de._identity
+
+    def aliased(path: Path) -> tuple[int, int]:
+        return unpatched(aliases[path] if path in aliases else path)
+
+    monkeypatch.setattr(de, "_identity", aliased)
+
+    def outcome(sample_dir: Path, manifest: Path | None = None) -> str:
+        return (
+            _target_outcome(
+                repo,
+                sample_dir,
+                manifest if manifest is not None else sample_dir / "MANIFEST.md",
+            )
+            or ""
+        )
+
+    assert "inside replays/samples/" in outcome(second_samples)
+    assert "inside replays/samples/" in outcome(second_samples / "new-set")
+    assert "inside replays/ml_corpus/" in outcome(second_corpus / "9p2i")
+    assert "records only into a candidate set" in outcome(second_replays / "newset")
+    assert "records only into a candidate set" in outcome(second_candidates / "r1")
+    assert "name '.r1' must start" in outcome(second_candidates / ".r1" / "9p2i")
+    assert outcome(second_candidates / "r1" / "9p2i") == ""
+    manifest_refusal = outcome(scratch, second_samples / "9p2i" / "MANIFEST.md")
+    assert manifest_refusal.startswith("Refused: AILIBI_MANIFEST resolves to ")
+    assert "inside replays/samples/" in manifest_refusal
+    assert outcome(scratch) == ""
+
+
+def test_case_variant_spellings_name_the_same_directories(tmp_path: Path) -> None:
+    """Planted: case-flipped segments and a case-flipped ancestor.
+
+    On a case-insensitive filesystem each flipped spelling opens the directory
+    it flips, so it gets that directory's verdict; the recorder would write
+    there. Skipped where the filesystem tells the names apart.
+    """
+
+    repo = tmp_path / "repo"
+    for tree in ("samples/9p2i", "ml_corpus/9p2i", "candidates/r1"):
+        (repo / "replays" / tree).mkdir(parents=True)
+    if not _case_insensitive(repo):
+        pytest.skip("this filesystem tells case-variant names apart")
+    flipped_ancestor = tmp_path.parent / tmp_path.name.swapcase()
+    assert os.path.samefile(flipped_ancestor, tmp_path)
+    cases = {
+        repo / "REPLAYS" / "Samples" / "9p2i": "inside replays/samples/",
+        repo / "Replays" / "samples" / "new-set": "inside replays/samples/",
+        repo / "REPLAYS" / "ML_CORPUS" / "9p2i": "inside replays/ml_corpus/",
+        flipped_ancestor / "repo" / "replays" / "samples" / "9p2i": (
+            "inside replays/samples/"
+        ),
+        flipped_ancestor / "REPO" / "replays" / "ml_corpus": (
+            "inside replays/ml_corpus/"
+        ),
+        repo / "REPLAYS" / "newset": "records only into a candidate set",
+        repo / "replays" / "CANDIDATES" / "r1": "records only into a candidate set",
+    }
+    for target, refusal in cases.items():
+        assert refusal in (
+            _target_outcome(repo, target, target / "MANIFEST.md") or ""
+        ), target
+    # The candidate family under a flipped spelling is still the family.
+    for target in (
+        repo / "REPLAYS" / "candidates" / "r1" / "9p2i",
+        repo / "replays" / "CANDIDATES" / "R1" / "9p2i",
+        flipped_ancestor / "REPO" / "Replays" / "Candidates" / "new" / "9p2i",
+    ):
+        assert _target_outcome(repo, target, target / "MANIFEST.md") is None, target
+
+
+def test_a_firmlink_spelling_names_the_same_directories(tmp_path: Path) -> None:
+    """Planted: the planted repository reached through the data-volume firmlink.
+
+    Skipped where no firmlink reaches the temporary directory.
+    """
+
+    repo = tmp_path / "repo"
+    for tree in ("samples/9p2i", "ml_corpus/9p2i", "candidates/r1"):
+        (repo / "replays" / tree).mkdir(parents=True)
+    firmlinked = _firmlinked(repo)
+    if firmlinked is None:
+        pytest.skip("no firmlink reaches this temporary directory")
+    assert str(firmlinked) != os.path.realpath(repo)
+    for tree, refusal in (
+        ("samples/9p2i", "inside replays/samples/"),
+        ("ml_corpus/9p2i", "inside replays/ml_corpus/"),
+        ("newset", "records only into a candidate set"),
+    ):
+        target = firmlinked / "replays" / tree
+        assert refusal in (
+            _target_outcome(repo, target, target / "MANIFEST.md") or ""
+        ), target
+    candidate = firmlinked / "replays" / "candidates" / "r1" / "9p2i"
+    assert _target_outcome(repo, candidate, candidate / "MANIFEST.md") is None
+
+
+def test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped(
+    tmp_path: Path,
+) -> None:
+    """Planted: a canonical tree the walk cannot list.
+
+    Its place cannot be read from disk, so the rule raises instead of treating
+    the tree as outside ``replays/``. Skipped where permissions do not bind (a
+    superuser reads every directory).
+    """
+
+    repo = tmp_path / "repo"
+    samples = repo / "replays" / "samples"
+    (samples / "9p2i").mkdir(parents=True)
+    # The manifest goes to scratch, so only the walk can see the tree.
+    scratch_manifest = tmp_path / "scratch" / "MANIFEST.md"
+    samples.chmod(0)
+    try:
+        if os.access(samples, os.R_OK):
+            pytest.skip("permissions do not bind for this user")
+        with pytest.raises(PermissionError):
+            _target_outcome(repo, samples, scratch_manifest)
+    finally:
+        samples.chmod(0o755)
+    assert "inside replays/samples/" in (
+        _target_outcome(repo, samples, scratch_manifest) or ""
+    )
