@@ -452,3 +452,217 @@ if after and report_meetings:
 show("role-correct ejections (reported, gates nothing)", "role_correct_ejections")
 show("meetings with vent proof", "meetings_with_vent_proof")
 ```
+
+## 2. The pre-spend, at `F` and before the first seed
+
+Nothing in this section called a provider. Every command ran in a bare shell
+(`env | grep -c '^AILIBI_'` printed 0) unless it names its own exports.
+Scratch outputs lived outside the repository; every census here is count-only.
+
+### 2.1 The preflight
+
+- `git grep -n WAVE_ARMS_PENDING -- '*.py'` at `F`: no output, exit 1. The
+  pending guard is gone.
+- The declared file, read through `scripts/_declared_experiment.py`'s own
+  loader at `F`: sha256 `4f0c4dd4…6d6c7` (1.2); eight fields off their default,
+  the ones 1.2 names; `prompt_versions_for_set("qwen3_6_27b",
+  experiment_config=...)` serves the three `.v6` stamps and the composite
+  ballot stamp.
+- Proof, two perturbations of the same payload: with one unknown key added,
+  validation is refused (`extra_forbidden`, `('unknown_switch',)`); with
+  `vent_witness_rule` removed, the fields off their default number 7.
+
+### 2.2 The before column
+
+At `F`, `publish_gameplay_census.py --set-dir replays/samples/9p2i
+--json-stdout` exited 0 and equals the `samples/9p2i` entry of
+`docs/gameplay-census.json` in 973 of 973 leaves;
+`publish_process_scorecard.py --set-dir replays/samples/9p2i --json-stdout`
+exited 0 and equals the shipped entry in 108 of 108. Proof: against a copy of
+the shipped census whose `vent_exits_seen_from_exit_room` numerator is raised
+by one, the same leaf comparison prints one difference
+(`cells.vent_exits_seen_from_exit_room.numerator: set-dir=53 shipped=54`) and
+exits 1. `measure_baseline.py replays/samples/9p2i --honesty --json` exited 0;
+its ballot family is the before of cells 3 and 5 (1.6). The tally prints
+`1694 9850930 422941 0.0` on `replays/samples/9p2i`, the anchor.
+
+### 2.3 The fake dress rehearsal
+
+Seeds 0-49 on the declared config, recorded with `AILIBI_LLM_PROVIDER=fake`
+into a scratch directory outside the repository, from the verification
+checkout at `F`:
+
+```
+AILIBI_LLM_PROVIDER=fake AILIBI_PROMPT_SET=qwen3_6_27b AILIBI_NUM_PLAYERS=9 \
+AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 AILIBI_SAMPLE_DIR=<scratch>/9p2i \
+AILIBI_MANIFEST=<scratch>/9p2i/MANIFEST.md AILIBI_REFRESH_WORKERS=4 \
+  bash scripts/refresh_samples.sh --full --expect-levers "" --experiment-config <scratch config copy>
+```
+
+50 of 50 seeds in 15 s, `$0.0000`, 112 meetings, the report rebuilt. The tally
+prints `1414 5236031 81305 0.0`. Each instrument then exited 0 on it:
+
+| instrument | result |
+|---|---|
+| `publish_gameplay_census.py --set-dir <dir> --json-stdout` | exit 0; 50 games, 112 meetings; every one of the 16 cells the declared settings force to zero reads 0 |
+| `publish_process_scorecard.py --set-dir <dir> --json-stdout` | exit 0 |
+| `validity_gate.py <dir> --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <config> --expected-seeds 0-49 --require-one-recording-sha` | exit 0; all ten checks PASS |
+| `bash scripts/verify_samples.sh <dir>` | exit 0; "All 50 samples verified clean." |
+| the golden's directory walk (`walk_directory`, count-only runner) | exit 0; 50 seeds, 112 meetings, 1,414 prompts, 0 not reproduced, 0 miscounted meetings |
+| `measure_baseline.py <dir> --honesty` | exit 0; no raise |
+| `scan_recording_packets.py <dir>` | exit 0 |
+
+The sixteen forced-zero cells, all 0 on the rehearsal: `impostor_openers`,
+`kills_in_grace_window_after_regroup`, `meetings_with_second_repeat_speaker`,
+`own_kill_rows_breaching` (0 of 4 served), `play_resumes_with_corpse`,
+`play_resumes_with_impostor_in_vent`, `rebuttals_differing_from_selector`,
+`recorded_teammate_ballot_targets`, `report_corpses_older_than_last_close`,
+`report_openings_with_kill_tick_handle` (0 of 105), `stale_report_meetings`,
+`surfacings_before_cap_in_view` (0 of 79), `trips_longer_than_cap`,
+`vent_band_resting_only_on_room_left`, `vent_entries_not_after_own_fresh_kill`
+(0 of 152) and `vent_exits_seen_only_from_room_left`. A fake meeting ejects
+nobody and fires no rebuttal, so the meeting arms are proved by 2.4, not here.
+
+Proof: gated against a copy of the config without `vent_witness_rule`, the
+gate exits 1 and fails `cost_and_provenance_exact` on 50 of 50 games, each line
+naming the recorded `vent_witness_rule='physical'` that the declared config
+lacks.
+
+### 2.4 The scripted rehearsal
+
+At `F`, the scripted cases the readers and ballot cards landed pass:
+`tests/_helpers/test_scripted_meeting.py` (the one rebuttal),
+`tests/meetings/test_ballot_arms.py` (impostor EJECTs with and without a row
+pointing toward the target, the kill row, the teammate coercion) and
+`tests/eval/test_recorded_arm_readers.py`, 267 passed in one run; and the
+golden's `test_the_scripted_rebuttal_game_re_renders_byte_equal`, whose
+perturbed half drops the recorded evidence profile and leaves the rebuttal call
+unconsumed, `test_dropping_the_recorded_reset_fails_the_meeting_post_hash` and
+`test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders`, all
+passed.
+
+One scratch scripted game on the full declared config: the ballot card's
+scripted game (`record_ballot_arms_game`, seed 26), recorded from the declared
+file rather than the helper's literal, into a scratch directory. It holds 3
+meetings, 2 rebuttals (one per accused meeting) and 1 ejection, and:
+
+| check | result |
+|---|---|
+| `verify_samples.sh <dir>` (the plain loader) | "All 1 samples verified clean." |
+| census `--set-dir` | exit 0; the rebuttals counted once each: `meetings_with_repeat_speaker` 2/3, `meetings_with_second_repeat_speaker` 0/3, `rebuttals_differing_from_selector` 0/2, beneficiaries "the opener, answering a crewmate" 1 and "the opener, answering an impostor" 1; `own_kill_rows_breaching` 0/3, `own_kill_rows_cited_by_holder` 1/3; impostor EJECTs 5 of 6 ballots, 4 labelled supported; authored teammate targets 1/6 and recorded 0/6; the one ejection carried by impostor ballots alone |
+| scorecard `--set-dir` | exit 0 |
+| `validity_gate.py <dir> --require-zero-cost --expected-experiment-config <config> --expected-seeds 26 --require-one-recording-sha` | exit 0; ten checks PASS |
+| the golden's directory walk | 40 prompts, 0 not reproduced, 0 miscounted meetings |
+
+### 2.5 The lab attribution matrix
+
+```
+uv run python -m experiments.tactical_gameplay \
+  --output audits/tactical-gameplay/stage-b-r1-frozen-head.json --split development \
+  --arms baseline vent_risk vent_physical vent_look_and_wait vent_own_fresh_kill stage_b_full \
+    stage_b_full_minus_look_and_wait stage_b_full_minus_own_fresh_kill \
+    stage_b_full_minus_physical stage_b_full_minus_hub_with_grace
+```
+
+Run at `F` (`git_head` `f937dfaa015eebf01e440f094d125f66bc130e35`, runtime
+fingerprint `source_sha256` `1677067c3b59bf53ff633ec982a8614e2d2e2c1adb866586f3e68d2e04cd5a05`,
+Python 3.11.15 on macOS arm64) on development seeds 1000-1007 of both rosters,
+with the lab's injected deterministic fake: no provider, no spend. **Proof:**
+the `baseline` and `vent_risk` rows equal
+`audits/tactical-gameplay/stage-b-development.json` in waits, exposure and
+calls, and in every other field, on both rosters, so no default path moved. The
+arms without `hub_with_grace` also equal the committed rows on both rosters;
+the four 9p2i arms that carry it (`stage_b_full` and three minus-one arms)
+differ from rows measured at `63980a00`, before the reset card's later commits,
+which is where they should move.
+
+Count-only sums over the eight 9p2i games (the 4p1i sums after the slash).
+Mechanical attribution only: fake outcomes are not model-quality evidence.
+
+| arm | meetings | vent actions | vent exits | exits a crewmate saw | seen only from the room left | trips at the cap | entries not after own fresh kill | bodies unreported after meetings | calls |
+|---|---|---|---|---|---|---|---|---|---|
+| `baseline` | 24/8 | 58/16 | 29/8 | 16/6 | 3/1 | 0/0 | 11/0 | 17/2 | 294/48 |
+| `vent_risk` | 26/8 | 68/16 | 34/8 | 14/5 | 5/2 | 0/0 | 17/0 | 28/2 | 308/48 |
+| `vent_physical` | 25/8 | 56/16 | 28/8 | 13/5 | 0/0 | 0/0 | 10/0 | 19/2 | 304/48 |
+| `vent_look_and_wait` | 29/8 | 181/15 | 90/7 | 13/4 | 10/2 | 24/4 | 65/0 | 16/2 | 358/48 |
+| `vent_own_fresh_kill` | 25/8 | 34/16 | 17/8 | 11/6 | 4/1 | 0/0 | 0/0 | 19/2 | 302/48 |
+| `stage_b_full` | 20/8 | 45/12 | 17/4 | 2/2 | 0/0 | 6/1 | 0/0 | 0/0 | 244/48 |
+| `stage_b_full_minus_look_and_wait` | 17/8 | 35/16 | 16/8 | 8/5 | 0/0 | 0/0 | 0/0 | 0/0 | 210/48 |
+| `stage_b_full_minus_own_fresh_kill` | 20/8 | 67/12 | 24/4 | 3/2 | 0/0 | 6/1 | 15/0 | 0/0 | 244/48 |
+| `stage_b_full_minus_physical` | 20/8 | 45/12 | 17/4 | 2/3 | 0/1 | 6/1 | 0/0 | 0/0 | 244/48 |
+| `stage_b_full_minus_hub_with_grace` | 27/8 | 51/15 | 23/7 | 3/2 | 0/0 | 10/4 | 0/0 | 18/2 | 328/48 |
+
+The columns are the lab's own counter keys: `meetings`,
+`applied:IMPOSTOR:vent` (entries and exits both), `event:VentExited`,
+`vent_exits_crew_witnessed`, `vent_exits_crew_source_only_witnessed`,
+`vent_trips_reaching_cap`, `vent_entries_not_after_own_fresh_kill`,
+`unreported_bodies_after_meetings`, and the rows' `model_calls`.
+
+### 2.6 The dry run, in the recording checkout at P
+
+The recording checkout is a worktree detached at P (`f1133de5`), with
+`uv sync --frozen`, no `.env`, and an untracked copy of the declared file at
+`replays/candidates/stage-b-r1/experiment-config.json` whose `shasum -a 256`
+prints `4f0c4dd4779cd38f69194b6735221d86bf7c6944fe12769a3971e38e4e46d6c7`.
+The recording shell's exports, and nothing else:
+
+```
+AILIBI_LLM_PROVIDER=featherless AILIBI_PROMPT_SET=qwen3_6_27b \
+AILIBI_LLM_MEETING_MODEL=Qwen/Qwen3.6-27B AILIBI_NUM_PLAYERS=9 AILIBI_NUM_IMPOSTORS=2 \
+AILIBI_TASKS_PER_CREWMATE=2 AILIBI_SAMPLE_DIR=replays/candidates/stage-b-r1/9p2i \
+AILIBI_MANIFEST=replays/candidates/stage-b-r1/9p2i/MANIFEST.md \
+AILIBI_REFRESH_WORKERS=2 AILIBI_SEED_MAX_ATTEMPTS=8 \
+  bash scripts/refresh_samples.sh --full --expect-levers "" \
+    --experiment-config replays/candidates/stage-b-r1/experiment-config.json --dry-run
+```
+
+Exit 0, and its resolved configuration:
+
+```
+[dry-run] Experiment config: replays/candidates/stage-b-r1/experiment-config.json (sha256 4f0c4dd4779cd38f69194b6735221d86bf7c6944fe12769a3971e38e4e46d6c7)
+[dry-run] Experiment config settings: meeting_reset='hub_with_grace', vent_exit_policy='look_and_wait', bounded_rebuttal_version=1, vent_witness_rule='physical', vent_entry_policy='own_fresh_kill', report_body_handle_version=1, ballot_kill_row_version=1, impostor_ballot_version=1
+[dry-run] Experiment switch exports: none
+[dry-run] mode: full
+[dry-run] seeds: 0,1,2,...,49
+[dry-run] roster: num_players=9 num_impostors=2 tasks_per_crewmate=2
+[dry-run] roster descriptor: would ensure replays/candidates/stage-b-r1/9p2i/roster.json = {num_players: 9, num_impostors: 2, tasks_per_crewmate: 2} (fails loud if an existing one disagrees)
+[dry-run] sample dir: replays/candidates/stage-b-r1/9p2i
+[dry-run] provider: featherless
+[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; $0 provider-keyed cost)
+[dry-run] meeting model: Qwen/Qwen3.6-27B
+[dry-run] prompt set: qwen3_6_27b
+[dry-run] substrate flags: expected levers ON = (none — the bare slate: every live toggle OFF); every other live toggle OFF; the graduated levers unconditional ON
+[dry-run] seed workers: 2 parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 32B request → 4-unit cap)
+[dry-run] seed crash-retry: up to 8 attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)
+[dry-run]   AILIBI_LLM_PROVIDER=featherless uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players 9 --num-impostors 2 --tasks-per-crewmate 2 --force --experiment-config <stage-dir>/experiment-config.json
+[dry-run] experiment config: would copy replays/candidates/stage-b-r1/experiment-config.json into the stage directory once, if it still reads sha256 4f0c4dd4779cd38f69194b6735221d86bf7c6944fe12769a3971e38e4e46d6c7, and pass that copy to every seed
+[dry-run] manifest: replays/candidates/stage-b-r1/9p2i/MANIFEST.md
+[dry-run] eval report: would rebuild replays/candidates/stage-b-r1/9p2i/tournament-eval-report.json.gz from the refreshed replays (scripts/build_sample_report.py; $0, no provider)
+[dry-run] no API calls made; no files written.
+Substrate slate OK: expected levers ON = (none — the bare slate: every live toggle OFF); every other live toggle OFF; the graduated levers unconditional ON.
+```
+
+The two model-coupling lines, the full-mode clean-up line and the full seed
+list are elided above; the run printed them. The porcelain status read the
+same one line before and after the dry run, the untracked declared copy
+(`?? replays/candidates/stage-b-r1/`), and with untracked files hidden it read
+0 lines: the dry run wrote nothing. The live leg runs `--seeds`, never
+`--full`, because the recorder re-records any seed it is given, on disk or not.
+
+Proof: the same dry run with a stray `AILIBI_BOUNDED_REBUTTAL=1` exported exits
+1 with "Refused: the environment exports AILIBI_BOUNDED_REBUTTAL. A recording
+takes its experimental switches only from a declared config file
+(--experiment-config), so unset these variables before recording. Nothing was
+staged."
+
+### 2.7 The key
+
+`FEATHERLESS_API_KEY` lives only in the main checkout's untracked `.env`. Its
+one line was copied by a `grep` whose output went straight to the file and was
+never printed, into a mode-0600 file in a mode-0700 directory outside every
+checkout; a count-only `grep -c` on the source found 1 matching line. Every
+live leg runs `uv run --env-file <that file> bash scripts/refresh_samples.sh
+...`; no step reads `.env` itself. The file is deleted when the leg ends. The
+recorder itself prints the key's first eight characters into its run log;
+that log stays outside the repository, and every line quoted from it here
+leaves that line out.
