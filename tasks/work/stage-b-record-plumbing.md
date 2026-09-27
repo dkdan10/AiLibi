@@ -1,6 +1,6 @@
 # Recorder, validity gate and candidate landing for experiment-config records
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -145,6 +145,13 @@ The test config uses arms that exist today, because the spine's pending guard re
 new values:
 `{"format_version": 1, "meeting_reset": "hub_with_grace", "vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}`.
 
+- [x] Review correction: the card holds on `main` after the physical witness card and the readers card merged
+  (round 3, integration). `main` is merged in `b91ecd7c`, never rebased, and the three shared files are resolved
+  as Results records. In `f10da891` the post-step's strict xfail and the candidate test's kill-craft fixture are
+  deleted, and `vent_witness_rule` joins the full-config copy. Proof:
+  `test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set` passes unmarked,
+  `test_each_profile_reads_the_full_config_copy_with_every_hash_verified` reads the physical rule, and the card's
+  whole Validation passes at the merged head (Results, round 3).
 - [x] Review correction: on a case-insensitive filesystem a case-variant spelling of a canonical tree or of one
   of its ancestors is refused like the plain path (round 1, correctness). The target rule now decides a
   target's place on disk, by device and inode, not by spelling. Proof in `tests/scripts/test_refresh_samples.py`:
@@ -201,7 +208,7 @@ new values:
       tree unchanged, which the existing `_replays_tree_restored` helper guarantees;
     - a config holding only historical defaults is accepted anywhere and records no
       `experiment_config` key.
-- [ ] **A fake arms-ON seed recorded through the recorder is read end to end in a bare shell.**
+- [x] **A fake arms-ON seed recorded through the recorder is read end to end in a bare shell.**
   - Mechanism: this card widens the validity and kill-gift walk profiles to
     `supports_experiments=True`, after the check-by-check review recorded in Results. The readers
     card widens kill-craft and threads `meeting_reset` there in its own acceptance, so this
@@ -942,3 +949,126 @@ through a pipe.
 - The dispatch asked to keep the Status `done`. The card was `active` with its third box open, and it stays so:
   the readers card has not merged, so that box is still unmet. The inventory sentence in `tasks/README.md` is
   unchanged.
+
+### Review corrections, round 3 (2026-09-26)
+
+The three review lenses verified `fde0157c` on base `bdfa5b19`, with CI green (round 2). One blocking finding
+followed, from the integration lens: `main` moved under the verified head. The physical vent witness card (PR 485)
+and the readers card (PR 486) merged, and `main` is now `e22b54e6`. This card writes `tests/_helpers/committed.py`
+after the readers card and `docs/artifacts.md` after A1, and its gate and verify loop had to hold against what those
+cards brought. The repair merges `main`, never rebasing, and re-runs the card's whole Validation at the merged head.
+Every number below was measured at `f10da891`. The commit that carries this subsection changes only this card and
+`tasks/README.md`.
+
+**The merge, `b91ecd7c`** (parents `fde0157c` and `e22b54e6`).
+- `tasks/README.md` conflicted on the derived inventory sentence, because each side had flipped other cards. It was
+  re-derived with `scripts/validate_task_docs.py`: "6 ready, 1 active, 81 done" at the merge, and "6 ready, 82 done"
+  in this subsection's commit (below).
+- `tests/_helpers/committed.py` merged without a conflict. The readers' threading stands: `meeting_trigger_kind`
+  takes the recording's settings, and the committed-meeting walk runs through `read_recorded_settings`. This card's
+  candidates region stands, unchanged, at the end of the file. Proof: `git diff fde0157c b91ecd7c --
+  tests/_helpers/committed.py` equals `git diff bdfa5b19 e22b54e6 -- tests/_helpers/committed.py` line for line once
+  the `index` lines are removed (`cmp` exit 0). The merge brought exactly the readers' hunks.
+- `docs/artifacts.md` merged without a conflict. It keeps main's `audits/` row (26,636,557 tracked bytes / 329
+  files), which the readers card recomputed. It also keeps this card's `replays/candidates/` row, still 1 file
+  (`git ls-files replays/candidates | wc -l` is 1), and its class sentence. This card moves no audit byte (`git diff
+  --stat e22b54e6..f10da891 -- audits` is empty), so the `audits/` row stays main's. The offline
+  `verify_ml_evidence.py` reads both rows OK.
+
+**Follow-through, `f10da891` (three test files only).** The merge left three test crutches doing nothing:
+- The strict xfail on `test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set` is deleted. It was keyed
+  on kill-craft's refusal, which the readers card lifted, so the test now runs and passes. That is the third box.
+- The candidate test's autouse fixture that let kill-craft read the test config is deleted, with its use in the
+  module-scoped planted round. Decisions and Limitations said it should go once `main` carried the readers card. The
+  planted round is now built through kill-craft's own profile.
+- The full-config copy that the three profiles read now carries `vent_witness_rule="physical"`. The acceptance item
+  says the rule joins once the physical witness card has merged. That card threads the field through
+  `engine_arguments` and removed it from `WAVE_ARMS_PENDING`. The copy's layer assertion now names the engine layer
+  too. Each profile reads the copy with every hash verified, and each result equals the unedited game's.
+
+No production byte of this card changed in this round: `git diff b91ecd7c f10da891` touches the three test files
+only.
+
+**The third box is met, and the Status is `done`.** At the merged head, the recorder's post-step completes on an
+arms-ON set, and the report's `--check` is consistent (the test above, and the rehearsal below). The perturbed
+proof, `test_each_profile_resimulates_the_recorded_meeting_reset`, is unchanged since `17cd2e65` and still passes:
+with `meeting_reset` stripped, the kill-gift walk and the gate both fail on the meeting post-hash. Every box is now
+ticked. The card reserves its Status line and the
+index sentence for the orchestrator, and this round's dispatch names the card done at the merged head. The Status
+is therefore `done`, and the index sentence is re-derived as "88 cards: 6 ready, 82 done".
+
+**The readers' recorded-settings refusals.** The validity, kill-gift and `current-report` profiles declare layers,
+not field lists. The readers card's field-by-field refusal (`eval/recorded_settings.py`) wraps only that card's own
+instruments, and none of this card's profiles runs through it. The recorder's post-step walks kill-craft, which does
+run through it, reading all nine settings the refusal allows (`KILL_CRAFT_READS`). Probe R6 below narrows those
+reads by `meeting_reset`, and the post-step test then fails on the readers' refusal ("does not read the recorded
+meeting_reset='hub_with_grace'"). So the post-step reads through that refusal, not around it. The gate's planted
+cases in `tests/eval/test_validity.py` all pass at the merged head.
+
+### Probes, round 3
+
+Each probe planted one defect in a span this round changed or relied on. It then ran the named tests
+(`-x -n 4 --dist loadfile`) and restored the file from a byte copy, comparing sha256. There were 6 probes, and all 6
+turned red.
+
+| Id | Planted defect | Tests | Red (first red test) |
+| --- | --- | --- | --- |
+| R1 | kill-craft back to its profile before the readers card (`supports_experiments=False`, no layers) | the post-step test | the post-step test: "replay profile 'kill-craft' does not support experimental recordings" |
+| R2 | the same | `tests/scripts/test_candidate_sets.py -k planted_round_holds` | the planted round's fixture errors on the same refusal, so the round is built through kill-craft's own profile |
+| R3 | `vent_witness_rule` dropped from the full-config copy | `tests/eval/test_validity.py -k "full_config or declares_every_layer or stand_in"` | `test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer` |
+| R4 | `engine_arguments` no longer threads `vent_witness_rule` (the spine's helper, planted) | the same | `test_each_profile_reads_the_full_config_copy_with_every_hash_verified[current-report]`: "is not threaded into the engine tick", so the copy's physical rule reaches the engine |
+| R5 | the layer assertion without the engine layer | the same | `test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer` |
+| R6 | kill-craft's reads narrowed by `meeting_reset` | the post-step test | the post-step test, on the readers' refusal |
+
+### Verification at `f10da891`
+
+Each command ran in a bare environment (`HOME` and `PATH` only), and its exit code was captured directly from the
+process, never through a pipe.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | ran once, at the commit that carries this subsection (whose only changes are this text and the index sentence); its exit code and counts are quoted in the PR body |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| the card's eight test files (`-q -n 6 --dist loadfile`) | exit 0: 493 passed, none xfailed. At `25d6f574` it was 482 passed and 1 xfailed. The post-step test now runs and passes, and the readers card added ten test functions to the golden (17 at `fde0157c`, 27 at the merge) |
+| `bash scripts/verify_samples.sh` (no argument) | exit 0: the two sample sets verified clean (50 each), no candidate set |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/validity_gate.py <set> --json`, the four sets | exit 0 each, every check passed (2994, 2980, 3008 and 2982 bytes). Each JSON is byte-identical (`cmp`) to the same command in an export of `e22b54e6` over the same replay bytes |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO; `replays/candidates/ [(a) + (b)]` and `audits/ [(b)]` OK |
+| `uv run ruff check`, `uv run ruff format --check` and `uv run mypy` on the three edited test files | clean |
+| `git diff --stat e22b54e6..f10da891 -- api frontend replays/samples replays/ml_corpus tests/fixtures` | empty |
+| `git grep -l '"experiment_config"'` over the 300 committed replay files | 0 |
+
+**The fake-provider rehearsals**, into a scratch directory outside `replays/`, with the 9p2i roster and the test
+config:
+
+| Rehearsal | Result |
+| --- | --- |
+| the dry run with the file | exit 0. It prints the file's sha256 (`8984cfef…`), its three settings, the per-seed line ending `--experiment-config`, and "Substrate slate OK". `git status --porcelain --untracked-files=all` shows 0 lines before and after, and the scratch target is not created |
+| the four experiment exports at `1` and at `0`, no config, `--dry-run` | exit 1 each, naming the variable, with no "Substrate slate OK" line |
+| `--seeds 0,1` with the file | exit 0: "Refresh complete", 2 of 2 reached a meeting, and the post-step wrote the report (2 games). At `17cd2e65` this step exited 1 on kill-craft's refusal |
+| the recorded rows (a count-only reader) | seed 0: 62 tick rows, all 62 carrying the file's config, and the footer carrying it too; seed 1: 21 of 21, and the footer. Both load with `outcome_verified` true |
+| `validity_gate.py <scratch> --expected-experiment-config <file> --expected-seeds 0-1 --require-one-recording-sha --json` | exit 0, all ten checks pass (5 resolved meetings, 31 ballots) |
+| the same set with no declaration | exit 1; `cost_and_provenance_exact` is the one failing check |
+| `bash scripts/verify_samples.sh <scratch>` | exit 0, 2 verified clean |
+| `build_sample_report.py --sample-dir <scratch> --check` | exit 0, consistent |
+
+**Publication.** `scripts/build_demo_bundle.py` ran twice. The first build used an export of `e22b54e6` with no round.
+The second used `f10da891` with an untracked planted round (`replays/candidates/planted-r1/9p2i/` holding s9 seed 0
+and its roster, 2 untracked paths), deleted after the build so that `git status` showed 0 lines. Each build baked 156
+JSON files, and `diff -r` of the two `data/` trees is empty (exit 0). The two bundles' README differs in one
+sentence. The base export reached the replays through a link outside its own directory, so that sentence comes
+from the comparison setup, not from the card.
+
+### Limitations, round 3
+
+- `f10da891` closes two of the round-0 limitations: the candidate test's kill-craft fixture, and `vent_witness_rule`
+  missing from the full-config copy.
+- The fake provider still fires no rebuttal, so these runs prove stamping, reading and refusing, not an arm's
+  behaviour.
+- The rehearsals and the bundle comparison ran on macOS; CI runs on Linux.
+- The pre-existing fake-provider guard hole (Limitations, round 1) is unchanged, and it stays a separate task.
