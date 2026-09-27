@@ -164,6 +164,14 @@ Every test below lives in `tests/orchestrator/test_report_body_handle.py`, uses
 the fake provider or a hand-built state, and writes only under `tmp_path`.
 `LEGACY_BODY_HANDLE_PATTERN` is `experiments/held_out_prefixes.py:168`.
 
+- [x] Review correction: the Results claim no more about the card's probe table than the module
+  asserts, and the module now asserts every cell. For each of the table's three rows,
+  `test_the_probe_table_is_measured_on_these_games` pins the prompts, the report and emergency
+  openings, the state hashes, the non-opening prompts and how many of them differ raw and after
+  normalizing. It pins two handle-blind contrast rows the same way, whose raw count is 0.
+  `test_the_probe_table_covers_every_narrowness_pair` ties the table to the compared pairs.
+  Perturbed: `test_a_perturbed_game_moves_its_one_cell_of_the_probe_row` (a moved tick state
+  hash, an edited later prompt) and `test_a_pair_that_disagrees_on_a_shared_count_is_refused`.
 - [x] Review correction: the builder docstring states the absent-corpse reading
   at the strength the code delivers. With neither version 1 nor
   `temporal_observations`, a report names the event's engine id whether or not
@@ -525,8 +533,10 @@ command prints numbers only:
 `python3 -c 'import json,re,glob,sys;p=re.compile(r"body-p-\d+-\d+");print(sys.argv[1],sum(1 for f in glob.glob(sys.argv[1]+"/replay-seed-*.jsonl") for l in open(f) for r in [json.loads(l)] if r["kind"]=="meeting" for c in r["llm_calls"] if p.search(c["prompt"])))' replays/samples/9p2i`.
 Every number equals the card's Evidence.
 
-**The card's probe, re-measured** through the production path at `c2aa9023` (count-only; the
-module above asserts each cell):
+**The card's probe, re-measured** through the production path at `c2aa9023` (count-only). At
+`c2aa9023` the module above asserted only two of these columns, the state hashes and the count
+after normalizing. Round 2 pins every cell in
+`test_the_probe_table_is_measured_on_these_games`; see "Review corrections, round 2 (2026-09-27)":
 
 | game | prompts | report openings | state hashes | non-opening prompts differing | after normalizing |
 |---|---|---|---|---|---|
@@ -791,3 +801,144 @@ round does not tick a box the owner has not answered. The inventory sentence in 
 is unchanged, and `validate_task_docs.py` re-derives it and passes. No `audits/` or
 `tests/fixtures/` byte moved, so no `docs/artifacts.md` row changes. The held-out band is
 untouched.
+
+### Review corrections, round 2 (2026-09-27)
+
+Review at `7622b11d` raised one blocking finding, from the docs verifier. The fix is `dd034a10`,
+and this subsection lands in the commit after it. Every command below ran at `dd034a10` in a bare
+shell with 0 `AILIBI_*` exports, unless a line names another commit.
+
+**The finding: valid, accepted.** The paragraph "The card's probe, re-measured" said "the module
+above asserts each cell". At `7622b11d` the module asserted three things about that table: equal
+state hashes and 0 differences after normalizing, both in `test_only_the_report_openings_differ`,
+and a non-empty raw difference on seed 1 in
+`test_the_normalization_is_needed_and_the_blind_client_removes_the_need`. No test pinned the
+prompt counts (22, 44, 66), the report openings (2, 4, and 4 plus 1 emergency) or the raw
+non-opening differences (20 of 20, 40 of 40, 46 of 61). No command in Results or the PR
+reproduced them.
+
+**What changed.**
+- `dd034a10` changes `tests/orchestrator/test_report_body_handle.py` only:
+  - `_probe_row` counts every cell of the table from a recorded OFF/ON pair into a `_ProbeRow`:
+    - prompts: every call of every meeting and aborted-meeting row;
+    - report and emergency openings: from the triggers the live builder returned;
+    - whether the state hashes are equal: tick and meeting hashes and per-meeting call counts;
+    - the non-opening prompts, and how many of them differ raw and after normalizing.
+  - Both games must agree on every count they share, or `_probe_row` raises and names the pair.
+  - `PROBE_TABLE` holds the card's three rows and two handle-blind contrast rows.
+    `test_the_probe_table_is_measured_on_these_games` asserts that each pair's measured row equals
+    its pinned row. `test_the_probe_table_covers_every_narrowness_pair` ties the table's keys to
+    `NARROWNESS_PAIRS`.
+  - Perturbed, `test_a_perturbed_game_moves_its_one_cell_of_the_probe_row`:
+    - one ON tick row given another state hash changes only the hashes cell, to not equal;
+    - one word appended to the first meeting's last prompt changes only the cell after
+      normalizing, to 1.
+  - Perturbed, `test_a_pair_that_disagrees_on_a_shared_count_is_refused`: one report trigger
+    re-labelled as an emergency makes `_probe_row` refuse the pair.
+  - The module docstring names the pinned table. The module has 69 tests, 9 more than at
+    `7622b11d`.
+- This commit rewords the parenthetical above. It now names the two columns `c2aa9023` asserted
+  and the round-2 test. It also adds this subsection and one Acceptance item.
+- No production line changed. No expectation changed, and no test was weakened, skipped or
+  deleted.
+
+**The table, re-measured at `dd034a10`** through the production path: fake games recorded by
+`_play` with the live builder. The command
+`uv run pytest -p no:cacheprovider tests/orchestrator/test_report_body_handle.py -q -k probe_table`
+passes 6 tests only when every cell below holds. It prints no prompt.
+
+| pair | prompts | report openings | emergency openings | state hashes | non-opening prompts | differing raw | after normalizing |
+|---|---|---|---|---|---|---|---|
+| seed 1, 7p1i, 80 ticks, default set | 22 | 2 | 0 | equal | 20 | 20 | 0 |
+| seed 12, 9p2i, 200 ticks, default set | 44 | 4 | 0 | equal | 40 | 40 | 0 |
+| seed 0, 9p2i, full game, `qwen3_6_27b` | 66 | 4 | 1 | equal | 61 | 46 | 0 |
+| seed 1, handle-blind client, `qwen3_6_27b` | 22 | 2 | 0 | equal | 20 | 0 | 0 |
+| seed 12, handle-blind client, `qwen3_6_27b` | 44 | 4 | 0 | equal | 40 | 0 | 0 |
+
+The first three rows equal the card's table at `c2aa9023`, cell for cell. Seed 1 and seed 12 also
+equal the Evidence table measured at `e886b663`.
+
+**Mutation probe.** It is bounded to the round-2 span (`_ProbeRow`, `_probe_row`, `PROBE_TABLE`,
+the three perturbations and the four new tests) and uses the eight operator classes only. Each
+mutant is one exact-string edit applied to the pristine bytes. The runner then runs the whole
+module as `pytest -n 6 --dist loadfile` and restores the file from a copy, never from git. All 27
+restores matched the pristine sha256, and the file equalled `HEAD` afterwards.
+
+| mutant | class | edit | failed | first failing |
+|---|---|---|---|---|
+| P1 | drop a filter | report count to all openings | 1 | measured row, seed 0 |
+| P2 | drop a filter | openings not subtracted from calls | 7 | every measured row, both perturbations |
+| P3 | drop a wrapper | `list(...)` dropped from the coverage check | 1 | coverage |
+| P4 | swap a collection | prompts to meetings | 7 | every measured row, both perturbations |
+| P5 | swap a collection | openings to report openings | 1 | measured row, seed 0 |
+| P6 | swap a collection | `(off, on)` to `(off, off)` in the shared counts | 1 | shared-count refusal |
+| P7 | swap a collection | raw differences measured OFF against OFF | 5 | fake-provider rows, both perturbations |
+| P8 | comparison inverse | shared-count equality inverted | 8 | all eight new game tests |
+| P9 | comparison inverse | hashes cell inverted | 7 | every measured row, both perturbations |
+| P10 | to a None test | the measured-row verdict | 0 | survived; see below |
+| P11 | to a None test | the coverage verdict | 0 | survived; see below |
+| P12 | read to constant | trigger kind to `"report"` | 2 | measured row, seed 0; shared-count refusal |
+| P13 | read to constant | emergency count to 0 | 1 | measured row, seed 0 |
+| P14 | read to constant | hashes cell to `True` | 1 | moved state hash |
+| P15 | read to constant | raw count to 0 | 5 | fake-provider rows, both perturbations |
+| P16 | read to constant | normalized count to 0 | 1 | edited later prompt |
+| P17 | message to constant | the refusal message | 1 | shared-count refusal |
+| P18 | drop a member | seed 0 row | 1 | coverage |
+| P19 | drop a member | seed 12 blind row | 1 | coverage |
+| P20 | source to literal | `NARROWNESS_PAIRS` to the card's three pairs | 1 | coverage |
+| P21 | swap a collection | tick row to meeting row in the hash perturbation | 1 | moved state hash |
+| P22 | read to constant | the moved hash to the row's own | 1 | moved state hash |
+| P23 | drop a member | the edited call to the original | 1 | edited later prompt |
+| P24 | read to constant | the edited prompt to the original | 1 | edited later prompt |
+| P25 | comparison inverse | the not-the-opening guard inverted | 1 | edited later prompt |
+| P26 | read to constant | the re-label to `"report"` | 1 | shared-count refusal |
+| P27 | to a None test | the perturbed-row verdict | 0 | survived; see below |
+
+"Swap adjacent branches" has no site: the span has no branch. P10, P11 and P27 each replace a new
+test's own final equality with a None test. They are equivalent on these bytes. The equality they
+replace holds, so the weakened test passes on every run, and no test can fail on a mutant that
+only weakens a true assertion. Each of these verdict lines is shown live by the mutants of its
+inputs that make that line, not an earlier helper assertion, fail:
+- P10's measured-row verdict by P1, P2, P4, P5, P7, P9, P12, P13 and P15;
+- P11's coverage verdict by P18, P19 and P20;
+- P27's perturbed-row verdict by P2, P4, P7, P9, P14, P15, P16, P23 and P24.
+
+These mutants first came back green in a draft that had only the state-hash perturbation: P6,
+P10, P11, P16, P17, and a mutant that swapped the pinned row for its own literal (equivalent,
+the same value). The draft then gained the edited-prompt perturbation, which kills P16. It also
+gained the re-label perturbation with a message naming the pair, which kills P6 and P17. Only
+the final bytes were committed. The runner, its logs and the count-only probes are under the
+session scratchpad's `fix-b4-r2/` directory, outside the tree.
+
+**Validation** at `dd034a10`, each command's real exit code:
+
+| command | exit | result |
+|---|---|---|
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_report_body_handle.py -q` | 0 | 69 passed |
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_temporal_delivery.py tests/orchestrator/test_experiment_config.py tests/experiments/test_held_out_prefixes.py tests/meetings/test_prompt_byte_golden.py -q` | 0 | 197 passed |
+| `uv run pytest -p no:cacheprovider tests/meetings/test_prompt_byte_golden.py -q` | 0 | 35 passed |
+| `bash scripts/verify_samples.sh <set>` on `replays/samples/9p2i`, `replays/samples/4p1i`, `replays/ml_corpus/9p2i` and `replays/ml_corpus/4p1i` | 0, 0, 0, 0 | 50, 50, 150 and 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, once per set | 0, 0, 0, 0 | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks, 390 prompts, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | every check passed |
+| `uv run pytest -p no:cacheprovider -m campaign -q` | 0 | 336 passed, 9375 deselected |
+| `git diff --name-only 7622b11d HEAD` | 0 | `tests/orchestrator/test_report_body_handle.py` |
+| `git diff --name-only f98bfae9 HEAD` | 0 | the same 9 paths as at `7622b11d`; `main` is still `f98bfae9` |
+
+**Publication.** This round touches no file under `api/` or `frontend/` and no replay, and the
+demo bundle reads no test module. So the earlier bundle comparisons stand, and no bundle was
+rebuilt.
+
+**The full gate.** `bash scripts/check.sh` runs once in this round, alone, in this clean worktree,
+at the round's final head: the commit that adds this subsection. PR #488's body records its exit
+code and counts.
+
+**Status.** It stays `active`. The dispatch for this round again assumed `done`, but the last box
+still waits on the owner's answer to the PR's Question, and this round does not tick it. The
+inventory sentence in `tasks/README.md` is unchanged, and `validate_task_docs.py` re-derives it
+and passes. No `audits/` or `tests/fixtures/` byte moved, so no `docs/artifacts.md` row changes.
+The held-out band is untouched. The dispatch named this subsection's date 2026-09-26; it carries
+the date the work was done, 2026-09-27, after round 1's subsection of the same date.
