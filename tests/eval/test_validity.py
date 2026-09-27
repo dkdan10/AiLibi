@@ -1119,10 +1119,11 @@ _TEST_CONFIG_JSON: Final[str] = (
 _TEST_CONFIG: Final[RecordedExperimentConfig] = (
     RecordedExperimentConfig.model_validate_json(_TEST_CONFIG_JSON)
 )
-#: Every other wave setting outside the engine layer at its ON value: the
-#: round-one config of the decision memo, less the physical witness rule, which
-#: joins once its card threads it through the engine-arguments helper.
+#: Every other wave setting at its ON value: the round-one config of the
+#: decision memo, the engine's physical witness rule included, which the
+#: engine-arguments helper threads into every advance.
 _FULL_CONFIG_SETTINGS: Final[dict[str, object]] = {
+    "vent_witness_rule": "physical",
     "vent_exit_policy": "look_and_wait",
     "vent_entry_policy": "own_fresh_kill",
     "report_body_handle_version": 1,
@@ -1594,7 +1595,7 @@ def test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer(
         {**_TEST_CONFIG.model_dump(), **_FULL_CONFIG_SETTINGS}
     )
     layers = {FIELD_LAYER[field] for field, _value in wave_settings(full)}
-    assert layers == {"orchestrator", "tactical", "meeting"}
+    assert layers == {"engine", "orchestrator", "tactical", "meeting"}
 
 
 @pytest.mark.parametrize("profile", sorted(_PROFILES))

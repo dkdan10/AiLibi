@@ -35,7 +35,6 @@ from hypothesis import strategies as st
 
 import _declared_experiment as de
 from api.replay_loader import ReplayLoader
-from eval import kill_craft
 from meetings.evidence_profile import EXPERIMENT_ENV_NAMES
 from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.replay import GameEndReplayEntry, ReplayEntry, read_all_entries
@@ -2156,14 +2155,6 @@ def test_a_fake_arms_on_refresh_records_exactly_the_file_and_loads_verified(
     assert list(tmp_path.glob(".ailibi-refresh-stage-*")) == []
 
 
-@pytest.mark.xfail(
-    not kill_craft._WALK_CONFIG.supports_experiments,
-    reason=(
-        "the post-step's kill-craft walk refuses experiment recordings until the "
-        "readers card widens it"
-    ),
-    strict=True,
-)
 def test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set(
     tmp_path: Path,
 ) -> None:

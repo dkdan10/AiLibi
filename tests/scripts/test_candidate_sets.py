@@ -38,7 +38,6 @@ import run_tournament
 import validity_gate
 from api.main import _resolve_replay_dir
 from api.replay_loader import SetLoaderRegistry
-from eval import kill_craft
 from eval.balance_eval import run_tournament_eval
 from eval.report_io import REPORT_FILENAME, read_report_text, write_report_text
 from eval.validity import (
@@ -274,28 +273,6 @@ _SEEDS: Final[tuple[int, ...]] = (0, 1)
 _SHA: Final[str] = "abc1234"
 
 
-def _kill_craft_reads_the_test_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let the report's kill-craft walk read the test config's recordings.
-
-    Kill-craft refuses every experiment recording until the readers card
-    widens its profile; the test config sets only settings that existed before
-    the Stage-B wave, which ``supports_experiments`` alone covers. Once kill-craft
-    reads them itself this does nothing, and it should then be deleted.
-    """
-
-    if not kill_craft._WALK_CONFIG.supports_experiments:
-        monkeypatch.setattr(
-            kill_craft,
-            "_WALK_CONFIG",
-            replace(kill_craft._WALK_CONFIG, supports_experiments=True),
-        )
-
-
-@pytest.fixture(autouse=True)
-def _report_reads_the_planted_rounds(monkeypatch: pytest.MonkeyPatch) -> None:
-    _kill_craft_reads_the_test_config(monkeypatch)
-
-
 def _readme(sha256: str, sets: Mapping[str, str]) -> str:
     lines = "\n".join(f"{name} seeds {seeds}" for name, seeds in sets.items())
     return (
@@ -344,9 +321,7 @@ def _build_round(root: Path) -> Path:
 
 @pytest.fixture(scope="module")
 def planted_round(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        _kill_craft_reads_the_test_config(monkeypatch)
-        return _build_round(tmp_path_factory.mktemp("family"))
+    return _build_round(tmp_path_factory.mktemp("family"))
 
 
 def _copy_family(planted_round: Path, tmp_path: Path) -> Path:
