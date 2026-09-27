@@ -185,6 +185,48 @@ the test fails on the tree this card starts from, where building the policy with
 raises the spine's named refusal. Each item also asserts the `target_distance` / `any_body`
 behaviour it contrasts with, so it proves the defect it claims.
 
+- [x] Review correction: the Limitations bullet and the README's look-and-wait reading say the
+  entry gate bounds the in-place re-entry loop rather than removing it: at most one re-entry per
+  own kill inside the three-tick window. Proof:
+  `test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit`, and the re-entry
+  walk in Results (9p2i `stage_b_full`: 6 of 28 entries, each after the impostor's own fresh
+  kill, at most one per kill).
+- [x] Review correction: the look's body key reads this tick's bodies only, so a body reported at
+  a meeting, whose `saw_body` rows stay in memory from earlier ticks, never enters it.
+  `test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key[before-the-cap-own-room-reported]`
+  surfaces at STORAGE_VENT, where a read over every row surfaces at ENGINEERING_VENT onto the
+  other body (mutation F01 red).
+- [x] Review correction: before the cap the pick follows the loaded map's vent rooms.
+  `test_before_the_cap_the_pick_follows_the_loaded_map` on the hand-built two-link map: VA; VB
+  with a body in A; VB with VA moved to an unseen room (mutations F02 to F04 red).
+- [x] Review correction: the entry gate sits after the self-report branch.
+  `test_self_report_runs_before_the_entry_gate`: `self_report` with `own_fresh_kill` at a
+  teammate's victim reports, where the gate alone walks away (mutation F06 red).
+- [x] Review correction: the determinism test's planted hash edit edits the second recording's own
+  bytes, so without the edit the copy equals the first recording and the assertion fails
+  (`test_the_b1_recording_repeats_byte_for_byte_and_loads_verified`; probe T01 red).
+- [x] Review correction (Codex P1): inside a vent `look_and_wait` runs the anchor's own row readers
+  first (`_refuse_rows_the_anchor_refuses`), so a non-string `pending_task_id` or a malformed
+  earlier `saw_player` row raises the anchor's own error instead of venting.
+  `test_a_row_the_anchor_refuses_is_refused_inside_a_vent[pending task-...]`,
+  `[earlier saw_player room-...]` and `[earlier saw_player subject-...]`.
+- [x] Review correction: the stale-body key is covered before the cap and at the cap, each case with
+  a contrast memory that still sees the body and picks the other vent: the four cases of
+  `test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key` (mutation F01 red).
+- [x] Review correction: the pre-cap clear branch's three `vent_rooms` reads and the unmapped check
+  are pinned on non-canonical maps: `test_before_the_cap_the_pick_follows_the_loaded_map` and
+  `test_a_connected_vent_with_no_room_raises[True]` (GHOST_VENT also a graph key); mutations F02
+  to F05 red.
+- [x] Review correction (Codex P1): the anchor's non-ranking row checks run before the in-vent
+  return. One planted malformed memory per kind the look's own reads miss
+  (`test_a_row_the_anchor_refuses_is_refused_inside_a_vent`, six cases), each accepted once the
+  checks are removed (`test_without_the_row_checks_each_planted_row_fails_the_check`), and a
+  property over eleven kinds of malformed row
+  (`test_every_row_the_anchor_refuses_in_a_vent_is_refused_by_the_look`, 300 examples): the look
+  raises the anchor's own message. The `decide` comment states what the code delivers.
+- [x] Review correction: a body seen only on an earlier tick does not enter the exit key before the
+  cap or at the cap (`test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key`, four
+  cases); the round-1 mutation table carries the row (F01).
 - [x] **A watched exit makes it wait.** In STORAGE_VENT at cooldown 3, with the own victim's body in
   STORAGE and a crewmate sighted this tick in ENGINEERING, `target_distance` surfaces at
   ENGINEERING_VENT, into the crewmate. `look_and_wait` waits. On the next tick, with ENGINEERING
@@ -502,7 +544,9 @@ the reversal of `tasks/phase-11.md:65-68`.
     clear before unseen before watched, then fewer watchers, no body, not the fled room, connected
     before in place, vent id; body knowledge is limited to the inferred sight. The count is the
     trailing run of in-vent `self_state` rows back to the last `meeting_boundary` row, so it
-    equals the census's ticks inside at the exit tick.
+    equals the census's ticks inside at the exit tick. Before the look it runs the anchor's own
+    row readers (`_refuse_rows_the_anchor_refuses`, review round 1), so a row the anchor refuses
+    in a vent raises the anchor's own error here too; no ranking is built.
   - `vent_entry_policy = "own_fresh_kill"` replaces the cover vent with the default cover's move
     unless an `own_kill` row names a victim whose body is sighted in the own room this tick, in
     that room, with kill tick (row tick less one) at most `FRESH_KILL_WINDOW_TICKS = 3` before the
@@ -610,12 +654,16 @@ the reversal of `tasks/phase-11.md:65-68`.
   field by name before its first advance (engine layer: by the helper; each declared layer:
   once that layer is removed); perturbed: without its declaration each refuses the full-config
   copy with no advance.
-- Lab rows: see the dated section of `audits/tactical-gameplay/README.md`. Runtime fingerprint
-  `9b7be845343c4af343ed7caeef559b5b8a48657838820be6d05fe90e61e8dbcd`, git head `90d5f335`
-  (recomputed at `dec380e0`: equal). 160 games, none aborted. Baseline and `vent_risk` equal the
+- Lab rows: see the dated section of `audits/tactical-gameplay/README.md`. The committed JSON is
+  the review round's re-run: runtime fingerprint
+  `eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e`, git head `63980a00`. The
+  first run, at `90d5f335` (fingerprint
+  `9b7be845343c4af343ed7caeef559b5b8a48657838820be6d05fe90e61e8dbcd`), gave the same arm rows
+  (round-1 subsection). 160 games, none aborted. Baseline and `vent_risk` equal the
   committed rows: 4p1i 22, 6/8, 48 and 25, 5/8, 48; 9p2i 96, 16/29, 294 and 106, 14/34, 308 (also
   re-run at the base `f98bfae9` before any change: equal). The README's changes are additions
-  only (`git diff --numstat` 123 0). The held-out split was not run.
+  only (`git diff --numstat` 132 0 against `main` after round 1). The held-out split was not
+  run.
 - Projection: re-measured at `f98bfae9` into scratch (below).
 - Publication: `git diff --name-only main...HEAD` names no `api/`, `frontend/`, `replays/` or
   `tests/fixtures/` path; bundles built at the base (a `git archive` of `f98bfae9`, replay mtimes
@@ -623,8 +671,9 @@ the reversal of `tasks/phase-11.md:65-68`.
   identical (`diff -r` exit 0). Before the mtime sync the only differences were 14
   `created_at` values in 9 files. Perturbed: the same check on a scratch branch carrying a
   planted `frontend/PLANTED_PROBE.txt` exits 1 and names it (branch deleted afterwards).
-- Registry row: `audits/` 26,636,557 bytes / 329 files at `f98bfae9` -> 27,302,756 / 330 with the
-  JSON and README staged (`git ls-files audits/`, sizes summed); `verify_ml_evidence.py` passes
+- Registry row: `audits/` 26,636,557 bytes / 329 files at `f98bfae9` -> 27,302,756 / 330 at
+  `dec380e0`, with the JSON and README staged (`git ls-files audits/`, sizes summed), and
+  27,303,392 / 330 after round 1 (below); `verify_ml_evidence.py` passes
   (63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO); perturbed: the row left stale exits 1 ("promises
   329 files, the index tracks 330"; "promises 26,636,557 tracked bytes, the tracked files contain
   27,302,756 bytes").
@@ -865,6 +914,189 @@ pull request.
 - The lab rows are fake-game mechanics: fake meetings eject nobody, so impostors win almost every
   9p2i game and no balance reading is possible; the 50-game record is the only balance measurement.
 - `look_and_wait` alone (with `any_body` entries) re-enters the vent after surfacing in place beside
-  a body; the round records both values together, where the entry gate removes that loop.
+  a body. The round records both values together, where the entry gate bounds that loop but does
+  not remove it: an impostor that surfaces in place beside its own fresh kill may dive once more
+  while the kill is at most three ticks old, and a dive and a surfacing take two ticks, so that
+  happens at most once per kill
+  (`test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit`). On the
+  development games, 9p2i `stage_b_full` has 6 such re-entries among its 28 entries, each after
+  the impostor's own fresh kill and at most one per kill (15 of 43 without the gate, 64 of 91
+  with the look alone; the re-entry walk in the round-1 subsection). Removing the second dive
+  would change behaviour and is the owner's decision.
 - No claim about the unadopted temporal observation path; its event-time own-kill rows raise.
 - The bundle comparison was built on macOS.
+
+### Review corrections, round 1 (2026-09-26)
+
+Ten blocking findings from three verifier lenses (correctness, integrity, documentation) on
+`bfa922d3`, including the Codex P1 comment reproduced by two of them. Commits: `63980a00` (the
+policy's row checks and every planted case), `de376a5b` (the lab rows re-run at `63980a00`, the
+README's loop reading, the `audits/` registry row) and this Results commit. Status stays done.
+
+**Codex P1: valid, fixed.** Before its in-vent exit, `ImpostorPolicy.decide` refuses a memory that
+has a `self_state` on any of these malformed rows: the latest `self_state`'s room, pending task,
+fellow ids or `in_vent` flag; a missing or non-integer cooldown this tick; a `saw_body` room this
+tick; any `saw_body` victim; the subject or room of any `saw_player` row, of any provenance; the
+room of any `self_state` row (the refuted-lead scan); and an in-vent room with no vent. At
+`bfa922d3` the look's own reads met most of these, but it returned an intent on four kinds: the
+pending task, the room on earlier `self_state` rows, `saw_body` victims, and `saw_player` rows it
+never reads (earlier ticks, or not first-hand). `ExperimentalImpostorPolicy._refuse_rows_the_anchor_refuses`
+now runs the anchor's own readers over those rows before the look and builds no ranking, so
+`test_the_in_vent_branch_never_reads_the_kill_ranking` still holds. The comment in `decide` now
+says a memory with no `self_state` falls through to the anchor, which refuses it, and that inside
+a vent every row the anchor refuses before its exit is refused here too. Enforced by
+`test_a_row_the_anchor_refuses_is_refused_inside_a_vent` (six planted kinds, with the anchor's
+message), `test_without_the_row_checks_each_planted_row_fails_the_check` (perturbed: each
+planted memory decides once the checks are removed) and the property
+`test_every_row_the_anchor_refuses_in_a_vent_is_refused_by_the_look` (`settings(deadline=None,
+max_examples=300)`). The property takes a memory from the never-stuck family and malforms one row
+in one of eleven ways that cover the list above (a `self_state` room, latest or earlier, is one
+kind; a missing cooldown row and a non-integer cooldown are two). The anchor must raise, and the
+look must raise the same message.
+All eleven kinds are drawn in a 300-example run (`--hypothesis-show-statistics`), and the
+property alone goes red on R01 to R06, R09, R10 and R14 below. Valid memory is unaffected: the lab
+rows re-run identical, and the B1 recording's numbers re-measure unchanged (below).
+
+**Other findings.**
+- The entry gate's loop (Limitations): stated at the delivered strength in Limitations, in the
+  README's look-and-wait reading and in the Acceptance correction. The gate bounds the loop to
+  at most one re-entry per own kill inside the three-tick window. It does not remove it; removing
+  the second dive would change behaviour, which is an owner decision.
+  `test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit` pins the sequence
+  from REACTOR: vent at 11, surface in place at 12, re-enter at 13 (kill age 3), surface at 14,
+  walk away at 15, where `any_body` vents again. The count, from the re-entry walk below, is 9p2i
+  `stage_b_full` 6 re-entries of 28 entries, all 6 after the impostor's own fresh kill, at most 1
+  on any one kill. It is 15 of 43 under `stage_b_full_minus_own_fresh_kill` and 64 of 91 under
+  `vent_look_and_wait`, and 0 of 8 on 4p1i in each arm.
+- M2 survivor (exit bodies over every row), found by three lenses:
+  `test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key` covers a body reported at a
+  meeting, whose rows stay at earlier ticks while the impostor waits through the meeting. It has
+  four cases: the own room or the connected room reported, before the cap from STORAGE and at the
+  cap from ENGINEERING, where a crewmate in EAST_HALL makes only the cap key surface. Each case
+  also checks that the same memory with the body still in view picks the other vent.
+- M8 survivors (the pre-cap clear branch's canonical-map reads) and V09 (unmapped check on the
+  vent graph): `test_before_the_cap_the_pick_follows_the_loaded_map` on `_two_link_map` (VA; VB
+  with a body in A; VB with VA moved to the unseen C) and
+  `test_a_connected_vent_with_no_room_raises[True]` (GHOST_VENT also a graph key).
+- M7 survivor (the entry gate ahead of self-report): `test_self_report_runs_before_the_entry_gate`.
+- The vacuous planted hash edit: `test_the_b1_recording_repeats_byte_for_byte_and_loads_verified`
+  now splits the second recording's own bytes (the split alone re-joins to the first recording),
+  zeroes the one occurrence of the first tick row's `state_hash` in that line, and asserts the
+  copy differs from the first recording.
+
+**Changed expectations.** `test_a_connected_vent_with_no_room_raises` is parametrized: `[False]` is
+the original case unchanged, `[True]` adds the graph key. The determinism test's planted edit
+moved from a re-serialization to the raw bytes, with three added assertions. No test was
+weakened, skipped or deleted, and no other test file changed. `tests/agents/test_vent_look_and_wait.py`
+goes from 60 to 81 collected tests; `tests/experiments/test_vent_look_and_wait_game.py` stays at 45.
+
+**The lab rows re-run.** `agents/tactical/experimental.py` is hashed into the lab's runtime
+fingerprint, so the development rows were re-run at `63980a00` with the Validation command, into
+scratch, and copied into the committed path. Against the rows run at `90d5f335`, every arm row
+and every other field is identical except `git_head`, `source_sha256`, `measured_utc` and the two
+copy-timing medians of `world_copy_control`. The README section names the new fingerprint
+`eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e` and head. The commits after
+`63980a00` touch no hashed package, so it is also this card's final head's fingerprint.
+
+**Re-measured at `de376a5b`** (count-only, outputs in the scratch directory, never the tree):
+
+```sh
+S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+uv run python $S/vlw-fix-r1/reentry_count.py     # arms: stage_b_full, stage_b_full_minus_own_fresh_kill, vent_look_and_wait
+uv run python $S/vlw-fix-r1/b1_numbers.py        # the seed-1003 B1 recording
+PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-fix-r1/walk2-de376a5b.json
+python3 $S/card_vlw/s9_ruled.py $S/vlw-fix-r1/walk2-de376a5b.json
+python3 $S/refute_vent/r4.py $S/vlw-fix-r1/walk2-de376a5b.json
+```
+
+- `reentry_count.py` plays each arm on the development seeds with `run_candidate`, walks the
+  recording with `MECHANISMS_WALK_CONFIG`, and counts an entry as a re-entry when the same
+  impostor's last exit came back up in the room it left (source room equals destination room), at
+  most three ticks earlier, in the room it now enters from. It then reads
+  `entry_after_own_fresh_kill` and counts re-entries per matching kill. Output: 4p1i 8 entries
+  and no re-entries in each arm; 9p2i `stage_b_full` 28 entries, 6 re-entries, 6 after an own
+  fresh kill, at most 1 per kill; minus own fresh kill 43, 15, 6, 1; look alone 91, 64, 6, 1.
+- `b1_numbers.py`: recorded-arm fold 44 decisions, 10 in-vent, 0 mismatches; default policy 44,
+  10, 11; census cells 0/4, 0/3, 0/2, forced 1/3, room-left-only 0/3. Unchanged.
+- `walk2.json` is byte identical to the card's (sha256 `cff6b3b8...`), and the projection
+  reproduces: s9 85 trips, 62, 53 and 9; physical exit field only 7, 45, 33, 8; with the gate 76
+  trips, 7, 37, 32, 8; the gate keeps 92 of 105 entries; pooled 103 of 587 removed, ruled key 20
+  and literal key 36; hidden travel on s9, 1 seen. No drift.
+
+**Mutation pass, round 1.** The harness `vlw-fix-r1/run_mutants.py` (scratch) applies each edit,
+runs `tests/agents/test_vent_look_and_wait.py`, `tests/experiments/test_vent_look_and_wait_game.py`
+and `tests/agents/test_tactical_experiments.py` with `-x -n 4`, and restores the file from an
+in-memory copy, checking its sha256. It covered only the spans this round changed and the spans
+the findings name: 20 production edits (neuters and the listed classes) and one test probe,
+T01. Two columns are shown: the head
+column ran F01 to F06 and R01 to R06 against `bfa922d3`'s two test files (restored from copies
+afterwards, sha256 checked), and T01 against its own planted line. The fix column ran at
+`63980a00`'s tests. Production is `63980a00` in both columns. With `-x` over four workers the
+first red test is the first failure scheduled, so it can differ between runs.
+
+| id | class | edit | head tests | fix tests | first red test at the fix |
+| --- | --- | --- | --- | --- | --- |
+| F01 | M2 | exit bodies read over every row | green | red | test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key[before-the-cap-own-room-reported] |
+| F02 | M8 | pre-cap visible filter on the canonical vent rooms | green | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| F03 | M8 | pre-cap body key on the canonical vent rooms | green | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| F04 | M8 | pre-cap fled key on the canonical vent rooms | green | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| F05 | M2 | unmapped check reads the vent graph | green | red | test_a_connected_vent_with_no_room_raises[True] |
+| F06 | M7 | entry gate ahead of the self-report branch | green | red | test_self_report_runs_before_the_entry_gate |
+| R01 | N | row checks not called | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R02 | N | pending-task check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[pending task-...] |
+| R03 | N | `saw_body` victim scan dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_body victim-...] |
+| R04 | N | `self_state` room check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R05 | N | `saw_player` subject check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_player subject-...] |
+| R06 | N | `saw_player` room check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_player room-...] |
+| R07 | M1 | `self_state` kind filter dropped | - | red | test_a_watched_exit_makes_it_wait_then_it_surfaces_clear |
+| R08 | M1 | `saw_player` kind filter dropped | - | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| R09 | M2 | row loop over this tick's rows only | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R10 | M2 | victim scan over this tick's rows only | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_body victim-...] |
+| R11 | M4 | `self_state` kind read -> constant | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R12 | M4 | `saw_player` kind read -> constant | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_player subject-...] |
+| R13 | M7 | `self_state` and `saw_player` branch bodies swapped | - | red | test_a_sighting_that_is_not_first_hand_never_counts[reported] |
+| R14 | M2 | row checks handed this tick's rows only | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| T01 | N | test probe: the planted hash edit removed | green | red | test_the_b1_recording_repeats_byte_for_byte_and_loads_verified |
+
+The probes that first came back green were F01 to F06 and T01 on the head's tests, reproducing the
+findings, and R01 to R06, where the head's tests held no malformed row (the red-before of the
+Codex fix). None survives at `63980a00`, and none is named equivalent. With the property as the
+only suite, R01 to R06, R09, R10 and R14 are each red on
+`test_every_row_the_anchor_refuses_in_a_vent_is_refused_by_the_look`. No other operator class was
+run.
+
+**Registry row.** `audits/` 27,302,756 / 330 at `dec380e0` -> 27,303,392 / 330 with the re-run
+JSON and the README reading staged (`git ls-files -s audits/` blob sizes summed; the working-tree
+`stat` sum agrees). `verify_ml_evidence.py` exits 0 (63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO).
+Perturbed, with the row left at 27,302,756 it exits 1 ("promises 27,302,756 tracked bytes, the
+tracked files contain 27,303,392 bytes"), and it passes again once restored from a copy.
+`tests/scripts/test_verify_ml_evidence.py` passes (86).
+
+**Validation, round 1** (at `de376a5b`, a bare shell with no `AILIBI_*` export; each exit code
+written by the script right after its command, `vlw-fix-r1/validation.sh` in scratch):
+
+```sh
+uv run pytest -m campaign                        # 336 passed, 9438 deselected
+uv run pytest -n 6 --dist loadfile <the card's targeted list>   # 1039 passed, 3 xfailed
+bash scripts/verify_samples.sh <set>             # samples/9p2i 50, samples/4p1i 50, ml_corpus/9p2i 150,
+                                                 # ml_corpus/4p1i 50: all verified clean
+uv run python scripts/build_sample_report.py --sample-dir <set> --check   # all four consistent
+uv run python scripts/publish_process_scorecard.py --check   # consistent
+uv run python scripts/publish_gameplay_census.py --check     # consistent
+uv run python scripts/check_doc_facts.py                     # exit 0
+uv run python scripts/validate_task_docs.py                  # exit 0 (390 phase tasks, 88 work cards)
+uv run python scripts/verify_ml_evidence.py                  # exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO
+git diff --name-only main...HEAD                             # 15 paths, none under api/, frontend/,
+                                                             # replays/ or tests/fixtures/
+```
+
+The runtime fingerprint at `de376a5b` recomputes to `eac202d4...`, the committed JSON's. The demo
+bundle built at `de376a5b` equals one built from a `git archive` of `f98bfae9` (replay mtimes set to
+the worktree's, as in the first round): `diff -r` exit 0 over 194 files. `bash scripts/check.sh`
+runs once, at the pushed head, after this commit; its exit code is in the pull request.
+
+**Closing greps** (on this commit's tree, case-insensitive): `git grep -n -i -E "removes? (that|the) loop|would refuse falls through"`
+hits only this paragraph, which quotes the pattern. `git grep -n -i "falls through to" --
+agents/tactical/experimental.py` has one hit, the new `decide` comment, which says the anchor
+refuses such a memory. `git grep -n "9b7be845"` hits only this card's Results: the first run's
+fingerprint under "Lab rows" and this paragraph.
