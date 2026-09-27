@@ -3590,14 +3590,23 @@ def _build_meeting_trigger(
     emergency call per game).
 
     ``report_body_handle_version`` is the recorded config's body-handle arm.
-    ``None`` builds today's text byte for byte; any other value raises, because
-    the substitution it names is not built yet.
+    ``None`` names a reported corpse by the engine's body id,
+    ``body-<victim>-<death tick>``, byte for byte as every recording made
+    without the arm holds it. Version 1 names it, as ``temporal_observations``
+    does, by the victim's public handle ``body-<victim>``
+    (:func:`observation.body_ids.public_body_id`), which carries no tick. Under
+    either, a corpse missing from ``state.bodies`` reads "a body" and the
+    engine id is never the fallback. The arm changes that handle and nothing
+    else: an emergency description, the trigger tick and every other returned
+    value are the same under both. Any other value raises.
     """
 
-    if report_body_handle_version is not None:
+    if report_body_handle_version is not None and (
+        type(report_body_handle_version) is not int or report_body_handle_version != 1
+    ):
         raise ValueError(
-            f"report_body_handle_version={report_body_handle_version!r} names a "
-            "trigger text that is not built yet"
+            f"report_body_handle_version={report_body_handle_version!r} is not a "
+            "body-handle version this builder writes"
         )
     trigger_event: MeetingTriggeredEvent | None = None
     for event in events:
@@ -3620,11 +3629,13 @@ def _build_meeting_trigger(
         if body_id is not None:
             corpse = state.bodies.get(body_id)
             victim_id = corpse.player_id if corpse is not None else None
-        # Trigger text reaches the model. Preserve recorded legacy bytes OFF;
-        # the temporal experiment exposes only the already-public victim handle.
+        # Trigger text reaches the model. With neither the temporal experiment
+        # nor the body-handle arm, keep the engine id every recording made
+        # without them holds; either one exposes only the victim's public
+        # handle, which carries no kill tick.
         described_body = (
             (public_body_id(victim_id) if victim_id is not None else None)
-            if temporal_observations
+            if temporal_observations or report_body_handle_version == 1
             else body_id
         )
         description = (

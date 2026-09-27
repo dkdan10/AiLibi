@@ -247,7 +247,6 @@ WAVE_ARMS_PENDING: Final[Mapping[str, frozenset[object]]] = MappingProxyType(
     {
         "vent_exit_policy": frozenset({"look_and_wait"}),
         "vent_entry_policy": frozenset({"own_fresh_kill"}),
-        "report_body_handle_version": frozenset({1}),
         "ballot_kill_row_version": frozenset({1}),
         "impostor_ballot_version": frozenset({1}),
     }

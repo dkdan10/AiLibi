@@ -1878,17 +1878,31 @@ def test_the_reconstructors_hand_the_recorded_trigger_setting_to_the_builder(
     tmp_path: Path,
     reader: str,
 ) -> None:
-    # The body-handle setting names a trigger text no builder writes yet, so the
-    # builder refuses it; reaching that refusal proves the recorded value got
-    # there, where a reader that dropped it would build the default text.
-    _open_the_pending_guard(monkeypatch)
+    # A spy on the builder both readers call records the body-handle value each
+    # rebuilt trigger received: None on the recording without the setting and
+    # the recorded 1 on a copy that records it, where a reader that dropped the
+    # value would hand the builder None both times.
+    import orchestrator.game as game_module
+
+    real = game_module._build_meeting_trigger
+    seen: list[object] = []
+
+    def _spy(**kwargs: Any) -> Any:
+        seen.append(kwargs.get("report_body_handle_version"))
+        return real(**kwargs)
+
+    monkeypatch.setattr(game_module, "_build_meeting_trigger", _spy)
+    monkeypatch.setattr(golden, "_build_meeting_trigger", _spy)
     copy = _with_settings(
         recordings["plain"], tmp_path / "handle" / "9p2i", report_body_handle_version=1
     )
-    with pytest.raises(
-        ValueError, match="report_body_handle_version=1 names a trigger"
-    ):
-        _EVERY_READER[reader](copy)
+    meetings = len(_meeting_ids(recordings["plain"]))
+    assert meetings > 0
+    _EVERY_READER[reader](recordings["plain"])
+    assert seen == [None] * meetings
+    seen.clear()
+    _EVERY_READER[reader](copy)
+    assert seen == [1] * meetings
 
 
 def test_the_golden_builds_the_recorded_arms_agents(
