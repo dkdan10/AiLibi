@@ -1412,9 +1412,12 @@ bare shell with 0 `AILIBI_*` exports. Each exit code was captured from the proce
 | `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
 | `git diff --stat b590eb17` | five files: `agents/memory/store.py` (one comment, no code), `docs/observation-contract.md`, this card and the two test files; nothing under `engine/`, `frontend/`, `api/`, `eval/`, `observation/`, `orchestrator/`, `meetings/`, `scripts/`, `replays/`, `audits/` or `tests/fixtures/` |
 
-`bash scripts/check.sh` runs once, at the commit that first carries this subsection, in a bare shell with its
-exit code captured from the process; the card commit after it records the result in this paragraph and
-changes nothing else.
+`bash scripts/check.sh` ran once, at `c3edd856`, the commit that first carries this subsection, in a bare shell
+with 0 `AILIBI_*` exports and its exit code captured from the process: exit 0 (ruff clean, 546 files formatted,
+`lint-imports` 4 kept 0 broken, task docs with 88 work cards and prompts valid, mypy clean on 517 files, pytest
+9673 passed, 20 skipped, 3 xfailed, the round's 6 new items above round 4's 9667; frontend lint, types, 559
+vitest tests and build). The commit after it changes only this paragraph; `scripts/validate_task_docs.py` and
+`scripts/check_doc_facts.py` re-run at that head.
 
 **Changed test expectations.** None is weakened, skipped or deleted. Two test helpers changed in
 `tests/orchestrator/test_meeting_reset_coherence.py`: `_EjectingRunner`'s ballots now name the impostor, and
