@@ -52,8 +52,8 @@ config payload and requires the committed bytes.
 ## The pending guard
 
 `WAVE_ARMS_PENDING` lists each new ON value whose behaviour is not built yet:
-`look_and_wait`, `own_fresh_kill`, and version 1 of the body handle and both
-ballot fields. The physical vent witness rule is built and has left it.
+version 1 of both ballot fields. The physical vent witness rule, `look_and_wait`,
+`own_fresh_kill` and version 1 of the body handle are built and have left it.
 Config validation refuses a listed value,
 naming field and value; the `HeadlessGame` constructor checks again, so a
 config built past validation is refused too; and `build_default_meeting_runner`

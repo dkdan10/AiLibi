@@ -614,6 +614,9 @@ Files a single card owns are listed in its brief (3.4). Every file touched by mo
 | `tasks/direction-2026-09-19-process-over-outcome.md` | the section-6 `docs:` commit (before wave 1), then A1 (one appended sentence with the census's opener counts) | Serial. |
 | `scripts/verify_samples.sh`, `tests/scripts/test_verify_samples.py` | plumbing only (the candidates root and the empty-root override in the two-set test) | Single writer. |
 | `eval/gameplay_census.py`, `tests/eval/test_gameplay_census.py` | A1 only. Each arm card's end-to-end conformance test lives in that card's own test file. | Single writer. |
+| `eval/meeting_quality.py` | B2 only (added by the orchestrator's ruling of 2026-09-27 on the card's stop-and-ask) | Single writer: threads the regroup window through `_ejected_in_inform_band` and every path a candidate-facing instrument reaches, with planted cases. |
+| `eval/vj_instruments.py` | B2 only (same ruling) | Single writer: threads the window where a candidate-facing instrument reaches `derive_belief_evidence`, else refuses a `hub_with_grace` recording by name. |
+| `eval/deception_instruments.py` (FROZEN) | B2 only (same ruling) | Refusal of `hub_with_grace` recordings by name, before any re-derivation; no evidence semantics change; the FROZEN departure is declared the way record plumbing declared its `refresh_samples.sh` departure. |
 
 ### 3.3 Version plan
 

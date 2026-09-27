@@ -4,6 +4,12 @@ The default FSMs remain the anchors. These explicitly constructed subclasses
 replace selected choices and preserve body, task, repair and escape interrupts.
 Public meeting knowledge belongs to each policy instance; speculative plans
 never enter a model's evidence memory.
+
+Two vent values change how an experimental impostor hides and nothing else:
+``vent_exit_policy = "look_and_wait"`` looks before it leaves a vent, and
+``vent_entry_policy = "own_fresh_kill"`` dives into a vent only beside its own
+fresh kill. Both read only the impostor's memory rows and the public map. Their
+window and cap are the named constants below, frozen once a round records them.
 """
 
 from __future__ import annotations
@@ -16,6 +22,8 @@ from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_v
 
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
+    EVENT_OWN_KILL,
+    EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
     EVENT_SAW_PLAYER_MOVE,
     EVENT_SELF_STATE,
@@ -24,8 +32,36 @@ from agents.perception import (
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyButtonView
 from agents.tactical.impostor_policy import ImpostorPolicy
 from agents.tactical.pathing import find_path
-from observation.action_intent import ActionIntent, ReportBodyIntent
-from observation.public_map import PublicMapView
+from observation.action_intent import ActionIntent, PlayerId, ReportBodyIntent
+from observation.public_map import PublicMapView, RoomId, VentId
+
+#: The frozen meaning of ``vent_entry_policy = "own_fresh_kill"``: the impostor
+#: enters a vent only when a body in its room is its own victim, killed at most
+#: this many engine ticks before the entry with no meeting between. The census
+#: counts the same window (``eval.gameplay_census.FRESH_KILL_WINDOW_TICKS``); a
+#: test pins the two equal. A revision adds a new value, never a new window.
+FRESH_KILL_WINDOW_TICKS: Final[int] = 3
+
+#: The frozen meaning of ``vent_exit_policy = "look_and_wait"``: the most play
+#: ticks an impostor stays inside a vent, counted from its entry or from the
+#: last meeting boundary, whichever is later. At this count it surfaces whatever
+#: it sees. The census's ``IN_VENT_CAP_TICKS`` is pinned equal to it.
+IN_VENT_CAP_TICKS: Final[int] = 4
+
+# The post-meeting episodic marker (``agents.memory.store._EVENT_MEETING_BOUNDARY``),
+# mirrored so no private name crosses a module boundary; a test pins the two.
+_MEETING_BOUNDARY_EVENT: Final[str] = "meeting_boundary"
+
+# An ``own_kill`` snapshot row lands on the observation after the kill: the
+# engine resolves the kill during tick K and advances the state to K + 1 before
+# the next packet is built (``engine.tick.advance_tick``), so the row's tick is
+# the kill's engine tick plus this lag.
+_OWN_KILL_ROW_LAG_TICKS: Final[int] = 1
+
+# An event-time row carries this payload key (``agents.perception`` stamps it on
+# every temporal-observation row). Such a row is dated at its source tick, not
+# one observation later, so the entry gate refuses it rather than misdate a kill.
+_EVENT_TIME_ROW_KEY: Final[str] = "source_event_id"
 
 
 class TacticalExperimentOptions(BaseModel):
@@ -70,13 +106,11 @@ class TacticalExperimentOptions(BaseModel):
 
 #: Option values declared ahead of their behaviour. A policy built with one
 #: raises instead of running the default decision under the arm's name; the
-#: card that builds a value's behaviour deletes it here.
-UNBUILT_OPTION_VALUES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
-    {
-        "vent_exit_policy": frozenset({"look_and_wait"}),
-        "vent_entry_policy": frozenset({"own_fresh_kill"}),
-    }
-)
+#: card that builds a value's behaviour deletes it here. Empty since the
+#: look-and-wait card built ``look_and_wait`` and ``own_fresh_kill``; the arm
+#: spine's pending-equals-unbuilt test still reads it, and the card that deletes
+#: ``WAVE_ARMS_PENDING`` deletes this guard with that test.
+UNBUILT_OPTION_VALUES: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
 
 
 class UnbuiltTacticalOptionError(ValueError):
@@ -123,6 +157,53 @@ def _recent_players(
             raise ValueError("an observed player action must be text or absent")
         seen[subject] = (event.tick, room, action)
     return seen
+
+
+def inferred_visible_rooms(
+    public_map: PublicMapView, room: RoomId, *, sabotage_active: bool
+) -> frozenset[RoomId]:
+    """The rooms an impostor inside the vent in ``room`` infers it can see.
+
+    The agent receives no visible-room list, so this is inferred from the public
+    map: the room itself and its map neighbours, or the room alone while any
+    sabotage is active. A test pins it to the engine's sight for an impostor
+    observer at base visibility and under lights. Under a reactor sabotage the
+    engine still shows the neighbours, so there this set is narrower than what
+    the engine shows: a neighbour counts as unseen.
+    """
+
+    neighbours = public_map.room_neighbors.get(room)
+    if neighbours is None:
+        raise ValueError(f"the public map lists no neighbours for room {room!r}")
+    if sabotage_active:
+        return frozenset({room})
+    return frozenset({room, *neighbours})
+
+
+def _watchers_by_room(
+    latest: tuple[EpisodicEvent, ...],
+    *,
+    visible: frozenset[RoomId],
+    not_watchers: frozenset[PlayerId],
+) -> dict[RoomId, int]:
+    """Non-teammates sighted first-hand this tick, counted per visible room.
+
+    Only a ``saw_player`` row of observed provenance counts; the caller passes
+    the impostor itself and its fellow impostors as ``not_watchers``. A sighting
+    outside ``visible`` is not read, so under a sabotage a neighbour the engine
+    still shows is treated as unseen.
+    """
+
+    seen: dict[RoomId, set[PlayerId]] = {}
+    for event in latest:
+        if event.type != EVENT_SAW_PLAYER or event.provenance != PROVENANCE_OBSERVED:
+            continue
+        subject = ImpostorPolicy._sighting_subject(event)
+        room = ImpostorPolicy._sighting_room(event)
+        if subject in not_watchers or room not in visible:
+            continue
+        seen.setdefault(room, set()).add(subject)
+    return {room: len(subjects) for room, subjects in seen.items()}
 
 
 def _patrol_goal(
@@ -195,7 +276,14 @@ class ExperimentalCrewmatePolicy(CrewmatePolicy):
 
 
 class ExperimentalImpostorPolicy(ImpostorPolicy):
-    """Compare vent risk, route persistence, reporting and task pressure."""
+    """Compare vent risk, route persistence, reporting and task pressure.
+
+    Under ``look_and_wait`` an impostor inside a vent surfaces only when no
+    non-teammate is sighted in a room it infers it can see, and at the in-vent
+    cap it surfaces whatever it sees (:meth:`_look_and_wait_exit`). Under
+    ``own_fresh_kill`` it enters a vent only beside its own fresh kill and
+    otherwise walks away as the default cover does (:meth:`_own_fresh_kill_here`).
+    """
 
     def __init__(self, *, agent_id: str, options: TacticalExperimentOptions) -> None:
         _refuse_unbuilt_options(options)
@@ -211,8 +299,20 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
         self._meeting_announced = True
 
     def decide(self, memory: MemoryStore, public_map: PublicMapView) -> ActionIntent:
-        anchor = super().decide(memory, public_map)
         events = memory.recent(since_tick=0)
+        if self.options.vent_exit_policy == "look_and_wait":
+            # Decided before the anchor, so nothing inside the vent reads the
+            # kill ranking. A memory with no self_state falls through to the
+            # anchor, which refuses it. Inside a vent, the anchor's row checks
+            # run first (:meth:`_refuse_rows_the_anchor_refuses`), so every row
+            # the anchor refuses before its in-vent exit is refused here too.
+            inside = self._latest_self_state(events)
+            if inside is not None and self._in_vent_from_self_state(inside):
+                self._refuse_rows_the_anchor_refuses(events, state=inside)
+                return self._look_and_wait_exit(
+                    events, public_map=public_map, state=inside
+                )
+        anchor = super().decide(memory, public_map)
         state = self._latest_self_state(events)
         assert state is not None
         tick = events[-1].tick
@@ -252,6 +352,17 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
                         "payload": {"body_id": body_id},
                     }
                 )
+            if (
+                self.options.vent_entry_policy == "own_fresh_kill"
+                and not self._own_fresh_kill_here(
+                    events, latest=latest, own_room=own_room, tick=tick
+                )
+            ):
+                # Any body but the impostor's own fresh kill: the default cover's
+                # walk-away move. The anchor here is that vent or that move
+                # already (``ImpostorPolicy._cover_or_vent``), so only a vent
+                # entry changes.
+                return self._cover(public_map=public_map, own_room=own_room)
             return anchor
         if anchor.type in ("kill", "sabotage"):
             return anchor
@@ -340,6 +451,223 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
             for event in latest
         )
         return nearby and cooldown > 0
+
+    @staticmethod
+    def _refuse_rows_the_anchor_refuses(
+        events: tuple[EpisodicEvent, ...], *, state: EpisodicEvent
+    ) -> None:
+        """Raise, with the anchor's message, on a row the anchor refuses in a vent.
+
+        ``ImpostorPolicy.decide`` validates these rows before its in-vent exit:
+        the pending task on the latest ``self_state`` as it reads that row, and,
+        while it builds the kill ranking, the room of every ``self_state`` row,
+        the victim of every ``saw_body`` row and the subject and room of every
+        ``saw_player`` row of any provenance. This runs the anchor's own readers
+        over them and builds no ranking. :meth:`_look_and_wait_exit` reads the
+        anchor's other in-vent inputs itself: the latest ``self_state``'s room
+        and fellow ids, the cooldown, this tick's body rooms and the vent in the
+        impostor's room.
+        """
+
+        ImpostorPolicy._pending_task_from_self_state(state)
+        ImpostorPolicy._confirmed_dead_from_bodies(events)
+        for event in events:
+            if event.type == EVENT_SELF_STATE:
+                ImpostorPolicy._room_from_self_state(event)
+            elif event.type == EVENT_SAW_PLAYER:
+                ImpostorPolicy._sighting_subject(event)
+                ImpostorPolicy._sighting_room(event)
+
+    def _look_and_wait_exit(
+        self,
+        events: tuple[EpisodicEvent, ...],
+        *,
+        public_map: PublicMapView,
+        state: EpisodicEvent,
+    ) -> ActionIntent:
+        """Look before leaving the vent: surface clear, wait, or surface at the cap.
+
+        Before the cap it surfaces only when no non-teammate is sighted first-hand
+        this tick in any room of :func:`inferred_visible_rooms`: in place, or at a
+        visible connected vent whose room ranks better on (a body there, the room
+        fled from, vent id). The room fled from is the vent's own room, since an
+        impostor inside never changes vents without surfacing, so a clear
+        connected room beats in place unless only it holds a body. Otherwise it
+        waits. At :data:`IN_VENT_CAP_TICKS` ticks inside it surfaces at the
+        candidate ranked first by the cap key (:meth:`_cap_exit`). It never reads
+        a target sighting from an earlier tick.
+        """
+
+        tick = events[-1].tick
+        latest = tuple(event for event in events if event.tick == tick)
+        if self._latest_cooldown(latest) is None:
+            raise ValueError(
+                "impostor policy requires a cooldown_status event at the latest tick"
+            )
+        own_room = self._room_from_self_state(state)
+        current = self._vent_in_room(public_map, own_room)
+        if current is None:
+            raise ValueError(
+                f"impostor is in_vent but no vent maps to its room: {own_room!r}"
+            )
+        connected = tuple(sorted(public_map.vent_graph.get(current, ())))
+        unmapped = [vent for vent in connected if vent not in public_map.vent_rooms]
+        if unmapped:
+            raise ValueError(f"connected vents with no room on the map: {unmapped!r}")
+        visible = inferred_visible_rooms(
+            public_map, own_room, sabotage_active=self._active_sabotage(events)
+        )
+        watchers = _watchers_by_room(
+            latest,
+            visible=visible,
+            not_watchers=self._fellow_impostor_ids_from_self_state(state)
+            | {self.agent_id},
+        )
+        bodies = self._body_visible_rooms(latest) & visible
+        if self._ticks_inside(events) >= IN_VENT_CAP_TICKS:
+            return self._vent(
+                vent_id=self._cap_exit(
+                    current=current,
+                    connected=connected,
+                    public_map=public_map,
+                    visible=visible,
+                    watchers=watchers,
+                    bodies=bodies,
+                    fled_room=own_room,
+                )
+            )
+        if watchers:
+            return self._wait()
+        clear = (
+            current,
+            *(vent for vent in connected if public_map.vent_rooms[vent] in visible),
+        )
+        return self._vent(
+            vent_id=min(
+                clear,
+                key=lambda vent: (
+                    public_map.vent_rooms[vent] in bodies,
+                    public_map.vent_rooms[vent] == own_room,
+                    vent,
+                ),
+            )
+        )
+
+    @staticmethod
+    def _cap_exit(
+        *,
+        current: VentId,
+        connected: tuple[VentId, ...],
+        public_map: PublicMapView,
+        visible: frozenset[RoomId],
+        watchers: Mapping[RoomId, int],
+        bodies: frozenset[RoomId],
+        fled_room: RoomId,
+    ) -> VentId:
+        """The forced exit at the cap, by the key ruled on 2026-09-24.
+
+        Each candidate (in place, or a connected vent) is classed by the
+        impostor's inferred sight this tick: clear (visible, no non-teammate
+        sighted there) before unseen (outside the inferred-visible set) before
+        watched (visible, a non-teammate sighted there). Within a class: fewer
+        sighted non-teammates, then a room with no body, then a room other than
+        the one fled from, then a connected vent before in place, then vent id.
+        """
+
+        def key(vent: VentId) -> tuple[int, int, bool, bool, bool, VentId]:
+            room = public_map.vent_rooms[vent]
+            sighted = watchers.get(room, 0)
+            if sighted:
+                sight_class = 2
+            elif room in visible:
+                sight_class = 0
+            else:
+                sight_class = 1
+            return (
+                sight_class,
+                sighted,
+                room in bodies,
+                room == fled_room,
+                vent == current,
+                vent,
+            )
+
+        return min((current, *connected), key=key)
+
+    @staticmethod
+    def _ticks_inside(events: tuple[EpisodicEvent, ...]) -> int:
+        """Play ticks inside the current vent, read from memory rows alone.
+
+        The trailing run of ``self_state`` rows that place the impostor in a
+        vent, counted back to the last ``meeting_boundary`` row, which the
+        post-meeting fold appends before the resume tick's perception. The
+        first observation inside counts 1, so the count equals the census's
+        ticks inside at the tick an exit would resolve.
+        """
+
+        inside = 0
+        for event in reversed(events):
+            if event.type == _MEETING_BOUNDARY_EVENT:
+                break
+            if event.type != EVENT_SELF_STATE:
+                continue
+            if not ImpostorPolicy._in_vent_from_self_state(event):
+                break
+            inside += 1
+        return inside
+
+    @staticmethod
+    def _own_fresh_kill_here(
+        events: tuple[EpisodicEvent, ...],
+        *,
+        latest: tuple[EpisodicEvent, ...],
+        own_room: RoomId,
+        tick: int,
+    ) -> bool:
+        """Whether a body in ``own_room`` is this impostor's own fresh kill.
+
+        Fresh means killed at most :data:`FRESH_KILL_WINDOW_TICKS` engine ticks
+        before an entry at ``tick``, with no meeting between. The kill's engine
+        tick is its ``own_kill`` row's tick less :data:`_OWN_KILL_ROW_LAG_TICKS`.
+        A meeting at or after the kill puts its boundary row on or after the
+        kill's row tick, since a kill on a meeting's trigger tick is perceived
+        on the resume tick. The victim's body must be sighted in ``own_room``
+        this tick. An event-time ``own_kill`` row (temporal observations) raises.
+        """
+
+        boundary = max(
+            (event.tick for event in events if event.type == _MEETING_BOUNDARY_EVENT),
+            default=None,
+        )
+        # The anchor has already refused a saw_body row without a string room or
+        # victim, so these reads cannot meet a malformed row.
+        victims_here = {
+            event.payload["victim_id"]
+            for event in latest
+            if event.type == EVENT_SAW_BODY and event.payload["room"] == own_room
+        }
+        for event in events:
+            if event.type != EVENT_OWN_KILL:
+                continue
+            if _EVENT_TIME_ROW_KEY in event.payload:
+                raise ValueError(
+                    "the own-fresh-kill entry gate dates a kill from snapshot "
+                    "own_kill rows; an event-time row is not supported"
+                )
+            victim = event.payload.get("victim_id")
+            room = event.payload.get("room")
+            if not isinstance(victim, str) or not isinstance(room, str):
+                raise ValueError(
+                    f"own_kill event missing string victim_id or room: {event.payload!r}"
+                )
+            kill_tick = event.tick - _OWN_KILL_ROW_LAG_TICKS
+            if tick - kill_tick > FRESH_KILL_WINDOW_TICKS:
+                continue
+            if boundary is not None and boundary >= event.tick:
+                continue
+            if room == own_room and victim in victims_here:
+                return True
+        return False
 
     @staticmethod
     def _two_thirds_complete(events: tuple[EpisodicEvent, ...]) -> bool:

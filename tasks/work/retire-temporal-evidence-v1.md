@@ -98,6 +98,23 @@ only), `.env.example`, the tests that pin the parameter rather than the
 behaviour, and every doc line naming either lever as switchable. Directly
 necessary call-site follow-through is permitted; new behaviour is not.
 
+The body-handle field (scope added 2026-09-26 by
+[the body-handle card](report-body-handle.md)). Once temporal version 2 is the
+only live behaviour, the live game names every reported corpse by its public
+handle, so `_build_meeting_trigger`'s `report_body_handle_version == 1` branch
+in `orchestrator/game.py` and its `report_body_handle_version` keyword are
+dead code for play and are deleted with the graduation (craft rule 3), unless
+the Stage-B adopting card has already graduated them. One condition binds the
+deletion: the prompt-byte golden re-renders each recorded opening from a
+trigger rebuilt through that keyword, so while any recording it walks records
+the field ON with temporal delivery OFF (the Stage-B candidate does), the
+branch stays as the golden's read path, or the deletion moves that reading
+into the reconstruction in the same change. Either way `report_body_handle_version`
+stays in `RecordedExperimentConfig` as a read-only recorded key whose missing
+value means `None`: the model forbids unknown keys, so deleting the field would
+make every recording that carries it unparseable. This paragraph adds scope
+only; the Status stays `ready` and every box stays unchecked.
+
 ## Record impact
 
 Retires two levers. Future recordings no longer carry a selectable version for
