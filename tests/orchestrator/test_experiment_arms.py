@@ -3,9 +3,10 @@ a runner built from the recorded config, derived arm stamps, the spectator
 view, the contract page (``docs/experiment-arms.md``) and the factory-kind
 record the policy-stamp docstring in ``orchestrator/replay.py`` relies on.
 
-No arm behaviour exists yet, so every ON value here is either refused (the
-pending guard) or reached with that guard patched open to prove the plumbing
-around it. The last arm card deletes the guard's refusal tests with the guard.
+Each arm card builds its values' behaviour and removes them from the pending
+guard. A value still pending is either refused here or reached with that guard
+patched open to prove the plumbing around it. The last arm card deletes the
+guard's refusal tests with the guard.
 """
 
 from __future__ import annotations

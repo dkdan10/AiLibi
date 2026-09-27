@@ -102,6 +102,128 @@ The fake votes produced no ejections. A `0/0` exposure cell means no exits.
 | Self-report | 78 | 17 | 0/0 | 55/65 | 1 | 0 | 406 |
 | Earlier sabotage | 89 | 27 | 15/29 | 59/70 | 5 | 0 | 284 |
 
+### Development: the Stage-B vent arms, 2026-09-26
+
+These rows screen the vent arms of the Stage-B wave on fake games. Each arm is
+named after the recorded value it sets
+([the look-and-wait card](../../tasks/work/vent-look-and-wait.md)).
+
+- **Look and wait** (`vent_exit_policy = look_and_wait`). An impostor inside a
+  vent looks before it leaves. It surfaces only when nobody but a teammate stands
+  in the rooms it can see from there: its own room and the rooms next to it, or
+  its own room alone while any sabotage runs. Otherwise it waits. After four
+  ticks inside it surfaces anyway. It then prefers a room it saw clear, then a
+  room it cannot see, then a watched room.
+- **Own fresh kill** (`vent_entry_policy = own_fresh_kill`). An impostor dives
+  into a vent only beside its own victim, killed at most three ticks earlier with
+  no meeting between. Any other body sends it walking away, as the default cover
+  does.
+- **Physical** (`vent_witness_rule = physical`). An exit into another room is
+  seen only from the room surfaced into.
+- **`stage_b_full`** sets the four round-1 fields that act during a fake game's
+  play: the physical rule, both vent values and the regroup reset
+  (`meeting_reset = hub_with_grace`). The round-1 rebuttal, body-handle and
+  ballot fields change only a meeting's turns and prompts. A fake meeting
+  ejects nobody, so they cannot change a fake game's play, and the lab leaves
+  them out.
+- **`stage_b_full_minus_<value>`** drops that one value back to its default.
+  These arms give mechanical attribution only.
+
+Inputs: the development split only, seeds 1000-1007 on both rosters, under the
+lab's limits (96 ticks, 256 calls, 1,000,000 input and 100,000 output tokens, 30
+seconds and $0 per game). The held-out split was not run. The rows are
+`stage-b-development.json`. Its runtime fingerprint is `9b7be845343c4af343ed7caeef559b5b8a48657838820be6d05fe90e61e8dbcd` and its git
+head is `90d5f33562d7765e75a5510edf95130e5a8b2057`. All 160 games completed, and none aborted or hit a limit.
+Reproduce into an unused path:
+
+```sh
+uv run python -m experiments.tactical_gameplay --split development --arms baseline vent_risk vent_physical vent_look_and_wait vent_own_fresh_kill stage_b_full stage_b_full_minus_look_and_wait stage_b_full_minus_own_fresh_kill stage_b_full_minus_physical stage_b_full_minus_hub_with_grace --output /tmp/stage-b-development.json
+```
+
+The re-run baseline and observed-risk rows equal the committed development rows
+above in waits, exposure and calls: 22, 6/8, 48 and 25, 5/8, 48 on 4p1i, and 96,
+16/29, 294 and 106, 14/34, 308 on 9p2i. So this card moved neither the default
+policy nor `observed_risk`.
+
+The columns are defined as follows.
+
+- **Waits** and **Exposure** are defined as above.
+- **Exit room** counts exits a crewmate saw from the room surfaced into.
+- **Room left only** counts exits a crewmate saw only from the room left.
+- **Not own fresh kill** counts entries with no victim of that impostor in that
+  room, killed at most three ticks before, with no meeting between.
+- **Vent waits** counts waits an impostor made inside a vent.
+- **Ticks inside** counts surfaced trips by play ticks spent inside, restarting
+  at a meeting. **At the cap** counts trips of four ticks.
+- **In place** counts exits back into the room entered from.
+- **Vent at open** counts meetings that opened with an impostor inside a vent,
+  over all meetings.
+- **Impostor wins** and **Calls** are read from each game's result.
+
+Every count comes from the recordings the lab walked, with every tick and meeting
+hash verified. The compact check at the end of this page, pointed at
+`stage-b-development.json`, reproduces them from the JSON.
+
+#### 4p1i, 8 games per arm
+
+| Arm | Waits | Exposure | Exit room | Room left only | Entries | Not own fresh kill | Vent waits | Ticks inside 1/2/3/4 | At the cap | In place | Vent at open | Impostor wins | Calls |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 22 | 6/8 | 5/8 | 1/8 | 8 | 0/8 | 0 | 8/0/0/0 | 0 | 0 | 0/8 | 7/8 | 48 |
+| `observed_risk` exit (`vent_risk`) | 25 | 5/8 | 3/8 | 2/8 | 8 | 0/8 | 0 | 8/0/0/0 | 0 | 0 | 0/8 | 6/8 | 48 |
+| `vent_physical` | 22 | 5/8 | 5/8 | 0/8 | 8 | 0/8 | 0 | 8/0/0/0 | 0 | 0 | 0/8 | 7/8 | 48 |
+| `vent_look_and_wait` | 25 | 4/7 | 2/7 | 2/7 | 8 | 0/8 | 20 | 3/0/0/4 | 4 | 1 | 4/8 | 5/8 | 48 |
+| `vent_own_fresh_kill` | 22 | 6/8 | 5/8 | 1/8 | 8 | 0/8 | 0 | 8/0/0/0 | 0 | 0 | 0/8 | 7/8 | 48 |
+| `stage_b_full` | 41 | 2/4 | 2/4 | 0/4 | 8 | 0/8 | 8 | 3/0/0/1 | 1 | 0 | 4/8 | 7/8 | 48 |
+| `stage_b_full_minus_look_and_wait` | 34 | 5/8 | 5/8 | 0/8 | 8 | 0/8 | 0 | 8/0/0/0 | 0 | 0 | 0/8 | 7/8 | 48 |
+| `stage_b_full_minus_own_fresh_kill` | 41 | 2/4 | 2/4 | 0/4 | 8 | 0/8 | 8 | 3/0/0/1 | 1 | 0 | 4/8 | 7/8 | 48 |
+| `stage_b_full_minus_physical` | 41 | 3/4 | 2/4 | 1/4 | 8 | 0/8 | 8 | 3/0/0/1 | 1 | 0 | 4/8 | 7/8 | 48 |
+| `stage_b_full_minus_hub_with_grace` | 25 | 2/7 | 2/7 | 0/7 | 8 | 0/8 | 20 | 3/0/0/4 | 4 | 1 | 4/8 | 5/8 | 48 |
+
+#### 9p2i, 8 games per arm
+
+| Arm | Waits | Exposure | Exit room | Room left only | Entries | Not own fresh kill | Vent waits | Ticks inside 1/2/3/4 | At the cap | In place | Vent at open | Impostor wins | Calls |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 96 | 16/29 | 13/29 | 3/29 | 29 | 11/29 | 0 | 29/0/0/0 | 0 | 0 | 3/24 | 8/8 | 294 |
+| `observed_risk` exit (`vent_risk`) | 106 | 14/34 | 9/34 | 5/34 | 34 | 17/34 | 0 | 34/0/0/0 | 0 | 0 | 6/26 | 8/8 | 308 |
+| `vent_physical` | 102 | 13/28 | 13/28 | 0/28 | 28 | 10/28 | 0 | 28/0/0/0 | 0 | 0 | 3/25 | 8/8 | 304 |
+| `vent_look_and_wait` | 353 | 13/90 | 3/90 | 10/90 | 91 | 65/91 | 106 | 57/5/4/24 | 24 | 74 | 20/29 | 7/8 | 358 |
+| `vent_own_fresh_kill` | 90 | 11/17 | 7/17 | 4/17 | 17 | 0/17 | 0 | 17/0/0/0 | 0 | 0 | 3/25 | 8/8 | 302 |
+| `stage_b_full` | 304 | 2/17 | 2/17 | 0/17 | 28 | 0/28 | 29 | 10/1/0/6 | 6 | 13 | 11/20 | 8/8 | 244 |
+| `stage_b_full_minus_look_and_wait` | 149 | 8/16 | 8/16 | 0/16 | 19 | 0/19 | 0 | 16/0/0/0 | 0 | 0 | 3/17 | 8/8 | 210 |
+| `stage_b_full_minus_own_fresh_kill` | 304 | 3/24 | 3/24 | 0/24 | 43 | 15/43 | 32 | 17/1/0/6 | 6 | 18 | 14/20 | 8/8 | 244 |
+| `stage_b_full_minus_physical` | 304 | 2/17 | 2/17 | 0/17 | 28 | 0/28 | 29 | 10/1/0/6 | 6 | 13 | 11/20 | 8/8 | 244 |
+| `stage_b_full_minus_hub_with_grace` | 143 | 3/23 | 3/23 | 0/23 | 28 | 0/28 | 52 | 12/1/0/10 | 10 | 15 | 11/27 | 8/8 | 328 |
+
+The readings below are count-only, from 16 fake games per arm. They show mechanics
+and make no claim about model reasoning or game balance. A fake meeting ejects
+nobody, so the impostors win almost every 9p2i game in every arm.
+
+- **The full set of vent arms.** On 9p2i, `stage_b_full` shows crewmates 2 of
+  17 exits, against 16 of 29 at baseline. No exit is seen only from the room
+  left, and all 28 entries follow the impostor's own fresh kill. Of the 17
+  surfaced trips, 6 end at the cap, and 13 of the 17 exits come back up in the
+  room entered from.
+- **Look and wait needs the entry gate.** With `vent_look_and_wait` alone the
+  impostor still dives at any body. After it surfaces in place beside a body,
+  the default cover vents again whenever no one watches. On 9p2i that raises
+  entries from 29 to 91, and 65 of the 91 do not follow an own fresh kill; 74 of
+  the 90 exits are in place. The minus-own-fresh-kill arm keeps part of this
+  loop: 43 entries, 15 of them not after an own fresh kill.
+- **The physical rule and the look overlap.** `vent_look_and_wait` alone, under
+  the older both-rooms rule, still shows 10 exits seen only from the room left.
+  All 10 are exits at the cap with a crewmate in the room left, which the cap
+  may leave. With the physical rule there are none. Dropping the physical
+  rule from `stage_b_full` changes nothing on 9p2i and adds one room-left
+  sighting on 4p1i (3 of 4 exits seen, against 2 of 4).
+- **Dropping the look** (`stage_b_full_minus_look_and_wait`) brings back
+  one-tick trips only, with 8 of 16 exits seen.
+- **Dropping the regroup** (`stage_b_full_minus_hub_with_grace`) leaves trips open
+  across meetings. That gives 10 trips at the cap against 6, and 52 waits
+  inside a vent against 29.
+- **Meetings open more often with an impostor inside a vent**: 11 of 20 under
+  `stage_b_full`, against 3 of 24 at baseline. The regroup ends those stays
+  without an exit.
+
 ### Held-out: 4p1i, 16 games per arm
 
 | Arm | Waits | Reversals | Exposure | Allocations | Reactor starts | Task wins | Calls |
@@ -144,6 +266,7 @@ The fake votes produced no ejections. A `0/0` exposure cell means no exits.
 | Anti-oscillation | Retain the baseline; the scoped guard and config key are deleted. All 16 paired development trajectories and counts were unchanged, and their baseline trajectories match the final source. Fixed goals already reduce shortest-path distance. New repair goals and body escapes can legitimately reverse a move. |
 | Identity-dependent order | Retain deterministic order; quantified below. Neither random priorities nor whole-game counterfactual outcomes are adopted. |
 | RNG/mapping work | Retain current implementation. RNG reconstruction already avoids initialization. Five safe mapping copies remain; measured below. |
+| Vent look and wait (2026-09-26) | `observed_risk` loses its mechanism when `look_and_wait` is adopted: both are values of `vent_exit_policy`, and the look replaces the risk-ranked exit. Adoption is the owner's decision after the round-1 record. Until then both stay selectable, and the observed-risk rows above stay as evidence. |
 
 Every candidate remains available only for an explicitly selected comparison.
 A future promotion needs source-pinned gameplay review, interaction/entitlement

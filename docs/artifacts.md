@@ -110,7 +110,7 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 26,636,557 tracked bytes / 329 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 27,302,756 tracked bytes / 330 files |
 | `docs/media/` — the README captures, their provenance, and the as-built architecture picture | (a) | in git | 1.4 MB / 7 files |
 | `docs/process-scorecard.md` + `docs/process-scorecard.json` — the nine-row process scorecard, folded from the committed recordings with no model call: the flattened measurement rows a spectator surface's cells will be read from, and the markdown that publishes them. `scripts/publish_process_scorecard.py --check` pins both against a recomputation, so the size states files and not bytes — a re-record rewrites the numbers without touching this row | (b) | in git | 2 files |
 | `docs/gameplay-census.md` + `docs/gameplay-census.json` — the gameplay census, a separate report beside the scorecard: counts of what happened in the games (witnesses, vent trips, corpses at each meeting, the state play resumes in, the meeting's speaking order, the impostors' ballots), folded from the committed recordings with no model call. `scripts/publish_gameplay_census.py --check` pins both against a recomputation, so the size states files and not bytes | (b) | in git | 2 files |
