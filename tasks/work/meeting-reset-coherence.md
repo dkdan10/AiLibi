@@ -1081,8 +1081,11 @@ never through a pipe.
 | `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
 | `git diff --stat cb0a4cfc 6fb328a8 -- engine/ frontend/ eval/off_menu.py replays/ observation/ orchestrator/experiment_config.py eval/gameplay_census.py eval/leak_scan.py api/schemas.py docs/architecture.md` | empty |
 
-`bash scripts/check.sh` runs once, at the head that carries this subsection; its exit code is recorded in the
-next commit, which changes only that line.
+`bash scripts/check.sh` ran once, at `faa61591`, the commit that first carried this subsection, in a bare shell
+with its exit code captured from the process: exit 0 (ruff clean, 546 files formatted, `lint-imports` 4 kept 0
+broken, task docs with 88 work cards and prompts valid, mypy clean on 517 files, pytest 9654 passed, 20 skipped,
+3 xfailed; frontend lint, types, 559 vitest tests and build). The commit after it changes only this paragraph;
+`scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` re-run at that head.
 
 **Changed test expectations.** None. The round adds 17 tests (15 in `tests/eval/test_regroup_instruments.py`, 2
 in `tests/orchestrator/test_meeting_reset_coherence.py`) and weakens, skips or deletes none.
