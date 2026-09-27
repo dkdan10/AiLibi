@@ -1,6 +1,6 @@
 # B2: the full meeting reset, coherent for agents and instruments
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -145,6 +145,28 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
 
 ## Acceptance
 
+- [x] Review correction: **the three readers the stop-and-ask named, resolved by the orchestrator's ruling of
+  2026-09-27.** `eval/meeting_quality.py` reads the regroup window in `_ejected_in_inform_band` through
+  `_regroup_ticks_before` (the one derivation, `orchestrator.replay.derive_regroup_ticks`);
+  `eval/vj_instruments.py` passes each walked meeting's `regroup_ticks` to its pre-vote derivation; the FROZEN
+  `eval/deception_instruments.py` refuses a `hub_with_grace` recording by name and seed before its walk and
+  changes no evidence semantics. Proof, in `tests/eval/test_regroup_instruments.py`:
+  `test_the_inform_band_reads_the_window_each_live_meeting_ran_with`,
+  `test_a_voice_resting_on_a_regroup_sighting_informs_nobody` against
+  `test_with_the_window_withheld_the_same_fold_credits_the_inform` and
+  `test_the_preserve_twin_of_the_planted_game_folds_as_before`;
+  `test_the_vj_pre_vote_fold_reads_each_meetings_window` and
+  `test_a_regroup_sighting_lifts_no_row_in_the_vj_pre_vote_graphs`;
+  `test_the_deception_instruments_refuse_the_reset_by_name_before_walking`,
+  `test_a_set_with_one_reset_recording_is_refused_at_that_seed` and
+  `test_the_deception_refusal_names_the_reset_and_nothing_else`. Commands: `build_sample_report.py` on a fake
+  `hub_with_grace` set, and the four committed `--check` runs.
+- [x] Review correction: **`main` merged and the body-handle hand-off written.** `main` at `cb0a4cfc` (B1, B4
+  and the one-writer amendment) is merged in `1ad1b57c`, never rebased. `docs/observation-contract.md` names
+  `report_body_handle_version = 1` and what it changes
+  (`test_the_contract_names_the_recorded_body_handle_setting`, planted
+  `test_the_paragraph_before_the_setting_fails_the_body_handle_check`). Every Validation gate is re-run at
+  `6fb328a8` and `check.sh` at the head (round 3 below).
 - [x] **The reset at the orchestrator entry.** Mechanism: the arm-gated `regroup_after_meeting` call in
   `apply_meeting_result`. The fixture is a MEETING state with the trigger corpse, two unreported corpses, an
   impostor in a vent with cooldown 0, an active reactor with repair progress, and used button presses. Under
@@ -216,7 +238,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   `preserve` bytes. Planted test: a voter holds an `own_vent` row for subject X at tick 5, seven ordinary
   sightings of X after tick 5, and co-presence sightings of X at R and R+1. The `own_vent` row survives the
   8-row budget. Removing the exclusion drops it and fails the test.
-- [ ] **Full caller threading, proved by equality.** Mechanism: the regroup ticks and the resume helper reach
+- [x] **Full caller threading, proved by equality.** Mechanism: the regroup ticks and the resume helper reach
   every production caller that can read a reset recording: the live meeting run and its detectors, the vouch
   gate in `derive_belief_evidence`, every caller listed in Evidence (including `meetings/corroboration.py:648`),
   and `agents/memory` through the public row. `scripts/counterfactual_phase20.py` (`:526`, `:543`, `:781`) is
@@ -265,7 +287,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   at the head gives an empty `diff -r` of the two `data/` trees, and `npm --prefix frontend test` and the
   Playwright journey pass. Planted proof: applying the resume filter under `preserve` turns the golden and the
   census `--check` red; Results names both failures.
-- [ ] **The documents, and the copy.**
+- [x] **The documents, and the copy.**
   - `docs/observation-contract.md` states the resume rule (after a regroup the resume packet carries only the
     trigger tick's kills and vents) and the default-path ingestion of the public row. It also takes the
     body-handle card's hand-off: the sentence at `:35-38` names the recorded body-handle setting.
@@ -332,7 +354,10 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   `audits/tactical-gameplay/README.md` (B1, this card).
 - This card alone: `eval/process_scorecard.py`, `scripts/counterfactual_phase20.py`,
   `agents/memory/evidence_context.py`, `docs/cleanup-dispositions.md`, the new test files, and
-  `orchestrator/policy_reconstruction.py` only if its call must route through the fold.
+  `orchestrator/policy_reconstruction.py` only if its call must route through the fold. By the orchestrator's
+  ruling of 2026-09-27 on this card's stop-and-ask (the decision memo's 3.2 map, amended in `cb0a4cfc`), also
+  `eval/meeting_quality.py`, `eval/vj_instruments.py` and one refusal in the FROZEN
+  `eval/deception_instruments.py`.
 - Not written here: `engine/`, `observation/`, `orchestrator/experiment_config.py`, `eval/gameplay_census.py`,
   `eval/off_menu.py`, `eval/leak_scan.py`, `frontend/`, `api/schemas.py`, `docs/architecture.md`, the direction
   file and `tasks/README.md`.
@@ -384,6 +409,9 @@ merging B1 or B4 overlaps a region of this card.
   is unchanged.
 - Test helpers: `tests/meetings/test_prompt_byte_golden.py` (the resume helper, and regroup ingestion through
   the fold) and `tests/_helpers/committed.py` (the reset).
+- Instruments, by the orchestrator's ruling of 2026-09-27 on the stop-and-ask: `eval/meeting_quality.py` and
+  `eval/vj_instruments.py` (the regroup window), and `eval/deception_instruments.py` (one refusal; the FROZEN
+  departure is declared under Record impact).
 - Docs: `docs/observation-contract.md`, `docs/glossary.md`, `docs/cleanup-dispositions.md`,
   `audits/tactical-gameplay/README.md`, and the `audits/` row of `docs/artifacts.md`, recomputed last.
 - New tests: `tests/orchestrator/test_meeting_reset_coherence.py` (entry, order, grace, resume, equality,
@@ -414,6 +442,13 @@ fixes and is not regenerated, since a later experiment never changes an earlier 
 **Publication.** A push to `main` republishes the demo bundle (`.github/workflows/pages.yml`). This card edits
 `api/replay_loader.py`, which the bundle executes, and no shown replay or viewer file. The empty `data/` diff,
 `npm --prefix frontend test` and the Playwright journey are the proof.
+
+**Declared FROZEN departure.** `eval/deception_instruments.py:1-2` limits the module to bug fixes and evidence
+readers. This card adds one refusal there: a set holding a recording whose `meeting_reset` is `hub_with_grace`
+is refused by name and seed before the walk re-derives anything. No evidence semantics change, and the header
+is not edited. The orchestrator's ruling of 2026-09-27 on this card's stop-and-ask, made under the owner's
+delegation of 2026-09-24, authorizes the departure; the record-plumbing card's `refresh_samples.sh` departure is
+the precedent. The PR states it under Decisions.
 
 **Adoption, stated now.** A missing config means `preserve` while any committed recording lacks the key, so each
 `preserve` branch stays a reader path. Graduation also needs `post_meeting_retarget` and evidence version 1
@@ -473,10 +508,11 @@ items 6, 8 and 10, 2.3, 3.2 and 3.4 card 9; the spine's arm page `docs/experimen
 `docs/observation-contract.md`'s public-regroup paragraph. No engine line, no recorded schema field, no new
 setting, no prompt registry bump; nothing is recorded.
 
-**Status: active, two boxes open.** The other fourteen acceptance items are met at `d801eb3c`.
+**Status at `d801eb3c`: active, two boxes open**; round 3 below closes both and sets `done`. The other
+fourteen acceptance items were met at `d801eb3c`.
 
-- **Blocked, stop and ask: three readers outside Expected scope read a reset recording at the no-regroup
-  default.** The card's stop-and-ask list names exactly this case. Each re-derives meeting evidence from a
+- **Blocked at `d801eb3c`, stop and ask (resolved in round 3): three readers outside Expected scope read a
+  reset recording at the no-regroup default.** The card's stop-and-ask list names exactly this case. Each re-derives meeting evidence from a
   recorded transcript without the regroup ticks, so on a `hub_with_grace` recording it can read a sighting in
   the window that the live meeting excluded:
   - `eval/meeting_quality.py::_ejected_in_inform_band` calls `derive_belief_evidence(meeting.transcript,
@@ -492,11 +528,11 @@ setting, no prompt registry bump; nothing is recorded.
   meeting's `regroup_ticks`, or `derive_regroup_ticks` over the recorded settings and meeting rows) and decide
   the FROZEN third (its header allows "Bug fixes and evidence readers only"); make all three refuse a reset
   recording by name; or accept the unwindowed reading as a named limitation of those cells. The equality box
-  stays open until one is chosen, and no pull request is opened.
-- **Waiting on B4: the body-handle hand-off.** The contract sentence at `docs/observation-contract.md:43-47`
+  stayed open until one was chosen, and no pull request was opened.
+- **Waited on B4 at `d801eb3c` (closed in round 3): the body-handle hand-off.** The contract sentence at `docs/observation-contract.md:43-47`
   ("Full model-facing removal is implemented only in temporal mode ...") is to name the recorded body-handle
-  setting once B4 has merged. B4 is not on `main`, so the documents box stays open. This card merges after B1
-  and B4: it takes `main` by merging, reruns every gate and recomputes the `audits/` row after B1's section of
+  setting once B4 has merged. B4 was not on `main`, so the documents box stayed open. This card merges after B1
+  and B4: round 3 takes `main` by merging, reruns every gate and recomputes the `audits/` row after B1's section of
   `audits/tactical-gameplay/README.md`.
 
 ### Decisions
@@ -541,7 +577,7 @@ setting, no prompt registry bump; nothing is recorded.
   setting as the recorded result.
 - **Status and index.** The card assigns the Status line and `tasks/README.md` to the orchestrator. As the
   record-plumbing card did under the same dispatch, this worker set Status to `active` and re-derived the
-  inventory sentence with `scripts/validate_task_docs.py`.
+  inventory sentence with `scripts/validate_task_docs.py`. Round 3 sets `done` the same way.
 
 ### Caller dispositions
 
@@ -558,7 +594,7 @@ setting, no prompt registry bump; nothing is recorded.
 | `scripts/counterfactual_phase20.py` (`:526`, `:543`, `:781`) | unchanged: keeps the readers card's named refusal (`test_the_offline_lever_counterfactual_keeps_refusing_the_reset`) |
 | `eval/off_menu.py` (FROZEN), `training/anchor_study.py`, `training/surrogate/dataset.py`, `experiments/lab/inference_testimony_probe.py` (FROZEN) | unchanged, at the no-regroup default: each refuses experiment recordings or reads only committed `preserve` bytes |
 | `audits/workflows/extract_gameplay_facts.py`, `eval/reasoning_evidence.py` | unchanged: the first refuses experiment settings (`refuse_experiment_settings`), the second reads fixtures only |
-| `eval/meeting_quality.py`, `eval/vj_instruments.py`, `eval/deception_instruments.py` | **not threaded: outside Expected scope; the stop-and-ask above** |
+| `eval/meeting_quality.py`, `eval/vj_instruments.py`, `eval/deception_instruments.py` | round 3: the first two threaded, the FROZEN third refuses the reset by name; at `d801eb3c` not threaded (the stop-and-ask above) |
 
 The readers card named one refusal pending this card, evidence honesty's `meeting_reset`. It is lifted
 (`test_honesty_reads_the_meeting_reset_now_its_room_table_is_coherent`, both reset arms), and every other field
@@ -606,12 +642,12 @@ that card refused is still refused (`test_every_other_setting_the_readers_refuse
 - **Own rows**: `test_an_early_vent_row_survives_the_budget_past_a_regroup`, planted
   `test_without_the_exclusion_the_regroup_sightings_push_the_vent_row_out`,
   `test_a_spawn_window_sighting_row_is_unchanged`.
-- **Equality (open)**: the fixture is seed 1000, recorded with the fake provider from the declared config into
+- **Equality**: the fixture is seed 1000, recorded with the fake provider from the declared config into
   `tmp_path`: 3 meetings at ticks 8, 20 and 31, all skipped, handed regroup ticks `[]`, `[9]` and `[9, 21]`;
   0 disagreements among the live agents, the loader, the golden walker and the evidence-honesty walk
   (`test_the_four_readings_agree_at_every_meeting_open`). Withholding the ticks, the resume or the notice at any
-  of the 4 live sites and 9 reader sites breaks agreement (13 parametrised cases). Open for the three readers
-  above.
+  of the 4 live sites and 9 reader sites breaks agreement (13 parametrised cases). The three readers above are
+  closed in round 3 by their own planted cases.
 - **Instruments and the viewer data layer**: `test_a_resume_tick_self_claim_naming_the_meeting_room_scores_true`,
   planted `test_without_the_applied_meeting_the_same_claim_scores_false`;
   `test_honesty_walks_a_reset_recording_and_checks_its_regrouped_clock`, planted
@@ -630,14 +666,15 @@ that card refused is still refused (`test_every_other_setting_the_readers_refuse
   carrier: a count-only scan of fake arm-ON games at seeds 1000-1007 read 0 such calls in every game.
 - **The OFF path**: the Verification table (every gate at the head, the 956 `"preserve"` stamps, an empty bundle
   `data/` diff) and the planted filter below.
-- **The documents (open)**: the contract's "The regroup reset" section (the resume rule and the announced
+- **The documents**: the contract's "The regroup reset" section (the resume rule and the announced
   regroup), the glossary's "regroup (the full meeting reset)", the A-28 line and the lab's dated note;
   `test_the_contract_and_the_glossary_name_every_kept_event_kind`, planted
   `test_a_kind_added_to_the_keep_set_without_the_documents_fails`,
   `test_the_glossary_says_what_moves_what_clears_and_what_survives`,
   `test_the_new_copy_carries_no_identifier_and_no_arithmetic`, planted
-  `test_a_planted_identifier_fails_the_copy_scan` (three identifiers). Open for the body-handle sentence.
-- **The registry row**: `audits/` now 26,636,941 tracked bytes / 329 files; the stale-row failure is below.
+  `test_a_planted_identifier_fails_the_copy_scan` (three identifiers). The body-handle sentence is written in round 3.
+- **The registry row**: `audits/` read 26,636,941 tracked bytes / 329 files at `d801eb3c`; round 3 recomputes
+  it after the merge. The stale-row failure is below.
 
 ### Planted failures
 
@@ -908,4 +945,159 @@ does not touch; it passes alone and in `check.sh`.
 - No development game at seeds 1000-1007 holds a kill-witness button call within 6 ticks of a regroup, so that
   census case is a carrier built from the fixture game's walk with the call inserted.
 - The planted census `--check` cannot turn red under the filter applied to `preserve` (above).
-- The three out-of-scope readers above, until the owner decides.
+- The three readers the stop-and-ask named are resolved in round 3; the further readers round 3 found are
+  listed there.
+
+### Review corrections, round 3 (2026-09-27)
+
+The resume after the stop-and-ask. Commits: `1ad1b57c` (the merge of `main`), `6fb328a8` (the three readers and
+the contract sentence) and the card commits that follow it. All three verifier lenses run on this round, the
+card's first.
+
+**The merge.** `main` at `cb0a4cfc` (B1 `#489`, B4 `#488`, the flip of B4's card and the orchestrator's
+amendment of the decision memo's one-writer map for this card's three readers) is merged in `1ad1b57c`; nothing
+is rebased. `orchestrator/game.py` merged without a conflict and by region: B4 changed only the body of
+`_build_meeting_trigger`, this card's regions are the resume composition, the regroup ticks and the absorb.
+`audits/tactical-gameplay/README.md` keeps B1's rows and this card's dated reset-row note. Two conflicts, both
+derived: the `tasks/README.md` inventory sentence, re-derived with `scripts/validate_task_docs.py`, and the
+`audits/` row of `docs/artifacts.md`, recomputed with `git ls-files` over the merged tree (330 files, 27,303,776
+tracked bytes; neither later commit touches `audits/`, and the row is re-read at the head below).
+
+**Finding 1: the three readers, by the orchestrator's ruling of 2026-09-27.** Candidate-facing instruments read
+the window; a FROZEN instrument keeps its evidence semantics and refuses.
+
+- (a) `eval/meeting_quality.py`. `_ejected_in_inform_band` takes a required keyword `regroup_ticks` and hands it
+  to `derive_belief_evidence`. `decompose_ejection_channels` passes `_regroup_ticks_before(game, meeting_index)`:
+  `orchestrator.replay.derive_regroup_ticks` over the report's recorded settings (`GameReport.experiment_config`,
+  filled from the recording by `eval.balance_eval`) and the earlier meetings' ticks. Every earlier meeting of a
+  game resumed play, since a meeting that ends the game is its last, so this is the live derivation. Consumers:
+  `compute_multi_signal_conversion` and `decompose_ejection_channels`, read by `scripts/build_sample_report.py`
+  (the summary at `:336`, `--baseline-out` at `:502` and `:513`) and by `audits/workflows/extract_gameplay_facts.py`,
+  which refuses experiment settings (`refuse_experiment_settings`). The scorecard, the census and the validity
+  gate do not reach it: `eval/process_scorecard.py` names it only in a definition that says it is not used.
+  Planted: on the fake reset recording (`vouching_game`, assembled by `assemble_tournament_report`, the sample
+  report's own assembly), `_regroup_ticks_before` equals the ticks each live meeting ran with (none at the
+  first meeting, then every earlier meeting's resume tick); the last meeting turned into an impostor ejection whose one voice rests on a sighting
+  at the previous regroup tick or the tick after it decomposes to `{body_proximity}` and the multi-signal fold
+  counts 0 inform conversions; with the window withheld (`derive_regroup_ticks` patched empty) the same fold
+  reads `{single_witness_inform}` and counts 1; a sighting two ticks past the regroup still informs; the
+  `preserve` twin (the same planted game with no recorded settings) reads `{single_witness_inform}` and 1, as
+  before this card. The committed sets fold byte-identically: the four `build_sample_report --check` runs.
+- (b) `eval/vj_instruments.py`: **threaded**, not refused. `_pre_vote_graphs` passes the walked meeting's
+  `regroup_ticks` (the funnel walk's `_VJMeeting` already carried them). Consumer: `compute_vj_instruments`, read
+  by `scripts/measure_baseline.py --vj` (`:785`) on any directory; `eval/deception_instruments.py` imports only
+  the funnel's carriers, not this module. `measure_baseline.py` is the command the record card runs on the
+  candidate (`--honesty`), and `--vj` is a flag of the same command, so it is candidate-facing. Planted: a spy on
+  the derivation reads each meeting's live window over the whole fold of the fake reset recording, and a
+  planted one-voice turn at the last regroup tick moves every listening crewmate's row by the absence lift
+  (+0.08) with the window and by the inform lift (+0.05) without it.
+- (c) `eval/deception_instruments.py` (FROZEN): `_refuse_the_meeting_reset` reads each replay's recorded
+  settings (`recorded_experiment_config`) and raises, naming `meeting_reset='hub_with_grace'` and the seed,
+  before `_walk_set_vj` runs. No evidence semantics change: `_restricted_grounded_subjects` and every other fold
+  are byte-identical, `tests/eval/test_deception_instruments.py` stays green, and the refusal fires on the reset
+  alone (a `preserve` recording, one stating `preserve` explicitly, and one with two other wave settings all reach
+  the walk). The departure is declared under Record impact.
+
+**Finding 2: integration.** Beside the merge above, `docs/observation-contract.md` now takes the body-handle
+card's hand-off: full model-facing removal is in temporal mode; without it,
+`report_body_handle_version = 1` changes the report opening alone, naming the corpse by its public
+`body-{victim_id}` handle (no death tick) and reading "a body" for a corpse missing from the state; with neither,
+the opening still carries the internal id. That is the builder's docstring at the strength it delivers
+(`orchestrator/game.py`, `_build_meeting_trigger`). The test reads the setting from `RecordedExperimentConfig`
+and the handle from `observation.body_ids.public_body_id`; the planted case is the paragraph as it read before
+the setting existed.
+
+**Further readers found, not in the ruling and left unchanged.** A search over every production caller of the
+window-bearing functions (`derive_belief_evidence`, `extract_belief_evidence`, `grounded_vouch_subjects`,
+`is_relevant_sighting`, `reconstruct_stated_paths`, `detect_corroborations`, `detect_contradictions`,
+`independent_voices`, `absent_players`, `build_testimony_ledger`, `build_evidence_rows`) found two more that can
+read a reset recording at the no-regroup default. Neither is in the record card's path, and neither file is this
+card's, so both are the PR's question to the orchestrator:
+- `scripts/counterfactual_phase21.py::_ledger_for` builds the testimony ledger without the window over the
+  golden walk. Its `--sets` mode takes any set name under `replays/`; its `--recording` mode requires the Wave-2
+  substrate slate, which a Stage-B candidate does not carry.
+- The FROZEN concluded lab probes `experiments/lab/deception_battery.py`, `deflection_probe.py`,
+  `forward_redesign_conversion_probe.py`, `forward_redesign_detector_sweep.py`, `meeting_prompt_battery.py` and
+  `vent_escape_lab.py` call `detect_contradictions` without the window, like `inference_testimony_probe.py`,
+  which the Evidence section already lists.
+
+**Red before, green after.** The 15 new instrument tests and the contract test, run against the pre-round
+bytes of the three modules and the contract (swapped in from byte copies, restored, sha256 equal):
+`pytest tests/eval/test_regroup_instruments.py tests/orchestrator/test_meeting_reset_coherence.py::test_the_contract_names_the_recorded_body_handle_setting`
+exit 1, 10 failed and 31 passed. Red: both `informs_nobody` cases (the inform credited), the two V&J tests (no
+window reaches the derivation; the rows equal the unwindowed ones), the two deception refusals (the walk ran
+first), the contract test, and three tests that call the new helper (`window_each`, `reads_no_window`,
+`withheld`, red because the helper and the module's import of the derivation do not exist yet). Green, as controls must be: `just_past_the_window`, the `preserve` twin, the
+three `names_the_reset_and_nothing_else` cases, and the 25 tests this card already had in the file. With the
+round's bytes: 41 passed.
+
+**The bounded mutation pass**, over the spans this round changed, with the listed classes only. Each mutant
+replaced one snippet, ran `tests/eval/test_regroup_instruments.py` plus the module's own suite
+(`test_gate_spec_metrics.py` and `test_wave2_metrics.py`, `test_vj_instruments.py`, or
+`test_deception_instruments.py`) with `-x`, and was restored from a byte copy (20 restored, sha256 equal). 20
+mutants, 19 red on the first run; the one survivor is equivalent. None needed a new planted case.
+
+| Id | Class | First red test |
+| --- | --- | --- |
+| N-MQ-derive-kw | neuter the keyword | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| M-MQ-call-arg | message argument to constant (`frozenset()`) | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| M-MQ-call-index | tick read to constant (`meeting_index` to 0) | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| M-MQ-config | loaded source to literal (settings to `None`) | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-tick | tick read to constant | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-slice | drop a filter (every meeting) | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-slice-next | swap a collection (this meeting too) | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-branch | swap branches (the band test inverted) | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| N-VJ-kw | neuter the keyword | `test_the_vj_pre_vote_fold_reads_each_meetings_window` |
+| M-VJ-const | message argument to constant | `test_the_vj_pre_vote_fold_reads_each_meetings_window` |
+| N-DI-call | neuter the refusal | `test_the_deception_instruments_refuse_the_reset_by_name_before_walking` |
+| M-DI-order | swap adjacent statements (walk first) | `test_the_deception_instruments_refuse_the_reset_by_name_before_walking` |
+| M-DI-none | None test inverted | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings0]` |
+| M-DI-none-only | comparison replaced by a None test | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings2]` |
+| M-DI-eq | comparison inverted | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings2]` |
+| M-DI-literal | loaded source to literal (`"preserve"`) | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings2]` |
+| M-DI-seeds | swap a collection (first seed only) | `test_a_set_with_one_reset_recording_is_refused_at_that_seed` |
+| M-DI-seed-path | read to constant (first seed's file) | `test_a_set_with_one_reset_recording_is_refused_at_that_seed` |
+| M-DI-msg-seed | message argument to constant | `test_the_deception_instruments_refuse_the_reset_by_name_before_walking` |
+| M-DI-msg-value | message argument to constant (`'hub_with_grace'`) | survives, equivalent: the branch runs only when the value is `'hub_with_grace'`, so the message bytes are equal |
+
+**Verification at `6fb328a8`.** A bare shell with 0 `AILIBI_*` exports; each exit code captured from the process,
+never through a pipe.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 199 passed |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `build_sample_report.py` on a fake `hub_with_grace` set (seeds 1000-1002, 7 meetings, recorded into the scratchpad by `tests/_helpers/scripted_meeting.record_game`): write, then `--check`, then `--baseline-out` | exit 0 each; 0 impostor ejections, so every channel count reads 0 |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted; `git grep -l` for the files | 956 `"meeting_reset":"preserve"`, in 101 files |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as recomputed in the merge |
+| `scripts/build_demo_bundle.py`, at an export of `cb0a4cfc` and at `6fb328a8` | exit 0 each, 156 JSON files baked; `diff -r` of the two `data/` trees prints nothing (exit 0). The export reads the same replay bytes through a link (`diff -rq` of its archived `replays/` against the branch's is empty), so the file times that stamp `created_at` agree |
+| `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
+| `git diff --stat cb0a4cfc 6fb328a8 -- engine/ frontend/ eval/off_menu.py replays/ observation/ orchestrator/experiment_config.py eval/gameplay_census.py eval/leak_scan.py api/schemas.py docs/architecture.md` | empty |
+
+`bash scripts/check.sh` runs once, at the head that carries this subsection; its exit code is recorded in the
+next commit, which changes only that line.
+
+**Changed test expectations.** None. The round adds 17 tests (15 in `tests/eval/test_regroup_instruments.py`, 2
+in `tests/orchestrator/test_meeting_reset_coherence.py`) and weakens, skips or deletes none.
+
+**Closing greps.** `git grep -n -i -E "removal is implemented only in temporal|only in temporal mode|OFF opening
+descriptions|passes no window|does not pass them|inherit the funnel's refusal|need no edit" -- ':!tasks/phase-*'
+':!agent_prompts' ':!audits'`, at `6fb328a8`. The hits:
+- this card's own record of `d801eb3c` (Results, the stop-and-ask bullets), now stated in the past;
+- `tasks/work/report-body-handle.md:350` and `:642`, that card's hand-off, and
+  `tasks/work/stage-b-readers.md:601`, that card's record of the readers before this ruling; neither is
+  rewritten;
+- `tasks/investigations-2026-09-24/vent_witness_and_exit.md:155`, an unrelated "need no edit";
+- `tests/orchestrator/test_meeting_reset_coherence.py`, the planted pre-setting paragraph.
+
+**Limitations.**
+- The planted ejections are carriers built from a fake reset game: the fake provider ejects nobody, so the fake
+  set's own fold reads 0 on every channel with or without the window. The record is the first real reading.
+- The two readers under "Further readers found" read a reset recording without the window if pointed at one.
