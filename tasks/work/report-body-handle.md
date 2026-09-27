@@ -164,6 +164,15 @@ Every test below lives in `tests/orchestrator/test_report_body_handle.py`, uses
 the fake provider or a hand-built state, and writes only under `tmp_path`.
 `LEGACY_BODY_HANDLE_PATTERN` is `experiments/held_out_prefixes.py:168`.
 
+- [x] Review correction: the branch takes `main` at `f83050c6` (the look-and-wait card, PR #489)
+  by merge commit `ef391150`, never by a rebase. `WAVE_ARMS_PENDING` keeps both cards' removals,
+  so only the two ballot values stay pending, and the arm page's pending sentence and the
+  re-derived inventory sentence say the same. Proof at the merged head:
+  `tests/orchestrator/test_experiment_arms.py::test_a_value_is_pending_exactly_while_its_behaviour_is_unbuilt`
+  and `test_the_arm_is_no_longer_pending` pass. Restoring any removed name, dropping a ballot
+  name or changing a ballot value fails the first (round-3 probe R1-R7). `scripts/validate_task_docs.py`
+  passes and refuses either side's sentence (R10, R11). Every Validation command passes at
+  `ef391150`, and `bash scripts/check.sh` at the round's final head.
 - [x] Review correction: the Results claim no more about the card's probe table than the module
   asserts, and the module now asserts every cell. For each of the table's three rows,
   `test_the_probe_table_is_measured_on_these_games` pins the prompts, the report and emergency
@@ -942,3 +951,144 @@ inventory sentence in `tasks/README.md` is unchanged, and `validate_task_docs.py
 and passes. No `audits/` or `tests/fixtures/` byte moved, so no `docs/artifacts.md` row changes.
 The held-out band is untouched. The dispatch named this subsection's date 2026-09-26; it carries
 the date the work was done, 2026-09-27, after round 1's subsection of the same date.
+
+### Review corrections, round 3 (2026-09-27)
+
+The integration review at `609b3541` raised one blocking finding. `main` moved from `f98bfae9` to
+`f83050c6` when the look-and-wait card (B1, PR #489) merged, and PR #488 then conflicted. The fix
+is merge commit `ef391150`, and this subsection lands in the commit after it. Every command below
+ran at `ef391150` in a bare shell with 0 `AILIBI_*` exports, unless a line names another commit.
+
+**The finding: valid, accepted.** B1 deleted its two names from `WAVE_ARMS_PENDING` and flipped
+its card. This branch deleted `report_body_handle_version` from the same mapping and re-derived the
+same index sentence. The merge had to keep both deletions and re-derive the sentence, and then
+every gate had to run again at the merged head.
+
+**The merge.** `git merge origin/main` at `f83050c6`, never a rebase. `ef391150` has the parents
+`609b3541` and `f83050c6`. Three paths conflicted, and each keeps both sides:
+- `orchestrator/experiment_config.py`: `WAVE_ARMS_PENDING` keeps B1's deletion of
+  `vent_exit_policy` `look_and_wait` and `vent_entry_policy` `own_fresh_kill`, and this card's
+  deletion of `report_body_handle_version` 1. Only `ballot_kill_row_version` 1 and
+  `impostor_ballot_version` 1 stay pending.
+- `docs/experiment-arms.md`: the pending-guard sentence lists version 1 of both ballot fields. It
+  names the physical rule, `look_and_wait`, `own_fresh_kill` and version 1 of the body handle as
+  built.
+- `tasks/README.md`: the inventory sentence reads 88 cards: 4 ready, 1 active, 83 done.
+  `scripts/validate_task_docs.py` re-derives it and passes. The dispatch expected 4 ready and 84
+  done, which assumes this card is `done`. It is `active` on its branch (see Status below), so the
+  validator counts 1 active and 83 done.
+
+Every other path merged without a conflict. That includes B1's edits to
+`tests/orchestrator/test_experiment_config.py` and `tests/eval/test_recorded_arm_readers.py`,
+which this card also edits.
+
+**The card's diff after the merge.** `git diff --name-only f83050c6 HEAD` lists the same 9 paths
+as `git diff --name-only f98bfae9 609b3541`. For 7 of them the changed lines are the same before
+and after the merge. The check compares the `+` and `-` lines of
+`git diff f98bfae9 609b3541 -- <path>` with those of `git diff f83050c6 ef391150 -- <path>`. The
+two paths that differ are the two resolved sentences, in `docs/experiment-arms.md` and
+`tasks/README.md`. `orchestrator/experiment_config.py` still changes by one deleted pending line.
+
+**Mutation probe**, bounded to the resolved spans: the `WAVE_ARMS_PENDING` mapping, the arm page's
+pending sentence and the inventory sentence. Each mutant is one exact-string edit applied to the
+pristine bytes. For a code mutant the runner runs the suites the merge touches as
+`pytest -n 6 --dist loadfile`:
+- `tests/orchestrator/test_experiment_config.py`
+- `tests/orchestrator/test_experiment_arms.py`
+- `tests/eval/test_recorded_arm_readers.py`
+- this card's module
+- B1's `tests/agents/test_vent_look_and_wait.py`, `tests/experiments/test_vent_look_and_wait_game.py`
+  and `tests/experiments/test_tactical_gameplay.py`
+
+For a text mutant it runs `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` and
+`tests/orchestrator/test_experiment_arms.py`. The file is restored from a copy, never from git.
+Every restore matched the pristine sha256, and `git status` was empty afterwards.
+
+| mutant | class | edit | result | failing, among others |
+|---|---|---|---|---|
+| R1 | drop a member | `report_body_handle_version` 1 put back as pending (resolved as main's side) | killed: 4 failed, 6 errors | the spine's pending equality, `test_the_live_meeting_passes_the_recorded_body_handle_arm`, both readers' trigger spies, this card's module |
+| R2 | drop a member | `look_and_wait` put back as pending | killed: 28 failed, 6 errors | the pending equality, the lab-candidate tests, B1's game tests |
+| R3 | drop a member | `own_fresh_kill` put back as pending | killed: 29 failed, 6 errors | the same, and the factory refusal |
+| R4 | drop a member | both put back (resolved as this branch's side) | killed: 31 failed, 6 errors | the pending equality |
+| R5 | drop a member | `ballot_kill_row_version` dropped | killed: 1 failed | the pending equality |
+| R6 | drop a member | `impostor_ballot_version` dropped | killed: 1 failed | the pending equality |
+| R7 | read to constant | the kill-row value 1 changed to 2 | killed: 4 failed | the pending equality, the validation and runner refusals |
+| R8 | text | the arm-page sentence resolved as this branch's side | not caught | none |
+| R9 | text | the arm-page sentence resolved as main's side | not caught | none |
+| R10 | text | the index sentence resolved as this branch's side (5 ready, 1 active, 82 done) | killed | `validate_task_docs.py` exits 1 |
+| R11 | text | the index sentence resolved as main's side (5 ready, 83 done) | killed | `validate_task_docs.py` exits 1 |
+
+The spine's pending equality is
+`tests/orchestrator/test_experiment_arms.py::test_a_value_is_pending_exactly_while_its_behaviour_is_unbuilt`.
+It failed under each of R1 to R7.
+
+R8 and R9 are not code mutants. The arm page's pending sentence is prose, and no gate reads it:
+`check_doc_facts.py`, `validate_task_docs.py` and the spine's page checks (fields, links and
+environment switches) all pass on both variants. This round adds no gate for the sentence, for
+three reasons:
+- it states no number;
+- the spine's test module is outside this card's scope;
+- the ballot card rewrites the sentence when it deletes the guard.
+
+The resolved sentence was checked by reading it against the live mapping. The runner and its
+count-only logs are under the session scratchpad's `fix-b4-r3/` directory, outside the tree.
+
+**B1's lab rows at the merged head.** This command exits 0:
+`uv run python -m experiments.tactical_gameplay --split development --arms baseline stage_b_full --output <scratch>/lab.json`.
+All 32 games, 8 seeds on each roster for each arm, reproduce the replay hash, trajectory hash and
+counts of their rows in `audits/tactical-gameplay/stage-b-development.json`. Both arms' configs
+are equal. This command prints 32:
+
+```sh
+python3 -c 'import json,sys;a,b=(json.load(open(p)) for p in sys.argv[1:3]);print(sum(x["replay_sha256"]==y["replay_sha256"] and x["counts"]==y["counts"] and x["trajectory_sha256"]==y["trajectory_sha256"] for arm in ("baseline","stage_b_full") for s in ("4p1i","9p2i") for x,y in zip(a["arms"][arm]["sets"][s],b["arms"][arm]["sets"][s])))' <scratch>/lab.json audits/tactical-gameplay/stage-b-development.json
+```
+
+`stage_b_full` leaves the body handle out (`STAGE_B_FULL_SETTINGS`), so the lab walks only this
+card's default path. The run's `source_sha256` differs from the committed one, as it must: it
+hashes `orchestrator/`, which this card changes. It records the run's provenance, and no gate
+compares it. No byte under `audits/` moved.
+
+**Validation** at `ef391150`, each command's real exit code:
+
+| command | exit | result |
+|---|---|---|
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_report_body_handle.py -q` | 0 | 69 passed |
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_temporal_delivery.py tests/orchestrator/test_experiment_config.py tests/experiments/test_held_out_prefixes.py tests/meetings/test_prompt_byte_golden.py -q` | 0 | 197 passed |
+| `uv run pytest -p no:cacheprovider tests/meetings/test_prompt_byte_golden.py -q` | 0 | 35 passed |
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_report_body_handle.py -q -k probe_table` | 0 | 6 passed: every cell of the probe table holds |
+| `bash scripts/verify_samples.sh <set>` on `replays/samples/9p2i`, `replays/samples/4p1i`, `replays/ml_corpus/9p2i` and `replays/ml_corpus/4p1i` | 0, 0, 0, 0 | 50, 50, 150 and 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, once per set | 0, 0, 0, 0 | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks, 390 prompts, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | every check passed |
+| `uv run pytest -p no:cacheprovider -m campaign -q` | 0 | 336 passed, 9516 deselected |
+| `git diff --name-only f83050c6 HEAD` | 0 | the 9 paths listed above; `f83050c6` is the merge base |
+
+The 69 tests of this card's module include the planted and perturbed cases the dispatch named:
+- the arm-ON leak checks and their planted builder without the substitution;
+- the OFF control forced ON (`test_forcing_the_arm_on_changes_every_report_opening`);
+- the reset-alone plant;
+- the census end-to-end test and its perturbed opening.
+
+Each passes at `ef391150` with the numbers in the Acceptance evidence table above. The module is
+byte-identical to `609b3541`'s.
+
+**Publication.** `uv run python scripts/build_demo_bundle.py --out <scratch>` ran twice in this
+checkout: once at `ef391150`, and once with every path of `git diff --name-only f83050c6 ef391150`
+set to its `f83050c6` bytes. The paths were then restored from copies, sha256 checked, and
+`git status` was empty. Each build baked 156 JSON files for 7 featured games in 2 sets. `diff -r`
+printed nothing, both on the two `data/` trees and on the two whole bundles. Both builds read the
+same checkout, so the replay mtimes were equal.
+
+**The full gate.** `bash scripts/check.sh` runs once in this round, alone, in this clean worktree,
+at the round's final head, which is the commit that adds this subsection. PR #488's body records
+its exit code and counts.
+
+**Status.** It stays `active`. The last box still waits on the owner's answer to the PR's
+Question, and this round does not tick it. This card's changes to the four paths that Question
+names are the same after the merge, apart from the two resolved sentences. No `audits/` or
+`tests/fixtures/` byte moved, so
+no `docs/artifacts.md` row changes. The held-out band is untouched, and
+`tests/experiments/test_held_out_prefixes.py` passes.
