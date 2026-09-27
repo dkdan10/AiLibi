@@ -135,6 +135,25 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
 
 ## Acceptance
 
+- [x] Review correction (round 4): evidence honesty's per-decision rebuild reads every arm through
+  its own field list, so dropping any member of that list fails a case. In
+  `tests/eval/test_recorded_arm_readers.py`, `test_honesty_verifies_every_arm_it_reads` asserts that
+  `reconstruct_impostor_decisions` returns decisions for the plain, workload, physical and
+  observed-risk arms and for the copy carrying the pending meeting and trigger values, and
+  `test_honesty_hands_a_pending_tactical_value_to_the_policy_builder` walks both honesty walks to the
+  factory's refusal of each pending tactical value. The verifier's probe R1
+  (`HONESTY_READS - {"vent_witness_rule"}` at the rebuild's site) is red, as are the other one-member
+  drops at that site and the entry-rule drop at the cells' site: Results, "Review corrections,
+  round 4".
+- [x] Review correction (round 4): the physical arm walks the rebuild too, so round 3's claim that
+  every recorded-arm refusal accepts the physical arm now holds for the rebuild's refusal. The
+  rebuild joins `_EVERY_READER` as `honesty decision rebuild`:
+  `test_on_a_physical_recording_the_stand_in_and_the_rule_reach_every_advance` shows the stand-in
+  and the rule `physical` (`both_rooms` when withheld) on every tick advance the rebuild drives, with
+  its decisions non-empty and unchanged, and
+  `test_an_engine_setting_the_helper_does_not_thread_is_refused_by_name` refuses it by name. Under
+  R1 both rebuild reach cases are red; under P2R (the spine's helper handed no config) the rebuild's
+  threaded reach case and its refusal case are red.
 - [x] Review correction (round 3): the settings refusal reads a recording's settings off a
   `TickOpened` only, and a stream led by any other event passes it through. In
   `tests/eval/test_recorded_arm_readers.py`,
@@ -1252,3 +1271,102 @@ inventory sentence.
 The gate ran once, on `182503d9`, which carries this subsection without the `check.sh` row above.
 The commit that adds the row changes nothing else, and the task-docs validator was re-run on it
 (exit 0).
+
+### Review corrections, round 4 (2026-09-26)
+
+Two blocking findings from the round-4 verifiers on `ae5f2879`, both about one survivor, plus the
+dispatch's scoped follow-up: merge `main`, then run the physical-witness leg of the event-level
+test. The PR carries no Codex inline comment, only the review summary, so there is none to answer.
+
+- **The merge.** `git merge origin/main` reports "Already up to date". `origin/main` is still
+  `fb9d2e31`, which round 3 merged in `638a7c26`. `scripts/validate_task_docs.py` accepts the
+  inventory sentence unchanged at 88 cards, 7 ready and 81 done. `git diff fb9d2e31 <head>` still
+  shows only this card's work.
+- **The survivor.** `eval/evidence_honesty.py` passes `HONESTY_READS` to `read_recorded_settings`
+  at two sites: the I-11 cells' walk under `compute_evidence_honesty`, and the per-decision rebuild
+  in `reconstruct_impostor_decisions`. Round 3 walked every arm through the cells' walk. It walked
+  the rebuild only on the observed-risk arm (the recorded-policy case and the meeting-hook case) and
+  on the reset arm (its refusal). So dropping `vent_witness_rule` from the rebuild's list stayed
+  green, and so did dropping `redistribution_policy`, `vent_entry_policy`,
+  `report_body_handle_version`, `ballot_kill_row_version` or `impostor_ballot_version`. The mutant
+  is not equivalent. Under it the rebuild refuses the physical recording with the unread-setting
+  message. That breaks round 3's claim that every recorded-arm refusal accepts the physical arm.
+- **The fix (`b1038ebc`, tests only).**
+  - `test_honesty_verifies_every_arm_it_reads` asserts that
+    `reconstruct_impostor_decisions(recordings[arm], seed=0)` returns at least one decision for
+    each of the four arms, the physical one included. It asserts the same for the copy carrying the
+    three pending meeting and trigger values.
+  - The rebuild joins `_EVERY_READER` as `honesty decision rebuild`. So
+    `test_on_a_physical_recording_the_stand_in_and_the_rule_reach_every_advance` now covers nine
+    readers, threaded and withheld (18 cases). The stand-in reaches every tick advance the rebuild
+    drives, and so does the rule: `physical`, or `both_rooms` when withheld. The rebuilt decisions
+    are non-empty and equal with and without the stand-in. Each is reduced to its tick, actor,
+    memory size, ranking and intent, so a failure prints no memory row.
+    `test_an_engine_setting_the_helper_does_not_thread_is_refused_by_name` now refuses the rebuild
+    by name too.
+  - `test_honesty_hands_a_pending_tactical_value_to_the_policy_builder` (4 cases) holds the
+    tactical fields no recording can carry yet. It copies the plain recording with
+    `vent_exit_policy="look_and_wait"` or `vent_entry_policy="own_fresh_kill"`. Each honesty walk
+    then reaches the factory's `UnbuiltTacticalOptionError`, matched on the field and value. A walk
+    that dropped the field would refuse the copy first, with a plain `ValueError`. This case was
+    added after the first probe batch found the entry rule held at neither site (R5, and R5C at the
+    cells' site).
+- **The physical-witness leg.** Round 3 ran it on the eight readers. The rebuild is now the ninth.
+  Every reader accepts the physical recording, and the stand-in and the recorded rule reach every
+  advance each reader drives, the rebuild's included.
+
+**Changed tests** (none weakened, skipped or deleted): the readers file goes from 154 to 161 cases.
+The rebuild adds three through `_EVERY_READER` (two reach cases and one engine-setting refusal), and
+the pending-tactical case adds four.
+
+**Round-4 probes.** The procedure is round 3's: one edit per probe, made in place from a byte copy.
+Each probe ran `tests/eval/test_recorded_arm_readers.py tests/eval/test_evidence_honesty.py` with
+`pytest -q -n 6 -p no:cacheprovider`. It ran first with the readers file at its `ae5f2879` bytes,
+then at its round-4 bytes. P2R ran with `-k rebuild`. R1 to R13 and P2R ran before the
+pending-tactical case existed. R5 was re-run after it was added, and R5C and R4C ran then too. Every
+file was restored from its copy and its sha256 compared; all restores matched and the tree held
+only the intended test edit after. The probe script is a scratch file, not committed. "Rebuild" is
+the `reads=` argument inside `reconstruct_impostor_decisions`, "cells" the one the I-11 walk passes.
+
+| Probe | Edit (operator class) | At `ae5f2879` | At round 4 |
+| --- | --- | --- | --- |
+| R1 | rebuild: `HONESTY_READS - {"vent_witness_rule"}` (drop one member; the verifier's probe) | green, 266 passed | red: the every-arm case and both rebuild reach cases |
+| R2 | rebuild: `frozenset()` (drop every member) | red, 2 cases | red, 5 cases |
+| R3 | rebuild: `- {"redistribution_policy"}` (drop one member) | green | red: the every-arm case |
+| R4 | rebuild: `- {"vent_exit_policy"}` | red | red |
+| R5 | rebuild: `- {"vent_entry_policy"}` | green | red: `[vent_entry_policy-decision rebuild]` |
+| R6 | rebuild: `- {"bounded_rebuttal_version"}` | red | red |
+| R7 | rebuild: `- {"report_body_handle_version"}` | green | red: the every-arm case |
+| R8 | rebuild: `- {"ballot_kill_row_version"}` | green | red: the every-arm case |
+| R9 | rebuild: `- {"impostor_ballot_version"}` | green | red: the every-arm case |
+| R10 | rebuild: `READABLE_SETTINGS` (one collection swapped for a related one) | red | red |
+| R11 | rebuild: the `read_recorded_settings` wrapper around its walk dropped (drop a wrapper) | red | red |
+| R12 | rebuild: `reader=` to `'r'` (a message argument to a constant) | red | red |
+| R13 | cells: `- {"vent_witness_rule"}` | red | red |
+| R4C | cells: `- {"vent_exit_policy"}` | red | red |
+| R5C | cells: `- {"vent_entry_policy"}` | green | red: `[vent_entry_policy-cells]` |
+| P2R | `eval/replay_walk.py`'s `engine_arguments(experiment)` to `engine_arguments(None)` (a loaded source's read replaced with the canonical literal), `-k rebuild` | green (the one policy case) | red: the rebuild's threaded reach case and its refusal case |
+
+16 probes, no survivor. Seven were green against the round-3 tests (R1, R3, R5, R7, R8, R9, R5C),
+and P2R had no rebuild case to turn red. R5C sits at the cells' site, which the round-4 finding did
+not name; the same pending-tactical case holds it. P2R edits the spine's file only inside the probe,
+restored byte for byte; this card does not change it.
+
+**Verification.** These runs used the production and test bytes of `b1038ebc`. No production module,
+recording, derived view, fixture, doc fact or `audits/` byte moved in round 4. `git diff --stat
+ae5f2879 b1038ebc` lists the one test file, so the round-3 bundle comparison still holds.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/eval/test_recorded_arm_readers.py tests/meetings/test_transcript.py tests/meetings/test_prompt_byte_golden.py tests/_helpers tests/experiments/test_gameplay_facts_refuses_experiments.py tests/scripts/test_process_scorecard.py -q -n 6` | exit 0, 436 passed (429 at round 3, plus the 7 new cases) |
+| `uv run pytest tests/eval/test_evidence_honesty.py tests/eval/test_funnel.py tests/eval/test_kill_craft.py tests/eval/test_solvability.py tests/eval/test_win_condition_selfcheck.py tests/meetings/test_reasoning_evidence.py tests/meetings/test_manager.py -q -n 6` | exit 0, 491 passed |
+| `bash scripts/verify_samples.sh replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check`; `uv run python scripts/publish_gameplay_census.py --check` | exit 0 each |
+| `uv run python scripts/measure_baseline.py --honesty replays/samples/9p2i` and `... replays/samples/4p1i` | exit 0 each; sha256 `97aa858e...` and `d0500f96...`, the values above |
+| `uv run python scripts/publish_process_scorecard.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; equal, as parsed JSON, to `sets[1]` of `docs/process-scorecard.json` |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | exit 0 each (88 work cards) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 62 checks, 50 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run lint-imports` | exit 0 |
+| `uv run pytest -m campaign -q -n 6` | exit 0, 336 passed |
+| `git diff --stat fb9d2e31 HEAD -- replays agents engine observation orchestrator api frontend docs/process-scorecard.md docs/process-scorecard.json` | empty |
