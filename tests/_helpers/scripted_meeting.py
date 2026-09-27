@@ -15,20 +15,29 @@ experiment config, with the meeting runner built from that config
 (``build_default_meeting_runner(profile=...)``) and no environment export, on
 the prompt set the committed recordings use, and writes the ``roster.json`` the
 readers resolve the roster from and the ``MANIFEST.md`` row the recorder's own
-manifest writer (``scripts/_manifest_writer.py``) derives from the replay. The
-ballot cases of a later card add their own scripts beside
-:data:`ACCUSE_THE_OPENER` and :data:`ACCUSE_A_NON_OPENER`.
+manifest writer (``scripts/_manifest_writer.py``) derives from the replay.
+
+The ballot cases (:class:`ScriptedBallot`) script one named voter's ballot in one
+meeting: its target, its confidence and what it cites. A citation is read off the
+ballot prompt the voter was actually served, never invented: ``"own_row"`` cites
+the first first-hand row the prompt's evidence block holds about the target, and
+``"accusing_turn"`` the first row saying someone spoke against the target at
+this table. A scripted citation the prompt does not hold raises, so a script can
+never record an id the voter did not hold. :data:`BALLOT_ARMS_SEED` and
+:data:`BALLOT_ARMS_SCRIPT` are the ballot card's scripted game, recorded on the
+round-1 config (:data:`ROUND_ONE_CONFIG`).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from pydantic import BaseModel
 
@@ -116,6 +125,64 @@ ACCUSE_A_NON_OPENER: Final[tuple[Accusation, ...]] = (
 )
 
 
+BallotCitation = Literal["own_row", "own_kill_row", "accusing_turn"]
+
+
+@dataclass(frozen=True)
+class ScriptedBallot:
+    """Voter ``voter``'s ballot in scripted meeting ``meeting``.
+
+    ``target`` is a player id or ``"SKIP"``. ``cite`` names what the ballot
+    cites, read off the prompt the voter was served: ``None`` cites nothing,
+    ``"own_row"`` the first first-hand evidence row about ``target`` and
+    ``"own_kill_row"`` the first one saying the voter watched ``target`` kill
+    (either observation id goes in ``primary_reason_observation_id``), and
+    ``"accusing_turn"`` the first evidence row saying someone spoke against
+    ``target`` (its turn id goes in ``primary_reason_id``).
+    """
+
+    meeting: int
+    voter: str
+    target: str
+    confidence: float = 0.9
+    cite: BallotCitation | None = None
+
+
+#: One served evidence row: subject, description, provenance clause, citation.
+_EVIDENCE_ROW = re.compile(
+    r"^- `(?P<subject>p-\d+)` \S+ (?P<description>.+?) "
+    r"\((?P<provenance>[^;\n]+); cite `(?P<citation>[^`\n]+)`\)$",
+    re.MULTILINE,
+)
+
+
+def served_citation(prompt: str, *, target: str, cite: BallotCitation) -> str:
+    """The id the ballot prompt's evidence block offers for ``cite`` about ``target``.
+
+    Raises when the prompt holds no such row, so a script cannot cite what the
+    voter was not served.
+    """
+
+    block = prompt.split("<evidence>", 1)[-1].split("</evidence>", 1)[0]
+    for match in _EVIDENCE_ROW.finditer(block):
+        if match["subject"] != target:
+            continue
+        first_hand = match["provenance"].startswith("first-hand")
+        if cite == "own_row" and first_hand:
+            return match["citation"]
+        if (
+            cite == "own_kill_row"
+            and first_hand
+            and match["description"].startswith("you watched them KILL in ")
+        ):
+            return match["citation"]
+        if cite == "accusing_turn" and " spoke against them in turn " in (
+            f" {match['description']}"
+        ):
+            return match["citation"]
+    raise ValueError(f"the ballot prompt serves no {cite} row about {target}")
+
+
 @dataclass
 class ScriptedMeetingClient:
     """The fake provider, except on the turns :attr:`script` names.
@@ -127,6 +194,7 @@ class ScriptedMeetingClient:
 
     script: Sequence[Accusation]
     ejections: Sequence[Ejection] = ()
+    ballots: Sequence[ScriptedBallot] = ()
     fake: FakeProvider = field(default_factory=FakeProvider)
     meeting: int = -1
     speakers: list[str] = field(default_factory=list)
@@ -155,6 +223,34 @@ class ScriptedMeetingClient:
         )
         if schema is ModelAuthoredVoteBallot:
             self.in_ballots = True
+            for ballot in self.ballots:
+                if (ballot.meeting, ballot.voter) != (self.meeting, agent_id):
+                    continue
+                cited = (
+                    served_citation(prompt, target=ballot.target, cite=ballot.cite)
+                    if ballot.cite is not None
+                    else None
+                )
+                text = json.dumps(
+                    {
+                        "voter": agent_id,
+                        "target": ballot.target,
+                        "confidence": ballot.confidence,
+                        "primary_reason_id": (
+                            cited if ballot.cite == "accusing_turn" else None
+                        ),
+                        "primary_reason_observation_id": (
+                            cited
+                            if ballot.cite in ("own_row", "own_kill_row")
+                            else None
+                        ),
+                        "considered_alternatives": [],
+                        "decision_basis": "cited" if cited is not None else None,
+                        "rationale_text": f"I vote {ballot.target}.",
+                    }
+                )
+                ModelAuthoredVoteBallot.model_validate_json(text)
+                return response.model_copy(update={"text": text})
             for ejection in self.ejections:
                 if ejection.meeting != self.meeting:
                     continue
@@ -272,12 +368,89 @@ def record_game(
     return path
 
 
+#: The round-1 config the Stage-B decision memo declares (section 1, "Arms"),
+#: as the literal the record card's config file holds.
+ROUND_ONE_CONFIG: Final[dict[str, object]] = {
+    "format_version": 1,
+    "meeting_reset": "hub_with_grace",
+    "vent_exit_policy": "look_and_wait",
+    "vent_entry_policy": "own_fresh_kill",
+    "vent_witness_rule": "physical",
+    "bounded_rebuttal_version": 1,
+    "report_body_handle_version": 1,
+    "ballot_kill_row_version": 1,
+    "impostor_ballot_version": 1,
+}
+
+#: The ballot card's scripted game: a 9p2i fake game whose impostors are p-2
+#: and p-3 and whose crewmate p-1 watches p-3 kill before the first meeting,
+#: so p-1 holds a kill row at all three meetings.
+BALLOT_ARMS_SEED: Final[int] = 26
+
+#: Two accusations the impostors' ballots cite: p-4 accuses the opener at the
+#: first meeting, and p-3 (an impostor) accuses the opener at the second.
+BALLOT_ARMS_ACCUSATIONS: Final[tuple[Accusation, ...]] = (
+    Accusation(meeting=0, turn=3, against_turn=0, reason="you were alone by the body"),
+    Accusation(meeting=1, turn=2, against_turn=0, reason="you keep finding the bodies"),
+)
+
+#: The scripted ballots, every other ballot the fake provider's. Meeting 0: p-1
+#: ejects the killer it watched, citing its kill row; p-2 names p-1, citing p-4's
+#: accusation; p-3 names its teammate p-2, which the meeting layer records as
+#: SKIP. Meeting 1: p-2 names p-4, citing only its own sighting; p-3 names p-1,
+#: citing its own accusation. Meeting 2: both impostors name p-7 (p-2 citing its
+#: own sighting, p-3 nothing) and crewmate p-9 names p-7 below the tally's
+#: confidence floor, so the impostors' ballots alone carry p-7's ejection.
+BALLOT_ARMS_BALLOTS: Final[tuple[ScriptedBallot, ...]] = (
+    ScriptedBallot(meeting=0, voter="p-2", target="p-1", cite="accusing_turn"),
+    ScriptedBallot(meeting=0, voter="p-3", target="p-2"),
+    ScriptedBallot(meeting=0, voter="p-1", target="p-3", cite="own_kill_row"),
+    ScriptedBallot(meeting=1, voter="p-2", target="p-4", cite="own_row"),
+    ScriptedBallot(meeting=1, voter="p-3", target="p-1", cite="accusing_turn"),
+    ScriptedBallot(meeting=2, voter="p-2", target="p-7", cite="own_row"),
+    ScriptedBallot(meeting=2, voter="p-3", target="p-7"),
+    ScriptedBallot(meeting=2, voter="p-9", target="p-7", confidence=0.2),
+    ScriptedBallot(meeting=2, voter="p-1", target="p-9", confidence=0.3),
+)
+
+
+def record_ballot_arms_game(
+    directory: Path, *, config: RecordedExperimentConfig | None = None
+) -> Path:
+    """Record the ballot card's scripted game into ``directory``; return its path.
+
+    ``config`` defaults to :data:`ROUND_ONE_CONFIG`; a caller passes another to
+    record the same script under other arms.
+    """
+
+    return record_game(
+        directory,
+        seed=BALLOT_ARMS_SEED,
+        config=(
+            config
+            if config is not None
+            else RecordedExperimentConfig.model_validate(ROUND_ONE_CONFIG)
+        ),
+        client=ScriptedMeetingClient(
+            script=BALLOT_ARMS_ACCUSATIONS, ballots=BALLOT_ARMS_BALLOTS
+        ),
+    )
+
+
 __all__ = [
     "ACCUSE_A_NON_OPENER",
     "ACCUSE_THE_OPENER",
+    "BALLOT_ARMS_ACCUSATIONS",
+    "BALLOT_ARMS_BALLOTS",
+    "BALLOT_ARMS_SEED",
     "PROMPT_SET",
+    "ROUND_ONE_CONFIG",
     "Accusation",
+    "BallotCitation",
     "Ejection",
+    "ScriptedBallot",
     "ScriptedMeetingClient",
+    "record_ballot_arms_game",
     "record_game",
+    "served_citation",
 ]
