@@ -15,6 +15,7 @@ changes nothing else. This module holds that contract:
   emergency openings, every other prompt byte-identical once the fake provider's
   prompt-seeded tokens are normalized, or raw under a client whose answers do
   not depend on the handle; no temporal version; the registry's prompt stamps;
+  and the card's count-only probe table, pinned cell for cell;
 * the builder, over generated meetings, changes at most a reported corpse's
   handle and leaves temporal mode's text alone; under the arm a corpse gone from
   the state reads "a body" and never the engine id, which only the setting with
@@ -627,6 +628,152 @@ def test_the_normalization_is_needed_and_the_blind_client_removes_the_need(
     assert not _other_prompt_differences(
         recorded["seed1-blind-off"], recorded["seed1-blind-on"], normalize=False
     )
+
+
+@dataclass(frozen=True)
+class _ProbeRow:
+    """One row of the card's count-only probe table, measured on an OFF/ON pair."""
+
+    prompts: int
+    report_openings: int
+    emergency_openings: int
+    state_hashes_equal: bool
+    other_prompts: int
+    other_prompts_differing_raw: int
+    other_prompts_differing_normalized: int
+
+
+def _probe_row(off: _Played, on: _Played) -> _ProbeRow:
+    """Count the table's cells; the two games must agree on every shared count."""
+
+    shared = []
+    for played in (off, on):
+        kinds = [opening.trigger.kind for opening in played.openings()]
+        calls = sum(len(meeting.llm_calls) for meeting in played.meetings)
+        shared.append(
+            (
+                len(played.prompts()),
+                kinds.count("report"),
+                kinds.count("emergency"),
+                calls - len(kinds),
+            )
+        )
+    pair = f"{off.directory.parent.name} and {on.directory.parent.name}"
+    assert shared[0] == shared[1], f"{pair} disagree on shared counts {shared}"
+    prompts, reports, emergencies, others = shared[0]
+    return _ProbeRow(
+        prompts=prompts,
+        report_openings=reports,
+        emergency_openings=emergencies,
+        state_hashes_equal=not _hash_and_count_differences(off, on),
+        other_prompts=others,
+        other_prompts_differing_raw=len(
+            _other_prompt_differences(off, on, normalize=False)
+        ),
+        other_prompts_differing_normalized=len(
+            _other_prompt_differences(off, on, normalize=True)
+        ),
+    )
+
+
+#: The card's probe table (its Evidence and Results), cell for cell. The first
+#: three rows are the card's: the fake provider's replies follow the handle, so
+#: non-opening prompts differ raw, all 20 and all 40 on seeds 1 and 12 and 46 of
+#: seed 0's 61, and none once the fake tokens are normalized. The two
+#: handle-blind rows are the contrast, on the same seeds and shapes but the
+#: round-one set: their replies ignore the handle, and none differs raw.
+PROBE_TABLE: Final[Mapping[tuple[str, str], _ProbeRow]] = {
+    ("seed1-off", "seed1-on"): _ProbeRow(22, 2, 0, True, 20, 20, 0),
+    ("seed12-off", "seed12-on"): _ProbeRow(44, 4, 0, True, 40, 40, 0),
+    ("seed0-off", "seed0-on"): _ProbeRow(66, 4, 1, True, 61, 46, 0),
+    ("seed1-blind-off", "seed1-blind-on"): _ProbeRow(22, 2, 0, True, 20, 0, 0),
+    ("seed12-blind-off", "seed12-blind-on"): _ProbeRow(44, 4, 0, True, 40, 0, 0),
+}
+
+
+def test_the_probe_table_covers_every_narrowness_pair() -> None:
+    pairs = [(off_name, on_name) for off_name, on_name, _n in NARROWNESS_PAIRS]
+    assert list(PROBE_TABLE) == pairs
+
+
+@pytest.mark.parametrize(("off_name", "on_name"), list(PROBE_TABLE))
+def test_the_probe_table_is_measured_on_these_games(
+    recorded: _Recordings, off_name: str, on_name: str
+) -> None:
+    measured = _probe_row(recorded[off_name], recorded[on_name])
+    assert measured == PROBE_TABLE[(off_name, on_name)]
+
+
+SEED_1_PAIR: Final[tuple[str, str]] = ("seed1-off", "seed1-on")
+
+
+def _with_entry(played: _Played, index: int, entry: ReplayLogEntry) -> _Played:
+    entries = (*played.entries[:index], entry, *played.entries[index + 1 :])
+    return replace(played, entries=entries)
+
+
+def _moves_a_state_hash(played: _Played) -> _Played:
+    """Perturbed: the first tick row given another state hash."""
+
+    index = next(i for i, e in enumerate(played.entries) if isinstance(e, ReplayEntry))
+    row = played.entries[index]
+    assert isinstance(row, ReplayEntry)
+    moved = row.model_copy(update={"state_hash": "0" * len(row.state_hash)})
+    assert moved.state_hash != row.state_hash
+    return _with_entry(played, index, moved)
+
+
+def _edits_a_later_prompt(played: _Played) -> _Played:
+    """Perturbed: the first meeting's last prompt, not its opening, given a word."""
+
+    opening = played.openings()[0]
+    index = played.entries.index(opening.meeting)
+    *earlier, last = opening.meeting.llm_calls
+    assert len(earlier) != opening.call_index
+    edited = last.model_copy(update={"prompt": f"{last.prompt} perturbed"})
+    calls = (*earlier, edited)
+    return _with_entry(
+        played, index, opening.meeting.model_copy(update={"llm_calls": calls})
+    )
+
+
+def _relabels_a_report(played: _Played) -> _Played:
+    """Perturbed: the first report trigger the builder gave re-labelled emergency."""
+
+    trigger, body_id, kind = played.built[0]
+    assert trigger.kind == "report"
+    relabelled: Built = (replace(trigger, kind="emergency"), body_id, kind)
+    return replace(played, built=(relabelled, *played.built[1:]))
+
+
+@pytest.mark.parametrize(
+    ("perturb", "expected"),
+    [
+        (
+            _moves_a_state_hash,
+            replace(PROBE_TABLE[SEED_1_PAIR], state_hashes_equal=False),
+        ),
+        (
+            _edits_a_later_prompt,
+            replace(PROBE_TABLE[SEED_1_PAIR], other_prompts_differing_normalized=1),
+        ),
+    ],
+)
+def test_a_perturbed_game_moves_its_one_cell_of_the_probe_row(
+    recorded: _Recordings, perturb: Callable[[_Played], _Played], expected: _ProbeRow
+) -> None:
+    off, on = (recorded[name] for name in SEED_1_PAIR)
+    measured = _probe_row(off, perturb(on))
+    assert measured == expected
+    assert measured != PROBE_TABLE[SEED_1_PAIR]
+
+
+def test_a_pair_that_disagrees_on_a_shared_count_is_refused(
+    recorded: _Recordings,
+) -> None:
+    off, on = (recorded[name] for name in SEED_1_PAIR)
+    with pytest.raises(AssertionError, match="seed1-off and seed1-on disagree"):
+        _probe_row(off, _relabels_a_report(on))
 
 
 def test_the_narrowness_games_hold_both_opening_kinds(recorded: _Recordings) -> None:
