@@ -22,15 +22,17 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+from agents.tactical.experimental import FRESH_KILL_WINDOW_TICKS, IN_VENT_CAP_TICKS
 from engine.actions import Action
 from engine.events import (
     KilledEvent,
     MeetingTriggeredEvent,
     MovedEvent,
+    VentEnteredEvent,
     VentExitedEvent,
 )
 from engine.tick import _apply_action
@@ -40,6 +42,7 @@ from eval.balance_eval import _CURRENT_REPORT_WALK_CONFIG
 from eval.replay_walk import (
     MeetingApplied,
     MeetingOpened,
+    ReplayWalkConfig,
     TickAdvanced,
     TickOpened,
     WalkComplete,
@@ -48,7 +51,11 @@ from eval.replay_walk import (
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
-from orchestrator.experiment_config import RecordedExperimentConfig, engine_arguments
+from orchestrator.experiment_config import (
+    ConfigLayer,
+    RecordedExperimentConfig,
+    engine_arguments,
+)
 from orchestrator.action_ordering import order_actions_for_tick
 from orchestrator.game import (
     HeadlessGame,
@@ -93,10 +100,63 @@ class GameMetrics(BaseModel):
     error: str | None = None
 
 
-def candidate_configs() -> dict[str, RecordedExperimentConfig]:
-    """Predeclared one-change comparisons; no automatic promotion of an arm."""
+#: The lab's walk profiles read Stage-B settings in these layers besides the
+#: engine's. Their consumers count recorded actions, engine events and applied
+#: meeting results, each checked against the recorded hashes, and re-decide
+#: nothing, so a count keeps its meaning under any value of a field in these
+#: layers. Declared here, never inherited from the current-report profile.
+LAB_THREADED_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
+    {"orchestrator", "tactical", "meeting"}
+)
 
-    return {
+#: :func:`measure_identity_effects`' walk. That consumer also refuses every
+#: experimental recording before it walks (``require_baseline_experiments``).
+SEAT_EFFECTS_WALK_CONFIG: Final[ReplayWalkConfig] = replace(
+    _CURRENT_REPORT_WALK_CONFIG,
+    profile="tactical-seat-effects",
+    threaded_layers=LAB_THREADED_LAYERS,
+)
+
+#: :func:`measure_replay`'s walk.
+MECHANISMS_WALK_CONFIG: Final[ReplayWalkConfig] = replace(
+    _CURRENT_REPORT_WALK_CONFIG,
+    profile="tactical-mechanisms",
+    threaded_layers=LAB_THREADED_LAYERS,
+)
+
+#: The round-1 config's fields that act during a fake game's play. Its
+#: rebuttal and ballot fields change only a meeting's turns and prompts, and a
+#: fake meeting ejects nobody, so the lab leaves them out; the body handle is
+#: left out with them.
+STAGE_B_FULL_SETTINGS: Final[Mapping[str, object]] = MappingProxyType(
+    {
+        "vent_witness_rule": "physical",
+        "vent_exit_policy": "look_and_wait",
+        "vent_entry_policy": "own_fresh_kill",
+        "meeting_reset": "hub_with_grace",
+    }
+)
+
+#: Each attribution arm, named after the recorded value it drops, and the one
+#: field it sets back to its default.
+STAGE_B_MINUS_ONE: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "stage_b_full_minus_look_and_wait": "vent_exit_policy",
+        "stage_b_full_minus_own_fresh_kill": "vent_entry_policy",
+        "stage_b_full_minus_physical": "vent_witness_rule",
+        "stage_b_full_minus_hub_with_grace": "meeting_reset",
+    }
+)
+
+
+def candidate_configs() -> dict[str, RecordedExperimentConfig]:
+    """Predeclared comparisons; no automatic promotion of an arm.
+
+    One-change arms, the Stage-B arm that sets every round-1 field acting
+    during play, and one attribution arm per such field, which drops it.
+    """
+
+    configs = {
         "baseline": RecordedExperimentConfig(),
         "workload": RecordedExperimentConfig(
             redistribution_policy="least_remaining_work"
@@ -108,7 +168,25 @@ def candidate_configs() -> dict[str, RecordedExperimentConfig]:
         "meeting_reset": RecordedExperimentConfig(meeting_reset="hub_with_grace"),
         "self_report": RecordedExperimentConfig(self_report=True),
         "earlier_sabotage": RecordedExperimentConfig(sabotage_threshold="two_thirds"),
+        "vent_physical": RecordedExperimentConfig(vent_witness_rule="physical"),
+        "vent_look_and_wait": RecordedExperimentConfig(
+            vent_exit_policy="look_and_wait"
+        ),
+        "vent_own_fresh_kill": RecordedExperimentConfig(
+            vent_entry_policy="own_fresh_kill"
+        ),
+        "stage_b_full": RecordedExperimentConfig.model_validate(
+            dict(STAGE_B_FULL_SETTINGS)
+        ),
     }
+    for name, field in STAGE_B_MINUS_ONE.items():
+        configs[name] = RecordedExperimentConfig.model_validate(
+            {
+                **STAGE_B_FULL_SETTINGS,
+                field: RecordedExperimentConfig.model_fields[field].default,
+            }
+        )
+    return configs
 
 
 def _remaining_work(state: WorldState, owner: str) -> int:
@@ -199,10 +277,13 @@ def measure_identity_effects(
     engine = engine_arguments(recorded_experiment_config(entries))
     counts: Counter[str] = Counter()
     game_map = load_canonical_map()
-    config = replace(_CURRENT_REPORT_WALK_CONFIG, profile="tactical-seat-effects")
     adapter: TypeAdapter[Action] = TypeAdapter(Action)
     for step in walk_replay(
-        path, seed=seed, game_map=game_map, config=config, **roster.model_dump()
+        path,
+        seed=seed,
+        game_map=game_map,
+        config=SEAT_EFFECTS_WALK_CONFIG,
+        **roster.model_dump(),
     ):
         if not isinstance(step, TickAdvanced):
             continue
@@ -365,7 +446,6 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
     ]
     failures = [entry for entry in entries if isinstance(entry, FailedCallReplayEntry)]
     engine = engine_arguments(recorded_experiment_config(entries))
-    config = replace(_CURRENT_REPORT_WALK_CONFIG, profile="tactical-mechanisms")
     game_map = load_canonical_map()
     adapter: TypeAdapter[Action] = TypeAdapter(Action)
     counts: Counter[str] = Counter()
@@ -376,8 +456,20 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
     meeting_state: WorldState | None = None
     winner: str | None = None
     reason: str | None = None
+    # Vent trips: each open trip's anchor tick (its entry, or the last meeting
+    # opened since), the kills so far and the meeting ticks, for the census's
+    # ticks-inside and own-fresh-kill definitions. A trip a meeting ends without
+    # an exit leaves its anchor behind until that impostor's next entry replaces
+    # it; only an exit reads an anchor.
+    vent_anchor: dict[str, int] = {}
+    kills: list[KilledEvent] = []
+    meeting_ticks: list[int] = []
     for step in walk_replay(
-        path, seed=seed, game_map=game_map, config=config, **roster.model_dump()
+        path,
+        seed=seed,
+        game_map=game_map,
+        config=MECHANISMS_WALK_CONFIG,
+        **roster.model_dump(),
     ):
         if isinstance(step, TickOpened):
             counts["tick_rows"] += 1
@@ -420,6 +512,12 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
                     _transfers(working, after, event.target, counts)
                 working = after
                 if (
+                    role == "IMPOSTOR"
+                    and action.type == "wait"
+                    and step.pre_state.players[action.actor].in_vent
+                ):
+                    counts["impostor_in_vent_waits"] += 1
+                if (
                     role == "CREWMATE"
                     and action.type == "wait"
                     and _remaining_work(step.pre_state, action.actor) == 0
@@ -454,6 +552,7 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
                     )
                 elif isinstance(event, KilledEvent):
                     death_ticks[event.target] = event.tick
+                    kills.append(event)
                     counts["kills_crew_witnessed"] += any(
                         step.pre_state.players[pid].role == "CREWMATE"
                         for pid in event.witnesses
@@ -474,12 +573,41 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
                     destination = bool(crew & set(event.destination_witnesses))
                     counts["vent_exits_crew_witnessed"] += source or destination
                     counts["vent_exits_crew_destination_witnessed"] += destination
+                    counts["vent_exits_crew_source_only_witnessed"] += (
+                        source and not destination
+                    )
+                    inside = event.tick - vent_anchor.pop(event.actor)
+                    counts[f"vent_trip_ticks_inside:{inside}"] += 1
+                    counts["vent_trips_reaching_cap"] += inside >= IN_VENT_CAP_TICKS
+                    counts["vent_exits_in_place"] += (
+                        event.source_room == event.destination_room
+                    )
+                elif isinstance(event, VentEnteredEvent):
+                    vent_anchor[event.actor] = event.tick
+                    counts["vent_entries_not_after_own_fresh_kill"] += not any(
+                        kill.actor == event.actor
+                        and kill.room == event.source_room
+                        and event.tick - FRESH_KILL_WINDOW_TICKS
+                        <= kill.tick
+                        < event.tick
+                        and not any(
+                            kill.tick <= tick < event.tick for tick in meeting_ticks
+                        )
+                        for kill in kills
+                    )
             last_move = {
                 pid: value for pid, value in last_move.items() if pid in moves_this_tick
             }
         elif isinstance(step, MeetingOpened):
             meeting_state = step.state
             counts["meetings"] += 1
+            meeting_ticks.append(step.entry.tick)
+            for actor in vent_anchor:
+                vent_anchor[actor] = step.entry.tick
+            counts["meetings_opening_with_impostor_in_vent"] += any(
+                player.alive and player.in_vent and player.role == "IMPOSTOR"
+                for player in step.state.players.values()
+            )
             counts[
                 f"meeting_caller:{step.state.players[step.entry.triggered_by].role}"
             ] += 1

@@ -418,7 +418,7 @@ def test_evidence_version_two_with_the_reset_still_validates() -> None:
 
 def test_no_lab_candidate_combines_either_reset_pair() -> None:
     candidates = candidate_configs()
-    assert len(candidates) == 9
+    assert len(candidates) == 17
     combined = [
         name
         for name, config in candidates.items()
@@ -517,10 +517,30 @@ def test_the_factory_refuses_an_unbuilt_value_rather_than_running_the_default(
 # The settings a pre-wave reader cannot know ------------------------------------
 
 
+#: The lab arms that existed before the Stage-B wave.
+_PRE_WAVE_LAB_ARMS: tuple[str, ...] = (
+    "baseline",
+    "workload",
+    "patrol",
+    "accompany",
+    "vent_risk",
+    "post_meeting",
+    "meeting_reset",
+    "self_report",
+    "earlier_sabotage",
+)
+
+
 def test_wave_settings_name_only_what_the_wave_added() -> None:
     assert wave_settings(RecordedExperimentConfig()) == ()
-    for config in candidate_configs().values():
-        assert wave_settings(config) == ()
+    candidates = candidate_configs()
+    for name in _PRE_WAVE_LAB_ARMS:
+        assert wave_settings(candidates[name]) == ()
+    assert wave_settings(candidates["stage_b_full"]) == (
+        ("vent_exit_policy", "look_and_wait"),
+        ("vent_witness_rule", "physical"),
+        ("vent_entry_policy", "own_fresh_kill"),
+    )
     mixed = RecordedExperimentConfig.model_construct(
         crew_idle_policy="patrol",
         vent_exit_policy="look_and_wait",

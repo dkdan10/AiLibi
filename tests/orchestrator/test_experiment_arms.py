@@ -1141,8 +1141,14 @@ def test_the_page_check_bites_an_undisclosed_environment_switch() -> None:
 
 
 def test_the_lab_candidates_are_all_arms_that_exist_today() -> None:
+    # A lab arm records only built values: none it sets is still pending.
     for config in candidate_configs().values():
-        assert not set(OMITTED_AT_DEFAULT) & set(config.model_dump())
+        dumped = config.model_dump()
+        assert not [
+            field
+            for field, refused in WAVE_ARMS_PENDING.items()
+            if field in dumped and dumped[field] in refused
+        ]
 
 
 # ---------------------------------------------------------------------------
