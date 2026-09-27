@@ -52,7 +52,7 @@ import tests.meetings.test_prompt_byte_golden as golden
 from agents.strategic.prompts.loader import DEFAULT_PROMPT_SET
 from api.replay_loader import ReplayLoader
 from engine.entities import BodyState
-from engine.events import MeetingTriggeredEvent
+from engine.events import ActionRejectedEvent, MeetingTriggeredEvent, MovedEvent
 from engine.world import Map, WorldState, load_canonical_map
 from eval.gameplay_census import CENSUS_WALK_CONFIG, GameplayCensusConformanceError
 from eval.replay_walk import (
@@ -869,12 +869,78 @@ def test_the_arm_beside_temporal_observations_keeps_the_temporal_text() -> None:
     assert both[0].description == "p-4 reported body body-p-7 at tick 12"
 
 
+def test_the_builder_reads_the_trigger_among_the_ticks_other_events() -> None:
+    # Planted surroundings: the tick's other events come before and after the
+    # trigger event, and the builder still reads the trigger.
+    state, (trigger_event,), engine_id = _meeting_inputs(
+        kind="report", trigger_tick=12, victim="p-7", kill_tick=9, corpse_present=True
+    )
+    events = (
+        MovedEvent(
+            type="Moved", tick=12, actor="p-2", from_room="CAFETERIA", to_room="MEDBAY"
+        ),
+        trigger_event,
+        ActionRejectedEvent(
+            type="ActionRejected",
+            tick=12,
+            actor="p-5",
+            action="Kill",
+            reason="cooldown",
+        ),
+    )
+    trigger, body_id, kind = _build_meeting_trigger(
+        state=state, events=events, report_body_handle_version=1
+    )
+    assert (trigger.description, body_id, kind) == (
+        "p-4 reported body body-p-7 at tick 12",
+        engine_id,
+        "report",
+    )
+
+
+def test_the_handle_follows_its_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Planted source: the arm names whatever the public-handle function returns.
+    monkeypatch.setattr(
+        game_module, "public_body_id", lambda victim: f"corpse-{victim}"
+    )
+    state, events, _engine_id = _meeting_inputs(
+        kind="report", trigger_tick=12, victim="p-7", kill_tick=9, corpse_present=True
+    )
+    on, _, _ = _build_meeting_trigger(
+        state=state, events=events, report_body_handle_version=1
+    )
+    assert on.description == "p-4 reported body corpse-p-7 at tick 12"
+
+
+def test_an_emergency_description_follows_its_phrase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Planted source: both values write the phrase the manager module states.
+    monkeypatch.setattr(game_module, "EMERGENCY_TRIGGER_PHRASE", "rang the bell")
+    state, events, _engine_id = _meeting_inputs(
+        kind="emergency",
+        trigger_tick=31,
+        victim="p-2",
+        kill_tick=20,
+        corpse_present=True,
+    )
+    for version in (None, 1):
+        trigger, _, _ = _build_meeting_trigger(
+            state=state, events=events, report_body_handle_version=version
+        )
+        assert trigger.description == "p-4 rang the bell at tick 31"
+
+
 @pytest.mark.parametrize("value", [2, 0, True, False, 1.0, "1"])
 def test_the_builder_refuses_a_version_it_does_not_write(value: object) -> None:
     state, events, _engine_id = _meeting_inputs(
         kind="report", trigger_tick=12, victim="p-7", kill_tick=9, corpse_present=True
     )
-    with pytest.raises(ValueError, match="is not a body-handle version"):
+    message = (
+        f"report_body_handle_version={value!r} is not a body-handle version "
+        "this builder writes"
+    )
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
         _build_meeting_trigger(
             state=state, events=events, report_body_handle_version=cast(Any, value)
         )
