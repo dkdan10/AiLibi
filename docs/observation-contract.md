@@ -41,10 +41,14 @@ Public packet body handles are an unconditional boundary repair, translated
 back to unchanged internal engine IDs for reporting. Historical recorded
 report actions, state hashes and raw prompt bodies remain readable. An explicit
 legacy packet projection supports historical analysis. Full model-facing
-removal is implemented only in temporal mode: **OFF opening descriptions still
-contain the internal body ID and can expose its encoded death tick.** Keeping
-those rendered bytes unchanged follows the default-OFF rule pending an adopting
-decision; the packet repair alone does not establish complete model privacy.
+removal is implemented in temporal mode. Without it, the recorded body-handle
+setting `report_body_handle_version = 1` changes the report opening alone: it
+names the corpse by the public `body-{victim_id}` handle, which carries no death
+tick, and a corpse missing from the state reads "a body". **With neither, opening
+descriptions still contain the internal body ID and can expose its encoded death
+tick.** Keeping those rendered bytes unchanged follows the default-OFF rule
+pending an adopting decision; the packet repair alone does not establish
+complete model privacy.
 
 `eval/leak_scan.py` independently checks packet visibility, body identity,
 audible entitlement and source-event claims. Planted tests cover invented,

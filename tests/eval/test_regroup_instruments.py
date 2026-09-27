@@ -10,9 +10,12 @@ keeps every room without a regroup:
   refusal the readers card left pending for this card.
 
 The funnel's memory walk reads each meeting's public regroup ticks for its belief
-fold and its pooling folds. The scorecard's walk profile declares the layers it
+fold and its pooling folds. The sample report's inform band
+(``eval.meeting_quality``) and the V&J pre-vote graphs (``eval.vj_instruments``)
+read the same window. The scorecard's walk profile declares the layers it
 reads and refuses every other one before its first advance. The offline lever
-counterfactual keeps refusing every recorded setting.
+counterfactual keeps refusing every recorded setting, and the frozen deception
+instruments refuse the reset by name before their walk.
 """
 
 from __future__ import annotations
@@ -27,8 +30,10 @@ from typing import Any, Final, Literal
 import pytest
 
 import eval.evidence_honesty as honesty_module
+import eval.meeting_quality as meeting_quality
 import eval.process_scorecard as scorecard
 import eval.replay_walk as walk_module
+from agents.memory.beliefs import ABSENCE_SUSPICION_DELTA, ACCUSATION_SUSPICION_DELTA
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from eval import funnel
@@ -37,9 +42,24 @@ from eval.evidence_honesty import (
     EvidenceHonestyReconstructionError,
     compute_evidence_honesty,
 )
+from eval.meeting_quality import (
+    CHANNEL_BODY_PROXIMITY,
+    CHANNEL_SINGLE_WITNESS_INFORM,
+    compute_multi_signal_conversion,
+    decompose_ejection_channels,
+)
 from eval.recorded_settings import READABLE_SETTINGS
 from eval.replay_walk import MeetingApplied, TickAdvanced, walk_replay
-from meetings.schemas import AlibiClaim, AlibiSegment
+from eval.report_schema import GameReport
+from eval.validity import assemble_tournament_report
+from meetings.schemas import (
+    AccusationClaim,
+    AlibiClaim,
+    AlibiSegment,
+    MeetingTranscript,
+    MeetingTurn,
+    SawPlayerObservation,
+)
 from orchestrator import experiment_config
 from orchestrator.experiment_config import (
     FIELD_LAYER,
@@ -523,3 +543,324 @@ def test_a_state_row_read_on_the_resolved_frame_raises() -> None:
             resolved_at=resolved_at,
             tallies=honesty_module._Tallies(),
         )
+
+
+# --------------------------------------------------------------------------- #
+# The meeting-quality inform band                                             #
+# --------------------------------------------------------------------------- #
+
+
+def _assembled(directory: Path) -> GameReport:
+    """The game as the sample report's own assembly reads it."""
+
+    (game,) = assemble_tournament_report(directory).games
+    return game
+
+
+def test_the_inform_band_reads_the_window_each_live_meeting_ran_with(
+    vouching_game: _Live,
+) -> None:
+    game = _assembled(vouching_game.path.parent)
+    assert game.experiment_config is not None
+    assert game.experiment_config.meeting_reset == "hub_with_grace"
+    read = [
+        meeting_quality._regroup_ticks_before(game, index)
+        for index in range(len(game.meetings))
+    ]
+    live = [opening.regroup_ticks for opening in vouching_game.openings]
+    assert read == live
+    assert sum(1 for ticks in read if ticks) >= 2
+
+
+def test_without_the_reset_the_inform_band_reads_no_window(preserve_set: Path) -> None:
+    game = _assembled(preserve_set)
+    assert len(game.meetings) >= 2
+    assert all(
+        meeting_quality._regroup_ticks_before(game, index) == frozenset()
+        for index in range(len(game.meetings))
+    )
+
+
+def _graph_prompt(rows: dict[str, float]) -> str:
+    graph = "".join(
+        f"- `{pid}`: suspicion {value:.2f}, trust 0.50\n" for pid, value in rows.items()
+    )
+    return f"## Your suspicion graph\n{graph}\n## Decision rules\n"
+
+
+def _one_voice(*, turn_id: str, accuser: str, impostor: str, tick: int) -> MeetingTurn:
+    """An opening that accuses ``impostor``, backed by a sighting of them at ``tick``."""
+
+    return MeetingTurn(
+        turn_id=turn_id,
+        turn_index=0,
+        speaker=accuser,
+        turn_kind="opening",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(
+                type="saw_player",
+                tick=tick,
+                subject=impostor,
+                room=load_canonical_map().meeting.room,
+            ),
+        ),
+        claims=(
+            AccusationClaim(
+                type="accusation",
+                against=impostor,
+                confidence=0.7,
+                reason="where they stood",
+            ),
+        ),
+        free_text="I saw them.",
+    )
+
+
+def _planted_ejection(
+    game: GameReport, *, after_regroup: int
+) -> tuple[GameReport, int]:
+    """The game's last meeting turned into an impostor ejection with one voice.
+
+    A crewmate accuses the impostor, backed only by a sighting of them in the
+    meeting room ``after_regroup`` ticks after the previous meeting's resume
+    tick, and one other voter was shown the impostor at 0.55: one inform
+    quantum over the prior. The resume tick is read off the meeting rows here,
+    never off the derivation under test.
+    """
+
+    index = len(game.meetings) - 1
+    assert index >= 1
+    meeting = game.meetings[index]
+    resume = game.meetings[index - 1].tick + 1
+    voters = sorted(ballot.voter for ballot in meeting.ballots)
+    impostor = next(pid for pid in voters if game.roles[pid] == "IMPOSTOR")
+    accuser, shown = [pid for pid in voters if game.roles[pid] == "CREWMATE"][:2]
+    turn = _one_voice(
+        turn_id=f"{meeting.meeting_id}:turn-0",
+        accuser=accuser,
+        impostor=impostor,
+        tick=resume + after_regroup,
+    )
+    call = meeting.llm_calls[0].model_copy(
+        update={"agent_id": shown, "prompt": _graph_prompt({impostor: 0.55})}
+    )
+    planted = meeting.model_copy(
+        update={
+            "outcome": "EJECTED",
+            "ejected_player_id": impostor,
+            "transcript": MeetingTranscript(turns=(turn,)),
+            "contradictions": (),
+            "llm_calls": (call,),
+        }
+    )
+    return (
+        game.model_copy(update={"meetings": (*game.meetings[:index], planted)}),
+        index,
+    )
+
+
+def _inform_conversions(game: GameReport) -> int:
+    return compute_multi_signal_conversion(
+        (game,)
+    ).conversions_with_single_witness_inform
+
+
+@pytest.mark.parametrize("after_regroup", [0, 1])
+def test_a_voice_resting_on_a_regroup_sighting_informs_nobody(
+    vouching_game: _Live, after_regroup: int
+) -> None:
+    planted, index = _planted_ejection(
+        _assembled(vouching_game.path.parent), after_regroup=after_regroup
+    )
+    # The inform band is empty, so the one +0.05 quantum reads as body
+    # proximity, the channel left when no voice explains it.
+    assert decompose_ejection_channels(planted, index) == frozenset(
+        {CHANNEL_BODY_PROXIMITY}
+    )
+    assert _inform_conversions(planted) == 0
+
+
+def test_with_the_window_withheld_the_same_fold_credits_the_inform(
+    vouching_game: _Live, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planted, index = _planted_ejection(
+        _assembled(vouching_game.path.parent), after_regroup=0
+    )
+    monkeypatch.setattr(
+        meeting_quality, "derive_regroup_ticks", lambda *a, **k: frozenset()
+    )
+    assert decompose_ejection_channels(planted, index) == frozenset(
+        {CHANNEL_SINGLE_WITNESS_INFORM}
+    )
+    assert _inform_conversions(planted) == 1
+
+
+def test_just_past_the_window_the_voice_still_informs(vouching_game: _Live) -> None:
+    planted, index = _planted_ejection(
+        _assembled(vouching_game.path.parent), after_regroup=2
+    )
+    assert decompose_ejection_channels(planted, index) == frozenset(
+        {CHANNEL_SINGLE_WITNESS_INFORM}
+    )
+
+
+def test_the_preserve_twin_of_the_planted_game_folds_as_before(
+    vouching_game: _Live,
+) -> None:
+    planted, index = _planted_ejection(
+        _assembled(vouching_game.path.parent), after_regroup=0
+    )
+    twin = planted.model_copy(update={"experiment_config": None})
+    assert decompose_ejection_channels(twin, index) == frozenset(
+        {CHANNEL_SINGLE_WITNESS_INFORM}
+    )
+    assert _inform_conversions(twin) == 1
+
+
+# --------------------------------------------------------------------------- #
+# The V&J pre-vote graphs                                                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_vj_pre_vote_fold_reads_each_meetings_window(
+    vouching_game: _Live, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import eval.vj_instruments as vj
+    from meetings.manager import derive_belief_evidence as real
+
+    seen: list[frozenset[int]] = []
+
+    def _spy(*args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs["regroup_ticks"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(vj, "derive_belief_evidence", _spy)
+    vj.compute_vj_instruments(vouching_game.path.parent)
+    assert seen == [opening.regroup_ticks for opening in vouching_game.openings]
+    assert sum(1 for ticks in seen if ticks) >= 2
+
+
+def test_a_regroup_sighting_lifts_no_row_in_the_vj_pre_vote_graphs(
+    vouching_game: _Live,
+) -> None:
+    from eval.vj_instruments import _pre_vote_graphs
+
+    walked = _vj_walk(vouching_game).meetings[-1]
+    assert walked.regroup_ticks
+    roles = _assembled(vouching_game.path.parent).roles
+    voters = sorted(walked.living)
+    impostor = next(pid for pid in voters if roles[pid] == "IMPOSTOR")
+    accuser = next(pid for pid in voters if roles[pid] == "CREWMATE")
+    turn = _one_voice(
+        turn_id=f"{walked.meeting_id}:turn-0",
+        accuser=accuser,
+        impostor=impostor,
+        tick=max(walked.regroup_ticks),
+    )
+    planted = replace(
+        walked, transcript=MeetingTranscript(turns=(turn,)), contradictions=()
+    )
+
+    listeners = [
+        voter
+        for voter in voters
+        if voter not in (impostor, accuser) and roles[voter] == "CREWMATE"
+    ]
+
+    def _spread(graphs: Any) -> dict[str, float]:
+        return {
+            voter: sum(
+                entry.testimony_spread
+                for entry in graphs[voter]
+                if entry.player_id == impostor
+            )
+            for voter in listeners
+        }
+
+    carried = _spread(walked.suspicion_graph_by_voter)
+    windowed = _spread(_pre_vote_graphs(planted))
+    plain = _spread(_pre_vote_graphs(replace(planted, regroup_ticks=frozenset())))
+    # In the window the sighting places nobody and backs no voice, so each
+    # listener's row takes the absence lift and no inform; without the window
+    # it places the impostor and backs the one voice, the inform quantum.
+    assert listeners
+    for voter in listeners:
+        assert windowed[voter] == pytest.approx(
+            carried[voter] + ABSENCE_SUSPICION_DELTA
+        )
+        assert plain[voter] == pytest.approx(
+            carried[voter] + ACCUSATION_SUSPICION_DELTA
+        )
+
+
+# --------------------------------------------------------------------------- #
+# The frozen deception instruments refuse the reset                           #
+# --------------------------------------------------------------------------- #
+
+
+class _Walked(Exception):
+    """The deception walk began: raised in place of the walk."""
+
+
+def _stop_at_the_walk(monkeypatch: pytest.MonkeyPatch) -> None:
+    import eval.deception_instruments as deception
+
+    def _walk(_directory: Path) -> Any:
+        raise _Walked
+
+    monkeypatch.setattr(deception, "_walk_set_vj", _walk)
+
+
+def test_the_deception_instruments_refuse_the_reset_by_name_before_walking(
+    reset_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eval.deception_instruments import compute_deception_instruments
+
+    _stop_at_the_walk(monkeypatch)
+    with pytest.raises(
+        ValueError, match=rf"meeting_reset='hub_with_grace' \(seed {SEED}\)"
+    ):
+        compute_deception_instruments(reset_set)
+
+
+def test_a_set_with_one_reset_recording_is_refused_at_that_seed(
+    preserve_set: Path,
+    reset_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from eval.deception_instruments import compute_deception_instruments
+
+    mixed = tmp_path / "9p2i"
+    shutil.copytree(preserve_set, mixed)
+    shutil.copy(_path(reset_set), mixed / f"replay-seed-{SEED + 1}.jsonl")
+    _stop_at_the_walk(monkeypatch)
+    with pytest.raises(ValueError, match=rf"\(seed {SEED + 1}\)"):
+        compute_deception_instruments(mixed)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {},
+        {"meeting_reset": "preserve"},
+        {"vent_witness_rule": "physical", "bounded_rebuttal_version": 1},
+    ],
+)
+def test_the_deception_refusal_names_the_reset_and_nothing_else(
+    preserve_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    settings: dict[str, object],
+) -> None:
+    from eval.deception_instruments import compute_deception_instruments
+
+    source = (
+        _copy_with(preserve_set, tmp_path / "copy" / "9p2i", **settings)
+        if settings
+        else preserve_set
+    )
+    _stop_at_the_walk(monkeypatch)
+    with pytest.raises(_Walked):
+        compute_deception_instruments(source)

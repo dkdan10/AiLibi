@@ -2031,6 +2031,58 @@ def test_a_kind_added_to_the_keep_set_without_the_documents_fails() -> None:
     assert _documented((*REGROUP_KEPT_EVENTS, MovedEvent)) == ["MovedEvent"]
 
 
+#: The contract's body-handle paragraph as it read before the body-handle
+#: setting existed: removal "only in temporal mode", with no setting named.
+_PRE_HANDLE_PARAGRAPH: Final[str] = (
+    "Public packet body handles are an unconditional boundary repair. Full "
+    "model-facing removal is implemented only in temporal mode: **OFF opening "
+    "descriptions still contain the internal body ID and can expose its encoded "
+    "death tick.**"
+)
+
+
+def _body_handle_paragraph() -> str:
+    text = _CONTRACT.read_text(encoding="utf-8")
+    (paragraph,) = [
+        part
+        for part in text.split("\n\n")
+        if part.startswith("Public packet body handles")
+    ]
+    return " ".join(paragraph.split())
+
+
+def _body_handle_problems(paragraph: str) -> list[str]:
+    """What the paragraph fails to say about the recorded body-handle setting."""
+
+    from observation.body_ids import public_body_id
+
+    setting = "report_body_handle_version"
+    assert setting in RecordedExperimentConfig.model_fields
+    problems: list[str] = []
+    if f"`{setting} = 1`" not in paragraph:
+        problems.append("names no body-handle setting")
+    if f"`{public_body_id('{victim_id}')}`" not in paragraph:
+        problems.append("names no public handle")
+    if "only in temporal mode" in paragraph:
+        problems.append("still says only temporal mode removes the id")
+    if "With neither" not in paragraph:
+        problems.append("drops the default path's exposure")
+    return problems
+
+
+def test_the_contract_names_the_recorded_body_handle_setting() -> None:
+    assert _body_handle_problems(_body_handle_paragraph()) == []
+
+
+def test_the_paragraph_before_the_setting_fails_the_body_handle_check() -> None:
+    assert _body_handle_problems(_PRE_HANDLE_PARAGRAPH) == [
+        "names no body-handle setting",
+        "names no public handle",
+        "still says only temporal mode removes the id",
+        "drops the default path's exposure",
+    ]
+
+
 def test_the_glossary_says_what_moves_what_clears_and_what_survives() -> None:
     entry = _glossary_regroup_entry().lower()
     for fact in (

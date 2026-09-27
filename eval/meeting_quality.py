@@ -226,6 +226,7 @@ from meetings.manager import (
 )
 from meetings.schemas import AccusationClaim, ContradictionRef, PlayerId, VoteBallot
 from meetings.transcript import is_weak_contradiction
+from orchestrator.replay import derive_regroup_ticks
 
 # The literal prefixes (the marker text minus the ``{target!r}`` placeholder)
 # the meeting layer stamps onto ``rationale_text`` when it normalizes a
@@ -1991,7 +1992,8 @@ def decompose_ejection_channels(
       lever, keyed on :data:`agents.memory.beliefs.WITNESS_INFORM_REASON`)
       — the ejected subject re-derives into THIS meeting's single-witness
       inform band (``derive_belief_evidence(...).pre_vote_informed``, one
-      home with the live fold) AND its +0.05 quantum is VISIBLE in the
+      home with the live fold, read with the public regroup ticks the meeting
+      ran with) AND its +0.05 quantum is VISIBLE in the
       persistent mass: after the vent and carry quanta the residue is a
       whole number of body-proximity quanta plus exactly one
       ``ACCUSATION_SUSPICION_DELTA``. Unlike ``prior_meeting_carry``, the
@@ -2130,7 +2132,13 @@ def decompose_ejection_channels(
     # consume below only runs when the quantum is present, which never happens
     # on W1). It consumes the 0.05 so a bare inform reads as the inform channel
     # alone, not a spurious sub-quantum body proximity.
-    if _ejected_in_inform_band(meeting, ejected, roster, all_flags):
+    if _ejected_in_inform_band(
+        meeting,
+        ejected,
+        roster,
+        all_flags,
+        regroup_ticks=_regroup_ticks_before(game, meeting_index),
+    ):
         remainder_hundredths = round(remaining * 100)
         inform_hundredths = round(ACCUSATION_SUSPICION_DELTA * 100)
         body_hundredths = round(BODY_PROXIMITY_SUSPICION_DELTA * 100)
@@ -2145,11 +2153,29 @@ def decompose_ejection_channels(
     return frozenset(channels)
 
 
+def _regroup_ticks_before(game: GameReport, meeting_index: int) -> frozenset[int]:
+    """The public regroup ticks the meeting at ``meeting_index`` ran with.
+
+    Every earlier meeting of a game resumed play, since a meeting that ends the
+    game is its last, so this is :func:`orchestrator.replay.derive_regroup_ticks`
+    over the recorded settings and the earlier meetings' ticks: the one
+    derivation the live game and every other reader of a recording use. Empty
+    unless the recording regroups.
+    """
+
+    return derive_regroup_ticks(
+        game.experiment_config,
+        (earlier.tick for earlier in game.meetings[:meeting_index]),
+    )
+
+
 def _ejected_in_inform_band(
     meeting: MeetingReport,
     ejected: PlayerId,
     roster: frozenset[PlayerId],
     flags: Sequence[ContradictionRef],
+    *,
+    regroup_ticks: frozenset[int],
 ) -> bool:
     """Whether ``ejected`` re-derives into this meeting's single-witness inform band.
 
@@ -2159,7 +2185,10 @@ def _ejected_in_inform_band(
     re-implementation of the voice count. ``flags`` is the caller's RECORDED
     non-vent contradiction set (:func:`recorded_contradiction_flags`); it feeds
     the §6.3 Rule-5 ``contradicted`` exemption only and never the voice count,
-    so threading it keeps this module on one census.
+    so threading it keeps this module on one census. ``regroup_ticks`` are the
+    public regroup ticks the meeting ran with (:func:`_regroup_ticks_before`): a
+    voice backed only by a sighting in a regroup's window backs nothing, as it
+    backed nothing in the live meeting.
     """
 
     evidence = derive_belief_evidence(
@@ -2167,6 +2196,7 @@ def _ejected_in_inform_band(
         contradictions=flags,
         roster=roster,
         trigger_kind=meeting.trigger,
+        regroup_ticks=regroup_ticks,
     )
     return ejected in evidence.pre_vote_informed
 
