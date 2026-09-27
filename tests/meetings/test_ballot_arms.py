@@ -36,7 +36,14 @@ from pydantic import BaseModel, ValidationError
 import meetings.manager as manager_module
 import orchestrator.game as game_module
 from agents.memory.episodic import EpisodicEvent
-from agents.perception import EVENT_SAW_PLAYER, PROVENANCE_OBSERVED, ingest_packet
+from agents.perception import (
+    EVENT_GLOBAL_STATUS,
+    EVENT_SAW_PLAYER,
+    EVENT_SAW_PLAYER_MOVE,
+    EVENT_SELF_STATE,
+    PROVENANCE_OBSERVED,
+    ingest_packet,
+)
 from agents.strategic.prompts.loader import (
     VOTE_BALLOT_TEMPLATE,
     build_prompt_renderers,
@@ -656,6 +663,64 @@ def test_the_teammate_guard_reads_first_hand_self_state_only() -> None:
         )
         agent.memory.episodic.append(kill)
         assert len(agent.kill_witness_records_for_meeting()) == held, provenance
+
+
+def test_the_accessor_reads_saw_player_rows_only() -> None:
+    """The row-type filter: a first-hand row of another type that carries a
+    player, a room and the kill action makes no record; the same payload on a
+    ``saw_player`` row makes one."""
+
+    agent = _agent("p-1", "CREWMATE")
+    payload = {"player_id": "p-3", "room": "EAST_HALL", "action": "kill"}
+    agent.memory.episodic.append(
+        EpisodicEvent(
+            tick=6,
+            type=EVENT_SAW_PLAYER_MOVE,
+            payload=payload,
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-1:6:1",
+        )
+    )
+    assert agent.kill_witness_records_for_meeting() == ()
+    agent.memory.episodic.append(
+        EpisodicEvent(
+            tick=7,
+            type=EVENT_SAW_PLAYER,
+            payload=payload,
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-1:7:1",
+        )
+    )
+    assert [
+        (r.subject, r.tick, r.observation_id)
+        for r in agent.kill_witness_records_for_meeting()
+    ] == [("p-3", 7, "p-1:7:1")]
+
+
+def test_the_teammate_guard_reads_self_state_rows_only() -> None:
+    """The row-type filter on the fellow set: a first-hand row of another type
+    that carries ``fellow_impostor_ids`` guards nothing; the same list on a
+    first-hand ``self_state`` row drops the teammate's kill."""
+
+    kill = EpisodicEvent(
+        tick=6,
+        type=EVENT_SAW_PLAYER,
+        payload={"player_id": "p-3", "room": "EAST_HALL", "action": "kill"},
+        provenance=PROVENANCE_OBSERVED,
+        observation_id="p-2:6:1",
+    )
+    for row_type, held in ((EVENT_GLOBAL_STATUS, 1), (EVENT_SELF_STATE, 0)):
+        agent = _agent("p-2", "IMPOSTOR")
+        agent.memory.episodic.append(
+            EpisodicEvent(
+                tick=5,
+                type=row_type,
+                payload={"agent_id": "p-2", "fellow_impostor_ids": ["p-3"]},
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
+        agent.memory.episodic.append(kill)
+        assert len(agent.kill_witness_records_for_meeting()) == held, row_type
 
 
 # --------------------------------------------------------------------------- #
@@ -1764,6 +1829,7 @@ def test_the_honesty_cells_count_the_scripted_ballots(scripted_game: Path) -> No
         cells.ejects_citing_only_neutral.denominator,
     ) == (2, 5)
     assert cells.ejects_without_citation == 1
+    assert cells.ejections == 1
     assert (
         cells.ejections_carried_by_impostors_alone.numerator,
         cells.ejections_carried_by_impostors_alone.denominator,
@@ -1780,6 +1846,59 @@ def test_the_honesty_cells_count_the_scripted_ballots(scripted_game: Path) -> No
     # Cell 4 equals the census's own reading of the same game.
     census = _census_cells(scripted_game)["ejections_carried_only_by_impostor_ballots"]
     assert (census["numerator"], census["denominator"]) == (1, 1)
+
+
+def test_the_report_publishes_each_conduct_tally_in_its_own_cell() -> None:
+    """Every ballot-conduct tally holds a different count, so a report argument
+    that reads a sibling tally, or a constant, moves a published cell."""
+
+    from eval.evidence_honesty import BallotConductCells, _report, _Tallies, cell
+
+    counts = {
+        "impostor_ballots": 97,
+        "impostor_ejects": 61,
+        "impostor_skips": 36,
+        "ejects_pointing_toward": 23,
+        "ejects_pointing_toward_own_turn": 11,
+        "ejects_other_turn": 13,
+        "ejects_citing_only_neutral": 7,
+        "ejects_without_citation": 18,
+        "ejections": 89,
+        "ejections_carried_by_impostors_alone": 3,
+        "kill_holders": 41,
+        "kill_holders_citing_the_kill": 17,
+        "recorded_teammate_targets": 2,
+    }
+    assert tuple(counts) == _CONDUCT_FIELDS == tuple(BallotConductCells.model_fields)
+    assert len(set(counts.values())) == len(counts)
+    assert 0 not in counts.values()
+    tallies = _Tallies()
+    for name, count in counts.items():
+        setattr(tallies, name, count)
+    report = _report(
+        sample_dir=Path("planted") / "9p2i",
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=3,
+        games_total=1,
+        policy_mode="planted",
+        tallies=tallies,
+    )
+    assert report.ballot_conduct == BallotConductCells(
+        impostor_ballots=97,
+        impostor_ejects=61,
+        impostor_skips=36,
+        ejects_pointing_toward=23,
+        ejects_pointing_toward_own_turn=11,
+        ejects_other_turn=13,
+        ejects_citing_only_neutral=cell(7, 61),
+        ejects_without_citation=18,
+        ejections=89,
+        ejections_carried_by_impostors_alone=cell(3, 89),
+        kill_holders=41,
+        kill_holders_citing_the_kill=cell(17, 41),
+        recorded_teammate_targets=cell(2, 97),
+    )
 
 
 # --------------------------------------------------------------------------- #
