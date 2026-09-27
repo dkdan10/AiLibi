@@ -164,6 +164,15 @@ Every test below lives in `tests/orchestrator/test_report_body_handle.py`, uses
 the fake provider or a hand-built state, and writes only under `tmp_path`.
 `LEGACY_BODY_HANDLE_PATTERN` is `experiments/held_out_prefixes.py:168`.
 
+- [x] Review correction: the builder docstring states the absent-corpse reading
+  at the strength the code delivers. With neither version 1 nor
+  `temporal_observations`, a report names the event's engine id whether or not
+  the corpse is still in `state.bodies`. With the arm, temporal delivery or
+  both, a corpse missing from `state.bodies` reads `a body`, and the engine id
+  is never the fallback. Proof:
+  `test_only_neither_switch_names_the_engine_id_of_a_gone_corpse` pins all four
+  settings, and two planted builders fail it: an engine-id fallback, and a
+  builder that hides the engine id under every setting.
 - [x] **The leak closes in play.** Mechanism: `_build_meeting_trigger` renders
   `public_body_id(victim)` when `report_body_handle_version == 1`. The test runs
   a fake game with a declared
@@ -658,3 +667,127 @@ by the round-1 record card.
 - The golden still refuses temporal recordings, so it re-renders the arm only with temporal
   delivery OFF.
 - The mutation pass covered only the lines this card owns, with the eight listed classes.
+
+### Review corrections, round 1 (2026-09-27)
+
+Review at `1cdee965` raised one blocking finding, from the docs verifier. It is the same defect as
+Codex's P2 inline comment on PR #488 (`orchestrator/game.py:3599`, 2026-09-27). The fix is
+`29519860`, and this subsection lands in the commit after it. Every command below ran at
+`29519860` in a bare shell with 0 `AILIBI_*` exports, unless a line names another commit.
+
+**The finding.** The `_build_meeting_trigger` docstring said: "Under either, a corpse missing
+from `state.bodies` reads "a body" and the engine id is never the fallback." It followed sentences
+about `None` and version 1, so it read as a guarantee under both values. The code does not deliver
+that. With neither version 1 nor `temporal_observations`, the builder names the event's engine id
+whether or not the corpse is still in `state.bodies`. The other three settings read `a body`. The
+property `test_the_arm_changes_only_a_reported_corpses_handle` already asserted the OFF reading.
+The sentence before it ("`None` names a reported corpse by the engine's body id") was overstated
+too: `None` beside `temporal_observations` names the public handle.
+
+**The Codex comment: valid, accepted.** It asked to "qualify the statement to the arm/temporal
+branches or describe the legacy fallback". The fix does both. It is answered here and in the PR
+body, not on the PR, because agents post no PR comments.
+
+**What changed in `29519860`.**
+- `orchestrator/game.py`, inside this card's region: the docstring paragraph on the field and the
+  `described_body` comment. No production line changed. The docstring now states each setting at
+  the strength the code delivers:
+  - With neither version 1 nor `temporal_observations`, a report names the event's engine id,
+    whether or not the corpse is still in `state.bodies`.
+  - With version 1, `temporal_observations` or both, a report names the public handle, and a
+    corpse missing from `state.bodies` reads `a body`: the engine id is never the fallback.
+  - A report event that carries no body id reads `a body` under every setting.
+  - The arm changes at most the report's body phrase, and only without `temporal_observations`.
+- `tests/orchestrator/test_report_body_handle.py`:
+  - New `test_only_neither_switch_names_the_engine_id_of_a_gone_corpse`. It reads, under all four
+    `(report_body_handle_version, temporal_observations)` settings, a report of corpse `p-6`
+    (killed at tick 11) gone from the state and a report event with no body id. The production
+    builder gives `p-4 reported body body-p-6-11 at tick 17` for the gone corpse only with both
+    switches off, and `p-4 reported a body at tick 17` in the other seven cells.
+  - Planted: `_falls_back_to_the_engine_id` names the engine id under all four settings. The new
+    `_hides_the_engine_id` reads `a body` under all four. Each fails the table.
+  - The module docstring's builder bullet is narrowed the same way.
+- No other file changed. No expectation changed, and no test was weakened, skipped or deleted.
+  The module has 60 tests, one more than at `1cdee965`.
+
+**Closing greps** at `29519860`:
+- `grep -rniE 'never the fallback|never falls? back to the engine|under either|either one exposes|names a reported corpse by the engine' orchestrator tests/orchestrator docs observation meetings api`
+  finds only the new comment's "Either one exposes at most the victim's public handle" and an
+  unrelated resume sentence at `orchestrator/game.py:1923`.
+- The same pattern over the `eval/` package, this card and `tasks/work/retire-temporal-evidence-v1.md`
+  finds only this card's Acceptance item on the absent corpse (scoped to "under the field") and
+  its "What was built" line. That line is scoped to the arm-or-temporal condition, and it names
+  the OFF engine id in the same sentence.
+- The PR body's Decision 2 already scoped the claim to the field.
+
+**Mutation probe**, bounded to the span the finding names (the corpse lookup, the
+`described_body` selection and the body phrase in `_build_meeting_trigger`), with the eight
+operator classes only. Each mutant is one exact-string edit applied to the pristine bytes. The
+runner first runs the new test alone, then the targeted suites: the new module,
+`tests/orchestrator/test_experiment_config.py`, `tests/orchestrator/test_temporal_delivery.py` and
+`tests/meetings/test_meeting_trigger_kind.py`, 207 tests, as `pytest -n 6 --dist loadfile`. The
+file is restored from a copy, never from git, and every restore's sha256 matched.
+
+| mutant | class | edit | new test | suites failed |
+|---|---|---|---|---|
+| M1 | drop a filter | `temporal_observations or` dropped | killed | 7 |
+| M2 | drop a filter | `or report_body_handle_version == 1` dropped | killed | 31 |
+| M3 | drop a wrapper | `public_body_id(...)` unwrapped | passed | 22 |
+| M4 | swap a collection | `state.bodies` to `state.players` | passed | 27 |
+| M5 | None test | `corpse is not None` inverted | killed | 31 |
+| M6 | None test | `victim_id is not None` inverted | killed | 26 |
+| M7 | None test | `== 1` to `is not None` | passed | 0, equivalent |
+| M8 | None test | `body_id is not None` inverted | passed | 27 |
+| M9 | None test | `described_body is not None` inverted | killed | 41 |
+| M10 | read to constant | the legacy `else body_id` to `else None` | killed | 23 |
+| M11 | read to constant | the victim read to `None` | passed | 27 |
+| M12 | read to constant | the event's body id to `None` | killed | 45 |
+| M13 | message argument to constant | the described body in the phrase | killed | 38 |
+| M14 | swap branches | the handle selection's branches | killed | 38 |
+| M15 | swap branches | the victim guard's branches | killed | 26 |
+| M16 | swap branches | the body phrase's branches | killed | 41 |
+| M17 | loaded source to literal | `public_body_id(v)` to `f"body-{v}"` | passed | 1 |
+
+Sixteen of 17 are killed by the suites. M7 is equivalent: the guard admits only `None` and the
+integer 1, so `== 1` and `is not None` agree on every reachable value. This is the earlier pass's
+C1. The six that pass the new test alone (M3, M4, M7, M8, M11 and M17) change present-corpse
+readings, or none at all. The new test builds only gone corpses and events without an id, and
+the other tests in the suites kill those five. M10 is the finding's own defect class: it hides
+the legacy engine id. The new table kills it, and so do 22 other tests. The runner and its log are under the session scratchpad's `fix-b4-r1/` directory, outside the
+tree.
+
+**Validation** at `29519860`, each command's real exit code:
+
+| command | exit | result |
+|---|---|---|
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_report_body_handle.py -q` | 0 | 60 passed |
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_temporal_delivery.py tests/orchestrator/test_experiment_config.py tests/experiments/test_held_out_prefixes.py tests/meetings/test_prompt_byte_golden.py -q` | 0 | 197 passed |
+| `uv run pytest -p no:cacheprovider tests/meetings/test_prompt_byte_golden.py -q` | 0 | 35 passed |
+| `bash scripts/verify_samples.sh <set>` on `replays/samples/9p2i`, `replays/samples/4p1i`, `replays/ml_corpus/9p2i` and `replays/ml_corpus/4p1i` | 0, 0, 0, 0 | 50, 50, 150 and 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, once per set | 0, 0, 0, 0 | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks, 390 prompts, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | every check passed |
+| `uv run pytest -m campaign` | 0 | 336 passed, 9366 deselected |
+| `git diff --name-only 1cdee965 HEAD` | 0 | `orchestrator/game.py` and `tests/orchestrator/test_report_body_handle.py` |
+| `git diff --name-only "$(git merge-base origin/main HEAD)" HEAD` | 0 | the same 9 paths as at `1cdee965`; `main` is still `f98bfae9` |
+
+**Publication.** `uv run python scripts/build_demo_bundle.py --out <scratch>` ran twice in this
+checkout: once at `29519860`, and once with `1cdee965`'s `orchestrator/game.py` copied in and then
+restored from the copy (sha256 checked). Each baked 156 JSON files for 7 featured games in 2 sets.
+`diff -r` on the two `data/` trees printed nothing (exit 0). Both builds read the same checkout, so
+the replay mtimes were equal. The earlier comparison of `c2aa9023` with the merge base still
+stands, because `1cdee965` changed only this card and `tasks/README.md`.
+
+**The full gate.** `bash scripts/check.sh` runs once in this round, alone, in this clean worktree,
+at the round's final head: the commit that adds this subsection. PR #488's body records its exit
+code and counts.
+
+**Status.** It stays `active`. The dispatch for this round assumed `done`, but the card was
+`active` at `1cdee965`, and its last box waits on the owner's answer to the PR's Question. This
+round does not tick a box the owner has not answered. The inventory sentence in `tasks/README.md`
+is unchanged, and `validate_task_docs.py` re-derives it and passes. No `audits/` or
+`tests/fixtures/` byte moved, so no `docs/artifacts.md` row changes. The held-out band is
+untouched.
