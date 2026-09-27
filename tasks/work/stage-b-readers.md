@@ -1370,3 +1370,10 @@ ae5f2879 b1038ebc` lists the one test file, so the round-3 bundle comparison sti
 | `uv run lint-imports` | exit 0 |
 | `uv run pytest -m campaign -q -n 6` | exit 0, 336 passed |
 | `git diff --stat fb9d2e31 HEAD -- replays agents engine observation orchestrator api frontend docs/process-scorecard.md docs/process-scorecard.json` | empty |
+| `bash scripts/check.sh` (exit code read directly, no pipe), at `98c6d60e` in this clean worktree | exit 0: ruff and format clean, `lint-imports` 4 kept, task docs valid, mypy clean over 508 files, 9,116 passed (9,109 at round 3, plus this round's 7), 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 vitest tests and the build pass |
+
+The gate ran on `98c6d60e`, which carries this subsection without the `check.sh` row above. Its
+first run there stopped at the frontend leg with exit 127 (`eslint: command not found`), because
+this fresh worktree had no `frontend/node_modules`; the Python legs had passed (9,116 passed).
+After `npm ci` in `frontend/` the whole gate re-ran once and exited 0. The commit that adds the row
+changes nothing else, and the task-docs validator was re-run on it (exit 0).
