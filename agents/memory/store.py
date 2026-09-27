@@ -631,11 +631,16 @@ def render_for_prompt(
     a partial view is not (a player absent at spawn is real information, so that
     view keeps its rows). A public regroup is the same fact again: the group that
     begins at a regroup's tick and names every other player the regroup gathered,
-    all in its room, collapses to one line the same way, and a partial view there
-    keeps its rows too. The span carries its FIRST row's ``observation_id``, so
-    every id a ballot can cite off the render is still one of the agent's own
-    stored ids. Reported testimony ranks above bare co-presence in the salience
-    ladder, so the budget sheds routine sightings before it sheds the game's only
+    all in its room, collapses to one line the same way when none of its
+    regroup-tick rows carries a movement note. A partial view there keeps its
+    rows too, and so does a group in which one subject's regroup-tick row is its
+    latest sighting after the agent saw it in another room: that row carries the
+    subject's movement note, which the one line cannot state, so every row of
+    the group stays its own. The span carries its FIRST row's
+    ``observation_id``, so every id a ballot can cite off the render is still
+    one of the agent's own stored ids. Reported testimony ranks above bare
+    co-presence in the salience ladder, so the budget sheds routine sightings
+    (a group's summary line among them) before it sheds the game's only
     cross-meeting social memory.
 
     Under evidence reasoning v2 the derived context lines enter by CLASS rather
@@ -2186,9 +2191,10 @@ def _coalesce_sightings(
     claims a tick its rows did not. The stretch from tick 0 over which the whole
     known roster stood together becomes one summary line, and so does the stretch
     from each public regroup's tick (``regroups``) over which every other player it
-    gathered stood together in its room; whatever each subject did after a summary
-    keeps its own span. Every other observation class -- vents, kills, bodies,
-    transitions, testimony, own rows -- passes through untouched.
+    gathered stood together in its room, unless a regroup-tick row carries a
+    movement note (:func:`_spawn_group_indices`); whatever each subject did after
+    a summary keeps its own span. Every other observation class -- vents, kills,
+    bodies, transitions, testimony, own rows -- passes through untouched.
     """
 
     grouped: dict[_SightingKey, list[_Observation]] = {}
@@ -2280,6 +2286,13 @@ def _spawn_group_indices(
     at the regroup's tick, against every player the row gathered minus the
     observer, all in the row's room -- the dead are not in the row, so they are
     not expected.
+
+    Either way no run's first row may carry a movement note
+    (``sighting_suffix``). The note lands on a subject's latest sighting when the
+    agent saw that subject in another room before it, and the one line cannot
+    state it. A spawn row has no earlier room to note, so the test bites after a
+    regroup: a subject last seen at the regroup's tick, after a sighting
+    elsewhere, leaves the whole group on its own rows.
 
     A partial view, a split room or a subject the observer did not see there is
     real information and keeps its own rows. How far past the first tick the

@@ -1280,10 +1280,14 @@ class MeetingManager:
         derived by the orchestrator the way ``dead_ids`` is and public in the same
         way: every survivor was gathered in the meeting room in front of everyone.
         They mark relevance only. A sighting at a regroup's tick or the tick after
-        it corroborates no alibi, prosecutes none, backs no voice and places
-        nobody, and it stays out of the ballot's own-sighting rows
+        it corroborates no alibi, backs no voice and places nobody, and it stays
+        out of the ballot's own-sighting rows
         (:func:`meetings.transcript.in_regroup_window`); the transcript, every
-        turn and every memory block are untouched. ``frozenset()`` (every
+        turn and every memory block are untouched. It prosecutes no alibi on
+        every profile but attributed testimony, whose contradiction step is the
+        account detector
+        (:func:`meetings.public_accounts.detect_public_account_conflicts`): it
+        compares spoken placements and takes no ticks. ``frozenset()`` (every
         recording without the regroup reset) changes nothing.
         """
 

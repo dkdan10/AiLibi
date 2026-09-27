@@ -190,10 +190,24 @@ events followed by the meeting's own, as it always has.
 memory on the default evidence path as well as under evidence version 2, and
 never under evidence version 1. Wherever the row exists the memory states the
 regroup beside the meeting record and as its own step in the agent's route. On
-the default evidence path it also folds the sightings the regroup produced
-(every other living player, in the meeting room) into one line; evidence version
-2 folds no sightings, so each of those keeps its own row, as the sightings at
-the start of the game do. A sighting on a regroup's tick or the tick after it
-is not evidence about anyone's whereabouts: the meeting layer neither
-corroborates nor prosecutes an alibi with it, and a voter's own sighting there
-makes no ballot evidence row. It stays in the voter's memory.
+the default evidence path it can also fold the sightings the regroup produced
+(every other living player, in the meeting room) into one line, and does so only
+when none of those sightings carries a movement note. A sighting carries one
+when it is that player's latest sighting in the memory and the agent saw the
+player in another room before it. So a player the agent saw elsewhere before
+the meeting and not again after the regroup leaves every regroup sighting on its
+own row, the note on that player's. Like any sighting row, the fold line can be
+shed by the render's token budget. Evidence version 2 folds no sightings, so
+each of those keeps its own row, as the sightings at the start of the game do.
+
+A sighting on a regroup's tick or the tick after it is not evidence about
+anyone's whereabouts. On every meeting profile but attributed testimony the
+meeting layer neither corroborates nor prosecutes an alibi with it, and a
+voter's own sighting there makes no ballot evidence row; it stays in the voter's
+memory. Under attributed testimony (`attributed_testimony_version`) the
+contradiction step is the account detector
+(`meetings.public_accounts.detect_public_account_conflicts`), which compares
+spoken placements and reads no window, so it would flag a player the regroup
+moved as an impossible walk. Nothing refuses the reset beside attributed
+testimony: no committed recording combines them, and the Stage-B record's
+settings do not include attributed testimony.

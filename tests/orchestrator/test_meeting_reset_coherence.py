@@ -16,6 +16,7 @@ with no environment export, by the fake provider and a scripted client.
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import sys
@@ -86,6 +87,7 @@ from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
 from agents.memory.store import DEFAULT_TOKEN_BUDGET
 from meetings.manager import MeetingManager, MeetingTrigger, extract_belief_evidence
+from meetings.public_accounts import detect_public_account_conflicts
 from meetings.schemas import (
     CorroborationClaim,
     FoundBodyObservation,
@@ -94,7 +96,9 @@ from meetings.schemas import (
     MeetingTurn,
     SawPlayerObservation,
 )
+from meetings.transcript import detect_contradictions
 from observation.service import ObservationService
+from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.game import (
     DefaultMeetingRunner,
@@ -863,6 +867,52 @@ def test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else() -> Non
         {"p-1": ended}, state=replace(state, phase="GAME_OVER"), room="ADMIN"
     )
     assert ended.episodic.recent(since_tick=0) == ()
+
+
+# --------------------------------------------------------------------------- #
+# The window's reach: the account detector reads none                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_account_detector_reads_no_regroup_window() -> None:
+    # The limit the contract states: under attributed testimony the
+    # contradiction step is the account detector, which takes no regroup ticks.
+    # Two honest witnesses, one placing p-3 in REACTOR before the meeting at
+    # tick 5 and one in the meeting room at the regroup tick 6, read to it as an
+    # impossible walk; the detector every other profile runs flags nothing.
+    def _turn(speaker: str, index: int, tick: int, room: str) -> MeetingTurn:
+        return MeetingTurn(
+            turn_id=f"m:turn-{index}",
+            turn_index=index,
+            speaker=speaker,
+            turn_kind="opening" if index == 0 else "reply",
+            reply_to=None if index == 0 else "m:turn-0",
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=tick, room=room, subject="p-3"
+                ),
+            ),
+            free_text="unsure",
+        )
+
+    transcript = MeetingTranscript(
+        turns=(_turn("p-1", 0, 5, "REACTOR"), _turn("p-2", 1, 6, "CAFETERIA"))
+    )
+    roster = frozenset({"p-1", "p-2", "p-3"})
+    public_map = public_map_from_engine_map(load_canonical_map())
+    assert "CAFETERIA" not in public_map.room_neighbors["REACTOR"]
+    flags = detect_public_account_conflicts(
+        transcript, roster=roster, room_neighbors=public_map.room_neighbors
+    )
+    assert len(flags) == 1
+    assert (
+        "regroup_ticks"
+        not in inspect.signature(detect_public_account_conflicts).parameters
+    )
+    assert (
+        detect_contradictions(transcript, roster=roster, regroup_ticks=frozenset({6}))
+        == ()
+    )
 
 
 # --------------------------------------------------------------------------- #

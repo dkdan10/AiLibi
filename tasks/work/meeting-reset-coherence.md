@@ -20,7 +20,8 @@ recorded arm or on the public regroup row it produces, so each is byte-neutral o
 4. **A symmetric regroup relevance window.** A regroup tick and the tick after it carry no alibi evidence,
    whether they would corroborate an alibi or prosecute one (`alibi_vs_sighting`). Their sightings stay out
    of the ballot's own-evidence rows.
-5. **Legible memory.** The regroup co-presence folds into one line; the self-location trail marks the regroup.
+5. **Legible memory.** The regroup co-presence folds into one line on the default evidence path when no
+   regroup-tick sighting carries a movement note; the self-location trail marks the regroup.
 6. **Every reader follows:** game, replay helpers, loader, walk, funnel, evidence honesty, scorecard, the
    phase-20 counterfactual, transcript detectors, manager, corroboration and agent memory.
 
@@ -145,6 +146,21 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
 
 ## Acceptance
 
+- [x] Review correction: **the regroup fold is stated at the strength the code delivers, its movement-note
+  condition included** (round 6, correctness lens). On the default evidence path the fold renders only when no
+  regroup-tick row carries a movement note; a subject last seen at the regroup after a sighting in another room
+  carries one, and every regroup sighting then keeps its own row. The contract paragraph, the `store.py`
+  docstrings, the "Legible memory" box, Decisions, Limitations, the PR body and the test helper's docstring say
+  so; the fold's code is unchanged. Planted: `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`
+  pins the unfolded render beside the folded case, and `test_a_subject_never_seen_elsewhere_leaves_the_fold_whole`
+  pins that the note, not the missing later sighting, breaks the fold. Count-only, fake arm-ON seeds 1000-1007:
+  18 of 54 post-regroup views render the latest regroup's fold line (round 6 below).
+- [x] Review correction: **the window's reach is stated at the profiles that read it** (round 6, orchestrator
+  ruling, in part). `docs/observation-contract.md` and `MeetingManager.run`'s docstring now say prosecution
+  reads the window on every profile but attributed testimony, whose account detector takes no ticks
+  (`test_the_account_detector_reads_no_regroup_window`). The ruled validator refusal of the reset beside the
+  public-account profiles is not written: it makes the done temporal-evidence card's pinned test
+  (`tests/orchestrator/test_public_regroup_evidence.py`) unrecordable, so it waits on the stop-and-ask in round 6.
 - [x] Review correction: **the walk's resume phase read is pinned by a recorded meeting that ends the game**
   (round 5, correctness lens). A 5-player reset game whose first meeting ejects the only impostor is recorded
   through `HeadlessGame` with a replay path and walked through `eval.replay_walk` under the evidence-honesty and
@@ -258,11 +274,15 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     evidence-version-1 memory ingests nothing.
 - [x] **Legible memory: the fold and the trail marker.** Mechanism: under a public regroup row,
   `_spawn_group_indices` and its caller also fold runs that begin at the regroup tick when they name every other
-  living player in the row's `player_ids`, all in the meeting room. The trail renders the regroup as its own
-  step, in the notice's words. The two freeze docstrings and `apply_meeting_result`'s name the reset.
-  - A planted 9-player regroup renders one fold line where it rendered eight rows; a partial view (one player
-    unseen) keeps its rows. Under the arm, memory rendered with the public row differs from memory rendered
-    without it only in the notice line, the fold line and the trail step.
+  living player in the row's `player_ids`, all in the meeting room, on the default evidence path, and none of
+  their regroup-tick rows carries a movement note. A row carries one when it is that subject's latest sighting
+  and the agent saw the subject in another room before it; then every regroup sighting keeps its own row. The
+  trail renders the regroup as its own step, in the notice's words. The two freeze docstrings and
+  `apply_meeting_result`'s name the reset.
+  - A planted 9-player regroup, each subject seen again after it, renders one fold line where it rendered eight
+    rows; a partial view (one player unseen) keeps its rows, and so does a subject seen elsewhere, then at the
+    regroup and not after (round 6). Under the arm, memory rendered with the public row differs from memory
+    rendered without it only in the notice line, the fold line and the trail step.
   - Planted proof: removing the fold extension restores eight rows, and removing the marker restores the bare
     arrow. The golden keeps `preserve` byte-identical.
 - [x] **The symmetric regroup window** (signed-off decision 2).
@@ -456,6 +476,10 @@ merging B1 or B4 overlaps a region of this card.
 - Instruments, by the orchestrator's ruling of 2026-09-27 on the stop-and-ask: `eval/meeting_quality.py` and
   `eval/vj_instruments.py` (the regroup window), and `eval/deception_instruments.py` (one refusal; the FROZEN
   departure is declared under Record impact).
+- By the orchestrator's round-6 ruling of 2026-09-27: one model-validator clause in
+  `orchestrator/experiment_config.py` refusing `meeting_reset = hub_with_grace` beside `public_account_version`
+  or `attributed_testimony_version`, a declared one-clause exception to the spine's ownership. Not written at
+  round 6: it would break a done card's pinned test, and the stop-and-ask in round 6's Results waits on it.
 - Docs: `docs/observation-contract.md`, `docs/glossary.md`, `docs/cleanup-dispositions.md`,
   `audits/tactical-gameplay/README.md`, and the `audits/` row of `docs/artifacts.md`, recomputed last.
 - New tests: `tests/orchestrator/test_meeting_reset_coherence.py` (entry, order, grace, resume, equality,
@@ -612,6 +636,10 @@ fourteen acceptance items were met at `d801eb3c`.
   key on the public row, so an evidence-version-2 memory renders them too. The fold renders on the default
   evidence path only: version 2 folds no sightings, the spawn group's included, so each regroup sighting keeps
   its own row there (corrected in round 5; `test_under_version_2_the_regroup_sightings_keep_their_own_rows`).
+  On the default path it renders only when no regroup-tick row carries a movement note: a subject whose latest
+  sighting is its regroup-tick row, after a sighting in another room, leaves every regroup sighting on its own
+  row (corrected in round 6; `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`). On fake
+  arm-ON games that is the common case: 18 of 54 post-regroup views render the latest regroup's fold (round 6).
   No committed recording carries the row. The completion line keeps its detection-row tick (evidence honesty's
   fabricated-sighting rule dates it) and takes the previous self-state row's room when the detection row is a
   regroup tick.
@@ -987,8 +1015,12 @@ does not touch; it passes alone and in `check.sh`.
   (`observation/service.py:557`), which is dropped uncounted.
 - The notice and the trail step key on the public row, so an evidence-version-2 memory under the reset
   renders them too; the fold line renders on the default evidence path only, and version 2 renders each
-  regroup sighting on its own row (corrected in round 5). No committed recording has the row. The notice stays
-  excluded under evidence version 1.
+  regroup sighting on its own row (corrected in round 5). On the default path the fold also needs every
+  regroup-tick row free of a movement note, and the token budget can shed the fold line like any sighting row:
+  on fake arm-ON seeds 1000-1007 the latest regroup's fold line renders in 18 of 54 post-regroup views (round 6).
+  No committed recording has the row. The notice stays excluded under evidence version 1.
+- Under attributed testimony the meeting's contradiction step is the account detector, which reads no regroup
+  window, and the recorded settings do not refuse it beside the reset (round 6's stop-and-ask).
 - The fake provider ejects nobody, so every fake reset game's meetings resume. A meeting that ends the game
   under the reset is covered by a runner of the test's own; how a model reasons after a regroup is first
   measured by the record.
@@ -1439,3 +1471,142 @@ them too|it folds the sightings|fold(s|ed)? .{0,30}under (evidence )?version 2|u
 - The Constraints sentence stands until the orchestrator amends it.
 - The recorded game-ending case is a runner of the test's own: the fake provider ejects nobody, so no fake-provider
   reset game ends at a meeting. The record is the first real reading.
+
+### Review corrections, round 6 (2026-09-27)
+
+The orchestrator's scoped round (its round 4 of this card): one correctness finding on the fold's strength and
+one ruling on the public-account profiles. Commit: the one that first carries this subsection. `main` is still
+`cb0a4cfc`, so nothing is merged. No byte moves under `engine/`, `api/`, `frontend/`, `eval/`, `orchestrator/`,
+`observation/`, `replays/`, `audits/` or `tests/fixtures/`, so the `audits/` row stays (330 files, 27,303,776
+tracked bytes, re-read below) and the demo bundle is not rebuilt. Status stays `done` and the `tasks/README.md`
+sentence is unchanged.
+
+**Finding 1: the fold's movement-note condition (correctness).** Valid. `_spawn_group_indices` takes a run only
+when its first row carries no movement note (`not rows[0].sighting_suffix`). The note lands on a subject's latest
+ordinary sighting when the agent saw that subject in another room at or before it (`_build_breadcrumbs`,
+`_movement_suffix_for`). So a subject seen elsewhere before the meeting and not again after the regroup carries
+the note on its regroup-tick row, and the group does not fold. By the orchestrator's ruling the behaviour stays
+(changing it would move memory bytes under the arm); every statement now matches it:
+- `docs/observation-contract.md`, "The announced regroup": the fold renders only when no regroup-tick sighting
+  carries a note, the case above leaves every regroup sighting on its own row, and the token budget can shed the
+  fold line like any sighting row.
+- `agents/memory/store.py`: the `render_for_prompt`, `_coalesce_sightings` and `_spawn_group_indices` docstrings.
+  No code line changes.
+- This card: Outcome item 5, the "Legible memory" box, Decisions ("Sabotage survives the reset") and Limitations.
+- `tests/agents/test_regroup_memory.py`: the module docstring and `_memory`'s, which now names its once-more
+  sighting after the regroup as what keeps the tick-6 rows free of the note. `_memory` gains
+  `unseen_after_regroup`, empty by default, so every existing caller renders as before.
+- The PR body's Summary and Decisions.
+
+Two planted tests sit beside the folded case (`test_a_nine_player_regroup_folds_eight_rows_into_one_line`):
+- `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`: p-2, seen in LABS at ticks 1-5 and not
+  after the regroup at 6, renders eight tick-6 rows and no fold line. The one row with a note is p-2's, ending
+  "(moved from LABS, last seen there at tick 5)." The notice and the route step still render, and the rows equal
+  those rendered without the public row.
+- `test_a_subject_never_seen_elsewhere_leaves_the_fold_whole`: p-9, never seen away from the meeting room, is not
+  seen after the regroup either, and the group still folds. The note breaks the fold, not the missing later
+  sighting.
+
+**The count-only figures.** Eight fake-provider games, seeds 1000-1007, each recorded into the scratchpad with
+`tests/_helpers/scripted_meeting.record_game(directory, seed=seed,
+config=RecordedExperimentConfig(meeting_reset="hub_with_grace"))` (9 players, 2 impostors). A view is
+`ReplayLoader(directory).get_meeting_memory(...)` for each voter of each meeting after a game's first, 10
+meetings in all. A view renders the latest regroup's fold when a line of its rendered memory holds the fold's
+words at the previous meeting's tick plus one. The reasons come from the same walk, with `_coalesce_sightings`
+wrapped to re-run the fold test on the latest regroup. Only counts were printed.
+
+| Reading | Views |
+| --- | --- |
+| views, one per voter of each meeting after the first | 54 |
+| the latest regroup's fold line in the rendered text | 18 |
+| the fold computed, its line shed by the token budget | 5 |
+| a regroup-tick row carries a movement note, so no fold | 30 |
+| a partial view (one subject unseen at the regroup), so no fold | 1 |
+| with the note withheld from every regroup-tick row: the fold line in the text (computed) | 48 (53) |
+
+The verifier reported 49 of 54 with the test helper's workaround. Two readings of that workaround were tried:
+`_movement_suffix_for` returning no note on a regroup tick, and the note test dropped from the regroup fold.
+Both read 48, so 48 is the figure this card can reproduce; the 49 is the verifier's own and is not reproduced
+here. So a rendered regroup under the arm is usually row by row: the fold line reaches the prompt in a third of
+post-regroup views.
+
+**Ruling: refuse the reset beside the public-account profiles. Stop and ask.** The clause was written and then
+withdrawn, and `orchestrator/experiment_config.py` is unchanged at this round's head.
+- **What was built.** One clause in `_meeting_reset_guards` refused `hub_with_grace` beside
+  `public_account_version` or `attributed_testimony_version`, and its message named both fields and the reset.
+  Planted cases in `tests/orchestrator/test_meeting_reset_coherence.py` covered four profiles: public accounts,
+  attributed testimony, both, and both with evidence version 2. Each was refused, and each profile alone and the
+  reset alone validated. The spine's committed-payload tests stayed green
+  (`test_every_committed_recorded_payload_reserializes_byte_for_byte`,
+  `test_every_committed_audit_json_payload_reserializes_unchanged`). None of the lab's 17 candidate configs
+  combines them. Nine listed-class mutants of the clause ran: 8 red, and the clause swapped with the
+  evidence-version-1 branch was equivalent (the two refuse disjoint settings, and both raise).
+- **The blocker.** `tests/orchestrator/test_public_regroup_evidence.py::test_public_reset_does_not_create_an_impossible_walk_or_erase_later_checks`
+  records exactly this combination: format 2, evidence version 2, public accounts 1, attributed testimony 1 and the
+  reset, through `experiments.deduction_scenarios.run_case`. Under the clause it failed at construction. It is the
+  done `tasks/work/temporal-evidence-v2.md` card's test, and that card's Results state its finding: the regroup
+  record "suppresses that allegation while preserving a later impossible public account". With the two account
+  fields removed, its regroup-boundary assertions still pass, but its later-account assertion (`:101`) fails:
+  without the account profiles the later account yields no such line. The clause therefore forces removing that
+  assertion or the test's account half. That is a weakened test and a moved earlier verdict, in a file outside
+  this card's scope, so this round withdrew the clause and its tests.
+- **The options** (the PR's Questions): refuse as ruled and retire the account half of that test, recording that
+  the temporal-evidence finding covered a combination now refused; thread the regroup ticks into the account
+  detector instead, a detector change beyond the ruling; or keep the combination and state the account detector's
+  missing window as a limitation, which is what the contract states at this head.
+- **What landed: the narrowing the ruling asked for.** The contract's window sentence now says that on every
+  meeting profile but attributed testimony a regroup-window sighting neither corroborates nor prosecutes. Under
+  attributed testimony the contradiction step is the account detector, which reads no window, and nothing refuses
+  the reset beside it. `MeetingManager.run`'s docstring says the same. Both are pinned by
+  `test_the_account_detector_reads_no_regroup_window`: two honest witnesses place p-3 in REACTOR at tick 5 and in
+  the meeting room at the regroup tick 6. The account detector reads that as one conflict and takes no
+  `regroup_ticks`, and `detect_contradictions` with the window flags nothing.
+
+**The bounded mutation pass.** It covers the span finding 1 names, the fold's note test in
+`_spawn_group_indices`. The ruling's narrowing changed only a document and a docstring, so it has no code span.
+Each mutant replaced one snippet (its count asserted to be exactly one) and ran
+`tests/agents/test_regroup_memory.py`, `tests/agents/test_memory_rendering.py` and
+`tests/orchestrator/test_meeting_reset_coherence.py` with `-x -n 8`. Each file was restored from a byte copy with
+sha256 equal, and `git status` showed only this round's edits.
+
+| Id | Class | File | First red test |
+| --- | --- | --- | --- |
+| M-ST-note-test-dropped | a, the note filter dropped | `agents/memory/store.py` | `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`; without `-x`, the only red of 240 |
+| M-ST-note-test-inverse | c, `not rows[0].sighting_suffix` to `rows[0].sighting_suffix` | same | `test_a_subject_never_seen_elsewhere_leaves_the_fold_whole` |
+
+The first mutant is the survivor the finding implies: before this round no test rendered a regroup-tick row with a
+note, and it is red only on the round's new case.
+
+**Verification of this round's bytes.** Every gate ran in a bare shell with 0 `AILIBI_*` exports, each exit code
+captured from the process, never through a pipe. `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py`
+re-ran after this subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 221 passed (218 at round 5, plus the round's 3 items) |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted | 956 `"meeting_reset":"preserve"` |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+| `ruff check`, `ruff format --check` and `mypy` on the four changed Python files | clean |
+
+`bash scripts/check.sh` runs once, at this round's head (the commit that carries this subsection), and the PR
+body quotes its exit code. No `api/` or `frontend/` byte changed, so the bundle and the Playwright journey were
+not re-run; `check.sh` runs the frontend's lint, types, tests and build.
+
+**Changed test expectations.** None is weakened, skipped or deleted. `_memory` in
+`tests/agents/test_regroup_memory.py` gains a keyword with an empty default. The round adds 3 test items: two in
+that file and `test_the_account_detector_reads_no_regroup_window` in `tests/orchestrator/test_meeting_reset_coherence.py`.
+
+**Limitations.**
+- The ruled refusal waits on the orchestrator (above and in the PR's Questions). Until then a config combining
+  the reset with attributed testimony validates, and its meetings would prosecute a regroup relocation.
+- The Constraints sentence on the fold ("so they also apply to evidence-version-2 memories") still waits on the
+  orchestrator, as in round 5.
+- The verifier's 49 of 54 is not reproduced; the card states the 48 it can reproduce.

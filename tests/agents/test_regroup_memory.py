@@ -9,7 +9,9 @@ before:
 
 * the meetings block announces the regroup (the notice);
 * on the default evidence path, the co-presence rows the regroup produced fold
-  into one line, as the spawn group does; version 2 folds neither group and
+  into one line, as the spawn group does, when none of them carries a movement
+  note; a subject last seen at the regroup after a sighting elsewhere carries
+  one, and then each row stays its own. Version 2 folds neither group and
   renders each sighting on its own row;
 * the self-location route states the regroup as its own step;
 * a task completion detected on the regroup's tick is placed where the task was
@@ -96,6 +98,7 @@ def _memory(
     *,
     regroup: bool,
     unseen_at_regroup: tuple[str, ...] = (),
+    unseen_after_regroup: tuple[str, ...] = (),
     room_before: str = "LABS",
     version: int | None = None,
     row_room: str = "CAFETERIA",
@@ -103,8 +106,14 @@ def _memory(
 ) -> AgentMemory:
     """Spawn together, split up, a meeting at tick 5, everyone gathered at 6.
 
-    After the regroup each subject is seen once more somewhere else, so no
-    tick-6 row carries a movement suffix and the regroup group is foldable.
+    ``p-2`` is seen in ``room_before`` at ticks 1-5. A movement note lands on a
+    subject's latest sighting only, when the agent saw it in another room
+    before, and the fold takes no group whose regroup-tick row carries one
+    (``agents.memory.store._spawn_group_indices``). So each subject is seen once
+    more after the regroup: no tick-6 row is then a latest sighting and the
+    regroup group folds. A subject in ``unseen_after_regroup`` is not seen
+    again, so its tick-6 row is its latest sighting; for ``p-2`` after a stay in
+    another room that row carries the note, and the group renders row by row.
     """
 
     memory = AgentMemory(evidence_reasoning_version=version)  # type: ignore[arg-type]
@@ -127,6 +136,7 @@ def _memory(
     events += [
         _saw(REGROUP + 1, subject, "ADMIN" if index % 2 else "UPPER_HALL", index)
         for index, subject in enumerate(OTHERS, 1)
+        if subject not in unseen_after_regroup
     ]
     for event in events:
         memory.episodic.append(event)
@@ -265,6 +275,39 @@ def test_a_nine_player_regroup_folds_eight_rows_into_one_line() -> None:
     without_row = _regroup_tick_rows(_render(_memory(regroup=False)))
     assert len(without_row) == len(OTHERS) == 8
     assert with_row == [
+        f"- [obs {OBSERVER}:{REGROUP}:1] [tick {REGROUP}] After the public regroup "
+        f"you saw every other living player in CAFETERIA: {', '.join(OTHERS)}."
+    ]
+
+
+def test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row() -> None:
+    # The fold's strength, beside the folded case above: p-2 was seen in LABS
+    # before the meeting and not again after the regroup, so its tick-6 row is
+    # its latest sighting and carries the movement note. The group then renders
+    # row by row, the note on p-2's row, with the notice and the route step and
+    # no fold line; the rows are the ones rendered without the public row.
+    view = _render(_memory(regroup=True, unseen_after_regroup=("p-2",)))
+    rows = _regroup_tick_rows(view)
+    assert len(rows) == len(OTHERS) == 8
+    assert "After the public regroup" not in view
+    assert f"- {NOTICE}" in view.splitlines()
+    assert TRAIL_STEP in _trail(view)
+    (noted,) = [row for row in rows if "moved from" in row]
+    assert "You saw p-2 in CAFETERIA" in noted
+    assert noted.endswith(" (moved from LABS, last seen there at tick 5).")
+    assert rows == _regroup_tick_rows(
+        _render(_memory(regroup=False, unseen_after_regroup=("p-2",)))
+    )
+
+
+def test_a_subject_never_seen_elsewhere_leaves_the_fold_whole() -> None:
+    # The note needs a room change: p-9 is never seen away from the meeting
+    # room before the regroup, so its tick-6 row stays bare even as its latest
+    # sighting, and the group still folds.
+    rows = _regroup_tick_rows(
+        _render(_memory(regroup=True, unseen_after_regroup=("p-9",)))
+    )
+    assert rows == [
         f"- [obs {OBSERVER}:{REGROUP}:1] [tick {REGROUP}] After the public regroup "
         f"you saw every other living player in CAFETERIA: {', '.join(OTHERS)}."
     ]
