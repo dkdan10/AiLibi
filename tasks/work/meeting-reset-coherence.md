@@ -145,6 +145,20 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
 
 ## Acceptance
 
+- [x] Review correction: **the walk's resume phase read is pinned by a recorded meeting that ends the game**
+  (round 5, correctness lens). A 5-player reset game whose first meeting ejects the only impostor is recorded
+  through `HeadlessGame` with a replay path and walked through `eval.replay_walk` under the evidence-honesty and
+  funnel profiles. Each walk completes with the terminal `MeetingApplied` (phase `GAME_OVER`, its game-over
+  event last) and then `WalkComplete` at the meeting's tick
+  (`test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting`). With the walk's resume phase
+  read replaced by `"PLAY"` both cases are red (`M-WK-compose-phase`, round 5 below).
+- [x] Review correction: **the regroup fold is stated at the strength the code delivers** (round 5, correctness
+  lens). The fold renders on the default evidence path only. Evidence version 2 folds no sightings, the spawn
+  group's included, so each regroup sighting keeps its own row there while the notice and the route step
+  render. `docs/observation-contract.md`, this card's Decisions and Limitations and the PR body say so.
+  `test_under_version_2_the_regroup_sightings_keep_their_own_rows` pins the version-2 render, and
+  `test_only_version_2_leaves_the_spawn_group_unfolded` pins the gate on all three paths. The Constraints
+  sentence the finding names is the orchestrator's to amend (the PR's Questions).
 - [x] Review correction: **the four listed-class mutation survivors are killed** (round 4, correctness lens).
   Each is red under its mutant through a planted case: a hand-built `public_regroup` row that lists its players
   renders byte-identically to the tuple row (`test_a_public_row_listing_its_players_reads_as_the_tuple_row_does`);
@@ -594,10 +608,13 @@ fourteen acceptance items were met at `d801eb3c`.
   policy rebuild (`orchestrator/policy_reconstruction.py`) does not run the full meeting fold, so its direct
   call now routes through `fold_public_regroup` and `regroup_room_for`, the same home.
   `ingest_public_regroup` ingests under evidence None and version 2 and returns under version 1.
-- **Sabotage survives the reset**: documented in the glossary entry, not changed. The fold and the trail step
-  key on the public row, so they also apply to evidence-version-2 memories; no committed recording carries the
-  row. The completion line keeps its detection-row tick (evidence honesty's fabricated-sighting rule dates it)
-  and takes the previous self-state row's room when the detection row is a regroup tick.
+- **Sabotage survives the reset**: documented in the glossary entry, not changed. The notice and the trail step
+  key on the public row, so an evidence-version-2 memory renders them too. The fold renders on the default
+  evidence path only: version 2 folds no sightings, the spawn group's included, so each regroup sighting keeps
+  its own row there (corrected in round 5; `test_under_version_2_the_regroup_sightings_keep_their_own_rows`).
+  No committed recording carries the row. The completion line keeps its detection-row tick (evidence honesty's
+  fabricated-sighting rule dates it) and takes the previous self-state row's room when the detection row is a
+  regroup tick.
 - **Evidence honesty reads two frames** under the reset: `room_at` is the frame an agent reads (the regrouped
   frame at a meeting tick) and `resolved_at` the frame each tick's actions resolved in. A state-read sighting
   is checked against the first and an action-stamped sighting against the second.
@@ -968,8 +985,10 @@ does not touch; it passes alone and in `check.sh`.
 - The resume filter drops every trigger-tick event outside the keep-set and counts only the three reported
   kinds. In the default delivery the only other trigger-tick event an observer reads is a rejected `do_task`
   (`observation/service.py:557`), which is dropped uncounted.
-- The fold line and the trail step key on the public row, so an evidence-version-2 memory under the reset
-  renders them too; no committed recording has the row. The notice stays excluded under evidence version 1.
+- The notice and the trail step key on the public row, so an evidence-version-2 memory under the reset
+  renders them too; the fold line renders on the default evidence path only, and version 2 renders each
+  regroup sighting on its own row (corrected in round 5). No committed recording has the row. The notice stays
+  excluded under evidence version 1.
 - The fake provider ejects nobody, so every fake reset game's meetings resume. A meeting that ends the game
   under the reset is covered by a runner of the test's own; how a model reasons after a regroup is first
   measured by the record.
@@ -1288,3 +1307,132 @@ script's reading of a reset recording.
   orchestrator rules for threading instead, this refusal is the thing to replace.
 - The FROZEN concluded lab probes named in round 3 still call `detect_contradictions` without the window if
   pointed at a reset recording; they are lab code, and the question stands.
+
+### Review corrections, round 5 (2026-09-27)
+
+The repair of the two blocking findings the correctness lens raised on round 4. Commits: the commit that first
+carries this subsection (the planted cases, the contract paragraph, one comment and this record) and the card
+commit after it, which records the `check.sh` run. `main` is still `cb0a4cfc`, the round-3 merge base, so
+nothing is merged. No `audits/` or `tests/fixtures/` byte moves, so the `audits/` row stays (330 files,
+27,303,776 tracked bytes, re-read below). Status stays `done` and the `tasks/README.md` sentence is unchanged.
+
+**Finding 1: the walk's resume phase read (correctness).** Valid. `eval/replay_walk.py::_walk_replay` composes
+the resume events before it stops at game over, so `meeting_regrouped(experiment, phase_after=state.phase)` is
+load-bearing there. After a meeting that ends a reset game the phase is `GAME_OVER`, no regroup ran, and the
+meeting's own events (the ejection's game-over event) pass through. With the read replaced by `"PLAY"`, the
+helper is told a regroup ran and refuses the non-empty meeting events. The loader and the golden stop at game
+over before they compose, so their phase reads are equivalent. No test recorded a reset game whose meeting ends
+it (the fake provider ejects nobody), so the constant stayed green.
+
+- **The planted case.** `_EjectingRunner` is the test's own runner that ejects the only impostor at the first
+  meeting. Every ballot it casts now names the impostor with full confidence, so the ballots tally to the
+  ejection the result states and the game can be recorded. `_button_game` takes an optional replay path, `None`
+  by default, so every other caller runs as before.
+  `test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting` records the 5-player reset game at
+  seed 4 into `tmp_path` through `HeadlessGame.run` and walks it under the evidence-honesty and funnel profiles.
+  Each walk yields one `MeetingApplied` in phase `GAME_OVER` whose post events end with the game-over event,
+  then `WalkComplete` whose terminal tick is the meeting's.
+- **Red under the mutant.** `M-WK-compose-phase` below: both parametrised cases are red (2 failed). At the
+  round's bytes both pass.
+- `test_a_meeting_that_ends_the_game_under_the_reset_resumes_nothing` keeps every assertion; only its runner's
+  ballots changed.
+
+**Finding 2: the fold under evidence version 2 (correctness).** Valid. `render_for_prompt` folds sightings only
+when the evidence version is not 2. Version-2 observations also carry no sighting key, the key the fold groups
+on. So a version-2 memory under the reset renders the notice and the route step, and keeps each regroup sighting
+on its own row, as it keeps the spawn sightings. It is now stated at that strength:
+
+- `docs/observation-contract.md`, "The announced regroup": the fold is on the default evidence path; evidence
+  version 2 folds no sightings.
+- This card's Decisions ("Sabotage survives the reset") and Limitations lines, corrected in place with a round-5
+  note; the PR body's Summary and Decisions.
+- `agents/memory/store.py`: one comment at the fold's version gate, and no code change;
+  `tests/agents/test_regroup_memory.py`: the module docstring.
+- Tests in `tests/agents/test_regroup_memory.py`:
+  `test_under_version_2_the_regroup_sightings_keep_their_own_rows` checks the notice line and the route step are
+  present, with no regroup fold line and no spawn fold. The regroup-tick rows equal those rendered without the
+  row, one per other player. `test_only_version_2_leaves_the_spawn_group_unfolded` checks the default path and
+  version 1 fold the spawn group and version 2 does not.
+- The Constraints sentence the finding names ("so they also apply to evidence-version-2 memories", under
+  "Decisions this card makes") is the orchestrator's contract text; the PR's Questions asks the orchestrator to
+  amend it. The Acceptance box "Legible memory" holds as written: it states the fold and the difference the row
+  makes on the default path, the path its tests render.
+
+**The bounded mutation pass.** It covers the span finding 1 names (the walk's resume composition) and the spans
+finding 2 names (the fold's version gate and its regroup argument, the notice's version gate, the route's regroup
+argument), with the listed classes only. Each mutant replaced one snippet (its count asserted to be exactly
+one) and ran the targeted suites with `-x -n 8`. For the walk: `tests/orchestrator/test_meeting_reset_coherence.py`
+and `tests/eval/test_replay_walk.py`. For the store: `tests/agents/test_regroup_memory.py`,
+`tests/agents/test_memory_rendering.py` and `tests/orchestrator/test_meeting_reset_coherence.py`. Each file was
+restored from a byte copy (18 restorations, sha256 equal each time), and `git status` showed only this round's
+edits. 14 mutants, 11 red on the first run. Of the three that came back green, one is killed by a new planted
+case and two are equivalent:
+
+| Id | Class | File | First red test |
+| --- | --- | --- | --- |
+| M-WK-compose-phase | d, the phase read to `"PLAY"` | `eval/replay_walk.py` | `test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting[funnel-instrument]` (both cases red) |
+| M-WK-compose-settings | h, the recorded settings to `None` | same | `test_the_four_readings_agree_at_every_meeting_open` |
+| M-WK-compose-meeting-events | b, the meeting's events swapped for the trigger tick's | same | `test_the_readers_name_the_maps_meeting_room` |
+| M-WK-compose-trigger-events | b, the trigger tick's events swapped for the meeting's | same | `test_withholding_the_window_or_the_resume_at_a_reader_breaks_agreement[walk-resume]` |
+| M-WK-break-first | g, the game-over break moved above the composition | same | green, equivalent: the walk reads neither `last_events` nor `resumed_meeting_ticks` after it breaks, so composing before or after the break yields the same events |
+| M-ST-fold-gate-inverse | c, `!= 2` to `== 2` | `agents/memory/store.py` | `test_the_fold_expects_the_players_the_row_gathered_not_the_known_roster` |
+| M-ST-fold-gate-not-none | c, `!= 2` to `is not None` | same | `test_the_fold_expects_the_players_the_row_gathered_not_the_known_roster` |
+| M-ST-fold-gate-none | c, `!= 2` to `is None` | same | first green (also over the wider memory suites, 1862 passed); killed by `test_only_version_2_leaves_the_spawn_group_unfolded[1-True]` |
+| M-ST-fold-gate-dropped | a, the version gate dropped | same | green, equivalent: version-2 observations carry no sighting key (`_build_v2_observations`), so `_coalesce_sightings` passes every one through unchanged and the render sorts them afterwards |
+| M-ST-fold-regroups-empty | b, the fold's regroups to `()` | same | `test_the_fold_expects_the_players_the_row_gathered_not_the_known_roster` |
+| M-ST-notice-gate-none | c, `!= 1` to `is None` | same | `test_under_version_2_the_regroup_sightings_keep_their_own_rows` (the one red test: the round's new case) |
+| M-ST-notice-gate-inverse | c, `!= 1` to `== 1` | same | `test_the_default_path_renders_the_notice_whenever_the_row_exists` |
+| M-ST-notice-gate-dropped | a, the notice's version gate dropped | same | `test_version_1_renders_no_notice_even_beside_a_row` |
+| M-ST-trail-regroups-empty | b, the route's regroups to `()` | same | `test_the_route_states_the_regroup_as_its_own_step` |
+
+The fold's version gate predates this card (this card added only its regroup argument). No test pinned that
+version 1 folds the spawn group, so `M-ST-fold-gate-none` survived. The finding names that span, so the round
+kills it rather than naming it pre-existing. The restorations: 14 in the first run, 1 in the wider run and 3 in
+the rerun of the three greens, where `M-ST-fold-gate-none` came back red and the two equivalents came back green.
+
+**Verification of this round's code and tests.** Every gate below ran on the round's code and test bytes, in a
+bare shell with 0 `AILIBI_*` exports. Each exit code was captured from the process, never through a pipe.
+`scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` re-ran after this subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 218 passed (212 at round 4, plus the round's 6 items) |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `build_sample_report.py` on a fake `hub_with_grace` set (seeds 1000-1002, 7 meetings, recorded with `tests/_helpers/scripted_meeting.record_game` into the scratchpad): write, then `--check`, then `--baseline-out` | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each (88 work cards) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted; `git grep -l` for the files | 956 `"meeting_reset":"preserve"`, in 101 files |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+| `scripts/build_demo_bundle.py`, at an export of `cb0a4cfc` and at the round's bytes | exit 0 each, 156 JSON files baked; `diff -r` of the two `data/` trees prints nothing (exit 0). Both read the branch's `replays/samples` (the export links the branch's `replays/`), and the export's build imports the export's own `api/` and `orchestrator/` |
+| `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
+| `git diff --stat b590eb17` | five files: `agents/memory/store.py` (one comment, no code), `docs/observation-contract.md`, this card and the two test files; nothing under `engine/`, `frontend/`, `api/`, `eval/`, `observation/`, `orchestrator/`, `meetings/`, `scripts/`, `replays/`, `audits/` or `tests/fixtures/` |
+
+`bash scripts/check.sh` runs once, at the commit that first carries this subsection, in a bare shell with its
+exit code captured from the process; the card commit after it records the result in this paragraph and
+changes nothing else.
+
+**Changed test expectations.** None is weakened, skipped or deleted. Two test helpers changed in
+`tests/orchestrator/test_meeting_reset_coherence.py`: `_EjectingRunner`'s ballots now name the impostor, and
+`_button_game` takes an optional replay path. The round adds 6 test items in 3 functions:
+`test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting` (2) in that file, and
+`test_under_version_2_the_regroup_sightings_keep_their_own_rows` (1) and
+`test_only_version_2_leaves_the_spawn_group_unfolded` (3) in `tests/agents/test_regroup_memory.py`.
+
+**Closing greps.** `git grep -n -i -E "also apply to evidence|apply to evidence-version-2|version-2 memor|renders?
+them too|it folds the sightings|fold(s|ed)? .{0,30}under (evidence )?version 2|under (evidence )?version 2.{0,40}fold"
+-- ':!tasks/phase-*' ':!agent_prompts' ':!audits'`, at the head. The hits:
+- this card's Constraints sentence, the orchestrator's (the PR's Questions);
+- this card's Decisions and Limitations lines as corrected, which say the notice and the trail step render under
+  version 2 and the fold does not;
+- this subsection's own quotation and grep.
+`docs/observation-contract.md` no longer says the memory folds the regroup wherever the row exists.
+
+**Limitations.**
+- The Constraints sentence stands until the orchestrator amends it.
+- The recorded game-ending case is a runner of the test's own: the fake provider ejects nobody, so no fake-provider
+  reset game ends at a meeting. The record is the first real reading.

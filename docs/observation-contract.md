@@ -189,9 +189,11 @@ events followed by the meeting's own, as it always has.
 **The announced regroup.** The `public_regroup` row is written into every living
 memory on the default evidence path as well as under evidence version 2, and
 never under evidence version 1. Wherever the row exists the memory states the
-regroup beside the meeting record and as its own step in the agent's route, and
-it folds the sightings the regroup produced (every other living player, in the
-meeting room) into one line. A sighting on a regroup's tick or the tick after it
+regroup beside the meeting record and as its own step in the agent's route. On
+the default evidence path it also folds the sightings the regroup produced
+(every other living player, in the meeting room) into one line; evidence version
+2 folds no sightings, so each of those keeps its own row, as the sightings at
+the start of the game do. A sighting on a regroup's tick or the tick after it
 is not evidence about anyone's whereabouts: the meeting layer neither
 corroborates nor prosecutes an alibi with it, and a voter's own sighting there
 makes no ballot evidence row. It stays in the voter's memory.

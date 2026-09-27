@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 import api.replay_loader as loader_module
 import eval.evidence_honesty as honesty_module
+import eval.funnel as funnel_module
 import eval.replay_walk as walk_module
 import orchestrator.game as game_module
 import orchestrator.replay as replay_module
@@ -74,7 +75,13 @@ from eval.gameplay_census import (
     load_census_inputs,
 )
 from eval.recorded_settings import read_recorded_settings
-from eval.replay_walk import MeetingApplied, MeetingOpened, TickOpened, walk_replay
+from eval.replay_walk import (
+    MeetingApplied,
+    MeetingOpened,
+    TickOpened,
+    WalkComplete,
+    walk_replay,
+)
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
 from agents.memory.store import DEFAULT_TOKEN_BUDGET
@@ -947,6 +954,7 @@ def _button_game(
     *,
     config: RecordedExperimentConfig | None,
     game_map: Map | None = None,
+    replay_path: Path | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     from orchestrator.game import HeadlessGame, build_default_agent_factory
     from orchestrator.scheduler import TickScheduler
@@ -969,7 +977,7 @@ def _button_game(
         agent_factory=_factory,
         meeting_runner=runner,
         experiment_config=config,
-        replay_path=None,
+        replay_path=replay_path,
         scheduler=TickScheduler(max_ticks=5),
         num_players=5,
         num_impostors=1,
@@ -1016,7 +1024,11 @@ def test_a_runner_written_before_the_ticks_is_refused_in_a_regroup_game() -> Non
 
 
 class _EjectingRunner(_SkippingRunner):
-    """Ejects the only impostor at the first meeting, so that meeting ends the game."""
+    """Ejects the only impostor at the first meeting, so that meeting ends the game.
+
+    Every living player votes the impostor with full confidence, so the ballots
+    tally to the ejection the result states and the meeting can be recorded.
+    """
 
     async def run_meeting(
         self,
@@ -1039,10 +1051,18 @@ class _EjectingRunner(_SkippingRunner):
             for pid, player in sorted(state.players.items())
             if player.alive and player.role == "IMPOSTOR"
         )
+        ballots = tuple(
+            ballot.model_copy(update={"target": impostor, "confidence": 1.0})
+            for ballot in artifacts.result.ballots
+        )
         return replace(
             artifacts,
             result=artifacts.result.model_copy(
-                update={"outcome": "EJECTED", "ejected_player_id": impostor}
+                update={
+                    "outcome": "EJECTED",
+                    "ejected_player_id": impostor,
+                    "ballots": ballots,
+                }
             ),
         )
 
@@ -1056,6 +1076,41 @@ def test_a_meeting_that_ends_the_game_under_the_reset_resumes_nothing() -> None:
     assert result.final_state.phase == "GAME_OVER"
     assert result.outcome == "CREWMATES"
     assert runner.regroup_ticks == [frozenset()]
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [honesty_module._WALK_CONFIG, funnel_module._WALK_CONFIG],
+    ids=["evidence-honesty", "funnel-instrument"],
+)
+def test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting(
+    tmp_path: Path, profile: Any
+) -> None:
+    # The walk composes the resume before it stops at game over, so it must read
+    # the phase the meeting left: a meeting that ends the game regroups nobody.
+    path = tmp_path / "headless-seed-4.jsonl"
+    game, _ = _button_game(_EjectingRunner(), config=RESET, replay_path=path)
+    recorded = game.run()
+    assert recorded.outcome == "CREWMATES"
+    events = list(
+        walk_replay(
+            path,
+            seed=4,
+            game_map=load_canonical_map(),
+            config=profile,
+            num_players=5,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+        )
+    )
+    applied = [event for event in events if isinstance(event, MeetingApplied)]
+    assert len(applied) == 1
+    assert applied[0].state.phase == "GAME_OVER"
+    assert [type(event) for event in applied[0].post_events][-1] is GameOverEvent
+    complete = events[-1]
+    assert isinstance(complete, WalkComplete)
+    assert complete.terminal_tick == applied[0].entry.tick
+    assert events[-2] is applied[0]
 
 
 def _admin_meeting_map() -> Map:

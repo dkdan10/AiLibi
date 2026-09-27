@@ -707,6 +707,8 @@ def render_for_prompt(
     # Fold the runs BEFORE the id prefix and the sort: the fold works on the
     # built observations, so every firewall suppression, co-presence suffix
     # and breadcrumb is already settled and a span cites a real stored id.
+    # Version 2 folds nothing: every sighting keeps its own row, at spawn and
+    # after a public regroup alike.
     if memory.evidence_reasoning_version != 2:
         observations = _coalesce_sightings(
             observations, roster=roster, own_agent_id=own_agent_id, regroups=regroups

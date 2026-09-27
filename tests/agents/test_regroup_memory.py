@@ -8,8 +8,9 @@ change below keys on that row, so a memory without it renders exactly as
 before:
 
 * the meetings block announces the regroup (the notice);
-* the co-presence rows the regroup produced fold into one line, as the spawn
-  group does;
+* on the default evidence path, the co-presence rows the regroup produced fold
+  into one line, as the spawn group does; version 2 folds neither group and
+  renders each sighting on its own row;
 * the self-location route states the regroup as its own step;
 * a task completion detected on the regroup's tick is placed where the task was
   done, not in the meeting room.
@@ -325,6 +326,36 @@ def test_the_regroup_breaks_a_stay_in_the_meeting_room_too() -> None:
     assert "CAFETERIA t0-6" in _trail(
         _render(_memory(regroup=False, room_before="CAFETERIA"))
     )
+
+
+def test_under_version_2_the_regroup_sightings_keep_their_own_rows() -> None:
+    # Version 2 renders every sighting on its own row, at spawn and after a
+    # regroup alike: the row brings the notice and the route step, no fold line.
+    with_row = _render(_memory(regroup=True, version=2))
+    without_row = _render(_memory(regroup=False, version=2))
+    assert f"- {NOTICE}" in with_row.splitlines()
+    assert TRAIL_STEP in _trail(with_row)
+    assert "After the public regroup" not in with_row
+    assert "You saw every other player in" not in with_row
+    # Version 2 dates a sighting "[tick 6, timing unspecified]".
+    stamp = re.compile(rf"\[tick {REGROUP}[,\]]")
+    rows = [line for line in with_row.splitlines() if stamp.search(line)]
+    assert rows == [line for line in without_row.splitlines() if stamp.search(line)]
+    assert sorted(re.findall(r"You saw (p-\d) in CAFETERIA", "\n".join(rows))) == [
+        *OTHERS
+    ]
+
+
+@pytest.mark.parametrize(
+    ("version", "folds"), [(None, True), (1, True), (2, False)], ids=str
+)
+def test_only_version_2_leaves_the_spawn_group_unfolded(
+    version: int | None, folds: bool
+) -> None:
+    # The fold the regroup reuses runs on every path but version 2, whose
+    # observations carry no sighting key to fold on.
+    view = _render(_memory(regroup=False, version=version))
+    assert ("You saw every other player in CAFETERIA" in view) is folds
 
 
 def test_the_row_changes_only_the_notice_the_fold_and_the_route() -> None:
