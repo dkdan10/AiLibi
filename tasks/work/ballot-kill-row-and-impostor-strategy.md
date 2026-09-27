@@ -122,6 +122,23 @@ edits the text under that header.
 
 ## Acceptance
 
+- [x] Review correction: **every ballot-conduct cell the report publishes reads its own tally**
+  (round 3, correctness verifier, probes X30, X32, X33 and X34). The new
+  `tests/meetings/test_ballot_arms.py::test_the_report_publishes_each_conduct_tally_in_its_own_cell`
+  builds the report from thirteen tallies that each hold a different non-zero count and compares
+  the published `BallotConductCells` whole; `test_the_honesty_cells_count_the_scripted_ballots`
+  now also asserts `ejections == 1`. X30 (`ejections` read as `impostor_ejects`), X32
+  (`ejections=0`), X33 (`ejects_other_turn=0`) and X34 (`ejects_pointing_toward_own_turn` read as
+  `ejects_without_citation`) in `eval/evidence_honesty.py::_report` now fail it.
+- [x] Review correction: **the kill predicate and the fellow-set reader read only their own row
+  type** (round 3, docs verifier, probes X08w and X07w). The new
+  `test_the_accessor_reads_saw_player_rows_only`: a first-hand `saw_player_move` row carrying a
+  player, a room and the kill action makes no record, and the same payload on a `saw_player` row
+  makes one. The new `test_the_teammate_guard_reads_self_state_rows_only`: a first-hand
+  `global_status` row carrying `fellow_impostor_ids` guards nothing, and the same list on a
+  first-hand `self_state` row drops the teammate's kill. X08w (drop the `saw_player` type filter in
+  `orchestrator/game.py::kill_witness_records_in`) and X07w (drop the `self_state` type filter in
+  `_fellow_impostor_ids_in`) now fail them.
 - [x] Review correction: **an EJECT citing a turn and an own observation is classified by the
   turn** (round 2, correctness verifier, probe R07). Two new carriers in
   `tests/meetings/test_ballot_arms.py::test_each_carrier_moves_its_cell_by_exactly_one`: impostor
@@ -1231,3 +1248,106 @@ player|minted a contradiction of this|classified by its primary citations" -- '*
 943 and 950 (the module text, the `CELL_DEFINITIONS` sentence and the family docstring) and the new
 test comment at `tests/meetings/test_ballot_arms.py:2138`; each states what the code does, at that
 strength.
+
+### Review corrections, round 3 (2026-09-27)
+
+Two blocking findings from the round-3 verifiers at `60eb015e`, both listed-class survivors that no
+test pinned. The code already did what its docstrings say, so no production byte changes. Fix
+commit `d64b6c59` edits only `tests/meetings/test_ballot_arms.py`; the commit after it changes only
+this card. Every command below ran at `d64b6c59` in a shell with no `AILIBI_*` export.
+
+**What changed.**
+- **The report's conduct arguments (correctness verifier: X30, X32, X33, X34).** Every carrier
+  folded tallies through `_fold_ballot_conduct` and read the fold's counters, and the scripted
+  game's report holds equal counts in several cells (`ejects_pointing_toward_own_turn` and
+  `ejects_without_citation` are both 1, `ejects_other_turn` is 0), so an argument of `_report`'s
+  `BallotConductCells(...)` that read a sibling tally or a constant left every test green. The
+  mutants are wrong published numbers, read off the family table below: X30 would publish 46
+  ejections on s9 instead of 90, X32 0, X33 0 other-turn EJECTs instead of 19, X34 0 own-turn
+  EJECTs instead of 13. The new `test_the_report_publishes_each_conduct_tally_in_its_own_cell` sets
+  the thirteen conduct tallies to thirteen different non-zero counts that add up as the fold's do
+  (61 EJECTs + 36 SKIPs = 97 ballots; 23 + 13 + 7 + 18 = 61 EJECTs), asserts that the tally names
+  equal the cell names in order (so a new cell must get its own count), and compares the published
+  `BallotConductCells` whole, each rate cell over its own denominator.
+  `test_the_honesty_cells_count_the_scripted_ballots` also asserts `ejections == 1`, the one cell
+  it read only as a denominator.
+- **The row-type filters (docs verifier: X07w, X08w).** Two planted tests beside the provenance
+  tests: a first-hand `saw_player_move` row carrying `player_id`, `room` and `action: kill` makes
+  no kill record, and the same payload on a `saw_player` row makes exactly one (subject, tick and
+  observation id checked); a first-hand `global_status` row carrying `fellow_impostor_ids` naming
+  p-3 leaves p-3's watched kill a record, and the same list on a first-hand `self_state` row drops
+  it. The finding's alternative, naming both mutants equivalent because of which perception writers
+  emit those keys, was not taken: the planted rows pin the filters without resting on today's
+  writers. Whether either mutant could move a committed number was not measured.
+
+**Mutation pass, bounded to the spans the findings name.** 17 probes: the six the findings name
+(ids kept) and eleven neighbours in the same spans. Letters: F drop a filter, S swap one tally for
+a related one, N invert a comparison, C replace a read with a constant. Suites:
+`tests/meetings/test_ballot_arms.py`, `tests/eval/test_evidence_honesty.py` and
+`tests/training/test_conviction_serving.py`, `pytest -q -n 6 -p no:cacheprovider`, no `-x`. Each
+probe was applied in place and run twice, with the test file of `60eb015e` and with the test file of
+`d64b6c59`; the production file was then restored from a copy and its sha256 checked, and restored
+the three suites read 211 passed. The failing tests come from a second run of the first-green probes
+with `-rf --tb=no`. X07c was first written with a constant `orchestrator/game.py` does not import (a
+`NameError`, not a semantic probe) and was re-run with `EVENT_SAW_PLAYER`; the row shows the re-run.
+
+| id | class | module | probe | first run (tests of `60eb015e`) | with the round-3 tests | failing tests, round-3 run |
+|---|---|---|---|---|---|---|
+| X30 | S | evidence_honesty | `ejections` reads `impostor_ejects` | SURVIVED: 208 passed | killed: 2 failed, 209 passed | the report test; the scripted honesty-cells test |
+| X32 | C | evidence_honesty | `ejections=0` | SURVIVED: 208 passed | killed: 2 failed, 209 passed | the same two |
+| X33 | C | evidence_honesty | `ejects_other_turn=0` | SURVIVED: 208 passed | killed: 1 failed, 210 passed | the report test |
+| X34 | S | evidence_honesty | `ejects_pointing_toward_own_turn` reads `ejects_without_citation` | SURVIVED: 208 passed | killed: 1 failed, 210 passed | the report test |
+| X35 | S | evidence_honesty | `impostor_ballots` reads `impostor_ejects` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X36 | S | evidence_honesty | `ejects_pointing_toward` reads the own-turn tally | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X37 | S | evidence_honesty | `ejects_without_citation` reads `ejects_other_turn` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X38 | S | evidence_honesty | `kill_holders` reads `kill_holders_citing_the_kill` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X39 | S | evidence_honesty | carried-ejection numerator reads `impostor_ejects` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X40 | S | evidence_honesty | teammate-target numerator reads `impostor_skips` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X41 | C | evidence_honesty | `impostor_skips=0` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X07w | F | game | fellow set drops the `self_state` type filter | SURVIVED: 208 passed | killed: 1 failed, 210 passed | `test_the_teammate_guard_reads_self_state_rows_only` |
+| X07c | C | game | fellow-set type read as `EVENT_SAW_PLAYER` | killed: 6 failed, 202 passed | killed: 7 failed, 204 passed | the new test and six existing ones |
+| X07n | N | game | fellow-set type test inverted | killed: 6 failed, 202 passed | killed: 7 failed, 204 passed | |
+| X08w | F | game | kill predicate drops the `saw_player` type filter | SURVIVED: 208 passed | killed: 1 failed, 210 passed | `test_the_accessor_reads_saw_player_rows_only` |
+| X08c | C | game | kill-predicate type read as `EVENT_SAW_PLAYER_MOVE` | killed: 8 failed, 182 passed, 18 errors | killed: 10 failed, 183 passed, 18 errors | |
+| X08n | N | game | kill-predicate type test inverted | killed: 8 failed, 182 passed, 18 errors | killed: 10 failed, 183 passed, 18 errors | |
+
+17 probes, all killed with the round-3 tests. The probes that first came back green were exactly the
+six the findings name; the eleven neighbours were killed on both runs. No other operator class was
+run.
+
+**Verification at `d64b6c59`.** No production path changed since `318c99ed`, so no committed
+number can move; the family was re-measured anyway with
+`uv run python scripts/measure_baseline.py replays/<set> --honesty --json` on the four sets and
+equals the round-2 table cell for cell (s9: 46 / 164 impostor EJECT / SKIP, 90 ejections, 26 (13) /
+19, 1 of 46, 0 of 90, 4 holders and 3 of 4, 0 of 210; pooled: 183 / 760, 411, 98 (47) / 83, 2 of
+183, 0 of 411, 31 and 21 of 31, 0 of 943).
+
+| command | result |
+|---|---|
+| the card's targeted pytest list (`-n 6`) | exit 0, 900 passed (three new tests) |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `git grep -n WAVE_ARMS_PENDING -- '*.py'` | no output (exit 1) |
+| `uv run mypy tests/meetings/test_ballot_arms.py`, `uv run ruff check` and `ruff format --check` on it | no issues |
+| `bash scripts/verify_samples.sh replays/<set>`, four sets | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, four sets | exit 0 each |
+| `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, four sets | exit 0 each; the family as above |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0 |
+| `uv run pytest -m campaign` | exit 0, 336 passed |
+| `scripts/build_demo_bundle.py --out <scratch>` with the test file of `60eb015e` swapped in and again at `d64b6c59`, `diff -r` of `data/` | exit 0, no output; the builder reads no `tests/` path |
+| `bash scripts/check.sh` (clean tree at `d64b6c59`, output to a file, exit code from the process) | exit 0: ruff, format (547 files), `lint-imports` (4 kept), task docs (88 work cards), prompt sync, mypy (518 files); 9,759 passed, 20 skipped, 3 xfailed (298 s); frontend 559 tests in 20 files, build |
+| `uv run python scripts/check_doc_facts.py`, `uv run python scripts/validate_task_docs.py` | exit 0 each, at the card commit |
+
+**Changed test expectations.** None weakened, skipped or deleted. Added: three tests
+(`test_the_accessor_reads_saw_player_rows_only`, `test_the_teammate_guard_reads_self_state_rows_only`,
+`test_the_report_publishes_each_conduct_tally_in_its_own_cell`) and one assertion
+(`cells.ejections == 1` in `test_the_honesty_cells_count_the_scripted_ballots`); the
+`agents.perception` import gains `EVENT_GLOBAL_STATUS`, `EVENT_SAW_PLAYER_MOVE` and
+`EVENT_SELF_STATE`.
+
+**Closing greps.** No behaviour or vocabulary changed this round, so no old-behaviour sentence can
+be stale. The sentences the new tests enforce are the docstrings of
+`orchestrator/game.py::kill_witness_records_in` ("a first-hand ... `saw_player` row") and
+`_fellow_impostor_ids_in` ("the latest first-hand `self_state` row"), and the
+`BallotConductCells` field list; each states what the code does, at that strength.
