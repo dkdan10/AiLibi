@@ -13,8 +13,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import BaseModel, ValidationError
 
+import agents.tactical.experimental as experimental
 from agents.tactical.experimental import (
-    UNBUILT_OPTION_VALUES,
     ExperimentalImpostorPolicy,
     TacticalExperimentOptions,
     UnbuiltTacticalOptionError,
@@ -453,7 +453,7 @@ def test_the_options_carry_every_tactical_field(field: str) -> None:
     assert getattr(options, field) == value
 
 
-def test_the_options_carry_the_two_unbuilt_values_too() -> None:
+def test_the_options_carry_the_two_look_and_wait_values_too() -> None:
     options = _tactical_experiment_options(
         RecordedExperimentConfig.model_construct(
             vent_exit_policy="look_and_wait", vent_entry_policy="own_fresh_kill"
@@ -463,17 +463,33 @@ def test_the_options_carry_the_two_unbuilt_values_too() -> None:
     assert options.vent_entry_policy == "own_fresh_kill"
 
 
+#: The two values the spine declared ahead of their behaviour. The look-and-wait
+#: card built both and emptied ``UNBUILT_OPTION_VALUES``, so the guard's tests
+#: plant them back to prove it still refuses a listed value.
+_PLANTED_UNBUILT: dict[str, frozenset[str]] = {
+    "vent_exit_policy": frozenset({"look_and_wait"}),
+    "vent_entry_policy": frozenset({"own_fresh_kill"}),
+}
+
+
+def _plant_unbuilt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        experimental, "UNBUILT_OPTION_VALUES", MappingProxyType(_PLANTED_UNBUILT)
+    )
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
         (field, value)
-        for field, values in UNBUILT_OPTION_VALUES.items()
+        for field, values in _PLANTED_UNBUILT.items()
         for value in sorted(values)
     ],
 )
 def test_an_unbuilt_option_value_refuses_to_build_a_policy(
-    field: str, value: str
+    field: str, value: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _plant_unbuilt(monkeypatch)
     options = TacticalExperimentOptions.model_validate({field: value})
     with pytest.raises(UnbuiltTacticalOptionError, match=f"{field}={value!r}"):
         ExperimentalImpostorPolicy(agent_id="p-1", options=options)
@@ -491,7 +507,7 @@ def test_the_built_vent_values_still_build_a_policy() -> None:
 def test_the_factory_refuses_an_unbuilt_value_rather_than_running_the_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+    _plant_unbuilt(monkeypatch)
     config = RecordedExperimentConfig(vent_entry_policy="own_fresh_kill")
     factory = build_default_agent_factory(experiment_config=config)
     with pytest.raises(UnbuiltTacticalOptionError, match="vent_entry_policy"):
