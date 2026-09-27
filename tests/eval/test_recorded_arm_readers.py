@@ -15,7 +15,10 @@ the readers the Stage-B readers card widened and for the ones it keeps refusing:
 * an event-level planted test threads a stand-in engine setting through the
   spine's engine-arguments helper and a stand-in engine that changes only the
   witness lists of vent exits, so every reader's call site is shown to take the
-  helper's arguments, and the readers that fold vent observations change;
+  helper's arguments, and the readers that fold vent observations change; on a
+  recording made under the physical vent witness rule, every reader accepts the
+  rule, the stand-in and the recorded rule reach every advance it drives, and
+  withholding the rule changes what the vent-folding readers fold;
 * the frozen and policy-re-running instruments keep refusing;
 * every call site the card owns passes the recorded engine, reset and trigger
   settings explicitly (an ``ast`` scan with planted modules);
@@ -34,10 +37,10 @@ import json
 import re
 import sys
 import tempfile
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence, Sized
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final, TypedDict
+from typing import Any, Final, TypedDict, cast
 
 import pytest
 
@@ -53,7 +56,7 @@ from engine.entities import PlayerId, Role
 from engine.events import VentExitedEvent
 from engine.tick import advance_tick as real_advance_tick
 from engine.world import WorldState, load_canonical_map
-from eval import evidence_honesty, funnel
+from eval import evidence_honesty, funnel, win_condition_selfcheck
 from eval.evidence_honesty import (
     HONESTY_READS,
     LIVE_POLICY_FOLD,
@@ -71,10 +74,19 @@ from eval.recorded_settings import (
     read_recorded_settings,
     refuse_unread_settings,
 )
-from eval.replay_walk import ReplayWalkConfig, TickOpened, walk_replay
+from eval.replay_walk import (
+    MeetingOpened,
+    ReplayWalkConfig,
+    ReplayWalkEvent,
+    TickAdvanced,
+    TickOpened,
+    WalkComplete,
+    walk_replay,
+)
 from eval.solvability import SOLVABILITY_READS, compute_solvability_report
 from eval.win_condition_selfcheck import (
     WIN_CONDITION_READS,
+    WinConditionSelfCheck,
     check_replay_win_condition,
 )
 from orchestrator import experiment_config
@@ -84,7 +96,7 @@ from orchestrator.experiment_config import (
     engine_arguments,
 )
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
-from tests._helpers.committed import walk_committed_meetings
+from tests._helpers.committed import CommittedMeeting, walk_committed_meetings
 from tests._helpers.scripted_meeting import (
     ACCUSE_THE_OPENER,
     ScriptedMeetingClient,
@@ -184,6 +196,9 @@ def recordings(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
             ),
             client=ScriptedMeetingClient(script=ACCUSE_THE_OPENER),
         ),
+        "physical": _record(
+            root, "physical", RecordedExperimentConfig(vent_witness_rule="physical")
+        ),
         "patrol": _record(
             root, "patrol", RecordedExperimentConfig(crew_idle_policy="patrol")
         ),
@@ -276,10 +291,19 @@ def test_the_readable_settings_are_the_wave_fields_and_redistribution() -> None:
     assert set(READABLE_SETTINGS) <= set(FIELD_LAYER)
 
 
-@pytest.mark.parametrize("reader", sorted(set(_READERS) - {"evidence-honesty"}))
-@pytest.mark.parametrize(
-    "arm", ["plain", "workload", "reset", "reset_rebuttal", "observed_risk_rebuttal"]
+#: The arms a fake game records today, the physical vent witness rule included.
+_ARMS_TODAY: Final[tuple[str, ...]] = (
+    "plain",
+    "workload",
+    "physical",
+    "reset",
+    "reset_rebuttal",
+    "observed_risk_rebuttal",
 )
+
+
+@pytest.mark.parametrize("reader", sorted(set(_READERS) - {"evidence-honesty"}))
+@pytest.mark.parametrize("arm", _ARMS_TODAY)
 def test_a_widened_reader_verifies_every_arm_that_exists_today(
     recordings: dict[str, Path], reader: str, arm: str
 ) -> None:
@@ -296,9 +320,7 @@ def _meeting_ids(directory: Path) -> list[str]:
     ]
 
 
-@pytest.mark.parametrize(
-    "arm", ["plain", "workload", "reset", "reset_rebuttal", "observed_risk_rebuttal"]
-)
+@pytest.mark.parametrize("arm", _ARMS_TODAY)
 def test_the_reconstructors_walk_every_meeting_of_every_arm_that_exists_today(
     recordings: dict[str, Path], arm: str
 ) -> None:
@@ -423,7 +445,7 @@ def test_a_widened_reader_verifies_a_copy_carrying_every_wave_value(
 def test_honesty_verifies_every_arm_it_reads(
     recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    for arm in ("plain", "workload", "observed_risk_rebuttal"):
+    for arm in ("plain", "workload", "physical", "observed_risk_rebuttal"):
         assert compute_evidence_honesty(recordings[arm]).games_total == 1
     _open_the_pending_guard(monkeypatch)
     copy = _with_settings(
@@ -538,6 +560,107 @@ def _exactly(message: str) -> str:
     """A ``match`` pattern that accepts ``message`` and nothing else."""
 
     return f"^{re.escape(message)}$"
+
+
+def _workload_walk(recordings: Mapping[str, Path]) -> list[ReplayWalkEvent]:
+    path = next(recordings["workload"].glob("replay-seed-*.jsonl"))
+    return list(
+        walk_replay(
+            path,
+            seed=_SEED,
+            game_map=load_canonical_map(),
+            config=evidence_honesty._WALK_CONFIG,
+            **_ROSTER,
+        )
+    )
+
+
+@pytest.mark.parametrize("lead", [WalkComplete, TickAdvanced, MeetingOpened])
+def test_a_leading_event_that_is_not_a_tick_row_passes_and_the_tick_row_refuses(
+    recordings: dict[str, Path], lead: type[ReplayWalkEvent]
+) -> None:
+    # Planted: a stream whose first event is not a TickOpened. The settings are
+    # read off a TickOpened only, so the leading event passes through untouched
+    # (a WalkComplete carries no row, a TickAdvanced comes after its advance, a
+    # MeetingOpened carries a meeting row) and the refusal arrives at the
+    # TickOpened after it. An empty replay's walk is led by its WalkComplete.
+    walked = _workload_walk(recordings)
+    leading = next(event for event in walked if isinstance(event, lead))
+    stream = read_recorded_settings(
+        iter([leading, *walked]),
+        reader="a stream-led reader",
+        reads=frozenset({"meeting_reset"}),
+    )
+    assert next(stream) is leading
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            "a stream-led reader does not read the recorded "
+            "redistribution_policy='least_remaining_work': it reads a recording's "
+            "own settings only for meeting_reset"
+        ),
+    ):
+        next(stream)
+
+
+def test_the_first_tick_row_speaks_for_the_recording(
+    recordings: dict[str, Path],
+) -> None:
+    # Planted: a later tick row carrying a setting the reader does not read. The
+    # walk has already checked that every row carries the same settings, so only
+    # the first tick row is read and the later one passes through.
+    walked = _workload_walk(recordings)
+    opened = [
+        index for index, event in enumerate(walked) if isinstance(event, TickOpened)
+    ]
+    assert len(opened) > 1
+    later = walked[opened[1]]
+    assert isinstance(later, TickOpened)
+    planted = dataclasses.replace(
+        later,
+        entry=later.entry.model_copy(
+            update={
+                "experiment_config": RecordedExperimentConfig(crew_idle_policy="patrol")
+            }
+        ),
+    )
+    stream = [*walked[: opened[1]], planted, *walked[opened[1] + 1 :]]
+    read = list(
+        read_recorded_settings(iter(stream), reader="a reader", reads=READABLE_SETTINGS)
+    )
+    assert len(read) == len(stream)
+    assert all(got is sent for got, sent in zip(read, stream, strict=True))
+
+
+def test_an_empty_replay_walks_to_the_vacuous_self_check(tmp_path: Path) -> None:
+    # A replay with no rows walks to its WalkComplete alone: there is no tick row
+    # to read settings from, so nothing is refused and the check is vacuous.
+    path = tmp_path / "replay-seed-2.jsonl"
+    path.write_text("", encoding="utf-8")
+    walked = list(
+        read_recorded_settings(
+            walk_replay(
+                path,
+                seed=2,
+                game_map=load_canonical_map(),
+                config=win_condition_selfcheck._WALK_CONFIG,
+                **_ROSTER,
+            ),
+            reader="a reader",
+            reads=frozenset(),
+        )
+    )
+    assert [type(event) for event in walked] == [WalkComplete]
+    assert check_replay_win_condition(path, seed=2, **_ROSTER) == (
+        WinConditionSelfCheck(
+            game_id="headless-seed-2",
+            seed=2,
+            winner=None,
+            reason=None,
+            first_zero_impostor_tick=None,
+            game_over_tick=None,
+        )
+    )
 
 
 def test_refusing_unread_settings_names_the_reader_and_the_field() -> None:
@@ -817,13 +940,28 @@ def _physical_exits(events: Sequence[object]) -> list[object]:
     ]
 
 
-class _StandIn:
-    """The planted helper and the stand-in engine, installed where readers bind them."""
+def _without_the_rule(config: RecordedExperimentConfig) -> RecordedExperimentConfig:
+    """``config`` with the vent witness rule at its default, as a helper that withheld it."""
 
-    def __init__(self) -> None:
+    default = RecordedExperimentConfig.model_fields["vent_witness_rule"].default
+    return config.model_copy(update={"vent_witness_rule": default})
+
+
+class _StandIn:
+    """The planted helper and the stand-in engine, installed where readers bind them.
+
+    ``rules`` records the vent witness rule each advance handed the real engine.
+    ``withhold`` plants a helper that drops the recorded rule before threading.
+    """
+
+    def __init__(self, *, withhold: bool = False) -> None:
         self.seen: list[object] = []
+        self.rules: list[object] = []
+        self.withhold = withhold
 
     def arguments(self, config: RecordedExperimentConfig | None) -> dict[str, object]:
+        if self.withhold and config is not None:
+            config = _without_the_rule(config)
         return {**engine_arguments(config), _STAND_IN: "surfaced-room-only"}
 
     def advance(
@@ -836,6 +974,7 @@ class _StandIn:
         **kwargs: Any,
     ) -> tuple[WorldState, list[object]]:
         self.seen.append(stand_in_witness_rule)
+        self.rules.append(kwargs.get("vent_witness_rule"))
         after, events = real_advance_tick(state, actions, game_map=game_map, **kwargs)
         return after, _physical_exits(events)
 
@@ -1036,6 +1175,168 @@ def test_an_engine_setting_the_helper_does_not_thread_is_refused_by_name(
         ValueError, match="redistribution_policy='least_remaining_work'"
     ):
         _EVERY_READER[reader](recordings["workload"])
+
+
+# --------------------------------------------------------------------------- #
+# The event-level test on a physical-rule recording                             #
+# --------------------------------------------------------------------------- #
+
+
+def _exits(directory: Path) -> list[VentExitedEvent]:
+    path = next(directory.glob("replay-seed-*.jsonl"))
+    return [
+        event
+        for walk_event in walk_replay(
+            path,
+            seed=_SEED,
+            game_map=load_canonical_map(),
+            config=evidence_honesty._WALK_CONFIG,
+            **_ROSTER,
+        )
+        if isinstance(walk_event, TickAdvanced)
+        for event in walk_event.events
+        if isinstance(event, VentExitedEvent)
+    ]
+
+
+def _withhold_the_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _withholding(config: RecordedExperimentConfig | None) -> object:
+        return engine_arguments(None if config is None else _without_the_rule(config))
+
+    for module in (replay_walk_module, golden):
+        monkeypatch.setattr(module, "engine_arguments", _withholding)
+
+
+def test_the_physical_recording_holds_exits_the_rule_changes(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Non-vacuity: under the recorded rule no exit into another room lists the
+    # room left, and withholding the rule gives at least one such exit a
+    # witness in the room left, with every hash still verified.
+    directory = recordings["physical"]
+    physical = _exits(directory)
+    assert physical
+    assert not any(
+        event.source_witnesses
+        for event in physical
+        if event.source_room != event.destination_room
+    )
+    _withhold_the_rule(monkeypatch)
+    withheld = _exits(directory)
+    assert [(e.tick, e.actor) for e in withheld] == [
+        (e.tick, e.actor) for e in physical
+    ]
+    assert any(
+        set(event.source_witnesses) - set(event.destination_witnesses)
+        for event in withheld
+    )
+
+
+def _digest(reader: str, result: object) -> object:
+    """What a reader's result says, with no rendered prompt or transcript in it.
+
+    A failed comparison prints the digest, so the golden's walk is reduced to
+    counts and the committed walk to its witness records.
+    """
+
+    if reader == "golden":
+        walk = cast(golden._SetWalk, result)
+        return (
+            walk.meetings,
+            len(walk.prompts),
+            sum(prompt.reproduced for prompt in walk.prompts),
+        )
+    if reader == "committed-meeting walk":
+        return [
+            (m.entry.meeting_id, m.vent_witness_records, m.move_witness_records)
+            for m in cast(Sequence[CommittedMeeting], result)
+        ]
+    return result
+
+
+@pytest.mark.parametrize("withhold", [False, True], ids=["threaded", "withheld"])
+@pytest.mark.parametrize("reader", sorted(_EVERY_READER))
+def test_on_a_physical_recording_the_stand_in_and_the_rule_reach_every_advance(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    reader: str,
+    withhold: bool,
+) -> None:
+    # The recorded-arm refusals accept the physical rule, and the planted helper
+    # hands every advance each reader drives both the stand-in and the recorded
+    # rule. The stand-in is the physical rule's shape, so it moves no output.
+    # Perturbed: a helper that withholds the rule still verifies every hash, and
+    # only the rule the engine received tells the two apart.
+    directory = recordings["physical"]
+    run = _EVERY_READER[reader]
+    baseline = _digest(reader, run(directory))
+    stand_in = _StandIn(withhold=withhold)
+    stand_in.install(monkeypatch, replay_walk_module, golden)
+    changed = _digest(reader, run(directory))
+    ticks = _ticks(directory)
+    assert stand_in.seen == ["surfaced-room-only"] * ticks
+    assert stand_in.rules == ["both_rooms" if withhold else "physical"] * ticks
+    assert changed == baseline
+    if reader == "golden":
+        meetings, prompts, reproduced = cast(tuple[int, int, int], changed)
+        assert meetings == len(_meeting_ids(directory)) and reproduced == prompts > 0
+
+
+def _funnel_vents(directory: Path) -> Sized:
+    path = next(directory.glob("replay-seed-*.jsonl"))
+    return funnel._walk_game(
+        path,
+        seed=_SEED,
+        roles=_roles(directory),
+        game_map=load_canonical_map(),
+        **_ROSTER,
+    ).vent_sightings
+
+
+def _committed_vent_records(directory: Path) -> Sized:
+    return [m.vent_witness_records for m in walk_committed_meetings(directory)]
+
+
+def _golden_memories(directory: Path) -> Sized:
+    path = next(directory.glob("replay-seed-*.jsonl"))
+    return [
+        tuple(participant.rendered_memory for participant in meeting.participants)
+        for meeting in golden.walk_replay_meetings(
+            path,
+            game_map=load_canonical_map(),
+            renderers_for_set=golden._canonical_renderers(),
+        )
+    ]
+
+
+#: The readers that fold vent observations, each reduced to what it folds.
+_VENT_FOLDS: Final[dict[str, Callable[[Path], Sized]]] = {
+    "funnel": _funnel_vents,
+    "evidence-honesty": lambda directory: _honesty_memories(
+        next(directory.glob("replay-seed-*.jsonl"))
+    ),
+    "committed-meeting walk": _committed_vent_records,
+    "golden": _golden_memories,
+}
+
+
+@pytest.mark.parametrize("reader", sorted(_VENT_FOLDS))
+def test_withholding_the_physical_rule_changes_what_a_vent_folding_reader_folds(
+    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, reader: str
+) -> None:
+    # Perturbed: the same physical recording read through a helper that
+    # withholds the rule folds different vent observations, so each folding
+    # reader's output follows the recorded rule, not the engine default. Only
+    # sizes and one boolean reach an assertion, so a failure prints no rendered
+    # memory.
+    fold = _VENT_FOLDS[reader]
+    threaded = fold(recordings["physical"])
+    _withhold_the_rule(monkeypatch)
+    withheld = fold(recordings["physical"])
+    sizes = (len(threaded), len(withheld))
+    assert sizes[0] == sizes[1] > 0
+    changed = threaded != withheld
+    assert changed, f"{reader} folded the same vent observations under both rules"
 
 
 # --------------------------------------------------------------------------- #
