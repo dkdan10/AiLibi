@@ -180,6 +180,7 @@ from orchestrator.replay import (  # noqa: E402
     _TOGGLEABLE_LEVER_RESOLVERS,
     env_var_for_lever,
     read_all_entries,
+    recorded_experiment_config,
     require_legacy_observations,
     read_substrate_flags,
     retired_levers_stamped_off,
@@ -2563,6 +2564,30 @@ def _seed_paths(sample_dir: Path) -> list[Path]:
     ]
 
 
+def _refuse_the_meeting_reset(sample_dir: Path) -> None:
+    """Refuse a directory holding a recording made under a meeting reset.
+
+    The regrouping reset (``meeting_reset = "hub_with_grace"``) makes the live
+    meeting read a sighting on a regroup's tick, or on the tick after it, as no
+    evidence. The corroboration lever's ledger (:func:`_ledger_for`) is built
+    without that window, so this script reads only recordings whose reset is the
+    default ``"preserve"``. The refusal names the setting and the seed and runs
+    before the walk re-derives anything.
+
+    Evidence honesty refused the reset for this script until it read the regroup.
+    """
+
+    for seed_path in _seed_paths(sample_dir):
+        config = recorded_experiment_config(read_all_entries(seed_path))
+        if config is not None and config.meeting_reset != "preserve":
+            seed = int(seed_path.stem.rsplit("-", 1)[-1])
+            raise SystemExit(
+                "the phase-21 counterfactual does not read the recorded "
+                f"meeting_reset={config.meeting_reset!r} (seed {seed}): its "
+                "testimony ledger does not apply the regroup window"
+            )
+
+
 def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
     """One reconstruction pass over one committed set, every fold on the way."""
 
@@ -2645,6 +2670,7 @@ def _walk(
             f"{sample_dir}: no replay-seed-*.jsonl files found — not a replay "
             "set; refusing to report a zero-game measurement"
         )
+    _refuse_the_meeting_reset(sample_dir)
     per_seed_roles = roles_by_seed(
         sample_dir,
         num_players=num_players,

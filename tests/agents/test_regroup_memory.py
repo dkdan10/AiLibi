@@ -205,6 +205,55 @@ def test_a_malformed_public_row_is_refused() -> None:
         _render(memory)
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"room": "CAFETERIA"},
+        {"room": 7, "player_ids": ("p-1", "p-2")},
+        {"room": "CAFETERIA", "player_ids": "p-1"},
+        {"room": "CAFETERIA", "player_ids": frozenset({"p-1"})},
+    ],
+)
+def test_the_malformed_row_refusal_quotes_the_payload_it_read(
+    payload: dict[str, Any],
+) -> None:
+    memory = _memory(regroup=False)
+    memory.episodic.append(
+        EpisodicEvent(
+            tick=REGROUP + 5,
+            type="public_regroup",
+            payload=payload,
+            provenance="public",
+        )
+    )
+    with pytest.raises(ValueError) as refused:
+        _render(memory)
+    assert str(refused.value) == f"public regroup row is malformed: {payload!r}"
+
+
+def test_a_public_row_listing_its_players_reads_as_the_tuple_row_does() -> None:
+    # The row's contract is a room and a list of player ids; the one writer
+    # stores a tuple, and a row holding a list renders the same notice, fold and
+    # route step.
+    tupled = _memory(regroup=True)
+    listed = AgentMemory()
+    for event in tupled.episodic.recent(since_tick=0):
+        if event.type == "public_regroup":
+            event = EpisodicEvent(
+                tick=event.tick,
+                type=event.type,
+                payload={
+                    "room": event.payload["room"],
+                    "player_ids": list(event.payload["player_ids"]),
+                },
+                provenance=event.provenance,
+            )
+        listed.episodic.append(event)
+    view = _render(listed)
+    assert NOTICE in view
+    assert view == _render(tupled)
+
+
 # --------------------------------------------------------------------------- #
 # The fold and the trail                                                      #
 # --------------------------------------------------------------------------- #

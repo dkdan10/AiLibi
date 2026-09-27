@@ -15,7 +15,8 @@ fold and its pooling folds. The sample report's inform band
 read the same window. The scorecard's walk profile declares the layers it
 reads and refuses every other one before its first advance. The offline lever
 counterfactual keeps refusing every recorded setting, and the frozen deception
-instruments refuse the reset by name before their walk.
+instruments and the phase-21 counterfactual refuse the reset by name before their
+walk.
 """
 
 from __future__ import annotations
@@ -864,3 +865,88 @@ def test_the_deception_refusal_names_the_reset_and_nothing_else(
     _stop_at_the_walk(monkeypatch)
     with pytest.raises(_Walked):
         compute_deception_instruments(source)
+
+
+# --------------------------------------------------------------------------- #
+# The phase-21 counterfactual refuses the reset                               #
+# --------------------------------------------------------------------------- #
+
+
+def _phase21(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """The script's module, its first re-derivation replaced by :class:`_Walked`."""
+
+    import sys
+
+    scripts = Path(__file__).resolve().parents[2] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import counterfactual_phase21
+
+    def _walk(*_args: Any, **_kwargs: Any) -> Any:
+        raise _Walked
+
+    monkeypatch.setattr(counterfactual_phase21, "roles_by_seed", _walk)
+    monkeypatch.setattr(counterfactual_phase21, "walk_replay_meetings", _walk)
+    return counterfactual_phase21
+
+
+def test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking(
+    reset_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    phase21 = _phase21(monkeypatch)
+    with pytest.raises(
+        SystemExit, match=rf"meeting_reset='hub_with_grace' \(seed {SEED}\)"
+    ):
+        phase21.walk_set(reset_set, set_name="reset/9p2i", withhold="testimony_shapes")
+
+
+def test_the_phase21_command_refuses_a_reset_set_staged_under_replays(
+    reset_set: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The command a reader would run: ``--sets`` names a directory under
+    # ``replays/``, here a checkout whose only set is the reset recording.
+    phase21 = _phase21(monkeypatch)
+    shutil.copytree(reset_set, tmp_path / "replays" / "staged" / "9p2i")
+    monkeypatch.setattr(phase21, "_REPO_ROOT", tmp_path)
+    with pytest.raises(
+        SystemExit, match=rf"meeting_reset='hub_with_grace' \(seed {SEED}\)"
+    ):
+        phase21.main(["--sets", "staged/9p2i"])
+
+
+def test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed(
+    preserve_set: Path,
+    reset_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    phase21 = _phase21(monkeypatch)
+    mixed = tmp_path / "9p2i"
+    shutil.copytree(preserve_set, mixed)
+    shutil.copy(_path(reset_set), mixed / f"replay-seed-{SEED + 1}.jsonl")
+    with pytest.raises(SystemExit, match=rf"\(seed {SEED + 1}\)"):
+        phase21.walk_set(mixed, set_name="mixed/9p2i", withhold="testimony_shapes")
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {},
+        {"meeting_reset": "preserve"},
+        {"vent_witness_rule": "physical", "bounded_rebuttal_version": 1},
+    ],
+)
+def test_the_phase21_refusal_names_the_reset_and_nothing_else(
+    preserve_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    settings: dict[str, object],
+) -> None:
+    phase21 = _phase21(monkeypatch)
+    source = (
+        _copy_with(preserve_set, tmp_path / "copy" / "9p2i", **settings)
+        if settings
+        else preserve_set
+    )
+    with pytest.raises(_Walked):
+        phase21.walk_set(source, set_name="copy/9p2i", withhold="testimony_shapes")

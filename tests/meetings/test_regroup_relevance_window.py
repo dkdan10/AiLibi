@@ -925,3 +925,25 @@ def test_the_manager_refuses_a_tick_that_is_not_a_non_negative_integer(
             )
         )
     assert client.calls == []
+
+
+@pytest.mark.parametrize(
+    ("ticks", "named"),
+    [(frozenset({9, -1}), "[-1, 9]"), (frozenset({4, 2, True}), "[True, 2, 4]")],
+)
+def test_the_manager_refusal_names_the_ticks_it_was_handed(
+    ticks: frozenset[int], named: str
+) -> None:
+    client = _ScriptedLLMClient(responder=_responder())
+    manager = _make_manager(llm_client=client)
+    with pytest.raises(ValueError) as refused:
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_trigger(),
+                participants=(_participant("p-1"), _participant("p-2")),
+                regroup_ticks=ticks,
+            )
+        )
+    assert str(refused.value) == f"regroup ticks must be non-negative integers: {named}"
+    assert client.calls == []

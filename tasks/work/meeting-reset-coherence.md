@@ -145,6 +145,36 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
 
 ## Acceptance
 
+- [x] Review correction: **the four listed-class mutation survivors are killed** (round 4, correctness lens).
+  Each is red under its mutant through a planted case: a hand-built `public_regroup` row that lists its players
+  renders byte-identically to the tuple row (`test_a_public_row_listing_its_players_reads_as_the_tuple_row_does`);
+  the malformed-row refusal quotes the payload it read (`test_the_malformed_row_refusal_quotes_the_payload_it_read`,
+  four payloads); the manager's refusal names the ticks it was handed
+  (`test_the_manager_refusal_names_the_ticks_it_was_handed`); and the resume helper's property now matches the
+  meeting's event count (`test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest`). The mutation
+  table is in round 4 below.
+- [x] Review correction: **the phase-21 counterfactual refuses a reset recording by name** (round 4, Codex P2 and
+  the documentation lens). `scripts/counterfactual_phase21.py::_refuse_the_meeting_reset` reads each recording's
+  settings and raises, naming `meeting_reset='hub_with_grace'` and the seed, before the walk re-derives anything.
+  It runs in the shared `_walk`, so both modes refuse. Proof in `tests/eval/test_regroup_instruments.py`:
+  `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking`,
+  `test_the_phase21_command_refuses_a_reset_set_staged_under_replays` (`main(["--sets", ...])`),
+  `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` and the three controls of
+  `test_the_phase21_refusal_names_the_reset_and_nothing_else`. Command: `uv run python
+  scripts/counterfactual_phase21.py --sets <a fake reset set staged under replays/>` exits 1, naming the setting
+  and seed 1000.
+- [x] Review correction: **the stop-and-ask over the phase-21 counterfactual, and the Status** (round 4, the
+  integrity lens). The equality box now holds at the strength it states: no production caller reads a reset
+  recording at the no-regroup default, because this one refuses. The repair is the first of the findings' three
+  options, forwarded by the orchestrator's round-4 dispatch with the instruction to repair each finding. It
+  restores the script's outcome at the merge base, a named refusal and no table, where `compute_evidence_honesty`
+  refused a reset recording after the walk; the refusal now comes before it. The file is outside the decision
+  memo's 3.2 map, and no Stage-B card writes it. The PR's Questions
+  asks the orchestrator to confirm the disposition and to record the map row, as `cb0a4cfc` did for the three
+  readers.
+- [x] Review correction: **the round-3 test counts are corrected** (round 4, documentation lens): 14 new
+  instrument tests, 26 already in the file, and 16 added in total. Command: `uv run pytest --collect-only -q
+  tests/eval/test_regroup_instruments.py` collects 26 items at `1ad1b57c` and 40 at `711e488f`.
 - [x] Review correction: **the three readers the stop-and-ask named, resolved by the orchestrator's ruling of
   2026-09-27.** `eval/meeting_quality.py` reads the regroup window in `_ejected_in_inform_band` through
   `_regroup_ticks_before` (the one derivation, `orchestrator.replay.derive_regroup_ticks`);
@@ -592,6 +622,7 @@ fourteen acceptance items were met at `d801eb3c`.
 | `meetings/corroboration.py:648` and the `meetings/transcript.py` internal sites | threaded |
 | `tests/meetings/test_prompt_byte_golden.py` (`walk_replay_meetings`) and `tests/_helpers/committed.py` | threaded (the helper, the fold, the ticks) |
 | `scripts/counterfactual_phase20.py` (`:526`, `:543`, `:781`) | unchanged: keeps the readers card's named refusal (`test_the_offline_lever_counterfactual_keeps_refusing_the_reset`) |
+| `scripts/counterfactual_phase21.py` (`_ledger_for` over the golden walk, both modes) | round 4: refuses a reset recording by name and seed before its walk (`_refuse_the_meeting_reset`); before round 4, from the lift of honesty's refusal on, it read one without the window |
 | `eval/off_menu.py` (FROZEN), `training/anchor_study.py`, `training/surrogate/dataset.py`, `experiments/lab/inference_testimony_probe.py` (FROZEN) | unchanged, at the no-regroup default: each refuses experiment recordings or reads only committed `preserve` bytes |
 | `audits/workflows/extract_gameplay_facts.py`, `eval/reasoning_evidence.py` | unchanged: the first refuses experiment settings (`refuse_experiment_settings`), the second reads fixtures only |
 | `eval/meeting_quality.py`, `eval/vj_instruments.py`, `eval/deception_instruments.py` | round 3: the first two threaded, the FROZEN third refuses the reset by name; at `d801eb3c` not threaded (the stop-and-ask above) |
@@ -1015,20 +1046,20 @@ read a reset recording at the no-regroup default. Neither is in the record card'
 card's, so both are the PR's question to the orchestrator:
 - `scripts/counterfactual_phase21.py::_ledger_for` builds the testimony ledger without the window over the
   golden walk. Its `--sets` mode takes any set name under `replays/`; its `--recording` mode requires the Wave-2
-  substrate slate, which a Stage-B candidate does not carry.
+  substrate slate, which a Stage-B candidate does not carry. (Round 4: it now refuses a reset recording by name.)
 - The FROZEN concluded lab probes `experiments/lab/deception_battery.py`, `deflection_probe.py`,
   `forward_redesign_conversion_probe.py`, `forward_redesign_detector_sweep.py`, `meeting_prompt_battery.py` and
   `vent_escape_lab.py` call `detect_contradictions` without the window, like `inference_testimony_probe.py`,
   which the Evidence section already lists.
 
-**Red before, green after.** The 15 new instrument tests and the contract test, run against the pre-round
+**Red before, green after.** The 14 new instrument tests and the contract test, run against the pre-round
 bytes of the three modules and the contract (swapped in from byte copies, restored, sha256 equal):
 `pytest tests/eval/test_regroup_instruments.py tests/orchestrator/test_meeting_reset_coherence.py::test_the_contract_names_the_recorded_body_handle_setting`
 exit 1, 10 failed and 31 passed. Red: both `informs_nobody` cases (the inform credited), the two V&J tests (no
 window reaches the derivation; the rows equal the unwindowed ones), the two deception refusals (the walk ran
 first), the contract test, and three tests that call the new helper (`window_each`, `reads_no_window`,
 `withheld`, red because the helper and the module's import of the derivation do not exist yet). Green, as controls must be: `just_past_the_window`, the `preserve` twin, the
-three `names_the_reset_and_nothing_else` cases, and the 25 tests this card already had in the file. With the
+three `names_the_reset_and_nothing_else` cases, and the 26 tests this card already had in the file. With the
 round's bytes: 41 passed.
 
 **The bounded mutation pass**, over the spans this round changed, with the listed classes only. Each mutant
@@ -1087,7 +1118,7 @@ broken, task docs with 88 work cards and prompts valid, mypy clean on 517 files,
 3 xfailed; frontend lint, types, 559 vitest tests and build). The commit after it changes only this paragraph;
 `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` re-run at that head.
 
-**Changed test expectations.** None. The round adds 17 tests (15 in `tests/eval/test_regroup_instruments.py`, 2
+**Changed test expectations.** None. The round adds 16 tests (14 in `tests/eval/test_regroup_instruments.py`, 2
 in `tests/orchestrator/test_meeting_reset_coherence.py`) and weakens, skips or deletes none.
 
 **Closing greps.** `git grep -n -i -E "removal is implemented only in temporal|only in temporal mode|OFF opening
@@ -1104,3 +1135,153 @@ descriptions|passes no window|does not pass them|inherit the funnel's refusal|ne
 - The planted ejections are carriers built from a fake reset game: the fake provider ejects nobody, so the fake
   set's own fold reads 0 on every channel with or without the window. The record is the first real reading.
 - The two readers under "Further readers found" read a reset recording without the window if pointed at one.
+  (Round 4: the phase-21 counterfactual now refuses one; the lab probes remain the PR's question.)
+
+### Review corrections, round 4 (2026-09-27)
+
+The repair of the four blocking findings the three verifier lenses and the Codex review raised on round 3.
+Commits: the commit that first carries this subsection (the phase-21 refusal, the planted cases and this record)
+and the card commit after it, which records the `check.sh` run. `main` is still `cb0a4cfc`, the round-3 merge
+base, so nothing is merged. No `audits/` or `tests/fixtures/` byte moves, so the `audits/` row stays
+(330 files, 27,303,776 tracked bytes, re-read at the head below).
+
+**Finding 1: four listed-class survivors in lines this card added (correctness).** The verifiers' harness kept
+four mutants green over the six non-golden card suites at `711e488f` (164 passed each). Each is now red through
+a planted case; none is named equivalent:
+
+| Id | Mutant | Planted case that kills it |
+| --- | --- | --- |
+| S1 | `_public_regroups`: `isinstance(players, (tuple, list))` to `(tuple,)` (drop a tuple member) | `test_a_public_row_listing_its_players_reads_as_the_tuple_row_does`: the row's contract is a room and a list of player ids; a hand-built row holding a list renders the same notice, fold and route step as the tuple row the one writer stores |
+| S2 | the same refusal's `{event.payload!r}` to a constant (message argument) | `test_the_malformed_row_refusal_quotes_the_payload_it_read`: four malformed payloads (no player list, a non-string room, a string, a frozenset), each message equal to `public regroup row is malformed: <the payload's repr>` |
+| S3 | `MeetingManager.run`: `{sorted(regroup_ticks)}` to `{[]}` (message argument) | `test_the_manager_refusal_names_the_ticks_it_was_handed`: `{9, -1}` reads `[-1, 9]` and `{4, 2, True}` reads `[True, 2, 4]`, no model call made |
+| S4 | `compose_resume_events`: `{len(meeting_events)}` to `{0}` (message argument) | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest`: the property's refusal `match` now ends `; got {len(meeting_events)}$`, over its generated one to three meeting events |
+
+**Findings 2 and 3: the phase-21 counterfactual read a reset recording without the window (integrity; the
+documentation lens and Codex P2).** Both are valid. At the merge base the script refused a `hub_with_grace`
+recording through `compute_evidence_honesty` (the readers card: it "takes their thread-or-refuse behaviour").
+This card lifted honesty's refusal with honesty's fix, and the script's own ledger (`_ledger_for`, which calls
+`build_testimony_ledger` without the window) went on reading the recording. The verifiers reproduced it: 7
+ledger calls over a fake reset set, 0 carrying the window, and `--sets` exiting 0 with a table.
+
+- **The repair.** `scripts/counterfactual_phase21.py::_refuse_the_meeting_reset` reads each recording's settings
+  (`recorded_experiment_config`) and raises `SystemExit`, naming the setting and the seed, when the reset is not
+  the default `"preserve"`. `_walk` calls it after the empty-set check and before `roles_by_seed`, so it runs
+  before the walk re-derives anything, in both modes. No evidence semantics change, and a recording without the
+  reset walks exactly as before (`tests/scripts/test_counterfactual_phase21.py` 105 passed).
+- **The ruling.** The round-3 PR asked the orchestrator this question. The round-4 dispatch forwards the
+  findings with their three options (a named refusal, threading, or a ruled limitation) and the instruction to
+  repair each finding; it carries no separate ruling text. The repair is the first option, the one the
+  orchestrator's ruling of 2026-09-27 chose for the analogous FROZEN reader (`eval/deception_instruments.py`),
+  and it restores the script's outcome at the merge base (a named refusal and no table; honesty refused there
+  after the walk, the refusal now comes before it). It edits a file outside the decision memo's 3.2 map;
+  no Stage-B card writes that file. The PR's Questions asks the orchestrator to confirm the disposition and to
+  record the map row, as `cb0a4cfc` did for the three readers. Threading was not chosen: the golden walk's
+  `ReconstructedMeeting` does not carry the ticks, and the script prices the Wave-2 levers over lever-OFF
+  committed bytes, which no Stage-B recording is; the refusal leaves its evidence semantics unchanged.
+- **The strength stated.** The equality box's guarantee now holds as written: every production caller that can
+  read a reset recording either receives the regroup ticks or refuses by name. The FROZEN concluded lab probes
+  in `experiments/lab/` are lab code, not production callers, and stay the PR's question.
+- **Proof** (`tests/eval/test_regroup_instruments.py`, each with `roles_by_seed` and `walk_replay_meetings`
+  replaced by a sentinel raised where the walk would begin):
+  `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` (`walk_set`, seed 1000);
+  `test_the_phase21_command_refuses_a_reset_set_staged_under_replays` (`main(["--sets", "staged/9p2i"])` with the
+  script's repository root pointed at a checkout whose only set is the reset recording);
+  `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` (seed 1001 among `preserve` seeds); and
+  `test_the_phase21_refusal_names_the_reset_and_nothing_else` (no settings, an explicit `preserve`, and two other
+  wave settings each reach the walk).
+- **The command.** A fake `hub_with_grace` set (seeds 1000-1002, 7 meetings, recorded with
+  `tests/_helpers/scripted_meeting.record_game` into the scratchpad) staged as `replays/zz_r4_tmp/9p2i`:
+  `uv run python scripts/counterfactual_phase21.py --sets zz_r4_tmp/9p2i` exit 1, printing `the phase-21
+  counterfactual does not read the recorded meeting_reset='hub_with_grace' (seed 1000): its testimony ledger does
+  not apply the regroup window`. The staged directory was removed and `git status` is clean under `replays/`.
+- **Red before.** The six phase-21 test items against the script's pre-round bytes (swapped in from `711e488f`, restored
+  from a byte copy, sha256 equal): `pytest tests/eval/test_regroup_instruments.py -k phase21` exit 1, 3 failed
+  and 3 passed. Red: the three reset cases (the walk began). Green, as controls must be: the three
+  `names_the_reset_and_nothing_else` cases. With the round's bytes: 6 passed.
+
+**Finding 4: the round-3 counts (documentation).** Valid. `uv run pytest --collect-only -q
+tests/eval/test_regroup_instruments.py` collects 26 items at `1ad1b57c` and 40 at `711e488f`: 14 new items, 9 red
+and 5 green controls in the red-before run (10 failed, 31 passed with the contract test). The three sentences
+now read 14 new instrument tests, 26 tests already in the file, and 16 added in total (14 there, 2 in
+`tests/orchestrator/test_meeting_reset_coherence.py`).
+
+**The bounded mutation pass**, over the spans this round changed and the four spans the findings named, with the
+listed classes only, plus three neutering probes of the new production lines. Each mutant replaced one snippet
+(its count asserted to be exactly one), ran the six non-golden card suites (`tests/orchestrator/test_meeting_reset_coherence.py`,
+`tests/agents/test_regroup_memory.py`, `tests/meetings/test_regroup_relevance_window.py`,
+`tests/eval/test_regroup_instruments.py`, `tests/engine/test_meeting_reset_experiment.py`,
+`tests/orchestrator/test_public_regroup_evidence.py`, `-x -n 8`), and was restored from a byte copy: 18
+restored, sha256 equal, and `git status` showed only this round's edits. 18 probes, 17 red on the first run;
+the one that came back green is equivalent.
+
+| Id | Class | File | First red test |
+| --- | --- | --- | --- |
+| S1 | f, drop a tuple member | `agents/memory/store.py` | `test_a_public_row_listing_its_players_reads_as_the_tuple_row_does` |
+| S2 | e, message argument | `agents/memory/store.py` | `test_the_malformed_row_refusal_quotes_the_payload_it_read[payload0]` |
+| S3 | e, message argument | `meetings/manager.py` | `test_the_manager_refusal_names_the_ticks_it_was_handed[ticks0-[-1, 9]]` |
+| S4 | e, message argument | `orchestrator/replay.py` | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| P-seeds-first | b, the first seed only | `scripts/counterfactual_phase21.py` | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| P-none-inverse | c, `is not None` to `is None` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-cmp-is-not-none | c, `!= "preserve"` to `is not None` | same | `test_the_phase21_refusal_names_the_reset_and_nothing_else[settings2]` |
+| P-cmp-is-none | c, `!= "preserve"` to `is None` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-cmp-inverse | c, `!=` to `==` | same | `test_the_phase21_command_refuses_a_reset_set_staged_under_replays` |
+| P-reset-const | d, the reset read to `"preserve"` | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| P-seed-const | d, the seed read to `0` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-msg-seed | e, message seed to `1000` | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| P-msg-value | e, message value to `'hub_with_grace'` | same | green, equivalent: the branch runs only when the value is not `"preserve"`, and `RecordedExperimentConfig.meeting_reset` admits one other value, `"hub_with_grace"`, so the message bytes are equal |
+| P-order | g, the refusal moved after `roles_by_seed` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-source-literal | h, the recorded settings to `None` | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| N-P-call | neuter, the call in `_walk` removed | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| N-P-body | neuter, the helper returns at once | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| N-P-raise | neuter, the raise removed | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+
+**Verification of this round's code and tests.** Every gate below ran on the bytes the commit that first carries
+this subsection holds, in a bare shell with 0 `AILIBI_*` exports, each exit code captured from the process and
+never through a pipe; `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` re-ran after this
+subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 212 passed |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `build_sample_report.py` on the fake `hub_with_grace` set above: write, then `--check`, then `--baseline-out` | exit 0 each; 3 games, 7 meetings, 0 ejections |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each (88 work cards) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest tests/scripts/test_counterfactual_phase21.py -q -n 8` | exit 0: 105 passed |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted; `git grep -l` for the files | 956 `"meeting_reset":"preserve"`, in 101 files |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+| `scripts/build_demo_bundle.py`, at an export of `cb0a4cfc` and at this round's bytes | exit 0 each, 156 JSON files baked; `diff -r` of the two `data/` trees prints nothing (exit 0). Both read the branch's `replays/samples` (the export's archived `replays/` is `diff -rq` identical), and the export's build imported the export's own `api/` and `orchestrator/` |
+| `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
+| `git diff --stat 711e488f -- engine/ frontend/ api/ observation/ replays/ eval/off_menu.py orchestrator/experiment_config.py eval/gameplay_census.py eval/leak_scan.py api/schemas.py docs/architecture.md audits/ tests/fixtures/` | empty |
+
+`bash scripts/check.sh` runs once, at the commit that first carries this subsection, in a bare shell with its exit
+code captured from the process; the card commit after it records the result in this paragraph and changes
+nothing else.
+
+**Changed test expectations.** One, stricter: the refusal `match` in
+`test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` now also pins `; got
+{len(meeting_events)}$`. The round adds 13 test items in 7 functions: 5 in `tests/agents/test_regroup_memory.py`
+(the four-payload refusal and the list row), 2 in `tests/meetings/test_regroup_relevance_window.py` and 6 in
+`tests/eval/test_regroup_instruments.py` (the four phase-21 functions, one of them with three controls). No test
+is weakened, skipped or deleted.
+
+**Closing greps.** `git grep -n -i -E "gains no refusal|thread-or-refuse|takes their (thread|behaviou?r)|without
+the window if pointed|reset recording without the window|read a reset recording at the no-regroup" --
+':!tasks/phase-*' ':!agent_prompts' ':!audits'`, at the head. The hits about the phase-21 script are this card's
+round-3 record (annotated in place with its round-4 outcome), this subsection's own account and grep, the card's
+stop-and-ask rule under Constraints, and `tasks/work/stage-b-readers.md:634` and `:890-891`, that card's record
+of the script before this card, which is not rewritten. The remaining hits name the spine's thread-or-refuse
+mechanism, which is unchanged. `git grep -n -i -E
+"counterfactual_phase21|phase-21 counterfactual" -- docs README.md` prints nothing, so no live document states the
+script's reading of a reset recording.
+
+**Limitations.**
+- The phase-21 disposition awaits the orchestrator's confirmation and its map row (the PR's Questions). If the
+  orchestrator rules for threading instead, this refusal is the thing to replace.
+- The FROZEN concluded lab probes named in round 3 still call `detect_contradictions` without the window if
+  pointed at a reset recording; they are lab code, and the question stands.

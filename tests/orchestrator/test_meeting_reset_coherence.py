@@ -759,7 +759,10 @@ def test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest(
         events=tuple(trigger_events) + tuple(meeting_events), dropped=()
     )
     if meeting_events:
-        with pytest.raises(ValueError, match="applying it emits no events"):
+        with pytest.raises(
+            ValueError,
+            match=rf"applying it emits no events; got {len(meeting_events)}$",
+        ):
             compose_resume_events(trigger_events, meeting_events, regrouped=True)
         return
     regrouped = compose_resume_events(trigger_events, (), regrouped=True)
