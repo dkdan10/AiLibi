@@ -4,8 +4,7 @@ The orchestrator decomposes this recording contract into engine and agent
 arguments. Neither side imports this privileged wiring module. Missing config
 means the historical defaults; an enabled config must agree across a recording.
 ``docs/experiment-arms.md`` states the Stage-B arms this module declares: each
-field's layer, the omit-at-default rule, the pending guard and the one
-engine-arguments helper.
+field's layer, the omit-at-default rule and the one engine-arguments helper.
 """
 
 from __future__ import annotations
@@ -136,14 +135,6 @@ class RecordedExperimentConfig(BaseModel):
             )
         return self
 
-    @model_validator(mode="after")
-    def _refuse_pending_arms(self) -> RecordedExperimentConfig:
-        refuse_pending_values(
-            {field: getattr(self, field) for field in WAVE_ARMS_PENDING},
-            source="experiment configuration",
-        )
-        return self
-
     @model_serializer(mode="wrap")
     def _preserve_version_one_bytes(
         self, handler: SerializerFunctionWrapHandler
@@ -239,17 +230,6 @@ OMITTED_AT_DEFAULT: Final[tuple[str, ...]] = (
     "impostor_ballot_version",
 )
 
-#: Each Stage-B ON value whose behaviour is not built yet. Validation, the
-#: ``HeadlessGame`` constructor and the meeting-runner constructor refuse every
-#: value listed here. Each arm card deletes its own names when it builds the
-#: behaviour; the last one deletes this guard, its call sites and its test.
-WAVE_ARMS_PENDING: Final[Mapping[str, frozenset[object]]] = MappingProxyType(
-    {
-        "ballot_kill_row_version": frozenset({1}),
-        "impostor_ballot_version": frozenset({1}),
-    }
-)
-
 #: Every field and value that existed before the Stage-B wave. A walk profile's
 #: ``supports_experiments`` flag covers exactly these; any other recorded
 #: setting (a later field off its default, or a later value of one of these
@@ -287,22 +267,6 @@ def fields_in_layer(layer: ConfigLayer) -> tuple[str, ...]:
     """The fields :data:`FIELD_LAYER` assigns to ``layer``, in declaration order."""
 
     return tuple(field for field, owner in FIELD_LAYER.items() if owner == layer)
-
-
-def refuse_pending_values(values: Mapping[str, object], *, source: str) -> None:
-    """Raise, naming field and value, for any value :data:`WAVE_ARMS_PENDING` lists.
-
-    ``values`` may carry any subset of the config's fields (a meeting profile
-    carries only its own), and only the fields it carries are checked.
-    """
-
-    for field, refused in WAVE_ARMS_PENDING.items():
-        if field in values and _same_value(values[field], refused):
-            raise ValueError(
-                f"{source} sets {field}={values[field]!r}, a Stage-B arm whose "
-                "behaviour is not built yet; it stays refused until its arm card "
-                "removes it from WAVE_ARMS_PENDING"
-            )
 
 
 def wave_settings(config: RecordedExperimentConfig) -> tuple[tuple[str, object], ...]:

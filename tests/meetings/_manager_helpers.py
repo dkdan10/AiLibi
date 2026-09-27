@@ -24,13 +24,13 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from meetings.corroboration import MeetingTestimonyLedger
-from meetings.render_contract import EvidenceRow, VotePromptRenderer
+from meetings.render_contract import EvidenceRow, VotePromptRenderer, VoterRole
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -185,6 +185,9 @@ def _vote_prompt(
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
     testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
     evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5 of 2026-09-19
+    voter_role: VoterRole | None = None,
+    ballot_kill_row_version: Literal[1] | None = None,
+    impostor_ballot_version: Literal[1] | None = None,
 ) -> str:
     # ``reporter_id`` (Task 15.5) conforms to the widened VotePromptRenderer
     # contract; surfaced only when supplied so a lever-OFF (``None``) render is

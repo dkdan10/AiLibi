@@ -55,6 +55,7 @@ from eval.evidence_honesty import (
     CUSTOM_POLICY_FOLD,
     LIVE_POLICY_FOLD,
     AdjacentRoomFlagCells,
+    BallotConductCells,
     EvidenceHonestyReconstructionError,
     EvidenceHonestyReport,
     FabricatedCompletionCells,
@@ -153,6 +154,7 @@ _CELL_OWNERS = {
     "I-9": SingularPersonaCells,
     "I-10": MeetingPhysicalityCells,
     "I-11": ImpostorTargetingCells,
+    "ballot-conduct": BallotConductCells,
 }
 
 

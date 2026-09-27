@@ -133,22 +133,28 @@ EvidenceRowKind: TypeAlias = Literal[
     "own_vent",
     "own_transit",
     "own_body_discovery",
+    "own_kill",
     "contradiction",
     "testimony",
 ]
 """Which typed channel one :class:`EvidenceRow` was assembled from.
 
-The four ``own_*`` kinds are the VOTER's own first-hand record channels
+The five ``own_*`` kinds are the VOTER's own first-hand record channels
 (:class:`~meetings.schemas.SightingRecord`,
 :class:`~meetings.schemas.VentWitnessRecord`,
-:class:`~meetings.schemas.MoveWitnessRecord`, :class:`BodyDiscoveryRecord`);
+:class:`~meetings.schemas.MoveWitnessRecord`, :class:`BodyDiscoveryRecord` and
+:class:`~meetings.schemas.KillWitnessRecord`, the last built only while the
+meeting's evidence profile sets ``ballot_kill_row_version``);
 ``contradiction`` is one flag the meeting's own detector raised
 (:class:`~meetings.schemas.ContradictionRef`); ``testimony`` is one accusing
-turn's typed :class:`~meetings.schemas.AccusationClaim`. There is no seventh
+turn's typed :class:`~meetings.schemas.AccusationClaim`. There is no eighth
 kind for rendered prose: the grounding chokepoint never parses rendered memory
 (``meetings/schemas.py`` :class:`~meetings.schemas.VentWitnessRecord`), and a row
 this vocabulary cannot name is a row the assembler did not build.
 """
+
+VoterRole: TypeAlias = Literal["CREWMATE", "IMPOSTOR"]
+"""The role of the voter a ballot is rendered for, as the manager threads it."""
 
 
 @dataclass(frozen=True)
@@ -163,10 +169,12 @@ class EvidenceRow:
     contradiction flags and the transcript's typed accusation claims -- never
     from ``rendered_memory``, which is prose. They are what the meeting layer
     can NAME, not a complete decomposition of the scalar: the assembler's
-    docstring names the two provenance channels that reach no row.
+    docstring names the provenance channels that reach no row.
 
-    * ``subject`` -- the player this row is about. For the three own-perception
-      kinds and for ``contradiction`` / ``testimony`` that is the player named;
+    * ``subject`` -- the player this row is about. For the ``own_sighting``,
+      ``own_vent``, ``own_transit`` and ``own_kill`` kinds (the last names the
+      KILLER the voter watched) and for ``contradiction`` / ``testimony`` that is
+      the player named;
       for ``own_body_discovery`` it is the VICTIM whose body the voter found,
       who is dead and therefore never an ejection target. The assembler groups
       by this field.
@@ -467,18 +475,31 @@ class VotePromptRenderer(Protocol):
     ``evidence_rows`` (ruling D5 of 2026-09-19) is the weighing channel: the
     typed :class:`EvidenceRow` pieces behind THIS voter's suspicion numbers that
     the meeting layer can NAME -- not a complete decomposition of those numbers.
-    Two provenance channels of :class:`SuspicionEntry` reach no row: a witnessed
-    KILL (the participant carries no kill channel) and the BODY-PROXIMITY lift
-    (the body-discovery row names the dead victim, not the nearby suspect), so a
-    template must render the figure as a PARTIAL summary of the rows and never
-    as their total. :func:`meetings.manager.build_evidence_rows` states the same
-    limit and hands the rows over already grouped and ordered, so a template
-    only loops. The rows carry provenance AS STATED and no engine verdict on
-    anyone's account (``first_hand`` above), so a template must not render one
-    as confirmed, borne out or true. It is the same additive, defaulted widening
+    The BODY-PROXIMITY lift of :class:`SuspicionEntry` reaches no row (the
+    body-discovery row names the dead victim, not the nearby suspect), and a
+    witnessed KILL reaches one only while the manager's evidence profile sets
+    ``ballot_kill_row_version``, so a template must render the figure as a
+    PARTIAL summary of the rows and never as their total.
+    :func:`meetings.manager.build_evidence_rows` states the same limit and hands
+    the rows over already grouped and ordered, so a template only loops. The
+    rows carry provenance AS STATED and no engine verdict on anyone's account
+    (``first_hand`` above), so a template must not render one as confirmed,
+    borne out or true. It is the same additive, defaulted widening
     ``reporter_id`` / ``persona`` / ``testimony_ledger`` use: the default ``()``
     renders nothing, and the six non-serving prompt sets reference no such
     variable, so their bytes are unchanged whatever the manager threads.
+
+    ``voter_role``, ``ballot_kill_row_version`` and ``impostor_ballot_version``
+    are the two ballot arms' render inputs, threaded by the manager at every
+    ballot render: the voter's own role (``MeetingParticipant.role``) and the two
+    values of the manager's evidence profile, so the runner's recorded stamps
+    and the rendered body read one profile. Only the served ``qwen3_6_27b`` body
+    reads them, inside guarded blocks: ``ballot_kill_row_version`` rewords the
+    suspicion header's partial-summary sentence, and ``impostor_ballot_version``
+    serves an IMPOSTOR voter the strategic ballot wording, which is why the role
+    is threaded (a sole impostor carries no teammate list to tell it from a
+    crewmate). The defaults ``None`` render the previous bytes, and every other
+    prompt set references none of the three, so their bytes are unchanged.
     """
 
     def __call__(
@@ -498,6 +519,9 @@ class VotePromptRenderer(Protocol):
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
         evidence_rows: tuple[EvidenceRow, ...] = (),
+        voter_role: VoterRole | None = None,
+        ballot_kill_row_version: Literal[1] | None = None,
+        impostor_ballot_version: Literal[1] | None = None,
     ) -> str: ...
 
 
@@ -511,4 +535,5 @@ __all__ = [
     "StatementPromptRenderer",
     "SuspicionEntry",
     "VotePromptRenderer",
+    "VoterRole",
 ]

@@ -153,6 +153,7 @@ from meetings.render_contract import (
     StatementPromptRenderer,
     SuspicionEntry,
     VotePromptRenderer,
+    VoterRole,
 )
 from meetings.schemas import (
     ContradictionRef,
@@ -1045,6 +1046,9 @@ def vote_ballot_prompt(
     map_card: str = "",
     public_account_version: Literal[1] | None = None,
     attributed_testimony_version: Literal[1] | None = None,
+    voter_role: VoterRole | None = None,
+    ballot_kill_row_version: Literal[1] | None = None,
+    impostor_ballot_version: Literal[1] | None = None,
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
@@ -1081,7 +1085,7 @@ def vote_ballot_prompt(
     voter holds about the players it may vote for -- what is behind its
     suspicion figures that the meeting layer can NAME, not a complete
     decomposition of them (:func:`meetings.manager.build_evidence_rows` states
-    which two provenance channels have no row) -- already grouped and ordered by
+    which provenance channels have no row) -- already grouped and ordered by
     that assembler; this renderer passes them
     through and the v8 body only loops, the ``flag_groups`` precedent. The
     default ``()`` renders no block, and only the served ``qwen3_6_27b`` body
@@ -1103,6 +1107,17 @@ def vote_ballot_prompt(
     lever read, never a second environment read here. The default ``False``
     renders the committed bytes exactly, and so does an ON ballot whose table
     spoke no kill.
+
+    ``voter_role``, ``ballot_kill_row_version`` and ``impostor_ballot_version``
+    are the two ballot arms' render inputs, passed straight through: the manager
+    threads the voter's own role and the two values of its evidence profile at
+    every ballot render. The served ``qwen3_6_27b`` body reads them in guarded
+    blocks: ``ballot_kill_row_version`` rewords the suspicion header's
+    partial-summary sentence (the ``own_kill`` rows themselves arrive in
+    ``evidence_rows``), and ``impostor_ballot_version`` with an ``"IMPOSTOR"``
+    role serves the strategic impostor persona, team block and citation
+    paragraph, a sole impostor included. The defaults ``None`` render the
+    committed bytes exactly, and every other set references none of the three.
     """
 
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
@@ -1129,6 +1144,9 @@ def vote_ballot_prompt(
             testimony_ledger=testimony_ledger,
             evidence_rows=evidence_rows,
             testimony_shapes=testimony_shapes,
+            voter_role=voter_role,
+            ballot_kill_row_version=ballot_kill_row_version,
+            impostor_ballot_version=impostor_ballot_version,
         )
     )
 
@@ -1154,11 +1172,13 @@ class PromptRenderers:
 _TESTIMONY_SHAPES_GUARD: Final[str] = "testimony_shapes"
 
 
-def _carries_a_live_guard(template: nodes.Template) -> bool:
-    """Whether a parsed body branches on the arm's variable for real.
+def _carries_a_live_guard(
+    template: nodes.Template, guard: str = _TESTIMONY_SHAPES_GUARD
+) -> bool:
+    """Whether a parsed body branches on an arm's variable for real.
 
-    True when some ``{% if %}`` condition reads
-    :data:`_TESTIMONY_SHAPES_GUARD` AND does not fold to a constant. Jinja
+    True when some ``{% if %}`` condition reads ``guard`` (by default
+    :data:`_TESTIMONY_SHAPES_GUARD`) AND does not fold to a constant. Jinja
     folds ``false and x`` to ``False`` without evaluating ``x``, so a dead
     guard is exactly the case ``as_const`` decides and a live one is exactly
     the case it refuses.
@@ -1171,7 +1191,7 @@ def _carries_a_live_guard(template: nodes.Template) -> bool:
         names = {node.name for node in test.find_all(nodes.Name)}
         if isinstance(test, nodes.Name):
             names.add(test.name)
-        if _TESTIMONY_SHAPES_GUARD not in names:
+        if guard not in names:
             continue
         try:
             test.as_const()
@@ -1228,6 +1248,44 @@ def _require_testimony_shapes_bodies(
                 f"{ENV_TESTIMONY_SHAPES} lever is only authored for the "
                 "'qwen3_6_27b' set — unset the lever or select a set whose "
                 "bodies carry the block"
+            )
+
+
+def require_guarded_bodies(
+    prompt_set: str | None,
+    *,
+    guard: str,
+    templates: tuple[str, ...],
+    env: Mapping[str, str] | None = None,
+    root: Path = _PROMPTS_ROOT,
+) -> None:
+    """Refuse an experiment arm for a set whose served bodies never read its variable.
+
+    An experiment arm re-bodies a set's own templates with guarded blocks read
+    off one render variable (the ballot arms read ``ballot_kill_row_version`` and
+    ``impostor_ballot_version``), and its stamp is folded for any registered set.
+    A set whose body carries no live ``{% if %}`` on that variable would record
+    the arm's stamp over bytes the arm never shaped, so a runner refuses it at
+    construction. The test is the one :func:`_require_testimony_shapes_bodies`
+    uses: the PARSED body, a condition that reads the variable and does not fold
+    to a constant. An absent or unparseable body is the same refusal, naming the
+    file.
+    """
+
+    environment = build_environment(prompt_set, root=root, env=env)
+    set_name = resolve_prompt_set(prompt_set, env=env)
+    for name in templates:
+        try:
+            source = environment.loader.get_source(environment, name)[0]  # type: ignore[union-attr]
+            guarded = _carries_a_live_guard(environment.parse(source), guard)
+        except (TemplateNotFound, TemplateSyntaxError, AttributeError):
+            guarded = False
+        if not guarded:
+            raise ValueError(
+                f"Prompt set {set_name!r} template {name!r} carries no live "
+                f"{guard!r} guard, so it cannot serve that experiment arm; its "
+                "blocks are authored for the 'qwen3_6_27b' set only — select that "
+                "set or record without the arm"
             )
 
 
@@ -1610,6 +1668,7 @@ __all__ = [
     "impostor_report_prompt",
     "impostor_roll_call_enabled",
     "render_map_card",
+    "require_guarded_bodies",
     "resolve_prompt_set",
     "public_account_prompt_versions",
     "validate_public_account_renderers",

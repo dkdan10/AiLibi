@@ -39,6 +39,8 @@ from agents.strategic.prompts.loader import (
     resolve_prompt_set,
 )
 from engine.world import load_canonical_map
+from llm.fake_provider import FakeProvider
+from meetings.evidence_profile import MeetingEvidenceProfile
 from meetings.manager import PromptRenderInputs, SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
@@ -60,9 +62,13 @@ from meetings.transcript import (
 from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.game import (
+    CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
     DEFAULT_PROMPT_VERSIONS,
     IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS,
     PROMPT_VERSION_SETS,
+    REPORTER_REASONING_PROMPT_VERSION_SETS,
+    TESTIMONY_SHAPES_PROMPT_VERSION_SETS,
+    build_default_meeting_runner,
     prompt_versions_for_set,
 )
 
@@ -1566,8 +1572,9 @@ def test_a_config_turning_no_registered_arm_on_keeps_the_mapping_by_identity(
     """The experiment-arm fold adds nothing unless a registered arm is ON.
 
     No config, the default config, and a config switching ON arms that register
-    no templates (the arm registry is empty until an arm card fills it) all
-    serve the set's own mapping object, as the lever fold alone did.
+    no templates (the arm registry holds only the two ballot arms, which these
+    configs leave OFF) all serve the set's own mapping object, as the lever fold
+    alone did.
     """
 
     default = PROMPT_VERSION_SETS[set_name]
@@ -1582,4 +1589,135 @@ def test_a_config_turning_no_registered_arm_on_keeps_the_mapping_by_identity(
     ):
         assert prompt_versions_for_set(set_name, env={}, experiment_config=config) is (
             default
+        )
+
+
+# --------------------------------------------------------------------------- #
+# The two ballot arms: derived stamps, never a default                         #
+# --------------------------------------------------------------------------- #
+
+_KILL_ROW_STAMP = "vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1"
+_IMPOSTOR_STAMP = "vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1"
+_BALLOT_ARM_CONFIGS: dict[str, RecordedExperimentConfig] = {
+    "kill-row": RecordedExperimentConfig(ballot_kill_row_version=1),
+    "impostor": RecordedExperimentConfig(impostor_ballot_version=1),
+    "both": RecordedExperimentConfig(
+        ballot_kill_row_version=1, impostor_ballot_version=1
+    ),
+}
+_BALLOT_ARM_STAMPS: dict[str, str] = {
+    "kill-row": _KILL_ROW_STAMP,
+    "impostor": _IMPOSTOR_STAMP,
+    "both": f"{_KILL_ROW_STAMP}+{_IMPOSTOR_STAMP}",
+}
+
+
+@pytest.mark.parametrize("arms", sorted(_BALLOT_ARM_CONFIGS))
+def test_each_ballot_arm_serves_its_derived_stamp_on_vote_ballot_only(
+    arms: str,
+) -> None:
+    served = prompt_versions_for_set(
+        "qwen3_6_27b", env={}, experiment_config=_BALLOT_ARM_CONFIGS[arms]
+    )
+    assert dict(served) == {
+        "crewmate_report": "crewmate_report.qwen3_6_27b.v6",
+        "impostor_report": "impostor_report.qwen3_6_27b.v6",
+        "accusation_round": "accusation_round.qwen3_6_27b.v6",
+        "vote_ballot": _BALLOT_ARM_STAMPS[arms],
+    }
+
+
+def test_no_ballot_arm_stamp_equals_a_default_or_overlay_stamp() -> None:
+    worn = {
+        stamp
+        for registry in (
+            PROMPT_VERSION_SETS,
+            IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS,
+            REPORTER_REASONING_PROMPT_VERSION_SETS,
+            CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
+            TESTIMONY_SHAPES_PROMPT_VERSION_SETS,
+        )
+        for versions in registry.values()
+        for stamp in versions.values()
+    } | set(DEFAULT_PROMPT_VERSIONS.values())
+    arm_stamps = set(_BALLOT_ARM_STAMPS.values())
+    assert not arm_stamps & worn
+    assert len(arm_stamps) == 3
+
+
+def test_the_ballot_arms_move_no_default_or_overlay_registry() -> None:
+    """The registries every committed recording resolves through are unchanged."""
+
+    assert dict(DEFAULT_PROMPT_VERSIONS) == {
+        "crewmate_report": "crewmate_report.v8",
+        "impostor_report": "impostor_report_v6",
+        "accusation_round": "accusation_round.v9",
+        "vote_ballot": "vote_ballot/v7",
+    }
+    served = {
+        "crewmate_report": "crewmate_report.qwen3_6_27b.v6",
+        "impostor_report": "impostor_report.qwen3_6_27b.v6",
+        "accusation_round": "accusation_round.qwen3_6_27b.v6",
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v8",
+    }
+    assert dict(PROMPT_VERSION_SETS["qwen3_6_27b"]) == served
+    assert dict(IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS["qwen3_6_27b"]) == {
+        **served,
+        "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
+        "accusation_round": "accusation_round_roll_call.qwen3_6_27b.v2",
+    }
+    assert dict(REPORTER_REASONING_PROMPT_VERSION_SETS["qwen3_6_27b"]) == {
+        **served,
+        "crewmate_report": "crewmate_report.qwen3_6_27b.v6.reporter_reasoning",
+        "accusation_round": "accusation_round.qwen3_6_27b.v6.reporter_reasoning",
+    }
+    assert dict(CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS["qwen3_6_27b"]) == {
+        **served,
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v8.corroboration_discipline",
+    }
+    assert dict(TESTIMONY_SHAPES_PROMPT_VERSION_SETS["qwen3_6_27b"]) == {
+        **served,
+        "crewmate_report": "crewmate_report.qwen3_6_27b.v6.testimony_shapes",
+        "accusation_round": "accusation_round.qwen3_6_27b.v6.testimony_shapes",
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v8.testimony_shapes",
+    }
+
+
+def test_the_ballot_header_keeps_the_v8_marker_and_names_both_arms() -> None:
+    path = _PROMPTS_ROOT / "qwen3_6_27b" / "vote_ballot.j2"
+    assert _marker_version(_template_header(path)) == "vote_ballot.qwen3_6_27b.v8"
+    prose = path.read_text(encoding="utf-8").split("-#}", 1)[0]
+    for field in ("ballot_kill_row_version", "impostor_ballot_version"):
+        assert field in prose, field
+
+
+def _pinned_runner(*, versions: dict[str, str], profile: dict[str, int]) -> object:
+    return build_default_meeting_runner(
+        llm_client=FakeProvider(),
+        env={"AILIBI_PROMPT_SET": "qwen3_6_27b"},
+        prompt_versions=versions,
+        profile=MeetingEvidenceProfile.model_validate(profile),
+    )
+
+
+@pytest.mark.parametrize("arms", sorted(_BALLOT_ARM_CONFIGS))
+def test_a_pin_that_omits_an_arm_the_manager_renders_fails_the_one_source_check(
+    arms: str,
+) -> None:
+    profile = {
+        field: 1
+        for field in ("ballot_kill_row_version", "impostor_ballot_version")
+        if getattr(_BALLOT_ARM_CONFIGS[arms], field) is not None
+    }
+    default = dict(PROMPT_VERSION_SETS["qwen3_6_27b"])
+    with pytest.raises(ValueError, match="would stamp one ballot and render another"):
+        _pinned_runner(versions=default, profile=profile)
+    # The pin that credits exactly the rendered arms builds.
+    assert _pinned_runner(
+        versions={**default, "vote_ballot": _BALLOT_ARM_STAMPS[arms]}, profile=profile
+    )
+    # A pin claiming the arms for a profile that renders none fails the same way.
+    with pytest.raises(ValueError, match="would stamp one ballot and render another"):
+        _pinned_runner(
+            versions={**default, "vote_ballot": _BALLOT_ARM_STAMPS[arms]}, profile={}
         )

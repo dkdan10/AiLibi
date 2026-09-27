@@ -389,6 +389,37 @@ class MoveWitnessRecord(_FrozenModel):
     observation_id: ObservationId | None = None
 
 
+class KillWitnessRecord(_FrozenModel):
+    """One of an agent's OWN first-hand witnessed-kill episodic records.
+
+    The kill twin of :class:`VentWitnessRecord`: ``subject`` is the witnessed
+    KILLER named at ``room``/``tick`` in a first-hand (``provenance ==
+    "observed"``) ``saw_player`` row whose action stamp is ``"kill"``. The
+    ``orchestrator.game.TacticalAgent.kill_witness_records_for_meeting``
+    accessor projects these off episodic memory and drops every record naming a
+    fellow impostor (the §4.7 teammate guard), so a reported kill (a
+    ``provenance == "reported"`` statement) never becomes one. The record names
+    no victim: the perceived ``PlayerView`` carries none.
+
+    Two readers. The training-side conviction assembler reads ``subject``
+    (``training.conviction.serving``). The meeting layer reads the voter's own
+    records into one ``own_kill`` evidence row each on that voter's ballot, and
+    only while the meeting's evidence profile sets ``ballot_kill_row_version``
+    (:func:`meetings.manager.build_evidence_rows`); the record reaches no
+    contradiction detector, testimony ledger or belief fold.
+
+    ``observation_id`` mirrors :class:`VentWitnessRecord`'s: the episodic id the
+    row was projected from, so an ``own_kill`` row carries an id the ballot may
+    cite, or ``None`` for an unstamped row. ADDITIVE with a ``None`` default, so
+    every construction predating it stays valid.
+    """
+
+    subject: PlayerId
+    room: RoomId
+    tick: int
+    observation_id: ObservationId | None = None
+
+
 # ---------------------------------------------------------------------------
 # Higher-level claims (alibi / accusation / corroboration) (DESIGN.md §5.3)
 # ---------------------------------------------------------------------------
@@ -1357,6 +1388,7 @@ __all__ = [
     "ContradictionRef",
     "CorroborationClaim",
     "FoundBodyObservation",
+    "KillWitnessRecord",
     "MARKER_QUOTED_ORIGINAL_MAX_CHARS",
     "MARKER_TRUNCATION_SUFFIX",
     "MeetingOutcome",

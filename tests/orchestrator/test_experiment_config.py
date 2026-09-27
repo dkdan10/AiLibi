@@ -13,11 +13,9 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import BaseModel, ValidationError
 
-import agents.tactical.experimental as experimental
 from agents.tactical.experimental import (
     ExperimentalImpostorPolicy,
     TacticalExperimentOptions,
-    UnbuiltTacticalOptionError,
 )
 from engine.entities import BodyState
 from engine.events import MeetingTriggeredEvent
@@ -211,7 +209,7 @@ _VERSION_PLAN: dict[str, ConfigLayer] = {
 
 
 def _constructed(values: dict[str, object]) -> RecordedExperimentConfig:
-    """A config built past validation (the pending guard's bypass route)."""
+    """A config built past validation."""
 
     return RecordedExperimentConfig.model_construct(**cast(dict[str, Any], values))
 
@@ -428,7 +426,7 @@ def test_no_lab_candidate_combines_either_reset_pair() -> None:
     assert combined == []
 
 
-# Tactical changes, the options mirror and the unbuilt refusal ---------------
+# Tactical changes and the options mirror -------------------------------------
 
 
 @pytest.mark.parametrize("field", fields_in_layer("tactical"))
@@ -463,38 +461,6 @@ def test_the_options_carry_the_two_look_and_wait_values_too() -> None:
     assert options.vent_entry_policy == "own_fresh_kill"
 
 
-#: The two values the spine declared ahead of their behaviour. The look-and-wait
-#: card built both and emptied ``UNBUILT_OPTION_VALUES``, so the guard's tests
-#: plant them back to prove it still refuses a listed value.
-_PLANTED_UNBUILT: dict[str, frozenset[str]] = {
-    "vent_exit_policy": frozenset({"look_and_wait"}),
-    "vent_entry_policy": frozenset({"own_fresh_kill"}),
-}
-
-
-def _plant_unbuilt(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        experimental, "UNBUILT_OPTION_VALUES", MappingProxyType(_PLANTED_UNBUILT)
-    )
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        (field, value)
-        for field, values in _PLANTED_UNBUILT.items()
-        for value in sorted(values)
-    ],
-)
-def test_an_unbuilt_option_value_refuses_to_build_a_policy(
-    field: str, value: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _plant_unbuilt(monkeypatch)
-    options = TacticalExperimentOptions.model_validate({field: value})
-    with pytest.raises(UnbuiltTacticalOptionError, match=f"{field}={value!r}"):
-        ExperimentalImpostorPolicy(agent_id="p-1", options=options)
-
-
 def test_the_built_vent_values_still_build_a_policy() -> None:
     for options in (
         TacticalExperimentOptions(vent_exit_policy="observed_risk"),
@@ -502,16 +468,6 @@ def test_the_built_vent_values_still_build_a_policy() -> None:
         TacticalExperimentOptions(vent_entry_policy="any_body"),
     ):
         assert ExperimentalImpostorPolicy(agent_id="p-1", options=options)
-
-
-def test_the_factory_refuses_an_unbuilt_value_rather_than_running_the_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _plant_unbuilt(monkeypatch)
-    config = RecordedExperimentConfig(vent_entry_policy="own_fresh_kill")
-    factory = build_default_agent_factory(experiment_config=config)
-    with pytest.raises(UnbuiltTacticalOptionError, match="vent_entry_policy"):
-        factory("p-1", "IMPOSTOR")
 
 
 # The settings a pre-wave reader cannot know ------------------------------------
@@ -699,12 +655,9 @@ def test_the_profile_refuses_a_coerced_ballot_version(raw: dict[str, object]) ->
     ],
 )
 @pytest.mark.parametrize("value", [True, 1.0])
-def test_a_coerced_wave_version_is_refused_with_the_guard_open(
-    monkeypatch: pytest.MonkeyPatch, field: str, value: object
-) -> None:
+def test_a_coerced_wave_version_is_refused(field: str, value: object) -> None:
     # Literal[1] alone would coerce True and 1.0 to 1; the integer check
-    # refuses them whether or not the pending guard still lists the field.
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+    # refuses them.
     with pytest.raises(ValidationError, match="integer version numbers"):
         RecordedExperimentConfig.model_validate({field: value})
     assert RecordedExperimentConfig.model_validate({field: 1}).model_dump()[field] == 1

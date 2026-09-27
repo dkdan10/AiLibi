@@ -164,10 +164,6 @@ def test_a_temporal_physical_set_fails_with_the_rule_withheld_from_the_v2_oracle
 # --------------------------------------------------------------------------- #
 
 
-def _open_pending_arms(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
-
-
 @pytest.fixture(scope="module")
 def todays_arms_set(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return record_fake_set(
@@ -200,9 +196,8 @@ def _full_config_copy(source: Path, destination: Path) -> Path:
 
 
 def test_the_factory_profile_scans_a_full_config_copy_with_every_hash_verified(
-    todays_arms_set: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    todays_arms_set: Path, tmp_path: Path
 ) -> None:
-    _open_pending_arms(monkeypatch)
     copy = _full_config_copy(todays_arms_set, tmp_path / "full" / "9p2i")
     config = recorded_experiment_config(read_all_entries(_replay(copy)))
     assert config is not None
@@ -241,7 +236,6 @@ def test_the_factory_profile_without_its_layers_refuses_the_full_config_copy(
 ) -> None:
     """Perturbed: the profile's layer declaration removed."""
 
-    _open_pending_arms(monkeypatch)
     copy = _full_config_copy(todays_arms_set, tmp_path / "full" / "9p2i")
     monkeypatch.setattr(
         leak_scan,

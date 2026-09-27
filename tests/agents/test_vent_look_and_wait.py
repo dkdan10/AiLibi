@@ -1506,7 +1506,6 @@ def test_without_the_row_checks_each_planted_row_fails_the_check(
 
 
 def test_both_values_build_a_policy_now() -> None:
-    assert experimental.UNBUILT_OPTION_VALUES == {}
     for options in (
         TacticalExperimentOptions(vent_exit_policy="look_and_wait"),
         TacticalExperimentOptions(vent_entry_policy="own_fresh_kill"),

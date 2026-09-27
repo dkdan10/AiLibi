@@ -378,10 +378,6 @@ _FULL_CONFIG_SETTINGS: Final[dict[str, object]] = {
 }
 
 
-def _open_pending(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
-
-
 def _counted(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     calls: list[int] = []
 
@@ -406,7 +402,6 @@ def test_the_profile_declares_the_layers_the_route_reads() -> None:
 def test_the_profile_reads_the_full_config_copy_with_every_hash_verified(
     reset_set: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _open_pending(monkeypatch)
     full = _copy_with(reset_set, tmp_path / "full" / "9p2i", **_FULL_CONFIG_SETTINGS)
     advances = _counted(monkeypatch)
     assert _routes(full) == _routes(reset_set)
@@ -416,7 +411,6 @@ def test_the_profile_reads_the_full_config_copy_with_every_hash_verified(
 def test_without_its_declaration_the_profile_refuses_the_full_config_copy(
     reset_set: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _open_pending(monkeypatch)
     full = _copy_with(reset_set, tmp_path / "full" / "9p2i", **_FULL_CONFIG_SETTINGS)
     real = scorecard._walk_config
     monkeypatch.setattr(

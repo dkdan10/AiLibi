@@ -15,7 +15,6 @@ window and cap are the named constants below, frozen once a round records them.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from types import MappingProxyType
 from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
@@ -102,29 +101,6 @@ class TacticalExperimentOptions(BaseModel):
                 "contextual reporting conflicts with unconditional reporting"
             )
         return self
-
-
-#: Option values declared ahead of their behaviour. A policy built with one
-#: raises instead of running the default decision under the arm's name; the
-#: card that builds a value's behaviour deletes it here. Empty since the
-#: look-and-wait card built ``look_and_wait`` and ``own_fresh_kill``; the arm
-#: spine's pending-equals-unbuilt test still reads it, and the card that deletes
-#: ``WAVE_ARMS_PENDING`` deletes this guard with that test.
-UNBUILT_OPTION_VALUES: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
-
-
-class UnbuiltTacticalOptionError(ValueError):
-    """A declared tactical option value whose behaviour does not exist yet."""
-
-
-def _refuse_unbuilt_options(options: TacticalExperimentOptions) -> None:
-    for field, unbuilt in UNBUILT_OPTION_VALUES.items():
-        value = getattr(options, field)
-        if value in unbuilt:
-            raise UnbuiltTacticalOptionError(
-                f"{field}={value!r} is declared but its policy behaviour is not "
-                "built; building a policy with it would run the default instead"
-            )
 
 
 def _visits(events: tuple[EpisodicEvent, ...]) -> dict[str, int]:
@@ -286,7 +262,6 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
     """
 
     def __init__(self, *, agent_id: str, options: TacticalExperimentOptions) -> None:
-        _refuse_unbuilt_options(options)
         super().__init__(agent_id=agent_id)
         self.options = options
         self._announced_dead: frozenset[str] = frozenset()

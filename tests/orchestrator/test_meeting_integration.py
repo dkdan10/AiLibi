@@ -29,7 +29,7 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 import pytest
 from pydantic import BaseModel, TypeAdapter
@@ -47,7 +47,7 @@ from eval.leak_scan import assert_memory_render_role_disclosure_is_entitled
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.corroboration import MeetingTestimonyLedger
-from meetings.render_contract import EvidenceRow
+from meetings.render_contract import EvidenceRow, VoterRole
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -1042,6 +1042,9 @@ def _stub_vote_prompt(
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
     testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
     evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5 of 2026-09-19
+    voter_role: VoterRole | None = None,
+    ballot_kill_row_version: Literal[1] | None = None,
+    impostor_ballot_version: Literal[1] | None = None,
 ) -> str:
     return f"VOTE voter={voter_id}"
 

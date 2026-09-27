@@ -376,7 +376,9 @@ def test_kill_witness_record_surfaces_for_a_crew_witness() -> None:
         players=(PlayerView(id="K", room="cafeteria", action="kill"),),
     )
     assert agent.kill_witness_records_for_meeting() == (
-        KillWitnessRecord(subject="K", room="cafeteria", tick=5),
+        KillWitnessRecord(
+            subject="K", room="cafeteria", tick=5, observation_id="OBS:5:1"
+        ),
     )
 
 
@@ -407,7 +409,9 @@ def test_kill_witness_record_excludes_a_fellow_impostors_kill() -> None:
         players=(PlayerView(id="C", room="electrical", action="kill"),),
     )
     assert agent.kill_witness_records_for_meeting() == (
-        KillWitnessRecord(subject="C", room="electrical", tick=6),
+        KillWitnessRecord(
+            subject="C", room="electrical", tick=6, observation_id="OBS:6:1"
+        ),
     )
 
 
@@ -435,8 +439,12 @@ def test_kill_witness_records_ignore_malformed_rows_and_are_tick_sorted() -> Non
         )
     )
     assert agent.kill_witness_records_for_meeting() == (
-        KillWitnessRecord(subject="K1", room="cafeteria", tick=3),
-        KillWitnessRecord(subject="K2", room="medbay", tick=7),
+        KillWitnessRecord(
+            subject="K1", room="cafeteria", tick=3, observation_id="OBS:3:1"
+        ),
+        KillWitnessRecord(
+            subject="K2", room="medbay", tick=7, observation_id="OBS:7:1"
+        ),
     )
 
 

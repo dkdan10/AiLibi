@@ -151,6 +151,7 @@ from meetings.schemas import (
     ContradictionRef,
     CorroborationClaim,
     FoundBodyObservation,
+    KillWitnessRecord,
     MeetingOutcome,
     MeetingResult,
     MeetingTranscript,
@@ -893,6 +894,19 @@ class MeetingParticipant:
     anyone: the row's subject is the dead victim. The default ``()``
     keeps every existing construction site valid and means "this speaker
     discovered nothing".
+
+    ``kill_witness_records`` is the participant's OWN first-hand witnessed-kill
+    channel, the sixth self-channel. The orchestrator populates it from the
+    optional ``KillWitnessAgent.kill_witness_records_for_meeting()`` accessor
+    (episodic memory, first-hand rows only, with the §4.7 teammate guard applied
+    there). The manager reads it in exactly one place: while its evidence
+    profile sets ``ballot_kill_row_version``, each record becomes one
+    ``own_kill`` evidence row on the holder's own ballot
+    (:func:`_own_channel_evidence_rows`), which drops a record naming a fellow
+    impostor again. It reaches no contradiction detector, testimony ledger or
+    belief fold, so a witnessed kill mints no public flag. The default ``()``
+    keeps every existing construction site valid and means "this voter watched
+    no kill".
     """
 
     agent_id: PlayerId
@@ -907,6 +921,7 @@ class MeetingParticipant:
     observation_ids: tuple[ObservationId, ...] = ()
     persona: str = ""
     body_discovery_records: tuple[BodyDiscoveryRecord, ...] = ()
+    kill_witness_records: tuple[KillWitnessRecord, ...] = ()
 
 
 # The values ``MeetingTrigger.kind`` accepts, read off the Literal rather than
@@ -2331,13 +2346,15 @@ class MeetingManager:
         # ledger is threaded and none is reachable: a testimony row's provenance
         # is read off the PUBLIC transcript, so the block can never tell this
         # voter which of the accounts against a player the engine bears out
-        # (review round 3).
+        # (review round 3). The witnessed-kill rows are read from the same
+        # evidence profile the runner's recorded stamps fold from.
         evidence_rows = build_evidence_rows(
             voter=participant,
             candidate_targets=candidate_targets,
             contradictions=contradictions,
             transcript=transcript,
             regroup_ticks=regroup_ticks,
+            ballot_kill_row_version=self._evidence_profile.ballot_kill_row_version,
         )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
@@ -2372,6 +2389,14 @@ class MeetingManager:
             # keeps every other prompt set byte-identical; only the served v8
             # body references the variable.
             evidence_rows=evidence_rows,
+            # The two ballot arms' render inputs: the voter's own role, so a
+            # sole impostor (who carries no teammate list) is told apart from a
+            # crewmate, and the two values of the SAME evidence profile the
+            # runner's recorded stamps fold from. Only the served body reads
+            # them, in guarded blocks; ``None`` renders the previous bytes.
+            voter_role=participant.role,
+            ballot_kill_row_version=self._evidence_profile.ballot_kill_row_version,
+            impostor_ballot_version=self._evidence_profile.impostor_ballot_version,
         )
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the
@@ -3480,14 +3505,16 @@ MAX_EVIDENCE_ROWS_PER_SUBJECT: Final[int] = 8
 # The provenance CLASS each row kind sorts under, and the only ordering the
 # assembler applies across kinds. Three classes: what the voter perceived
 # itself, what the meeting's detector raised, what somebody said here. The order
-# is provenance, never strength -- a witnessed vent and an ordinary sighting
-# share class 0 precisely so the block cannot rank one player's evidence above
-# another's, which is the defect ruling D5 exists to remove.
+# is provenance, never strength -- a witnessed vent, a watched kill and an
+# ordinary sighting share class 0 precisely so the block cannot rank one
+# player's evidence above another's, which is the defect ruling D5 exists to
+# remove. The same reasoning keeps a kill row under the same per-subject budget.
 _EVIDENCE_KIND_CLASS: Final[Mapping[EvidenceRowKind, int]] = {
     "own_sighting": 0,
     "own_vent": 0,
     "own_transit": 0,
     "own_body_discovery": 0,
+    "own_kill": 0,
     "contradiction": 1,
     "testimony": 2,
 }
@@ -3512,9 +3539,20 @@ def _turn_id_for_event(event_id: str, *, turns: Sequence[MeetingTurn]) -> TurnId
 
 
 def _own_channel_evidence_rows(
-    *, voter: MeetingParticipant, regroup_ticks: frozenset[int] = frozenset()
+    *,
+    voter: MeetingParticipant,
+    regroup_ticks: frozenset[int] = frozenset(),
+    ballot_kill_row_version: Literal[1] | None = None,
 ) -> list[tuple[int, EvidenceRow]]:
-    """This voter's four own-perception channels, as ``(tick, row)`` pairs.
+    """This voter's own-perception channels, as ``(tick, row)`` pairs.
+
+    Four channels always: sightings, vents, transits and body discoveries. The
+    fifth, the voter's witnessed kills, makes rows only while
+    ``ballot_kill_row_version`` is set (the evidence profile's R8 arm); with it
+    ``None`` the kill records are not read at all, so a ballot renders exactly
+    the rows it rendered before the arm existed. A kill row names the KILLER it
+    watched as its subject, says ``you watched them KILL in {room} at tick
+    {tick}`` and names no victim, because the record carries none.
 
     One row per typed record, so the count is bounded by the records the voter
     holds and nothing here can multiply them. Every row is ``first_hand`` and
@@ -3545,7 +3583,10 @@ def _own_channel_evidence_rows(
     nothing and renders exactly what it rendered before this filter.
     Body-discovery rows take no filter and need none: a body's subject is the
     dead VICTIM, and ``engine.rules`` refuses a kill whose target is an impostor
-    (the friendly-fire guard), so a fellow impostor is never a victim.
+    (the friendly-fire guard), so a fellow impostor is never a victim. A kill row
+    takes the same drop as a vent row even though the accessor already applies
+    it: the records may come from any agent implementing the channel, and an
+    impostor's ballot must never read "you watched them KILL" about its partner.
 
     A sighting record at a public regroup's tick or the tick after it
     (``regroup_ticks``, :func:`meetings.transcript.in_regroup_window`) makes no
@@ -3639,6 +3680,25 @@ def _own_channel_evidence_rows(
                 ),
             )
         )
+    if ballot_kill_row_version == 1:
+        for kill in voter.kill_witness_records:
+            if kill.subject in teammates:
+                continue
+            rows.append(
+                (
+                    kill.tick,
+                    EvidenceRow(
+                        subject=kill.subject,
+                        description=(
+                            f"you watched them KILL in {kill.room} at tick {kill.tick}"
+                        ),
+                        kind="own_kill",
+                        first_hand=True,
+                        speaker=voter.agent_id,
+                        citation_id=kill.observation_id,
+                    ),
+                )
+            )
     return rows
 
 
@@ -3836,14 +3896,18 @@ def build_evidence_rows(
     contradictions: Sequence[ContradictionRef],
     transcript: MeetingTranscript,
     regroup_ticks: frozenset[int] = frozenset(),
+    ballot_kill_row_version: Literal[1] | None = None,
 ) -> tuple[EvidenceRow, ...]:
     """The typed pieces THIS voter holds about the players it may vote for.
 
     Ruling D5 of 2026-09-19. The ballot used to hand a voter a finished number
     and instruct it to follow that number; these are the typed pieces behind
-    that number, assembled from TYPED inputs only -- the participant's four own
+    that number, assembled from TYPED inputs only -- the participant's own
     record channels, the meeting's :class:`~meetings.schemas.ContradictionRef`
-    flags, and the transcript's typed accusation claims.
+    flags, and the transcript's typed accusation claims. The witnessed-kill
+    channel is read only while ``ballot_kill_row_version`` is set, the value the
+    manager passes from its evidence profile; with it ``None`` the result is the
+    tuple this function built before that channel existed.
     ``rendered_memory`` is never read: it is prose, and the standing rule is that
     the grounding chokepoint never parses rendered prose
     (:class:`~meetings.schemas.VentWitnessRecord`).
@@ -3856,15 +3920,16 @@ def build_evidence_rows(
     lies, and is never told which of them the engine confirms.
 
     NOT a complete decomposition of the scalar, and the template says so at the
-    same strength. Two of the eight provenance channels
-    (:class:`~meetings.render_contract.SuspicionEntry`) have no row here: a
-    witnessed KILL (``kill_or_vent_pin``'s kill half -- the participant carries
-    no kill channel at all, and ``sighting_records_for_meeting`` filters the
-    kill action out of the sightings) and the BODY-PROXIMITY lift, whose own
-    row would name the nearby suspect while the body-discovery row this
-    assembler builds names the dead victim. So a number can sit above rows that
-    do not add up to it; the rows are what the meeting layer can NAME, never a
-    proof of the figure.
+    same strength. Of the eight provenance channels
+    (:class:`~meetings.render_contract.SuspicionEntry`), the BODY-PROXIMITY lift
+    never has a row here: its own row would name the nearby suspect, while the
+    body-discovery row this assembler builds names the dead victim. A witnessed
+    KILL (``kill_or_vent_pin``'s kill half) has a row only while
+    ``ballot_kill_row_version`` is set; otherwise the kill records are not read
+    (``sighting_records_for_meeting`` filters the kill action out of the
+    sightings, so no other channel carries one either). So a number can sit
+    above rows that do not add up to it; the rows are what the meeting layer can
+    NAME, never a proof of the figure.
 
     Only THIS voter's own channels are read. No other participant's records are
     reachable from here, which is what keeps the block firewall-clean: every own
@@ -3893,8 +3958,8 @@ def build_evidence_rows(
        exactly where a true one does;
     3. by provenance CLASS (:data:`_EVIDENCE_KIND_CLASS`): what the voter
        perceived, then what the detector raised, then what was said here. A
-       witnessed vent and an ordinary sighting share a class, so no row is
-       ranked above another for being stronger evidence;
+       witnessed vent, a watched kill and an ordinary sighting share a class,
+       so no row is ranked above another for being stronger evidence;
     4. earliest first within a class -- tick for an own row, turn index for the
        other two -- then by kind, speaker and citation id, so the tuple is
        total and deterministic.
@@ -3912,7 +3977,11 @@ def build_evidence_rows(
     targets = frozenset(candidate_targets)
     turns = transcript.turns
     pairs = (
-        _own_channel_evidence_rows(voter=voter, regroup_ticks=regroup_ticks)
+        _own_channel_evidence_rows(
+            voter=voter,
+            regroup_ticks=regroup_ticks,
+            ballot_kill_row_version=ballot_kill_row_version,
+        )
         + _contradiction_evidence_rows(
             contradictions=contradictions,
             turns=turns,

@@ -32,14 +32,24 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Callable, Coroutine, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, Literal, Protocol, TypeAlias, TypeVar, cast, runtime_checkable
+from typing import (
+    Final,
+    Literal,
+    Protocol,
+    TypeAlias,
+    TypeVar,
+    cast,
+    get_args,
+    runtime_checkable,
+)
 
 from agents.base import AgentInterface, EventObservingAgent
+from agents.memory.episodic import EpisodicEvent
 from agents.memory.investigation import (
     investigation_packet_sha256,
     reduce_investigation_evidence,
@@ -80,6 +90,7 @@ from agents.strategic.prompts import (
     validate_public_account_renderers,
     resolve_prompt_set,
 )
+from agents.strategic.prompts.loader import require_guarded_bodies
 from agents.tactical.crewmate_policy import (
     CrewmatePolicy,
     EmergencyPacingTracker,
@@ -135,6 +146,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     FoundBodyObservation,
+    KillWitnessRecord,
     MeetingResult,
     MoveWitnessRecord,
     ObservationId,
@@ -148,11 +160,9 @@ from observation.action_intent import ActionIntent
 from observation.body_ids import public_body_id
 from observation.packet import EventObservationBatch, ObservationPacket
 from orchestrator.experiment_config import (
-    FIELD_LAYER,
     RecordedExperimentConfig,
     engine_arguments,
     normalize_experiment_config,
-    refuse_pending_values,
 )
 from orchestrator.observation_delivery import event_observation_batches
 from orchestrator.replay_integrity import LEGACY_SKIP_CONFIDENCE_THRESHOLD
@@ -512,9 +522,23 @@ def _lever_arm_versions(set_name: str, lever_key: str) -> Mapping[str, str]:
 # keyed on the RECORDED config rather than on an environment lever, so a
 # recording serves an arm's stamps only when its config carries the arm. Each
 # stamp is ``_lever_arm_versions``' form with a suffix derived from the field
-# and value (:func:`experiment_arm_suffix`), never a hand-written string. Empty
-# until an arm card registers its templates.
-EXPERIMENT_ARM_TEMPLATES: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType({})
+# and value (:func:`experiment_arm_suffix`), never a hand-written string.
+#
+# The two ballot arms re-body ``vote_ballot`` alone, with guarded blocks in the
+# same ``vote_ballot.j2`` whose header marker stays ``vote_ballot.qwen3_6_27b.v8``:
+# the witnessed-kill row (``ballot_kill_row_version``) rewords the suspicion
+# header's partial-summary sentence and the manager builds the ``own_kill`` rows,
+# and the strategic impostor ballot (``impostor_ballot_version``) serves an
+# impostor voter its persona, team block and citation paragraph. So their
+# stamps read ``vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1`` and
+# ``vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1``, joined by ``+`` when both
+# are ON; the default registry above does not move.
+EXPERIMENT_ARM_TEMPLATES: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "ballot_kill_row_version": ("vote_ballot",),
+        "impostor_ballot_version": ("vote_ballot",),
+    }
+)
 
 
 def experiment_arm_suffix(field: str, value: object) -> str:
@@ -567,6 +591,32 @@ def _experiment_arm_entry(
         else default
         for template, default in PROMPT_VERSION_SETS[set_name].items()
     }
+
+
+def _served_experiment_arm_values(
+    versions: Mapping[str, str], *, set_name: str, field: str, template: str
+) -> tuple[object, ...]:
+    """The ON values of ``field`` whose derived ``template`` stamp ``versions`` credits.
+
+    Every value the recorded config's ``Literal`` accepts for ``field`` is tried,
+    so a stamp crediting the arm at any value is found, and a stamp crediting it
+    at none reads ``()``. The runner holds this equal to the value its profile
+    renders with, which is the one-source rule for an explicit version pin.
+    """
+
+    annotation = RecordedExperimentConfig.model_fields[field].annotation
+    candidates = tuple(
+        value for part in get_args(annotation) for value in get_args(part)
+    )
+    return tuple(
+        value
+        for value in candidates
+        if _arm_is_served(
+            versions,
+            template=template,
+            arm=_experiment_arm_entry(set_name, field, value)[template],
+        )
+    )
 
 
 # The reporter-voice ON-arm version registry, served by
@@ -1071,6 +1121,25 @@ class MoveWitnessAgent(Protocol):
 
 
 @runtime_checkable
+class KillWitnessAgent(Protocol):
+    """Agent that exposes its OWN first-hand witnessed kills.
+
+    The self-channel behind the witnessed-kill ballot row: the manager builds one
+    ``own_kill`` evidence row per record on the holder's own ballot, and only
+    while its evidence profile sets ``ballot_kill_row_version``. Firewall-clean
+    -- an agent reporting its own witnessed events leaks nothing, the packet the
+    rows derive from is witness-gated by the engine (``eval/leak_test.py``), and
+    the production accessor drops a kill by a fellow impostor.
+
+    OPTIONAL, like :class:`MoveWitnessAgent`: an agent without the channel
+    watched no kill, and its ballot carries no kill row -- the same no-op the
+    arm's OFF path produces.
+    """
+
+    def kill_witness_records_for_meeting(self) -> tuple[KillWitnessRecord, ...]: ...
+
+
+@runtime_checkable
 class BodyDiscoveryAgent(Protocol):
     """Agent that exposes its OWN first-hand body discoveries.
 
@@ -1467,11 +1536,14 @@ def build_default_meeting_runner(
     reads the same profile, so the versions a runner records and the profile it
     renders come from one source. An environment exporting any of those
     switches ON beside a declared profile raises: the declared config is then
-    the only source. The config-only ballot fields reach a runner only this way,
-    and a profile carrying a value the pending guard lists is refused. An
-    explicit ``prompt_versions`` pin, or the public-account versions, bypass
-    the experiment-arm fold; an arm card that registers templates refuses
-    those combinations itself.
+    the only source. The config-only ballot fields reach a runner only this way.
+    An explicit ``prompt_versions`` pin, or the public-account versions, bypass
+    the experiment-arm fold, so the runner holds the served stamp of every
+    registered arm (:data:`EXPERIMENT_ARM_TEMPLATES`) equal to the value the
+    profile renders with and raises otherwise. A profile turning a ballot arm ON
+    is refused beside any of the four legacy meeting overlays, and for a prompt
+    set whose served vote body carries no guarded block for it; the profile's
+    own validation refuses it beside the account profiles.
     """
 
     # Provenance must match the rendered set (DESIGN.md §11.4). Resolve the
@@ -1501,7 +1573,6 @@ def build_default_meeting_runner(
                 f"experiments, but the environment also exports {exported} ON; "
                 "unset them or build the runner from the environment alone"
             )
-    refuse_pending_values(profile.model_dump(), source="meeting profile")
     if (
         profile.evidence_reasoning_version == 2
         or profile.public_account_version is not None
@@ -1513,17 +1584,44 @@ def build_default_meeting_runner(
         profile.public_account_version is not None
         or profile.attributed_testimony_version is not None
     )
-    if account_mode and any(
-        frozen_flags[key]
+    legacy_overlays_on = [
+        key
         for key in (
             "impostor_roll_call",
             "reporter_reasoning",
             "corroboration_discipline",
             "testimony_shapes",
         )
-    ):
+        if frozen_flags[key]
+    ]
+    if account_mode and legacy_overlays_on:
         raise ValueError(
             "public account profiles cannot combine with legacy meeting overlays"
+        )
+    # The experiment arms the served profile turns ON. Each re-bodies templates
+    # the four legacy overlays also re-body under stamps of their own, so the two
+    # are refused together; the account profiles are refused beside them by the
+    # profile's own validation.
+    experiment_arms_on = [
+        field
+        for field in EXPERIMENT_ARM_TEMPLATES
+        if getattr(profile, field) is not None
+    ]
+    if experiment_arms_on and legacy_overlays_on:
+        raise ValueError(
+            f"the ballot experiment {experiment_arms_on} cannot run while the "
+            f"legacy meeting overlays {legacy_overlays_on} are switched on: both "
+            "rewrite the same ballot under different stamps, so the recording "
+            "could not say which wording a voter read; unset the overlays"
+        )
+    for field in experiment_arms_on:
+        require_guarded_bodies(
+            active_prompt_set,
+            guard=field,
+            templates=tuple(
+                f"{template}.j2" for template in EXPERIMENT_ARM_TEMPLATES[field]
+            ),
+            env=frozen_env,
         )
     renderers = build_prompt_renderers(
         active_prompt_set,
@@ -1557,6 +1655,28 @@ def build_default_meeting_runner(
         raise ValueError(
             "public account prompt versions disagree with the served profile"
         )
+    # One source for every experiment arm: the stamp the runner records must
+    # credit exactly the arm values its manager renders with. The fold above
+    # guarantees it; an explicit pin could say otherwise, so it is checked here
+    # and a pin that omits an arm the profile renders, or claims one it does
+    # not, is refused rather than recorded.
+    for field, templates in EXPERIMENT_ARM_TEMPLATES.items():
+        rendered = getattr(profile, field)
+        for template in templates:
+            served = _served_experiment_arm_values(
+                resolved_versions,
+                set_name=active_prompt_set,
+                field=field,
+                template=template,
+            )
+            if served != (() if rendered is None else (rendered,)):
+                raise ValueError(
+                    f"the {template} stamp {resolved_versions.get(template)!r} "
+                    f"credits {field} at {list(served)}, but the served profile "
+                    f"renders it at {rendered!r}: the recording would stamp one "
+                    "ballot and render another; drop the explicit prompt_versions "
+                    "or pin the stamp the profile folds to"
+                )
     # The meeting-layer levers are resolved HERE, once each, beside the versions
     # they are stamped into -- the same pairing the prompt set gets. Reading one
     # per-run inside the manager instead would let a mid-game export move the
@@ -1826,6 +1946,15 @@ def _build_participants(
                 body_discovery_records=(
                     agent.body_discovery_records_for_meeting()
                     if isinstance(agent, BodyDiscoveryAgent)
+                    else ()
+                ),
+                # The witnessed-kill ballot row's self-channel, same snapshot
+                # discipline. The manager reads it only while its profile sets
+                # ``ballot_kill_row_version``; an agent without the optional
+                # capability watched no kill, which is the arm's OFF behaviour.
+                kill_witness_records=(
+                    agent.kill_witness_records_for_meeting()
+                    if isinstance(agent, KillWitnessAgent)
                     else ()
                 ),
             )
@@ -2381,11 +2510,6 @@ class HeadlessGame:
                 "explicit substrate_flags disagree with DefaultMeetingRunner"
             )
         experiment = experiment_config or RecordedExperimentConfig()
-        # Re-checked here because ``model_construct`` skips validation.
-        refuse_pending_values(
-            {field: getattr(experiment, field) for field in FIELD_LAYER},
-            source="experiment_config",
-        )
         selected_temporal = temporal_observation_version
         if selected_temporal is None:
             selected_temporal = (
@@ -3739,27 +3863,10 @@ def _drive_async(coro: Coroutine[object, object, _T]) -> _T:
 # Typed episodic records the tactical agent projects at meeting-open.
 # ---------------------------------------------------------------------------
 
-
-@dataclass(frozen=True)
-class KillWitnessRecord:
-    """One first-hand witnessed-kill episodic record, typed (Task 18.30).
-
-    The kill twin of :class:`~meetings.schemas.VentWitnessRecord`: the
-    ``subject`` is the WITNESSED KILLER named at ``room``/``tick`` in a
-    first-hand ``saw_player`` row whose action stamp is ``"kill"``. Emitted by
-    :meth:`TacticalAgent.kill_witness_records_for_meeting` and consumed only by
-    the training-side conviction assembler
-    (:mod:`training.conviction.serving`) — never by the meeting layer, so it is
-    NOT part of the :class:`MeetingAwareAgent` protocol. Defined in ``game.py``
-    (not ``meetings/schemas.py``, which the 18.30 scope freezes) beside the
-    other game-local frozen records (:class:`MeetingArtifacts`), and a plain
-    dataclass rather than a pydantic schema because it never flows through
-    LLM structured output.
-    """
-
-    subject: PlayerId
-    room: RoomId
-    tick: int
+# :class:`~meetings.schemas.KillWitnessRecord`, the first-hand witnessed-kill
+# record, lives in ``meetings/schemas.py`` beside the vent record and is
+# re-exported from this module (``__all__``), so the training-side conviction
+# assembler keeps importing it from here.
 
 
 @dataclass(frozen=True)
@@ -3772,13 +3879,78 @@ class BodyProximityRecord:
     first ``saw_body`` sighting). Emitted by
     :meth:`TacticalAgent.body_proximity_records_for_meeting` and consumed only
     by the training-side conviction assembler
-    (:mod:`training.conviction.serving`); like :class:`KillWitnessRecord` it is
-    game-local, frozen, and off the :class:`MeetingAwareAgent` protocol.
+    (:mod:`training.conviction.serving`); it is game-local, frozen, and off the
+    :class:`MeetingAwareAgent` protocol.
     """
 
     subject: PlayerId
     room: RoomId
     tick: int
+
+
+def _fellow_impostor_ids_in(events: Iterable[EpisodicEvent]) -> frozenset[str]:
+    """The fellow-impostor set the latest first-hand ``self_state`` row names.
+
+    Read the SAME way ``agents.memory.store._latest_self_guard_fields`` reads
+    it: the latest first-hand (``provenance == "observed"``) ``self_state``
+    row's ``fellow_impostor_ids`` payload wins, and a malformed payload
+    contributes nothing. Empty for every crewmate and a sole impostor.
+    """
+
+    fellows: tuple[str, ...] = ()
+    for event in events:
+        if event.type != EVENT_SELF_STATE:
+            continue
+        if event.provenance != PROVENANCE_OBSERVED:
+            continue
+        raw = event.payload.get("fellow_impostor_ids")
+        if isinstance(raw, (list, tuple)) and all(isinstance(x, str) for x in raw):
+            fellows = tuple(raw)
+    return frozenset(fellows)
+
+
+def kill_witness_records_in(
+    events: Sequence[EpisodicEvent],
+) -> tuple[KillWitnessRecord, ...]:
+    """The first-hand witnessed-kill records one agent's episodic log holds.
+
+    The predicate behind :meth:`TacticalAgent.kill_witness_records_for_meeting`,
+    kept as a function so an offline walk over rebuilt memories reads kill
+    holders by the accessor's own rule rather than a copy of it. ``events`` is
+    one agent's own log in append order. A record is a first-hand
+    (``provenance == "observed"``) ``saw_player`` row whose action stamp is
+    ``"kill"`` and whose killer is not a fellow impostor the same log names
+    (:func:`_fellow_impostor_ids_in`); it carries the row's tick, room and
+    ``observation_id``. A malformed payload contributes nothing.
+    """
+
+    fellows = _fellow_impostor_ids_in(events)
+    records: list[KillWitnessRecord] = []
+    for event in events:
+        if event.type != EVENT_SAW_PLAYER:
+            continue
+        if event.provenance != PROVENANCE_OBSERVED:
+            continue
+        if event.payload.get("action") != OBSERVED_KILL_ACTION:
+            continue
+        player_id = event.payload.get("player_id")
+        room = event.payload.get("room")
+        if not isinstance(player_id, str) or not isinstance(room, str):
+            continue
+        if player_id in fellows:
+            # §4.7: a witnessed TEAMMATE kill never pins — the production
+            # belief rule's ``player.id not in fellow_impostor_ids`` guard,
+            # equivalently the offline pin's crew-witnesses-only restriction.
+            continue
+        records.append(
+            KillWitnessRecord(
+                subject=player_id,
+                room=room,
+                tick=event.tick,
+                observation_id=event.observation_id,
+            )
+        )
+    return tuple(records)
 
 
 # ---------------------------------------------------------------------------
@@ -4287,33 +4459,35 @@ class TacticalAgent:
         ``fellow_impostor_ids`` payload wins (a defensive ``.get`` +
         ``isinstance`` read — a malformed payload contributes nothing). It is
         ``()`` for every crewmate and a sole impostor, so the crew read path is
-        an empty set and filters nothing. Used only by the kill/body accessors
-        below to inherit the production belief rules' teammate guard; never
-        leaves this agent's own log, so the firewall is preserved.
+        an empty set and filters nothing. Used by the move and body accessors
+        below to inherit the production belief rules' teammate guard (the kill
+        accessor reads the same set through :func:`_fellow_impostor_ids_in` over
+        the same log); never leaves this agent's own log, so the firewall is
+        preserved.
         """
 
-        fellows: tuple[str, ...] = ()
-        for event in self._memory.episodic.recent(since_tick=0):
-            if event.type != EVENT_SELF_STATE:
-                continue
-            if event.provenance != PROVENANCE_OBSERVED:
-                continue
-            raw = event.payload.get("fellow_impostor_ids")
-            if isinstance(raw, (list, tuple)) and all(isinstance(x, str) for x in raw):
-                fellows = tuple(raw)
-        return frozenset(fellows)
+        return _fellow_impostor_ids_in(self._memory.episodic.recent(since_tick=0))
 
     def kill_witness_records_for_meeting(self) -> tuple[KillWitnessRecord, ...]:
         """The agent's OWN witnessed-kill episodic records, typed (Task 18.30).
 
-        The kill twin of :meth:`vent_witness_records_for_meeting`: first-hand
+        Implements the optional :class:`KillWitnessAgent`. The kill twin of
+        :meth:`vent_witness_records_for_meeting`: first-hand
         (``provenance == "observed"``) ``saw_player`` rows whose witness-gated
-        action stamp is ``"kill"``, projected into :class:`KillWitnessRecord`
-        rows naming the witnessed killer. Consumed by the training-side
-        conviction assembler (:mod:`training.conviction.serving`) — the game-long
-        ``kill_pin_pairs`` / ``kill_pinned_candidates`` features — NOT by the
-        meeting layer, so it is deliberately off the :class:`MeetingAwareAgent`
-        protocol.
+        action stamp is ``"kill"``, projected into
+        :class:`~meetings.schemas.KillWitnessRecord` rows naming the witnessed
+        killer and carrying the episodic ``observation_id`` the row was
+        projected from (the vent accessor's precedent). The predicate is
+        :func:`kill_witness_records_in`, which the evidence-honesty walk runs over
+        its own rebuilt memories. Two readers: the training-side conviction
+        assembler (:mod:`training.conviction.serving`, the game-long
+        ``kill_pin_pairs`` / ``kill_pinned_candidates`` features, which read
+        ``subject`` only), and :func:`_build_participants`, which hands the
+        records to the meeting layer as ``MeetingParticipant.kill_witness_records``;
+        the manager turns them into ballot rows only while its evidence profile
+        sets ``ballot_kill_row_version``. A reported kill (a
+        ``provenance == "reported"`` statement absorbed from a meeting) is never
+        read here.
 
         Unlike the vent accessor's passive firewall inheritance, this accessor
         ACTIVELY applies the DESIGN.md §4.7 teammate guard. The episodic
@@ -4330,8 +4504,8 @@ class TacticalAgent:
         restriction. Omitting the guard would surface an impostor's
         teammate-kill row the offline table excludes and break the parity pin on
         any meeting where an impostor co-located with a teammate's kill (the
-        routine case). The fellow set is this agent's own
-        (:meth:`_fellow_impostor_ids_from_store`).
+        routine case). The fellow set is this agent's own, read from the same
+        log (:func:`_fellow_impostor_ids_in`).
 
         Firewall-clean: every row was witness-gated by the engine before it
         reached this agent's packet (``eval/leak_test.py``), and the accessor
@@ -4342,28 +4516,7 @@ class TacticalAgent:
         tuple is deterministic and tick-sorted.
         """
 
-        fellows = self._fellow_impostor_ids_from_store()
-        records: list[KillWitnessRecord] = []
-        for event in self._memory.episodic.recent(since_tick=0):
-            if event.type != EVENT_SAW_PLAYER:
-                continue
-            if event.provenance != PROVENANCE_OBSERVED:
-                continue
-            if event.payload.get("action") != OBSERVED_KILL_ACTION:
-                continue
-            player_id = event.payload.get("player_id")
-            room = event.payload.get("room")
-            if not isinstance(player_id, str) or not isinstance(room, str):
-                continue
-            if player_id in fellows:
-                # §4.7: a witnessed TEAMMATE kill never pins — the production
-                # belief rule's ``player.id not in fellow_impostor_ids`` guard,
-                # equivalently the offline pin's crew-witnesses-only restriction.
-                continue
-            records.append(
-                KillWitnessRecord(subject=player_id, room=room, tick=event.tick)
-            )
-        return tuple(records)
+        return kill_witness_records_in(self._memory.episodic.recent(since_tick=0))
 
     def body_discovery_records_for_meeting(self) -> tuple[BodyDiscoveryRecord, ...]:
         """The agent's OWN first-hand body discoveries, typed.
@@ -4713,6 +4866,7 @@ __all__ = [
     "HeadlessGame",
     "HeadlessGameResult",
     "IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS",
+    "KillWitnessAgent",
     "KillWitnessRecord",
     "MeetingArtifacts",
     "MeetingAwareAgent",
@@ -4736,5 +4890,6 @@ __all__ = [
     "enabled_experiment_arms",
     "enabled_prompt_version_overlays",
     "experiment_arm_suffix",
+    "kill_witness_records_in",
     "prompt_versions_for_set",
 ]

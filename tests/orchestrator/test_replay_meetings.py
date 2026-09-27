@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from pydantic import BaseModel, TypeAdapter
@@ -37,7 +38,7 @@ from engine.entities import BodyState, PlayerId, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.corroboration import MeetingTestimonyLedger
-from meetings.render_contract import EvidenceRow
+from meetings.render_contract import EvidenceRow, VoterRole
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -245,6 +246,9 @@ def _vote_prompt(
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
     testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
     evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5 of 2026-09-19
+    voter_role: VoterRole | None = None,
+    ballot_kill_row_version: Literal[1] | None = None,
+    impostor_ballot_version: Literal[1] | None = None,
 ) -> str:
     return f"VO:{voter_id}:{','.join(candidate_targets)}"
 

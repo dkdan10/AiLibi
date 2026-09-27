@@ -78,7 +78,8 @@ _DEFERENCE_SENTENCE: Final[str] = (
 )
 _SUSPICION_HEADER: Final[str] = "## Your suspicion of each player"
 #: What the served body may NOT claim: that the number decomposes into the rows
-#: above it. Two provenance channels have no row (see the test that uses this).
+#: above it. With the kill-row arm OFF two provenance channels have no row (see
+#: the test that uses this).
 _COMPLETE_SUMMARY_CLAIM: Final[str] = "A running summary of the lines above"
 _PARTIAL_SUMMARY_CLAIM: Final[str] = "only a PARTIAL summary of the lines above"
 #: What "pointing AWAY from the name you just wrote" means when no name was
@@ -1621,6 +1622,25 @@ class TestTheAssemblerCannotReachTheLedger:
         run = ast.unparse(ast.Module(body=self._function("run").body, type_ignores=[]))
         assert "build_testimony_ledger" in run
 
+    def test_a_helper_handing_kill_records_to_the_ledger_fails_the_scan(self) -> None:
+        """Planted: an assembler helper that passes the kill channel to the ledger.
+
+        The witnessed-kill records reach the assembler only; a helper that
+        forwarded them to the ledger is caught by the same name scan the five
+        assembler functions pass.
+        """
+
+        planted = ast.parse(
+            "def _own_kill_rows(voter):\n"
+            '    """Doc."""\n'
+            "    return build_testimony_ledger(\n"
+            "        kill_witness_records=voter.kill_witness_records\n"
+            "    )\n"
+        ).body[0]
+        assert isinstance(planted, ast.FunctionDef)
+        body = ast.unparse(ast.Module(body=planted.body[1:], type_ignores=[])).lower()
+        assert [name for name in self._FORBIDDEN if name in body] == ["ledger"]
+
 
 # --------------------------------------------------------------------------- #
 # B2. The §4.7 teammate firewall on the own-channel rows                       #
@@ -2087,15 +2107,18 @@ class TestTheServedBody:
     def test_the_number_is_called_a_partial_summary_of_the_rows(self) -> None:
         """The scalar is not claimed to be the sum of the lines above it.
 
-        Two of the eight provenance channels
+        With the witnessed-kill arm OFF (the body every committed recording
+        rendered), two of the eight provenance channels
         (:class:`~meetings.render_contract.SuspicionEntry`) have no evidence row
-        behind them: a witnessed KILL -- the participant carries no kill channel
-        at all and ``sighting_records_for_meeting`` filters the kill action out
-        of the sightings -- and the BODY-PROXIMITY lift, whose own row would
-        name the nearby suspect while the body-discovery row names the dead
-        victim. So a number CAN sit above rows that do not add up to it, and the
-        header states that at the strength the assembler delivers instead of
-        calling itself a running summary of the lines above.
+        behind them: a witnessed KILL -- the assembler reads no kill record
+        unless ``ballot_kill_row_version`` is set, and
+        ``sighting_records_for_meeting`` filters the kill action out of the
+        sightings -- and the BODY-PROXIMITY lift, whose own row would name the
+        nearby suspect while the body-discovery row names the dead victim. So a
+        number CAN sit above rows that do not add up to it, and the header
+        states that at the strength the assembler delivers instead of calling
+        itself a running summary of the lines above. The arm-ON sentence is
+        pinned in ``tests/meetings/test_ballot_arms.py``.
         """
 
         rendered = _served_ballot()

@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 
@@ -40,7 +40,7 @@ from agents.memory.beliefs import (
     graduated_spread_delta,
 )
 from meetings.corroboration import MeetingTestimonyLedger
-from meetings.render_contract import EvidenceRow
+from meetings.render_contract import EvidenceRow, VoterRole
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import AlibiSegment
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
@@ -3353,6 +3353,9 @@ class TestSelfRefutedAlibiDowngrade:
             render_inputs: PromptRenderInputs | None = None,  # Task 20.31
             testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
             evidence_rows: tuple[EvidenceRow, ...] = (),  # ruling D5
+            voter_role: VoterRole | None = None,
+            ballot_kill_row_version: Literal[1] | None = None,
+            impostor_ballot_version: Literal[1] | None = None,
         ) -> str:
             captured[voter_id] = suspicion_graph
             return "cast your ballot"

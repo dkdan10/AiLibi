@@ -25,7 +25,6 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
-from types import MappingProxyType
 from typing import NoReturn, cast
 
 import pytest
@@ -1462,13 +1461,11 @@ _LATER_SETTINGS: list[tuple[str, object, ConfigLayer]] = [
 @pytest.mark.parametrize(("field", "value", "layer"), _LATER_SETTINGS)
 def test_a_profile_reads_a_later_setting_only_in_a_declared_layer(
     arm_recordings: dict[str, Path],
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     field: str,
     value: object,
     layer: ConfigLayer,
 ) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
     path = _with_recorded_setting(
         arm_recordings["patrol"], tmp_path / "copy", field=field, value=value
     )

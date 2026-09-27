@@ -49,19 +49,14 @@ adoption: a recording that adopts a value writes it explicitly.
 `tests/orchestrator/test_experiment_arms.py` re-serializes every committed
 config payload and requires the committed bytes.
 
-## The pending guard
+## Every value is built
 
-`WAVE_ARMS_PENDING` lists each new ON value whose behaviour is not built yet:
-version 1 of both ballot fields. The physical vent witness rule, `look_and_wait`,
-`own_fresh_kill` and version 1 of the body handle are built and have left it.
-Config validation refuses a listed value,
-naming field and value; the `HeadlessGame` constructor checks again, so a
-config built past validation is refused too; and `build_default_meeting_runner`
-refuses a profile carrying a listed ballot value. Each arm card deletes its own
-names when it builds the behaviour. The ballot card, merging last, deletes the
-emptied guard, its call sites and its test, and the record card's preflight
-confirms it is gone. Validation also refuses evidence version 1, and
-`post_meeting_retarget`, beside `meeting_reset = hub_with_grace`.
+Every value of the eight fields has its behaviour built, so config validation
+accepts each of them and the declared round-1 config validates. The guard that
+refused a value while its behaviour was unbuilt was deleted, with its call sites
+and its tests, by the ballot card, the last arm card to merge. Validation still
+refuses evidence version 1, and `post_meeting_retarget`, beside
+`meeting_reset = hub_with_grace`.
 
 ## One engine-arguments helper
 
@@ -93,12 +88,24 @@ also exports any of the four switches ON. `HeadlessGame` requires a default
 meeting runner's two ballot fields to equal the recorded config's, both ways.
 
 A meeting arm that re-bodies a template registers it in
-`EXPERIMENT_ARM_TEMPLATES` (empty until the ballot card), and
+`EXPERIMENT_ARM_TEMPLATES`, and
 `prompt_versions_for_set(..., experiment_config=...)` serves its stamp only for
 a config that carries the arm. The stamp suffix is derived from the field,
-never chosen: drop `_version` and append `_v<value>`, so the ballot stamps
-read `vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1` and
-`vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1`.
+never chosen: drop `_version` and append `_v<value>`. Both ballot fields
+re-body `vote_ballot` alone, with guarded blocks in the same `vote_ballot.j2`
+whose header marker stays `vote_ballot.qwen3_6_27b.v8`, so their stamps read
+`vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1` and
+`vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1`, joined by `+` when both are ON.
+
+`ballot_kill_row_version` gives a voter one first-hand `own_kill` evidence row
+for each kill it watched a non-teammate make, and never a public flag, a ledger
+row or a belief input. `impostor_ballot_version` serves an impostor voter a
+ballot framed as a move for its side, bounded by an instructed citation rule the
+tally does not enforce. A runner refuses either arm beside any of the four
+legacy meeting overlays, for a prompt set whose vote body carries no block for
+it, and under an explicit version pin that does not credit exactly the arms its
+profile renders; the meeting profile refuses either arm beside an account
+profile.
 
 ## Frozen values
 

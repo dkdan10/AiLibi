@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Final, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 EvidenceVersion = Literal[1, 2]
 
@@ -98,6 +98,33 @@ class MeetingEvidenceProfile(BaseModel):
         if value is not None and type(value) is not int:
             raise ValueError("evidence versions must be integer version numbers")
         return value
+
+    @model_validator(mode="after")
+    def _ballot_arms_refuse_the_account_profiles(self) -> MeetingEvidenceProfile:
+        """Refuse either ballot arm beside either account profile.
+
+        The account profiles serve their own ``*_accounts.j2`` ballot body, which
+        carries neither ballot arm's blocks, so the pair would record an arm the
+        voter never read.
+        """
+
+        ballot_arms = [
+            field
+            for field in ("ballot_kill_row_version", "impostor_ballot_version")
+            if getattr(self, field) is not None
+        ]
+        account_profiles = [
+            field
+            for field in ("public_account_version", "attributed_testimony_version")
+            if getattr(self, field) is not None
+        ]
+        if ballot_arms and account_profiles:
+            raise ValueError(
+                f"the ballot experiment {ballot_arms} cannot run with the account "
+                f"profile {account_profiles}: the account profiles serve a ballot "
+                "of their own that carries none of the ballot experiment's wording"
+            )
+        return self
 
     @classmethod
     def from_environment(

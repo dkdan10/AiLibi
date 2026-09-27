@@ -1,6 +1,6 @@
 # B6: the witnessed-kill ballot row (R8) and the strategic impostor ballot (R10)
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -122,7 +122,79 @@ edits the text under that header.
 
 ## Acceptance
 
-- [ ] **The kill record moves and carries its id.** `KillWitnessRecord` moves to
+- [x] Review correction: **every ballot-conduct cell the report publishes reads its own tally**
+  (round 3, correctness verifier, probes X30, X32, X33 and X34). The new
+  `tests/meetings/test_ballot_arms.py::test_the_report_publishes_each_conduct_tally_in_its_own_cell`
+  builds the report from thirteen tallies that each hold a different non-zero count and compares
+  the published `BallotConductCells` whole; `test_the_honesty_cells_count_the_scripted_ballots`
+  now also asserts `ejections == 1`. X30 (`ejections` read as `impostor_ejects`), X32
+  (`ejections=0`), X33 (`ejects_other_turn=0`) and X34 (`ejects_pointing_toward_own_turn` read as
+  `ejects_without_citation`) in `eval/evidence_honesty.py::_report` now fail it.
+- [x] Review correction: **the kill predicate and the fellow-set reader read only their own row
+  type** (round 3, docs verifier, probes X08w and X07w). The new
+  `test_the_accessor_reads_saw_player_rows_only`: a first-hand `saw_player_move` row carrying a
+  player, a room and the kill action makes no record, and the same payload on a `saw_player` row
+  makes one. The new `test_the_teammate_guard_reads_self_state_rows_only`: a first-hand
+  `global_status` row carrying `fellow_impostor_ids` guards nothing, and the same list on a
+  first-hand `self_state` row drops the teammate's kill. X08w (drop the `saw_player` type filter in
+  `orchestrator/game.py::kill_witness_records_in`) and X07w (drop the `self_state` type filter in
+  `_fellow_impostor_ids_in`) now fail them.
+- [x] Review correction: **an EJECT citing a turn and an own observation is classified by the
+  turn** (round 2, correctness verifier, probe R07). Two new carriers in
+  `tests/meetings/test_ballot_arms.py::test_each_carrier_moves_its_cell_by_exactly_one`: impostor
+  p-2's EJECT keeps its own observation and also cites p-7's turn, which points nowhere (another
+  turn +1, neutral only -1), or its own turn accusing the target (pointing toward +1, own turn +1,
+  neutral only -1). Probe R07 (swap the turn branch and the observation branch in
+  `eval/evidence_honesty.py::_fold_ballot_conduct`) now fails it.
+- [x] Review correction: **the carried-ejection cell reads only ballots for the ejected player**
+  (round 2, correctness verifier probe R05 and the docs verifier's cell-4 finding, the same
+  probe). New carriers in the same test: crew p-1 voting p-9, or SKIP, at 0.9 leaves
+  `ejections_carried_by_impostors_alone` unchanged, and crew p-1 voting the ejected p-7 at 0.9
+  lowers it by one. Probe R05 (keep only the confidence filter in the carried list) now fails it.
+- [x] Review correction: **the ejected-target comparison is pinned** (round 2, integrity verifier,
+  probe P3). The same carriers; P3 (`ballot.target == entry.ejected_player_id` read as
+  `ballot.target is not None`) now fails them.
+- [x] Review correction: **only an accusation against the target points toward it** (round 2,
+  integrity verifier, probe Q1). New carrier in the same test: the cited turn accuses p-9, not the
+  EJECT's target, so the EJECT cites another turn (+1) and pointing toward is unchanged. Probe Q1
+  (`claim.against == target` read as `claim.against is not None` in `_points_toward`) now fails it.
+- [x] Review correction: **a contradiction points toward only from the turn it was minted from**
+  (round 2, integrity verifier, probe Q4). New entry in the same test's conflict loop: a
+  contradiction naming the target, minted from two other turns, while the cited turn accuses
+  nobody: another turn +1, pointing toward unchanged. Probe Q4 (drop the per-turn conjunct on the
+  contradiction branch of `_points_toward`) now fails it.
+- [x] Review correction: **the ballot family's per-turn filter is pinned** (round 1, correctness
+  verifier). A new carrier in `tests/meetings/test_ballot_arms.py::test_each_carrier_moves_its_cell_by_exactly_one`
+  has another turn of the meeting accuse the target while the cited turn does not: it moves
+  `ejects_other_turn` by one and leaves `ejects_pointing_toward` unchanged. Probe V16 (drop the
+  per-turn filter in `eval/evidence_honesty.py::_points_toward`) now fails it.
+- [x] Review correction: **an absent or unparseable body gets the body check's own refusal**
+  (round 1, correctness verifier). `test_an_absent_or_unparseable_body_is_the_same_refusal_naming_the_file`
+  (both arms) deletes the registered `vote_ballot.j2` from one set copy and appends a syntax error
+  to it in another; each raises the check's `ValueError` naming the set and the file. Probes V01
+  (drop `TemplateNotFound`) and V02 (drop `TemplateSyntaxError`) now fail it.
+- [x] Review correction: **four message arguments are pinned** (round 1, correctness verifier). The
+  set name in the body check's refusal (`test_a_dead_guard_is_no_block`,
+  `test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block`), the arm and
+  account-profile lists in the profile refusal
+  (`test_the_profile_refuses_a_ballot_arm_beside_an_account_profile` and the new
+  `test_the_profile_refusal_names_every_arm_and_account_profile_it_met`), and the meeting id in the
+  missing-memory raise (`test_a_ballot_by_a_player_with_no_rebuilt_memory_raises`). Probes V04,
+  V20, V21 and V22 now fail.
+- [x] Review correction: **the listed-class survivors V01 and V02 are killed and V03 is named
+  equivalent** (round 1, integrity verifier; the same except tuple as the second item). The
+  planted cases are the ones above; V03 (drop `AttributeError`) is equivalent because
+  `_environment_for_set` always gives the environment a `FileSystemLoader`, so `loader` is never
+  `None`. All three are in the round-1 mutation table.
+- [x] Review correction: **`kill_holders_citing_the_kill` reads both slots that take an own
+  observation id** (round 1, docs verifier; Codex P2 on PR #491). The fold counts a kill
+  observation cited in `primary_reason_observation_id` or in `counter_reason_id`, as the family's
+  sentence and cell 5 say. Planted: a holder citing the kill only in the counter slot moves the
+  cell by one, and a counter naming a turn does not. Re-measured with
+  `uv run python scripts/measure_baseline.py replays/<set> --honesty --json` on the four sets: every
+  report equals the previous head's byte for byte, so cell 5 stays 3 of 4 on s9 and 21 of 31
+  pooled.
+- [x] **The kill record moves and carries its id.** `KillWitnessRecord` moves to
   `meetings/schemas.py` beside `VentWitnessRecord` as a `_FrozenModel` with
   `observation_id: ObservationId | None = None`; `orchestrator.game` re-exports it, so
   `training/conviction/serving.py` and `tests/training/test_composed_runner.py` import it unchanged;
@@ -131,7 +203,7 @@ edits the text under that header.
   `tests/training/test_conviction_serving.py:378-380` and `:409-411` (memo 2.5 item 6; also
   `:437-439` if it compares records) carry the id, and the conviction parity pin passes unchanged.
   Planted: an accessor that drops the id fails them.
-- [ ] **A witness gets exactly one row.** Mechanism: an optional `@runtime_checkable`
+- [x] **A witness gets exactly one row.** Mechanism: an optional `@runtime_checkable`
   `KillWitnessAgent` protocol, used by `_build_participants` as it uses `MoveWitnessAgent`;
   `MeetingParticipant.kill_witness_records` (default `()`); `"own_kill"` in `EvidenceRowKind` and
   in `_EVIDENCE_KIND_CLASS` as class 0; one row per record in `_own_channel_evidence_rows`, built
@@ -142,11 +214,11 @@ edits the text under that header.
   own-kill pattern constant: the test imports it from `eval/gameplay_census.py`, which this card
   never edits, while `meetings/` imports nothing from `eval/`. Planted: the same participant with
   the arm OFF gets no row, and a row whose wording differs from the constant fails the equality.
-- [ ] **A voter who was only told gets nothing.** A `TacticalAgent` whose store holds only a
+- [x] **A voter who was only told gets nothing.** A `TacticalAgent` whose store holds only a
   reported `saw_kill` statement (`absorb_reported_testimony`) returns `()` from the accessor and
   gets no `own_kill` row. Mechanism: the accessor's observed-provenance filter. Planted: the same
   event written with observed provenance produces the row.
-- [ ] **The teammate firewall holds at assembly.** Mechanism: `if record.subject in teammates:
+- [x] **The teammate firewall holds at assembly.** Mechanism: `if record.subject in teammates:
   continue` in the kill loop, as in the vent, sighting and transit loops. Proof, with records
   passed directly so the assembly guard is what is proven: an impostor with
   `fellow_impostor_ids=("p-3",)` and a record naming p-3 gets no row, while the identical records
@@ -155,17 +227,17 @@ edits the text under that header.
   impostor case. Committed-data twin, count-only, arm forced ON through an existing
   `tests/_helpers/committed.py` entry point: the impostor holders of a teammate-kill sighting (87
   pooled, re-measured) get 0 `own_kill` rows; if no entry point fits, a scratch count in Results.
-- [ ] **Old recordings render identically.** With the arm OFF and kill records present,
+- [x] **Old recordings render identically.** With the arm OFF and kill records present,
   `build_evidence_rows` returns today's tuple and the golden re-renders every committed s9 and s4
   ballot byte-identically. Mechanism: the profile gate. Planted, in the golden: with the gate
   forced ON the golden fails at the committed kill-holder meetings (re-measured, named in Results),
   so the OFF gate is not vacuous.
-- [ ] **No flag, no ledger, no belief.** With the arm ON, `detect_contradictions`, the testimony
+- [x] **No flag, no ledger, no belief.** With the arm ON, `detect_contradictions`, the testimony
   ledger and the belief fold equal OFF on a meeting with kill records. Mechanism: the record reaches
   the assembler only, and `TestTheAssemblerCannotReachTheLedger`
   (`tests/meetings/test_weighing_channel.py:1549`) adds every new helper to `_ASSEMBLER`. Planted:
   a helper passing kill records to `build_testimony_ledger` fails the scan.
-- [ ] **Crew bytes.** Under `ballot_kill_row_version=1`, a ballot with no kill record differs from
+- [x] **Crew bytes.** Under `ballot_kill_row_version=1`, a ballot with no kill record differs from
   OFF only in the suspicion-header sentence, which becomes (proposed): "And it is only a PARTIAL
   summary of the lines above: someone you saw near a body just before you found it moves these
   numbers with no line of its own up there — your memory block above still carries that."
@@ -173,13 +245,13 @@ edits the text under that header.
   Under `impostor_ballot_version=1` every crew ballot is byte-identical to OFF. Mechanism: the
   guards, whitespace-controlled. Planted: an impostor block whose guard omits the role test changes
   a crew ballot and fails.
-- [ ] **The role reaches every impostor.** `voter_role` is an additive defaulted keyword on
+- [x] **The role reaches every impostor.** `voter_role` is an additive defaulted keyword on
   `VotePromptRenderer` and `vote_ballot_prompt`, passed by the manager's vote render call from
   `participant.role`, beside the two arm values from the manager's evidence profile; every other
   prompt set ignores them. Mechanism: the keyword and the guard. Proof: under the arm an impostor
   with `fellow_impostor_ids=()` (the 4p1i shape) renders the strategy text. Planted: with
   `voter_role` withheld the same voter renders the crew text and the test fails.
-- [ ] **The impostor wording, tightened and neutral.** Under `impostor_ballot_version=1`, for
+- [x] **The impostor wording, tightened and neutral.** Under `impostor_ballot_version=1`, for
   impostor voters only:
   - the persona keeps its win-condition clause and replaces the belief clause. Proposed: "You are
     {{ impostors.one_of_them }}. The discussion is over — cast one ejection ballot. It is a move for
@@ -199,17 +271,17 @@ edits the text under that header.
   clause and no task, audit or ruling ID, and contain the tightened sentence; the team block names
   only the teammate list. Planted: a body saying a sighting may be invented, one with a confidence
   clause, one with a digit: each fails.
-- [ ] **The firewall under the impostor arm.** A scripted impostor ballot naming its teammate,
+- [x] **The firewall under the impostor arm.** A scripted impostor ballot naming its teammate,
   rendered through the arm, is recorded as SKIP with `guard_rewrite_reason="teammate_coerced"`, its
   marker and label `not_assessed`, and `check_no_betrayal` passes. Mechanism: the unchanged
   coercion. Planted: with the coercion monkeypatched to identity, `check_no_betrayal` fails.
-- [ ] **The meeting layer labels and never rewrites.** An impostor EJECT citing an accusation turn
+- [x] **The meeting layer labels and never rewrites.** An impostor EJECT citing an accusation turn
   against its target labels `supported`; an impostor SKIP with no ids labels `none_held`; a scripted
   impostor EJECT citing only its own sighting of the target is recorded as cast, tallied for that
   target and counted in the compliance cell below. Mechanism: the role-blind labeller and the
   label-blind tally (D6). Planted: a tally patched to drop the ungrounded EJECT changes the scripted
   outcome and the test fails.
-- [ ] **Stamps, derived and never a default.** The spine's experiment-arm registry gains exactly
+- [x] **Stamps, derived and never a default.** The spine's experiment-arm registry gains exactly
   two entries, `ballot_kill_row_version` and `impostor_ballot_version`, each re-bodying
   `vote_ballot` only. Mechanism: the spine's derivation function and fold. Proofs in
   `tests/agents/test_bespoke_prompt_sets.py`: either arm serves its derived stamp; both serve
@@ -219,7 +291,7 @@ edits the text under that header.
   names both arms by field name, and `PROMPT_VERSION_SETS`, `DEFAULT_PROMPT_VERSIONS` and the four
   overlay registries are unchanged. Planted: a hand-written suffix fails the derivation test; a
   runner whose served stamps omit an arm its manager renders fails the one-source check.
-- [ ] **Refusals.** `MeetingEvidenceProfile` validation refuses either ballot arm with
+- [x] **Refusals.** `MeetingEvidenceProfile` validation refuses either ballot arm with
   `public_account_version` or `attributed_testimony_version`; `build_default_meeting_runner`
   refuses either arm while `impostor_roll_call`, `reporter_reasoning`, `corroboration_discipline`
   or `testimony_shapes` is ON, beside the account-mode refusal (`orchestrator/game.py:1388-1403`),
@@ -227,7 +299,7 @@ edits the text under that header.
   Adverse: each arm alone, and both with the rebuttal and the reset, construct.
   `EXPERIMENT_ENV_NAMES` and `.env.example` are unchanged; if a registry check wants an env name
   for every profile field, a config-only allow-list lands with a planted case (memo 2.5 item 6).
-- [ ] **The railroad tripwire cannot go vacuous.** A ballot rendered with each arm ON, and with
+- [x] **The railroad tripwire cannot go vacuous.** A ballot rendered with each arm ON, and with
   both, parses through `_rendered_suspicions` and `_parse_suspicion_graph` to exactly the rows of
   the suspicion graph it was given (one per living player in the scripted case), and on the
   scripted arm-ON recording `check_no_railroaded_crew_ejections` reports `rendered_crew_rows > 0`.
@@ -235,13 +307,13 @@ edits the text under that header.
   whose ON block edits the header, or puts a `## ` line between the header and the rows, parses
   to zero rows and fails; an arm-ON prompt with a crew row at 1.00 and two same-meeting flags
   naming that crewmate fails the check.
-- [ ] **The golden covers the ON body.** Called on a scripted both-arms-ON recording in
+- [x] **The golden covers the ON body.** Called on a scripted both-arms-ON recording in
   `tmp_path` (the readers card's directory walk and `tests/_helpers/scripted_meeting.py`, to which
   this card adds its ballot cases), the golden re-renders every ballot byte-identically through the
   arm stamps. Mechanism: the readers card's arm-stamp resolution over this card's registry entries.
   Planted: dropping a bound arm value fails it; a one-byte edit inside an ON block leaves the
   golden on s9 and s4 green and fails it on the scripted recording.
-- [ ] **Evidence-honesty cells.** `eval/evidence_honesty.py` gains one ballot family with its own
+- [x] **Evidence-honesty cells.** `eval/evidence_honesty.py` gains one ballot family with its own
   `CELL_DEFINITIONS` sentence (numerator, denominator, and what it does not measure: whether an
   accusation is true, or intent), repeated verbatim in the module and family docstrings under the
   existing drift test. A citation **points toward** target T when the cited turn carries a typed
@@ -258,13 +330,13 @@ edits the text under that header.
   one. Proof: on the scripted arm-ON game cell 4 equals the census's "ejections carried only by
   impostor ballots"; on baseline 9 it reads 0 of 411 pooled. No cell is a gate; Results reports
   cells 1-4 and 6 on s9 and pooled as the record card's "before".
-- [ ] **The census reads 0 by construction on a scripted arm-ON game.** One end-to-end test in this
+- [x] **The census reads 0 by construction on a scripted arm-ON game.** One end-to-end test in this
   card's own test file folds the scripted game through the census's `--set-dir` path: "own-kill
   rows naming a teammate or held by a non-witness" reads 0 over a non-empty denominator, and
   "recorded teammate ballot targets" reads 0. Mechanism: the census conformance fold over the
   served rows. Planted: a copy whose impostor ballot prompt carries an `own_kill` row naming its
   teammate raises the census conformance error.
-- [ ] **The pending guard is gone.** With B0, B1 and B4 merged, this card's two names are the last
+- [x] **The pending guard is gone.** With B0, B1 and B4 merged, this card's two names are the last
   in `WAVE_ARMS_PENDING`. It deletes them, then the mapping, its checks at config validation, at
   `HeadlessGame` construction and in `build_default_meeting_runner`, and the refusal test;
   `git grep -n WAVE_ARMS_PENDING -- '*.py'` prints nothing and every test that patched the mapping
@@ -273,7 +345,7 @@ edits the text under that header.
   a fake-provider `HeadlessGame` from it in a bare environment, plays one seed to its end and loads
   it through `ReplayLoader` with `outcome_verified` true. Perturbed: the same test at the merge
   base, where the guard still refuses the two ballot values, fails; Results quotes the failure.
-- [ ] **The OFF path is byte-identical.** Mechanism: default `None`, the omitted key and the
+- [x] **The OFF path is byte-identical.** Mechanism: default `None`, the omitted key and the
   whitespace-controlled guards. Evidence at the branch head: the four-set loop under Validation
   (`verify_samples`, `build_sample_report --check`, and `--honesty --json` whose pre-existing
   families equal the merge base's exactly); the golden on s9 and s4, whose one-byte perturbation leg
@@ -442,9 +514,840 @@ frontend legs, and the bundle diff is the publication proof.
 
 ## Results
 
-Not started. The implementer records here and in the PR: the sections relied on
-(`docs/architecture.md` "Enforced boundaries" and "Explicit cleanup experiments", with the spine's
-arm page `docs/experiment-arms.md` it links; memo 0.2, 0.3, 2.5, 3.4); the six decisions and the runner-region follow-through; the
-meetings the planted OFF leg failed at; the new honesty cells and re-measured Evidence counts with
-their commands; every planted failure's red output; every Validation command's exit code; the
-bundle diff; the files that dropped a pending patch; and the limitations.
+Implemented on `work/ballot-kill-row-and-impostor-strategy` from `4b1e9a01` (main after B2, #490;
+every earlier Stage-B card merged). Commits: `958aeb3e` (both arms, the refusals, the registry
+entries, the deletion of `WAVE_ARMS_PENDING` and of the emptied `UNBUILT_OPTION_VALUES`, the arm
+page and the test follow-through), `f01cff63` (the evidence-honesty ballot family), `7ca0485a`
+(the scripted ballot game and `tests/meetings/test_ballot_arms.py`), `92e8803a` (the planted cases
+the mutation pass asked for) and the Results commit, which changes only this card and
+`tasks/README.md`. Every command below ran at `92e8803a` in a shell with no `AILIBI_*` export
+unless a line names another commit; no production byte changed after `f01cff63`.
+
+**Sections relied on.** `docs/architecture.md` "Enforced boundaries" (the meeting layer imports
+nothing from `eval/`; `agents/` imports no engine module; `lint-imports` 4 kept) and "Explicit
+cleanup experiments", which links the arm page `docs/experiment-arms.md` (the meeting layer, the
+omit-at-default rule, config-only ballot fields, the registry and its derived suffix). The Stage-B
+decision memo `tasks/decision-2026-09-24-stage-b-wave.md`: 0.2 (R8, R10 and its enforcement
+note), 0.3 items 2, 4, 5, 6 and 9, 2.5, 3.2 (the one-writer map), 3.3 (the composite stamp) and
+the card-10 brief in 3.4. The investigation `tasks/investigations-2026-09-24/ballot_kill_row_and_impostor_strategy.md`
+sections 1-8, with the memo overruling its v9 stamp and environment switch. The dated 2026-09-24
+addendum to `tasks/direction-2026-09-19-process-over-outcome.md`, which records R10 ("an impostor
+may name a crewmate only when it can cite a line it holds that points toward that crewmate ... The
+tally does not enforce the SKIP").
+
+**What was built.**
+- `meetings/schemas.py`: `KillWitnessRecord` as a frozen model beside `VentWitnessRecord`, with
+  `observation_id: ObservationId | None = None`. `orchestrator.game` re-exports it (`__all__`), so
+  `training/conviction/serving.py` and `tests/training/test_composed_runner.py` import it unchanged.
+- `orchestrator/game.py`: the accessor's predicate became `kill_witness_records_in(events)`
+  (first-hand `saw_player` rows stamped `kill`, the teammate guard, the row's `observation_id`);
+  `TacticalAgent.kill_witness_records_for_meeting` calls it. An optional `@runtime_checkable`
+  `KillWitnessAgent`, read by `_build_participants` as it reads `MoveWitnessAgent`. The two
+  registry entries (`EXPERIMENT_ARM_TEMPLATES`, both re-bodying `vote_ballot`). In
+  `build_default_meeting_runner`: the refusal of either arm beside any of the four legacy overlays
+  (the spine's region, edited serially, see Decisions), the body check, and the one-source check
+  on the served stamp. The pending checks at the runner and at `HeadlessGame` construction are
+  gone.
+- `meetings/manager.py`: `MeetingParticipant.kill_witness_records` (default `()`); `"own_kill"` in
+  `_EVIDENCE_KIND_CLASS` as class 0; one row per record in `_own_channel_evidence_rows`, built only
+  when `ballot_kill_row_version == 1` and dropping a fellow impostor again; `build_evidence_rows`
+  takes the arm value, and the manager passes its profile's value there and passes `voter_role`
+  and both arm values at the ballot render.
+- `meetings/render_contract.py`: `"own_kill"` in `EvidenceRowKind`, `VoterRole`, and the three
+  defaulted keywords on `VotePromptRenderer`; `agents/strategic/prompts/loader.py`: the same three
+  on `vote_ballot_prompt`, and `require_guarded_bodies` (the testimony-shapes body test with the
+  guard name as a parameter).
+- `vote_ballot.j2`: guarded blocks at the persona, the suspicion header's sentence and the team
+  block, plus header prose naming both arms; the marker stays `vote_ballot.qwen3_6_27b.v8`.
+- `meetings/evidence_profile.py`: the profile refuses either ballot arm beside either account
+  profile. `meetings/corroboration.py`: docstring only.
+- `orchestrator/experiment_config.py`: `WAVE_ARMS_PENDING`, `refuse_pending_values` and the config
+  validator that called it are deleted. `agents/tactical/experimental.py`: the emptied
+  `UNBUILT_OPTION_VALUES`, `UnbuiltTacticalOptionError` and `_refuse_unbuilt_options` are deleted.
+- `eval/evidence_honesty.py`: `BallotConductCells` (report field `ballot_conduct`,
+  `CELL_DEFINITIONS["ballot-conduct"]`), folded by `_fold_ballot_conduct` beside `_fold_grounding`.
+- `docs/experiment-arms.md` (the pending-guard section and the registry paragraph) and one
+  sentence of `docs/architecture.md`.
+
+**The served text.** Under `impostor_ballot_version = 1`, for an impostor voter only, the persona
+keeps its win-condition clause and continues: "You are {{ impostors.one_of_them }}. The
+discussion is over — cast one ejection ballot. It is a move for your side, not a statement of who
+{{ impostors.subject }} {{ impostors.verb_be }}: name one crewmate to eject, or SKIP, whichever you
+judge better for your side. The outcome is a deterministic tally over every ballot." The team
+block renders for every impostor: with a teammate, "Secret: ... is your fellow saboteur. Never vote
+a teammate, and never your own name: your ballot names a crewmate or SKIP, nothing else."; alone,
+"Your own name never goes in "target": your ballot names a crewmate or SKIP, nothing else."; then
+the paragraph "Name a crewmate only when you can cite a line you hold that points toward them: a
+turn in which someone accused them at this table, or a conflict that names them. Copy that line's
+id exactly. You may choose which of the lines you hold to cite. Cite only lines that are really on
+this page, and in "rationale_text" say only what the cited line shows. When nothing you hold points
+toward any crewmate, write SKIP." Under `ballot_kill_row_version = 1` the header sentence reads
+"And it is only a PARTIAL summary of the lines above: someone you saw near a body just before you
+found it moves these numbers with no line of its own up there — your memory block above still
+carries that." (the card's proposal, verbatim), and the witness reads `you watched them KILL in
+{room} at tick {tick}` rendered as "first-hand: you saw this yourself; cite `<id>`". No new term
+needed a glossary entry: the new copy uses plain words and no ID, number or threshold.
+
+### Decisions
+
+1. **The kill row is class 0 under the same budget** (D5 orders by provenance, never strength).
+   Re-measured: 32 kill records at 31 holder ballots pooled, 1 dropped by the per-subject budget
+   (ml_corpus/9p2i), 0 on samples/9p2i.
+2. **It names no victim**; the record carries none.
+3. **One source.** The manager passes `voter_role` (from `participant.role`) and both arm values
+   at the ballot render from its own evidence profile; the runner folds its stamps from the same
+   profile (`_profile_arm_config`). An explicit `prompt_versions` pin bypasses the fold, so the
+   runner now checks that the served `vote_ballot` stamp credits exactly the arm values the
+   profile renders with (`_served_experiment_arm_values`), both ways, and raises otherwise.
+4. **Where each refusal sits.** Account profiles: the `MeetingEvidenceProfile` validator. Legacy
+   overlays: `build_default_meeting_runner`, beside the account-mode refusal, which now shares the
+   one overlay list. That runner region is the spine's and lies beyond the memo's 3.2 list for this
+   card; it is the only place the substrate flags are visible, and the edit was serial (no other
+   card was active). The runner also refuses either arm for a prompt set whose served vote body
+   has no live guard for it (`require_guarded_bodies`, the testimony-shapes body test with the guard
+   as a parameter): the spine's Results named this refusal as the ballot card's.
+5. **The ballot family is a new fold beside `_fold_grounding`** (`_fold_ballot_conduct`), not a
+   widening of it: `_fold_grounding` folds one STRONG flag's sighting side. It reads the kill
+   holders by the accessor's own predicate, which is why that predicate became the module
+   function `kill_witness_records_in`.
+6. **`KillWitnessRecord` is a frozen pydantic model.** Its one training reader uses `.subject`;
+   the conviction parity pin (`tests/training/test_conviction_serving.py`) passes unchanged.
+7. **The emptied `UNBUILT_OPTION_VALUES` guard is deleted with the pending guard**, following
+   Decision 3 of the look-and-wait card ("the card that deletes `WAVE_ARMS_PENDING` deletes it
+   with that test"). This file (`agents/tactical/experimental.py`) is not in this card's named
+   scope, so it is reported as a deviation. The two readers' tests that used the guard as a probe
+   (the recorded value reaches the policy builder) now stop the builder with a monkeypatched
+   constructor that raises naming the value it received: the same claim, proven without the
+   retired mechanism.
+8. **The scripted game.** Seed 26 on the round-1 config, the first seed of a count-only search over
+   fake round-1 games (seeds 0-79) whose recording serves an own-kill row: impostors p-2 and p-3,
+   and crewmate p-1 watches p-3 kill before the first meeting. Its ballot script is in
+   `tests/_helpers/scripted_meeting.py` (`BALLOT_ARMS_*`); a scripted citation is read off the
+   prompt the voter was served and raises when the prompt holds no such row.
+9. **Arm-page and architecture follow-through.** `docs/experiment-arms.md` and one sentence of
+   `docs/architecture.md` described the pending guard in the present tense; the card lists `docs/`
+   as not written except a glossary entry, so these two edits are reported as deviations (the
+   earlier arm cards edited the same page for their removals).
+10. **Where the new tests live.** The wording, crew-byte and role tests the card places "after
+   `test_the_decision_section_recommends_no_player`" live in `tests/meetings/test_ballot_arms.py`
+   beside the other arm-ON cases, reusing that test's recommendation pattern;
+   `tests/meetings/test_weighing_channel.py` keeps pinning the OFF body and gains the planted
+   ledger-scan case.
+11. **Status and index.** The Constraints reserve the Status line and `tasks/README.md` for the
+   orchestrator; the dispatch delegated the flip, so the Results commit flips Status to done and
+   re-derives the inventory sentence with `scripts/validate_task_docs.py` (88 cards: 2 ready, 86
+   done).
+
+### Acceptance evidence
+
+Tests: `tests/meetings/test_ballot_arms.py` (A) unless named.
+- Record: A `test_the_kill_record_lives_beside_the_vent_record_and_is_re_exported`; the three
+  accessor equality tests in `tests/training/test_conviction_serving.py` now carry
+  `observation_id` (`OBS:5:1`, `OBS:6:1`, `OBS:3:1`/`OBS:7:1`); planted M27 below.
+- One row: A `test_a_witness_gets_exactly_one_kill_row`, `test_the_kill_kind_is_named_and_sorts_with_the_first_hand_rows`,
+  `test_a_kill_row_sorts_by_tick_among_the_killers_first_hand_rows`,
+  `test_a_kill_row_obeys_the_per_subject_budget` (kill at tick 2 dropped, at 20 kept),
+  the property `test_every_non_teammate_record_makes_exactly_its_own_row` (both arms, both roles,
+  two voters), `test_a_row_worded_otherwise_is_not_the_census_row` (the census finds the built row
+  and not a reworded one), `test_the_meeting_layer_imports_nothing_from_eval` (with its planted
+  import), `test_the_participants_carry_the_kill_channel_of_an_agent_that_has_it`.
+- Told, not watched: A `test_a_voter_told_of_a_kill_holds_no_kill_row` (absorbed reported
+  `saw_kill`: accessor `()`, no row; planted: the same kill perceived first-hand makes the row) and
+  `test_the_accessor_reads_first_hand_rows_only`.
+- Teammate firewall at assembly: A `test_an_impostors_record_naming_its_teammate_makes_no_row`
+  (records passed directly; the crewmate twin keeps both rows);
+  `test_the_teammate_guard_reads_first_hand_self_state_only`. Committed-data twin: no
+  `tests/_helpers/committed.py` entry point exposes the rebuilt memories, so it is a scratch count
+  (below): 87 impostor holders of a teammate-kill sighting (56 with the teammate living), 0
+  `own_kill` rows naming a fellow when their RAW records, teammate kills included, reach
+  `build_evidence_rows` with the arm forced ON.
+- Old recordings: A `test_the_arm_off_builds_no_kill_row_and_the_tuple_of_today`; the golden
+  (`tests/meetings/test_prompt_byte_golden.py`) green on samples/9p2i and samples/4p1i; its new OFF
+  leg `test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders` forces the
+  assembler's gate ON and fails at exactly five committed meetings: samples/9p2i seed 17
+  `meeting-3`, seed 19 `meeting-3`, seed 26 `meeting-0` and `meeting-1`, and samples/4p1i seed 22
+  `meeting-0` (memo 2.5's list, re-measured).
+- No flag, ledger or belief: A `test_the_kill_arm_mints_no_flag_no_ledger_row_and_no_belief_input`
+  (with kill records and the corroboration lever ON: equal flags, transcript, ledgers, suspicion
+  graphs and `extract_belief_evidence`). `TestTheAssemblerCannotReachTheLedger` needed no new
+  `_ASSEMBLER` member (the kill loop lives in `_own_channel_evidence_rows`); its planted
+  `test_a_helper_handing_kill_records_to_the_ledger_fails_the_scan` is new.
+- Crew bytes: the property `test_a_crew_ballot_moves_only_in_the_header_sentence` (60 generated
+  renders: the impostor arm leaves a crew ballot byte-identical; the kill-row arm moves only the
+  sentence; `_PARTIAL_SUMMARY_CLAIM` stays); planted
+  `test_an_impostor_guard_without_the_role_test_moves_a_crew_ballot`. The OFF body stays pinned by
+  `tests/meetings/test_weighing_channel.py::TestTheServedBody::test_the_number_is_called_a_partial_summary_of_the_rows`.
+- Role: A `test_the_role_reaches_a_sole_impostor` (4p1i shape through the real manager; planted:
+  `voter_role` withheld renders the crew text) and
+  `test_the_manager_threads_the_role_and_both_arm_values_to_every_ballot`.
+- Wording: A `test_the_impostor_wording_is_neutral_and_carries_the_tightened_sentence` (with a
+  teammate and alone), `test_the_wording_scan_bites_a_planted_line` (an invented sighting, a
+  confidence clause, a digit, a recommended target), and
+  `test_the_impostor_arm_leaves_the_confidence_sentences_and_contract_alone`.
+- Firewall under the arm: A `test_a_teammate_ballot_under_the_arm_is_coerced_and_betrayal_stays_zero`
+  (meeting 0, p-3 names p-2: SKIP, `teammate_coerced`, redirected from p-2, the marker,
+  `not_assessed`; `check_no_betrayal` passes over the recorded game) and planted
+  `test_without_the_coercion_the_betrayal_check_fails`.
+- Labels, never rewrites: A `test_the_layer_labels_what_the_impostor_cites_and_records_it_as_cast`
+  (EJECT citing p-4's accusation: `supported`; EJECT citing only an own sighting: recorded as
+  cast), `test_an_impostor_skip_that_holds_nothing_labels_none_held`,
+  `test_an_ungrounded_impostor_eject_is_tallied_like_any_other` (it decides the outcome) and
+  planted `test_a_tally_that_dropped_the_ungrounded_eject_would_change_the_outcome`.
+- Stamps: `tests/agents/test_bespoke_prompt_sets.py`
+  `test_each_ballot_arm_serves_its_derived_stamp_on_vote_ballot_only` (either arm and the composite
+  `vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1+vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1`;
+  the `.v6` stamps unchanged), `test_no_ballot_arm_stamp_equals_a_default_or_overlay_stamp`,
+  `test_the_ballot_arms_move_no_default_or_overlay_registry`,
+  `test_the_ballot_header_keeps_the_v8_marker_and_names_both_arms`, and
+  `test_a_pin_that_omits_an_arm_the_manager_renders_fails_the_one_source_check`; the spine's
+  `test_every_registered_arm_serves_its_derived_stamp` now runs over the two real entries and its
+  `test_a_hand_written_stamp_fails_the_derivation_test` stays the planted side.
+- Refusals: A `test_the_profile_refuses_a_ballot_arm_beside_an_account_profile` (4 combinations),
+  `test_the_runner_refuses_a_ballot_arm_beside_a_legacy_overlay` (8), adverse
+  `test_each_arm_alone_and_both_with_the_rebuttal_and_reset_construct`,
+  `test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block`,
+  `test_a_dead_guard_is_no_block`, `test_the_body_check_reads_the_template_the_arm_registers`,
+  `test_a_pin_claiming_an_arm_on_another_set_fails_the_one_source_check`. No registry check wanted
+  an environment name for every profile field, so no config-only allow-list was needed;
+  `EXPERIMENT_ENV_NAMES` (four names) and `.env.example` are unchanged.
+- Tripwire: A `test_an_arm_on_ballot_parses_to_exactly_its_suspicion_rows` (each arm and both,
+  through `_parse_suspicion_graph` and `eval.validity._rendered_suspicions`),
+  `test_a_template_copy_that_moves_the_header_parses_to_nothing` (a `## ` line inserted, the
+  header edited), `test_the_tripwire_reads_crew_rows_on_the_scripted_arm_on_game`
+  (`rendered_crew_rows > 0`), planted `test_a_railroaded_crew_row_on_an_arm_on_prompt_fails_the_tripwire`.
+- Golden ON: A `test_the_golden_re_renders_every_ballot_of_the_arm_on_game` (every prompt of the
+  scripted game re-renders through the composite stamp), planted
+  `test_the_golden_fails_when_a_bound_arm_value_is_dropped` (each arm) and
+  `test_a_byte_inside_an_on_block_fails_only_the_arm_on_recording` (green on both sample sets, red
+  on the scripted game).
+- Honesty: `tests/eval/test_evidence_honesty.py` registers the family in the drift test (the
+  sentence is verbatim in the module and family docstrings, and the drifted sentence is rejected
+  on both); A `test_each_carrier_moves_its_cell_by_exactly_one`,
+  `test_the_confidence_floor_is_read_from_the_recording`, `test_the_roles_are_read_from_the_seed`,
+  `test_a_ballot_by_a_player_with_no_rebuilt_memory_raises`, and on the scripted game
+  `test_the_honesty_cells_count_the_scripted_ballots` (cell 4 equals the census's
+  `ejections_carried_only_by_impostor_ballots`, 1 of 1).
+- Census: A `test_the_census_reads_zero_breaching_rows_and_zero_teammate_targets` (through
+  `scripts/publish_gameplay_census.py`'s `--set-dir` path) and planted
+  `test_a_teammate_kill_row_in_an_impostor_prompt_raises_the_census`.
+- Pending guard gone: `git grep -n WAVE_ARMS_PENDING -- '*.py'` prints nothing (exit 1). A
+  `test_the_round_one_config_validates_plays_and_verifies_in_a_bare_shell`. Perturbed: the same
+  test body run at the merge base (the base tree exported to scratch, run with its own code)
+  fails: `Value error, experiment configuration sets ballot_kill_row_version=1, a Stage-B arm
+  whose behaviour is not built yet; it stays refused until its arm card removes it from
+  WAVE_ARMS_PENDING` (1 failed).
+- OFF path byte-identical: Verification below.
+
+### Verification at `92e8803a`
+
+Re-measured Evidence (count-only, production path). The ballot-family rows come from
+`uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, once per set; the
+rest from the scratch walk described under the committed-data twin (the evidence-honesty walk,
+the accessor's predicate and the live `build_evidence_rows`), which prints counts keyed by set.
+
+| cell | s9 | pooled, four sets |
+|---|---|---|
+| impostor ballots: EJECT / SKIP | 46 / 164 | 183 / 760 (943) |
+| impostor EJECTs labelled `supported` / `off_target`; at confidence >= 0.6 | 44 / 2; 46 of 46 | 178 / 5; 182 of 183 |
+| impostor SKIPs with `decision_basis` `none_held` | 95 of 164 | 440 of 760 |
+| impostor SKIPs holding a citable row pointing toward a non-teammate | 163 of 164 | 759 of 760 |
+| teammate-coerced impostor ballots | 1 | 13 |
+| first-hand kill holders (ballots) | 4 | 31 |
+| impostor holders of a teammate-kill sighting (teammate living) | 18 (12) | 87 (56) |
+| kill records the per-subject budget drops | 0 of 4 | 1 of 32 |
+| ejections whose confidence floor impostor ballots alone met | 0 of 90 | 0 of 411 |
+
+The new family on the committed sets, the record card's "before" (cells 1-4 and 6, plus 5):
+
+| cell | s9 | pooled |
+|---|---|---|
+| 1. impostor EJECT / SKIP | 46 / 164 | 183 / 760 |
+| 2. EJECTs pointing toward (own turn) / another turn / neutral only / no valid citation | 26 (13) / 19 / 1 / 0 | 98 (47) / 83 / 2 / 0 |
+| 3. EJECTs citing only neutral rows, over impostor EJECTs | 1 of 46 | 2 of 183 |
+| 4. ejections carried by impostor ballots alone | 0 of 90 | 0 of 411 |
+| 5. kill holders; their ballots citing the kill | 4; 3 of 4 | 31; 21 of 31 |
+| 6. recorded teammate targets, over impostor ballots | 0 of 210 | 0 of 943 |
+
+The pre-existing honesty families are equal to the merge base's on all four sets: the base JSON
+came from `4b1e9a01` exported to scratch (`git archive`) and run with its own code; the comparison
+reads every family and prints `families base=18 head=19 added=['ballot_conduct'] missing=[]
+differing=[]` for each set.
+
+Validation, each exit code captured directly:
+
+| command | result |
+|---|---|
+| `uv sync --frozen` | exit 0 |
+| the card's targeted pytest list | exit 0, 894 passed |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `git grep -n WAVE_ARMS_PENDING -- '*.py'` | no output (exit 1) |
+| `bash scripts/verify_samples.sh replays/<set>`, four sets | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, four sets | exit 0 each |
+| `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, four sets | exit 0 each; families above |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0 |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0, every check passed |
+| `uv run pytest -m campaign` | exit 0, 336 passed |
+| `scripts/build_demo_bundle.py --out <scratch>` at the base and at the head, `diff -r` of `data/` | empty diff (see below) |
+| `bash scripts/check.sh` | exit 0: ruff, format, `lint-imports`, task docs, prompt sync, mypy; 9,753 passed, 20 skipped, 3 xfailed (297 s); frontend lint, typecheck, 559 tests in 20 files, build |
+
+**The bundle.** The first diff was not empty: 9 files differed, every difference in
+`created_at`, which the loader reads from each replay file's modification time
+(`api/replay_loader.py` `_iso_mtime`); the exported base tree carries the export's times. With the
+100 replay files byte-compared and their mtimes copied from the head checkout onto the export, the
+base rebuild's `data/` equals the head's: `diff -r` exit 0, 0 lines. The shown bundle is unchanged.
+No file under `api/` or `frontend/` changed, so `npm --prefix frontend test` and the Playwright
+journey were not required; `check.sh` ran the frontend legs.
+
+### Planted failures
+
+Each probe was applied to a copy, run, and the file restored from the copy (sha256 checked).
+Named demonstrations, `planted.py <probe> <selection>`:
+
+- M27, the predicate drops the observation id, `tests/training/test_conviction_serving.py`:
+  perturbed exit 1, 3 failed, 10 passed (the three accessor equality tests); restored exit 0, 13
+  passed.
+- M03, the kill loop's teammate `continue` deleted, `test_ballot_arms.py -k teammate`: perturbed
+  exit 1, 2 failed (`test_every_non_teammate_record_makes_exactly_its_own_row`,
+  `test_an_impostors_record_naming_its_teammate_makes_no_row`); restored exit 0, 7 passed.
+- N02, the kill-row gate disabled, `-k 'witness or kill_row'`: perturbed exit 1, 6 failed and 2
+  errors (the scripted game cannot cite a row it was not served); restored exit 0, 17 passed.
+- M47, the persona guard without its role test, `-k 'crew_ballot or role'`: perturbed exit 1, 3
+  failed (the sole-impostor test, the crew property and the planted-guard test); restored exit 0,
+  5 passed.
+- H13, the floor read as the literal 0.6, `-k floor`: perturbed exit 1, 2 failed (thresholds 0.2
+  and 0.95); restored exit 0, 4 passed.
+- The in-test planted legs listed under Acceptance evidence (the golden's forced gate, the
+  census's planted row, the dead guard, the dropped arm value, the one-byte ON edit, the planted
+  scan, the uncoerced ballot, the dropping tally, the railroaded row, the reworded row) each assert
+  their failing side inside the test.
+
+### Neutering and the bounded mutation pass
+
+One pass over every production line, row and argument this card added or changed (N probes) and
+the eight operator classes over the touched production modules (F filter, S swap, N comparison, C
+constant for a role/kind/room/tick read, M message, T tuple member, B branch swap, L loaded source
+to literal), run by `run_mutants.py` with the suites `tests/meetings/test_ballot_arms.py`,
+`tests/meetings/test_weighing_channel.py`, `tests/agents/test_bespoke_prompt_sets.py`,
+`tests/training/test_conviction_serving.py` and `tests/orchestrator/test_experiment_arms.py`
+(`pytest -x -n 6`, so the counts stop at the first failure). 91 probes; 85 killed on the first
+run; 6 survived: M01 and M42 are equivalent (reasons in the table); M31, M38, M43 and M44 were
+killed by the cases in `92e8803a` and re-run. Restored: the same suites, 362 passed.
+
+| id | class | module | probe | first run | after the kill round |
+|---|---|---|---|---|---|
+| N01 | neuter | manager | delete the `own_kill` class row | killed: 2 failed, 42 passed, 3 errors |  |
+| N02 | neuter | manager | kill-row gate `if False` | killed: 2 failed, 42 passed, 3 errors |  |
+| N03 | neuter | manager | drop the arm argument to `_own_channel_evidence_rows` | killed: 2 failed, 42 passed, 3 errors |  |
+| N04 | neuter | manager | drop the profile arm at the manager's `build_evidence_rows` call | killed: 1 failed, 68 passed, 3 errors |  |
+| N05 | neuter | manager | drop `voter_role` at the render call | killed: 3 failed, 74 passed |  |
+| N06 | neuter | manager | drop `ballot_kill_row_version` at the render call | killed: 2 failed, 86 passed |  |
+| N07 | neuter | manager | drop `impostor_ballot_version` at the render call | killed: 3 failed, 74 passed |  |
+| M01 | N | manager | gate `== 1` to `is not None` | SURVIVED: 360 passed | SURVIVED (equivalent: the field is `Literal[1] | None`, so `== 1` and `is not None` agree on every legal value) |
+| M02 | N | manager | gate `== 1` to `!= 1` | killed: 2 failed, 42 passed, 3 errors |  |
+| M03 | F | manager | drop the kill loop's teammate `continue` | killed: 1 failed, 327 passed |  |
+| M04 | S | manager | kill loop reads `vent_witness_records` | killed: 2 failed, 42 passed, 3 errors |  |
+| M05 | C | manager | row order key tick to 0 | killed: 1 failed, 92 passed |  |
+| M06 | C | manager | row room to `ADMIN` | killed: 2 failed, 73 passed |  |
+| M07 | C | manager | row tick to 0 | killed: 2 failed, 73 passed |  |
+| M08 | C | manager | row kind to `own_sighting` | killed: 1 failed, 88 passed |  |
+| M09 | C | manager | row speaker to `p-1` | killed: 1 failed, 286 passed |  |
+| M10 | C | manager | row citation to None | killed: 1 failed, 42 passed, 4 errors |  |
+| M11 | M | manager | row description to a constant | killed: 2 failed, 42 passed, 3 errors |  |
+| M12 | L | manager | `own_kill` class 0 to 1 | killed: 1 failed, 89 passed |  |
+| M13 | C | manager | manager passes arm 1 to the assembler | killed: 2 failed, 88 passed |  |
+| M14 | C | manager | render `voter_role` to CREWMATE | killed: 3 failed, 74 passed |  |
+| M15 | S | manager | render kill-row value from the impostor field | killed: 1 failed, 99 passed |  |
+| M16 | S | manager | render impostor value from the kill-row field | killed: 2 failed, 87 passed |  |
+| M17 | T | render_contract | drop `own_kill` from `EvidenceRowKind` | killed: 1 failed, 89 passed |  |
+| N08 | neuter | evidence_profile | profile validator `if False` | killed: 1 failed, 90 passed |  |
+| M18 | T | evidence_profile | drop the kill-row field from the arm tuple | killed: 1 failed, 90 passed |  |
+| M19 | T | evidence_profile | drop the impostor field from the arm tuple | killed: 1 failed, 91 passed |  |
+| M20 | T | evidence_profile | drop `public_account_version` from the account tuple | killed: 1 failed, 90 passed |  |
+| M21 | T | evidence_profile | drop `attributed_testimony_version` from the account tuple | killed: 1 failed, 92 passed |  |
+| M22 | N | evidence_profile | arm filter `is not None` to `is None` | killed: 1 failed, 90 passed |  |
+| M23 | M | evidence_profile | profile refusal message to a constant | killed: 1 failed, 90 passed |  |
+| N09 | neuter | game | drop the kill-row registry entry | killed: 3 failed, 70 passed |  |
+| N10 | neuter | game | drop the impostor registry entry | killed: 3 failed, 70 passed |  |
+| M24 | S | game | kill-row entry re-bodies `accusation_round` | killed: 1 failed, 66 passed, 3 errors |  |
+| N11 | neuter | game | drop the participants' kill channel | killed: 1 failed, 74 passed, 4 errors |  |
+| M25 | S | game | participants test `MoveWitnessAgent` | killed: 1 failed, 175 passed |  |
+| M26 | B | game | participants swap the conditional's branches | killed: 1 failed, 94 passed, 4 errors |  |
+| N12 | neuter | game | accessor returns () | killed: 1 failed, 112 passed, 4 errors |  |
+| M27 | C | game | predicate drops the observation id | killed: 1 failed, 75 passed, 4 errors |  |
+| M28 | F | game | predicate drops the teammate guard | killed: 3 failed, 288 passed |  |
+| M29 | F | game | predicate drops the provenance filter | killed: 1 failed, 177 passed |  |
+| M30 | F | game | predicate drops the kill-action filter | killed: 2 failed, 166 passed |  |
+| M31 | F | game | fellow set drops the provenance filter | SURVIVED: 360 passed | killed: 1 failed, 170 passed |
+| M32 | F | game | overlay refusal drops the overlay condition | killed: 1 failed, 66 passed, 3 errors |  |
+| M33 | T | game | overlay tuple drops `testimony_shapes` | killed: 1 failed, 122 passed |  |
+| M34 | T | game | overlay tuple drops `impostor_roll_call` | killed: 1 failed, 96 passed |  |
+| M35 | T | game | overlay tuple drops `reporter_reasoning` | killed: 1 failed, 109 passed |  |
+| M36 | T | game | overlay tuple drops `corroboration_discipline` | killed: 1 failed, 94 passed |  |
+| M37 | N | game | arms-on filter `is not None` to `is None` | killed: 2 failed, 83 passed |  |
+| N13 | neuter | game | skip the body check | killed: 1 failed, 104 passed |  |
+| M38 | L | game | body check reads `vote_ballot.j2` for every arm | SURVIVED: 360 passed | killed: 1 failed, 147 passed |
+| M39 | C | game | body check reads `qwen3_6_27b` for every set | killed: 1 failed, 126 passed |  |
+| N14 | neuter | game | one-source check `if False` | killed: 1 failed, 114 passed |  |
+| M40 | N | game | one-source expected value inverted | killed: 2 failed, 46 passed, 3 errors |  |
+| M41 | C | game | one-source check reads `qwen3_6_27b` for every set | killed: 1 failed, 125 passed |  |
+| M42 | L | game | arm values literal `(1,)` for the annotation read | SURVIVED: 360 passed | SURVIVED (equivalent: both registered fields are `Literal[1] | None`, so the annotation read yields exactly `(1,)`) |
+| M43 | M | game | one-source message to a constant | SURVIVED: 360 passed | killed: 1 failed, 165 passed |
+| M44 | M | game | overlay refusal message to a constant | SURVIVED: 360 passed | killed: 2 failed, 80 passed |
+| M45 | C | loader | body check drops the guard argument | killed: 1 failed, 127 passed |  |
+| N15 | neuter | loader | loader drops `voter_role` | killed: 4 failed, 23 passed, 2 errors |  |
+| N16 | neuter | loader | loader drops `ballot_kill_row_version` | killed: 1 failed, 99 passed |  |
+| N17 | neuter | loader | loader drops `impostor_ballot_version` | killed: 2 failed, 87 passed |  |
+| M46 | B | loader | body check raise branch inverted | killed: 1 failed, 66 passed, 3 errors |  |
+| M47 | F | vote_ballot.j2 | persona guard drops the role test | killed: 1 failed, 100 passed |  |
+| M48 | N | vote_ballot.j2 | header guard inverted | killed: 3 failed, 80 passed |  |
+| M49 | B | vote_ballot.j2 | team block's teammate branch inverted | killed: 1 failed, 174 passed |  |
+| N18 | neuter | evidence_honesty | drop the ballot fold call | killed: 1 failed, 352 passed |  |
+| N19 | neuter | evidence_honesty | missing memory `continue` before the raise | killed: 1 failed, 355 passed |  |
+| H01 | N | evidence_honesty | accusation `==` to `!=` | killed: 1 failed, 352 passed |  |
+| H02 | F | evidence_honesty | drop the accusation type filter | killed: 1 failed, 354 passed |  |
+| H03 | F | evidence_honesty | drop `target in flag.subjects` | killed: 1 failed, 354 passed |  |
+| H04 | T | evidence_honesty | drop event a from the resolved pair | killed: 1 failed, 354 passed |  |
+| H05 | T | evidence_honesty | drop event b from the resolved pair | killed: 1 failed, 354 passed |  |
+| H06 | F | evidence_honesty | drop the impostor-voter filter | killed: 2 failed, 133 passed |  |
+| H07 | N | evidence_honesty | SKIP test inverted | killed: 2 failed, 133 passed |  |
+| H08 | F | evidence_honesty | drop the self-vote exclusion | killed: 1 failed, 354 passed |  |
+| H09 | F | evidence_honesty | drop the turn-id membership test | killed: 1 failed, 354 passed |  |
+| H10 | N | evidence_honesty | own-turn test inverted | killed: 1 failed, 354 passed |  |
+| H11 | N | evidence_honesty | observation-id test inverted | killed: 2 failed, 133 passed |  |
+| H12 | N | evidence_honesty | floor `>=` to `>` | killed: 1 failed, 357 passed |  |
+| H13 | L | evidence_honesty | floor literal 0.6 | killed: 1 failed, 357 passed |  |
+| H14 | N | evidence_honesty | EJECTED test inverted | killed: 1 failed, 352 passed |  |
+| H15 | F | evidence_honesty | kill holders read the whole log | killed: 1 failed, 354 passed |  |
+| H16 | F | evidence_honesty | drop the cited-id None test | killed: 1 failed, 354 passed |  |
+| H17 | C | evidence_honesty | impostors literal `{p-2, p-3}` | killed: 1 failed, 141 passed |  |
+| H18 | S | evidence_honesty | neutral-only denominator from impostor ballots | killed: 1 failed, 352 passed |  |
+| H19 | S | evidence_honesty | teammate denominator from impostor EJECTs | killed: 1 failed, 352 passed |  |
+| H20 | S | evidence_honesty | kill-citing denominator from impostor ballots | killed: 1 failed, 352 passed |  |
+| H21 | S | evidence_honesty | carried denominator from impostor EJECTs | killed: 1 failed, 352 passed |  |
+| H22 | S | evidence_honesty | other-turn cell reads the no-citation tally | killed: 1 failed, 352 passed |  |
+| H23 | S | evidence_honesty | SKIP cell reads the EJECT tally | killed: 1 failed, 352 passed |  |
+
+### Changed test expectations
+
+- `tests/training/test_conviction_serving.py`: the three accessor equality assertions carry
+  `observation_id`.
+- `tests/orchestrator/test_experiment_arms.py`: deleted with the guard: `_open_the_guard`,
+  `_PENDING`, `_PENDING_PROFILE`, `_unbuilt_values` and the tests
+  `test_a_value_is_pending_exactly_while_its_behaviour_is_unbuilt`,
+  `test_the_pending_guard_still_lists_an_arm`, `test_validation_refuses_a_pending_value`,
+  `test_construction_refuses_a_pending_value_built_past_validation`,
+  `test_the_runner_refuses_a_profile_carrying_a_pending_value`,
+  `test_a_pinned_runner_still_refuses_a_pending_profile_value` and
+  `test_the_lab_candidates_are_all_arms_that_exist_today` (vacuous once every value is built); the
+  contract-page check no longer requires the page to name `WAVE_ARMS_PENDING`;
+  `test_a_config_only_field_must_equal_the_runners_both_ways` builds its runner on `qwen3_6_27b`
+  (the only set whose ballot carries the blocks); `test_the_runner_stamps_the_profile_it_renders`
+  stubs the body check for its planted rebuttal entry.
+- `tests/orchestrator/test_experiment_config.py`: `test_a_coerced_wave_version_is_refused_with_the_guard_open`
+  renamed `test_a_coerced_wave_version_is_refused` without the patch; deleted with the unbuilt
+  guard: `test_an_unbuilt_option_value_refuses_to_build_a_policy` and
+  `test_the_factory_refuses_an_unbuilt_value_rather_than_running_the_default`.
+- `tests/orchestrator/test_report_body_handle.py`: deleted `test_the_arm_is_no_longer_pending`.
+- `tests/eval/test_vent_witness_readers.py`, `tests/experiments/test_vent_look_and_wait_game.py`,
+  `tests/agents/test_vent_look_and_wait.py`: dropped the assertions that a name is not pending or
+  that the unbuilt guard is empty.
+- `tests/eval/test_recorded_arm_readers.py`: the builder probe is `_stop_at_the_builder` (same
+  claim); `_PENDING_*` constants and two tests renamed `wave`; the golden half of
+  `test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_wave_values` now expects the
+  copy's ballots NOT to reproduce while every turn prompt does: the golden renders the arms the
+  rewritten settings name.
+- `tests/meetings/test_prompt_byte_golden.py`: `test_a_recording_made_with_a_registered_arm_resolves_through_its_settings`
+  stubs the body check for its planted rebuttal entry; one docstring; the new OFF leg.
+- Vote-renderer doubles widened by the three keywords: `tests/meetings/_manager_helpers.py`,
+  `tests/meetings/test_corroboration.py`, `tests/agents/test_beliefs.py`,
+  `tests/orchestrator/test_meeting_integration.py`, `tests/orchestrator/test_replay_meetings.py`.
+- `tests/eval/test_evidence_honesty.py`: `_CELL_OWNERS` gains `ballot-conduct`.
+
+Files that dropped a pending-guard patch: `tests/eval/test_gameplay_census.py`,
+`tests/eval/test_recorded_arm_readers.py`, `tests/eval/test_regroup_instruments.py`,
+`tests/eval/test_replay_walk.py`, `tests/eval/test_validity.py`,
+`tests/experiments/test_vent_look_and_wait_game.py`, `tests/orchestrator/test_experiment_arms.py`,
+`tests/orchestrator/test_experiment_config.py`, `tests/scripts/test_scan_recording_packets.py`
+(and a now-unused `monkeypatch` parameter where the patch was its only use).
+
+### Closing greps
+
+- `git grep -n WAVE_ARMS_PENDING -- '*.py'`: nothing. `git grep -n -i 'UNBUILT_OPTION\|UnbuiltTactical\|refuse_pending' -- '*.py'`: nothing.
+- `git grep -n -i -E 'pending guard|wave_arms_pending|unbuilt_option|no kill channel|kill channel at all|two of the eight|two provenance channels|never reaches the meeting|registry is empty' -- ':!tasks' ':!audits' ':!agent_prompts'`:
+  seven hits, none live-tense about the old behaviour: two in this card's test file (a past-tense
+  banner and docstring), two in `tests/meetings/test_weighing_channel.py` qualified "with the
+  kill-row arm OFF", two unrelated `test_manager.py` docstrings and one unrelated
+  `training/README.md` line.
+
+### Limitations
+
+- The grounding bound is instructed, not enforced: the tally reads no grounding label (ruling D6),
+  so an ungrounded impostor EJECT is recorded and tallied, and cell 3 counts it. "Say only what
+  the cited line shows" is instructed too: the rationale row checks tokens, not propositions.
+- `supported` means aboutness; the family's "points toward" is the stricter typed test (s9: 44
+  impostor EJECTs labelled `supported`, 26 pointing toward).
+- The kill row has no statistical power at 50 seeds (4 holder ballots on s9).
+- The one-source check enumerates each registered field's `Literal` ON values; both are
+  `Literal[1] | None` today.
+- The body check requires a live guard in the served body; it does not decide whether the guarded
+  lines are the right ones (the byte tests do).
+- The committed-data twin is a scratch count, not a test: no committed-walk entry point exposes
+  the rebuilt memories, and `tests/_helpers/committed.py` is outside this card.
+- `scripts/measure_baseline.py`'s human-readable `--honesty` rendering does not print the new
+  family (the JSON carries it); `scripts/` is outside this card.
+
+### Review corrections, round 1 (2026-09-27)
+
+Five blocking findings from the round-1 verifiers at `9b198d55` (two of them the same except
+tuple, seen by two verifiers). Fix commit `318c99ed`: `eval/evidence_honesty.py` (the kill-citing
+fold and the family docstring) and `tests/meetings/test_ballot_arms.py`; the commit after it
+changes only this card. Every command below ran at `318c99ed` in a shell with no `AILIBI_*`
+export.
+
+**What changed.**
+- **Kill citations in either own-id slot (docs verifier; Codex P2 on PR #491).** Reply to Codex:
+  valid, and fixed the way it proposes rather than by narrowing the text. The ballot contract lets
+  `counter_reason_id` carry one of the voter's own observation ids (the `counter_reason_id` bullet
+  of `vote_ballot.j2`'s output format), and `meetings.manager._normalize_ballot_counter_reason_id`
+  keeps it only when it is this meeting's turn or this voter's own observation, so a match is a
+  real citation of the kill. `_fold_ballot_conduct` now counts a holder whose ballot names one of
+  its kill records' observation ids in `primary_reason_observation_id` or `counter_reason_id`; the
+  family docstring says so. Planted: the counter-slot carrier and the counter-names-a-turn carrier
+  in `test_each_carrier_moves_its_cell_by_exactly_one`. No committed number moves: no committed
+  holder ballot cites the kill only in the counter slot (the four honesty reports are
+  byte-identical, below).
+- **The per-turn filter (correctness verifier, V16).** New carrier: p-2's turn accuses p-7 and
+  impostor p-3's EJECT of p-7 cites p-7's own turn, which accuses nobody. Expected: other turn +1,
+  pointing toward unchanged. With the filter dropped the published s9 split moved to 35 / 10 (the
+  verifier's measurement); the carrier now fails that mutant.
+- **Absent or unparseable bodies (correctness and integrity verifiers, V01, V02, V03).** New
+  `test_an_absent_or_unparseable_body_is_the_same_refusal_naming_the_file`, both arms: a set copy
+  without `vote_ballot.j2`, and a set copy whose `vote_ballot.j2` ends in `{% if %}`; each must raise
+  the check's `ValueError` naming the set and the file. V03 (drop `AttributeError`) is equivalent:
+  `_environment_for_set` always builds the environment on a `FileSystemLoader`, so
+  `environment.loader` is never `None` and `get_source` is always there.
+- **Message arguments (correctness verifier, V04, V20, V21, V22).** The match patterns now carry
+  the set name (`Prompt set 'qwen3_6_27b' template 'vote_ballot.j2' ...` and `Prompt set
+  'qwen3_32b' ...`), the arm list and the account-profile list (per arm and account, plus a new
+  case with both arms and both profiles that pins the order), and the meeting id
+  (`headless-seed-26:meeting-2: ballot by 'p-9', ...`).
+
+**Mutation pass, bounded to the spans the findings name and the span this round changed.** The
+named operator classes only (F filter, T tuple member, M message argument, N comparison, S swap).
+Suites: the five core suites (`tests/meetings/test_ballot_arms.py`,
+`tests/meetings/test_weighing_channel.py`, `tests/agents/test_bespoke_prompt_sets.py`,
+`tests/training/test_conviction_serving.py`, `tests/orchestrator/test_experiment_arms.py`) for the
+loader and profile probes, and `tests/meetings/test_ballot_arms.py` with
+`tests/eval/test_evidence_honesty.py` for the honesty probes; `pytest -q -n 6`, no `-x`. Each probe
+was applied in place, run, and the file restored from a copy with its sha256 checked. First run:
+the fixed production code with the test file of `9b198d55`; second run: the fixed test file.
+Restored: the core suites 365 passed, the honesty pair 195 passed.
+
+| id | class | module | probe | first run (tests of `9b198d55`) | with the round-1 tests |
+|---|---|---|---|---|---|
+| V16 | F | evidence_honesty | `_points_toward` drops the per-turn filter | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| V01 | T | loader | body-check except tuple drops `TemplateNotFound` | SURVIVED: 362 passed | killed: 2 failed, 363 passed |
+| V02 | T | loader | body-check except tuple drops `TemplateSyntaxError` | SURVIVED: 362 passed | killed: 2 failed, 363 passed |
+| V03 | T | loader | body-check except tuple drops `AttributeError` | SURVIVED: 362 passed | SURVIVED: 365 passed (equivalent, reason above) |
+| V04a | M | loader | refusal's set name to `'X'` | SURVIVED: 362 passed | killed: 6 failed, 359 passed |
+| V04b | M | loader | refusal's set name to `'qwen3_6_27b'` | SURVIVED: 362 passed | killed: 2 failed, 363 passed |
+| V20 | M | evidence_profile | refusal's arm list to `['X']` | SURVIVED: 362 passed | killed: 5 failed, 360 passed |
+| V20b | M | evidence_profile | refusal's arm list to `['ballot_kill_row_version']` | SURVIVED: 362 passed | killed: 3 failed, 362 passed |
+| V21 | M | evidence_profile | refusal's account list to `['X']` | SURVIVED: 362 passed | killed: 5 failed, 360 passed |
+| V21b | M | evidence_profile | refusal's account list to `['public_account_version']` | SURVIVED: 362 passed | killed: 3 failed, 362 passed |
+| V22 | M | evidence_honesty | missing-memory raise's meeting id to `'m-x'` | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| K1 | T | evidence_honesty | kill-citing slots drop `counter_reason_id` | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| K2 | T | evidence_honesty | kill-citing slots drop `primary_reason_observation_id` | killed: 2 failed, 190 passed | killed: 2 failed, 193 passed |
+| K3 | F | evidence_honesty | kill-citing slots drop the `None` filter | killed: 1 failed, 191 passed | killed: 1 failed, 194 passed |
+| K4 | N | evidence_honesty | kill-citing filter `is not None` to `is None` | killed: 2 failed, 190 passed | killed: 2 failed, 193 passed |
+| K5 | S | evidence_honesty | counter slot swapped for `primary_reason_id` | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| K6 | N | evidence_honesty | kill match `in` to `not in` | killed: 2 failed, 190 passed | killed: 2 failed, 193 passed |
+
+17 probes. With the round-1 tests: 16 killed, 1 equivalent (V03). The probes that first came back
+green were V16, V01-V04, V20, V21, V22 (the findings) and K1 and K5 (the new counter slot, before
+its carrier existed). No other operator class was run.
+
+**Verification at `318c99ed`.** Ballot rows re-measured count-only from the recorded ballots
+through `eval.validity.roles_by_seed` (a scratch script keyed by set, printing counts only), the
+family from `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`:
+
+| cell | s9 | pooled, four sets |
+|---|---|---|
+| impostor ballots: EJECT / SKIP | 46 / 164 | 183 / 760 (943) |
+| impostor EJECTs labelled `supported` / `off_target`; at confidence >= 0.6 | 44 / 2; 46 of 46 | 178 / 5; 182 of 183 |
+| impostor SKIPs with `decision_basis` `none_held` | 95 of 164 | 440 of 760 |
+| teammate-coerced impostor ballots | 1 | 13 |
+| ejections | 90 | 411 |
+| family cell 2: pointing toward / another turn | 26 / 19 | 98 / 83 |
+| family cell 4: ejections carried by impostor ballots alone | 0 of 90 | 0 of 411 |
+| family cell 5: kill holders; their ballots citing the kill (either slot) | 4; 3 of 4 | 31; 21 of 31 |
+| family cell 6: recorded teammate targets | 0 of 210 | 0 of 943 |
+
+The four honesty reports at `318c99ed` are byte-identical (`cmp` exit 0) to the same command run
+at `9b198d55` (that tree exported to scratch and run with its own code), so every family, the new
+one included, is unchanged, and the earlier comparison with the merge base's 18 families carries
+over. The rows of the `92e8803a` table that came from the earlier scratch walk over rebuilt
+memories (SKIPs holding a pointing row, teammate-kill sighting holders, budget-dropped kill
+records) were not re-measured: they read no code this round changed.
+
+| command | result |
+|---|---|
+| the card's targeted pytest list | exit 0, 897 passed |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `git grep -n WAVE_ARMS_PENDING -- '*.py'` | no output (exit 1) |
+| `bash scripts/verify_samples.sh replays/<set>`, four sets | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, four sets | exit 0 each |
+| `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, four sets | exit 0 each; byte-identical to `9b198d55` |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0 |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0 (and again at the card commit) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0 |
+| `uv run pytest -m campaign` | exit 0, 336 passed |
+| `uv run mypy eval/evidence_honesty.py tests/meetings/test_ballot_arms.py` | no issues |
+| `scripts/build_demo_bundle.py --out <scratch>` before and after the fix, same checkout, `diff -r` of `data/` | exit 0, no output; the builder does not import `eval.evidence_honesty` |
+| `bash scripts/check.sh` (clean tree at `318c99ed`) | exit 0: ruff, format, `lint-imports` (4 kept), task docs, prompt sync, mypy (518 files); 9,756 passed, 20 skipped, 3 xfailed (292 s); frontend lint, typecheck, 559 tests in 20 files, build |
+
+**Changed test expectations.** None weakened, skipped or deleted. Tightened: the match patterns of
+`test_the_profile_refuses_a_ballot_arm_beside_an_account_profile`,
+`test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block`,
+`test_a_dead_guard_is_no_block` and `test_a_ballot_by_a_player_with_no_rebuilt_memory_raises`.
+Added: three carriers in `test_each_carrier_moves_its_cell_by_exactly_one`,
+`test_the_profile_refusal_names_every_arm_and_account_profile_it_met` and
+`test_an_absent_or_unparseable_body_is_the_same_refusal_naming_the_file` (two cases).
+
+**Closing greps.** `git grep -n -i -E "kill.{0,60}(primary[_ ]reason[_ ]observation|primary observation slot|primary slot)|(primary[_ ]reason[_ ]observation|primary observation slot).{0,60}kill" -- '*.py' '*.md' ':!replays' ':!audits' ':!agent_prompts'`:
+two hits, both unrelated test lines (`tests/meetings/test_ballot_observation_citation.py`,
+`tests/meetings/test_vote_guard_rationale.py`); no sentence says the family reads only the primary
+slot. `git grep -n -i -E "absent or unparseable|unparseable or absent" -- '*.py' '*.md' ':!replays'`:
+the two loader docstrings, now both pinned.
+
+**Limitation added.** The census's own-kill cell `own_kill_rows_cited_by_holder`
+(`eval/gameplay_census.py`, the census card's file, not written here) reads only
+`primary_reason_observation_id`, while its definition says "cites the row's observation". The
+honesty cell now reads both slots, so the two can differ once an arm-ON record holds a counter-slot
+kill citation; on committed data both read nothing from the counter slot. Noted for the census
+owner and the record card.
+
+### Review corrections, round 2 (2026-09-27)
+
+Six blocking findings from the round-2 verifiers at `07282a4e`, five distinct probes: the
+correctness verifier's R05 and the docs verifier's cell-4 finding are the same mutant. All five are
+listed-class survivors in `eval/evidence_honesty.py` that no carrier pinned; the code already did
+what the family sentence says, so no production byte changes. Fix commit `173139cb` edits only
+`tests/meetings/test_ballot_arms.py`; the commit after it changes only this card. Every command
+below ran at `173139cb` in a shell with no `AILIBI_*` export.
+
+**What changed.** New carriers in `test_each_carrier_moves_its_cell_by_exactly_one`, all on the
+scripted game's third meeting (impostors p-2 and p-3 eject p-7 at 0.9; recorded floor 0.6):
+- **Classification order (R07, correctness verifier).** Impostor p-2's EJECT keeps its own
+  observation `p-2:1:12` and also cites a turn of this meeting. Citing p-7's turn, which points
+  nowhere, moves another turn +1 and neutral only -1; citing its own turn accusing p-7 moves
+  pointing toward +1, own turn +1 and neutral only -1. The family docstring's order (a turn first,
+  then an own observation) is now enforced; with the branches swapped the published s9 cell 3 would
+  read 17 of 46 instead of 1 of 46 (the verifier's measurement), consistent with the count-only
+  population below.
+- **The ejected-target filter in cell 4 (R05, correctness verifier; the docs verifier's cell-4
+  finding; P3, integrity verifier).** Crew p-1 voting p-9 at 0.9, or SKIP at 0.9, leaves
+  `ejections_carried_by_impostors_alone` unchanged; crew p-1 voting p-7 at 0.9 lowers it by one.
+  Both mutants could only lower a count that reads 0 of 411 on committed data, so no published
+  value was at risk; the family sentence ("ballots for the ejected player") is now enforced.
+- **An accusation against somebody else (Q1, integrity verifier).** p-7's turn carries a typed
+  accusation against p-9 and impostor p-3's EJECT of p-7 cites it: another turn +1, pointing toward
+  unchanged. With the mutant the published s9 split would read 45 / 0 instead of 26 / 19 (the
+  verifier's measurement).
+- **A contradiction minted from other turns (Q4, integrity verifier).** A new conflict-loop entry:
+  a contradiction naming p-7 whose two event ids resolve to p-9's and p-1's turns, while the cited
+  turn (p-7's) accuses nobody: another turn +1, pointing toward unchanged. The loop's assertion
+  message now names both event ids, since two entries share the subjects `("p-7",)`.
+
+**Count-only population for the R07 carrier.** Impostor EJECTs whose recorded
+`primary_reason_id` names a turn of the meeting and whose `primary_reason_observation_id` is set:
+16 of 46 on s9 and 61 of 183 pooled (samples/4p1i 1 of 6, ml_corpus/9p2i 43 of 121, ml_corpus/4p1i
+1 of 10). A scratch script over the recorded ballots, roles through `eval.validity.roles_by_seed`
+with `resolve_roster_knobs`, printing counts keyed by set only.
+
+**Mutation pass, bounded to the spans the findings name.** The card's operator letters (F drop a
+filter, S swap one collection for a related one, N comparison to a None test or its inverse, B swap
+adjacent branches). Suites: `tests/meetings/test_ballot_arms.py` and
+`tests/eval/test_evidence_honesty.py`, `pytest -q -n 6`, no `-x`. Each probe was applied in place,
+run, and `eval/evidence_honesty.py` restored from a copy with its sha256 checked; restored, the pair
+reads 195 passed after each run. First run: the test file of `07282a4e`; second run: the test file
+of `173139cb`. The last column names the assertion that fails first under the probe (a single-test
+run with `--tb=line`).
+
+| id | class | probe | first run (tests of `07282a4e`) | with the round-2 tests | first failing assertion |
+|---|---|---|---|---|---|
+| R07 | B | classification swaps the turn branch and the own-observation branch | SURVIVED: 195 passed | killed: 1 failed, 194 passed | p-2 cites p-7's turn and keeps its observation |
+| R07b | B | pointing-toward and other-turn bodies swapped | killed: 2 failed, 193 passed | killed: 2 failed, 193 passed | |
+| R07c | F | drop the turn-id membership test | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+| R07d | N | own-observation test `is not None` to `is None` | killed: 3 failed, 192 passed | killed: 3 failed, 192 passed | |
+| R05 | F | carried list keeps only the confidence filter | SURVIVED: 195 passed | killed: 1 failed, 194 passed | crew p-1 votes p-9 at 0.9 |
+| R05b | F | carried list drops the confidence filter | killed: 5 failed, 190 passed | killed: 5 failed, 190 passed | |
+| R05c | F | drop the non-empty test before `all` | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+| R05d | S | impostor set swapped for the roles mapping | killed: 1 failed, 194 passed | killed: 2 failed, 193 passed | |
+| P3 | N | ejected-target test to `ballot.target is not None` | SURVIVED: 195 passed | killed: 1 failed, 194 passed | crew p-1 votes p-9 at 0.9 |
+| P3b | N | ejected-target `==` to `!=` | killed: 4 failed, 191 passed | killed: 4 failed, 191 passed | |
+| Q1 | N | accusation `claim.against == target` to `is not None` | SURVIVED: 195 passed | killed: 1 failed, 194 passed | the cited turn accuses p-9 |
+| Q1b | N | accusation `==` to `!=` | killed: 2 failed, 193 passed | killed: 2 failed, 193 passed | |
+| Q4 | F | drop the per-turn conjunct on the contradiction branch | SURVIVED: 195 passed | killed: 1 failed, 194 passed | the contradiction minted from p-9's and p-1's turns |
+| Q4b | N | subjects `in` to `not in` | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+| Q4c | F | drop the subjects filter | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+
+15 probes, all killed with the round-2 tests. The probes that first came back green were exactly
+the five the findings name (R07, R05, P3, Q1, Q4); the other ten are neighbours in the same spans,
+killed on both runs. The crew-SKIP carrier sits after the p-9 carrier in the same loop, so no probe
+reached it first; it is not claimed as a killer. No other operator class was run.
+
+**Verification at `173139cb`.** No production path changed since `318c99ed` (`git diff --stat
+318c99ed 173139cb` names only `tests/meetings/test_ballot_arms.py`), so no committed number can
+move; the family was re-measured anyway with
+`uv run python scripts/measure_baseline.py replays/<set> --honesty --json` on the four sets and
+equals the round-1 table cell for cell:
+
+| cell | s9 | pooled, four sets |
+|---|---|---|
+| impostor ballots: EJECT / SKIP | 46 / 164 | 183 / 760 (943) |
+| ejections | 90 | 411 |
+| family cell 2: pointing toward (own turn) / another turn | 26 (13) / 19 | 98 (47) / 83 |
+| family cell 3: EJECTs citing only a neutral row | 1 of 46 | 2 of 183 |
+| family cell 4: ejections carried by impostor ballots alone | 0 of 90 | 0 of 411 |
+| family cell 5: kill holders; their ballots citing the kill (either slot) | 4; 3 of 4 | 31; 21 of 31 |
+| family cell 6: recorded teammate targets | 0 of 210 | 0 of 943 |
+
+| command | result |
+|---|---|
+| the card's targeted pytest list (`-n 6`) | exit 0, 897 passed (the carriers sit inside one existing test) |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `git grep -n WAVE_ARMS_PENDING -- '*.py'` | no output (exit 1) |
+| `uv run mypy tests/meetings/test_ballot_arms.py eval/evidence_honesty.py` | no issues |
+| `bash scripts/verify_samples.sh replays/<set>`, four sets | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, four sets | exit 0 each |
+| `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, four sets | exit 0 each; the family as tabled above |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0 |
+| `uv run pytest -m campaign` | exit 0, 336 passed |
+| `scripts/build_demo_bundle.py --out <scratch>` with only the test file changed from `07282a4e` and again at `173139cb`, `diff -r` of `data/` | exit 0, no output; the builder reads no `tests/` path |
+| `bash scripts/check.sh` (clean tree at `173139cb`) | exit 0: ruff, format (547 files), `lint-imports` (4 kept), task docs, prompt sync, mypy (518 files); 9,756 passed, 20 skipped, 3 xfailed (292 s); frontend lint, typecheck, 559 tests in 20 files, build |
+| `uv run python scripts/check_doc_facts.py`, `uv run python scripts/validate_task_docs.py` | exit 0 each, at the card commit |
+
+**Changed test expectations.** None weakened, skipped or deleted. Added, all inside
+`test_each_carrier_moves_its_cell_by_exactly_one`: seven carrier assertions (Q1 one, R07 two, Q4
+one conflict-loop entry, cell 4 three, two of them in one loop) and two precondition assertions
+(p-2's recorded observation id is set; the third meeting ejects p-7 under the recorded floor 0.6). Changed: the
+conflict loop's assertion message, from the subjects alone to the subjects and both event ids.
+
+**Closing greps.** No behaviour or vocabulary changed this round, so no old-behaviour sentence can
+be stale. The sentences the carriers now enforce, `git grep -n -i -E "ballots for the ejected
+player|minted a contradiction of this|classified by its primary citations" -- '*.py' '*.md'
+':!replays' ':!audits' ':!agent_prompts'`: `eval/evidence_honesty.py` lines 91, 94, 539, 542, 940,
+943 and 950 (the module text, the `CELL_DEFINITIONS` sentence and the family docstring) and the new
+test comment at `tests/meetings/test_ballot_arms.py:2138`; each states what the code does, at that
+strength.
+
+### Review corrections, round 3 (2026-09-27)
+
+Two blocking findings from the round-3 verifiers at `60eb015e`, both listed-class survivors that no
+test pinned. The code already did what its docstrings say, so no production byte changes. Fix
+commit `d64b6c59` edits only `tests/meetings/test_ballot_arms.py`; the commit after it changes only
+this card. Every command below ran at `d64b6c59` in a shell with no `AILIBI_*` export.
+
+**What changed.**
+- **The report's conduct arguments (correctness verifier: X30, X32, X33, X34).** Every carrier
+  folded tallies through `_fold_ballot_conduct` and read the fold's counters, and the scripted
+  game's report holds equal counts in several cells (`ejects_pointing_toward_own_turn` and
+  `ejects_without_citation` are both 1, `ejects_other_turn` is 0), so an argument of `_report`'s
+  `BallotConductCells(...)` that read a sibling tally or a constant left every test green. The
+  mutants are wrong published numbers, read off the family table below: X30 would publish 46
+  ejections on s9 instead of 90, X32 0, X33 0 other-turn EJECTs instead of 19, X34 0 own-turn
+  EJECTs instead of 13. The new `test_the_report_publishes_each_conduct_tally_in_its_own_cell` sets
+  the thirteen conduct tallies to thirteen different non-zero counts that add up as the fold's do
+  (61 EJECTs + 36 SKIPs = 97 ballots; 23 + 13 + 7 + 18 = 61 EJECTs), asserts that the tally names
+  equal the cell names in order (so a new cell must get its own count), and compares the published
+  `BallotConductCells` whole, each rate cell over its own denominator.
+  `test_the_honesty_cells_count_the_scripted_ballots` also asserts `ejections == 1`, the one cell
+  it read only as a denominator.
+- **The row-type filters (docs verifier: X07w, X08w).** Two planted tests beside the provenance
+  tests: a first-hand `saw_player_move` row carrying `player_id`, `room` and `action: kill` makes
+  no kill record, and the same payload on a `saw_player` row makes exactly one (subject, tick and
+  observation id checked); a first-hand `global_status` row carrying `fellow_impostor_ids` naming
+  p-3 leaves p-3's watched kill a record, and the same list on a first-hand `self_state` row drops
+  it. The finding's alternative, naming both mutants equivalent because of which perception writers
+  emit those keys, was not taken: the planted rows pin the filters without resting on today's
+  writers. Whether either mutant could move a committed number was not measured.
+
+**Mutation pass, bounded to the spans the findings name.** 17 probes: the six the findings name
+(ids kept) and eleven neighbours in the same spans. Letters: F drop a filter, S swap one tally for
+a related one, N invert a comparison, C replace a read with a constant. Suites:
+`tests/meetings/test_ballot_arms.py`, `tests/eval/test_evidence_honesty.py` and
+`tests/training/test_conviction_serving.py`, `pytest -q -n 6 -p no:cacheprovider`, no `-x`. Each
+probe was applied in place and run twice, with the test file of `60eb015e` and with the test file of
+`d64b6c59`; the production file was then restored from a copy and its sha256 checked, and restored
+the three suites read 211 passed. The failing tests come from a second run of the first-green probes
+with `-rf --tb=no`. X07c was first written with a constant `orchestrator/game.py` does not import (a
+`NameError`, not a semantic probe) and was re-run with `EVENT_SAW_PLAYER`; the row shows the re-run.
+
+| id | class | module | probe | first run (tests of `60eb015e`) | with the round-3 tests | failing tests, round-3 run |
+|---|---|---|---|---|---|---|
+| X30 | S | evidence_honesty | `ejections` reads `impostor_ejects` | SURVIVED: 208 passed | killed: 2 failed, 209 passed | the report test; the scripted honesty-cells test |
+| X32 | C | evidence_honesty | `ejections=0` | SURVIVED: 208 passed | killed: 2 failed, 209 passed | the same two |
+| X33 | C | evidence_honesty | `ejects_other_turn=0` | SURVIVED: 208 passed | killed: 1 failed, 210 passed | the report test |
+| X34 | S | evidence_honesty | `ejects_pointing_toward_own_turn` reads `ejects_without_citation` | SURVIVED: 208 passed | killed: 1 failed, 210 passed | the report test |
+| X35 | S | evidence_honesty | `impostor_ballots` reads `impostor_ejects` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X36 | S | evidence_honesty | `ejects_pointing_toward` reads the own-turn tally | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X37 | S | evidence_honesty | `ejects_without_citation` reads `ejects_other_turn` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X38 | S | evidence_honesty | `kill_holders` reads `kill_holders_citing_the_kill` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X39 | S | evidence_honesty | carried-ejection numerator reads `impostor_ejects` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X40 | S | evidence_honesty | teammate-target numerator reads `impostor_skips` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X41 | C | evidence_honesty | `impostor_skips=0` | killed: 1 failed, 207 passed | killed: 2 failed, 209 passed | |
+| X07w | F | game | fellow set drops the `self_state` type filter | SURVIVED: 208 passed | killed: 1 failed, 210 passed | `test_the_teammate_guard_reads_self_state_rows_only` |
+| X07c | C | game | fellow-set type read as `EVENT_SAW_PLAYER` | killed: 6 failed, 202 passed | killed: 7 failed, 204 passed | the new test and six existing ones |
+| X07n | N | game | fellow-set type test inverted | killed: 6 failed, 202 passed | killed: 7 failed, 204 passed | |
+| X08w | F | game | kill predicate drops the `saw_player` type filter | SURVIVED: 208 passed | killed: 1 failed, 210 passed | `test_the_accessor_reads_saw_player_rows_only` |
+| X08c | C | game | kill-predicate type read as `EVENT_SAW_PLAYER_MOVE` | killed: 8 failed, 182 passed, 18 errors | killed: 10 failed, 183 passed, 18 errors | |
+| X08n | N | game | kill-predicate type test inverted | killed: 8 failed, 182 passed, 18 errors | killed: 10 failed, 183 passed, 18 errors | |
+
+17 probes, all killed with the round-3 tests. The probes that first came back green were exactly the
+six the findings name; the eleven neighbours were killed on both runs. No other operator class was
+run.
+
+**Verification at `d64b6c59`.** No production path changed since `318c99ed`, so no committed
+number can move; the family was re-measured anyway with
+`uv run python scripts/measure_baseline.py replays/<set> --honesty --json` on the four sets and
+equals the round-2 table cell for cell (s9: 46 / 164 impostor EJECT / SKIP, 90 ejections, 26 (13) /
+19, 1 of 46, 0 of 90, 4 holders and 3 of 4, 0 of 210; pooled: 183 / 760, 411, 98 (47) / 83, 2 of
+183, 0 of 411, 31 and 21 of 31, 0 of 943).
+
+| command | result |
+|---|---|
+| the card's targeted pytest list (`-n 6`) | exit 0, 900 passed (three new tests) |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `git grep -n WAVE_ARMS_PENDING -- '*.py'` | no output (exit 1) |
+| `uv run mypy tests/meetings/test_ballot_arms.py`, `uv run ruff check` and `ruff format --check` on it | no issues |
+| `bash scripts/verify_samples.sh replays/<set>`, four sets | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, four sets | exit 0 each |
+| `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, four sets | exit 0 each; the family as above |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0 |
+| `uv run pytest -m campaign` | exit 0, 336 passed |
+| `scripts/build_demo_bundle.py --out <scratch>` with the test file of `60eb015e` swapped in and again at `d64b6c59`, `diff -r` of `data/` | exit 0, no output; the builder reads no `tests/` path |
+| `bash scripts/check.sh` (clean tree at `d64b6c59`, output to a file, exit code from the process) | exit 0: ruff, format (547 files), `lint-imports` (4 kept), task docs (88 work cards), prompt sync, mypy (518 files); 9,759 passed, 20 skipped, 3 xfailed (298 s); frontend 559 tests in 20 files, build |
+| `uv run python scripts/check_doc_facts.py`, `uv run python scripts/validate_task_docs.py` | exit 0 each, at the card commit |
+
+**Changed test expectations.** None weakened, skipped or deleted. Added: three tests
+(`test_the_accessor_reads_saw_player_rows_only`, `test_the_teammate_guard_reads_self_state_rows_only`,
+`test_the_report_publishes_each_conduct_tally_in_its_own_cell`) and one assertion
+(`cells.ejections == 1` in `test_the_honesty_cells_count_the_scripted_ballots`); the
+`agents.perception` import gains `EVENT_GLOBAL_STATUS`, `EVENT_SAW_PLAYER_MOVE` and
+`EVENT_SELF_STATE`.
+
+**Closing greps.** No behaviour or vocabulary changed this round, so no old-behaviour sentence can
+be stale. The sentences the new tests enforce are the docstrings of
+`orchestrator/game.py::kill_witness_records_in` ("a first-hand ... `saw_player` row") and
+`_fellow_impostor_ids_in` ("the latest first-hand `self_state` row"), and the
+`BallotConductCells` field list; each states what the code does, at that strength.
