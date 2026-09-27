@@ -1999,6 +1999,51 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
         "ejects_other_turn": 1,
         "ejects_without_citation": -1,
     }
+    # The cited turn accuses a player other than the target: only an accusation
+    # against the target points toward it, so the EJECT cites another turn.
+    accusing_another = other.model_copy(
+        update={
+            "transcript": MeetingTranscript(
+                turns=tuple(
+                    turn.model_copy(
+                        update={
+                            "claims": (
+                                AccusationClaim(
+                                    type="accusation",
+                                    against="p-9",
+                                    confidence=0.7,
+                                    reason="planted",
+                                ),
+                            )
+                        }
+                    )
+                    if turn.speaker == "p-7"
+                    else turn
+                    for turn in third.transcript.turns
+                )
+            )
+        }
+    )
+    assert _moved(base, _conduct(accusing_another)) == {
+        "ejects_other_turn": 1,
+        "ejects_without_citation": -1,
+    }
+    # A turn of this meeting and an own observation cited together: the turn
+    # classifies the EJECT, whether it points elsewhere or toward the target, and
+    # the observation no longer makes it neutral only.
+    assert _ballot(third, "p-2").primary_reason_observation_id is not None
+    assert _moved(
+        base,
+        _conduct(_with_ballot(third, "p-2", primary_reason_id=third_turns["p-7"])),
+    ) == {"ejects_other_turn": 1, "ejects_citing_only_neutral": -1}
+    assert _moved(
+        base,
+        _conduct(_with_ballot(accusing, "p-2", primary_reason_id=third_turns["p-2"])),
+    ) == {
+        "ejects_pointing_toward": 1,
+        "ejects_pointing_toward_own_turn": 1,
+        "ejects_citing_only_neutral": -1,
+    }
     # Only a neutral row, and then nothing at all.
     assert _moved(
         base,
@@ -2009,12 +2054,20 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
         _conduct(_with_ballot(third, "p-2", primary_reason_observation_id=None)),
     ) == {"ejects_citing_only_neutral": -1, "ejects_without_citation": 1}
     # A conflict minted from the cited turn that names somebody else: another
-    # turn still; and one that names the target on its second event id: pointing.
+    # turn still; one that names the target but was minted from two other turns,
+    # while the cited turn accuses nobody: another turn; and one that names the
+    # target on its second event id: pointing.
     for subjects, event_a, event_b, moved in (
         (
             ("p-9",),
             f"turn:{third_turns['p-7']}:claim:0",
             "planted:elsewhere",
+            {"ejects_other_turn": 1, "ejects_without_citation": -1},
+        ),
+        (
+            ("p-7",),
+            f"turn:{third_turns['p-9']}:claim:0",
+            f"turn:{third_turns['p-1']}:obs:0",
             {"ejects_other_turn": 1, "ejects_without_citation": -1},
         ),
         (
@@ -2038,7 +2091,7 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
                 )
             }
         )
-        assert _moved(base, _conduct(elsewhere)) == moved, subjects
+        assert _moved(base, _conduct(elsewhere)) == moved, (subjects, event_a, event_b)
     # A cited turn whose only claim is another kind points nowhere: other turn.
     from meetings.schemas import CorroborationClaim
 
@@ -2082,6 +2135,24 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
         "recorded_teammate_targets": 1
     }
     assert _moved(base, _conduct(_with_ballot(third, "p-2", target="p-2"))) == {}
+    # The carried-ejection cell reads only ballots for the ejected player at or
+    # above the recorded floor: a crew ballot for another player or a crew SKIP,
+    # each at 0.9, leaves the ejection carried by the impostors alone, and a crew
+    # ballot for the ejected player at 0.9 does not.
+    assert (third.ejected_player_id, third.skip_confidence_threshold) == ("p-7", 0.6)
+    for crew_target in ("p-9", "SKIP"):
+        assert (
+            _moved(
+                base,
+                _conduct(
+                    _with_ballot(third, "p-1", target=crew_target, confidence=0.9)
+                ),
+            )
+            == {}
+        ), crew_target
+    assert _moved(
+        base, _conduct(_with_ballot(third, "p-1", target="p-7", confidence=0.9))
+    ) == {"ejections_carried_by_impostors_alone": -1}
     # A kill holder, and one whose ballot cites the kill.
     assert _moved(base, _conduct(third, stores=_stores({"p-9": "p-2"}))) == {
         "kill_holders": 1
