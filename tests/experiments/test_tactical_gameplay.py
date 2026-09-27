@@ -36,6 +36,14 @@ from orchestrator.seeder import seed_initial_state
         "self_report",
         "earlier_sabotage",
         "post_meeting",
+        "vent_physical",
+        "vent_look_and_wait",
+        "vent_own_fresh_kill",
+        "stage_b_full",
+        "stage_b_full_minus_look_and_wait",
+        "stage_b_full_minus_own_fresh_kill",
+        "stage_b_full_minus_physical",
+        "stage_b_full_minus_hub_with_grace",
     ],
 )
 def test_genuine_candidate_reconstructs_in_api_and_repeats(

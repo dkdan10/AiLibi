@@ -1,6 +1,6 @@
 # B1: impostors look before leaving a vent and vent only after their own fresh kill
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -185,21 +185,88 @@ the test fails on the tree this card starts from, where building the policy with
 raises the spine's named refusal. Each item also asserts the `target_distance` / `any_body`
 behaviour it contrasts with, so it proves the defect it claims.
 
-- [ ] **A watched exit makes it wait.** In STORAGE_VENT at cooldown 3, with the own victim's body in
+- [x] Review correction (round 2, correctness lens): the entry gate's walk-away leaves from the
+  impostor's own room, in every vent room. `test_the_walk_away_leaves_from_the_impostors_own_room`
+  has one case per vent room of the canonical map (ADMIN and ENGINEERING to EAST_HALL, LABS to
+  MEDBAY, MEDBAY to LABS, REACTOR and STORAGE to ENGINEERING). Each case equals
+  `ImpostorPolicy._cover` for that room, where `any_body` vents at that room's vent.
+  `test_the_walk_away_cases_cover_every_vent_room` pins the cases to the map's vent rooms. A
+  walk-away from STORAGE whatever the room (mutation G01) is red on the ADMIN, ENGINEERING, LABS
+  and MEDBAY cases; at `587c2674` it passed all three targeted suites.
+- [x] Review correction (round 2, integrity lens): the same room read replaced by a constant is red
+  for each constant tried. STORAGE (G01) and REACTOR (G02) are red on the four cases whose
+  walk-away is not ENGINEERING, and ADMIN (G03) on the four whose walk-away is not EAST_HALL. In
+  the same cases the impostor's own fresh kill vents exactly as `any_body` does. The walk-away also
+  follows the loaded map: `test_the_walk_away_follows_the_loaded_maps_neighbours` gives STORAGE a
+  CAFETERIA neighbour, and the walk-away goes to CAFETERIA. The canonical map in place of the
+  loaded one (G04) is red there.
+- [x] Review correction (round 2, documentation lens): planted memories kill the two M2 survivors.
+  V04 (the look's sabotage read over this tick's rows only):
+  `test_the_look_reads_the_freshest_sabotage_status_even_from_an_earlier_tick[reactor|lights]`.
+  When the freshest status is the previous tick's and reports a sabotage, the impostor surfaces in
+  place; when a status on this tick reports none, it waits. V09 (the gate's body read over every
+  row): `test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body`. When the own
+  victim's body was sighted here only on the previous tick, the impostor walks away; with the body
+  still in view, it vents. Perception never builds either memory: it appends a status every tick,
+  and a body stays until a meeting, which the gate's boundary clause already excludes. So each case
+  pins the documented read; neither shows a behaviour a recorded game could reach.
+- [x] Review correction: the Limitations bullet and the README's look-and-wait reading say the
+  entry gate bounds the in-place re-entry loop rather than removing it: at most one re-entry per
+  own kill inside the three-tick window. Proof:
+  `test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit`, and the re-entry
+  walk in Results (9p2i `stage_b_full`: 6 of 28 entries, each after the impostor's own fresh
+  kill, at most one per kill).
+- [x] Review correction: the look's body key reads this tick's bodies only, so a body reported at
+  a meeting, whose `saw_body` rows stay in memory from earlier ticks, never enters it.
+  `test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key[before-the-cap-own-room-reported]`
+  surfaces at STORAGE_VENT, where a read over every row surfaces at ENGINEERING_VENT onto the
+  other body (mutation F01 red).
+- [x] Review correction: before the cap the pick follows the loaded map's vent rooms.
+  `test_before_the_cap_the_pick_follows_the_loaded_map` on the hand-built two-link map: VA; VB
+  with a body in A; VB with VA moved to an unseen room (mutations F02 to F04 red).
+- [x] Review correction: the entry gate sits after the self-report branch.
+  `test_self_report_runs_before_the_entry_gate`: `self_report` with `own_fresh_kill` at a
+  teammate's victim reports, where the gate alone walks away (mutation F06 red).
+- [x] Review correction: the determinism test's planted hash edit edits the second recording's own
+  bytes, so without the edit the copy equals the first recording and the assertion fails
+  (`test_the_b1_recording_repeats_byte_for_byte_and_loads_verified`; probe T01 red).
+- [x] Review correction (Codex P1): inside a vent `look_and_wait` runs the anchor's own row readers
+  first (`_refuse_rows_the_anchor_refuses`), so a non-string `pending_task_id` or a malformed
+  earlier `saw_player` row raises the anchor's own error instead of venting.
+  `test_a_row_the_anchor_refuses_is_refused_inside_a_vent[pending task-...]`,
+  `[earlier saw_player room-...]` and `[earlier saw_player subject-...]`.
+- [x] Review correction: the stale-body key is covered before the cap and at the cap, each case with
+  a contrast memory that still sees the body and picks the other vent: the four cases of
+  `test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key` (mutation F01 red).
+- [x] Review correction: the pre-cap clear branch's three `vent_rooms` reads and the unmapped check
+  are pinned on non-canonical maps: `test_before_the_cap_the_pick_follows_the_loaded_map` and
+  `test_a_connected_vent_with_no_room_raises[True]` (GHOST_VENT also a graph key); mutations F02
+  to F05 red.
+- [x] Review correction (Codex P1): the anchor's non-ranking row checks run before the in-vent
+  return. One planted malformed memory per kind the look's own reads miss
+  (`test_a_row_the_anchor_refuses_is_refused_inside_a_vent`, six cases), each accepted once the
+  checks are removed (`test_without_the_row_checks_each_planted_row_fails_the_check`), and a
+  property over eleven kinds of malformed row
+  (`test_every_row_the_anchor_refuses_in_a_vent_is_refused_by_the_look`, 300 examples): the look
+  raises the anchor's own message. The `decide` comment states what the code delivers.
+- [x] Review correction: a body seen only on an earlier tick does not enter the exit key before the
+  cap or at the cap (`test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key`, four
+  cases); the round-1 mutation table carries the row (F01).
+- [x] **A watched exit makes it wait.** In STORAGE_VENT at cooldown 3, with the own victim's body in
   STORAGE and a crewmate sighted this tick in ENGINEERING, `target_distance` surfaces at
   ENGINEERING_VENT, into the crewmate. `look_and_wait` waits. On the next tick, with ENGINEERING
   clear, it surfaces at ENGINEERING_VENT, which has no body and is not the room it fled. Mechanism:
   the all-clear gate. Red before.
-- [ ] **The blind-exit contrast.** In REACTOR_VENT (neither exit visible) with a crewmate in
+- [x] **The blind-exit contrast.** In REACTOR_VENT (neither exit visible) with a crewmate in
   ENGINEERING, `target_distance` surfaces blind at a connected vent; `look_and_wait` waits. With
   every visible room clear it surfaces in place and never at a room it cannot see. Mechanism: the
   candidate set is the current vent plus visible connected vents. Red before.
-- [ ] **Who counts as a watcher.** A non-teammate in the own room forces a wait, even though the
+- [x] **Who counts as a watcher.** A non-teammate in the own room forces a wait, even though the
   physical rule would not make it a witness of a connected exit. A teammate in the own room or a
   neighbour does not: from ADMIN_VENT it surfaces in place, where `target_distance` surfaces at a
   connected vent. A sighting that is not first-hand never counts. Mechanism: fellow ids from `self_state`
   and the observed-provenance filter. Red before.
-- [ ] **The cap.** With a watcher still in view, inside-counts 1 to 3 wait and count 4 surfaces.
+- [x] **The cap.** With a watcher still in view, inside-counts 1 to 3 wait and count 4 surfaces.
   The key is the ruled one: each candidate (in place, or a connected vent) is classed by the
   impostor's own inferred sight this tick as clear (visible, no non-teammate sighted there), unseen
   (outside the inferred-visible set) or watched (visible, a non-teammate sighted there); clear ranks
@@ -210,18 +277,18 @@ behaviour it contrasts with, so it proves the defect it claims.
   The fixture is chosen so this pick differs from `target_distance`'s.
   A `meeting_boundary` row inside the streak restarts the count. Perturbed: counting from the entry
   alone fails the restart case. The count comes from memory rows, never from instance state.
-- [ ] **No steering inside.** Two memories that differ only in target sightings from earlier ticks
+- [x] **No steering inside.** Two memories that differ only in target sightings from earlier ticks
   give the same `look_and_wait` intent and different `target_distance` intents. Mechanism: the
   in-vent branch never calls `_scored_targets` or `_decision_targets`. Red before.
-- [ ] **Sabotage makes neighbours unseen.** Under an active reactor sabotage, with the own room clear
+- [x] **Sabotage makes neighbours unseen.** Under an active reactor sabotage, with the own room clear
   and a crewmate sighted in a neighbour the engine truly shows, it surfaces in place. The same holds
   under lights. The census predicate from `eval/gameplay_census.py`, fed this surfacing, reads no
   breach; fed a surfacing with the crewmate in the own room instead, it reads one.
-- [ ] **The sight model is pinned to the engine.** For every canonical room, the inferred-visible
+- [x] **The sight model is pinned to the engine.** For every canonical room, the inferred-visible
   set equals `engine.visibility.visible_rooms_for_player` for an impostor observer at base
   visibility, and equals the own room under lights. A test may import the engine; the policy may
   not (`lint-imports`). Perturbed: an adjacency fixture with one extra neighbour fails.
-- [ ] **The entry gate.** Under `own_fresh_kill`, a teammate's victim in a room with a vent and no
+- [x] **The entry gate.** Under `own_fresh_kill`, a teammate's victim in a room with a vent and no
   witness makes it walk away (`_cover`), where `any_body` vents. So does an own victim across a
   `meeting_boundary`, and an own victim killed 4 ticks before. An own victim killed 3 ticks before
   vents, and a fresh own kill vents exactly as `any_body` does (the control). A non-teammate in the
@@ -229,23 +296,23 @@ behaviour it contrasts with, so it proves the defect it claims.
   the recorded observation path (temporal observations OFF): the two boundary memories come from
   engine ticks run through the observation service and perception, not hand-typed row ticks.
   Red before.
-- [ ] **Never stuck, and deterministic** (Hypothesis). Over random in-vent memories (teammate and
+- [x] **Never stuck, and deterministic** (Hypothesis). Over random in-vent memories (teammate and
   non-teammate sightings across the own room, neighbours and far rooms; bodies; sabotage on or off;
   in-vent streaks of 1 to 6 rows with or without a meeting boundary inside), every intent is `vent`
   or `wait`. At an inside-count of 4 or more it is `vent`. Repeated calls, and permuted
   `room_neighbors` and `vent_graph` listings, give the same intent. Perturbed: a copy with the cap
   check removed fails the property.
-- [ ] **The default is untouched.** `git diff --stat main...HEAD -- agents/tactical/impostor_policy.py`
+- [x] **The default is untouched.** `git diff --stat main...HEAD -- agents/tactical/impostor_policy.py`
   is empty. `TestCommittedCorpusTargetingPins` in `tests/agents/test_impostor_policy.py` passes
   unedited: on s9, 1754 decisions reconstructed, 109 in-vent, 9/232 free kills declined, and 223
   recorded kills reproduced; these are measured at `e886b663` and re-measured at dispatch. The
   `observed_risk` tests in `tests/agents/test_tactical_experiments.py` pass unedited.
   `publish_process_scorecard.py --check` and `publish_gameplay_census.py --check` pass unchanged.
-- [ ] **Reconstructible from memory.** A fake 9p2i game recorded with both values ON is reconstructed
+- [x] **Reconstructible from memory.** A fake 9p2i game recorded with both values ON is reconstructed
   by evidence honesty with the recorded policy with 0 decision mismatches (the capability the
   readers card lands); reconstructed with the default policy it shows more than 0. Tests in
   `tests/experiments/test_vent_look_and_wait_game.py` (new, this card only).
-- [ ] **Wiring and determinism** (same file). `HeadlessGame` built with either value alone builds
+- [x] **Wiring and determinism** (same file). `HeadlessGame` built with either value alone builds
   `ExperimentalImpostorPolicy`, and `has_tactical_changes` is true for `own_fresh_kill` alone. The
   fake game recorded twice is byte identical. It loads through the plain `ReplayLoader` with
   `outcome_verified` true, and its tick rows carry both keys. A default config serializes without
@@ -253,7 +320,7 @@ behaviour it contrasts with, so it proves the defect it claims.
   raises. Planted: a config with only `vent_entry_policy="own_fresh_kill"` fails the test if the
   default `ImpostorPolicy` is built for it (patched into the factory), and a copy of the second
   recording with one tick row's state hash edited fails the byte comparison.
-- [ ] **The census reads 0 on a game built with the arms** (same file). A fake 9p2i game on a
+- [x] **The census reads 0 on a game built with the arms** (same file). A fake 9p2i game on a
   development seed, with both values and the physical rule ON, reads 0 on the three B1 conformance
   cells of `eval/gameplay_census.py`: surfacings before the cap with a non-teammate in the
   inferred-visible set; trips longer than the cap; entries not after the impostor's own fresh kill.
@@ -261,12 +328,12 @@ behaviour it contrasts with, so it proves the defect it claims.
   pass vacuously. A perturbed copy of the carrier raises on each cell: one surfacing moved to a
   watched tick, one stay extended past the cap, one entry re-keyed to a teammate's victim. The
   policy's window (3) and cap (4) constants are pinned equal to the census's named constants.
-- [ ] **The pending guard.** This card deletes exactly its two `WAVE_ARMS_PENDING` entries:
+- [x] **The pending guard.** This card deletes exactly its two `WAVE_ARMS_PENDING` entries:
   `vent_exit_policy` `look_and_wait` and `vent_entry_policy` `own_fresh_kill`. Configs carrying
   them validate. The spine's refusal test, parametrized from the mapping's live contents, still
   refuses every value left pending at this card's head (the body-handle and ballot values,
   whichever have not merged), with no edit to `tests/orchestrator/test_experiment_arms.py`.
-- [ ] **The lab arms.** `candidate_configs()` in `experiments/tactical_gameplay.py` gains
+- [x] **The lab arms.** `candidate_configs()` in `experiments/tactical_gameplay.py` gains
   `vent_physical`, `vent_look_and_wait`, `vent_own_fresh_kill` and `stage_b_full`, plus four
   minus-one arms named after the value they drop: `stage_b_full_minus_look_and_wait`,
   `stage_b_full_minus_own_fresh_kill`, `stage_b_full_minus_physical` and
@@ -282,7 +349,7 @@ behaviour it contrasts with, so it proves the defect it claims.
   - Mechanism: a test that each minus-one arm's config differs from `stage_b_full` in exactly the
     field its name drops, set back to its default. Perturbed: a minus-one arm that drops a
     different field, or equals `stage_b_full`, fails it.
-- [ ] **The two lab walk profiles declare their layers.** Mechanism: the profiles derived from
+- [x] **The two lab walk profiles declare their layers.** Mechanism: the profiles derived from
   `current-report` with `replace` (`experiments/tactical_gameplay.py:199`, `:363`) set the spine's
   `threaded_layers` explicitly, never inheriting `current-report`'s, to the layers the lab reads,
   named in Results; the spine names this card as their owner. Proof, per profile: it reads the
@@ -291,7 +358,7 @@ behaviour it contrasts with, so it proves the defect it claims.
   with every hash verified, and it refuses a planted unknown field (a stand-in added to the config
   model and `FIELD_LAYER` in a layer the profile does not declare) by name before its first
   advance. Perturbed: a profile with its layer declaration removed refuses the full-config copy.
-- [ ] **The lab rows.** At this card's final head, which the harness's runtime fingerprint freezes
+- [x] **The lab rows.** At this card's final head, which the harness's runtime fingerprint freezes
   for the run, the development split only (seeds 1000-1007, both rosters, the lab's $0 limits)
   runs baseline, `vent_risk` and the eight arms, committed as
   `audits/tactical-gameplay/stage-b-development.json`. The record card re-runs the same arms at its
@@ -302,16 +369,16 @@ behaviour it contrasts with, so it proves the defect it claims.
   `observed_risk` path moved and stops the card. A new dated "Decisions and limits" row says
   `observed_risk` loses its mechanism when `look_and_wait` is adopted and its rows stay. The
   existing "Vent choice" row and every earlier row stay unedited. The held-out split is not run.
-- [ ] **The projection is re-measured at dispatch.** The three commands in Evidence, re-run at the
+- [x] **The projection is re-measured at dispatch.** The three commands in Evidence, re-run at the
   branch base with outputs outside the tree, reproduce 85, 62, 53 and 9; the ruled rows (7, 45, 33,
   8, and 7, 37, 32, 8); and the gate's 13 of 105. Any drift is recorded in Results with the command.
   If the scratch root is gone, the rule stated here rebuilds the wrapper, and the walk script is
   rewritten from the movement memo's description.
-- [ ] **Publication neutral.** `git diff --name-only main...HEAD` names no path under `api/`,
+- [x] **Publication neutral.** `git diff --name-only main...HEAD` names no path under `api/`,
   `frontend/`, `replays/` or `tests/fixtures/`, and leaves the featured list untouched. A demo bundle
   built at the base and at the head is byte identical (`diff -r`, Validation). Perturbed: the diff
   check flags a planted `frontend/` path in a scratch branch.
-- [ ] **The registry row follows the audit bytes.** The `audits/` row of `docs/artifacts.md`
+- [x] **The registry row follows the audit bytes.** The `audits/` row of `docs/artifacts.md`
   (`:109`, 26,635,440 tracked bytes / 329 files at `e886b663`) is recomputed with `git ls-files`
   as the last step, after the new section and JSON land and after the final merge of `main`. The offline `scripts/verify_ml_evidence.py` passes. Perturbed: with
   the row left stale, it fails on the byte count.
@@ -468,6 +535,746 @@ uv run python -m experiments.tactical_gameplay --split development --arms baseli
 
 ## Results
 
-Not started. At delivery: each acceptance item's evidence, the re-measured projection, the lab
-rows' fingerprint, the real `check.sh` exit code, the Decisions (the cap key, the registry row),
-and the limitations (a first-order projection, fake-game mechanics, no temporal-path claim).
+Implemented on `work/vent-look-and-wait` from `f98bfae9` (the wave-3 base: B0 #485, the readers
+#486 and the record plumbing #487 merged). Commits: `5b6f9db3` (the policy, the two pending
+removals, the emptied refusal, the unit tests and two follow-through test files), `74a205b6` (the
+lab arms, counters and profiles, the game-level tests, the lab parametrize and three pinned lab
+tests), `90d5f335` (the mutation pass's fixes: two redundant clauses removed, two lab predicates
+made pure helpers with planted cases, more planted policy cases), `dec380e0` (the committed lab
+rows, the README section and decisions row, the `audits/` registry row, the arm page's pending
+sentence, one stale test docstring) and the Results commit. The validation below ran at
+`dec380e0` in a bare shell (no `AILIBI_*` export) unless a line names another commit; the Results
+commit changes only this card and `tasks/README.md`.
+
+**Sections relied on.** `docs/architecture.md`: "Enforced boundaries" (the policy imports no
+engine module; the tests do, which `lint-imports` allows), "Determinism and the substrate
+ladder" (committed recordings stay byte-identical) and "Explicit cleanup experiments", which links
+the arm page `docs/experiment-arms.md` (the tactical layer, omit-at-default, the pending guard,
+walk-profile layers, frozen values). The decision memo `tasks/decision-2026-09-24-stage-b-wave.md`:
+0.3 items 3, 6 and 9, 0.4 (the entry-gate count and the policy-side sight), section 1 (adoption
+item 4, `observed_risk`), 2.2, 3.2 (the file map) and the card-7 brief in 3.4.
+`tasks/investigations-2026-09-24/orchestrator-vent-ruling.md` and `vent_movement_options.md`. The
+dated 2026-09-24 addendum to `tasks/direction-2026-09-19-process-over-outcome.md`, which records
+the reversal of `tasks/phase-11.md:65-68`.
+
+**What was built.**
+- `agents/tactical/experimental.py`, `ExperimentalImpostorPolicy` only:
+  - `vent_exit_policy = "look_and_wait"` is decided before the anchor, so nothing inside a vent
+    calls `_scored_targets` or `_decision_targets`. `inferred_visible_rooms` is the own room and
+    its map neighbours, or the own room alone while the freshest `global_status` reports any
+    sabotage. A watcher is a first-hand (`observed`) `saw_player` at the latest tick, in that set,
+    naming neither the impostor nor a fellow id from `self_state`. Before the cap: any watcher
+    means wait; otherwise surface at the current vent or a visible connected vent, keyed (body
+    there, the room fled from, vent id). At `IN_VENT_CAP_TICKS = 4`: surface by the ruled cap key,
+    clear before unseen before watched, then fewer watchers, no body, not the fled room, connected
+    before in place, vent id; body knowledge is limited to the inferred sight. The count is the
+    trailing run of in-vent `self_state` rows back to the last `meeting_boundary` row, so it
+    equals the census's ticks inside at the exit tick. Before the look it runs the anchor's own
+    row readers (`_refuse_rows_the_anchor_refuses`, review round 1), so a row the anchor refuses
+    in a vent raises the anchor's own error here too; no ranking is built.
+  - `vent_entry_policy = "own_fresh_kill"` replaces the cover vent with the default cover's move
+    unless an `own_kill` row names a victim whose body is sighted in the own room this tick, in
+    that room, with kill tick (row tick less one) at most `FRESH_KILL_WINDOW_TICKS = 3` before the
+    entry and no `meeting_boundary` at or after the row's tick. An event-time `own_kill` row
+    (temporal observations) raises rather than misdate the kill.
+  - `UNBUILT_OPTION_VALUES` is now empty; the refusal mechanism stays for the spine's
+    pending-equals-unbuilt test (Decision 3).
+- `orchestrator/experiment_config.py`: the two `WAVE_ARMS_PENDING` rows deleted, nothing else.
+- `experiments/tactical_gameplay.py`: the eight arms (`STAGE_B_FULL_SETTINGS`,
+  `STAGE_B_MINUS_ONE`), the count-only counters (room-left-only exits, in-vent waits, trips by
+  ticks inside, trips at the cap, in-place exits, entries not after an own fresh kill, meetings
+  opening with an impostor in a vent) on the census's definitions, and the two walk profiles as
+  named constants declaring `LAB_THREADED_LAYERS = {orchestrator, tactical, meeting}`: the lab
+  counts recorded actions, engine events and applied meeting results under verified hashes and
+  re-decides nothing, so every count keeps its meaning under any value in those layers.
+  `measure_identity_effects` still refuses every experimental recording before it walks.
+
+**Acceptance evidence** (tests in `tests/agents/test_vent_look_and_wait.py`, U, and
+`tests/experiments/test_vent_look_and_wait_game.py`, G).
+- Watched exit: U `test_a_watched_exit_makes_it_wait_then_it_surfaces_clear`
+  (`target_distance` -> ENGINEERING_VENT; wait; next tick ENGINEERING_VENT).
+- Blind exit: U `test_the_blind_exit_contrast` (from REACTOR_VENT, `target_distance` surfaces
+  blind; `look_and_wait` waits, then with every visible room clear surfaces in place even with
+  its own victim underfoot). Red on `target_distance`: with the look-and-wait branch disabled (a copy-edit-restore of
+  `agents/tactical/experimental.py`) the test fails at the wait assertion (`'vent' == 'wait'`),
+  and passes again once restored.
+- Watchers: U `test_a_non_teammate_in_its_own_room_forces_a_wait`,
+  `test_a_teammate_is_never_a_watcher` (ADMIN and its three neighbours; `target_distance` ->
+  MEDBAY_VENT), `test_the_teammate_list_comes_from_self_state`,
+  `test_a_sighting_that_is_not_first_hand_never_counts` (reported, inferred),
+  `test_a_sighting_of_itself_is_not_a_watcher`, `test_a_sighting_outside_its_inferred_sight_is_not_read`.
+- Cap: U `test_it_waits_before_the_cap_with_a_watcher_in_view[1-3]`,
+  `test_at_the_cap_it_surfaces_by_the_ruled_key` (STORAGE clear, ENGINEERING watched, REACTOR
+  unseen: in place; the literal key takes REACTOR_VENT; `target_distance` ENGINEERING_VENT), plus
+  one planted case per key term (`..._unseen_room_beats_a_watched_one`,
+  `..._fewer_watchers_win_within_the_watched_class`, `..._a_clear_room_without_a_body_beats_one_with`,
+  `..._a_room_other_than_the_one_fled_wins`, `..._a_connected_vent_in_the_same_room_beats_in_place`,
+  `..._two_unseen_rooms_fall_to_the_vent_id`; the fled-room, in-place and count terms use a small
+  hand-built map because on the canonical map every vent links one unseen room).
+  `test_a_meeting_boundary_inside_the_streak_restarts_the_count[1-3]`; perturbed:
+  `test_counting_from_the_entry_alone_fails_the_restart_case`; memory, not instance state:
+  `test_the_count_comes_from_memory_never_from_instance_state`, `test_an_earlier_trip_does_not_add_to_the_count`.
+- No steering: U `test_stale_target_sightings_do_not_steer_the_exit` (same `look_and_wait`
+  intent, `target_distance` REACTOR_VENT versus ENGINEERING_VENT) and
+  `test_the_in_vent_branch_never_reads_the_kill_ranking` (both ranking methods patched to raise).
+- Sabotage: U `test_under_a_sabotage_a_neighbour_counts_as_unseen[reactor|lights]` (in place
+  where base visibility waits; the census fold of that surfacing reads 0 of 1, and with the
+  crewmate in the own room raises the conformance error) and
+  `test_under_a_sabotage_a_body_in_a_neighbour_is_not_read_at_the_cap`.
+- Sight model: U `test_the_inferred_sight_equals_the_engines_at_base_and_under_lights` (every
+  canonical room, an in-vent impostor observer through `compute_visibility_for_player`; under a
+  reactor sabotage the inference is a strict subset); perturbed:
+  `test_an_adjacency_with_one_extra_neighbour_fails_the_pin` returns `["STORAGE/None"]`.
+- Entry gate: U teammate's victim, fresh control, across a meeting, a kill on the trigger tick
+  (perceived on the resume tick, after the boundary), witness under both values, wrong room,
+  victim's body next door, other body here, malformed rows, event-time row; the window through the
+  engine: `test_the_fresh_kill_window_counts_from_the_engines_kill_tick` runs a kill through
+  `advance_tick`, `ObservationService.build_packet` and `ingest_packet` and asserts a vent at kill
+  ages 1-3 and the walk-away at age 4, where `any_body` vents at every age.
+- Never stuck: U `test_it_is_never_stuck_and_always_deterministic` (`settings(deadline=None,
+  max_examples=300)`): every intent is `vent` or `wait`; at a count of
+  4 or more it is `vent`; before the cap it vents exactly when no non-teammate is sighted in the
+  inferred sight, and only into a room in that sight; repeat calls and a rotated, reversed
+  `room_neighbors`/`vent_graph` give the same intent. Perturbed:
+  `test_a_policy_without_the_cap_fails_the_property`.
+- Default untouched: `git diff --stat main...HEAD -- agents/tactical/impostor_policy.py` prints
+  nothing; `tests/agents/test_impostor_policy.py` and `tests/agents/test_tactical_experiments.py`
+  are unedited (`git diff --numstat` empty) and pass, `TestCommittedCorpusTargetingPins` included
+  (1754 decisions, 109 in-vent, 9/232 declined, 223 kills reproduced, its own pins). Scorecard
+  and census `--check` pass.
+- Reconstructible: G `test_honesty_reconstructs_the_recorded_policy_with_no_mismatch`. On the
+  seed-1003 recording (count-only, scratch script `b1_numbers.py`): recorded-arm fold 44 decisions,
+  10 in-vent, 0 mismatches; the default policy 44, 10, 11 mismatches.
+- Wiring: G `test_either_value_alone_builds_the_experimental_impostor[2]`, planted
+  `test_a_config_whose_entry_value_builds_the_default_policy_fails_the_wiring` (the tactical
+  layer blind to `vent_entry_policy`: the factory builds `ImpostorPolicy` and the check fails),
+  `test_both_values_build_and_validate_with_no_refusal`,
+  `test_the_b1_recording_repeats_byte_for_byte_and_loads_verified` (with the edited-hash copy),
+  `test_a_default_config_serializes_without_the_new_key`.
+- Census: G `test_the_census_reads_zero_on_the_b1_cells`: entries 0/4, surfacings before the cap
+  in view 0/3, trips longer than the cap 0/2 (forced surfacings 1/3, room-left-only 0/3); the three
+  perturbed carriers raise (`..._a_surfacing_moved_to_a_watched_tick_breaches`,
+  `..._a_stay_extended_past_the_cap_breaches`, `..._an_entry_rekeyed_to_a_teammates_victim_breaches`);
+  U `test_the_policys_window_and_cap_are_the_censuss`.
+- Pending guard: the two rows deleted; `_WAVE_CONFIG`-style configs with both values validate.
+  The spine's refusal tests (`test_validation_refuses_a_pending_value` and its siblings,
+  parametrized from the live mapping) are unedited and now run on the three values left
+  (report_body_handle_version 1, ballot_kill_row_version 1, impostor_ballot_version 1). See
+  Deviation 1 for the one other edit in that file.
+- Lab arms: `candidate_configs()` holds 17 arms; G `test_the_eight_arms_set_what_their_names_say`,
+  `test_each_minus_one_arm_drops_exactly_the_field_it_names`, perturbed
+  `test_a_minus_one_arm_that_drops_another_field_or_nothing_fails`; counters:
+  `test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000|stage_b_full-1005]`,
+  `test_an_entry_follows_its_own_fresh_kill_by_the_census_definition[10 cases]`,
+  `test_a_living_player_in_a_vent_is_one_the_census_reads`,
+  `test_measure_replay_hands_the_entry_check_the_kills_and_meetings_so_far`; the lab
+  parametrize gains the eight arms (each reconstructs in the API and repeats).
+- Lab profiles: both declare `{orchestrator, tactical, meeting}` (G
+  `test_each_lab_profile_is_current_report_plus_its_own_layers`,
+  `test_the_lab_profiles_never_inherit_the_current_report_layers` re-executes the module with a
+  layerless current-report profile, `test_each_lab_consumer_walks_with_its_profile`); each reads
+  the full-config copy (a fake 4p1i recording on physical, regroup and rebuttal, its rows and footer
+  rewritten with look_and_wait, own_fresh_kill, the body handle and both ballot values, the
+  pending set patched empty) with every hash verified and equal counts; each refuses a stand-in
+  field by name before its first advance (engine layer: by the helper; each declared layer:
+  once that layer is removed); perturbed: without its declaration each refuses the full-config
+  copy with no advance.
+- Lab rows: see the dated section of `audits/tactical-gameplay/README.md`. The committed JSON is
+  the review round's re-run: runtime fingerprint
+  `eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e`, git head `63980a00`. The
+  first run, at `90d5f335` (fingerprint
+  `9b7be845343c4af343ed7caeef559b5b8a48657838820be6d05fe90e61e8dbcd`), gave the same arm rows
+  (round-1 subsection). 160 games, none aborted. Baseline and `vent_risk` equal the
+  committed rows: 4p1i 22, 6/8, 48 and 25, 5/8, 48; 9p2i 96, 16/29, 294 and 106, 14/34, 308 (also
+  re-run at the base `f98bfae9` before any change: equal). The README's changes are additions
+  only (`git diff --numstat` 132 0 against `main` after round 1). The held-out split was not
+  run.
+- Projection: re-measured at `f98bfae9` into scratch (below).
+- Publication: `git diff --name-only main...HEAD` names no `api/`, `frontend/`, `replays/` or
+  `tests/fixtures/` path; bundles built at the base (a `git archive` of `f98bfae9`, replay mtimes
+  set to the worktree's, since the loader's `created_at` is the file mtime) and at the head are
+  identical (`diff -r` exit 0). Before the mtime sync the only differences were 14
+  `created_at` values in 9 files. Perturbed: the same check on a scratch branch carrying a
+  planted `frontend/PLANTED_PROBE.txt` exits 1 and names it (branch deleted afterwards).
+- Registry row: `audits/` 26,636,557 bytes / 329 files at `f98bfae9` -> 27,302,756 / 330 at
+  `dec380e0`, with the JSON and README staged (`git ls-files audits/`, sizes summed), and
+  27,303,392 / 330 after round 1 (below); `verify_ml_evidence.py` passes
+  (63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO); perturbed: the row left stale exits 1 ("promises
+  329 files, the index tracks 330"; "promises 26,636,557 tracked bytes, the tracked files contain
+  27,302,756 bytes").
+
+**Red before.** On the base tree the two new test modules fail to import (`true_base_red.sh`:
+the three production files swapped for `f98bfae9`'s, 2 collection errors, then restored from
+copies and compared). With the head code and the spine's refusal planted back (a pytest plugin
+restoring both values to `UNBUILT_OPTION_VALUES` and `WAVE_ARMS_PENDING`): U 56 failed, 4 passed
+(the sight pin, its perturbation, the unknown-room refusal and the constant pin, which build no
+policy), and G fails at collection (its module-level config is refused).
+
+**The projection, re-measured at `f98bfae9`** (outputs in the scratch directory, never the tree):
+
+```sh
+S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-b1-impl/walk2.json
+python3 $S/card_vlw/s9_ruled.py $S/vlw-b1-impl/walk2.json
+python3 $S/refute_vent/r4.py $S/vlw-b1-impl/walk2.json
+```
+
+`walk2.json` is byte-identical to the card's and the memo's walks (sha256 `cff6b3b8...`).
+s9: 85 trips, 62 seen under both rooms, 53 from the exit room (so 9 only from the room left);
+ruled wait, exit field only: physical 7 seen, 45 clear, 33 inside at a meeting, 8 forced;
+both-rooms 8, 44, 33, 8; ruled wait and entry gate, physical: 76 trips, 7, 37, 32, 8; the gate
+keeps 92 of 105 entries (removes 13); pooled 103 of 587. Pooled ruled key (blind last at the cap)
+20 seen exits, literal key 36; hidden travel on s9, 1 seen. No drift. Hidden travel stays the
+priced escalation and the status quo (`target_distance`, `any_body`) the fallback, as Evidence
+states.
+
+**Neuter and mutation pass.** One harness (`run_mutants.py`, scratch) applies each edit to a
+production file, runs the targeted suites (`tests/agents/test_vent_look_and_wait.py` and
+`tests/experiments/test_vent_look_and_wait_game.py`; for the lab also
+`tests/experiments/test_tactical_gameplay.py`; for the config also both
+`tests/orchestrator/test_experiment_*` files) with `-x -n 4`, restores the file from an in-memory
+copy and checks its sha256. Round 1 (at `74a205b6`, 122 mutants: 110 killed) first came back green on 11:
+P33 (the gate's `anchor.type == "vent"`), P56 and P68 (the vent-id tie-break), L30 and L47 (the
+counters' impostor-role clauses), L39, L40, L42, L43 and L44 (the entry count's killer, room,
+upper-bound and meeting clauses and its meeting-tick collection) and L48 (the vent-at-open alive
+clause); P43 had an ambiguous anchor. Fixes at `90d5f335`: P33, L30 and L47 were redundant and are
+deleted; the entry count and the vent-at-open predicate became pure helpers with planted cases.
+Round 2 (125 mutants, every file restored): 122 killed, 3 equivalent.
+
+| id | class | edit | first red test |
+| --- | --- | --- | --- |
+| P01 | N | fresh-kill window 3 -> 2 | test_the_policys_window_and_cap_are_the_censuss |
+| P02 | N | fresh-kill window 3 -> 4 | test_the_policys_window_and_cap_are_the_censuss |
+| P03 | N | cap 4 -> 3 | test_it_waits_before_the_cap_with_a_watcher_in_view[3] |
+| P04 | N | cap 4 -> 5 | test_the_policys_window_and_cap_are_the_censuss |
+| P05 | N | boundary kind renamed | test_a_meeting_boundary_inside_the_streak_restarts_the_count[1] |
+| P06 | N | own_kill row lag 1 -> 0 | test_the_fresh_kill_window_counts_from_the_engines_kill_tick |
+| P07 | N | event-time key renamed | test_an_event_time_own_kill_row_is_refused |
+| P08 | N | look_and_wait back in UNBUILT_OPTION_VALUES | test_a_watched_exit_makes_it_wait_then_it_surfaces_clear |
+| P10 | M3 | unknown-room refusal disabled | test_an_unknown_room_has_no_inferred_sight |
+| P11 | M5 | unknown-room message room -> constant | test_an_unknown_room_has_no_inferred_sight |
+| P12 | M7 | sabotage sight branches swapped | test_at_the_cap_an_unseen_room_beats_a_watched_one |
+| P13 | M1 | neighbours dropped from base sight | test_a_clear_connected_room_beats_the_room_it_fled |
+| P14 | N | sabotage branch deleted | test_an_adjacency_with_one_extra_neighbour_fails_the_pin |
+| P15 | M8 | map neighbours -> canonical literal | test_an_adjacency_with_one_extra_neighbour_fails_the_pin |
+| P20 | M1 | watcher kind filter dropped | test_a_teammate_is_never_a_watcher[WEST_HALL] |
+| P21 | M1 | provenance filter dropped | test_a_sighting_that_is_not_first_hand_never_counts[reported] |
+| P22 | M1 | not-watcher filter dropped | test_a_teammate_is_never_a_watcher[ADMIN] |
+| P23 | M1 | visible-room filter dropped | test_a_watched_exit_makes_it_wait_then_it_surfaces_clear |
+| P24 | N | watcher count -> 1 | test_at_the_cap_fewer_watchers_win_within_the_watched_class |
+| P25 | M4 | observed provenance -> reported | test_a_watched_exit_makes_it_wait_then_it_surfaces_clear |
+| P30 | M3 | look_and_wait test inverted | test_a_watched_exit_makes_it_wait_then_it_surfaces_clear |
+| P31 | N | in-vent test dropped | test_honesty_reconstructs_the_recorded_policy_with_no_mismatch |
+| P32 | M3 | self_state None test inverted | test_memory_the_anchor_refuses_is_refused |
+| P37 | M4 | entry tick -> 0 | test_the_fresh_kill_window_counts_from_the_engines_kill_tick |
+| P38 | M4 | own room -> STORAGE | test_the_census_reads_zero_on_the_b1_cells |
+| P40 | N | cooldown refusal deleted | test_an_in_vent_memory_without_a_cooldown_reading_raises |
+| P41 | M3 | no-vent refusal disabled | test_an_in_vent_impostor_in_a_room_with_no_vent_raises |
+| P42 | M5 | no-vent message room -> constant | test_an_in_vent_impostor_in_a_room_with_no_vent_raises |
+| P44 | N | unmapped-vent refusal deleted | test_a_connected_vent_with_no_room_raises |
+| P45 | M5 | unmapped message -> constant | test_a_connected_vent_with_no_room_raises |
+| P46 | M4 | sabotage read -> False | test_under_a_sabotage_a_neighbour_counts_as_unseen[reactor] |
+| P47 | M1 | fellow impostors dropped from not-watchers | test_a_teammate_is_never_a_watcher[WEST_HALL] |
+| P48 | M1 | self dropped from not-watchers | test_a_sighting_of_itself_is_not_a_watcher |
+| P49 | M1 | bodies not limited to sight | test_under_a_sabotage_a_body_in_a_neighbour_is_not_read_at_the_cap |
+| P50 | M3 | cap >= -> > | test_the_count_comes_from_memory_never_from_instance_state |
+| P51 | M4 | fled room -> STORAGE | test_at_the_cap_a_room_other_than_the_one_fled_wins |
+| P52 | M7 | wait branch inverted | test_a_watched_exit_makes_it_wait_then_it_surfaces_clear |
+| P53 | M1 | blind connected vents made candidates | test_the_blind_exit_contrast |
+| P54 | M6 | clear key: body term dropped | test_a_clear_room_with_a_body_loses_to_one_without |
+| P55 | M6 | clear key: fled term dropped | test_a_clear_connected_room_beats_the_room_it_fled |
+| P56 | M6 | clear key: vent id dropped | equivalent: candidates are the current vent then sorted connected vents, and the current vent is its room's smallest id, so the first minimum found is the smallest id |
+| P57 | M1 | in place dropped from candidates | test_a_clear_room_with_a_body_loses_to_one_without |
+| P60 | M7 | clear and unseen classes swapped | test_at_the_cap_a_clear_room_without_a_body_beats_one_with |
+| P61 | N | watched class -> 0 | test_under_a_sabotage_a_body_in_a_neighbour_is_not_read_at_the_cap |
+| P62 | M3 | visible test inverted | test_at_the_cap_it_surfaces_by_the_ruled_key |
+| P63 | M4 | sighted count -> 0 | test_under_a_sabotage_a_body_in_a_neighbour_is_not_read_at_the_cap |
+| P64 | M6 | cap key: count term dropped | test_at_the_cap_fewer_watchers_win_within_the_watched_class |
+| P65 | M6 | cap key: body term dropped | test_at_the_cap_a_clear_room_without_a_body_beats_one_with |
+| P66 | M6 | cap key: fled term dropped | test_at_the_cap_a_room_other_than_the_one_fled_wins |
+| P67 | M6 | cap key: in-place term dropped | test_at_the_cap_a_connected_vent_in_the_same_room_beats_in_place |
+| P68 | M6 | cap key: vent id dropped | equivalent: same as P56 for the cap candidates |
+| P69 | M6 | cap key: class term dropped | test_at_the_cap_a_clear_room_without_a_body_beats_one_with |
+| P70 | M1 | in place dropped at the cap | test_at_the_cap_a_clear_room_without_a_body_beats_one_with |
+| P80 | M1 | boundary stop dropped | test_a_meeting_boundary_inside_the_streak_restarts_the_count[1] |
+| P81 | M1 | self_state filter dropped | test_at_the_cap_it_surfaces_by_the_ruled_key |
+| P82 | M7 | out-of-vent row: break -> continue | test_an_earlier_trip_does_not_add_to_the_count |
+| P83 | N | count + 1 | test_a_meeting_boundary_inside_the_streak_restarts_the_count[1] |
+| P90 | M1 | boundary max over every row | test_a_fresh_own_kill_vents_exactly_as_any_body_does |
+| P91 | M1 | victims not limited to own room | test_an_own_victim_sighted_in_a_neighbour_is_not_this_body |
+| P92 | M4 | victim room -> STORAGE | test_the_census_reads_zero_on_the_b1_cells |
+| P93 | M1 | own_kill kind filter dropped | test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting |
+| P94 | N | event-time refusal disabled | test_an_event_time_own_kill_row_is_refused |
+| P95 | M1 | malformed test: room clause dropped | test_a_malformed_own_kill_row_raises[payload1] |
+| P96 | M1 | malformed test: victim clause dropped | test_a_malformed_own_kill_row_raises[payload0] |
+| P97 | M5 | malformed message payload -> constant | test_a_malformed_own_kill_row_raises[payload0] |
+| P98 | M4 | kill tick -> 0 | test_a_fresh_own_kill_vents_exactly_as_any_body_does |
+| P99 | M3 | window > -> >= | test_the_fresh_kill_window_counts_from_the_engines_kill_tick |
+| PA0 | M3 | boundary >= -> > | test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting |
+| PA1 | M3 | boundary test -> is None | test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting |
+| PA2 | M1 | kill-room clause dropped | test_an_own_kill_row_in_another_room_is_not_this_body |
+| PA3 | M1 | victim clause dropped | test_an_own_victim_whose_body_is_not_here_is_not_this_body |
+| PA4 | N | fresh match returns False | test_a_fresh_own_kill_vents_exactly_as_any_body_does |
+| PA5 | M4 | own_kill room -> STORAGE | test_an_own_kill_row_in_another_room_is_not_this_body |
+| C01 | N | vent_exit_policy back in WAVE_ARMS_PENDING | G at collection (its B1 config is refused) |
+| C02 | N | vent_entry_policy back in WAVE_ARMS_PENDING | G at collection (its B1 config is refused) |
+| L01 | M6 | orchestrator dropped from LAB_THREADED_LAYERS | test_each_lab_profile_is_current_report_plus_its_own_layers[tactical-mechanisms] |
+| L02 | M6 | tactical dropped | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L03 | M6 | meeting dropped | test_each_lab_profile_is_current_report_plus_its_own_layers[tactical-mechanisms] |
+| L04 | M5 | seat-effects profile renamed | test_each_lab_profile_is_current_report_plus_its_own_layers[tactical-seat-effects] |
+| L05 | N | seat-effects layers inherited | test_the_lab_profiles_never_inherit_the_current_report_layers |
+| L06 | N | mechanisms layers inherited | test_the_lab_profiles_never_inherit_the_current_report_layers |
+| L07 | M5 | mechanisms profile renamed | test_each_lab_profile_is_current_report_plus_its_own_layers[tactical-mechanisms] |
+| L08 | M2 | identity walk -> mechanisms profile | test_each_lab_consumer_walks_with_its_profile |
+| L09 | M2 | mechanisms walk -> seat-effects profile | test_without_its_declaration_a_lab_profile_refuses_the_full_config_copy[tactical-mechanisms] |
+| L10 | N | physical dropped from stage_b_full | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L11 | N | look_and_wait dropped from stage_b_full | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L12 | N | own_fresh_kill dropped from stage_b_full | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L13 | N | regroup dropped from stage_b_full | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L14 | N | minus-look arm drops the entry field | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L15 | N | minus-own arm drops the exit field | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L16 | N | minus-physical arm drops the reset | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L17 | N | minus-regroup arm drops the rule | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L18 | N | vent_physical -> default | test_the_eight_arms_set_what_their_names_say |
+| L19 | N | vent_look_and_wait -> observed_risk | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L20 | N | vent_own_fresh_kill -> default | test_the_eight_arms_set_what_their_names_say |
+| L21 | N | minus arms keep the value | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L22 | M1 | one minus arm dropped | test_each_minus_one_arm_drops_exactly_the_field_it_names |
+| L33 | N | kills never collected | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L34 | M1 | room-left-only -> any source sighting | test_the_lab_counters_agree_with_the_census[stage_b_full-1005] |
+| L35 | M4 | ticks inside -> 1 | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L36 | M3 | cap >= -> > | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L37 | M3 | in-place == inverted | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L38 | M4 | trip anchor -> 0 | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L44 | N | meeting ticks never collected | test_measure_replay_hands_the_entry_check_the_kills_and_meetings_so_far |
+| L45 | N | trip anchor not moved at a meeting | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L49 | M4 | ticks key -> constant | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| P34 | M4 | entry-policy test -> True | test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting |
+| P35 | N | fresh-kill test inverted | test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting |
+| P36 | N | gate returns the anchor | test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting |
+| P39 | M3 | entry-policy test inverted | test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting |
+| P43 | M1 | sorted() dropped on connected vents | equivalent: both keys end in the vent id, so min() does not depend on the candidates' order |
+| L31 | M4 | vent-wait kind test -> True | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L32 | N | vent-wait in_vent clause dropped | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L39 | M1 | entry check: killer clause dropped | test_an_entry_follows_its_own_fresh_kill_by_the_census_definition[kill4-meetings4-False] |
+| L40 | M1 | entry check: room clause dropped | test_an_entry_follows_its_own_fresh_kill_by_the_census_definition[kill5-meetings5-False] |
+| L41 | M1 | entry check: window floor dropped | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L42 | M3 | entry check: < -> <= | test_an_entry_follows_its_own_fresh_kill_by_the_census_definition[kill3-meetings3-False] |
+| L43 | M1 | entry check: meeting clause dropped | test_an_entry_follows_its_own_fresh_kill_by_the_census_definition[kill6-meetings6-False] |
+| L51 | M3 | entry check: meeting <= -> < | test_an_entry_follows_its_own_fresh_kill_by_the_census_definition[kill6-meetings6-False] |
+| L46 | M1 | in_vent clause dropped | test_a_living_player_in_a_vent_is_one_the_census_reads |
+| L48 | M1 | alive clause dropped | test_a_living_player_in_a_vent_is_one_the_census_reads |
+| L52 | M4 | entry check gets no kills | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L53 | M4 | entry check gets no meetings | test_measure_replay_hands_the_entry_check_the_kills_and_meetings_so_far |
+| L54 | N | entry count inverted | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+| L55 | N | vent-at-open count deleted | test_the_lab_counters_agree_with_the_census[vent_look_and_wait-1000] |
+
+Classes: N neuters an added line, row or argument; M1-M8 are the eight bounded operator classes
+(drop a filter or wrapper; swap a collection; a comparison to a None test or its inverse; a
+role, kind, room or tick read to a constant; a message argument to a constant; drop a tuple
+member; swap adjacent branches; a loaded source to its canonical literal). No other class was run.
+
+**Validation** (at `dec380e0`, exit codes captured directly):
+
+```sh
+bash scripts/check.sh; echo "check.sh exit=$?"   # check.sh exit=0: ruff, format, lint-imports, task docs,
+                                                 # prompts, mypy; pytest 9394 passed, 20 skipped, 3 xfailed;
+                                                 # frontend lint, tsc, vitest 559 passed, build
+uv run pytest -m campaign                        # 336 passed, 9417 deselected
+uv run pytest -n 6 --dist loadfile <the card's targeted list>   # 1018 passed, 3 xfailed
+bash scripts/verify_samples.sh <set>             # samples/9p2i 50, samples/4p1i 50, ml_corpus/9p2i 150,
+                                                 # ml_corpus/4p1i 50: all verified clean
+uv run python scripts/build_sample_report.py --sample-dir <set> --check   # all four consistent
+uv run python scripts/publish_process_scorecard.py --check   # consistent
+uv run python scripts/publish_gameplay_census.py --check     # consistent
+uv run python scripts/check_doc_facts.py                     # exit 0
+uv run python scripts/validate_task_docs.py                  # exit 0 (390 phase tasks, 88 work cards)
+uv run python scripts/verify_ml_evidence.py                  # exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO
+git diff --name-only main...HEAD                             # 13 paths, none under api/, frontend/,
+                                                             # replays/ or tests/fixtures/
+```
+
+Every exit code was written by the script itself right after each command (`validation.sh`,
+scratch). On the Results commit `validate_task_docs.py` and `check_doc_facts.py` were re-run
+(exit 0); `bash scripts/check.sh` at the pushed head is re-run and its exit code is recorded in the
+pull request.
+
+**Decisions.**
+1. The cap key is the one ruled on 2026-09-24. Within the pre-cap clear case the key is (body,
+   fled room, vent id); since an impostor never changes vents without surfacing, the fled room is
+   the vent's own room, so a visible clear connected room wins unless only it holds a body.
+2. Body knowledge at the cap is limited to the inferred sight, like the watchers: under a reactor
+   sabotage a body the engine still shows next door is not read.
+3. `UNBUILT_OPTION_VALUES` and its refusal stay, empty: `tests/orchestrator/test_experiment_arms.py`
+   (which this card was not to edit for the refusal tests) imports it for the spine's
+   pending-equals-unbuilt equality, and the card that deletes `WAVE_ARMS_PENDING` deletes it with
+   that test. The two refusal tests in `tests/orchestrator/test_experiment_config.py` and the two in
+   `tests/eval/test_recorded_arm_readers.py` now plant the spine's two values back, keeping each
+   test's claim (the guard refuses a listed value; a walk hands the recorded value to the builder).
+4. The own-fresh-kill gate refuses an event-time `own_kill` row: that path dates the row at the
+   kill tick, so the snapshot lag would misdate it. The round records temporal observations OFF.
+5. The lab profiles declare all three declarable layers, so an undeclared layer is proved on a
+   copy of each profile with one layer removed; the engine layer is the helper's.
+6. `stage_b_full` leaves out the round-1 rebuttal, body-handle and ballot fields (none acts on a
+   fake game's play).
+7. The registry row was recomputed with `git ls-files` after the section and JSON were staged, at
+   `dec380e0`; `main` had not moved when the branch was pushed.
+
+**Deviations.**
+1. Follow-through outside Expected scope, each forced by an acceptance item:
+   `tests/orchestrator/test_experiment_config.py` (the two unbuilt-refusal tests plant the values;
+   the lab count 9 -> 17; the wave-settings test pins the nine pre-wave arms by name and
+   `stage_b_full`'s three wave settings; one test renamed from "unbuilt" to "look_and_wait"),
+   `tests/eval/test_recorded_arm_readers.py` (two refusal-reaching tests plant the values),
+   `tests/orchestrator/test_experiment_arms.py` (`test_the_lab_candidates_are_all_arms_that_exist_today`
+   asserted no lab arm dumps a Stage-B field, which the lab-arms item makes false; it now asserts no
+   lab arm carries a pending value; and its module docstring no longer says no arm behaviour
+   exists; the pending-guard refusal tests are unedited), and `docs/experiment-arms.md` (the
+   pending guard's list). No test was skipped, weakened or deleted.
+2. The Evidence's memo paths under `~/.claude/...` are read from `tasks/investigations-2026-09-24/`.
+
+**Limitations.**
+- The projection is first order: crew hold their recorded positions, so avoided counts are upper
+  bounds, and it does not model the lights refinement.
+- The lab rows are fake-game mechanics: fake meetings eject nobody, so impostors win almost every
+  9p2i game and no balance reading is possible; the 50-game record is the only balance measurement.
+- `look_and_wait` alone (with `any_body` entries) re-enters the vent after surfacing in place beside
+  a body. The round records both values together, where the entry gate bounds that loop but does
+  not remove it: an impostor that surfaces in place beside its own fresh kill may dive once more
+  while the kill is at most three ticks old, and a dive and a surfacing take two ticks, so that
+  happens at most once per kill
+  (`test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit`). On the
+  development games, 9p2i `stage_b_full` has 6 such re-entries among its 28 entries, each after
+  the impostor's own fresh kill and at most one per kill (15 of 43 without the gate, 64 of 91
+  with the look alone; the re-entry walk in the round-1 subsection). Removing the second dive
+  would change behaviour and is the owner's decision.
+- No claim about the unadopted temporal observation path; its event-time own-kill rows raise.
+- The bundle comparison was built on macOS.
+
+### Review corrections, round 1 (2026-09-26)
+
+Ten blocking findings from three verifier lenses (correctness, integrity, documentation) on
+`bfa922d3`, including the Codex P1 comment reproduced by two of them. Commits: `63980a00` (the
+policy's row checks and every planted case), `de376a5b` (the lab rows re-run at `63980a00`, the
+README's loop reading, the `audits/` registry row) and this Results commit. Status stays done.
+
+**Codex P1: valid, fixed.** Before its in-vent exit, `ImpostorPolicy.decide` refuses a memory that
+has a `self_state` on any of these malformed rows: the latest `self_state`'s room, pending task,
+fellow ids or `in_vent` flag; a missing or non-integer cooldown this tick; a `saw_body` room this
+tick; any `saw_body` victim; the subject or room of any `saw_player` row, of any provenance; the
+room of any `self_state` row (the refuted-lead scan); and an in-vent room with no vent. At
+`bfa922d3` the look's own reads met most of these, but it returned an intent on four kinds: the
+pending task, the room on earlier `self_state` rows, `saw_body` victims, and `saw_player` rows it
+never reads (earlier ticks, or not first-hand). `ExperimentalImpostorPolicy._refuse_rows_the_anchor_refuses`
+now runs the anchor's own readers over those rows before the look and builds no ranking, so
+`test_the_in_vent_branch_never_reads_the_kill_ranking` still holds. The comment in `decide` now
+says a memory with no `self_state` falls through to the anchor, which refuses it, and that inside
+a vent every row the anchor refuses before its exit is refused here too. Enforced by
+`test_a_row_the_anchor_refuses_is_refused_inside_a_vent` (six planted kinds, with the anchor's
+message), `test_without_the_row_checks_each_planted_row_fails_the_check` (perturbed: each
+planted memory decides once the checks are removed) and the property
+`test_every_row_the_anchor_refuses_in_a_vent_is_refused_by_the_look` (`settings(deadline=None,
+max_examples=300)`). The property takes a memory from the never-stuck family and malforms one row
+in one of eleven ways that cover the list above (a `self_state` room, latest or earlier, is one
+kind; a missing cooldown row and a non-integer cooldown are two). The anchor must raise, and the
+look must raise the same message.
+All eleven kinds are drawn in a 300-example run (`--hypothesis-show-statistics`), and the
+property alone goes red on R01 to R06, R09, R10 and R14 below. Valid memory is unaffected: the lab
+rows re-run identical, and the B1 recording's numbers re-measure unchanged (below).
+
+**Other findings.**
+- The entry gate's loop (Limitations): stated at the delivered strength in Limitations, in the
+  README's look-and-wait reading and in the Acceptance correction. The gate bounds the loop to
+  at most one re-entry per own kill inside the three-tick window. It does not remove it; removing
+  the second dive would change behaviour, which is an owner decision.
+  `test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit` pins the sequence
+  from REACTOR: vent at 11, surface in place at 12, re-enter at 13 (kill age 3), surface at 14,
+  walk away at 15, where `any_body` vents again. The count, from the re-entry walk below, is 9p2i
+  `stage_b_full` 6 re-entries of 28 entries, all 6 after the impostor's own fresh kill, at most 1
+  on any one kill. It is 15 of 43 under `stage_b_full_minus_own_fresh_kill` and 64 of 91 under
+  `vent_look_and_wait`, and 0 of 8 on 4p1i in each arm.
+- M2 survivor (exit bodies over every row), found by three lenses:
+  `test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key` covers a body reported at a
+  meeting, whose rows stay at earlier ticks while the impostor waits through the meeting. It has
+  four cases: the own room or the connected room reported, before the cap from STORAGE and at the
+  cap from ENGINEERING, where a crewmate in EAST_HALL makes only the cap key surface. Each case
+  also checks that the same memory with the body still in view picks the other vent.
+- M8 survivors (the pre-cap clear branch's canonical-map reads) and V09 (unmapped check on the
+  vent graph): `test_before_the_cap_the_pick_follows_the_loaded_map` on `_two_link_map` (VA; VB
+  with a body in A; VB with VA moved to the unseen C) and
+  `test_a_connected_vent_with_no_room_raises[True]` (GHOST_VENT also a graph key).
+- M7 survivor (the entry gate ahead of self-report): `test_self_report_runs_before_the_entry_gate`.
+- The vacuous planted hash edit: `test_the_b1_recording_repeats_byte_for_byte_and_loads_verified`
+  now splits the second recording's own bytes (the split alone re-joins to the first recording),
+  zeroes the one occurrence of the first tick row's `state_hash` in that line, and asserts the
+  copy differs from the first recording.
+
+**Changed expectations.** `test_a_connected_vent_with_no_room_raises` is parametrized: `[False]` is
+the original case unchanged, `[True]` adds the graph key. The determinism test's planted edit
+moved from a re-serialization to the raw bytes, with three added assertions. No test was
+weakened, skipped or deleted, and no other test file changed. `tests/agents/test_vent_look_and_wait.py`
+goes from 60 to 81 collected tests; `tests/experiments/test_vent_look_and_wait_game.py` stays at 45.
+
+**The lab rows re-run.** `agents/tactical/experimental.py` is hashed into the lab's runtime
+fingerprint, so the development rows were re-run at `63980a00` with the Validation command, into
+scratch, and copied into the committed path. Against the rows run at `90d5f335`, every arm row
+and every other field is identical except `git_head`, `source_sha256`, `measured_utc` and the two
+copy-timing medians of `world_copy_control`. The README section names the new fingerprint
+`eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e` and head. The commits after
+`63980a00` touch no hashed package, so it is also this card's final head's fingerprint.
+
+**Re-measured at `de376a5b`** (count-only, outputs in the scratch directory, never the tree):
+
+```sh
+S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+uv run python $S/vlw-fix-r1/reentry_count.py     # arms: stage_b_full, stage_b_full_minus_own_fresh_kill, vent_look_and_wait
+uv run python $S/vlw-fix-r1/b1_numbers.py        # the seed-1003 B1 recording
+PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-fix-r1/walk2-de376a5b.json
+python3 $S/card_vlw/s9_ruled.py $S/vlw-fix-r1/walk2-de376a5b.json
+python3 $S/refute_vent/r4.py $S/vlw-fix-r1/walk2-de376a5b.json
+```
+
+- `reentry_count.py` plays each arm on the development seeds with `run_candidate`, walks the
+  recording with `MECHANISMS_WALK_CONFIG`, and counts an entry as a re-entry when the same
+  impostor's last exit came back up in the room it left (source room equals destination room), at
+  most three ticks earlier, in the room it now enters from. It then reads
+  `entry_after_own_fresh_kill` and counts re-entries per matching kill. Output: 4p1i 8 entries
+  and no re-entries in each arm; 9p2i `stage_b_full` 28 entries, 6 re-entries, 6 after an own
+  fresh kill, at most 1 per kill; minus own fresh kill 43, 15, 6, 1; look alone 91, 64, 6, 1.
+- `b1_numbers.py`: recorded-arm fold 44 decisions, 10 in-vent, 0 mismatches; default policy 44,
+  10, 11; census cells 0/4, 0/3, 0/2, forced 1/3, room-left-only 0/3. Unchanged.
+- `walk2.json` is byte identical to the card's (sha256 `cff6b3b8...`), and the projection
+  reproduces: s9 85 trips, 62, 53 and 9; physical exit field only 7, 45, 33, 8; with the gate 76
+  trips, 7, 37, 32, 8; the gate keeps 92 of 105 entries; pooled 103 of 587 removed, ruled key 20
+  and literal key 36; hidden travel on s9, 1 seen. No drift.
+
+**Mutation pass, round 1.** The harness `vlw-fix-r1/run_mutants.py` (scratch) applies each edit,
+runs `tests/agents/test_vent_look_and_wait.py`, `tests/experiments/test_vent_look_and_wait_game.py`
+and `tests/agents/test_tactical_experiments.py` with `-x -n 4`, and restores the file from an
+in-memory copy, checking its sha256. It covered only the spans this round changed and the spans
+the findings name: 20 production edits (neuters and the listed classes) and one test probe,
+T01. Two columns are shown: the head
+column ran F01 to F06 and R01 to R06 against `bfa922d3`'s two test files (restored from copies
+afterwards, sha256 checked), and T01 against its own planted line. The fix column ran at
+`63980a00`'s tests. Production is `63980a00` in both columns. With `-x` over four workers the
+first red test is the first failure scheduled, so it can differ between runs.
+
+| id | class | edit | head tests | fix tests | first red test at the fix |
+| --- | --- | --- | --- | --- | --- |
+| F01 | M2 | exit bodies read over every row | green | red | test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key[before-the-cap-own-room-reported] |
+| F02 | M8 | pre-cap visible filter on the canonical vent rooms | green | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| F03 | M8 | pre-cap body key on the canonical vent rooms | green | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| F04 | M8 | pre-cap fled key on the canonical vent rooms | green | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| F05 | M2 | unmapped check reads the vent graph | green | red | test_a_connected_vent_with_no_room_raises[True] |
+| F06 | M7 | entry gate ahead of the self-report branch | green | red | test_self_report_runs_before_the_entry_gate |
+| R01 | N | row checks not called | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R02 | N | pending-task check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[pending task-...] |
+| R03 | N | `saw_body` victim scan dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_body victim-...] |
+| R04 | N | `self_state` room check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R05 | N | `saw_player` subject check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_player subject-...] |
+| R06 | N | `saw_player` room check dropped | green | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_player room-...] |
+| R07 | M1 | `self_state` kind filter dropped | - | red | test_a_watched_exit_makes_it_wait_then_it_surfaces_clear |
+| R08 | M1 | `saw_player` kind filter dropped | - | red | test_before_the_cap_the_pick_follows_the_loaded_map |
+| R09 | M2 | row loop over this tick's rows only | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R10 | M2 | victim scan over this tick's rows only | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_body victim-...] |
+| R11 | M4 | `self_state` kind read -> constant | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| R12 | M4 | `saw_player` kind read -> constant | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier saw_player subject-...] |
+| R13 | M7 | `self_state` and `saw_player` branch bodies swapped | - | red | test_a_sighting_that_is_not_first_hand_never_counts[reported] |
+| R14 | M2 | row checks handed this tick's rows only | - | red | test_a_row_the_anchor_refuses_is_refused_inside_a_vent[earlier self_state room-...] |
+| T01 | N | test probe: the planted hash edit removed | green | red | test_the_b1_recording_repeats_byte_for_byte_and_loads_verified |
+
+The probes that first came back green were F01 to F06 and T01 on the head's tests, reproducing the
+findings, and R01 to R06, where the head's tests held no malformed row (the red-before of the
+Codex fix). None survives at `63980a00`, and none is named equivalent. With the property as the
+only suite, R01 to R06, R09, R10 and R14 are each red on
+`test_every_row_the_anchor_refuses_in_a_vent_is_refused_by_the_look`. No other operator class was
+run.
+
+**Registry row.** `audits/` 27,302,756 / 330 at `dec380e0` -> 27,303,392 / 330 with the re-run
+JSON and the README reading staged (`git ls-files -s audits/` blob sizes summed; the working-tree
+`stat` sum agrees). `verify_ml_evidence.py` exits 0 (63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO).
+Perturbed, with the row left at 27,302,756 it exits 1 ("promises 27,302,756 tracked bytes, the
+tracked files contain 27,303,392 bytes"), and it passes again once restored from a copy.
+`tests/scripts/test_verify_ml_evidence.py` passes (86).
+
+**Validation, round 1** (at `de376a5b`, a bare shell with no `AILIBI_*` export; each exit code
+written by the script right after its command, `vlw-fix-r1/validation.sh` in scratch):
+
+```sh
+uv run pytest -m campaign                        # 336 passed, 9438 deselected
+uv run pytest -n 6 --dist loadfile <the card's targeted list>   # 1039 passed, 3 xfailed
+bash scripts/verify_samples.sh <set>             # samples/9p2i 50, samples/4p1i 50, ml_corpus/9p2i 150,
+                                                 # ml_corpus/4p1i 50: all verified clean
+uv run python scripts/build_sample_report.py --sample-dir <set> --check   # all four consistent
+uv run python scripts/publish_process_scorecard.py --check   # consistent
+uv run python scripts/publish_gameplay_census.py --check     # consistent
+uv run python scripts/check_doc_facts.py                     # exit 0
+uv run python scripts/validate_task_docs.py                  # exit 0 (390 phase tasks, 88 work cards)
+uv run python scripts/verify_ml_evidence.py                  # exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO
+git diff --name-only main...HEAD                             # 15 paths, none under api/, frontend/,
+                                                             # replays/ or tests/fixtures/
+```
+
+The runtime fingerprint at `de376a5b` recomputes to `eac202d4...`, the committed JSON's. The demo
+bundle built at `de376a5b` equals one built from a `git archive` of `f98bfae9` (replay mtimes set to
+the worktree's, as in the first round): `diff -r` exit 0 over 194 files. `bash scripts/check.sh`
+runs once, at the pushed head, after this commit; its exit code is in the pull request.
+
+**Closing greps** (on this commit's tree, case-insensitive): `git grep -n -i -E "removes? (that|the) loop|would refuse falls through"`
+hits only this paragraph, which quotes the pattern. `git grep -n -i "falls through to" --
+agents/tactical/experimental.py` has one hit, the new `decide` comment, which says the anchor
+refuses such a memory. `git grep -n "9b7be845"` hits only this card's Results: the first run's
+fingerprint under "Lab rows" and this paragraph.
+
+### Review corrections, round 2 (2026-09-26)
+
+Three blocking findings came from the round-2 verifiers (the correctness, integrity and
+documentation lenses) on `587c2674`. The first two name the same edit, the entry gate's walk-away
+room read replaced by a constant. Commits: `3d3240fc` (tests only) and this Results commit. No
+production file changed: `agents/tactical/experimental.py` is byte-identical to `63980a00`'s
+(sha256 `a5974635...`). The lab's runtime fingerprint therefore recomputes to `eac202d4...` at
+`3d3240fc`, and the committed lab rows stand. Status stays done.
+
+**Findings 1 and 2: the walk-away room (M4).** The gate's walk-away is
+`self._cover(public_map=public_map, own_room=own_room)`. Every gate case that reached it stood in
+STORAGE or REACTOR, and the first sorted neighbour of both is ENGINEERING. So a walk-away from a
+fixed STORAGE or REACTOR passed the targeted suites, and the broader runs the verifiers made. Three
+tests are new, and the cases they add are:
+- `test_the_walk_away_leaves_from_the_impostors_own_room`: one case per vent room of the canonical
+  map (ADMIN to EAST_HALL, ENGINEERING to EAST_HALL, LABS to MEDBAY, MEDBAY to LABS, REACTOR and
+  STORAGE to ENGINEERING). With a teammate's victim, `any_body` vents at that room's vent. The
+  gate's move equals `ImpostorPolicy._cover` for that room, and it goes to the listed neighbour.
+  With the impostor's own fresh kill in the same room, the gate vents exactly as `any_body` does.
+- `test_the_walk_away_cases_cover_every_vent_room`: the cases are exactly the map's vent rooms, and
+  they walk to more than one room, so a walk-away from any fixed room fails at least one case.
+- `test_the_walk_away_follows_the_loaded_maps_neighbours`: on a map where STORAGE also neighbours
+  CAFETERIA, the walk-away goes to CAFETERIA (the loaded map's first sorted neighbour), where the
+  canonical map gives ENGINEERING.
+
+**Finding 3: V04 and V09 (M2).** Both were killed with planted cases, not named equivalent:
+- V04: `test_the_look_reads_the_freshest_sabotage_status_even_from_an_earlier_tick[reactor|lights]`.
+  A sabotage status at 21, the tick-22 status row removed, and a crewmate sighted in ENGINEERING at
+  22. The impostor surfaces in place at STORAGE_VENT, because the freshest status says ENGINEERING
+  is unseen. With a tick-22 status reporting no sabotage it waits.
+- V09: `test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body`. The own victim's
+  body is sighted in STORAGE at 11, and at 12 the only body there is another's (the kill is two
+  ticks old). The gate walks away where `any_body` vents; with the victim's body still in view at
+  12 it vents.
+
+Neither memory is one perception builds. Perception appends one `global_status` per tick, and a
+body stays until a meeting, which the gate's boundary clause already excludes. Each case pins the
+read the docstring states, and its comment says it is planted. No recorded game's behaviour
+changes.
+
+**Changed expectations.** None. `_entry_memory` gains a `room` keyword that defaults to STORAGE,
+and its default body follows that room, so every existing case builds the same memory. Five
+tests are new (eleven collected cases). `tests/agents/test_vent_look_and_wait.py` goes from 81 to
+92 collected tests, and `tests/experiments/test_vent_look_and_wait_game.py` stays at 45. No test
+was weakened, skipped or deleted, and no other test file changed.
+
+**Mutation pass, round 2.** The harness is `vlw-fix-r2/run_mutants.py`, in scratch. It covers the
+spans the findings name (the gate's walk-away call and its gate call, the look's sabotage read, the
+gate's body read) with the listed operator classes, 16 production edits in all. Each edit runs
+`tests/agents/test_vent_look_and_wait.py`, `tests/experiments/test_vent_look_and_wait_game.py` and
+`tests/agents/test_tactical_experiments.py` with `-x -n 4`. The harness then restores the file
+from an in-memory copy and checks its sha256. The head column ran `587c2674`'s unit test file,
+copied back in place and then restored from a copy of this round's file (sha256 checked). The fix
+column ran at `3d3240fc`. Production is `587c2674`'s in both columns. A first per-case listing
+loaded an earlier mutant's bytecode (two same-size edits within one second), and it was discarded.
+Both scripts now delete the module's bytecode before each mutant and write none. Every row below
+comes from runs made after that change.
+
+| id | class | edit | head tests | fix tests | first red test at the fix |
+| --- | --- | --- | --- | --- | --- |
+| G01 | M4 | walk-away room read -> STORAGE (findings 1 and 2) | green | red | test_the_walk_away_leaves_from_the_impostors_own_room[ADMIN-EAST_HALL] |
+| G02 | M4 | walk-away room read -> REACTOR | green | red | test_the_walk_away_follows_the_loaded_maps_neighbours |
+| G03 | M4 | walk-away room read -> ADMIN | red | red | test_a_teammates_victim_makes_it_walk_away |
+| G04 | M8 | walk-away map -> the canonical map | green | red | test_the_walk_away_follows_the_loaded_maps_neighbours |
+| G05 | M4 | gate's room read -> STORAGE | red | red | test_the_walk_away_leaves_from_the_impostors_own_room[ADMIN-EAST_HALL] |
+| G06 | M4 | gate's tick read -> 0 | red | red | test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit |
+| G07 | M2 | gate call: this tick's rows -> every row | green | red | test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body |
+| G08 | M2 | gate call: every row -> this tick's rows | red | red | test_an_event_time_own_kill_row_is_refused |
+| G09 | M3 | gate test inverted | red | red | test_a_teammates_victim_makes_it_walk_away |
+| V04 | M2 | look's sabotage read over this tick's rows only (finding 3) | green | red | test_the_look_reads_the_freshest_sabotage_status_even_from_an_earlier_tick[reactor] |
+| S02 | M4 | look's sabotage read -> True | red | red | test_at_the_cap_an_unseen_room_beats_a_watched_one |
+| S03 | M4 | look's sabotage read -> False | red | red | test_under_a_sabotage_a_neighbour_counts_as_unseen[reactor] |
+| V09 | M2 | gate's body read over every row (finding 3) | green | red | test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body |
+| C02 | M1 | gate's body read: `saw_body` kind filter dropped | red | red | test_a_non_teammate_in_the_room_keeps_the_walk_away_under_both[None] |
+| C03 | M4 | gate's body read: kind -> `saw_player` | red | red | test_the_walk_away_leaves_from_the_impostors_own_room[STORAGE-ENGINEERING] |
+| C04 | M4 | gate's body read: room -> STORAGE | red | red | test_the_walk_away_leaves_from_the_impostors_own_room[ADMIN-EAST_HALL] |
+
+Six probes first came back green on `587c2674`'s tests: G01, G02, G04, G07, V04 and V09. G01 and
+G02 are the findings' edit, and V04 and V09 are the third finding's. G04 (the canonical map in
+place of the loaded one) and G07 (the call-site form of V09) were found by this pass over the
+named spans. All 16 are red at `3d3240fc`, and none is named equivalent. With `-x` over four
+workers, the first red test is the first failure scheduled, so it can differ between runs.
+
+`vlw-fix-r2/which_cases.py` (scratch) runs the new tests without `-x` and lists every red case.
+- G01 and G02: the ADMIN, ENGINEERING, LABS and MEDBAY cases (G02 also fails the loaded-map test).
+- G03: LABS, MEDBAY, REACTOR and STORAGE, and the loaded-map test.
+- G04: the loaded-map test.
+- V04: both parameters.
+- V09 and G07: the earlier-sighting test.
+
+No other operator class was run.
+
+**Re-measured at `3d3240fc`** (count-only; outputs in `vlw-fix-r2/`, in scratch, never in the
+tree). `b1_numbers.py` is round 1's script with its import path set to this worktree. Round 1's
+copy put another worktree's checkout first on that path; the numbers from this worktree equal
+round 1's:
+
+```sh
+S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+uv run python $S/vlw-fix-r2/reentry_count.py
+uv run python $S/vlw-fix-r2/b1_numbers.py
+PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-fix-r2/walk2-3d3240fc.json
+python3 $S/card_vlw/s9_ruled.py $S/vlw-fix-r2/walk2-3d3240fc.json
+python3 $S/refute_vent/r4.py $S/vlw-fix-r2/walk2-3d3240fc.json
+uv run python -c "from pathlib import Path; from experiments.tactical_gameplay import runtime_fingerprint; print(runtime_fingerprint(Path('.').resolve()))"
+```
+
+- Re-entries: 4p1i has 8 entries and no re-entries in each arm. On 9p2i, `stage_b_full` has 28
+  entries and 6 re-entries, all 6 after an own fresh kill, at most 1 per kill. The arm without
+  the gate has 43 entries and 15 re-entries; the look alone has 91 and 64.
+- B1 recording: the recorded-arm fold reads 44 decisions, 10 in-vent and 0 mismatches; the
+  default policy reads 44, 10 and 11. The census cells read 0/4, 0/3, 0/2, forced 1/3 and
+  room-left-only 0/3.
+- Projection: `walk2-3d3240fc.json` has sha256 `cff6b3b8...`, the card's. The `s9_ruled.py` and
+  `r4.py` outputs are identical to round 1's at `de376a5b` (`diff` empty). So the projection
+  stands: s9 has 85 trips, 62 seen, 53 from the exit room and 9 room-left only. The gate keeps 92
+  of 105 entries.
+- Fingerprint: `eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e`, the committed
+  JSON's.
+
+None of these numbers moved.
+
+**Validation, round 2** (at `3d3240fc`, in a bare shell with no `AILIBI_*` export).
+`vlw-fix-r2/validation.sh` (scratch) writes each exit code right after its command:
+
+```sh
+uv run pytest -m campaign                        # 336 passed, 9449 deselected
+uv run pytest -n 6 --dist loadfile <the card's targeted list>   # 1050 passed, 3 xfailed
+bash scripts/verify_samples.sh <set>             # samples/9p2i, samples/4p1i, ml_corpus/9p2i,
+                                                 # ml_corpus/4p1i: all exit 0, verified clean
+uv run python scripts/build_sample_report.py --sample-dir <set> --check   # all four exit 0
+uv run python scripts/publish_process_scorecard.py --check   # exit 0
+uv run python scripts/publish_gameplay_census.py --check     # exit 0
+uv run python scripts/check_doc_facts.py                     # exit 0
+uv run python scripts/validate_task_docs.py                  # exit 0 (390 phase tasks, 88 work cards)
+uv run python scripts/verify_ml_evidence.py                  # exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO
+git diff --name-only 587c2674 3d3240fc                       # tests/agents/test_vent_look_and_wait.py
+```
+
+The demo bundle built at `3d3240fc` equals one built from round 1's base copy of `f98bfae9`: `diff
+-r` exit 0 over 194 files. Before the build, `vlw-fix-r2/check_base.py` compared that copy blob by
+blob with `git ls-tree -r f98bfae9`: 2,334 blobs, none missing or different, and no extra file
+outside caches. Its replay mtimes were set to this worktree's first, as in round 1. No `audits/` or
+`tests/fixtures/` byte moved, so the registry row stays 27,303,392 / 330. On this Results commit,
+`validate_task_docs.py` and `check_doc_facts.py` were re-run (exit 0). `bash scripts/check.sh` runs
+once, at the pushed head, after this commit, and its exit code is in the pull request.
+
+**Closing greps** (on this commit's tree). The round changes no behaviour or vocabulary, so the
+greps look for stale statements about the test file:
+- `git grep -n "test_vent_look_and_wait" -- '*.md'` hits only this card.
+- `git grep -n "81 collected"` hits round 1's subsection, whose counts are pinned to its commits,
+  and this line, which quotes the pattern.
