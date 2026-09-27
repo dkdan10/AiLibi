@@ -462,7 +462,9 @@ class CommittedMeeting:
 
     ``roster`` is the living participants, ``trigger_kind`` is derived as the
     manager derives it, and each channel omits a participant with no rows, as
-    ``meetings.manager.MeetingManager`` builds its mappings.
+    ``meetings.manager.MeetingManager`` builds its mappings. ``regroup_ticks``
+    are the public regroup ticks the meeting ran with (empty without the regroup
+    reset), the relevance window production detected it with.
     """
 
     set_name: str
@@ -473,6 +475,7 @@ class CommittedMeeting:
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]]
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]]
+    regroup_ticks: frozenset[int] = frozenset()
 
     @property
     def name(self) -> str:
@@ -495,6 +498,7 @@ class CommittedMeeting:
             vent_witness_records=self.vent_witness_records,
             move_witness_records=self.move_witness_records,
             sighting_records=self.sighting_records,
+            regroup_ticks=self.regroup_ticks,
         )
 
 
@@ -526,7 +530,9 @@ def walk_committed_meetings(
     A recording's own settings are read as far as
     :data:`eval.recorded_settings.READABLE_SETTINGS` names them: the engine
     settings reach every advance through the walk's engine-arguments helper, the
-    meeting reset reaches every applied meeting, and the trigger settings reach
+    meeting reset reaches every applied meeting, the resume perception after it
+    (the walk's shared resume events), the post-meeting fold and each meeting's
+    ``regroup_ticks``, and the trigger settings reach
     :func:`meeting_trigger_kind`; the tactical and meeting settings reach the
     channels only as the recorded actions and turns. Any other recorded setting
     is refused before the first advance.
@@ -626,6 +632,7 @@ def walk_committed_meetings(
                                         for pid in living
                                     }
                                 ),
+                                regroup_ticks=walk_event.regroup_ticks,
                             )
                         )
                     elif isinstance(walk_event, MeetingApplied):

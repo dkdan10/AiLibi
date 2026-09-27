@@ -202,6 +202,26 @@ silent living players receive a whereabouts turn before voting. This gives
 otherwise unheard players an opportunity to state an account
 ([`meetings/manager.py`](../meetings/manager.py)).
 
+### regroup (the full meeting reset)
+
+What a meeting's close does under the recorded setting
+`meeting_reset = hub_with_grace`, when the meeting did not end the game. Every
+living player is placed in the meeting room; every corpse is cleared, reported
+or not; an impostor inside a vent is brought out; ongoing actions stop; and each
+living impostor's kill cooldown restarts at the map's value, so no kill is
+possible for that many ticks after the meeting. Task progress, button uses and
+an active sabotage survive it. The relocation is announced, not walked: every
+living player's memory records it, states it beside the meeting record and as
+its own step in the player's route. The first observations after it carry only
+the kills, vent entries and vent exits seen on the tick the meeting was called,
+because those were seen where they happened; a walk or a task step from that
+tick is not replayed from the meeting room. A sighting on the regroup's tick or
+the tick after it counts as evidence neither for nor against anyone's alibi.
+The setting is off by default
+([`engine/meeting_reset.py`](../engine/meeting_reset.py),
+[observation contract](observation-contract.md#the-regroup-reset),
+[experiment arms](experiment-arms.md)).
+
 ### endpoint-band whereabouts exemption
 
 The rule that a whereabouts claim is not treated as contradicted when the two

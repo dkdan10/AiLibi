@@ -161,3 +161,33 @@ boundary that survives the merge is a declared room change or a gap, which is a
 claim a listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
 interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled
 as a speaker's claim even if the viewer can independently inspect engine truth.
+
+## The regroup reset
+
+The recorded `meeting_reset = hub_with_grace` regroups the survivors when a
+meeting that did not end the game closes: every living player is placed in the
+meeting room, every corpse is cleared, the vents are emptied and each living
+impostor's kill cooldown restarts ([glossary](glossary.md#regroup-the-full-meeting-reset)).
+Two rules keep what an agent perceives true to that relocation.
+
+**The resume rule.** The first packets after a meeting are built from the
+state play resumes in and from the trigger tick's events. After a regroup the
+resume packet carries only the trigger tick's kills and vent entries and vent
+exits: their witnesses were fixed where the event happened, so the relocation
+cannot change who saw them. A trigger-tick walk or task step is dropped, because
+its view is gated on the observer's current position, which the regroup has
+moved to the meeting room. One helper composes the resume events for the live
+loop and for every reader of a recording
+(`orchestrator.replay.compose_resume_events`), and it reports the walks and task
+steps it dropped. Without a regroup the resume packet carries the trigger tick's
+events followed by the meeting's own, as it always has.
+
+**The announced regroup.** The `public_regroup` row is written into every living
+memory on the default evidence path as well as under evidence version 2, and
+never under evidence version 1. Wherever the row exists the memory states the
+regroup beside the meeting record and as its own step in the agent's route, and
+it folds the sightings the regroup produced (every other living player, in the
+meeting room) into one line. A sighting on a regroup's tick or the tick after it
+is not evidence about anyone's whereabouts: the meeting layer neither
+corroborates nor prosecutes an alibi with it, and a voter's own sighting there
+makes no ballot evidence row. It stays in the voter's memory.

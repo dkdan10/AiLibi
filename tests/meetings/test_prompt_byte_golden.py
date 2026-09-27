@@ -107,8 +107,12 @@ for the recorded settings, then ``bind_experiment``). A recorded stamp other tha
 the live default resolves only through an experiment arm the recording's own
 settings turn on (:func:`resolve_prompt_set`), and
 :func:`test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty`
-accepts such a stamp only when it equals that arm's stamp. The walk mirrors the
-live loop's current resume perception under the meeting reset.
+accepts such a stamp only when it equals that arm's stamp. Under the recorded
+regroup reset the walk takes the live loop's shared helpers: the resume events
+(:func:`orchestrator.replay.compose_resume_events`), the public regroup ticks
+handed to each meeting and its belief fold
+(:func:`orchestrator.replay.derive_regroup_ticks`) and the announced regroup
+written through the meeting fold's ``regroup_room``.
 """
 
 from __future__ import annotations
@@ -189,10 +193,14 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
+    compose_resume_events,
+    derive_regroup_ticks,
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
+    meeting_regrouped,
     read_all_entries,
     recorded_experiment_config,
+    regroup_room_for,
     require_legacy_observations,
 )
 from orchestrator.seeder import seed_initial_state
@@ -777,6 +785,9 @@ def walk_replay_meetings(
         )
         last_events: tuple[Any, ...] = ()
         meeting_index = 0
+        # The meetings that resumed play: each meeting's public regroup ticks
+        # derive from them exactly as the live loop derives them.
+        resumed_meeting_ticks: list[int] = []
         for entry in replay_entries:
             _ingest_tick(service, agents, state, last_events)
             actions = _deserialize_actions(entry.actions)
@@ -799,6 +810,7 @@ def walk_replay_meetings(
                 # walk exactly as ``_walk`` does (the two must stay consistent).
                 break
 
+            regroup_ticks = derive_regroup_ticks(recorded, resumed_meeting_ticks)
             reconstructed, result, body_id, trigger_kind = _run_recorded_meeting(
                 meeting_entry=meeting_entry,
                 seed=seed,
@@ -808,6 +820,7 @@ def walk_replay_meetings(
                 agents=agents,
                 renderers_for_set=renderers_for_set,
                 experiment_config=recorded,
+                regroup_ticks=regroup_ticks,
             )
             yield reconstructed
 
@@ -843,23 +856,32 @@ def walk_replay_meetings(
                 state=next_state,
                 agents=agents,
                 trigger_kind=trigger_kind,
+                regroup_ticks=regroup_ticks,
             )
             # Then the meeting-history fold, in the live loop's order
             # (``_notify_meeting_concluded`` runs after the belief fold), through
             # the same shared helper the replay loader and the evidence-honesty
-            # walk call — so the mirrors cannot drift. Inert to every rendered
-            # byte while the ``meeting_outcome_memory`` lever is OFF, which is
-            # the state every committed recording was made in.
+            # walk call — so the mirrors cannot drift. Under the recorded regroup
+            # reset the same fold writes the announced regroup.
             fold_meeting_outcome_into_memories(
                 result,
                 state=next_state,
                 memories={pid: agent.memory for pid, agent in agents.items()},
+                regroup_room=regroup_room_for(
+                    recorded, meeting_room=game_map.meeting.room
+                ),
             )
             state = next_state
             meeting_index += 1
             if state.phase == "GAME_OVER":
                 break
-            last_events = tuple(events) + tuple(post_events)
+            resumed_meeting_ticks.append(entry.tick)
+            # The live loop's resume events, through the one shared helper.
+            last_events = compose_resume_events(
+                tuple(events),
+                tuple(post_events),
+                regrouped=meeting_regrouped(recorded, phase_after=state.phase),
+            ).events
 
 
 def _run_recorded_meeting(
@@ -872,11 +894,14 @@ def _run_recorded_meeting(
     agents: Mapping[PlayerId, TacticalAgent],
     renderers_for_set: Mapping[str, PromptRenderers],
     experiment_config: RecordedExperimentConfig | None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> tuple[ReconstructedMeeting, MeetingResult, str | None, Any]:
     """Drive one recorded meeting through the real manager + stub client.
 
     ``experiment_config`` is the recording's own settings: they resolve its
     stamp, rebuild its trigger and select the manager's evidence profile.
+    ``regroup_ticks`` are the public regroup ticks before this meeting, handed
+    to the manager as the live runner hands them.
     """
 
     set_name = resolve_prompt_set(
@@ -936,6 +961,7 @@ def _run_recorded_meeting(
             impostor_count=sum(
                 1 for player in state.players.values() if player.role == "IMPOSTOR"
             ),
+            regroup_ticks=regroup_ticks,
         )
     )
     hit_prompts = frozenset(call.prompt for call in stub.calls if call.hit)

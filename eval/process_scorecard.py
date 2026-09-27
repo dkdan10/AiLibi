@@ -123,6 +123,7 @@ from eval.meeting_quality import (
     _rendered_suspicion_by_target_per_voter,
 )
 from eval.replay_walk import (
+    MeetingApplied,
     ReplayWalkConfig,
     TickAdvanced,
     TickOpened,
@@ -152,6 +153,7 @@ from meetings.schemas import (
     VoteBallot,
 )
 from meetings.transcript import maximal_stays
+from orchestrator.experiment_config import ConfigLayer
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 #: Bumped only when the published JSON changes shape in a way an older reader
@@ -770,13 +772,29 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
     )
 
 
+#: The layers whose recorded settings the route walk reads, beside the engine
+#: settings the walk's engine-arguments helper threads into every advance. The
+#: route is engine rooms only: a tactical setting reaches it as the recorded
+#: actions, a meeting setting as the recorded meeting result the walk applies,
+#: and of the orchestrator's settings the regroup reset reaches it through the
+#: applied meeting's state (:func:`walk_routes`) while the body-handle setting
+#: changes only trigger text, which the route never reads. The prompt, ballot
+#: and transcript folds read the recorded bytes through the eval report, not
+#: through this walk.
+SCORECARD_THREADED_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
+    {"orchestrator", "tactical", "meeting"}
+)
+
+
 def _walk_config() -> ReplayWalkConfig:
     """A state-hash-verifying profile: the route is ground truth or it is nothing.
 
     A violated hash raises rather than yielding a route the engine never
     produced — an instrument must never silently under-measure (AGENTS.md "no
     silent fallbacks"), and row 3's whole claim is that the route is the
-    engine's own.
+    engine's own. The profile reads the Stage-B settings of
+    :data:`SCORECARD_THREADED_LAYERS`, and refuses one of any other layer before
+    its first advance.
     """
 
     return ReplayWalkConfig(
@@ -785,6 +803,7 @@ def _walk_config() -> ReplayWalkConfig:
         verify_tick_hashes=True,
         supports_temporal_observations=True,
         supports_experiments=True,
+        threaded_layers=SCORECARD_THREADED_LAYERS,
     )
 
 
@@ -804,6 +823,12 @@ def walk_routes(
     an agent-frame tick 0 describes; without it a claim covering the game's
     first tick would read as unresolvable and, counted as false, would inflate
     the envelope census by 11 claims on the shipped 9p2i corpora.
+
+    A meeting tick's row is the applied meeting's state
+    (:class:`~eval.replay_walk.MeetingApplied`): the frame play resumes from and
+    the one an agent-frame claim for the resume tick describes. It keeps every
+    room without a regroup, and under the regroup reset it is the regrouped
+    frame, so a resume-tick claim naming the meeting room scores true.
     """
 
     config = _walk_config()
@@ -825,6 +850,10 @@ def walk_routes(
                     {pid: player.room for pid, player in event.state.players.items()},
                 )
             elif isinstance(event, TickAdvanced):
+                per_tick[event.entry.tick] = {
+                    pid: player.room for pid, player in event.state.players.items()
+                }
+            elif isinstance(event, MeetingApplied):
                 per_tick[event.entry.tick] = {
                     pid: player.room for pid, player in event.state.players.items()
                 }
@@ -1954,6 +1983,7 @@ __all__ = [
     "ROLE_CORRECTNESS_NOTE",
     "ROW_DEFINITIONS",
     "SCHEMA_VERSION",
+    "SCORECARD_THREADED_LAYERS",
     "AgentAuthoredRow",
     "ArgmaxIndependenceRow",
     "ContextCells",

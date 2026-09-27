@@ -272,9 +272,10 @@ def test_event_stream_shape_and_termination(
 def test_last_events_threading_matches_live_loop(
     tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
 ) -> None:
-    """TickOpened.last_events is the prior tick's events — or, across a meeting,
-    the pre-meeting play events plus the meeting's post-events (the exact
-    ``HeadlessGame._run_loop`` contract the leak/funnel packet folds rely on)."""
+    """TickOpened.last_events is the prior tick's events — or, across a meeting
+    without a regroup, the pre-meeting play events plus the meeting's post-events
+    (the exact ``HeadlessGame._run_loop`` contract the leak/funnel packet folds
+    rely on)."""
 
     seed, lines, _ = _meeting_game()
     path = _write_game(tmp_path, seed, lines)

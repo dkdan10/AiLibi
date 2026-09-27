@@ -41,8 +41,11 @@ the recorded meeting row and :func:`orchestrator.game.apply_meeting_result`
 ``None`` when absent — the engine stamps ``body_id=None`` on emergency
 triggers); stop at GAME_OVER. ``last_events`` is threaded exactly as
 ``orchestrator.game.HeadlessGame._run_loop`` threads it — the previous tick's
-events, or across a meeting the pre-meeting play events plus the meeting's
-post-events — so packet-building consumers see the live loop's contract.
+events, or across a meeting the resume events
+:func:`orchestrator.replay.compose_resume_events` composes (the pre-meeting play
+events plus the meeting's post-events, or after a regroup only the trigger
+tick's kill and vent events) — so packet-building consumers see the live loop's
+contract.
 
 Callers FOLD, never subclass: :func:`walk_replay` is a generator of typed
 per-tick events —
@@ -243,9 +246,13 @@ from orchestrator.replay import (
     WinnerSide,
     _state_hash,
     classify_action_dispositions,
+    compose_resume_events,
+    derive_regroup_ticks,
+    meeting_regrouped,
     read_all_entries,
     recorded_substrate_flags,
     recorded_temporal_observation_version,
+    regroup_room_for,
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
@@ -398,8 +405,10 @@ class TickOpened:
     """Before the advance: the recorded row, PRE-advance state, ``last_events``.
 
     ``last_events`` is exactly what the live loop hands ``build_packet`` on
-    this tick: the previous tick's events, or across a meeting the pre-meeting
-    play events plus the meeting's post-events.
+    this tick: the previous tick's events, or across a meeting the resume events
+    :func:`orchestrator.replay.compose_resume_events` composes -- the pre-meeting
+    play events plus the meeting's post-events, or after a regroup only the
+    trigger tick's kill and vent events.
     """
 
     entry: ReplayEntry
@@ -426,7 +435,10 @@ class MeetingOpened:
     ``events`` are the trigger tick's events; ``trigger`` is the tick's
     :class:`MeetingTriggeredEvent` (``None`` only on engine-invariant-breaking
     bytes) and ``body_id`` its reported body (``None`` for an emergency
-    meeting).
+    meeting). ``regroup_ticks`` are the public regroup ticks before this
+    meeting under the recording's settings
+    (:func:`orchestrator.replay.derive_regroup_ticks`), the set the live meeting
+    received; empty without the regroup reset.
     """
 
     entry: MeetingReplayEntry
@@ -434,11 +446,20 @@ class MeetingOpened:
     body_id: BodyId | None
     state: WorldState
     events: tuple[EngineEvent, ...]
+    regroup_ticks: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True)
 class MeetingApplied:
-    """After ``apply_meeting_result`` (and the profile's post-hash check)."""
+    """After ``apply_meeting_result`` (and the profile's post-hash check).
+
+    ``regroup_ticks`` repeats the meeting's :class:`MeetingOpened` set, the one
+    its post-meeting belief fold reads. ``regroup_room`` is the room the
+    recording's settings regroup the survivors into
+    (:func:`orchestrator.replay.regroup_room_for`), the argument a memory fold
+    hands :func:`orchestrator.replay.fold_meeting_outcome_into_memories`;
+    ``None`` without the regroup reset.
+    """
 
     entry: MeetingReplayEntry
     result: MeetingResult
@@ -446,6 +467,8 @@ class MeetingApplied:
     state: WorldState
     post_events: tuple[EngineEvent, ...]
     testimony_shapes: bool = False
+    regroup_ticks: frozenset[int] = frozenset()
+    regroup_room: str | None = None
 
 
 @dataclass(frozen=True)
@@ -645,6 +668,10 @@ def _walk_replay(
 
     hash_needed = config.verify_tick_hashes or config.verify_meeting_pre_hashes
     last_events: tuple[EngineEvent, ...] = ()
+    # The ticks of the meetings that resumed play: the source of each meeting's
+    # public regroup ticks, derived exactly as the live loop derives them.
+    resumed_meeting_ticks: list[int] = []
+    regroup_room = regroup_room_for(experiment, meeting_room=game_map.meeting.room)
     terminal_tick: int | None = None
     reconstructed_winner: WinnerSide | None = None
     reconstructed_reason: str | None = None
@@ -779,6 +806,7 @@ def _walk_replay(
             None,
         )
         body_id = trigger.body_id if trigger is not None else None
+        regroup_ticks = derive_regroup_ticks(experiment, resumed_meeting_ticks)
         if policy is not None:
             policy.open_meeting(state)
         yield MeetingOpened(
@@ -787,6 +815,7 @@ def _walk_replay(
             body_id=body_id,
             state=state,
             events=events,
+            regroup_ticks=regroup_ticks,
         )
 
         result = _meeting_result_from_entry(meeting_entry)
@@ -818,7 +847,10 @@ def _walk_replay(
             integrity.check_meeting_result(state, post_events)
         if policy is not None:
             policy.complete_meeting(
-                state=state, result=result, emergency=body_id is None
+                state=state,
+                result=result,
+                emergency=body_id is None,
+                regroup_ticks=regroup_ticks,
             )
         for event in post_events:
             if isinstance(event, GameOverEvent):
@@ -831,9 +863,17 @@ def _walk_replay(
             state=state,
             post_events=post_events,
             testimony_shapes=testimony_shapes,
+            regroup_ticks=regroup_ticks,
+            regroup_room=regroup_room,
         )
 
-        last_events = events + post_events
+        last_events = compose_resume_events(
+            events,
+            post_events,
+            regrouped=meeting_regrouped(experiment, phase_after=state.phase),
+        ).events
+        if state.phase == "PLAY":
+            resumed_meeting_ticks.append(entry.tick)
         if state.phase == "GAME_OVER":
             terminal_tick = entry.tick
             break

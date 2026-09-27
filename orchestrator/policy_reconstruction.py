@@ -9,10 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from agents.memory.episodic import EpisodicEvent
-from agents.memory.evidence_context import (
-    ingest_public_meeting_roster,
-    ingest_public_regroup,
-)
+from agents.memory.evidence_context import ingest_public_meeting_roster
 from engine.actions import Action
 from engine.events import EngineEvent
 from engine.world import Map, WorldState
@@ -31,6 +28,7 @@ from orchestrator.game import (
     build_default_agent_factory,
 )
 from orchestrator.observation_delivery import ingest_event_observations_for_memories
+from orchestrator.replay import fold_public_regroup, regroup_room_for
 
 
 class PolicyReconstructionMismatch(ValueError):
@@ -142,8 +140,20 @@ class PolicyReconstruction:
             )
 
     def complete_meeting(
-        self, *, state: WorldState, result: MeetingResult, emergency: bool
+        self,
+        *,
+        state: WorldState,
+        result: MeetingResult,
+        emergency: bool,
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> None:
+        """Run the live loop's post-meeting folds on the reconstructed agents.
+
+        ``regroup_ticks`` are the public regroup ticks the meeting ran with
+        (``orchestrator.replay.derive_regroup_ticks``), which the belief fold's
+        relevance window reads as the live loop's does.
+        """
+
         _absorb_meeting_beliefs(
             result=result,
             state=state,
@@ -153,6 +163,7 @@ class PolicyReconstruction:
             evidence_reasoning_version=self.experiment.evidence_reasoning_version,
             public_account_version=self.experiment.public_account_version,
             attributed_testimony_version=self.experiment.attributed_testimony_version,
+            regroup_ticks=regroup_ticks,
         )
         _notify_meeting_concluded(
             state=state,
@@ -161,12 +172,8 @@ class PolicyReconstruction:
             outcome=derive_meeting_outcome_summary(result),
             roster_impostor_count=self.roster_impostor_count,
         )
-        if self.experiment.meeting_reset == "hub_with_grace" and state.phase == "PLAY":
-            living = tuple(sorted(pid for pid, p in state.players.items() if p.alive))
-            for pid in living:
-                ingest_public_regroup(
-                    self.memories[pid],
-                    tick=state.tick,
-                    room=self.public_map.meeting_room,
-                    player_ids=living,
-                )
+        room = regroup_room_for(
+            self.experiment, meeting_room=self.public_map.meeting_room
+        )
+        if room is not None:
+            fold_public_regroup(self.memories, state=state, room=room)

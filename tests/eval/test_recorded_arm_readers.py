@@ -10,8 +10,8 @@ the readers the Stage-B readers card widened and for the ones it keeps refusing:
   arms-ON fake recordings with every hash verified, and refuse any other
   recorded setting by name before the first advance;
 * evidence honesty rebuilds each game's impostor decisions with the policy the
-  recording names, and refuses the meeting reset until that setting's own card
-  makes its room table coherent;
+  recording names, and reads the meeting reset since that setting's own card
+  made its room table coherent;
 * an event-level planted test threads a stand-in engine setting through the
   spine's engine-arguments helper and a stand-in engine that changes only the
   witness lists of vent exits, so every reader's call site is shown to take the
@@ -269,9 +269,9 @@ def test_each_reader_declares_its_fields_and_the_layers_they_cover() -> None:
         FUNNEL_READS,
         SOLVABILITY_READS,
         WIN_CONDITION_READS,
+        HONESTY_READS,
     ):
         assert reads == READABLE_SETTINGS
-    assert HONESTY_READS == READABLE_SETTINGS - {"meeting_reset"}
     assert layers_read(HONESTY_READS) == frozenset(
         {"orchestrator", "tactical", "meeting"}
     )
@@ -540,20 +540,15 @@ def test_a_later_settings_format_is_refused_by_name(
     assert "format_version=2" in str(got.value)
 
 
-def test_honesty_refuses_the_meeting_reset_until_its_room_table_is_coherent(
-    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("arm", ["reset", "reset_rebuttal"])
+def test_honesty_reads_the_meeting_reset_now_its_room_table_is_coherent(
+    recordings: dict[str, Path], arm: str
 ) -> None:
-    _refuse_every_advance(monkeypatch)
-    with pytest.raises(ValueError) as refused:
-        compute_evidence_honesty(recordings["reset"])
-    assert "replay profile 'evidence-honesty'" in str(refused.value)
-    assert "meeting_reset='hub_with_grace'" in str(refused.value)
-    with pytest.raises(ValueError) as rebuilt:
-        reconstruct_impostor_decisions(recordings["reset"], seed=_SEED)
-    assert str(rebuilt.value).startswith(
-        "replay profile 'evidence-honesty' does not read the recorded "
-        "meeting_reset='hub_with_grace'"
-    )
+    # The meeting-reset card lifted the refusal with its fix: the walk verifies
+    # every hash, the clock alignment passes on the regrouped frame, and the
+    # decision rebuild reads the same recording.
+    assert compute_evidence_honesty(recordings[arm]) is not None
+    assert reconstruct_impostor_decisions(recordings[arm], seed=_SEED)
 
 
 def test_the_refusal_checks_the_first_tick_and_passes_every_event_through(
