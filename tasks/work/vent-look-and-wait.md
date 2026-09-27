@@ -185,6 +185,31 @@ the test fails on the tree this card starts from, where building the policy with
 raises the spine's named refusal. Each item also asserts the `target_distance` / `any_body`
 behaviour it contrasts with, so it proves the defect it claims.
 
+- [x] Review correction (round 2, correctness lens): the entry gate's walk-away leaves from the
+  impostor's own room, in every vent room. `test_the_walk_away_leaves_from_the_impostors_own_room`
+  has one case per vent room of the canonical map (ADMIN and ENGINEERING to EAST_HALL, LABS to
+  MEDBAY, MEDBAY to LABS, REACTOR and STORAGE to ENGINEERING). Each case equals
+  `ImpostorPolicy._cover` for that room, where `any_body` vents at that room's vent.
+  `test_the_walk_away_cases_cover_every_vent_room` pins the cases to the map's vent rooms. A
+  walk-away from STORAGE whatever the room (mutation G01) is red on the ADMIN, ENGINEERING, LABS
+  and MEDBAY cases; at `587c2674` it passed all three targeted suites.
+- [x] Review correction (round 2, integrity lens): the same room read replaced by a constant is red
+  for each constant tried. STORAGE (G01) and REACTOR (G02) are red on the four cases whose
+  walk-away is not ENGINEERING, and ADMIN (G03) on the four whose walk-away is not EAST_HALL. In
+  the same cases the impostor's own fresh kill vents exactly as `any_body` does. The walk-away also
+  follows the loaded map: `test_the_walk_away_follows_the_loaded_maps_neighbours` gives STORAGE a
+  CAFETERIA neighbour, and the walk-away goes to CAFETERIA. The canonical map in place of the
+  loaded one (G04) is red there.
+- [x] Review correction (round 2, documentation lens): planted memories kill the two M2 survivors.
+  V04 (the look's sabotage read over this tick's rows only):
+  `test_the_look_reads_the_freshest_sabotage_status_even_from_an_earlier_tick[reactor|lights]`.
+  When the freshest status is the previous tick's and reports a sabotage, the impostor surfaces in
+  place; when a status on this tick reports none, it waits. V09 (the gate's body read over every
+  row): `test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body`. When the own
+  victim's body was sighted here only on the previous tick, the impostor walks away; with the body
+  still in view, it vents. Perception never builds either memory: it appends a status every tick,
+  and a body stays until a meeting, which the gate's boundary clause already excludes. So each case
+  pins the documented read; neither shows a behaviour a recorded game could reach.
 - [x] Review correction: the Limitations bullet and the README's look-and-wait reading say the
   entry gate bounds the in-place re-entry loop rather than removing it: at most one re-entry per
   own kill inside the three-tick window. Proof:
@@ -1100,3 +1125,156 @@ hits only this paragraph, which quotes the pattern. `git grep -n -i "falls throu
 agents/tactical/experimental.py` has one hit, the new `decide` comment, which says the anchor
 refuses such a memory. `git grep -n "9b7be845"` hits only this card's Results: the first run's
 fingerprint under "Lab rows" and this paragraph.
+
+### Review corrections, round 2 (2026-09-26)
+
+Three blocking findings came from the round-2 verifiers (the correctness, integrity and
+documentation lenses) on `587c2674`. The first two name the same edit, the entry gate's walk-away
+room read replaced by a constant. Commits: `3d3240fc` (tests only) and this Results commit. No
+production file changed: `agents/tactical/experimental.py` is byte-identical to `63980a00`'s
+(sha256 `a5974635...`). The lab's runtime fingerprint therefore recomputes to `eac202d4...` at
+`3d3240fc`, and the committed lab rows stand. Status stays done.
+
+**Findings 1 and 2: the walk-away room (M4).** The gate's walk-away is
+`self._cover(public_map=public_map, own_room=own_room)`. Every gate case that reached it stood in
+STORAGE or REACTOR, and the first sorted neighbour of both is ENGINEERING. So a walk-away from a
+fixed STORAGE or REACTOR passed the targeted suites, and the broader runs the verifiers made. Three
+tests are new, and the cases they add are:
+- `test_the_walk_away_leaves_from_the_impostors_own_room`: one case per vent room of the canonical
+  map (ADMIN to EAST_HALL, ENGINEERING to EAST_HALL, LABS to MEDBAY, MEDBAY to LABS, REACTOR and
+  STORAGE to ENGINEERING). With a teammate's victim, `any_body` vents at that room's vent. The
+  gate's move equals `ImpostorPolicy._cover` for that room, and it goes to the listed neighbour.
+  With the impostor's own fresh kill in the same room, the gate vents exactly as `any_body` does.
+- `test_the_walk_away_cases_cover_every_vent_room`: the cases are exactly the map's vent rooms, and
+  they walk to more than one room, so a walk-away from any fixed room fails at least one case.
+- `test_the_walk_away_follows_the_loaded_maps_neighbours`: on a map where STORAGE also neighbours
+  CAFETERIA, the walk-away goes to CAFETERIA (the loaded map's first sorted neighbour), where the
+  canonical map gives ENGINEERING.
+
+**Finding 3: V04 and V09 (M2).** Both were killed with planted cases, not named equivalent:
+- V04: `test_the_look_reads_the_freshest_sabotage_status_even_from_an_earlier_tick[reactor|lights]`.
+  A sabotage status at 21, the tick-22 status row removed, and a crewmate sighted in ENGINEERING at
+  22. The impostor surfaces in place at STORAGE_VENT, because the freshest status says ENGINEERING
+  is unseen. With a tick-22 status reporting no sabotage it waits.
+- V09: `test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body`. The own victim's
+  body is sighted in STORAGE at 11, and at 12 the only body there is another's (the kill is two
+  ticks old). The gate walks away where `any_body` vents; with the victim's body still in view at
+  12 it vents.
+
+Neither memory is one perception builds. Perception appends one `global_status` per tick, and a
+body stays until a meeting, which the gate's boundary clause already excludes. Each case pins the
+read the docstring states, and its comment says it is planted. No recorded game's behaviour
+changes.
+
+**Changed expectations.** None. `_entry_memory` gains a `room` keyword that defaults to STORAGE,
+and its default body follows that room, so every existing case builds the same memory. Five
+tests are new (eleven collected cases). `tests/agents/test_vent_look_and_wait.py` goes from 81 to
+92 collected tests, and `tests/experiments/test_vent_look_and_wait_game.py` stays at 45. No test
+was weakened, skipped or deleted, and no other test file changed.
+
+**Mutation pass, round 2.** The harness is `vlw-fix-r2/run_mutants.py`, in scratch. It covers the
+spans the findings name (the gate's walk-away call and its gate call, the look's sabotage read, the
+gate's body read) with the listed operator classes, 16 production edits in all. Each edit runs
+`tests/agents/test_vent_look_and_wait.py`, `tests/experiments/test_vent_look_and_wait_game.py` and
+`tests/agents/test_tactical_experiments.py` with `-x -n 4`. The harness then restores the file
+from an in-memory copy and checks its sha256. The head column ran `587c2674`'s unit test file,
+copied back in place and then restored from a copy of this round's file (sha256 checked). The fix
+column ran at `3d3240fc`. Production is `587c2674`'s in both columns. A first per-case listing
+loaded an earlier mutant's bytecode (two same-size edits within one second), and it was discarded.
+Both scripts now delete the module's bytecode before each mutant and write none. Every row below
+comes from runs made after that change.
+
+| id | class | edit | head tests | fix tests | first red test at the fix |
+| --- | --- | --- | --- | --- | --- |
+| G01 | M4 | walk-away room read -> STORAGE (findings 1 and 2) | green | red | test_the_walk_away_leaves_from_the_impostors_own_room[ADMIN-EAST_HALL] |
+| G02 | M4 | walk-away room read -> REACTOR | green | red | test_the_walk_away_follows_the_loaded_maps_neighbours |
+| G03 | M4 | walk-away room read -> ADMIN | red | red | test_a_teammates_victim_makes_it_walk_away |
+| G04 | M8 | walk-away map -> the canonical map | green | red | test_the_walk_away_follows_the_loaded_maps_neighbours |
+| G05 | M4 | gate's room read -> STORAGE | red | red | test_the_walk_away_leaves_from_the_impostors_own_room[ADMIN-EAST_HALL] |
+| G06 | M4 | gate's tick read -> 0 | red | red | test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit |
+| G07 | M2 | gate call: this tick's rows -> every row | green | red | test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body |
+| G08 | M2 | gate call: every row -> this tick's rows | red | red | test_an_event_time_own_kill_row_is_refused |
+| G09 | M3 | gate test inverted | red | red | test_a_teammates_victim_makes_it_walk_away |
+| V04 | M2 | look's sabotage read over this tick's rows only (finding 3) | green | red | test_the_look_reads_the_freshest_sabotage_status_even_from_an_earlier_tick[reactor] |
+| S02 | M4 | look's sabotage read -> True | red | red | test_at_the_cap_an_unseen_room_beats_a_watched_one |
+| S03 | M4 | look's sabotage read -> False | red | red | test_under_a_sabotage_a_neighbour_counts_as_unseen[reactor] |
+| V09 | M2 | gate's body read over every row (finding 3) | green | red | test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body |
+| C02 | M1 | gate's body read: `saw_body` kind filter dropped | red | red | test_a_non_teammate_in_the_room_keeps_the_walk_away_under_both[None] |
+| C03 | M4 | gate's body read: kind -> `saw_player` | red | red | test_the_walk_away_leaves_from_the_impostors_own_room[STORAGE-ENGINEERING] |
+| C04 | M4 | gate's body read: room -> STORAGE | red | red | test_the_walk_away_leaves_from_the_impostors_own_room[ADMIN-EAST_HALL] |
+
+Six probes first came back green on `587c2674`'s tests: G01, G02, G04, G07, V04 and V09. G01 and
+G02 are the findings' edit, and V04 and V09 are the third finding's. G04 (the canonical map in
+place of the loaded one) and G07 (the call-site form of V09) were found by this pass over the
+named spans. All 16 are red at `3d3240fc`, and none is named equivalent. With `-x` over four
+workers, the first red test is the first failure scheduled, so it can differ between runs.
+
+`vlw-fix-r2/which_cases.py` (scratch) runs the new tests without `-x` and lists every red case.
+- G01 and G02: the ADMIN, ENGINEERING, LABS and MEDBAY cases (G02 also fails the loaded-map test).
+- G03: LABS, MEDBAY, REACTOR and STORAGE, and the loaded-map test.
+- G04: the loaded-map test.
+- V04: both parameters.
+- V09 and G07: the earlier-sighting test.
+
+No other operator class was run.
+
+**Re-measured at `3d3240fc`** (count-only; outputs in `vlw-fix-r2/`, in scratch, never in the
+tree). `b1_numbers.py` is round 1's script with its import path set to this worktree. Round 1's
+copy put another worktree's checkout first on that path; the numbers from this worktree equal
+round 1's:
+
+```sh
+S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+uv run python $S/vlw-fix-r2/reentry_count.py
+uv run python $S/vlw-fix-r2/b1_numbers.py
+PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-fix-r2/walk2-3d3240fc.json
+python3 $S/card_vlw/s9_ruled.py $S/vlw-fix-r2/walk2-3d3240fc.json
+python3 $S/refute_vent/r4.py $S/vlw-fix-r2/walk2-3d3240fc.json
+uv run python -c "from pathlib import Path; from experiments.tactical_gameplay import runtime_fingerprint; print(runtime_fingerprint(Path('.').resolve()))"
+```
+
+- Re-entries: 4p1i has 8 entries and no re-entries in each arm. On 9p2i, `stage_b_full` has 28
+  entries and 6 re-entries, all 6 after an own fresh kill, at most 1 per kill. The arm without
+  the gate has 43 entries and 15 re-entries; the look alone has 91 and 64.
+- B1 recording: the recorded-arm fold reads 44 decisions, 10 in-vent and 0 mismatches; the
+  default policy reads 44, 10 and 11. The census cells read 0/4, 0/3, 0/2, forced 1/3 and
+  room-left-only 0/3.
+- Projection: `walk2-3d3240fc.json` has sha256 `cff6b3b8...`, the card's. The `s9_ruled.py` and
+  `r4.py` outputs are identical to round 1's at `de376a5b` (`diff` empty). So the projection
+  stands: s9 has 85 trips, 62 seen, 53 from the exit room and 9 room-left only. The gate keeps 92
+  of 105 entries.
+- Fingerprint: `eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e`, the committed
+  JSON's.
+
+None of these numbers moved.
+
+**Validation, round 2** (at `3d3240fc`, in a bare shell with no `AILIBI_*` export).
+`vlw-fix-r2/validation.sh` (scratch) writes each exit code right after its command:
+
+```sh
+uv run pytest -m campaign                        # 336 passed, 9449 deselected
+uv run pytest -n 6 --dist loadfile <the card's targeted list>   # 1050 passed, 3 xfailed
+bash scripts/verify_samples.sh <set>             # samples/9p2i, samples/4p1i, ml_corpus/9p2i,
+                                                 # ml_corpus/4p1i: all exit 0, verified clean
+uv run python scripts/build_sample_report.py --sample-dir <set> --check   # all four exit 0
+uv run python scripts/publish_process_scorecard.py --check   # exit 0
+uv run python scripts/publish_gameplay_census.py --check     # exit 0
+uv run python scripts/check_doc_facts.py                     # exit 0
+uv run python scripts/validate_task_docs.py                  # exit 0 (390 phase tasks, 88 work cards)
+uv run python scripts/verify_ml_evidence.py                  # exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO
+git diff --name-only 587c2674 3d3240fc                       # tests/agents/test_vent_look_and_wait.py
+```
+
+The demo bundle built at `3d3240fc` equals one built from round 1's base copy of `f98bfae9`: `diff
+-r` exit 0 over 194 files. Before the build, `vlw-fix-r2/check_base.py` compared that copy blob by
+blob with `git ls-tree -r f98bfae9`: 2,334 blobs, none missing or different, and no extra file
+outside caches. Its replay mtimes were set to this worktree's first, as in round 1. No `audits/` or
+`tests/fixtures/` byte moved, so the registry row stays 27,303,392 / 330. On this Results commit,
+`validate_task_docs.py` and `check_doc_facts.py` were re-run (exit 0). `bash scripts/check.sh` runs
+once, at the pushed head, after this commit, and its exit code is in the pull request.
+
+**Closing greps** (on this commit's tree). The round changes no behaviour or vocabulary, so the
+greps look for stale statements about the test file:
+- `git grep -n "test_vent_look_and_wait" -- '*.md'` hits only this card.
+- `git grep -n "81 collected"` hits round 1's subsection, whose counts are pinned to its commits,
+  and this line, which quotes the pattern.
