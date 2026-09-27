@@ -62,6 +62,7 @@ from eval.evidence_honesty import (
     LIVE_POLICY_FOLD,
     RECORDED_ARM_POLICY_FOLD,
     EvidenceHonestyReconstructionError,
+    ReconstructedDecision,
     compute_evidence_honesty,
     live_impostor_policy,
     reconstruct_impostor_decisions,
@@ -445,8 +446,11 @@ def test_a_widened_reader_verifies_a_copy_carrying_every_wave_value(
 def test_honesty_verifies_every_arm_it_reads(
     recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # Both honesty walks read the arms, each through its own field-list site:
+    # the I-11 cells and the per-decision rebuild.
     for arm in ("plain", "workload", "physical", "observed_risk_rebuttal"):
         assert compute_evidence_honesty(recordings[arm]).games_total == 1
+        assert reconstruct_impostor_decisions(recordings[arm], seed=_SEED)
     _open_the_pending_guard(monkeypatch)
     copy = _with_settings(
         recordings["observed_risk_rebuttal"],
@@ -455,6 +459,36 @@ def test_honesty_verifies_every_arm_it_reads(
     )
     report = compute_evidence_honesty(copy)
     assert report.impostor_targeting.reconstruction_mismatches == 0
+    assert reconstruct_impostor_decisions(copy, seed=_SEED)
+
+
+@pytest.mark.parametrize("walk", ["cells", "decision rebuild"])
+@pytest.mark.parametrize("field", sorted(_PENDING_TACTICAL))
+def test_honesty_hands_a_pending_tactical_value_to_the_policy_builder(
+    recordings: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    walk: str,
+) -> None:
+    # The factory refuses a declared tactical value whose behaviour is not built
+    # yet, so reaching that refusal proves the recorded value passed the walk's
+    # field list; a walk that dropped the field would refuse the recording by
+    # name first, with a plain ValueError.
+    from agents.tactical.experimental import UnbuiltTacticalOptionError
+
+    _open_the_pending_guard(monkeypatch)
+    value = _PENDING_TACTICAL[field]
+    copy = _with_settings(
+        recordings["plain"], tmp_path / "tactical" / "9p2i", **{field: value}
+    )
+    with pytest.raises(
+        UnbuiltTacticalOptionError, match=re.escape(f"{field}={value!r}")
+    ):
+        if walk == "cells":
+            compute_evidence_honesty(copy)
+        else:
+            reconstruct_impostor_decisions(copy, seed=_SEED)
 
 
 def _advance_refused(*args: object, **kwargs: object) -> object:
@@ -1155,10 +1189,16 @@ def test_a_call_site_that_bypasses_the_helper_fails_its_case(
     assert stand_in.seen == []
 
 
+def _rebuilt_decisions(directory: Path) -> tuple[ReconstructedDecision, ...]:
+    return reconstruct_impostor_decisions(directory, seed=_SEED)
+
+
 _EVERY_READER: Final[dict[str, Callable[[Path], object]]] = {
     **{name: run for name, (_p, _r, run) in _READERS.items()},
     "committed-meeting walk": walk_committed_meetings,
     "golden": golden.walk_directory,
+    # Evidence honesty's per-decision rebuild walks through its own field list.
+    "honesty decision rebuild": _rebuilt_decisions,
 }
 
 
@@ -1236,7 +1276,8 @@ def _digest(reader: str, result: object) -> object:
     """What a reader's result says, with no rendered prompt or transcript in it.
 
     A failed comparison prints the digest, so the golden's walk is reduced to
-    counts and the committed walk to its witness records.
+    counts, the committed walk to its witness records and each rebuilt decision
+    to its memory's size, ranking and intent.
     """
 
     if reader == "golden":
@@ -1250,6 +1291,11 @@ def _digest(reader: str, result: object) -> object:
         return [
             (m.entry.meeting_id, m.vent_witness_records, m.move_witness_records)
             for m in cast(Sequence[CommittedMeeting], result)
+        ]
+    if reader == "honesty decision rebuild":
+        return [
+            (d.tick, d.actor, len(d.memory), d.ranked, d.intent)
+            for d in cast(Sequence[ReconstructedDecision], result)
         ]
     return result
 
@@ -1280,6 +1326,8 @@ def test_on_a_physical_recording_the_stand_in_and_the_rule_reach_every_advance(
     if reader == "golden":
         meetings, prompts, reproduced = cast(tuple[int, int, int], changed)
         assert meetings == len(_meeting_ids(directory)) and reproduced == prompts > 0
+    if reader == "honesty decision rebuild":
+        assert changed
 
 
 def _funnel_vents(directory: Path) -> Sized:
