@@ -1,6 +1,6 @@
 # B4: close the kill-tick leak with the public body handle
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -298,7 +298,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
   - Perturbed proof of the reason: a tick-row payload carrying a misspelled
     `report_body_handle_vers: 1` is refused (`extra="forbid"`). So deleting the
     field would make every recording that carries it unparseable.
-- [ ] **Nothing else moves.** The diff touches only the Expected-scope files.
+- [x] **Nothing else moves.** The diff touches only the Expected-scope files. (Ruled 2026-09-27 by the orchestrator at the merge of PR #488: the four paths the PR's Question names, `docs/experiment-arms.md`, `tasks/README.md`, `tests/eval/test_recorded_arm_readers.py` and `tests/orchestrator/test_experiment_config.py`, are the direct test, documentation and index follow-through of deleting the spine's builder refusal, which AGENTS.md permits within a card's boundaries; the box is met on that reading.)
   `orchestrator/experiment_config.py` changes by the one deleted pending name.
   No template, `PROMPT_VERSION_SETS` entry, `EXPERIMENT_ENV_NAMES` entry or
   `.env.example` line changes. `bash scripts/check.sh` exits 0 in a clean
@@ -1092,3 +1092,10 @@ names are the same after the merge, apart from the two resolved sentences. No `a
 `tests/fixtures/` byte moved, so
 no `docs/artifacts.md` row changes. The held-out band is untouched, and
 `tests/experiments/test_held_out_prefixes.py` passes.
+
+### Merge and Status flip (2026-09-27)
+
+PR #488 merged into `main` as `9741a20b` after the round-3 integration pass (integrity and
+correctness lenses PASS at `423b8329`, CI green). The orchestrator ruled the PR's open Question:
+the four paths outside Expected scope are direct follow-through of deleting the builder refusal,
+so the last box is ticked and the card flips to `done` in this commit, per the card's Status rule.
