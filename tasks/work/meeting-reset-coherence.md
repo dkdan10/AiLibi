@@ -146,6 +146,17 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
 
 ## Acceptance
 
+- [x] Review correction: **the reset beside the account profiles is a stated limitation, by the orchestrator's
+  ruling of 2026-09-27** (round 7). No validator clause is written and no test changes:
+  `orchestrator/experiment_config.py` and `tests/orchestrator/test_public_regroup_evidence.py` have no diff
+  against `main`, and that test, the done temporal-evidence card's, passes with its later-account assertion
+  (`:101`) intact. The ruling's three options and why the third was taken are in Decisions, Limitations and
+  round 7 below. `docs/observation-contract.md` states the window's reach at the strength the code delivers:
+  every profile but attributed testimony, alone or beside public accounts, whose account detector takes no ticks
+  (`test_the_account_detector_reads_no_regroup_window`); public accounts alone keep the windowed detector
+  (`test_independent_account_arms_complete_real_meetings[1-None]`, red under three routing mutants, round 7).
+  `MeetingManager.run`'s docstring already states it and is unchanged. The glossary's "regroup" entry, the one
+  other document that states the window's reach, gains the same exception in one clause.
 - [x] Review correction: **the regroup fold is stated at the strength the code delivers, its movement-note
   condition included** (round 6, correctness lens). On the default evidence path the fold renders only when no
   regroup-tick row carries a movement note; a subject last seen at the regroup after a sighting in another room
@@ -160,7 +171,8 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   reads the window on every profile but attributed testimony, whose account detector takes no ticks
   (`test_the_account_detector_reads_no_regroup_window`). The ruled validator refusal of the reset beside the
   public-account profiles is not written: it makes the done temporal-evidence card's pinned test
-  (`tests/orchestrator/test_public_regroup_evidence.py`) unrecordable, so it waits on the stop-and-ask in round 6.
+  (`tests/orchestrator/test_public_regroup_evidence.py`) unrecordable, so it waited on the stop-and-ask in round
+  6, which the orchestrator's round-7 ruling settles (the first item above).
 - [x] Review correction: **the walk's resume phase read is pinned by a recorded meeting that ends the game**
   (round 5, correctness lens). A 5-player reset game whose first meeting ejects the only impostor is recorded
   through `HeadlessGame` with a replay path and walked through `eval.replay_walk` under the evidence-honesty and
@@ -479,7 +491,9 @@ merging B1 or B4 overlaps a region of this card.
 - By the orchestrator's round-6 ruling of 2026-09-27: one model-validator clause in
   `orchestrator/experiment_config.py` refusing `meeting_reset = hub_with_grace` beside `public_account_version`
   or `attributed_testimony_version`, a declared one-clause exception to the spine's ownership. Not written at
-  round 6: it would break a done card's pinned test, and the stop-and-ask in round 6's Results waits on it.
+  round 6: it would break a done card's pinned test, and the stop-and-ask in round 6's Results waited on it.
+  Withdrawn by the orchestrator's ruling of 2026-09-27 (round 7): no clause is written, the file stays
+  unchanged, and the combination is a stated limitation (Decisions).
 - Docs: `docs/observation-contract.md`, `docs/glossary.md`, `docs/cleanup-dispositions.md`,
   `audits/tactical-gameplay/README.md`, and the `audits/` row of `docs/artifacts.md`, recomputed last.
 - New tests: `tests/orchestrator/test_meeting_reset_coherence.py` (entry, order, grace, resume, equality,
@@ -653,6 +667,24 @@ fourteen acceptance items were met at `d801eb3c`.
 - **Status and index.** The card assigns the Status line and `tasks/README.md` to the orchestrator. As the
   record-plumbing card did under the same dispatch, this worker set Status to `active` and re-derived the
   inventory sentence with `scripts/validate_task_docs.py`. Round 3 sets `done` the same way.
+- **The reset beside the account profiles is a stated limitation** (the orchestrator's ruling of 2026-09-27,
+  round 7). `RecordedExperimentConfig(format_version=2, attributed_testimony_version=1,
+  meeting_reset="hub_with_grace")` validates, and under it the meeting's contradiction step is the account
+  detector, which takes no regroup ticks and so can prosecute a regroup relocation. The pinned test is
+  `tests/orchestrator/test_public_regroup_evidence.py::test_public_reset_does_not_create_an_impossible_walk_or_erase_later_checks`,
+  the done `tasks/work/temporal-evidence-v2.md` card's. It records exactly that combination with public accounts
+  and evidence version 2, and its later-account assertion (`:101`) needs both account fields. The three options:
+  1. Refuse the combination in the validator (round 6's ruling). That fails the pinned test at construction,
+     and retiring its later-account assertion weakens a test and moves an earlier verdict (craft rule 7).
+  2. Thread the regroup ticks into the account detector
+     (`meetings.public_accounts.detect_public_account_conflicts`). That is a detector change outside this card.
+  3. Keep the combination and state the account detector's missing window as a limitation.
+
+  Option 3 was taken. It moves no byte, weakens no test and changes no earlier verdict. The Stage-B record uses
+  neither attributed testimony nor public accounts, so no recorded byte depends on the combination. The contract
+  and `MeetingManager.run`'s docstring state the reach: every profile but attributed testimony, alone or beside
+  public accounts. Public accounts alone keep the windowed detector, because `MeetingManager._detect_contradictions`
+  picks the account detector on `attributed_testimony_version` only.
 
 ### Caller dispositions
 
@@ -1019,8 +1051,12 @@ does not touch; it passes alone and in `check.sh`.
   regroup-tick row free of a movement note, and the token budget can shed the fold line like any sighting row:
   on fake arm-ON seeds 1000-1007 the latest regroup's fold line renders in 18 of 54 post-regroup views (round 6).
   No committed recording has the row. The notice stays excluded under evidence version 1.
-- Under attributed testimony the meeting's contradiction step is the account detector, which reads no regroup
-  window, and the recorded settings do not refuse it beside the reset (round 6's stop-and-ask).
+- Under attributed testimony, alone or beside public accounts, the meeting's contradiction step is the account
+  detector, which reads no regroup window, so a meeting there can prosecute a player the regroup moved. The
+  recorded settings accept the reset beside either account profile: a stated limitation by the orchestrator's
+  ruling of 2026-09-27 (round 7), which kept the temporal-evidence card's pinned test
+  (`tests/orchestrator/test_public_regroup_evidence.py`) and took no detector change (Decisions). No committed
+  recording and no Stage-B setting combines them.
 - The fake provider ejects nobody, so every fake reset game's meetings resume. A meeting that ends the game
   under the reset is covered by a runner of the test's own; how a model reasons after a regroup is first
   measured by the record.
@@ -1607,6 +1643,108 @@ that file and `test_the_account_detector_reads_no_regroup_window` in `tests/orch
 **Limitations.**
 - The ruled refusal waits on the orchestrator (above and in the PR's Questions). Until then a config combining
   the reset with attributed testimony validates, and its meetings would prosecute a regroup relocation.
+  (Settled in round 7: no refusal is written, and the combination is a stated limitation.)
 - The Constraints sentence on the fold ("so they also apply to evidence-version-2 memories") still waits on the
   orchestrator, as in round 5.
 - The verifier's 49 of 54 is not reproduced; the card states the 48 it can reproduce.
+
+### Review corrections, round 7 (2026-09-27)
+
+The orchestrator's recording round: one ruling, recorded, and no other change in kind. Commit: the one that
+first carries this subsection. `main` is still `cb0a4cfc`, so nothing is merged. The round edits one paragraph
+of `docs/observation-contract.md`, one sentence of `docs/glossary.md` and this card. No byte moves under
+`engine/`, `api/`, `frontend/`, `eval/`, `orchestrator/`, `observation/`, `meetings/`, `agents/`, `scripts/`,
+`tests/`, `replays/` or `audits/`, so the `audits/` row stays (330 files, 27,303,776 tracked bytes, re-read
+below) and the demo bundle is not rebuilt.
+Status stays `done` and the `tasks/README.md` sentence is unchanged.
+
+**The ruling: the reset beside the account profiles stays a stated limitation.** It settles round 6's
+stop-and-ask with the third of that round's options: no validator clause and no change to the earlier card's
+pinned test.
+- **Nothing refuses the combination.** `orchestrator/experiment_config.py` and
+  `tests/orchestrator/test_public_regroup_evidence.py` have no diff against `main` (`git diff --stat
+  origin/main...HEAD -- <both files>` prints nothing). Three settings validate at this head:
+  - format 2, attributed testimony 1 and the reset;
+  - format 2, public accounts 1 and the reset;
+  - the pinned test's own combination: format 2, evidence version 2, both account fields and the reset.
+- **The pinned test stays whole.**
+  `test_public_reset_does_not_create_an_impossible_walk_or_erase_later_checks` passes with its later-account
+  assertion (`:101`) intact.
+- **Where the ruling is recorded.**
+  - Decisions: the three options, and why the third was taken.
+  - Limitations, and Expected scope, where the round-6 clause is marked withdrawn.
+  - Round 6's acceptance item and its Limitations, each marked settled.
+  - The PR's Decisions and Questions: the round-6 question is closed with the ruling.
+- **The window's reach, at the strength the code delivers.** The ruling states the reach as "every profile but
+  attributed testimony and public accounts". The code picks the account detector on
+  `attributed_testimony_version == 1` alone (`MeetingManager._detect_contradictions`). Public accounts without
+  attributed testimony therefore run `meetings.transcript.detect_contradictions` with the window. The contract
+  paragraph now says three things:
+  - Prosecution reads the window on every profile but attributed testimony, alone or beside public accounts.
+  - Public accounts without attributed testimony keep the windowed step.
+  - The recorded settings accept the reset beside either account profile and refuse neither. This is the
+    stated limitation. No committed recording combines them, and the Stage-B record's settings include neither.
+
+  `MeetingManager.run`'s docstring already says "every profile but attributed testimony, whose contradiction
+  step is the account detector" and that the detector takes no ticks. It is unchanged.
+- **The glossary, beyond the ruling's list.** The ruling names the contract and the docstring. The glossary's
+  "regroup" entry is the one other document that states the window's reach, and it said without exception that
+  a regroup-window sighting "counts as evidence neither for nor against anyone's alibi". That overstates the
+  delivered reach under attributed testimony. The sentence now carries the same exception, naming the recorded
+  `attributed_testimony_version` setting, because the glossary defines no "attributed testimony" term. The entry
+  is this card's own (decision memo 3.2). The entry's kept-event words, which
+  `test_the_contract_and_the_glossary_name_every_kept_event_kind` reads, are unchanged.
+- **The pins.**
+  - `test_the_account_detector_reads_no_regroup_window`: the account detector takes no `regroup_ticks` and flags
+    a regroup relocation, and the windowed detector flags none.
+  - `test_independent_account_arms_complete_real_meetings[1-None]`: under public accounts alone the meeting
+    carries the grounded `vent_sighting` flag. Only the ordinary detector mints that flag.
+- **The count-only facts.** 0 committed `.jsonl` files carry `hub_with_grace`. 956 `"meeting_reset":"preserve"`
+  stamps. 50 committed `.jsonl` files carry `"attributed_testimony_version": 1`, all of them on `preserve`.
+
+**The bounded mutation pass.** The round changes no code span. The contract sentence names one: the routing
+branch in `MeetingManager._detect_contradictions`.
+- Each mutant replaced `if self._evidence_profile.attributed_testimony_version == 1:`, its count asserted to be
+  exactly one.
+- Each ran `tests/meetings/test_public_accounts.py`, `tests/orchestrator/test_meeting_reset_coherence.py`,
+  `tests/meetings/test_regroup_relevance_window.py` and `tests/orchestrator/test_public_regroup_evidence.py`
+  with `-x -n 0`.
+- `meetings/manager.py` was restored from a byte copy, and its sha256 (`3b2f2ade...`) is equal before and after.
+  `git status` showed only this round's two edits.
+
+| Id | Class | Replacement | First red test |
+| --- | --- | --- | --- |
+| M-MG-route-accounts-enabled | b, one read swapped for a related one | `if self._accounts_enabled:` | `test_independent_account_arms_complete_real_meetings[1-None]` |
+| M-MG-route-none-test | c, the comparison replaced with a None test | `... attributed_testimony_version is None:` | `test_manager_and_persistent_fold_do_not_read_other_speaker_grounding` |
+| M-MG-route-public-accounts | b, one field swapped for the related one | `if self._evidence_profile.public_account_version == 1:` | `test_independent_account_arms_complete_real_meetings[1-None]` |
+
+All three are red.
+
+**Verification of this round's bytes.** Every gate ran in a bare shell with 0 `AILIBI_*` exports. Each exit
+code was captured from the process, never through a pipe. `scripts/validate_task_docs.py` and
+`scripts/check_doc_facts.py` re-ran after this subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 221 passed, as at round 6 |
+| the same seven, plus `tests/meetings/test_public_accounts.py`, `tests/engine/test_vent_witness_rule.py` and `tests/scripts/test_architecture_truth.py` (the routing pin and the two other readers of the contract) | exit 0: 290 passed |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+
+`bash scripts/check.sh` runs once, at this round's head (the commit that carries this subsection), and the PR
+body quotes its exit code. No `api/` or `frontend/` byte changed, so the bundle and the Playwright journey were
+not re-run. `check.sh` runs the frontend's lint, types, tests and build.
+
+**Changed test expectations.** None. No test file changes in this round.
+
+**Limitations.**
+- The account detector's missing window stays, as the ruling decides (Limitations above).
+- The Constraints sentence on the fold ("so they also apply to evidence-version-2 memories") still waits on the
+  orchestrator, as in rounds 5 and 6.

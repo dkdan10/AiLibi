@@ -216,7 +216,10 @@ its own step in the player's route. The first observations after it carry only
 the kills, vent entries and vent exits seen on the tick the meeting was called,
 because those were seen where they happened; a walk or a task step from that
 tick is not replayed from the meeting room. A sighting on the regroup's tick or
-the tick after it counts as evidence neither for nor against anyone's alibi.
+the tick after it counts as evidence neither for nor against anyone's alibi,
+except under the recorded `attributed_testimony_version` setting, whose
+comparison of spoken accounts reads no such window and can hold that sighting
+against the account of a player the regroup moved.
 The setting is off by default
 ([`engine/meeting_reset.py`](../engine/meeting_reset.py),
 [observation contract](observation-contract.md#the-regroup-reset),

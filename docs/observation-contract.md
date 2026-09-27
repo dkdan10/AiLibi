@@ -204,10 +204,14 @@ A sighting on a regroup's tick or the tick after it is not evidence about
 anyone's whereabouts. On every meeting profile but attributed testimony the
 meeting layer neither corroborates nor prosecutes an alibi with it, and a
 voter's own sighting there makes no ballot evidence row; it stays in the voter's
-memory. Under attributed testimony (`attributed_testimony_version`) the
+memory. That includes public accounts (`public_account_version`) without
+attributed testimony, whose meetings keep the ordinary contradiction step
+(`meetings.transcript.detect_contradictions`) and its window. Under attributed
+testimony (`attributed_testimony_version`, alone or beside public accounts) the
 contradiction step is the account detector
 (`meetings.public_accounts.detect_public_account_conflicts`), which compares
 spoken placements and reads no window, so it would flag a player the regroup
-moved as an impossible walk. Nothing refuses the reset beside attributed
-testimony: no committed recording combines them, and the Stage-B record's
-settings do not include attributed testimony.
+moved as an impossible walk. This is a stated limitation: the recorded settings
+accept the reset beside either account profile and refuse neither. No committed
+recording combines them, and the Stage-B record's settings include neither
+account profile.
