@@ -1247,3 +1247,8 @@ inventory sentence.
 | `uv run pytest -m campaign -q -n 6` | exit 0, 336 passed |
 | `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 329 files; 26,636,557 bytes, the `docs/artifacts.md` row, unchanged (B0 moved no `audits/` byte) |
 | `git diff --stat fb9d2e31 HEAD -- replays agents engine observation orchestrator api frontend docs/process-scorecard.md docs/process-scorecard.json` | empty |
+| `bash scripts/check.sh` (exit code read directly, no pipe), at `182503d9` in this clean worktree | exit 0: ruff and format clean, `lint-imports` 4 kept, task docs valid, mypy clean over 508 files, 9,109 passed (9,021 at round 2, plus the physical-witness card's cases and this round's 32), 20 skipped, 3 xfailed; frontend lint, `tsc:check`, 559 vitest tests and the build pass |
+
+The gate ran once, on `182503d9`, which carries this subsection without the `check.sh` row above.
+The commit that adds the row changes nothing else, and the task-docs validator was re-run on it
+(exit 0).
