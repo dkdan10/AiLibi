@@ -623,21 +623,40 @@ def test_no_body_handle_arm_builds_todays_trigger_byte_for_byte(
     )
     assert explicit == today
     assert explicit[0].description == today[0].description
-    with pytest.raises(ValueError, match="report_body_handle_version=1"):
-        _build_meeting_trigger(
-            state=state,
-            events=events,
-            temporal_observations=temporal,
-            report_body_handle_version=1,
-        )
+    # Version 1 names a reported corpse by the victim's public handle and
+    # changes nothing else; tests/orchestrator/test_report_body_handle.py
+    # holds the arm's own cases.
+    handle = _build_meeting_trigger(
+        state=state,
+        events=events,
+        temporal_observations=temporal,
+        report_body_handle_version=1,
+    )
+    engine_id = f"body-{victim}-{max(0, tick - 3)}"
+    assert handle[0].description == (
+        today[0].description.replace(engine_id, f"body-{victim}")
+        if kind == "report" and not temporal
+        else today[0].description
+    )
+    assert replace(handle[0], description=today[0].description) == today[0]
+    assert handle[1:] == today[1:]
 
 
 def test_the_live_meeting_passes_the_recorded_body_handle_arm(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # With the guard patched open, the first meeting reaches the builder with
-    # the recorded value and is refused there, before any model call.
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+    # Every meeting of the live game reaches the builder with the recorded
+    # value, read through a spy on the builder the game calls.
+    import orchestrator.game as game_module
+
+    seen: list[object] = []
+    real = game_module._build_meeting_trigger
+
+    def _spy(**kwargs: Any) -> Any:
+        seen.append(kwargs["report_body_handle_version"])
+        return real(**kwargs)
+
+    monkeypatch.setattr(game_module, "_build_meeting_trigger", _spy)
     config = RecordedExperimentConfig(report_body_handle_version=1)
     game = HeadlessGame(
         seed=1000,
@@ -651,8 +670,8 @@ def test_the_live_meeting_passes_the_recorded_body_handle_arm(
         num_impostors=1,
         tasks_per_crewmate=1,
     )
-    with pytest.raises(ValueError, match="report_body_handle_version=1"):
-        game.run()
+    game.run()
+    assert seen and set(seen) == {1}
 
 
 @pytest.mark.parametrize(
