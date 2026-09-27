@@ -25,6 +25,7 @@ import sys
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Final, Literal
 
 import pytest
@@ -265,6 +266,17 @@ def test_a_witness_gets_exactly_one_kill_row() -> None:
     assert not re.search(r"p-\d", kills[0].description)
 
 
+def test_the_kill_kind_is_named_and_sorts_with_the_first_hand_rows() -> None:
+    from typing import get_args
+
+    from meetings.render_contract import EvidenceRowKind as Kind
+
+    kinds = set(get_args(Kind))
+    assert "own_kill" in kinds
+    assert set(manager_module._EVIDENCE_KIND_CLASS) == kinds  # noqa: PLC2701
+    assert manager_module._EVIDENCE_KIND_CLASS["own_kill"] == 0  # noqa: PLC2701
+
+
 def test_the_arm_off_builds_no_kill_row_and_the_tuple_of_today() -> None:
     voter = _voter(
         sightings=(
@@ -356,10 +368,14 @@ def _kill_records(draw: st.DrawFn) -> tuple[KillWitnessRecord, ...]:
     )
 
 
-@given(kills=_kill_records(), fellows=st.sampled_from(((), ("p-3",))))
+@given(
+    kills=_kill_records(),
+    fellows=st.sampled_from(((), ("p-3",))),
+    voter=st.sampled_from(("p-1", "p-6")),
+)
 @settings(deadline=None, max_examples=80)
 def test_every_non_teammate_record_makes_exactly_its_own_row(
-    kills: tuple[KillWitnessRecord, ...], fellows: tuple[str, ...]
+    kills: tuple[KillWitnessRecord, ...], fellows: tuple[str, ...], voter: str
 ) -> None:
     """A property over generated records, both arms, both roles.
 
@@ -369,18 +385,27 @@ def test_every_non_teammate_record_makes_exactly_its_own_row(
     """
 
     role = "IMPOSTOR" if fellows else "CREWMATE"
-    voter = _voter(role=role, fellows=fellows, kills=kills)
+    holder = voter
+    voter_participant = _voter(holder, role=role, fellows=fellows, kills=kills)
     targets = _SUBJECTS
-    on = [row for row in _rows(voter, arm=1, targets=targets) if row.kind == "own_kill"]
+    on = [
+        row
+        for row in _rows(voter_participant, arm=1, targets=targets)
+        if row.kind == "own_kill"
+    ]
     expected = sorted(
-        (_kill_row(record) for record in kills if record.subject not in fellows),
+        (
+            _kill_row(record, voter=holder)
+            for record in kills
+            if record.subject not in fellows
+        ),
         key=lambda row: (targets.index(row.subject), row.description),
     )
     assert sorted(
         on, key=lambda row: (targets.index(row.subject), row.description)
     ) == (expected)
-    assert _rows(voter, arm=None, targets=targets) == _rows(
-        replace(voter, kill_witness_records=()), arm=None, targets=targets
+    assert _rows(voter_participant, arm=None, targets=targets) == _rows(
+        replace(voter_participant, kill_witness_records=()), arm=None, targets=targets
     )
 
 
@@ -487,6 +512,64 @@ def _participant_from(agent: TacticalAgent) -> MeetingParticipant:
     )
 
 
+class _MeetingAgent:
+    """The meeting protocol's required channels, all empty."""
+
+    def __init__(self, agent_id: str, role: str) -> None:
+        self.agent_id = agent_id
+        self.role = role
+
+    def render_memory_for_meeting(
+        self, *, token_budget: int, suspicion_override: Any = None
+    ) -> str:
+        return ""
+
+    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+        return ()
+
+    def vent_witness_records_for_meeting(self) -> tuple[Any, ...]:
+        return ()
+
+    def sighting_records_for_meeting(self) -> tuple[Any, ...]:
+        return ()
+
+    def observation_ids_for_meeting(self) -> tuple[str, ...]:
+        return ()
+
+
+class _KillWitness(_MeetingAgent):
+    """The same agent with the optional kill channel, and no movement channel."""
+
+    def kill_witness_records_for_meeting(self) -> tuple[KillWitnessRecord, ...]:
+        return (_KILL,)
+
+
+def test_the_participants_carry_the_kill_channel_of_an_agent_that_has_it() -> None:
+    from orchestrator.game import _build_participants
+    from orchestrator.seeder import seed_initial_state
+
+    state = seed_initial_state(seed=1, game_map=load_canonical_map(), num_players=4)
+    agents: dict[str, Any] = {
+        pid: (
+            _KillWitness(pid, player.role)
+            if pid == "p-1"
+            else _MeetingAgent(pid, player.role)
+        )
+        for pid, player in state.players.items()
+    }
+    participants = {
+        participant.agent_id: participant
+        for participant in _build_participants(
+            state=state, agents=agents, token_budget=1000
+        )
+    }
+    assert participants["p-1"].kill_witness_records == (_KILL,)
+    assert participants["p-1"].move_witness_records == ()
+    assert all(
+        participants[pid].kill_witness_records == () for pid in ("p-2", "p-3", "p-4")
+    )
+
+
 def test_a_voter_told_of_a_kill_holds_no_kill_row() -> None:
     told = _agent("p-1", "CREWMATE")
     _witness(told, killer=None, room="ADMIN", tick=5, bystanders=("p-3", "p-4"))
@@ -544,6 +627,35 @@ def test_the_accessor_reads_first_hand_rows_only() -> None:
         )
     )
     assert [r.tick for r in agent.kill_witness_records_for_meeting()] == [7]
+
+
+def test_the_teammate_guard_reads_first_hand_self_state_only() -> None:
+    """A fellow list the agent did not perceive itself guards nothing.
+
+    The accessor's fellow set is the latest first-hand ``self_state`` row's list;
+    a row in any other provenance naming p-3 leaves p-3's kill a record, and the
+    same list first-hand drops it.
+    """
+
+    kill = EpisodicEvent(
+        tick=6,
+        type=EVENT_SAW_PLAYER,
+        payload={"player_id": "p-3", "room": "EAST_HALL", "action": "kill"},
+        provenance=PROVENANCE_OBSERVED,
+        observation_id="p-2:6:1",
+    )
+    for provenance, held in (("reported", 1), (PROVENANCE_OBSERVED, 0)):
+        agent = _agent("p-2", "IMPOSTOR")
+        agent.memory.episodic.append(
+            EpisodicEvent(
+                tick=5,
+                type="self_state",
+                payload={"agent_id": "p-2", "fellow_impostor_ids": ["p-3"]},
+                provenance=provenance,
+            )
+        )
+        agent.memory.episodic.append(kill)
+        assert len(agent.kill_witness_records_for_meeting()) == held, provenance
 
 
 # --------------------------------------------------------------------------- #
@@ -731,6 +843,15 @@ def test_the_witness_reads_its_kill_row_through_the_real_meeting() -> None:
     assert not any(row in on.rendered[voter] for voter in ("p-2", "p-3", "p-4"))
     _, off = _meeting(_four(), profile=MeetingEvidenceProfile())
     assert row not in off.rendered["p-1"]
+    # Each arm reaches its own block and no other: the kill-row arm rewords the
+    # header on every ballot and serves no impostor wording, and the impostor arm
+    # serves its wording and leaves the header alone.
+    assert all(_SENTENCE_ON in body for body in on.rendered.values())
+    assert _STRATEGY_CLAUSE not in on.rendered["p-3"]
+    _, impostor = _meeting(_four(), profile=_IMPOSTOR_ON)
+    assert all(_SENTENCE_OFF in body for body in impostor.rendered.values())
+    assert _STRATEGY_CLAUSE in impostor.rendered["p-3"]
+    assert row not in impostor.rendered["p-1"]
 
 
 def test_the_role_reaches_a_sole_impostor() -> None:
@@ -1156,7 +1277,13 @@ def test_the_runner_refuses_a_ballot_arm_beside_a_legacy_overlay(
     arm: str, overlay: str
 ) -> None:
     env = {"AILIBI_PROMPT_SET": _SET, _OVERLAYS[overlay]: "1"}
-    with pytest.raises(ValueError, match=f"legacy meeting overlays \\['{overlay}'\\]"):
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"the ballot experiment \\['{arm}'\\] cannot run while the "
+            f"legacy meeting overlays \\['{overlay}'\\]"
+        ),
+    ):
         build_default_meeting_runner(
             llm_client=_fake(),
             env=env,
@@ -1207,6 +1334,29 @@ def test_each_arm_alone_and_both_with_the_rebuttal_and_reset_construct(
     assert game._experiment_config == config  # noqa: PLC2701
 
 
+def test_a_pin_claiming_an_arm_on_another_set_fails_the_one_source_check() -> None:
+    """The check reads the ACTIVE set's stamps, not the served set's."""
+
+    pinned = {
+        **PROMPT_VERSION_SETS["qwen3_32b"],
+        "vote_ballot": "vote_ballot.qwen3_32b.v6.impostor_ballot_v1",
+    }
+    with pytest.raises(
+        ValueError,
+        match=(
+            "the vote_ballot stamp 'vote_ballot.qwen3_32b.v6.impostor_ballot_v1' "
+            "credits impostor_ballot_version at \\[1\\], but the served profile "
+            "renders it at None"
+        ),
+    ):
+        build_default_meeting_runner(
+            llm_client=_fake(),
+            env={"AILIBI_PROMPT_SET": "qwen3_32b"},
+            prompt_versions=pinned,
+            profile=MeetingEvidenceProfile(),
+        )
+
+
 @pytest.mark.parametrize("arm", _ARMS)
 def test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block(
     arm: str,
@@ -1216,6 +1366,24 @@ def test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block(
             llm_client=_fake(),
             env={"AILIBI_PROMPT_SET": "qwen3_32b"},
             profile=MeetingEvidenceProfile.model_validate({arm: 1}),
+        )
+
+
+def test_the_body_check_reads_the_template_the_arm_registers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: an arm registered on a body that carries no block for it."""
+
+    monkeypatch.setattr(
+        game_module,
+        "EXPERIMENT_ARM_TEMPLATES",
+        MappingProxyType({"ballot_kill_row_version": ("accusation_round",)}),
+    )
+    with pytest.raises(ValueError, match="template 'accusation_round.j2' carries no"):
+        build_default_meeting_runner(
+            llm_client=_fake(),
+            env={"AILIBI_PROMPT_SET": _SET},
+            profile=MeetingEvidenceProfile(ballot_kill_row_version=1),
         )
 
 
@@ -1527,8 +1695,14 @@ def test_the_honesty_cells_count_the_scripted_ballots(scripted_game: Path) -> No
         cells.ejections_carried_by_impostors_alone.denominator,
     ) == (1, 1)
     assert cells.kill_holders == 3
-    assert cells.kill_holders_citing_the_kill.numerator == 1
-    assert cells.recorded_teammate_targets.numerator == 0
+    assert (
+        cells.kill_holders_citing_the_kill.numerator,
+        cells.kill_holders_citing_the_kill.denominator,
+    ) == (1, 3)
+    assert (
+        cells.recorded_teammate_targets.numerator,
+        cells.recorded_teammate_targets.denominator,
+    ) == (0, 6)
     # Cell 4 equals the census's own reading of the same game.
     census = _census_cells(scripted_game)["ejections_carried_only_by_impostor_ballots"]
     assert (census["numerator"], census["denominator"]) == (1, 1)
@@ -1607,7 +1781,10 @@ def _conduct(
     *,
     roles: Mapping[str, str] = _ROLES,
     stores: Mapping[str, Any] | None = None,
+    prefix: Mapping[str, int] | None = None,
 ) -> dict[str, int]:
+    """Fold one meeting; ``prefix`` defaults to every store's full length."""
+
     from eval.evidence_honesty import _fold_ballot_conduct, _MeetingFacts, _Tallies
 
     memories = stores if stores is not None else _stores()
@@ -1618,7 +1795,11 @@ def _conduct(
             living=frozenset(ballot.voter for ballot in entry.ballots),
             venting=frozenset(),
             body_triggered=True,
-            memory_prefix={pid: len(store) for pid, store in memories.items()},
+            memory_prefix=(
+                prefix
+                if prefix is not None
+                else {pid: len(store) for pid, store in memories.items()}
+            ),
         ),
         roles=roles,  # type: ignore[arg-type]
         memories=memories,
@@ -1744,10 +1925,80 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
         base,
         _conduct(_with_ballot(third, "p-2", primary_reason_observation_id=None)),
     ) == {"ejects_citing_only_neutral": -1, "ejects_without_citation": 1}
-    # A recorded teammate target.
+    # A conflict minted from the cited turn that names somebody else: another
+    # turn still; and one that names the target on its second event id: pointing.
+    for subjects, event_a, event_b, moved in (
+        (
+            ("p-9",),
+            f"turn:{third_turns['p-7']}:claim:0",
+            "planted:elsewhere",
+            {"ejects_other_turn": 1, "ejects_without_citation": -1},
+        ),
+        (
+            ("p-7",),
+            "planted:elsewhere",
+            f"turn:{third_turns['p-7']}:obs:0",
+            {"ejects_pointing_toward": 1, "ejects_without_citation": -1},
+        ),
+    ):
+        elsewhere = other.model_copy(
+            update={
+                "contradictions": (
+                    ContradictionRef(
+                        contradiction_id="c-planted",
+                        kind="alibi_vs_sighting",
+                        event_a_id=event_a,
+                        event_b_id=event_b,
+                        subjects=subjects,
+                        description="planted",
+                    ),
+                )
+            }
+        )
+        assert _moved(base, _conduct(elsewhere)) == moved, subjects
+    # A cited turn whose only claim is another kind points nowhere: other turn.
+    from meetings.schemas import CorroborationClaim
+
+    vouching = other.model_copy(
+        update={
+            "transcript": MeetingTranscript(
+                turns=tuple(
+                    turn.model_copy(
+                        update={
+                            "claims": (
+                                CorroborationClaim(
+                                    type="corroboration",
+                                    supports="p-7",
+                                    on_tick=30,
+                                    reason="planted",
+                                ),
+                            )
+                        }
+                    )
+                    if turn.speaker == "p-7"
+                    else turn
+                    for turn in third.transcript.turns
+                )
+            )
+        }
+    )
+    assert _moved(base, _conduct(vouching)) == {
+        "ejects_other_turn": 1,
+        "ejects_without_citation": -1,
+    }
+    # A turn id that names no turn of this meeting is no citation.
+    assert (
+        _moved(
+            base,
+            _conduct(_with_ballot(third, "p-3", primary_reason_id="m-x:turn-99")),
+        )
+        == {}
+    )
+    # A recorded teammate target; a vote for oneself is not one.
     assert _moved(base, _conduct(_with_ballot(third, "p-2", target="p-3"))) == {
         "recorded_teammate_targets": 1
     }
+    assert _moved(base, _conduct(_with_ballot(third, "p-2", target="p-2"))) == {}
     # A kill holder, and one whose ballot cites the kill.
     assert _moved(base, _conduct(third, stores=_stores({"p-9": "p-2"}))) == {
         "kill_holders": 1
@@ -1759,6 +2010,30 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
             stores=_stores({"p-1": "p-3"}),
         ),
     ) == {"kill_holders": 1, "kill_holders_citing_the_kill": 1}
+    # A kill row that arrived after the meeting opened is not held at it.
+    late = _stores()
+    prefix = {pid: len(store) for pid, store in late.items()}
+    late["p-9"].append(
+        EpisodicEvent(
+            tick=50,
+            type=EVENT_SAW_PLAYER,
+            payload={"player_id": "p-2", "room": "EAST_HALL", "action": "kill"},
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-9:50:2",
+        )
+    )
+    assert _moved(base, _conduct(third, stores=late, prefix=prefix)) == {}
+    # A holder whose kill row carries no id, voting with no citation, cites nothing.
+    unstamped = _stores()
+    unstamped["p-1"].append(
+        EpisodicEvent(
+            tick=6,
+            type=EVENT_SAW_PLAYER,
+            payload={"player_id": "p-3", "room": "EAST_HALL", "action": "kill"},
+            provenance=PROVENANCE_OBSERVED,
+        )
+    )
+    assert _moved(base, _conduct(third, stores=unstamped)) == {"kill_holders": 1}
     # A teammate's kill makes no holder: the accessor's own predicate.
     impostor_store = _stores({"p-2": "p-3"})
     impostor_store["p-2"].append(
@@ -1777,14 +2052,28 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
     assert second.outcome == "SKIPPED"
 
 
-@pytest.mark.parametrize(("threshold", "carried"), [(None, 1), (0.2, 0), (0.95, 0)])
+def test_a_ballot_by_a_player_with_no_rebuilt_memory_raises(
+    scripted_game: Path,
+) -> None:
+    from eval.evidence_honesty import EvidenceHonestyReconstructionError
+
+    stores = _stores()
+    del stores["p-9"]
+    with pytest.raises(EvidenceHonestyReconstructionError, match="p-9"):
+        _conduct(_meetings(scripted_game)[2], stores=stores)
+
+
+@pytest.mark.parametrize(
+    ("threshold", "carried"), [(None, 1), (0.2, 0), (0.9, 1), (0.95, 0)]
+)
 def test_the_confidence_floor_is_read_from_the_recording(
     scripted_game: Path, threshold: float | None, carried: int
 ) -> None:
     """Planted: the recorded floor moved; the cell follows the recorded value.
 
     At the recorded floor only the impostors' ballots for p-7 meet it; at 0.2
-    crewmate p-9's ballot meets it too; at 0.95 no ballot does.
+    crewmate p-9's ballot meets it too; at 0.9, the impostors' own confidence, the
+    inclusive floor still admits them; at 0.95 no ballot does.
     """
 
     third = _meetings(scripted_game)[2]
