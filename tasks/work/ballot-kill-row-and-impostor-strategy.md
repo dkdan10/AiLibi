@@ -122,6 +122,37 @@ edits the text under that header.
 
 ## Acceptance
 
+- [x] Review correction: **the ballot family's per-turn filter is pinned** (round 1, correctness
+  verifier). A new carrier in `tests/meetings/test_ballot_arms.py::test_each_carrier_moves_its_cell_by_exactly_one`
+  has another turn of the meeting accuse the target while the cited turn does not: it moves
+  `ejects_other_turn` by one and leaves `ejects_pointing_toward` unchanged. Probe V16 (drop the
+  per-turn filter in `eval/evidence_honesty.py::_points_toward`) now fails it.
+- [x] Review correction: **an absent or unparseable body gets the body check's own refusal**
+  (round 1, correctness verifier). `test_an_absent_or_unparseable_body_is_the_same_refusal_naming_the_file`
+  (both arms) deletes the registered `vote_ballot.j2` from one set copy and appends a syntax error
+  to it in another; each raises the check's `ValueError` naming the set and the file. Probes V01
+  (drop `TemplateNotFound`) and V02 (drop `TemplateSyntaxError`) now fail it.
+- [x] Review correction: **four message arguments are pinned** (round 1, correctness verifier). The
+  set name in the body check's refusal (`test_a_dead_guard_is_no_block`,
+  `test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block`), the arm and
+  account-profile lists in the profile refusal
+  (`test_the_profile_refuses_a_ballot_arm_beside_an_account_profile` and the new
+  `test_the_profile_refusal_names_every_arm_and_account_profile_it_met`), and the meeting id in the
+  missing-memory raise (`test_a_ballot_by_a_player_with_no_rebuilt_memory_raises`). Probes V04,
+  V20, V21 and V22 now fail.
+- [x] Review correction: **the listed-class survivors V01 and V02 are killed and V03 is named
+  equivalent** (round 1, integrity verifier; the same except tuple as the second item). The
+  planted cases are the ones above; V03 (drop `AttributeError`) is equivalent because
+  `_environment_for_set` always gives the environment a `FileSystemLoader`, so `loader` is never
+  `None`. All three are in the round-1 mutation table.
+- [x] Review correction: **`kill_holders_citing_the_kill` reads both slots that take an own
+  observation id** (round 1, docs verifier; Codex P2 on PR #491). The fold counts a kill
+  observation cited in `primary_reason_observation_id` or in `counter_reason_id`, as the family's
+  sentence and cell 5 say. Planted: a holder citing the kill only in the counter slot moves the
+  cell by one, and a counter naming a turn does not. Re-measured with
+  `uv run python scripts/measure_baseline.py replays/<set> --honesty --json` on the four sets: every
+  report equals the previous head's byte for byte, so cell 5 stays 3 of 4 on s9 and 21 of 31
+  pooled.
 - [x] **The kill record moves and carries its id.** `KillWitnessRecord` moves to
   `meetings/schemas.py` beside `VentWitnessRecord` as a `_FrozenModel` with
   `observation_id: ObservationId | None = None`; `orchestrator.game` re-exports it, so
@@ -926,3 +957,136 @@ Files that dropped a pending-guard patch: `tests/eval/test_gameplay_census.py`,
   the rebuilt memories, and `tests/_helpers/committed.py` is outside this card.
 - `scripts/measure_baseline.py`'s human-readable `--honesty` rendering does not print the new
   family (the JSON carries it); `scripts/` is outside this card.
+
+### Review corrections, round 1 (2026-09-27)
+
+Five blocking findings from the round-1 verifiers at `9b198d55` (two of them the same except
+tuple, seen by two verifiers). Fix commit `318c99ed`: `eval/evidence_honesty.py` (the kill-citing
+fold and the family docstring) and `tests/meetings/test_ballot_arms.py`; the commit after it
+changes only this card. Every command below ran at `318c99ed` in a shell with no `AILIBI_*`
+export.
+
+**What changed.**
+- **Kill citations in either own-id slot (docs verifier; Codex P2 on PR #491).** Reply to Codex:
+  valid, and fixed the way it proposes rather than by narrowing the text. The ballot contract lets
+  `counter_reason_id` carry one of the voter's own observation ids (the `counter_reason_id` bullet
+  of `vote_ballot.j2`'s output format), and `meetings.manager._normalize_ballot_counter_reason_id`
+  keeps it only when it is this meeting's turn or this voter's own observation, so a match is a
+  real citation of the kill. `_fold_ballot_conduct` now counts a holder whose ballot names one of
+  its kill records' observation ids in `primary_reason_observation_id` or `counter_reason_id`; the
+  family docstring says so. Planted: the counter-slot carrier and the counter-names-a-turn carrier
+  in `test_each_carrier_moves_its_cell_by_exactly_one`. No committed number moves: no committed
+  holder ballot cites the kill only in the counter slot (the four honesty reports are
+  byte-identical, below).
+- **The per-turn filter (correctness verifier, V16).** New carrier: p-2's turn accuses p-7 and
+  impostor p-3's EJECT of p-7 cites p-7's own turn, which accuses nobody. Expected: other turn +1,
+  pointing toward unchanged. With the filter dropped the published s9 split moved to 35 / 10 (the
+  verifier's measurement); the carrier now fails that mutant.
+- **Absent or unparseable bodies (correctness and integrity verifiers, V01, V02, V03).** New
+  `test_an_absent_or_unparseable_body_is_the_same_refusal_naming_the_file`, both arms: a set copy
+  without `vote_ballot.j2`, and a set copy whose `vote_ballot.j2` ends in `{% if %}`; each must raise
+  the check's `ValueError` naming the set and the file. V03 (drop `AttributeError`) is equivalent:
+  `_environment_for_set` always builds the environment on a `FileSystemLoader`, so
+  `environment.loader` is never `None` and `get_source` is always there.
+- **Message arguments (correctness verifier, V04, V20, V21, V22).** The match patterns now carry
+  the set name (`Prompt set 'qwen3_6_27b' template 'vote_ballot.j2' ...` and `Prompt set
+  'qwen3_32b' ...`), the arm list and the account-profile list (per arm and account, plus a new
+  case with both arms and both profiles that pins the order), and the meeting id
+  (`headless-seed-26:meeting-2: ballot by 'p-9', ...`).
+
+**Mutation pass, bounded to the spans the findings name and the span this round changed.** The
+named operator classes only (F filter, T tuple member, M message argument, N comparison, S swap).
+Suites: the five core suites (`tests/meetings/test_ballot_arms.py`,
+`tests/meetings/test_weighing_channel.py`, `tests/agents/test_bespoke_prompt_sets.py`,
+`tests/training/test_conviction_serving.py`, `tests/orchestrator/test_experiment_arms.py`) for the
+loader and profile probes, and `tests/meetings/test_ballot_arms.py` with
+`tests/eval/test_evidence_honesty.py` for the honesty probes; `pytest -q -n 6`, no `-x`. Each probe
+was applied in place, run, and the file restored from a copy with its sha256 checked. First run:
+the fixed production code with the test file of `9b198d55`; second run: the fixed test file.
+Restored: the core suites 365 passed, the honesty pair 195 passed.
+
+| id | class | module | probe | first run (tests of `9b198d55`) | with the round-1 tests |
+|---|---|---|---|---|---|
+| V16 | F | evidence_honesty | `_points_toward` drops the per-turn filter | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| V01 | T | loader | body-check except tuple drops `TemplateNotFound` | SURVIVED: 362 passed | killed: 2 failed, 363 passed |
+| V02 | T | loader | body-check except tuple drops `TemplateSyntaxError` | SURVIVED: 362 passed | killed: 2 failed, 363 passed |
+| V03 | T | loader | body-check except tuple drops `AttributeError` | SURVIVED: 362 passed | SURVIVED: 365 passed (equivalent, reason above) |
+| V04a | M | loader | refusal's set name to `'X'` | SURVIVED: 362 passed | killed: 6 failed, 359 passed |
+| V04b | M | loader | refusal's set name to `'qwen3_6_27b'` | SURVIVED: 362 passed | killed: 2 failed, 363 passed |
+| V20 | M | evidence_profile | refusal's arm list to `['X']` | SURVIVED: 362 passed | killed: 5 failed, 360 passed |
+| V20b | M | evidence_profile | refusal's arm list to `['ballot_kill_row_version']` | SURVIVED: 362 passed | killed: 3 failed, 362 passed |
+| V21 | M | evidence_profile | refusal's account list to `['X']` | SURVIVED: 362 passed | killed: 5 failed, 360 passed |
+| V21b | M | evidence_profile | refusal's account list to `['public_account_version']` | SURVIVED: 362 passed | killed: 3 failed, 362 passed |
+| V22 | M | evidence_honesty | missing-memory raise's meeting id to `'m-x'` | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| K1 | T | evidence_honesty | kill-citing slots drop `counter_reason_id` | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| K2 | T | evidence_honesty | kill-citing slots drop `primary_reason_observation_id` | killed: 2 failed, 190 passed | killed: 2 failed, 193 passed |
+| K3 | F | evidence_honesty | kill-citing slots drop the `None` filter | killed: 1 failed, 191 passed | killed: 1 failed, 194 passed |
+| K4 | N | evidence_honesty | kill-citing filter `is not None` to `is None` | killed: 2 failed, 190 passed | killed: 2 failed, 193 passed |
+| K5 | S | evidence_honesty | counter slot swapped for `primary_reason_id` | SURVIVED: 192 passed | killed: 1 failed, 194 passed |
+| K6 | N | evidence_honesty | kill match `in` to `not in` | killed: 2 failed, 190 passed | killed: 2 failed, 193 passed |
+
+17 probes. With the round-1 tests: 16 killed, 1 equivalent (V03). The probes that first came back
+green were V16, V01-V04, V20, V21, V22 (the findings) and K1 and K5 (the new counter slot, before
+its carrier existed). No other operator class was run.
+
+**Verification at `318c99ed`.** Ballot rows re-measured count-only from the recorded ballots
+through `eval.validity.roles_by_seed` (a scratch script keyed by set, printing counts only), the
+family from `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`:
+
+| cell | s9 | pooled, four sets |
+|---|---|---|
+| impostor ballots: EJECT / SKIP | 46 / 164 | 183 / 760 (943) |
+| impostor EJECTs labelled `supported` / `off_target`; at confidence >= 0.6 | 44 / 2; 46 of 46 | 178 / 5; 182 of 183 |
+| impostor SKIPs with `decision_basis` `none_held` | 95 of 164 | 440 of 760 |
+| teammate-coerced impostor ballots | 1 | 13 |
+| ejections | 90 | 411 |
+| family cell 2: pointing toward / another turn | 26 / 19 | 98 / 83 |
+| family cell 4: ejections carried by impostor ballots alone | 0 of 90 | 0 of 411 |
+| family cell 5: kill holders; their ballots citing the kill (either slot) | 4; 3 of 4 | 31; 21 of 31 |
+| family cell 6: recorded teammate targets | 0 of 210 | 0 of 943 |
+
+The four honesty reports at `318c99ed` are byte-identical (`cmp` exit 0) to the same command run
+at `9b198d55` (that tree exported to scratch and run with its own code), so every family, the new
+one included, is unchanged, and the earlier comparison with the merge base's 18 families carries
+over. The rows of the `92e8803a` table that came from the earlier scratch walk over rebuilt
+memories (SKIPs holding a pointing row, teammate-kill sighting holders, budget-dropped kill
+records) were not re-measured: they read no code this round changed.
+
+| command | result |
+|---|---|
+| the card's targeted pytest list | exit 0, 897 passed |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `git grep -n WAVE_ARMS_PENDING -- '*.py'` | no output (exit 1) |
+| `bash scripts/verify_samples.sh replays/<set>`, four sets | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, four sets | exit 0 each |
+| `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, four sets | exit 0 each; byte-identical to `9b198d55` |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0 |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0 (and again at the card commit) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0 |
+| `uv run pytest -m campaign` | exit 0, 336 passed |
+| `uv run mypy eval/evidence_honesty.py tests/meetings/test_ballot_arms.py` | no issues |
+| `scripts/build_demo_bundle.py --out <scratch>` before and after the fix, same checkout, `diff -r` of `data/` | exit 0, no output; the builder does not import `eval.evidence_honesty` |
+| `bash scripts/check.sh` (clean tree at `318c99ed`) | exit 0: ruff, format, `lint-imports` (4 kept), task docs, prompt sync, mypy (518 files); 9,756 passed, 20 skipped, 3 xfailed (292 s); frontend lint, typecheck, 559 tests in 20 files, build |
+
+**Changed test expectations.** None weakened, skipped or deleted. Tightened: the match patterns of
+`test_the_profile_refuses_a_ballot_arm_beside_an_account_profile`,
+`test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block`,
+`test_a_dead_guard_is_no_block` and `test_a_ballot_by_a_player_with_no_rebuilt_memory_raises`.
+Added: three carriers in `test_each_carrier_moves_its_cell_by_exactly_one`,
+`test_the_profile_refusal_names_every_arm_and_account_profile_it_met` and
+`test_an_absent_or_unparseable_body_is_the_same_refusal_naming_the_file` (two cases).
+
+**Closing greps.** `git grep -n -i -E "kill.{0,60}(primary[_ ]reason[_ ]observation|primary observation slot|primary slot)|(primary[_ ]reason[_ ]observation|primary observation slot).{0,60}kill" -- '*.py' '*.md' ':!replays' ':!audits' ':!agent_prompts'`:
+two hits, both unrelated test lines (`tests/meetings/test_ballot_observation_citation.py`,
+`tests/meetings/test_vote_guard_rationale.py`); no sentence says the family reads only the primary
+slot. `git grep -n -i -E "absent or unparseable|unparseable or absent" -- '*.py' '*.md' ':!replays'`:
+the two loader docstrings, now both pinned.
+
+**Limitation added.** The census's own-kill cell `own_kill_rows_cited_by_holder`
+(`eval/gameplay_census.py`, the census card's file, not written here) reads only
+`primary_reason_observation_id`, while its definition says "cites the row's observation". The
+honesty cell now reads both slots, so the two can differ once an arm-ON record holds a counter-slot
+kill citation; on committed data both read nothing from the counter slot. Noted for the census
+owner and the record card.
