@@ -1483,7 +1483,6 @@ def test_a_profile_reads_a_later_setting_only_in_a_declared_layer(
 def test_an_engine_setting_the_helper_does_not_thread_is_refused_by_any_profile(
     arm_recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
     path = _with_recorded_setting(
         arm_recordings["patrol"],
         tmp_path / "copy",
@@ -1491,6 +1490,15 @@ def test_an_engine_setting_the_helper_does_not_thread_is_refused_by_any_profile(
         value="physical",
     )
     every = frozenset(_DECLARABLE)
+    # The helper threads the rule, so any profile, declaring no layer, walks the
+    # copy with every hash verified.
+    events = _arm_walk(path, _arm_profile())
+    assert isinstance(events[-1], WalkComplete)
+    # Planted: the helper patched to leave the rule unthreaded refuses it before
+    # the first advance, whatever layers the profile declares.
+    monkeypatch.setattr(
+        experiment_config, "_THREADED_ENGINE_FIELDS", ("redistribution_policy",)
+    )
     with pytest.raises(ValueError, match="vent_witness_rule='physical'"):
         _first_step(path, _arm_profile(threaded_layers=every))
 

@@ -112,6 +112,22 @@ for the before/after close finding — STABLE::
       "per_meeting": [ MeetingFunnelRow, ... ]
     }
 
+Recorded settings: the ``funnel-instrument`` profile reads recordings that carry
+experiment settings, and :data:`FUNNEL_READS` names, field by field, the ones
+both funnel walks read: every setting in
+:data:`eval.recorded_settings.READABLE_SETTINGS`. The engine settings reach
+every advance through the engine-arguments helper (which refuses one it does not
+thread), and the vent folds read the witness lists those advances produce, so a
+changed witness rule reaches Stage 2 and the pooled perception. The meeting reset
+reaches the applied meetings, and the per-tick perception across a meeting reads
+the pre-meeting play events plus the meeting's own events, as the live loop and
+the replay loader do; the belief fold after a meeting mirrors the live loop's
+default path. The tactical, meeting and trigger settings reach the folds only as
+the recorded actions, turns, flags and ballots (a rebuttal reply is one more
+recorded turn), and the trigger's described body handle is never read. Any other
+recorded setting, a settings format other than the first, and temporal delivery
+are refused before the first advance, naming the profile and the setting.
+
 Pure + offline: no network, no ``AILIBI_*`` env, no LLM. The public surface
 (stable — downstream tasks import these): :func:`compute_information_funnel`,
 :class:`InformationFunnelReport`, :class:`MeetingFunnelRow`.
@@ -138,6 +154,11 @@ from engine.events import (
 )
 from engine.world import Map, WorldState, load_canonical_map
 from observation.service import ObservationService
+from eval.recorded_settings import (
+    READABLE_SETTINGS,
+    layers_read,
+    read_recorded_settings,
+)
 from eval.replay_walk import (
     MeetingApplied,
     MeetingOpened,
@@ -245,6 +266,10 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
     )
 
 
+#: The recorded settings both funnel walks read (module docstring, "Recorded
+#: settings"): every setting a reviewed reader may read.
+FUNNEL_READS: frozenset[str] = READABLE_SETTINGS
+
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record), shared
 # by BOTH funnel walks: every recorded hash verified (per-tick + meeting
 # before/after), missing meeting row fail-loud, and a recording stamping a
@@ -260,6 +285,8 @@ _WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
     verify_meeting_pre_hashes=True,
     verify_meeting_post_hashes=True,
     reject_retired_levers_stamped_off=True,
+    supports_experiments=True,
+    threaded_layers=layers_read(FUNNEL_READS),
 )
 
 
@@ -389,14 +416,18 @@ def _walk_game(
     )
 
     try:
-        for walk_event in walk_replay(
-            replay_path,
-            seed=seed,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            game_map=game_map,
-            config=_WALK_CONFIG,
+        for walk_event in read_recorded_settings(
+            walk_replay(
+                replay_path,
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ),
+            reader=f"replay profile {_WALK_CONFIG.profile!r}",
+            reads=FUNNEL_READS,
         ):
             if isinstance(walk_event, TickOpened):
                 state = walk_event.state
@@ -1183,14 +1214,18 @@ def _walk_game_vj(
     trigger_kind: MeetingTriggerKind | None = None
 
     try:
-        for walk_event in walk_replay(
-            replay_path,
-            seed=seed,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            game_map=game_map,
-            config=_WALK_CONFIG,
+        for walk_event in read_recorded_settings(
+            walk_replay(
+                replay_path,
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ),
+            reader=f"replay profile {_WALK_CONFIG.profile!r}",
+            reads=FUNNEL_READS,
         ):
             if isinstance(walk_event, TickOpened):
                 # Pre-advance packets for EVERY living player (the 15.3 walk

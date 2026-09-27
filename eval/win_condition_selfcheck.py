@@ -30,6 +30,18 @@ meeting's ``state_hash_after`` against the recording, so a wrong roster or a
 determinism break fails loud rather than silently producing a misleading tick,
 and tolerates a partial-meeting replay by truncating the walk there — matching
 the loader's partial-replay handling.
+
+The profile reads recordings that carry experiment settings.
+:data:`WIN_CONDITION_READS` names, field by field, the ones it reads: every
+setting in :data:`eval.recorded_settings.READABLE_SETTINGS`. The check reads only
+the living impostors after each advance and each applied meeting, plus the
+recorded ``game_over`` row, so each of those settings reaches it through the
+walk: the engine settings through the engine-arguments helper (which refuses one
+it does not thread), the meeting reset through the walk's applied meetings, and
+the tactical, meeting and trigger settings only as the recorded actions and
+meeting rows it replays. Any other recorded setting, a settings format other
+than the first, and temporal delivery are refused before the first advance,
+naming the profile and the setting.
 """
 
 from __future__ import annotations
@@ -40,6 +52,11 @@ from typing import Final, NoReturn
 from pydantic import BaseModel, ConfigDict
 
 from engine.world import Map, WorldState, load_canonical_map
+from eval.recorded_settings import (
+    READABLE_SETTINGS,
+    layers_read,
+    read_recorded_settings,
+)
 from eval.replay_walk import (
     MeetingApplied,
     ReplayWalkConfig,
@@ -163,14 +180,18 @@ def check_replay_win_condition(
         if alive_impostors == 0:
             first_zero_impostor_tick = tick
 
-    for event in walk_replay(
-        replay_path,
-        seed=seed,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-        game_map=resolved_map,
-        config=_WALK_CONFIG,
+    for event in read_recorded_settings(
+        walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=resolved_map,
+            config=_WALK_CONFIG,
+        ),
+        reader=f"replay profile {_WALK_CONFIG.profile!r}",
+        reads=WIN_CONDITION_READS,
     ):
         if isinstance(event, (TickAdvanced, MeetingApplied)):
             _record_zero(event.entry.tick, event.state)
@@ -199,6 +220,10 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
     )
 
 
+#: The recorded settings the self-check reads (module docstring): every setting
+#: a reviewed reader may read.
+WIN_CONDITION_READS: Final[frozenset[str]] = READABLE_SETTINGS
+
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record): verify
 # per-tick hashes + each meeting's state_hash_after; TRUNCATE on a partial
 # meeting — this pass deliberately serves what a recording contains.
@@ -209,10 +234,13 @@ _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     verify_action_dispositions=True,
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
+    supports_experiments=True,
+    threaded_layers=layers_read(WIN_CONDITION_READS),
 )
 
 
 __all__ = [
+    "WIN_CONDITION_READS",
     "WinConditionRegressionError",
     "WinConditionSelfCheck",
     "assert_win_condition_consistent",
