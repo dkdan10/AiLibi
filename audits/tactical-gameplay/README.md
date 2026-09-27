@@ -132,8 +132,8 @@ named after the recorded value it sets
 Inputs: the development split only, seeds 1000-1007 on both rosters, under the
 lab's limits (96 ticks, 256 calls, 1,000,000 input and 100,000 output tokens, 30
 seconds and $0 per game). The held-out split was not run. The rows are
-`stage-b-development.json`. Its runtime fingerprint is `9b7be845343c4af343ed7caeef559b5b8a48657838820be6d05fe90e61e8dbcd` and its git
-head is `90d5f33562d7765e75a5510edf95130e5a8b2057`. All 160 games completed, and none aborted or hit a limit.
+`stage-b-development.json`. Its runtime fingerprint is `eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e` and its git
+head is `63980a00ace5336b901302552c20cdb39db1c95b`. All 160 games completed, and none aborted or hit a limit.
 Reproduce into an unused path:
 
 ```sh
@@ -208,7 +208,16 @@ nobody, so the impostors win almost every 9p2i game in every arm.
   the default cover vents again whenever no one watches. On 9p2i that raises
   entries from 29 to 91, and 65 of the 91 do not follow an own fresh kill; 74 of
   the 90 exits are in place. The minus-own-fresh-kill arm keeps part of this
-  loop: 43 entries, 15 of them not after an own fresh kill.
+  loop: 43 entries, 15 of them not after an own fresh kill. The entry gate
+  bounds the loop but does not remove it. An impostor that surfaces in place
+  beside its own victim may dive once more while the kill is at most three
+  ticks old. A dive and a surfacing take two ticks, so that happens at most
+  once per kill. A separate walk of the same games counts these re-entries
+  (the look-and-wait card's Results give the command; the JSON does not carry
+  this count). On 9p2i, 6 of the 28 entries under `stage_b_full` re-enter
+  within three ticks of the same impostor's in-place exit, each after its own
+  fresh kill. There are 15 of 43 without the gate and 64 of 91 with the look
+  alone.
 - **The physical rule and the look overlap.** `vent_look_and_wait` alone, under
   the older both-rooms rule, still shows 10 exits seen only from the room left.
   All 10 are exits at the cap with a crewmate in the room left, which the cap

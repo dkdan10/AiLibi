@@ -15118,7 +15118,7 @@
     "9p2i": "01ba485b9aed3cc7517a813afe919581861ccc1439c7249db0cbb06a84644340"
   },
   "format_version": 1,
-  "git_head": "90d5f33562d7765e75a5510edf95130e5a8b2057",
+  "git_head": "63980a00ace5336b901302552c20cdb39db1c95b",
   "historical_samples": {},
   "identity_permutations": {},
   "input_fingerprints": {
@@ -15138,7 +15138,7 @@
     "platform": "macOS-15.7.3-arm64-arm-64bit",
     "python": "3.11.15"
   },
-  "measured_utc": "2026-09-27T03:41:53.398571+00:00",
+  "measured_utc": "2026-09-27T05:13:28.209238+00:00",
   "seeds": [
     1000,
     1001,
@@ -15149,16 +15149,16 @@
     1006,
     1007
   ],
-  "source_sha256": "9b7be845343c4af343ed7caeef559b5b8a48657838820be6d05fe90e61e8dbcd",
+  "source_sha256": "eac202d4f73db94c5daa511ce912fc76dfc8450ac6e5db326f691eacad1ec49e",
   "split": "development",
   "world_copy_control": {
-    "copy_five_mappings_median_ns": 1649.8418,
+    "copy_five_mappings_median_ns": 1562.0416,
     "disposition": "retain safe copies; RNG reconstruction already bypasses initialization",
     "external_mapping_proxy_cannot_mutate_state": true,
     "iterations_per_loop": 5000,
     "mapping_values_preserved": true,
     "new_mapping_objects": 5,
-    "replace_world_median_ns": 3761.1,
+    "replace_world_median_ns": 3714.425,
     "rng_bytes_preserved": true,
     "scope": "five warmed single-process loops; nanoseconds per operation"
   }
