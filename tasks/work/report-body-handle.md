@@ -1,6 +1,6 @@
 # B4: close the kill-tick leak with the public body handle
 
-**Status:** ready
+**Status:** active
 
 ## Outcome
 
@@ -164,7 +164,7 @@ Every test below lives in `tests/orchestrator/test_report_body_handle.py`, uses
 the fake provider or a hand-built state, and writes only under `tmp_path`.
 `LEGACY_BODY_HANDLE_PATTERN` is `experiments/held_out_prefixes.py:168`.
 
-- [ ] **The leak closes in play.** Mechanism: `_build_meeting_trigger` renders
+- [x] **The leak closes in play.** Mechanism: `_build_meeting_trigger` renders
   `public_body_id(victim)` when `report_body_handle_version == 1`. The test runs
   a fake game with a declared
   `RecordedExperimentConfig(report_body_handle_version=1)` and temporal OFF:
@@ -175,7 +175,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
     round 1 records with (`AILIBI_PROMPT_SET=qwen3_6_27b`, set by the test).
   - Planted: a builder with the substitution removed (monkeypatched to the
     legacy description) fails both assertions.
-- [ ] **OFF bytes are unchanged.** Mechanism: the `None` default takes the
+- [x] **OFF bytes are unchanged.** Mechanism: the `None` default takes the
   legacy branch.
   - `test_opening_prompt_body_handle_privacy_is_explicitly_versioned[False]`
     passes unedited, still reading `body-p-3-4 at tick 8`.
@@ -185,7 +185,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
     `--check` runs and the c9 refit pins, campaign tier included, all pass.
   - Planted: the same OFF game with the field forced ON produces openings that
     differ from the OFF recording's, so the comparison is not vacuous.
-- [ ] **Reconstruction threads the recorded value, both ways.** Mechanism: the
+- [x] **Reconstruction threads the recorded value, both ways.** Mechanism: the
   golden's directory-callable walk, landed by
   [the readers card](stage-b-readers.md), rebuilds the trigger through the
   production builder with the recorded config. Re-anchor its symbol at dispatch.
@@ -194,7 +194,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
     prompt's recorded-response lookup.
   - Planted: the walk over an OFF recording with the field forced ON misses it
     too.
-- [ ] **Only the report openings differ.** Mechanism: the field gates only the
+- [x] **Only the report openings differ.** Mechanism: the field gates only the
   `described_body` selection. ON versus OFF, on seed 1 (7p1i) and seed 12 (9p2i):
   - equal tick and meeting state hashes, and equal call counts;
   - each ON report opening equals its OFF opening with its one `body-p-N-T`
@@ -212,7 +212,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
     opening-equality assertion.
   - Planted: the same run under `AILIBI_TEMPORAL_OBSERVATIONS=2` fails the
     no-temporal assertion.
-- [ ] **Edge cases of the builder.** Mechanism: unit tests on
+- [x] **Edge cases of the builder.** Mechanism: unit tests on
   `_build_meeting_trigger` with hand-built states and events.
   - An emergency trigger's description is byte-identical with the field ON and
     OFF.
@@ -222,7 +222,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
     description unchanged.
   - Planted: a builder that falls back to `body_id` when the victim is unknown
     fails the absent-corpse case.
-- [ ] **The field round-trips and is omitted at its default.** Mechanism: the
+- [x] **The field round-trips and is omitted at its default.** Mechanism: the
   spine's omit-at-default serializer and this card's deletion of its name from
   `WAVE_ARMS_PENDING`.
   - `RecordedExperimentConfig(report_body_handle_version=1)` validates at
@@ -237,14 +237,14 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
     so this card does not edit `tests/orchestrator/test_experiment_arms.py`.
   - Perturbed: `True` and `2` are refused. That refusal is the spine's
     validator; a failure here is reported under Questions, not patched here.
-- [ ] **A plain shell loads it.** Mechanism: the loader and the replay walk
+- [x] **A plain shell loads it.** Mechanism: the loader and the replay walk
   re-simulate from the recorded row, not the shell.
   - With no `AILIBI_*` export, `ReplayLoader` loads the arm-ON recording with
     `outcome_verified` true, and the shared walk verifies every tick and
     meeting hash.
   - Perturbed: a copy whose footer config disagrees with its tick rows raises
     in `validate_recorded_experiment_config`.
-- [ ] **Joint with the reset.** Mechanism: the corpse clear at meeting close
+- [x] **Joint with the reset.** Mechanism: the corpse clear at meeting close
   (`engine/meeting_reset.py:41`) does not change the id's form. The test runs a
   fake game on `{meeting_reset: "hub_with_grace", report_body_handle_version: 1}`.
   - A report meeting opened after a regroup names `body-p-N` without a kill
@@ -254,7 +254,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
     `meeting_reset="hub_with_grace"` and then the builder.
   - Planted: the same game with the field `None` shows the legacy handle in the
     post-regroup report, so the reset alone does not close the leak.
-- [ ] **End-to-end census conformance.** Mechanism: A1's opening-handle
+- [x] **End-to-end census conformance.** Mechanism: A1's opening-handle
   conformance cell (C31 in `census_and_record.md`; the flag computed in the
   loader so no text leaves it) and its arm predicate. The census folds the arm-ON
   recording through its write-nothing `--set-dir` path.
@@ -262,7 +262,7 @@ the fake provider or a hand-built state, and writes only under `tmp_path`.
   - Perturbed: a copy with one opening prompt given back its `body-p-N-T`
     handle raises the conformance guard.
   - B5's "kill-tick handle in an opening" STOP relies on this test.
-- [ ] **The retirement rule is written down.** Mechanism: a scope note in
+- [x] **The retirement rule is written down.** Mechanism: a scope note in
   `tasks/work/retire-temporal-evidence-v1.md`, Expected scope. When temporal v2
   graduates there, the narrow branch in `_build_meeting_trigger` and its keyword
   are dead code and are deleted (craft rule 3), unless the Stage-B adopting card
@@ -448,8 +448,213 @@ bash scripts/check.sh; echo "check.sh exit $?"
 
 ## Results
 
-Not started. The worker fills this section with the architecture and design
-sections referenced (`docs/architecture.md` "Observation timing and public
-identities" and the spine's arm page, `docs/experiment-arms.md`), the decisions, every Validation
-command with its real exit code, the seed used for the joint reset test, the
-re-measured reach counts, and the limitations.
+Implemented on `work/report-body-handle` from `f98bfae9`: `59f957e1` (the arm, the pending
+removal, the new test module and the follow-through), `1ddd6798` (the retirement scope note) and
+`c2aa9023` (three planted cases that kill the mutation survivors). Every command below ran at
+`c2aa9023` in a bare shell with 0 `AILIBI_*` exports, unless a line names another commit.
+
+**Status.** Ten of eleven boxes are met. "Nothing else moves" stays unchecked, and the card stays
+`active`, for one reason. The diff touches four paths outside Expected scope (see Deviations).
+Deleting the spine's builder refusal forced three of them: two tests in
+`tests/orchestrator/test_experiment_config.py` and one in `tests/eval/test_recorded_arm_readers.py`
+asserted that refusal, and `docs/experiment-arms.md` listed the body handle as pending. The card
+expected only `tests/orchestrator/test_experiment_arms.py` to depend on the refusal, and that file
+needed no edit. The fourth is `tasks/README.md`, whose inventory sentence the dispatch asked this
+card to re-derive. Every other part of that box holds and is evidenced below. The PR asks the
+owner under Questions to accept the four paths, and then this box is ticked.
+
+**Sections relied on.** `docs/architecture.md`, "Observation timing and public identities" (the
+packet handle and the legacy OFF opening). The spine's arm page, `docs/experiment-arms.md` (the
+eight fields, the missing-key rule and the pending guard). `docs/observation-contract.md` (public
+packet handles). The decision memo `tasks/decision-2026-09-24-stage-b-wave.md`: 0.2 (the B4
+rider), 0.3 items 1, 2, 6 and 9, section 1, 2.4, 3.2 (region ownership), 3.3 and the card-8 brief
+in 3.4. The investigation `tasks/investigations-2026-09-24/rebuttal_and_body_handle.md`, section 4.
+The dated 2026-09-24 addendum of `tasks/direction-2026-09-19-process-over-outcome.md`, which lists
+this field.
+
+**What was built.**
+- `orchestrator/game.py::_build_meeting_trigger`, body only:
+  - The spine's refusal of value 1 is deleted. A guard refuses every value other than `None` and
+    the integer 1 (`True`, `False`, 0, 2, `1.0` and `"1"` raise, naming the value).
+  - The `described_body` selection takes the public handle when
+    `temporal_observations or report_body_handle_version == 1`. Under either, a corpse missing
+    from `state.bodies` reads `a body`; OFF, the legacy branch still names the event's engine id.
+  - The comment and the docstring state the field.
+  - The signature, the keyword, the typed-kind construction and the call site are unchanged.
+- `orchestrator/experiment_config.py`: `report_body_handle_version` is deleted from
+  `WAVE_ARMS_PENDING`, and nothing else in that file changed.
+- `tests/orchestrator/test_report_body_handle.py` (new, 59 tests). It records 14 named fake games
+  once per module under a temporary root, with the meeting runner built from the declared config
+  and an explicit environment. It prints no prompt: a failure names handles, meeting ids and counts.
+- `tasks/work/retire-temporal-evidence-v1.md`: one scope paragraph under Expected scope. That
+  card's Status stays `ready` and its boxes stay unchecked.
+
+**Acceptance evidence** (test names are in `tests/orchestrator/test_report_body_handle.py` unless
+a path is given):
+
+| item | evidence | planted or perturbed |
+|---|---|---|
+| leak closes | `test_no_recorded_prompt_carries_a_kill_tick_handle_under_the_arm` over five arm-ON games: seed 1 (7p1i, 1 task, 80 ticks) and seed 12 (9p2i, 2 tasks, 200 ticks), each on the default set and on `qwen3_6_27b`, plus seed 0 (9p2i, full game, `qwen3_6_27b`). No recorded prompt matches `LEGACY_BODY_HANDLE_PATTERN`, counting every call of every meeting and aborted-meeting row, retries included. Each report opening carries `<opener> reported body body-p-N at tick T`. `test_the_first_report_reads_the_public_handle_at_its_report_tick`: seed 1 reads `reported body body-p-3 at tick 8`, where its engine id is `body-p-3-4`. | `test_a_builder_without_the_substitution_fails_both_leak_checks`: the live builder monkeypatched to the legacy description fails both checks on seed 1 and seed 12 (`qwen3_6_27b`). |
+| OFF bytes unchanged | `tests/orchestrator/test_temporal_delivery.py::test_opening_prompt_body_handle_privacy_is_explicitly_versioned[False]` passes unedited (`git diff f98bfae9 -- tests/orchestrator/test_temporal_delivery.py` is empty). The golden passes 35 on s9 and s4; `verify_samples` passes on all four sets; the four report checks, the scorecard and census checks and the campaign tier all pass (Validation below). | `test_forcing_the_arm_on_changes_every_report_opening`: in all five OFF/ON pairs, every OFF report opening names its engine id and differs from its ON opening. |
+| reconstruction threads both ways | `test_the_golden_re_renders_the_arm_on_recording_byte_equal`: `golden.walk_directory` (its `_run_recorded_meeting` rebuilds the trigger with the recorded config) reproduces every recorded prompt of seed 1 (default set) and seed 0 (`qwen3_6_27b`), and consumes every recorded call exactly once. | `test_the_golden_misses_the_opening_when_the_recorded_value_is_dropped`: the golden's builder is forced to `None`, and exactly the 4 report meetings of seed 0 miscount. `test_the_golden_misses_the_opening_of_an_off_recording_stamped_on`: an OFF recording is stamped ON (every tick row and the footer), and exactly its 4 report meetings miscount; the unstamped copy is clean. |
+| only the openings differ | `test_only_the_report_openings_differ`, over five pairs. Seed 1, seed 12 (default set, fake provider, fake tokens normalized) and seed 0 (`qwen3_6_27b`, 1 emergency and 4 report meetings) give equal tick and meeting state hashes and equal call counts per meeting. Each ON report opening equals its OFF opening with its one engine id replaced by `body-p-N`. The emergency opening is byte-identical. Every other prompt is equal after normalization. Seed 1 and seed 12 under a handle-blind client (`_HandleBlindClient`: the fake provider fed the prompt with ticks stripped from handles) are equal raw. No tick row carries a temporal version, and `substrate_flags.temporal_observations` is false. `prompt_versions` equal the registry mapping for the set in use. `test_the_round_one_stamps_are_the_registry_defaults`: three `.qwen3_6_27b.v6` stamps and `vote_ballot.qwen3_6_27b.v8`. `test_the_normalization_is_needed_and_the_blind_client_removes_the_need` shows why both forms are run. | `test_a_builder_that_moves_the_report_tick_fails_the_opening_equality`: a builder that moves `at tick T` to `T+1`, or drops it, fails the opening equality for every report meeting. `test_temporal_observations_fail_the_no_temporal_check`: the same game with `AILIBI_TEMPORAL_OBSERVATIONS=2` in the runner's environment carries a temporal version on all 24 tick rows and a true flag. |
+| builder edge cases | `test_the_arm_changes_only_a_reported_corpses_handle` (Hypothesis, 200 examples, `deadline=None`, over kind, tick, corpse age, victim, corpse present or absent, and temporal): every returned value except the description is equal under `None` and 1. No ON description carries a kill-tick handle. A report without temporal names `body-p-N` for a present corpse and `a body` for an absent one; everything else is byte-identical. `test_an_emergency_description_is_the_same_under_the_arm`, `test_an_absent_corpse_reads_a_body_and_never_the_engine_id`, `test_the_arm_beside_temporal_observations_keeps_the_temporal_text`, `test_the_builder_refuses_a_version_it_does_not_write` (6 values, whole message matched). | `_falls_back_to_the_engine_id` fails the absent-corpse case on description and engine id. |
+| round-trip and omission | `test_the_field_round_trips_at_format_one`. `test_the_default_serializes_without_the_key` (the default, the reset alone, format 2, format 3 with evidence 2). `test_the_arm_is_no_longer_pending`. The spine's `tests/orchestrator/test_experiment_arms.py::test_every_committed_recorded_payload_reserializes_byte_for_byte` (956 rows across 101 files, that is 947 rows over the 100 archive recordings plus 9 rows of the v3 fixture) and `test_every_committed_audit_json_payload_reserializes_unchanged` (237 payloads) pass unedited, as does its pending-refusal equality `test_a_value_is_pending_exactly_while_its_behaviour_is_unbuilt`. | `test_a_coerced_or_unknown_version_is_refused`: `True` and 2 are refused by the spine's validator. No Question arises. |
+| plain shell | `test_a_plain_shell_loads_the_arm_on_recording`: with every `AILIBI_*` export removed (count asserted 0), `ReplayLoader` loads seed 0 with `outcome_verified` true. The shared walk (the census profile with meeting pre-hashes on) verifies all 57 tick rows and all 5 meetings. | `test_a_footer_that_disagrees_with_the_tick_rows_is_refused`: a footer set to the default config raises `terminal experiment configuration disagrees with tick rows` in `validate_recorded_experiment_config`, through `recorded_experiment_config` and through the loader. |
+| joint with the reset | Seed 0, 9p2i, 2 tasks each, full game, `qwen3_6_27b`, `{meeting_reset: "hub_with_grace", report_body_handle_version: 1}`: 3 meetings, 38 calls. Meeting 0 is a button call, and its description is `<opener> called an emergency meeting at tick T`, with no body. Meetings 1 and 2 are reports; each follows a meeting that closed with every survivor in the meeting room and no corpse left, and each opening names `body-p-N`. No prompt matches the pattern. | `test_the_reset_alone_leaves_the_kill_tick_handle`: the same game with the field `None` carries 2 kill-tick handles, each in a post-regroup report opening. |
+| census end to end | `test_the_census_counts_no_kill_tick_opening_on_the_arm_on_recording`: `publish_gameplay_census.py --set-dir DIR --json-stdout` folds seed 0 arm ON to `report_openings_with_kill_tick_handle` 0 of 4, guard `report_body_handle_version = 1`. The OFF recording folds to 4 of 4 without raising. B5's STOP on a kill-tick handle in an opening relies on this test. | `test_one_opening_given_back_its_kill_tick_handle_breaks_the_census_guard`: one opening prompt in a copy gets its engine id back. The command exits 1 with nothing on stdout, and stderr names the conformance breach, the setting and the meeting; `set_dir_json` raises `GameplayCensusConformanceError`. |
+| retirement rule | The scope paragraph in `tasks/work/retire-temporal-evidence-v1.md`. | `test_a_recorded_key_the_model_does_not_declare_leaves_the_row_unparseable`: an arm-ON tick row parses, and the same row with the key misspelled `report_body_handle_vers` is refused (`extra="forbid"`). |
+| nothing else moves | Not met as worded; see Status. `orchestrator/experiment_config.py` changes by the one deleted line. No template, `PROMPT_VERSION_SETS` entry, `EXPERIMENT_ENV_NAMES` entry or `.env.example` line changes. `check.sh` exits 0 and every Validation command passes. | The scope check below, with its planted branch. |
+
+**Re-measured reach** (count-only, at `c2aa9023`). The published census cell
+`report_openings_with_kill_tick_handle` in `docs/gameplay-census.json` reads s9 135/135, c9
+416/416, s4 36/36, c4 36/36 and pooled 623/623;
+`uv run python scripts/publish_gameplay_census.py --check` recomputes it and exits 0. Recorded
+calls carrying a `body-p-N-T` handle, retries included, number s9 138, c9 422, s4 36 and c4 36, 632
+in all. Calls carrying one from anyone but the opener number 0 in every set. The per-set count
+command prints numbers only:
+`python3 -c 'import json,re,glob,sys;p=re.compile(r"body-p-\d+-\d+");print(sys.argv[1],sum(1 for f in glob.glob(sys.argv[1]+"/replay-seed-*.jsonl") for l in open(f) for r in [json.loads(l)] if r["kind"]=="meeting" for c in r["llm_calls"] if p.search(c["prompt"])))' replays/samples/9p2i`.
+Every number equals the card's Evidence.
+
+**The card's probe, re-measured** through the production path at `c2aa9023` (count-only; the
+module above asserts each cell):
+
+| game | prompts | report openings | state hashes | non-opening prompts differing | after normalizing |
+|---|---|---|---|---|---|
+| seed 1, 7p1i, 80 ticks, default set | 22 | 2 | equal | 20 of 20 | 0 |
+| seed 12, 9p2i, 200 ticks, default set | 44 | 4 | equal | 40 of 40 | 0 |
+| seed 0, 9p2i, full game, `qwen3_6_27b` | 66 | 4 (plus 1 emergency) | equal | 46 of 61 | 0 |
+
+**Neuter pass** over every production line this card adds or changes. Each row is one edit applied
+to the pristine bytes copied into the scratchpad. The targeted suites then run (the new module,
+`tests/orchestrator/test_experiment_config.py`, `tests/orchestrator/test_temporal_delivery.py`,
+`tests/meetings/test_meeting_trigger_kind.py`, `tests/orchestrator/test_experiment_arms.py` and
+`tests/eval/test_recorded_arm_readers.py`, run as `pytest -n 6 --dist loadfile`). The pass ran
+with the module as committed at `c2aa9023` minus its three survivor-killing cases, 437 tests. The
+file is then restored from the copy, never from git, and its sha256 is checked equal. Every row
+was killed on first run, and every restore matched.
+
+| row | neutered | failed / passed | first failing |
+|---|---|---|---|
+| N1 | the whole unknown-value guard deleted | 6 / 431 | `test_the_builder_refuses_a_version_it_does_not_write` |
+| N2 | the guard's `type(...) is not int` clause dropped | 2 / 435 | the same, for `True` and `False` |
+| N3 | the guard's `!= 1` clause dropped | 2 / 435 | the same, for 2 and 0 |
+| N4 | the guard's message replaced by a constant | 6 / 431 | the same (whole message matched) |
+| N5 | `or report_body_handle_version == 1` dropped | 28 / 409 | the leak, opening-equality, absent-corpse and census tests |
+| N6 | `temporal_observations or` dropped | 6 / 431 | `test_opening_prompt_body_handle_privacy_is_explicitly_versioned`, the property, the temporal edge case |
+| N7 | the pending entry restored | 10 / 379 (module import error) | `test_a_value_is_pending_exactly_while_its_behaviour_is_unbuilt`, the live-meeting spy, the readers spy, the new module |
+
+**Mutation pass**, once and bounded to the lines this card owns: the body of
+`_build_meeting_trigger` and the `WAVE_ARMS_PENDING` mapping. It used exactly the eight operator
+classes and the same runner and suites as the neuter pass, and produced 33 mutants.
+
+| class | mutants | outcome |
+|---|---|---|
+| drop a filter or wrapper | A1 `public_body_id(...)` unwrapped; A2 the `isinstance` filter on `events` dropped | A1 killed (20 failed). A2 SURVIVED at `1ddd6798`, then killed at `c2aa9023` by `test_the_builder_reads_the_trigger_among_the_ticks_other_events` (1 failed). |
+| swap a collection | B1 `state.bodies` to `state.players` | killed (25) |
+| comparison to a None test | C1 `== 1` to `is not None`; C2 `== 1` to `is None`; C3 `!= 1` to `is None`; C4 `type(...) is not int` to `is None`; C5 the guard's `is not None` inverted; C6 `body_id is not None` inverted; C7 `corpse is not None` inverted; C8 `victim_id is not None` inverted; C9 `described_body is not None` inverted; C10 the kind comparison to `is None` | C1 equivalent: the guard lets only `None` and the integer 1 past, so `== 1` and `is not None` agree on every reachable value. The other nine were killed (31, 2, 2, 200, 25, 28, 23, 38 and 117 failed). |
+| read to constant | D1 report `at tick` tick; D2 `trigger_tick`; D3 `kind`; D4 returned kind; D5 victim id; D6 the kind test; D7 emergency tick; D8 the event's body id | all killed (19, 132, 13, 3, 10, 4, 3 and 109 failed) |
+| message argument to constant | E1 the refused value in the message; E2 report actor; E3 emergency actor; E4 the described body | all killed (6, 12, 3 and 35 failed) |
+| drop a member | F1 `impostor_ballot_version` dropped from the pending mapping; F2 `vent_entry_policy` dropped | both killed by the spine's pending equality (1 failed each) |
+| swap branches | G1 the handle selection's branches; G2 the victim guard's branches; G3 the body phrase's branches; G4 the report/emergency branches | all killed (35, 23, 38 and 119 failed) |
+| loaded source to literal | H1 `EMERGENCY_TRIGGER_PHRASE` to its literal; H2 `public_body_id(v)` to `f"body-{v}"` | Both SURVIVED at `1ddd6798`. At `c2aa9023` they are killed by `test_an_emergency_description_follows_its_phrase` and `test_the_handle_follows_its_source` (1 failed each). |
+
+The probes that first came back green were A2, H1, H2 and C1; the neuter rows all failed on
+first run. The three survivors, re-run at `c2aa9023`, fail as shown, and C1 is named equivalent.
+The runner, the tables and the probes are under the session scratchpad's `b4run/` directory,
+outside the tree.
+
+**Validation**, at `c2aa9023`, 0 `AILIBI_*` exports, each command's real exit code:
+
+| command | exit | result |
+|---|---|---|
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_report_body_handle.py -q` | 0 | 59 passed |
+| `uv run pytest -p no:cacheprovider tests/orchestrator/test_temporal_delivery.py tests/orchestrator/test_experiment_config.py tests/experiments/test_held_out_prefixes.py tests/meetings/test_prompt_byte_golden.py -q` | 0 | 197 passed (the golden alone: 35 passed, as at `f98bfae9`) |
+| `bash scripts/verify_samples.sh replays/samples/9p2i` | 0 | all 50 verified clean |
+| `bash scripts/verify_samples.sh replays/samples/4p1i` | 0 | all 50 verified clean |
+| `bash scripts/verify_samples.sh replays/ml_corpus/9p2i` | 0 | all 150 verified clean |
+| `bash scripts/verify_samples.sh replays/ml_corpus/4p1i` | 0 | all 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, once per set | 0, 0, 0, 0 | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks, 390 prompts, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | every check passed |
+| `uv run pytest -m campaign` | 0 | 336 passed, 9365 deselected |
+| `git diff --name-only "$(git merge-base origin/main HEAD)" HEAD` | 0 | 7 paths (the Expected-scope four plus the three follow-through paths) |
+| `bash scripts/check.sh` in the clean worktree | 0 | ruff clean, 540 files formatted, 4 import contracts kept, task docs valid, strict mypy clean on 511 files, 9342 passed, 20 skipped and 3 xfailed, then 559 vitest tests and the frontend build |
+
+**The scope check** (`scope_check.py` in the scratchpad) prints every changed path outside a given
+list and exits 1 if there is any. Against the Expected-scope list at `c2aa9023` it prints
+`docs/experiment-arms.md`, `tests/eval/test_recorded_arm_readers.py` and
+`tests/orchestrator/test_experiment_config.py`, and exits 1. With those three declared paths and
+`tasks/README.md` added to the list, it prints nothing and exits 0. Planted: a scratch branch with
+one comment line appended to `orchestrator/replay.py` makes the declared-list run print
+`outside the expected scope: orchestrator/replay.py` and exit 1. The scratch branch was then
+deleted and never pushed.
+
+**Publication.** `uv run python scripts/build_demo_bundle.py --out <scratch>/bundle-head` at
+`c2aa9023`, and the same script at `f98bfae9`, each baked 156 JSON files for 7 featured games in 2
+sets. `diff -r` on the two `data/` trees printed nothing (exit 0). The base tree came from
+`git archive f98bfae9`. A replay view's `created_at` is its file's mtime (`api/replay_loader.py`,
+`_iso_mtime`), and an archive stamps the commit time. So a first diff differed only in
+`created_at`, in 9 files. The 319 replay files were confirmed byte-identical to the head
+checkout's and given its mtimes, and the base was rebuilt before the diff above.
+
+**Decisions.**
+1. The builder refuses any value other than `None` and 1, so a value past the config's validator
+   (a `model_construct` config) never silently renders the legacy text.
+2. Under the arm, a report whose corpse is missing from `state.bodies` reads `a body`, as temporal
+   mode already does. OFF still names the event's engine id there. The property states both.
+3. The retirement note states when the branch may be deleted. It is dead for play once temporal
+   version 2 graduates. But the golden rebuilds each recorded opening through the keyword, so
+   while a walked recording holds the field ON with temporal OFF (the Stage-B candidate will),
+   the branch stays as the golden's read path, or the deletion moves that reading into the
+   reconstruction. The card's "are dead code" is true for play only.
+4. `docs/observation-contract.md` (its "Full model-facing removal is implemented only in temporal
+   mode" sentence) is incomplete now that the arm exists. This is handed to that file's next
+   writer, the reset card. `docs/architecture.md` "Complete model-facing body-ID privacy remains
+   gated" and `docs/cleanup-dispositions.md` rows A-32 and G1-01 stay true: the default path still
+   renders the engine id.
+5. The card leaves Status to the orchestrator, but the dispatch asked this card to set it and to
+   re-derive the index sentence. With one box unchecked, Status is `active`, not `done`.
+
+**Deviations from Expected scope, all direct follow-through of deleting the refusal**, with every
+changed expectation:
+- `tests/orchestrator/test_experiment_config.py`:
+  - `test_no_body_handle_arm_builds_todays_trigger_byte_for_byte` replaces its `pytest.raises`
+    block with the arm's expectation. Version 1 gives today's trigger with the one handle
+    substituted for a report without temporal, and the same trigger otherwise.
+  - `test_the_live_meeting_passes_the_recorded_body_handle_arm` now runs the game. A spy on the
+    builder must see 1 on every meeting, and the test no longer patches the guard open.
+- `tests/eval/test_recorded_arm_readers.py::test_the_reconstructors_hand_the_recorded_trigger_setting_to_the_builder`:
+  a spy on the builder both readers call must see `None` on every meeting of the plain recording
+  and 1 on every meeting of the stamped copy, where it used to expect the refusal.
+- `docs/experiment-arms.md`: the pending-guard sentence no longer lists the body handle.
+- `tasks/README.md`: the inventory sentence, re-derived for this card's Status.
+
+No test was deleted or skipped. Closing greps at `c2aa9023`:
+`git grep -n -i -E 'trigger text (that is|no builder)|names a trigger|body.handle[^.]*(pending|not built|unbuilt|refus)|(pending|unbuilt|not built)[^.]*body.handle' -- . ':!tasks/decision-2026-09-24-stage-b-wave.md' ':!tasks/investigations-2026-09-24' ':!audits' ':!agent_prompts' ':!replays'`
+finds only dated card Results, B1's card (not this card's file), this card and the new test. A
+second grep for `only in temporal`, `model-facing ... privacy` and `death-tick handle` outside
+`tasks/`, `audits/`, `agent_prompts/`, `replays/`, `training/reports/` and the census pages finds
+only the rows named in Decision 4 and test or held-out-generator text that concerns temporal
+version 2.
+
+**Record impact, as delivered.** No committed byte under `replays/`, `audits/`, `tests/fixtures/`
+or `docs/` (apart from the one arm-page sentence) moved. So no `docs/artifacts.md` row changes.
+The held-out manifest and generator are untouched: the band is checked against its own frozen
+bytes, and `tests/experiments/test_held_out_prefixes.py` passes. The field is first recorded ON
+by the round-1 record card.
+
+**Limitations.**
+- Fake games establish the mechanism, not what a real model says. The 38 openings whose free text
+  names the kill tick (Evidence) are neither explained nor addressed, and the arm may remove a
+  correct time a reporter passed on.
+- The hash chain cannot tell which value a recording was made under: an OFF recording stamped ON
+  re-simulates with every hash equal. The golden (its misses) and the census guard (a kill-tick
+  handle under the ON stamp) are the checks that see it. The committed-meeting walk reads only
+  the trigger kind, so it cannot.
+- The golden still refuses temporal recordings, so it re-renders the arm only with temporal
+  delivery OFF.
+- The mutation pass covered only the lines this card owns, with the eight listed classes.
