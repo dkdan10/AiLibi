@@ -135,6 +135,27 @@ target of the earliest unanswered new charge, whatever that player's seat or rol
 
 ## Acceptance
 
+- [x] Review correction (round 3): the settings refusal reads a recording's settings off a
+  `TickOpened` only, and a stream led by any other event passes it through. In
+  `tests/eval/test_recorded_arm_readers.py`,
+  `test_a_leading_event_that_is_not_a_tick_row_passes_and_the_tick_row_refuses` leads a real walk
+  with a `WalkComplete`, a `TickAdvanced` and a `MeetingOpened` in turn: each passes through
+  untouched and the refusal, matched whole, arrives at the `TickOpened` after it.
+  `test_an_empty_replay_walks_to_the_vacuous_self_check` walks an empty replay to its
+  `WalkComplete` alone and pins the vacuous win-condition check, and
+  `test_the_first_tick_row_speaks_for_the_recording` passes a later tick row carrying an unread
+  setting. The verifier's probe V4 (the `TickOpened` filter dropped) and V5 (the first-row guard
+  dropped) are red: Results, "Review corrections, round 3".
+- [x] Review correction (round 3): the physical-witness leg of the event-level test runs, B0 (#485)
+  having merged before this card's last merge of `main` (`fb9d2e31`). A fake game recorded under
+  `vent_witness_rule="physical"` joins the arms every widened reader, evidence honesty and both
+  reconstructors verify, so every recorded-arm refusal accepts it.
+  `test_on_a_physical_recording_the_stand_in_and_the_rule_reach_every_advance` shows the stand-in
+  and the recorded rule reaching every advance of each of the eight readers, with the stand-in
+  moving no output; a helper that withholds the rule is told apart only by the rule the engine
+  received. `test_withholding_the_physical_rule_changes_what_a_vent_folding_reader_folds` and
+  `test_the_physical_recording_holds_exits_the_rule_changes` hold the folds and non-vacuity. Probes
+  P1 and P2 (the golden's and the walk's helper handed no config) are red.
 - [x] Review correction (round 2): `walk_chain`'s missing-pick and extra-turn refusals name the
   recorded pick and turn, pinned whole. `tests/meetings/test_transcript.py::TestWalkChainBoundedRebuttal`
   runs every case over two shapes whose pick speaker, charge and reply index all differ (`p-1`,
@@ -843,9 +864,10 @@ Case-insensitive, over the whole tree except `tasks/`, `audits/` and `agent_prom
   reset; the meeting-reset card changes the live loop and these readers together. The scorecard
   `--set-dir` tests use no reset fixture, since the scorecard's room table under the reset is that
   card's.
-- `vent_witness_rule='physical'` is still refused by the engine helper everywhere; the event-level
-  test proves the readers take a stand-in engine setting through the helper, and the physical run is
-  the physical-witness card's once it threads the rule.
+- `vent_witness_rule='physical'` was refused by the engine helper everywhere until the
+  physical-witness card (#485) threaded it. Since this card merged `main` at `fb9d2e31`, the
+  event-level test also runs on a physical recording (Results, "Review corrections, round 3"); the
+  pending refusal the Decisions above name for it is lifted.
 - `scripts/counterfactual_phase21.py` gains no refusal of its own; it reads recordings only through
   the golden walk and evidence honesty and takes their behaviour.
 - The B3 figures are a projection of the selector over transcripts recorded without it; a game
@@ -1110,3 +1132,118 @@ carries this subsection. That commit changes only this card.
 The gate ran once, on `325fd4f9`, which carries this subsection without the `check.sh` row above.
 The commit that adds the row changes nothing else, and the task-docs validator was re-run on it
 (exit 0).
+
+### Review corrections, round 3 (2026-09-26)
+
+One blocking finding from the round-3 verifiers on `f35e0fe5`, plus the dispatch's scoped follow-up:
+merge `main` now that the physical-witness card (B0, #485) has landed, and run the physical-witness
+leg of the event-level test that the Limitations above left to B0. No Codex comment was posted on
+the PR beyond its review summary, so there is none to answer.
+
+- **The merge (`638a7c26`).** `origin/main` at `fb9d2e31` merged in with `git merge`, no rebase. The
+  two histories share one file, `tasks/README.md`'s derived inventory sentence. It merged textually
+  clean at "8 ready, 80 done", but that was stale, since each side had flipped a different card to
+  done. `scripts/validate_task_docs.py` re-derived it as 7 ready, 81 done. From here on, `git diff
+  fb9d2e31 <head>` shows only this card's work.
+- **Survivor V4 in `read_recorded_settings` (correctness).** With the `TickOpened` filter dropped
+  (`if not checked:`), every test stayed green, because every stream the tests fed the refusal
+  opened with a `TickOpened`. The mutant is not equivalent: an empty replay's walk opens with its
+  `WalkComplete`, which has no `entry`, so the mutant raises `AttributeError` where
+  `check_replay_win_condition` returns the vacuous check. Three planted cases now hold the filter
+  (`29d27544`, tests only), all in `tests/eval/test_recorded_arm_readers.py`:
+  - `test_a_leading_event_that_is_not_a_tick_row_passes_and_the_tick_row_refuses` puts a
+    `WalkComplete`, a `TickAdvanced` or a `MeetingOpened` from the workload recording's own walk in
+    front of that walk. The leading event comes back as the same object, and the next pull raises
+    the unread-setting message, matched whole, under a reader name no other case uses.
+  - `test_an_empty_replay_walks_to_the_vacuous_self_check` shows an empty replay's walk is its
+    `WalkComplete` alone. It pins `check_replay_win_condition` at seed 2 to the all-`None` check
+    named `headless-seed-2`.
+  - `test_the_first_tick_row_speaks_for_the_recording` plants `crew_idle_policy="patrol"` on the
+    second tick row. The walk has already checked that every row agrees, so only the first row is
+    read and every event passes through as the same object. This also holds the first-row guard,
+    probe V5 below.
+- **The physical-witness leg (the event-level acceptance item's B0 clause).** B0 threads
+  `vent_witness_rule` through the spine's engine helper and drops the rule from the wave's pending
+  guard. So the module fixture now records a fake game under `vent_witness_rule="physical"`, with no
+  guard patched open.
+  - The recorded-arm refusals accept the rule. The physical recording joins the arms of
+    `test_a_widened_reader_verifies_every_arm_that_exists_today` (five readers) and
+    `test_the_reconstructors_walk_every_meeting_of_every_arm_that_exists_today`. There the committed
+    walk yields every recorded meeting and the golden re-renders every prompt byte-equal. It also
+    joins `test_honesty_verifies_every_arm_it_reads`.
+  - The stand-in reaches every reader under the rule.
+    `test_on_a_physical_recording_the_stand_in_and_the_rule_reach_every_advance` covers the five
+    profiles, the pooling funnel, the committed walk and the golden, each threaded and withheld (16
+    cases). It installs the planted helper and the stand-in engine at the walk and the golden. The
+    engine then sees the stand-in on every tick row's advance, and the rule `physical` on every
+    advance. The stand-in is R7's shape, which the physical rule already produces, so each reader's
+    output equals its output without the stand-in. For the golden that means every prompt
+    re-renders byte-equal. The perturbed case plants a helper that withholds the rule. Every hash
+    still verifies, and only the rule the engine received (`both_rooms`) tells it apart.
+  - The folding readers follow the rule.
+    `test_withholding_the_physical_rule_changes_what_a_vent_folding_reader_folds` reads the same
+    recording through a helper that withholds the rule. The funnel's vent sightings, evidence
+    honesty's rebuilt memories, the committed walk's vent witness records and the golden's rendered
+    memory each change, at the same size.
+  - Non-vacuity. `test_the_physical_recording_holds_exits_the_rule_changes` asserts the recording
+    holds vent exits and that no exit into another room lists the room left under the recorded rule.
+    It also asserts that withholding the rule gives at least one exit a witness in the room left
+    who is absent from the room surfaced into.
+  - Only sizes, counts, witness records and one boolean reach these assertions, so a failure prints
+    no rendered prompt or memory.
+  - The earlier spy case, `test_the_reconstructors_hand_the_recorded_witness_rule_to_the_engine_helper`,
+    is unchanged. It holds whether or not the helper threads the rule.
+
+**Changed tests** (none weakened, skipped or deleted): the two arm parametrizations now read one
+`_ARMS_TODAY` tuple with `physical` added. `_StandIn` also records the rule each advance handed the
+engine, and it takes a `withhold` switch. The readers file goes from 122 to 154 cases: 3 leading
+events, the first-row case, the empty replay, the non-vacuity case, 16 reach cases, 4 fold cases, 5
+widened-reader arms and 1 reconstructor arm.
+
+**Round-3 probes.** One edit per probe, made in place from a byte copy. Each probe ran twice with
+`pytest -x -q -n 6 -p no:cacheprovider`: first with the readers test file at its `f35e0fe5` bytes,
+then at its `29d27544` bytes. The V probes ran `tests/eval/test_recorded_arm_readers.py`. The P
+probes ran the same file with `-k physical`, so only the physical leg could turn them red. Each file
+was restored from its copy and its sha256 compared; all 9 restores matched and the tree was clean
+after. Red means real test failures: a re-run of each red probe without `-x` names the failing
+cases. The probe script is a scratch file, not committed.
+
+| Probe | Edit (operator class) | At `f35e0fe5` | At `29d27544` |
+| --- | --- | --- | --- |
+| V4 | `if not checked and isinstance(event, TickOpened)` to `if not checked` (drop a filter; the verifier's probe) | green | red: the three leading-event cases and the empty replay |
+| V4I | `isinstance(...)` to `not isinstance(...)` (the check's inverse) | red | red |
+| V4S | `TickOpened` to `TickAdvanced` (one type swapped for a related one) | red | red |
+| V5 | `not checked and` dropped (drop a filter) | green | red: `test_the_first_tick_row_speaks_for_the_recording` |
+| V6 | `event.entry.experiment_config` to `None` (a loaded source's read replaced with the canonical literal) | red | red |
+| V7 | `reads=reads` to `reads=READABLE_SETTINGS` (one collection swapped for a related one) | red | red |
+| V8 | `reader=reader` to `reader='r'` (a message argument to a constant) | red | red |
+| P1 | the golden walk's `engine_arguments(recorded)` to `engine_arguments(None)` (a loaded source's read replaced with the canonical literal) | no physical case to run (pytest exit 5) | red: 4 cases, the golden's reach, fold and every-meeting cases |
+| P2 | `eval/replay_walk.py`'s `engine_arguments(experiment)` to `engine_arguments(None)` (the same class, at the spine's site the other seven readers use) | no physical case to run | red: 13 cases |
+
+9 probes, no survivor. P2 edits the spine's file only inside the probe, restored byte for byte;
+neither this card nor round 3 changes it.
+
+**Verification.** These runs used the production and test bytes of `29d27544`, before the commit
+that carries this subsection. That commit changes only this card. No production module, recording,
+derived view, fixture, doc fact or `audits/` byte moved in round 3. `git diff --stat 638a7c26
+29d27544` lists the one test file, and the merge adds only `main`'s own bytes plus the re-derived
+inventory sentence.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/eval/test_recorded_arm_readers.py tests/meetings/test_transcript.py tests/meetings/test_prompt_byte_golden.py tests/_helpers tests/experiments/test_gameplay_facts_refuses_experiments.py tests/scripts/test_process_scorecard.py -q -n 6` | exit 0, 429 passed (397 before, plus the 32 new cases) |
+| `uv run pytest tests/eval/test_evidence_honesty.py tests/eval/test_funnel.py tests/eval/test_kill_craft.py tests/eval/test_solvability.py tests/eval/test_win_condition_selfcheck.py tests/meetings/test_reasoning_evidence.py tests/meetings/test_manager.py -q -n 6` | exit 0, 491 passed |
+| the same, plus B0's `tests/eval/test_vent_witness_readers.py` and `tests/eval/test_replay_walk.py` | exit 0, 555 passed |
+| `bash scripts/verify_samples.sh replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check`; `uv run python scripts/publish_gameplay_census.py --check` | exit 0 each, consistent |
+| `uv run python scripts/measure_baseline.py --honesty replays/samples/9p2i` and `... replays/samples/4p1i` | exit 0 each; sha256 `97aa858e...` and `d0500f96...`, the values above |
+| `uv run python scripts/publish_process_scorecard.py --set-dir replays/samples/9p2i --json-stdout` | exit 0; equal, as parsed JSON, to the `samples/9p2i` entry of `docs/process-scorecard.json` (`sets[1]`) |
+| `uv run python scripts/build_demo_bundle.py --out <scratch>/bundle-head`, and `--out <scratch>/bundle-base` with this card's ten production files at their `fb9d2e31` bytes (`eval/recorded_settings.py` removed), restored from copies afterwards (sha256 checked) | exit 0 each: 7 featured games, 156 baked JSON files |
+| `diff -r bundle-base bundle-head` | empty, exit 0 (194 files each): merging this card into `fb9d2e31` republishes identical bytes |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | exit 0 each (88 work cards) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 62 checks, 50 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `uv run pytest -m campaign -q -n 6` | exit 0, 336 passed |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 329 files; 26,636,557 bytes, the `docs/artifacts.md` row, unchanged (B0 moved no `audits/` byte) |
+| `git diff --stat fb9d2e31 HEAD -- replays agents engine observation orchestrator api frontend docs/process-scorecard.md docs/process-scorecard.json` | empty |
