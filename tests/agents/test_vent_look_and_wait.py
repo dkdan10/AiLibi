@@ -774,6 +774,34 @@ def test_under_a_sabotage_a_neighbour_counts_as_unseen(sabotage: Sabotage) -> No
         fold_set(_census_surfacing("STORAGE", sabotage=True))
 
 
+@pytest.mark.parametrize("sabotage", ["reactor", "lights"])
+def test_the_look_reads_the_freshest_sabotage_status_even_from_an_earlier_tick(
+    sabotage: Sabotage,
+) -> None:
+    # The sabotage status comes at 21; the tick-22 status row is removed, so the
+    # freshest status is 21's. The look reads it, as the anchor's sabotage guard
+    # does, so ENGINEERING is unseen and the impostor surfaces in place. With a
+    # tick-22 status reporting no sabotage, the crewmate there makes it wait.
+    # Perception appends a status every tick, so the removal is planted: it pins
+    # that the look reads the freshest status over all rows, not this tick's.
+    memory = MemoryStore()
+    _tick(memory, tick=20, room="STORAGE", in_vent=False, cooldown=4)
+    _tick(memory, tick=21, room="STORAGE", in_vent=True, sabotage=sabotage)
+    _tick(memory, tick=22, room="STORAGE", in_vent=True, seen=((CREW, "ENGINEERING"),))
+    rows = memory.recent(since_tick=0)
+    stale = _rebuilt(
+        row for row in rows if (row.tick, row.type) != (22, "global_status")
+    )
+    assert [row.type for row in stale.recent(since_tick=22)] == [
+        "self_state",
+        "cooldown_status",
+        "saw_player",
+    ]
+    assert ImpostorPolicy._active_sabotage(stale.recent(since_tick=0))
+    assert _vent(_policy().decide(stale, MAP)) == "STORAGE_VENT"
+    assert _policy().decide(memory, MAP).type == "wait"
+
+
 def test_under_a_sabotage_a_body_in_a_neighbour_is_not_read_at_the_cap() -> None:
     # Reactor: STORAGE watched, ENGINEERING and REACTOR both unseen. A body the
     # engine still shows in ENGINEERING is not read, so the vent id decides.
@@ -876,24 +904,27 @@ def _entry_memory(
     own_kill: tuple[str, str] | None,
     kill_row_tick: int = 11,
     decide_tick: int = 11,
-    body: tuple[str, str] = (VICTIM, "STORAGE"),
+    room: str = "STORAGE",
+    body: tuple[str, str] | None = None,
     seen: Iterable[tuple[str, str]] = (),
     boundary: int | None = None,
     boundary_first: bool = False,
 ) -> MemoryStore:
+    """The impostor in ``room`` beside a body, by default ``VICTIM``'s in ``room``."""
+
     memory = MemoryStore()
-    _tick(memory, tick=10, room="STORAGE", in_vent=False, cooldown=0)
+    _tick(memory, tick=10, room=room, in_vent=False, cooldown=0)
     for tick in range(kill_row_tick, decide_tick + 1):
         if boundary is not None and tick == boundary and boundary_first:
             _boundary(memory, tick)
         _tick(
             memory,
             tick=tick,
-            room="STORAGE",
+            room=room,
             in_vent=False,
             cooldown=4,
             own_kill=own_kill if tick == kill_row_tick else None,
-            bodies=(body,),
+            bodies=((VICTIM, room) if body is None else body,),
             seen=seen if tick == decide_tick else (),
         )
         if boundary is not None and tick == boundary and not boundary_first:
@@ -913,6 +944,106 @@ def test_a_teammates_victim_makes_it_walk_away() -> None:
     assert walked == ImpostorPolicy(agent_id=ME)._cover(
         public_map=MAP, own_room="STORAGE"
     )
+
+
+_VENT_OF_ROOM: dict[str, str] = {room: vent for vent, room in MAP.vent_rooms.items()}
+
+# The default cover's move from each vent room of the canonical map: its first
+# neighbour in sorted order.
+_WALK_AWAY: dict[str, str] = {
+    "ADMIN": "EAST_HALL",
+    "ENGINEERING": "EAST_HALL",
+    "LABS": "MEDBAY",
+    "MEDBAY": "LABS",
+    "REACTOR": "ENGINEERING",
+    "STORAGE": "ENGINEERING",
+}
+
+
+def test_the_walk_away_cases_cover_every_vent_room() -> None:
+    # Every vent room is a case, and they walk to more than one room, so a
+    # walk-away from any fixed room fails at least one of them.
+    assert set(_WALK_AWAY) == set(MAP.vent_rooms.values())
+    assert len(set(_WALK_AWAY.values())) > 1
+
+
+@pytest.mark.parametrize(("room", "walk_to"), sorted(_WALK_AWAY.items()))
+def test_the_walk_away_leaves_from_the_impostors_own_room(
+    room: str, walk_to: str
+) -> None:
+    # A teammate's victim in each vent room: the gate walks to that room's own
+    # cover move, where any_body vents at that room's vent. The impostor's own
+    # fresh kill in the same room vents exactly as any_body does.
+    memory = _entry_memory(own_kill=None, room=room)
+    assert _vent(_entry(memory, "any_body")) == _VENT_OF_ROOM[room]
+    walked = _entry(memory, "own_fresh_kill")
+    assert walked == ImpostorPolicy(agent_id=ME)._cover(public_map=MAP, own_room=room)
+    assert walked.type == "move" and walked.payload.to_room == walk_to
+    assert walk_to in MAP.room_neighbors[room]
+    own = _entry_memory(own_kill=(VICTIM, room), room=room)
+    assert _entry(own, "own_fresh_kill") == _entry(own, "any_body")
+    assert _vent(_entry(own, "own_fresh_kill")) == _VENT_OF_ROOM[room]
+
+
+def test_the_walk_away_follows_the_loaded_maps_neighbours() -> None:
+    # Perturbed map: STORAGE gains CAFETERIA as a neighbour, which sorts before
+    # ENGINEERING, so the walk-away on that map goes to CAFETERIA.
+    wider = MAP.model_copy(
+        update={
+            "room_neighbors": {
+                **MAP.room_neighbors,
+                "STORAGE": (*MAP.room_neighbors["STORAGE"], "CAFETERIA"),
+            }
+        }
+    )
+    memory = _entry_memory(own_kill=None)
+    any_body = _policy("target_distance", "any_body").decide(memory, wider)
+    assert _vent(any_body) == "STORAGE_VENT"
+    walked = _policy("target_distance", "own_fresh_kill").decide(memory, wider)
+    assert walked.type == "move" and walked.payload.to_room == "CAFETERIA"
+    assert walked == ImpostorPolicy(agent_id=ME)._cover(
+        public_map=wider, own_room="STORAGE"
+    )
+    canonical = _entry(memory, "own_fresh_kill")
+    assert canonical.type == "move" and canonical.payload.to_room == "ENGINEERING"
+
+
+def _own_victim_seen_at_11(bodies_at_12: tuple[tuple[str, str], ...]) -> MemoryStore:
+    """The own kill's row and its victim's body in STORAGE at 11; ``bodies_at_12``."""
+
+    memory = MemoryStore()
+    _tick(memory, tick=10, room="STORAGE", in_vent=False, cooldown=0)
+    _tick(
+        memory,
+        tick=11,
+        room="STORAGE",
+        in_vent=False,
+        cooldown=4,
+        own_kill=(VICTIM, "STORAGE"),
+        bodies=((VICTIM, "STORAGE"),),
+    )
+    _tick(
+        memory, tick=12, room="STORAGE", in_vent=False, cooldown=3, bodies=bodies_at_12
+    )
+    return memory
+
+
+def test_an_own_victim_sighted_here_only_before_this_tick_is_not_this_body() -> None:
+    # The kill (engine tick 10) is fresh at 12, but the victim's body was
+    # sighted here only at 11; at 12 the one body here is another's. The gate
+    # reads this tick's bodies, so it walks away where any_body vents. With the
+    # victim's body still in view at 12 it vents exactly as any_body does.
+    # Perception would still show that body at 12 (a body stays until a meeting,
+    # and a meeting after the kill already fails the gate), so the memory is
+    # planted: it pins that the gate reads this tick's sightings, not earlier ones.
+    earlier = _own_victim_seen_at_11(((OTHER_CREW, "STORAGE"),))
+    assert _vent(_entry(earlier, "any_body")) == "STORAGE_VENT"
+    assert _entry(earlier, "own_fresh_kill") == ImpostorPolicy(agent_id=ME)._cover(
+        public_map=MAP, own_room="STORAGE"
+    )
+    in_view = _own_victim_seen_at_11(((VICTIM, "STORAGE"), (OTHER_CREW, "STORAGE")))
+    assert _entry(in_view, "own_fresh_kill") == _entry(in_view, "any_body")
+    assert _vent(_entry(in_view, "own_fresh_kill")) == "STORAGE_VENT"
 
 
 def test_a_fresh_own_kill_vents_exactly_as_any_body_does() -> None:
