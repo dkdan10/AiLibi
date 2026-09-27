@@ -1257,10 +1257,37 @@ def test_a_tally_that_dropped_the_ungrounded_eject_would_change_the_outcome(
 def test_the_profile_refuses_a_ballot_arm_beside_an_account_profile(
     arm: str, account: str
 ) -> None:
-    with pytest.raises(ValidationError, match="cannot run with the account profile"):
+    """The refusal names the arm and the account profile it met."""
+
+    with pytest.raises(
+        ValidationError,
+        match=(
+            f"the ballot experiment \\['{arm}'\\] cannot run with the account "
+            f"profile \\['{account}'\\]"
+        ),
+    ):
         MeetingEvidenceProfile.model_validate({arm: 1, account: 1})
     assert MeetingEvidenceProfile.model_validate({arm: 1})
     assert MeetingEvidenceProfile.model_validate({account: 1})
+
+
+def test_the_profile_refusal_names_every_arm_and_account_profile_it_met() -> None:
+    with pytest.raises(
+        ValidationError,
+        match=(
+            "the ballot experiment \\['ballot_kill_row_version', "
+            "'impostor_ballot_version'\\] cannot run with the account profile "
+            "\\['public_account_version', 'attributed_testimony_version'\\]"
+        ),
+    ):
+        MeetingEvidenceProfile.model_validate(
+            {
+                "ballot_kill_row_version": 1,
+                "impostor_ballot_version": 1,
+                "public_account_version": 1,
+                "attributed_testimony_version": 1,
+            }
+        )
 
 
 _OVERLAYS: Final[dict[str, str]] = {
@@ -1361,7 +1388,13 @@ def test_a_pin_claiming_an_arm_on_another_set_fails_the_one_source_check() -> No
 def test_the_runner_refuses_an_arm_for_a_set_whose_ballot_has_no_block(
     arm: str,
 ) -> None:
-    with pytest.raises(ValueError, match=f"carries no live '{arm}' guard"):
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"Prompt set 'qwen3_32b' template '{VOTE_BALLOT_TEMPLATE}' carries no "
+            f"live '{arm}' guard"
+        ),
+    ):
         build_default_meeting_runner(
             llm_client=_fake(),
             env={"AILIBI_PROMPT_SET": "qwen3_32b"},
@@ -1387,12 +1420,27 @@ def test_the_body_check_reads_the_template_the_arm_registers(
         )
 
 
+def _set_copy(root: Path) -> Path:
+    """A copy of the served set's bodies under ``root``; returns ``root``."""
+
+    shutil.copytree(_REPO / "agents" / "strategic" / "prompts" / _SET, root / _SET)
+    return root
+
+
+def _no_block(arm: str) -> str:
+    """The body check's refusal for the served set's ballot, as a pattern."""
+
+    return re.escape(
+        f"Prompt set '{_SET}' template '{VOTE_BALLOT_TEMPLATE}' carries no live "
+        f"'{arm}' guard"
+    )
+
+
 @pytest.mark.parametrize("arm", _ARMS)
 def test_a_dead_guard_is_no_block(arm: str, tmp_path: Path) -> None:
     """Planted: the arm's guards folded to a constant in a template copy."""
 
-    root = tmp_path / "prompts"
-    shutil.copytree(_REPO / "agents" / "strategic" / "prompts" / _SET, root / _SET)
+    root = _set_copy(tmp_path / "prompts")
     victim = root / _SET / VOTE_BALLOT_TEMPLATE
     source = victim.read_text(encoding="utf-8")
     victim.write_text(
@@ -1401,11 +1449,37 @@ def test_a_dead_guard_is_no_block(arm: str, tmp_path: Path) -> None:
     )
     from agents.strategic.prompts.loader import require_guarded_bodies
 
-    with pytest.raises(ValueError, match=f"carries no live '{arm}' guard"):
+    with pytest.raises(ValueError, match=_no_block(arm)):
         require_guarded_bodies(
             _SET, guard=arm, templates=(VOTE_BALLOT_TEMPLATE,), root=root
         )
     require_guarded_bodies(_SET, guard=arm, templates=(VOTE_BALLOT_TEMPLATE,))
+
+
+@pytest.mark.parametrize("arm", _ARMS)
+def test_an_absent_or_unparseable_body_is_the_same_refusal_naming_the_file(
+    arm: str, tmp_path: Path
+) -> None:
+    """Planted: the registered body missing from a set copy, then unparseable.
+
+    Either way the set cannot serve the arm, so the check raises its own
+    refusal naming the file, never the template engine's error.
+    """
+
+    from agents.strategic.prompts.loader import require_guarded_bodies
+
+    absent = _set_copy(tmp_path / "absent")
+    (absent / _SET / VOTE_BALLOT_TEMPLATE).unlink()
+    broken = _set_copy(tmp_path / "broken")
+    victim = broken / _SET / VOTE_BALLOT_TEMPLATE
+    victim.write_text(
+        victim.read_text(encoding="utf-8") + "\n{% if %}\n", encoding="utf-8"
+    )
+    for root in (absent, broken):
+        with pytest.raises(ValueError, match=_no_block(arm)):
+            require_guarded_bodies(
+                _SET, guard=arm, templates=(VOTE_BALLOT_TEMPLATE,), root=root
+            )
 
 
 # --------------------------------------------------------------------------- #
@@ -1916,6 +1990,15 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
         "ejects_pointing_toward_own_turn": 1,
         "ejects_citing_only_neutral": -1,
     }
+    # Another turn of this meeting accuses the target while the cited turn does
+    # not: only the cited turn is read, so the EJECT cites another turn.
+    accused_elsewhere = _with_ballot(
+        accusing, "p-3", primary_reason_id=third_turns["p-7"]
+    )
+    assert _moved(base, _conduct(accused_elsewhere)) == {
+        "ejects_other_turn": 1,
+        "ejects_without_citation": -1,
+    }
     # Only a neutral row, and then nothing at all.
     assert _moved(
         base,
@@ -2010,6 +2093,22 @@ def test_each_carrier_moves_its_cell_by_exactly_one(scripted_game: Path) -> None
             stores=_stores({"p-1": "p-3"}),
         ),
     ) == {"kill_holders": 1, "kill_holders_citing_the_kill": 1}
+    # The counter slot takes an own observation id too: citing the kill there
+    # cites it, and a counter naming a turn does not.
+    assert _moved(
+        base,
+        _conduct(
+            _with_ballot(third, "p-1", counter_reason_id="p-1:6:2"),
+            stores=_stores({"p-1": "p-3"}),
+        ),
+    ) == {"kill_holders": 1, "kill_holders_citing_the_kill": 1}
+    assert _moved(
+        base,
+        _conduct(
+            _with_ballot(third, "p-1", counter_reason_id=third_turns["p-3"]),
+            stores=_stores({"p-1": "p-3"}),
+        ),
+    ) == {"kill_holders": 1}
     # A kill row that arrived after the meeting opened is not held at it.
     late = _stores()
     prefix = {pid: len(store) for pid, store in late.items()}
@@ -2059,8 +2158,15 @@ def test_a_ballot_by_a_player_with_no_rebuilt_memory_raises(
 
     stores = _stores()
     del stores["p-9"]
-    with pytest.raises(EvidenceHonestyReconstructionError, match="p-9"):
-        _conduct(_meetings(scripted_game)[2], stores=stores)
+    third = _meetings(scripted_game)[2]
+    with pytest.raises(
+        EvidenceHonestyReconstructionError,
+        match=re.escape(
+            f"{third.meeting_id}: ballot by 'p-9', a player the walk rebuilt no "
+            "memory for"
+        ),
+    ):
+        _conduct(third, stores=stores)
 
 
 @pytest.mark.parametrize(

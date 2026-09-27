@@ -964,7 +964,10 @@ class BallotConductCells(_FrozenModel):
     by the accessor's own predicate
     (:func:`orchestrator.game.kill_witness_records_in`) over the rebuilt memory, and
     ``kill_holders_citing_the_kill`` those whose ballot cites one of those records'
-    observations. No cell is a gate.
+    observations in either slot that takes an own observation id:
+    ``primary_reason_observation_id`` or ``counter_reason_id``, which the meeting
+    layer nulls when it is neither this meeting's turn nor the voter's own
+    observation. No cell is a gate.
     """
 
     impostor_ballots: int
@@ -2899,10 +2902,15 @@ def _fold_ballot_conduct(
         )
         if kills:
             tallies.kill_holders += 1
-            if ballot.primary_reason_observation_id is not None and any(
-                record.observation_id == ballot.primary_reason_observation_id
-                for record in kills
-            ):
+            cited_observations = frozenset(
+                cited_id
+                for cited_id in (
+                    ballot.primary_reason_observation_id,
+                    ballot.counter_reason_id,
+                )
+                if cited_id is not None
+            )
+            if any(record.observation_id in cited_observations for record in kills):
                 tallies.kill_holders_citing_the_kill += 1
         if ballot.voter not in impostors:
             continue
