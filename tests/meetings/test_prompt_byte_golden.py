@@ -90,6 +90,25 @@ archived set is pinned on BOTH halves of what it rendered: the template bytes
 (``root=_ARCHIVE_ROOT``) and the render inputs that moved with it
 (:data:`ARCHIVED_MAP_CARDS` — a bump that rewrites the ``<map>`` card's format
 is not reproduced by archived ``.j2`` bytes alone).
+
+Any directory, with its own recorded settings (the Stage-B readers card):
+:func:`golden_directories` lists the two sample sets and every candidate set
+under ``replays/candidates/<round>/<roster>/`` that holds replay files, from a
+root a test can redirect, and :func:`walk_directory` walks one of them. Each
+recording is re-simulated with the settings it recorded, read at most as far as
+:data:`eval.recorded_settings.READABLE_SETTINGS` names them and refused by name
+before the first advance otherwise: every advance takes
+:func:`orchestrator.experiment_config.engine_arguments`, every applied meeting
+the recorded reset, every rebuilt trigger the recorded trigger settings, the
+meeting manager the evidence profile
+:func:`meetings.evidence_profile.profile_from_config` builds from the recording,
+and the agents are built as ``HeadlessGame`` builds them (the default factory
+for the recorded settings, then ``bind_experiment``). A recorded stamp other than
+the live default resolves only through an experiment arm the recording's own
+settings turn on (:func:`resolve_prompt_set`), and
+:func:`test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty`
+accepts such a stamp only when it equals that arm's stamp. The walk mirrors the
+live loop's current resume perception under the meeting reset.
 """
 
 from __future__ import annotations
@@ -97,16 +116,20 @@ from __future__ import annotations
 import asyncio
 import difflib
 import shutil
-from collections.abc import Iterator, Mapping, Sequence
+import sys
+from collections import Counter
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from itertools import combinations
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import MappingProxyType
 from typing import Any, Final
 
 import pytest
 from pydantic import BaseModel
 
+import orchestrator.game as game_module
 from agents.memory.beliefs import (
     SUSPICION_PROVENANCE_ATOL,
     SuspicionProvenance,
@@ -119,17 +142,16 @@ from agents.strategic.prompts.loader import (
     PromptRenderers,
     build_prompt_renderers,
 )
-from agents.tactical.crewmate_policy import CrewmatePolicy
-from agents.tactical.impostor_policy import ImpostorPolicy
 from api.replay_loader import (
     _deserialize_actions,
     _game_id_for_seed,
     _infer_num_players,
     _load_roster_config,
 )
-from engine.entities import PlayerId, Role
+from engine.entities import PlayerId
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
+from eval.recorded_settings import READABLE_SETTINGS, refuse_unread_settings
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
@@ -139,10 +161,17 @@ from meetings.manager import (
     MeetingTrigger,
     SuspicionEntry,
 )
+from meetings.evidence_profile import MeetingEvidenceProfile, profile_from_config
 from meetings.render_contract import ReporterContext
 from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from meetings.transcript import MeetingTriggerKind
 from observation.service import ObservationService
+from orchestrator.boundary import public_map_from_engine_map
+from orchestrator.experiment_config import (
+    RecordedExperimentConfig,
+    engine_arguments,
+    meeting_values,
+)
 from orchestrator.game import (
     DEFAULT_NUM_IMPOSTORS,
     HEADLESS_MEETING_DEADLINES,
@@ -153,6 +182,7 @@ from orchestrator.game import (
     _build_participants,
     _PROMPT_VERSION_OVERLAYS,
     apply_meeting_result,
+    build_default_agent_factory,
     prompt_versions_for_set,
 )
 from orchestrator.replay import (
@@ -162,6 +192,7 @@ from orchestrator.replay import (
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
     read_all_entries,
+    recorded_experiment_config,
     require_legacy_observations,
 )
 from orchestrator.seeder import seed_initial_state
@@ -175,6 +206,37 @@ _SAMPLE_SETS: tuple[Path, ...] = (
     _REPO_ROOT / "replays" / "samples" / "9p2i",
     _REPO_ROOT / "replays" / "samples" / "4p1i",
 )
+#: Where candidate recordings land, one directory per round and roster.
+_CANDIDATES_ROOT: Path = _REPO_ROOT / "replays" / "candidates"
+
+
+def golden_directories(
+    *,
+    samples: Sequence[Path] = _SAMPLE_SETS,
+    candidates_root: Path = _CANDIDATES_ROOT,
+) -> tuple[Path, ...]:
+    """The directories the golden walks: the sample sets, then every candidate set.
+
+    A candidate set is a ``<candidates_root>/<round>/<roster>/`` directory holding
+    at least one replay file, listed in path order. A test redirects
+    ``candidates_root`` to a planted tree.
+    """
+
+    candidates = sorted(
+        directory
+        for directory in candidates_root.glob("*/*")
+        if directory.is_dir() and _seed_paths(directory)
+    )
+    return (*samples, *candidates)
+
+
+def _directory_id(directory: Path) -> str:
+    """A parametrization id: the roster for a sample set, the path under replays else."""
+
+    if directory in _SAMPLE_SETS:
+        return directory.name
+    return directory.relative_to(_REPO_ROOT / "replays").as_posix()
+
 
 # Task 16.15: recorded-stamp registry for committed sets that predate a
 # prompt-set bump. Keyed like PROMPT_VERSION_SETS, but each key names a
@@ -433,6 +495,7 @@ def _tagging_manager(
     stub: _RecordedResponseStub,
     renderers: PromptRenderers,
     renders: list[_Render],
+    profile: MeetingEvidenceProfile,
 ) -> MeetingManager:
     """Build a real :class:`MeetingManager` wired exactly as the recording did.
 
@@ -441,7 +504,8 @@ def _tagging_manager(
     with an otherwise-default :class:`meetings.manager.MeetingConfig`, so the
     ``skip_confidence_threshold`` and token budgets that reach the vote prompt
     match the recorded run. The four renderers are the kind-tagging wrappers
-    around the set's real Jinja callables.
+    around the set's real Jinja callables, and ``profile`` is the evidence
+    profile the recording's own settings select.
     """
 
     return MeetingManager(
@@ -457,6 +521,7 @@ def _tagging_manager(
         ),
         vote_prompt=_KindTaggingRenderer(_KIND_VOTE_BALLOT, renderers.vote, renders),
         config=MeetingConfig(deadlines=HEADLESS_MEETING_DEADLINES),
+        evidence_profile=profile,
     )
 
 
@@ -465,7 +530,11 @@ def _tagging_manager(
 # --------------------------------------------------------------------------- #
 
 
-def resolve_prompt_set(prompt_versions: Mapping[str, str]) -> str:
+def resolve_prompt_set(
+    prompt_versions: Mapping[str, str],
+    *,
+    experiment_config: RecordedExperimentConfig | None = None,
+) -> str:
     """Reverse-look the recorded ``prompt_versions`` up in the set registries.
 
     :data:`orchestrator.game.PROMPT_VERSION_SETS` maps each prompt-set name to
@@ -478,8 +547,10 @@ def resolve_prompt_set(prompt_versions: Mapping[str, str]) -> str:
     :data:`ARCHIVED_PROMPT_VERSION_SETS` instead (Task 16.15 — the archived
     bodies are what those recordings rendered). A recording made with substrate
     levers ON stamps those arms' version strings instead, so it resolves through
-    the ON-ARM index (:func:`_overlay_stamp_index`). Fail loud unless exactly one
-    set matches across all three.
+    the ON-ARM index (:func:`_overlay_stamp_owners`), and so does a recording
+    whose own settings (``experiment_config``) turn on an experiment arm that
+    re-bodies a template. Fail loud unless exactly one set matches across all
+    three.
     """
 
     wanted = dict(prompt_versions)
@@ -494,7 +565,7 @@ def resolve_prompt_set(prompt_versions: Mapping[str, str]) -> str:
     # so this cannot hide an ambiguity -- and it keeps the enumeration off the
     # path every lever-OFF recording takes.
     if not matches:
-        matches = list(_overlay_stamp_owners(wanted))
+        matches = list(_overlay_stamp_owners(wanted, experiment_config))
     if len(matches) != 1:
         raise AssertionError(
             f"recorded prompt_versions {wanted} matched {len(matches)} registered "
@@ -509,7 +580,10 @@ def _stamp_key(versions: Mapping[str, str]) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(versions.items()))
 
 
-def _overlay_stamp_owners(wanted: Mapping[str, str]) -> tuple[str, ...]:
+def _overlay_stamp_owners(
+    wanted: Mapping[str, str],
+    experiment_config: RecordedExperimentConfig | None,
+) -> tuple[str, ...]:
     """The sets whose ON-ARM stamp for some lever slate equals ``wanted``.
 
     A lever with a version overlay moves provenance with the bytes it re-bodies,
@@ -533,18 +607,27 @@ def _overlay_stamp_owners(wanted: Mapping[str, str]) -> tuple[str, ...]:
     build's, and a memoised copy would answer from an earlier process state
     after a test replaced one. It costs a fraction of a millisecond and only
     runs for a stamp the default registries could not place.
+
+    The recording's own settings fold in as well, through
+    :func:`orchestrator.game.prompt_versions_for_set`'s ``experiment_config``:
+    an experiment arm the settings turn on (the spine's
+    ``EXPERIMENT_ARM_TEMPLATES``) stamps its templates, so the empty slate is
+    enumerated too. With no such arm the empty slate is the default mapping the
+    registries above already tried, so it adds no owner.
     """
 
     wanted_key = _stamp_key(wanted)
     owners: list[str] = []
     for name in PROMPT_VERSION_SETS:
-        for size in range(1, len(_OVERLAY_KEYS) + 1):
+        for size in range(len(_OVERLAY_KEYS) + 1):
             if name in owners:
                 break
             for subset in combinations(_OVERLAY_KEYS, size):
                 env = {env_var_for_lever(key): "1" for key in subset}
                 try:
-                    versions = prompt_versions_for_set(name, env=env)
+                    versions = prompt_versions_for_set(
+                        name, env=env, experiment_config=experiment_config
+                    )
                 except ValueError:
                     continue
                 if _stamp_key(versions) == wanted_key:
@@ -572,29 +655,34 @@ def _roster_for(
     return roster.num_players, roster.num_impostors, roster.tasks_per_crewmate
 
 
-def _build_agents(state: WorldState) -> dict[PlayerId, TacticalAgent]:
-    """One real :class:`TacticalAgent` per seeded player.
+def _build_agents(
+    state: WorldState,
+    *,
+    experiment_config: RecordedExperimentConfig | None,
+    game_map: Map,
+) -> dict[PlayerId, TacticalAgent]:
+    """One real :class:`TacticalAgent` per seeded player, built as the recording's were.
 
-    The default agent factory's construction (:func:`orchestrator.game.
-    build_default_agent_factory`) — a role-appropriate policy plus a fresh
-    :class:`agents.memory.store.AgentMemory`. The tactical policy is never
-    exercised here (the walk applies the RECORDED actions, not policy output);
-    memory is reconstructed by feeding the observation pipeline directly, the
-    same episodic/belief writes ``TacticalAgent.decide`` makes. Real agents let
-    ``_build_participants`` and ``_absorb_meeting_beliefs`` run VERBATIM.
+    ``HeadlessGame`` builds each agent with the default agent factory for the
+    recorded settings (:func:`orchestrator.game.build_default_agent_factory`)
+    and then binds those settings and the public map into it
+    (``TacticalAgent.bind_experiment``); this does the same. The tactical
+    policy is never exercised here (the walk applies the RECORDED actions, not
+    policy output); memory is reconstructed by feeding the observation pipeline
+    directly, the same episodic/belief writes ``TacticalAgent.decide`` makes.
+    Real agents let ``_build_participants`` and ``_absorb_meeting_beliefs`` run
+    VERBATIM.
     """
 
+    factory = build_default_agent_factory(experiment_config=experiment_config)
+    public_map = public_map_from_engine_map(game_map)
     agents: dict[PlayerId, TacticalAgent] = {}
     for player_id in sorted(state.players):
-        role: Role = state.players[player_id].role
-        policy: CrewmatePolicy | ImpostorPolicy = (
-            ImpostorPolicy(agent_id=player_id)
-            if role == "IMPOSTOR"
-            else CrewmatePolicy(agent_id=player_id)
-        )
-        agents[player_id] = TacticalAgent(
-            agent_id=player_id, policy=policy, role=role, memory=None
-        )
+        agent = factory(player_id, state.players[player_id].role)
+        if not isinstance(agent, TacticalAgent):
+            raise TypeError("the default agent factory built a non-tactical agent")
+        agent.bind_experiment(experiment_config, public_map)
+        agents[player_id] = agent
     return agents
 
 
@@ -648,12 +736,26 @@ def walk_replay_meetings(
     announced outcomes the live agents held. ``renderers_for_set`` lets a caller
     inject a perturbed template
     root (the perturbation leg).
+
+    The recording's own settings drive every step that reads one: the advances
+    take :func:`orchestrator.experiment_config.engine_arguments`, each applied
+    meeting takes the recorded reset and redistribution rule, each rebuilt
+    trigger the recorded trigger settings, each meeting its recorded evidence
+    profile and stamp resolution, and the agents are built for the recorded
+    settings (:func:`_build_agents`). A recorded setting beyond
+    :data:`eval.recorded_settings.READABLE_SETTINGS` is refused before the
+    first advance.
     """
 
     seed = _seed_from_path(replay_path)
     game_id = _game_id_for_seed(seed)
     entries = read_all_entries(replay_path)
     require_legacy_observations(entries, consumer="frozen prompt-byte reconstruction")
+    recorded = recorded_experiment_config(entries)
+    refuse_unread_settings(
+        recorded, reader="the prompt-byte golden", reads=READABLE_SETTINGS
+    )
+    settings = recorded if recorded is not None else RecordedExperimentConfig()
     replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
     meeting_by_tick = {e.tick: e for e in entries if isinstance(e, MeetingReplayEntry)}
     num_players, num_impostors, tasks_per_crewmate = _roster_for(
@@ -666,7 +768,8 @@ def walk_replay_meetings(
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
     )
-    agents = _build_agents(state)
+    agents = _build_agents(state, experiment_config=recorded, game_map=game_map)
+    engine = engine_arguments(recorded)
 
     with TemporaryDirectory(prefix="ailibi-golden-audit-") as audit_dir:
         service = ObservationService(
@@ -677,7 +780,7 @@ def walk_replay_meetings(
         for entry in replay_entries:
             _ingest_tick(service, agents, state, last_events)
             actions = _deserialize_actions(entry.actions)
-            state, events = advance_tick(state, actions, game_map=game_map)
+            state, events = advance_tick(state, actions, game_map=game_map, **engine)
             actual = _state_hash(state)
             if actual != entry.state_hash:
                 raise AssertionError(
@@ -704,6 +807,7 @@ def walk_replay_meetings(
                 events=events,
                 agents=agents,
                 renderers_for_set=renderers_for_set,
+                experiment_config=recorded,
             )
             yield reconstructed
 
@@ -721,7 +825,12 @@ def walk_replay_meetings(
             # retired_guard`` carries that half instead, ballot by ballot
             # against ``rebuilt_ballots``, and is the only thing that does.
             next_state, post_events = apply_meeting_result(
-                state, result, game_map=game_map, triggering_body_id=body_id
+                state,
+                result,
+                game_map=game_map,
+                triggering_body_id=body_id,
+                redistribution_policy=settings.redistribution_policy,
+                meeting_reset=settings.meeting_reset,
             )
             after = _state_hash(next_state)
             if after != meeting_entry.state_hash_after:
@@ -762,10 +871,17 @@ def _run_recorded_meeting(
     events: Sequence[Any],
     agents: Mapping[PlayerId, TacticalAgent],
     renderers_for_set: Mapping[str, PromptRenderers],
+    experiment_config: RecordedExperimentConfig | None,
 ) -> tuple[ReconstructedMeeting, MeetingResult, str | None, Any]:
-    """Drive one recorded meeting through the real manager + stub client."""
+    """Drive one recorded meeting through the real manager + stub client.
 
-    set_name = resolve_prompt_set(meeting_entry.prompt_versions)
+    ``experiment_config`` is the recording's own settings: they resolve its
+    stamp, rebuild its trigger and select the manager's evidence profile.
+    """
+
+    set_name = resolve_prompt_set(
+        meeting_entry.prompt_versions, experiment_config=experiment_config
+    )
     renderers = renderers_for_set[set_name]
     responses = {
         call.prompt: LLMResponse(
@@ -778,7 +894,16 @@ def _run_recorded_meeting(
         )
         for call in meeting_entry.llm_calls
     }
-    trigger, body_id, trigger_kind = _build_meeting_trigger(state=state, events=events)
+    settings = (
+        experiment_config
+        if experiment_config is not None
+        else RecordedExperimentConfig()
+    )
+    trigger, body_id, trigger_kind = _build_meeting_trigger(
+        state=state,
+        events=events,
+        report_body_handle_version=settings.report_body_handle_version,
+    )
     if trigger.triggered_by != meeting_entry.triggered_by:
         raise AssertionError(
             f"{meeting_entry.meeting_id}: rebuilt trigger opener "
@@ -792,7 +917,12 @@ def _run_recorded_meeting(
     )
     renders: list[_Render] = []
     stub = _RecordedResponseStub(responses=responses)
-    manager = _tagging_manager(stub=stub, renderers=renderers, renders=renders)
+    manager = _tagging_manager(
+        stub=stub,
+        renderers=renderers,
+        renders=renders,
+        profile=profile_from_config(meeting_values(settings)),
+    )
     result = asyncio.run(
         manager.run(
             meeting_id=meeting_entry.meeting_id,
@@ -966,6 +1096,21 @@ class _SetWalk:
     # kwarg (Seam C). Both must satisfy ``0.5 + sum(components) == suspicion``.
     participant_rows: tuple[SuspicionEntry, ...] = ()
     ballot_prov_rows: tuple[SuspicionEntry, ...] = ()
+    # The meetings whose recorded calls the manager did not consume exactly once
+    # each (a call never asked for, or asked for twice).
+    miscounted_meetings: tuple[str, ...] = ()
+
+
+def consumed_exactly_once(meeting: ReconstructedMeeting) -> bool:
+    """Whether the manager asked for every recorded call of the meeting exactly once.
+
+    Each recorded prompt is counted against the stub's hits for that prompt, so a
+    call the reconstruction never reached (an unconsumed rebuttal, say) and a
+    call it reached twice both fail.
+    """
+
+    hits = Counter(call.prompt for call in meeting.complete_calls if call.hit)
+    return hits == Counter(call.prompt for call in meeting.entry.llm_calls)
 
 
 def _seed_from_path(path: Path) -> int:
@@ -997,13 +1142,16 @@ def _canonical_renderers() -> dict[str, PromptRenderers]:
     return renderers
 
 
-def _walk_set(set_dir: Path) -> _SetWalk:
+def walk_directory(set_dir: Path) -> _SetWalk:
+    """Re-render every recorded meeting of one directory, each with its own settings."""
+
     game_map = load_canonical_map()
     renderers_for_set = _canonical_renderers()
     prompts: list[RerenderedPrompt] = []
     kinds_in_data: set[str] = set()
     participant_rows: list[SuspicionEntry] = []
     ballot_prov_rows: list[SuspicionEntry] = []
+    miscounted: list[str] = []
     meetings = 0
     seed_paths = _seed_paths(set_dir)
     for path in seed_paths:
@@ -1011,6 +1159,8 @@ def _walk_set(set_dir: Path) -> _SetWalk:
             path, game_map=game_map, renderers_for_set=renderers_for_set
         ):
             meetings += 1
+            if not consumed_exactly_once(meeting):
+                miscounted.append(f"{path.name}:{meeting.meeting_id}")
             for rendered in rerendered_prompts(meeting):
                 prompts.append(rendered)
                 kinds_in_data.add(rendered.kind)
@@ -1031,16 +1181,17 @@ def _walk_set(set_dir: Path) -> _SetWalk:
         kinds_in_data=frozenset(kinds_in_data),
         participant_rows=tuple(participant_rows),
         ballot_prov_rows=tuple(ballot_prov_rows),
+        miscounted_meetings=tuple(miscounted),
     )
 
 
-@pytest.fixture(scope="module", params=_SAMPLE_SETS, ids=lambda p: p.name)
+@pytest.fixture(scope="module", params=golden_directories(), ids=_directory_id)
 def set_walk(request: pytest.FixtureRequest) -> _SetWalk:
-    """Re-render one committed set once; every assertion below reads the result."""
+    """Re-render one set once; every assertion below reads the result."""
 
     set_dir = request.param
     assert set_dir.is_dir(), f"missing committed sample set: {set_dir}"
-    return _walk_set(set_dir)
+    return walk_directory(set_dir)
 
 
 # --------------------------------------------------------------------------- #
@@ -1097,6 +1248,8 @@ def test_every_recorded_llm_call_is_consumed_exactly_once(
                     recorded_meeting_calls += 1
     assert recorded_meeting_calls == len(set_walk.prompts)
     assert set_walk.meetings > 0, f"{set_walk.set_dir.name}: walked zero meetings"
+    # And the manager itself asked for each recorded call exactly once.
+    assert set_walk.miscounted_meetings == ()
 
 
 def test_present_template_kinds_are_each_reproduced(set_walk: _SetWalk) -> None:
@@ -1275,6 +1428,7 @@ def _first_meeting_state(
     path = _seed_paths(set_dir)[0]
     seed = _seed_from_path(path)
     entries = read_all_entries(path)
+    recorded = recorded_experiment_config(entries)
     replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
     meeting_by_tick = {e.tick: e for e in entries if isinstance(e, MeetingReplayEntry)}
     num_players, num_impostors, tasks_per_crewmate = _roster_for(
@@ -1287,7 +1441,8 @@ def _first_meeting_state(
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
     )
-    agents = _build_agents(state)
+    agents = _build_agents(state, experiment_config=recorded, game_map=game_map)
+    engine = engine_arguments(recorded)
     with TemporaryDirectory(prefix="ailibi-golden-imp-") as audit_dir:
         service = ObservationService(
             game_map=game_map, audit_log_path=Path(audit_dir) / "audit.jsonl"
@@ -1296,7 +1451,7 @@ def _first_meeting_state(
         for entry in replay_entries:
             _ingest_tick(service, agents, state, last_events)
             state, events = advance_tick(
-                state, _deserialize_actions(entry.actions), game_map=game_map
+                state, _deserialize_actions(entry.actions), game_map=game_map, **engine
             )
             if state.phase == "MEETING" and meeting_by_tick.get(entry.tick) is not None:
                 return state, agents, tuple(events), game_map
@@ -1442,6 +1597,51 @@ def _first_meeting_prompt_set() -> Mapping[str, str]:
     raise AssertionError(f"{path.name}: no recorded meeting to read a stamp from")
 
 
+RecordedStamp = tuple[str, Mapping[str, str], RecordedExperimentConfig | None]
+
+
+def recorded_stamps(directories: Sequence[Path]) -> Iterator[RecordedStamp]:
+    """Every recorded meeting stamp in ``directories``, with its recording's settings."""
+
+    for directory in directories:
+        for replay in _seed_paths(directory):
+            entries = read_all_entries(replay)
+            config = recorded_experiment_config(entries)
+            for entry in entries:
+                if isinstance(entry, MeetingReplayEntry):
+                    yield (
+                        f"{replay.name}:{entry.meeting_id}",
+                        entry.prompt_versions,
+                        config,
+                    )
+
+
+def stamp_window_problems(stamps: Iterable[RecordedStamp]) -> list[str]:
+    """Every recorded stamp that is not the one its recording's settings serve.
+
+    A stamp must equal what :func:`orchestrator.game.prompt_versions_for_set`
+    serves its set for that recording's own settings: the live default mapping,
+    unless the settings turn on a registered experiment arm, and then that arm's
+    stamp. So a stamp other than the live default is accepted only on a
+    recording that carries the arm. A stamp that resolves to no set is reported
+    rather than raised.
+    """
+
+    problems: list[str] = []
+    for label, stamp, config in stamps:
+        try:
+            name = resolve_prompt_set(stamp, experiment_config=config)
+        except AssertionError as unresolved:
+            problems.append(f"{label}: {unresolved}")
+            continue
+        served = prompt_versions_for_set(name, env={}, experiment_config=config)
+        if dict(stamp) != dict(served):
+            problems.append(
+                f"{label}: stamp is not the {name!r} stamp its recorded settings serve"
+            )
+    return problems
+
+
 def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
     """The baseline-9 record closed the alibi-as-route window; nothing is archived.
 
@@ -1452,6 +1652,10 @@ def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
     fixture directory remains, and every committed stamp resolves through the
     LIVE registry to exactly that set's live mapping -- so a later bump that
     moves the default entry without re-opening the archive fails HERE.
+
+    Every directory the golden walks is held to :func:`stamp_window_problems`: a
+    stamp other than the live default passes only on a recording whose own
+    settings turn on the registered experiment arm that stamp names.
     """
 
     assert ARCHIVED_PROMPT_VERSION_SETS == {}
@@ -1465,6 +1669,51 @@ def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
                 assert dict(entry.prompt_versions) == dict(
                     PROMPT_VERSION_SETS[resolve_prompt_set(entry.prompt_versions)]
                 )
+    stamps = list(recorded_stamps(golden_directories()))
+    assert stamps
+    assert stamp_window_problems(stamps) == []
+
+
+def test_an_arm_stamp_resolves_only_on_a_recording_that_carries_the_arm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window with a registered arm: planted, since the registry is empty here.
+
+    With a planted registry entry the arm's stamp resolves on a recording whose
+    settings carry the arm and passes the window; the same stamp on a recording
+    without the arm fails it, and so does the default stamp on a recording that
+    carries the arm. With the registry empty the arm's settings serve the default
+    stamp, so a committed recording's stamp is the live default mapping.
+    """
+
+    carrying = RecordedExperimentConfig(bounded_rebuttal_version=1)
+    default = dict(PROMPT_VERSION_SETS[_OVERLAY_SET])
+    assert (
+        dict(prompt_versions_for_set(_OVERLAY_SET, env={}, experiment_config=carrying))
+        == default
+    )
+    assert stamp_window_problems([("empty registry", default, carrying)]) == []
+
+    monkeypatch.setattr(
+        game_module,
+        "EXPERIMENT_ARM_TEMPLATES",
+        MappingProxyType({"bounded_rebuttal_version": ("accusation_round",)}),
+    )
+    arm = dict(
+        prompt_versions_for_set(_OVERLAY_SET, env={}, experiment_config=carrying)
+    )
+    assert arm == {
+        **default,
+        "accusation_round": "accusation_round.qwen3_6_27b.v6.bounded_rebuttal_v1",
+    }
+    assert resolve_prompt_set(arm, experiment_config=carrying) == _OVERLAY_SET
+    assert stamp_window_problems([("carrying the arm", arm, carrying)]) == []
+    without = stamp_window_problems([("without the arm", arm, None)])
+    assert len(without) == 1 and "matched 0 registered sets" in without[0]
+    other = RecordedExperimentConfig(meeting_reset="hub_with_grace")
+    assert stamp_window_problems([("another arm", arm, other)]) != []
+    worn = stamp_window_problems([("default stamp, arm on", default, carrying)])
+    assert len(worn) == 1 and "its recorded settings serve" in worn[0]
 
 
 def test_a_lever_on_recording_can_never_wear_a_default_stamp() -> None:
@@ -1655,7 +1904,12 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
     renderers = _canonical_renderers()[resolve_prompt_set(_first_meeting_prompt_set())]
     renders: list[_Render] = []
     stub = _RecordedResponseStub(responses={})
-    manager = _tagging_manager(stub=stub, renderers=renderers, renders=renders)
+    manager = _tagging_manager(
+        stub=stub,
+        renderers=renderers,
+        renders=renders,
+        profile=MeetingEvidenceProfile(),
+    )
     dead_ids = tuple(
         sorted(pid for pid, player in state.players.items() if not player.alive)
     )
@@ -1967,3 +2221,235 @@ def test_removing_the_fold_empties_the_block_the_previous_test_asserts(
     prompts = _second_meeting_renders()
     assert prompts
     assert not any(_MEETINGS_HEADER in prompt for prompt in prompts)
+
+
+# --------------------------------------------------------------------------- #
+# Any directory, with its own recorded settings                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_sample_sets_come_first_and_candidates_are_discovered() -> None:
+    found = golden_directories()
+    assert found[: len(_SAMPLE_SETS)] == _SAMPLE_SETS
+    assert all(path.parent.parent == _CANDIDATES_ROOT for path in found[2:])
+    # The sample sets keep the case ids they were collected under.
+    assert [_directory_id(path) for path in _SAMPLE_SETS] == ["9p2i", "4p1i"]
+    assert (
+        _directory_id(_CANDIDATES_ROOT / "round-1" / "9p2i")
+        == "candidates/round-1/9p2i"
+    )
+
+
+def test_a_planted_candidate_root_is_discovered_and_walked(tmp_path: Path) -> None:
+    from orchestrator.experiment_config import RecordedExperimentConfig as Config
+    from tests._helpers.scripted_meeting import record_game
+
+    root = tmp_path / "candidates"
+    walked = root / "round-1" / "9p2i"
+    record_game(walked, seed=0, config=Config(meeting_reset="hub_with_grace"))
+    (root / "round-1" / "empty").mkdir()
+    (root / "notes.md").write_text("not a set", encoding="utf-8")
+    found = golden_directories(candidates_root=root)
+    assert found == (*_SAMPLE_SETS, walked)
+    walk = walk_directory(found[-1])
+    assert walk.meetings > 0 and walk.prompts
+    assert all(prompt.reproduced for prompt in walk.prompts)
+    assert walk.miscounted_meetings == ()
+
+
+def _scripted_rebuttal_game(directory: Path) -> Path:
+    from tests._helpers.scripted_meeting import (
+        ACCUSE_THE_OPENER,
+        ScriptedMeetingClient,
+        record_game,
+    )
+
+    record_game(
+        directory,
+        seed=0,
+        config=RecordedExperimentConfig(bounded_rebuttal_version=1),
+        client=ScriptedMeetingClient(script=ACCUSE_THE_OPENER),
+    )
+    return directory
+
+
+def test_the_scripted_rebuttal_game_re_renders_byte_equal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = _scripted_rebuttal_game(tmp_path / "rebuttal" / "9p2i")
+    walk = walk_directory(directory)
+    assert walk.prompts and all(prompt.reproduced for prompt in walk.prompts)
+    assert walk.miscounted_meetings == ()
+
+    # Perturbed: the manager built without the recorded profile never asks for
+    # the rebuttal, so its recorded call goes unconsumed.
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "profile_from_config",
+        lambda values: MeetingEvidenceProfile(),
+    )
+    dropped = walk_directory(directory)
+    assert dropped.miscounted_meetings != ()
+    assert not all(prompt.reproduced for prompt in dropped.prompts)
+
+
+def test_dropping_the_recorded_reset_fails_the_meeting_post_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests._helpers.scripted_meeting import record_game
+
+    directory = tmp_path / "reset" / "9p2i"
+    record_game(
+        directory,
+        seed=0,
+        config=RecordedExperimentConfig(meeting_reset="hub_with_grace"),
+    )
+    walk = walk_directory(directory)
+    assert walk.meetings > 0 and all(prompt.reproduced for prompt in walk.prompts)
+
+    real = apply_meeting_result
+
+    def _preserve(*args: Any, **kwargs: Any) -> Any:
+        return real(*args, **{**kwargs, "meeting_reset": "preserve"})
+
+    monkeypatch.setattr(sys.modules[__name__], "apply_meeting_result", _preserve)
+    with pytest.raises(AssertionError, match="state_hash_after"):
+        walk_directory(directory)
+
+
+def test_a_setting_beyond_the_readable_ones_is_refused_before_the_first_advance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests._helpers.scripted_meeting import record_game
+
+    directory = tmp_path / "patrol" / "9p2i"
+    record_game(
+        directory, seed=0, config=RecordedExperimentConfig(crew_idle_policy="patrol")
+    )
+
+    def _refused(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a refused recording advanced")
+
+    monkeypatch.setattr(sys.modules[__name__], "advance_tick", _refused)
+    with pytest.raises(ValueError, match="the prompt-byte golden does not read"):
+        walk_directory(directory)
+
+
+def test_an_applied_meeting_takes_the_recorded_redistribution_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests._helpers.scripted_meeting import (
+        Ejection,
+        ScriptedMeetingClient,
+        record_game,
+    )
+
+    # Every voter ejects the opener of the first meeting, so the meeting applies
+    # an ejection whose unfinished tasks the recorded rule hands out.
+    directory = tmp_path / "workload" / "9p2i"
+    record_game(
+        directory,
+        seed=0,
+        config=RecordedExperimentConfig(redistribution_policy="least_remaining_work"),
+        client=ScriptedMeetingClient(
+            script=(), ejections=(Ejection(meeting=0, target_turn=0),)
+        ),
+    )
+    first = next(
+        entry
+        for entry in read_all_entries(next(directory.glob("replay-seed-*.jsonl")))
+        if isinstance(entry, MeetingReplayEntry)
+    )
+    assert first.outcome == "EJECTED"
+    walk = walk_directory(directory)
+    assert all(prompt.reproduced for prompt in walk.prompts)
+
+    real = apply_meeting_result
+
+    def _default_rule(*args: Any, **kwargs: Any) -> Any:
+        return real(*args, **{**kwargs, "redistribution_policy": "lowest_id"})
+
+    monkeypatch.setattr(sys.modules[__name__], "apply_meeting_result", _default_rule)
+    with pytest.raises(AssertionError, match="state_hash_after"):
+        walk_directory(directory)
+
+
+def test_a_recording_made_with_a_registered_arm_resolves_through_its_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Planted registry entry: the runner stamps the rebuttal reply's template
+    # with the arm's derived stamp, and the walk resolves that stamp only
+    # through the recording's own settings.
+    monkeypatch.setattr(
+        game_module,
+        "EXPERIMENT_ARM_TEMPLATES",
+        MappingProxyType({"bounded_rebuttal_version": ("accusation_round",)}),
+    )
+    directory = _scripted_rebuttal_game(tmp_path / "arm" / "9p2i")
+    stamps = [
+        entry.prompt_versions["accusation_round"]
+        for entry in read_all_entries(next(directory.glob("replay-seed-*.jsonl")))
+        if isinstance(entry, MeetingReplayEntry)
+    ]
+    assert stamps and set(stamps) == {
+        "accusation_round.qwen3_6_27b.v6.bounded_rebuttal_v1"
+    }
+    walk = walk_directory(directory)
+    assert walk.prompts and all(prompt.reproduced for prompt in walk.prompts)
+    assert stamp_window_problems(recorded_stamps((directory,))) == []
+
+    # Perturbed: resolved without the recording's settings, the stamp is no set's.
+    real = resolve_prompt_set
+
+    def _bare(
+        prompt_versions: Mapping[str, str],
+        *,
+        experiment_config: RecordedExperimentConfig | None = None,
+    ) -> str:
+        return real(prompt_versions)
+
+    monkeypatch.setattr(sys.modules[__name__], "resolve_prompt_set", _bare)
+    with pytest.raises(AssertionError, match="matched 0 registered sets"):
+        walk_directory(directory)
+
+
+def test_consumption_counts_hits_against_the_recorded_calls() -> None:
+    """A miss the manager defaulted on is not a consumed call, and a call hit twice fails."""
+
+    from types import SimpleNamespace
+
+    def _meeting(recorded: Sequence[str], asked: Sequence[tuple[str, bool]]) -> Any:
+        return SimpleNamespace(
+            entry=SimpleNamespace(
+                llm_calls=[SimpleNamespace(prompt=prompt) for prompt in recorded]
+            ),
+            complete_calls=[
+                _CompleteCall(prompt=prompt, agent_id=None, hit=hit)
+                for prompt, hit in asked
+            ],
+        )
+
+    assert consumed_exactly_once(
+        _meeting(["a", "b"], [("a", True), ("defaulted", False), ("b", True)])
+    )
+    assert not consumed_exactly_once(_meeting(["a", "b"], [("a", True)]))
+    assert not consumed_exactly_once(_meeting(["a"], [("a", True), ("a", True)]))
+
+
+def test_candidate_sets_are_listed_in_path_order_whatever_the_filesystem_returns(
+    tmp_path: Path,
+) -> None:
+    root_type = type(tmp_path)
+
+    class _Reversing(root_type):  # type: ignore[valid-type,misc]
+        """A root whose listing comes back in reverse path order."""
+
+        def glob(self, pattern: str) -> Iterator[Path]:
+            return iter(sorted(super().glob(pattern), reverse=True))
+
+    for round_name in ("round-1", "round-2"):
+        planted = tmp_path / round_name / "4p1i"
+        planted.mkdir(parents=True)
+        (planted / "replay-seed-0.jsonl").write_text("", encoding="utf-8")
+    found = golden_directories(samples=(), candidates_root=_Reversing(tmp_path))
+    assert [path.parent.name for path in found] == ["round-1", "round-2"]

@@ -624,7 +624,7 @@ def test_the_committed_walk_helper_returns_the_engine_kind(
         state=state,
         events=events,
     )
-    assert meeting_trigger_kind(walk_event) == kind
+    assert meeting_trigger_kind(walk_event, experiment_config=None) == kind
 
 
 # --------------------------------------------------------------------------- #

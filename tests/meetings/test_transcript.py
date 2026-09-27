@@ -14,9 +14,14 @@ classification (DESIGN.md §5.4; audit gp-1 precision) is pinned here.
 from __future__ import annotations
 
 import itertools
+import re
+from typing import NamedTuple
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
+from meetings.rebuttal import select_bounded_rebuttal
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -44,6 +49,7 @@ from meetings.transcript import (
     WEAK_REASON_RETARGETED_PROXY,
     WEAK_REASON_SELF_PAIR,
     WEAK_REASON_SELF_STATED,
+    ChainWalk,
     DetectedCorroboration,
     accusation_target,
     canonical_rooms,
@@ -277,6 +283,507 @@ class TestWalkChain:
 
         with pytest.raises(ValueError, match="opt_in"):
             walk_chain(MeetingTranscript(turns=turns), living_ids=_LIVING_4)
+
+
+def _exactly(message: str) -> str:
+    """A ``match`` pattern that accepts ``message`` and nothing else."""
+
+    return f"^{re.escape(message)}$"
+
+
+class _RebuttalShape(NamedTuple):
+    """A manager-shaped meeting whose turns leave one new charge unanswered.
+
+    ``speaker`` and ``charge`` are the pick the selector makes on ``turns``;
+    ``wrong_speaker`` is a living player other than the pick and
+    ``wrong_charge`` a turn id other than the charge. ``walk`` is the chain the
+    turns reconstruct, with or without the one selected reply after them.
+    """
+
+    turns: tuple[MeetingTurn, ...]
+    living: frozenset[str]
+    speaker: str
+    charge: str
+    wrong_speaker: str
+    wrong_charge: str
+    walk: ChainWalk
+
+
+def _accused_opener() -> _RebuttalShape:
+    # p-1 opens accusing p-3; p-3 answers by accusing the opener, who has
+    # already spoken, so the chain stops and the roll call follows. The charge
+    # against the opener is then the one unanswered new charge.
+    return _RebuttalShape(
+        turns=(
+            _turn(turn_index=0, speaker="p-1", turn_kind="opening", accuses="p-3"),
+            _turn(
+                turn_index=1,
+                speaker="p-3",
+                turn_kind="reply",
+                reply_to="m-1:turn-0",
+                accuses="p-1",
+            ),
+            _turn(turn_index=2, speaker="p-5", turn_kind="opt_in"),
+            _turn(turn_index=3, speaker="p-7", turn_kind="opt_in"),
+        ),
+        living=_LIVING_4,
+        speaker="p-1",
+        charge="m-1:turn-1",
+        wrong_speaker="p-5",
+        wrong_charge="m-1:turn-0",
+        walk=ChainWalk(("p-1", "p-3"), "re_accusation_cycle", ("p-5", "p-7")),
+    )
+
+
+def _accused_first_speaker_of_three() -> _RebuttalShape:
+    # Three living players: p-3 opens accusing p-5, p-5 accuses p-7, and p-7
+    # accuses p-3, who already spoke, so the chain stops with nobody left for
+    # the roll call. p-7's charge at turn 2 is the one unanswered new charge.
+    return _RebuttalShape(
+        turns=(
+            _turn(turn_index=0, speaker="p-3", turn_kind="opening", accuses="p-5"),
+            _turn(
+                turn_index=1,
+                speaker="p-5",
+                turn_kind="reply",
+                reply_to="m-1:turn-0",
+                accuses="p-7",
+            ),
+            _turn(
+                turn_index=2,
+                speaker="p-7",
+                turn_kind="reply",
+                reply_to="m-1:turn-1",
+                accuses="p-3",
+            ),
+        ),
+        living=frozenset({"p-3", "p-5", "p-7"}),
+        speaker="p-3",
+        charge="m-1:turn-2",
+        wrong_speaker="p-7",
+        wrong_charge="m-1:turn-1",
+        walk=ChainWalk(("p-3", "p-5", "p-7"), "re_accusation_cycle", ()),
+    )
+
+
+#: Two shapes whose pick, charge, wrong values and reply index all differ, so a
+#: message that printed a fixed value in place of the recorded one fails one.
+_SHAPES = pytest.mark.parametrize(
+    "shape",
+    [_accused_opener(), _accused_first_speaker_of_three()],
+    ids=["opener-of-four", "first-speaker-of-three"],
+)
+
+
+class TestWalkChainBoundedRebuttal:
+    """The one reply the rebuttal setting adds, accepted exactly and nothing else.
+
+    The recorded setting is the meeting's own; ``None`` keeps the fail-closed
+    reading every recording made without it had, so a trailing reply raises.
+    Every refusal is matched in full, with the turn index, kind, speaker and
+    charge it names, over two shapes in which each of those values differs.
+    """
+
+    @staticmethod
+    def _rebuttal(
+        shape: _RebuttalShape,
+        *,
+        speaker: str | None = None,
+        reply_to: str | None = None,
+        kind: str = "reply",
+    ) -> MeetingTurn:
+        return _turn(
+            turn_index=len(shape.turns),
+            speaker=shape.speaker if speaker is None else speaker,
+            turn_kind=kind,
+            reply_to=shape.charge if reply_to is None else reply_to,
+        )
+
+    @staticmethod
+    def _walk(
+        shape: _RebuttalShape, turns: tuple[MeetingTurn, ...], *, version: bool = True
+    ) -> ChainWalk:
+        if version:
+            return walk_chain(
+                MeetingTranscript(turns=turns),
+                living_ids=shape.living,
+                bounded_rebuttal_version=1,
+            )
+        return walk_chain(MeetingTranscript(turns=turns), living_ids=shape.living)
+
+    @_SHAPES
+    def test_the_selected_tail_passes(self, shape: _RebuttalShape) -> None:
+        pick = select_bounded_rebuttal(
+            MeetingTranscript(turns=shape.turns), living_ids=shape.living
+        )
+        assert pick is not None
+        assert (pick.speaker, pick.reply_to) == (shape.speaker, shape.charge)
+        assert self._walk(shape, shape.turns, version=False) == shape.walk
+        assert self._walk(shape, (*shape.turns, self._rebuttal(shape))) == shape.walk
+
+    @_SHAPES
+    def test_a_wrong_speaker_raises(self, shape: _RebuttalShape) -> None:
+        index = len(shape.turns)
+        wrong = self._rebuttal(shape, speaker=shape.wrong_speaker)
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: the rebuttal at turn {index} is by "
+                f"{shape.wrong_speaker!r} but the selector gives the reply to "
+                f"{shape.speaker!r}"
+            ),
+        ):
+            self._walk(shape, (*shape.turns, wrong))
+
+    @_SHAPES
+    def test_a_wrong_reply_to_raises(self, shape: _RebuttalShape) -> None:
+        index = len(shape.turns)
+        wrong = self._rebuttal(shape, reply_to=shape.wrong_charge)
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: the rebuttal at turn {index} links to "
+                f"{shape.wrong_charge!r}, expected the charge {shape.charge!r}"
+            ),
+        ):
+            self._walk(shape, (*shape.turns, wrong))
+
+    @_SHAPES
+    def test_two_trailing_replies_raise(self, shape: _RebuttalShape) -> None:
+        index = len(shape.turns)
+        second = _turn(
+            turn_index=index + 1,
+            speaker=shape.wrong_speaker,
+            turn_kind="reply",
+            reply_to=f"m-1:turn-{index}",
+        )
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: turn {index + 1} follows the one rebuttal reply; "
+                "the rebuttal setting adds exactly one turn"
+            ),
+        ):
+            self._walk(shape, (*shape.turns, self._rebuttal(shape), second))
+
+    @_SHAPES
+    def test_a_trailing_opt_in_after_the_reply_raises(
+        self, shape: _RebuttalShape
+    ) -> None:
+        index = len(shape.turns)
+        late = _turn(
+            turn_index=index + 1, speaker=shape.wrong_speaker, turn_kind="opt_in"
+        )
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: turn {index + 1} follows the one rebuttal reply; "
+                "the rebuttal setting adds exactly one turn"
+            ),
+        ):
+            self._walk(shape, (*shape.turns, self._rebuttal(shape), late))
+
+    @_SHAPES
+    @pytest.mark.parametrize("kind", ["reply", "opening"])
+    def test_a_trailing_turn_without_the_setting_raises(
+        self, shape: _RebuttalShape, kind: str
+    ) -> None:
+        index = len(shape.turns)
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: turn {index} after the chain must be opt_in, "
+                f"got turn_kind={kind!r}"
+            ),
+        ):
+            self._walk(
+                shape, (*shape.turns, self._rebuttal(shape, kind=kind)), version=False
+            )
+
+    @_SHAPES
+    def test_a_missing_pick_raises(self, shape: _RebuttalShape) -> None:
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: the rebuttal setting gives {shape.speaker!r} one "
+                f"reply to {shape.charge!r}, but the transcript records none"
+            ),
+        ):
+            self._walk(shape, shape.turns)
+
+    @_SHAPES
+    def test_a_non_reply_in_the_rebuttal_slot_raises(
+        self, shape: _RebuttalShape
+    ) -> None:
+        # An opt-in turn here would join the roll call, so the one kind that can
+        # reach the slot and is not a reply is a second opening.
+        index = len(shape.turns)
+        again = self._rebuttal(shape, kind="opening")
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: turn {index} after the opt-in turns must be the "
+                "rebuttal reply, got turn_kind='opening'"
+            ),
+        ):
+            self._walk(shape, (*shape.turns, again))
+
+    @pytest.mark.parametrize(
+        ("turns", "living"),
+        [
+            (
+                (
+                    _turn(
+                        turn_index=0, speaker="p-1", turn_kind="opening", accuses="p-3"
+                    ),
+                    _turn(
+                        turn_index=1,
+                        speaker="p-3",
+                        turn_kind="reply",
+                        reply_to="m-1:turn-0",
+                    ),
+                    _turn(turn_index=2, speaker="p-5", turn_kind="opt_in"),
+                ),
+                _LIVING_4,
+            ),
+            (
+                (
+                    _turn(turn_index=0, speaker="p-3", turn_kind="opening"),
+                    _turn(turn_index=1, speaker="p-5", turn_kind="opt_in"),
+                ),
+                frozenset({"p-3", "p-5"}),
+            ),
+        ],
+        ids=["charge-against-a-new-speaker", "no-charge"],
+    )
+    @pytest.mark.parametrize("kind", ["reply", "opening"])
+    def test_no_pick_and_no_reply_passes_and_a_trailing_turn_then_raises(
+        self, turns: tuple[MeetingTurn, ...], living: frozenset[str], kind: str
+    ) -> None:
+        # Nobody accuses a player who already spoke, so the selector picks
+        # nothing and the setting adds no turn.
+        transcript = MeetingTranscript(turns=turns)
+        assert select_bounded_rebuttal(transcript, living_ids=living) is None
+        walk_chain(transcript, living_ids=living, bounded_rebuttal_version=1)
+        index = len(turns)
+        trailing = _turn(
+            turn_index=index,
+            speaker=turns[0].speaker,
+            turn_kind=kind,
+            reply_to=turns[-1].turn_id if kind == "reply" else None,
+        )
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: turn {index} follows the opt-in turns, but no charge "
+                "is left unanswered, so the rebuttal setting adds no reply "
+                f"(got turn_kind={kind!r})"
+            ),
+        ):
+            walk_chain(
+                MeetingTranscript(turns=(*turns, trailing)),
+                living_ids=living,
+                bounded_rebuttal_version=1,
+            )
+
+
+_PLAYERS: tuple[str, ...] = ("p-1", "p-3", "p-5", "p-7")
+
+
+@st.composite
+def _chain_meetings(
+    draw: st.DrawFn,
+) -> tuple[tuple[MeetingTurn, ...], frozenset[str]]:
+    """A manager-shaped transcript: opening, the reactive chain, the roll call.
+
+    Each speaker's accusation (or none) is drawn; the chain follows
+    :func:`next_chain_step` exactly as the manager does, and every living
+    player who has not spoken takes one ``opt_in`` turn in ascending order.
+    """
+
+    living = frozenset(
+        draw(st.lists(st.sampled_from(_PLAYERS), min_size=2, unique=True))
+    )
+    targets = st.none() | st.sampled_from(_PLAYERS)
+    opener = draw(st.sampled_from(sorted(living)))
+    turns = [
+        _turn(turn_index=0, speaker=opener, turn_kind="opening", accuses=draw(targets))
+    ]
+    spoken = {opener}
+    while True:
+        step = next_chain_step(
+            prev_turn=turns[-1],
+            spoken=frozenset(spoken),
+            living_ids=living,
+            turns_recorded=len(turns),
+        )
+        if step.next_speaker is None:
+            break
+        turns.append(
+            _turn(
+                turn_index=len(turns),
+                speaker=step.next_speaker,
+                turn_kind="reply",
+                reply_to=turns[-1].turn_id,
+                accuses=draw(targets),
+            )
+        )
+        spoken.add(step.next_speaker)
+    for player in sorted(living - spoken):
+        turns.append(
+            _turn(
+                turn_index=len(turns),
+                speaker=player,
+                turn_kind="opt_in",
+                accuses=draw(targets),
+            )
+        )
+    return tuple(turns), living
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    meeting=_chain_meetings(),
+    stray=st.sampled_from(_PLAYERS),
+    kind=st.sampled_from(["reply", "opening"]),
+)
+def test_walk_chain_accepts_exactly_the_selected_rebuttal(
+    meeting: tuple[tuple[MeetingTurn, ...], frozenset[str]], stray: str, kind: str
+) -> None:
+    """Over generated chains: the pick's reply passes, and every other tail fails.
+
+    With a pick, the transcript without the reply raises, the reply with the
+    pick's speaker and ``reply_to`` passes, and a reply by any other speaker, a
+    reply to any other turn, a turn after the reply and a non-reply in its slot
+    each raise. Without a pick, the bare transcript passes and any trailing turn
+    raises. Without the setting, any trailing turn raises. Each refusal is
+    matched in full, with the generated index, kind, speaker and charge it names.
+    """
+
+    turns, living = meeting
+    transcript = MeetingTranscript(turns=turns)
+    pick = select_bounded_rebuttal(transcript, living_ids=living)
+    index = len(turns)
+    trailing = _turn(
+        turn_index=index,
+        speaker=stray,
+        turn_kind=kind,
+        reply_to=turns[-1].turn_id if kind == "reply" else None,
+    )
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            f"walk_chain: turn {index} after the chain must be opt_in, "
+            f"got turn_kind={kind!r}"
+        ),
+    ):
+        walk_chain(MeetingTranscript(turns=(*turns, trailing)), living_ids=living)
+    if pick is None:
+        walk_chain(transcript, living_ids=living, bounded_rebuttal_version=1)
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: turn {index} follows the opt-in turns, but no charge "
+                "is left unanswered, so the rebuttal setting adds no reply "
+                f"(got turn_kind={kind!r})"
+            ),
+        ):
+            walk_chain(
+                MeetingTranscript(turns=(*turns, trailing)),
+                living_ids=living,
+                bounded_rebuttal_version=1,
+            )
+        return
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            f"walk_chain: the rebuttal setting gives {pick.speaker!r} one reply to "
+            f"{pick.reply_to!r}, but the transcript records none"
+        ),
+    ):
+        walk_chain(transcript, living_ids=living, bounded_rebuttal_version=1)
+    selected = _turn(
+        turn_index=index,
+        speaker=pick.speaker,
+        turn_kind="reply",
+        reply_to=pick.reply_to,
+    )
+    with_reply = MeetingTranscript(turns=(*turns, selected))
+    walk_chain(with_reply, living_ids=living, bounded_rebuttal_version=1)
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            f"walk_chain: turn {index} after the chain must be opt_in, "
+            "got turn_kind='reply'"
+        ),
+    ):
+        walk_chain(with_reply, living_ids=living)
+    late = _turn(
+        turn_index=index + 1,
+        speaker=stray,
+        turn_kind="opt_in" if kind == "opening" else "reply",
+        reply_to=selected.turn_id if kind == "reply" else None,
+    )
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            f"walk_chain: turn {index + 1} follows the one rebuttal reply; "
+            "the rebuttal setting adds exactly one turn"
+        ),
+    ):
+        walk_chain(
+            MeetingTranscript(turns=(*turns, selected, late)),
+            living_ids=living,
+            bounded_rebuttal_version=1,
+        )
+    # The reply's own id is never a charge: every charge is an earlier turn's.
+    unlinked = _turn(
+        turn_index=index,
+        speaker=pick.speaker,
+        turn_kind="reply",
+        reply_to=selected.turn_id,
+    )
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            f"walk_chain: the rebuttal at turn {index} links to "
+            f"{selected.turn_id!r}, expected the charge {pick.reply_to!r}"
+        ),
+    ):
+        walk_chain(
+            MeetingTranscript(turns=(*turns, unlinked)),
+            living_ids=living,
+            bounded_rebuttal_version=1,
+        )
+    opening = _turn(turn_index=index, speaker=pick.speaker, turn_kind="opening")
+    with pytest.raises(
+        ValueError,
+        match=_exactly(
+            f"walk_chain: turn {index} after the opt-in turns must be the "
+            "rebuttal reply, got turn_kind='opening'"
+        ),
+    ):
+        walk_chain(
+            MeetingTranscript(turns=(*turns, opening)),
+            living_ids=living,
+            bounded_rebuttal_version=1,
+        )
+    if stray != pick.speaker:
+        wrong = _turn(
+            turn_index=index, speaker=stray, turn_kind="reply", reply_to=pick.reply_to
+        )
+        with pytest.raises(
+            ValueError,
+            match=_exactly(
+                f"walk_chain: the rebuttal at turn {index} is by {stray!r} but the "
+                f"selector gives the reply to {pick.speaker!r}"
+            ),
+        ):
+            walk_chain(
+                MeetingTranscript(turns=(*turns, wrong)),
+                living_ids=living,
+                bounded_rebuttal_version=1,
+            )
 
 
 class TestSortTurnsCanonically:

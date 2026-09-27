@@ -135,6 +135,36 @@ with, so the fold now measures the REPAIRED mover's counterfactual and
 carries the ``policy_mode`` that produced it, and no ratified bar rides I-11 — it is
 a §5 secondary cell (memo §11 amendment, 2026-08-20).
 
+By default the fold rebuilds each game's impostor decisions with the policy that
+game's recorded settings name (:func:`recorded_impostor_policy`). A recording
+made without tactical settings names the policy in the tree,
+:func:`live_impostor_policy`, and its block reads ``live-policy-fold`` exactly as
+before. A recording made with tactical settings names the experimental impostor
+policy the default agent factory builds for them, with the options that factory
+derives; its block reads ``recorded-arm-policy-fold``, and each such policy
+receives the meeting-concluded hook the live loop gives it. A recording whose
+agents came from a custom factory is refused, since the policy it ran cannot be
+rebuilt. A caller may still pass a policy explicitly to fold a counterfactual.
+
+Recorded settings
+-----------------
+The ``evidence-honesty`` profile reads recordings that carry experiment settings,
+and :data:`HONESTY_READS` names, field by field, the ones it reads: every setting
+in :data:`eval.recorded_settings.READABLE_SETTINGS` except the meeting reset. The
+engine settings reach every advance through the engine-arguments helper (which
+refuses one it does not thread), and the perception this module rebuilds reads
+the witness lists those advances produce. The vent exit and entry policies reach
+the I-11 fold as the recorded policy above. A rebuttal reply, the trigger's
+described body handle and the ballot settings reach the folds only as recorded
+turns, flags and prompts: every cell here counts what the recorded bytes carry
+and reads no rule those settings change. The meeting reset stays refused: the
+regroup moves every survivor to the hub between the trigger tick's frame and the
+resume tick, so the ``room_at`` table and the clock alignment below would read
+honest post-regroup sightings as a moved clock; the card that makes the reset
+coherent lifts this refusal with its fix. Any other recorded setting, a settings
+format other than the first, and temporal delivery are refused before the first
+advance, naming the profile and the setting.
+
 Purity: offline, no network, no ``AILIBI_*`` env read, no LLM call. Two runs over
 the same bytes produce identical reports.
 
@@ -171,6 +201,7 @@ from agents.perception import (
     EVENT_SAW_PLAYER_MOVE,
     ingest_packet,
 )
+from agents.tactical.experimental import ExperimentalImpostorPolicy
 from agents.tactical.impostor_policy import ImpostorPolicy, RankedTarget
 from engine.entities import PlayerId, Role, RoomId
 from engine.events import KilledEvent, TaskCompletedEvent
@@ -179,6 +210,11 @@ from eval.deduction_metrics import (
     _RARE_EVENT_ADVISORY_MAX_NUMERATOR,
     WilsonRateCell,
     _wilson_interval,
+)
+from eval.recorded_settings import (
+    READABLE_SETTINGS,
+    layers_read,
+    read_recorded_settings,
 )
 from eval.replay_walk import (
     MeetingApplied,
@@ -216,9 +252,12 @@ from observation.action_intent import ActionIntent
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
+from orchestrator.experiment_config import normalize_experiment_config
+from orchestrator.game import TacticalAgent, build_default_agent_factory
 from orchestrator.replay import (
     LLMCallRecord,
     MeetingReplayEntry,
+    ReplayEntry,
     fold_meeting_outcome_into_memories,
 )
 
@@ -240,10 +279,98 @@ def live_impostor_policy(agent_id: PlayerId) -> ImpostorPolicy:
 # over the frozen baseline-6 bytes; the ratified baseline is the frozen measurement
 # of the policy those bytes were RECORDED with, which is no longer in the tree; a
 # custom fold re-invokes some other caller-supplied policy over the same bytes and
-# must never be read as either of the two named ones.
+# must never be read as either of the two named ones. A recorded-arm fold
+# re-invokes the experimental policy a recording's tactical settings name.
 LIVE_POLICY_FOLD: Final[str] = "live-policy-fold"
 RATIFIED_BASELINE: Final[str] = "ratified-baseline"
 CUSTOM_POLICY_FOLD: Final[str] = "custom-policy-fold"
+RECORDED_ARM_POLICY_FOLD: Final[str] = "recorded-arm-policy-fold"
+
+
+def recorded_impostor_policy(
+    entry: ReplayEntry, *, game_id: str
+) -> ImpostorPolicyFactory:
+    """The impostor policy one recording names.
+
+    ``entry`` is the recording's first tick row, which carries its settings and
+    its agent-factory identity. Each policy is the one the default agent factory
+    builds for those settings: with tactical settings, the experimental policy
+    with the options the factory derives, read back through
+    :attr:`orchestrator.game.TacticalAgent.tactical_experiment_options`; without
+    them, :func:`live_impostor_policy`. A recording whose agents came from a
+    custom factory raises: the policy it ran cannot be rebuilt from its settings.
+    """
+
+    if entry.agent_factory_kind == "custom":
+        raise EvidenceHonestyReconstructionError(
+            f"{game_id}: the recording's agents came from a custom factory, so the "
+            "impostor policy it ran cannot be rebuilt from its settings; pass a "
+            "policy explicitly to fold a counterfactual"
+        )
+    factory = build_default_agent_factory(
+        experiment_config=normalize_experiment_config(entry.experiment_config)
+    )
+
+    def _recorded(agent_id: PlayerId) -> ImpostorPolicy:
+        agent = factory(agent_id, "IMPOSTOR")
+        if not isinstance(agent, TacticalAgent):  # pragma: no cover - factory pin
+            raise TypeError("the default agent factory built a non-tactical agent")
+        options = agent.tactical_experiment_options
+        if options is None:
+            return live_impostor_policy(agent_id)
+        return ExperimentalImpostorPolicy(agent_id=agent_id, options=options)
+
+    return _recorded
+
+
+@dataclass
+class _ImpostorPolicies:
+    """One game's impostor policies, resolved at the walk's first tick.
+
+    ``chosen`` is the caller's explicit factory, or ``None`` for the policy the
+    recording names. :meth:`open` builds the policies once, before the first
+    decision; :meth:`meeting_concluded` gives each living experimental policy
+    the announced dead roster, as ``TacticalAgent.note_meeting_concluded`` does
+    after every live meeting.
+    """
+
+    chosen: ImpostorPolicyFactory | None
+    impostor_ids: frozenset[PlayerId]
+    game_id: str
+    policies: dict[PlayerId, ImpostorPolicy] = field(default_factory=dict)
+    mode: str | None = None
+
+    def open(self, entry: ReplayEntry) -> None:
+        if self.mode is not None:
+            return
+        if self.chosen is None:
+            recorded = recorded_impostor_policy(entry, game_id=self.game_id)
+            self.policies = {pid: recorded(pid) for pid in sorted(self.impostor_ids)}
+            self.mode = (
+                RECORDED_ARM_POLICY_FOLD
+                if any(
+                    isinstance(policy, ExperimentalImpostorPolicy)
+                    for policy in self.policies.values()
+                )
+                else LIVE_POLICY_FOLD
+            )
+            return
+        self.policies = {pid: self.chosen(pid) for pid in sorted(self.impostor_ids)}
+        self.mode = (
+            LIVE_POLICY_FOLD
+            if self.chosen is live_impostor_policy
+            else CUSTOM_POLICY_FOLD
+        )
+
+    def meeting_concluded(self, state: WorldState) -> None:
+        dead_ids = tuple(
+            sorted(pid for pid, player in state.players.items() if not player.alive)
+        )
+        for pid, policy in sorted(self.policies.items()):
+            if state.players[pid].alive and isinstance(
+                policy, ExperimentalImpostorPolicy
+            ):
+                policy.note_meeting_concluded(dead_ids=dead_ids)
 
 
 class _TopRanked(NamedTuple):
@@ -896,7 +1023,7 @@ class _Tallies:
 def compute_evidence_honesty(
     sample_dir: Path,
     *,
-    impostor_policy: ImpostorPolicyFactory = live_impostor_policy,
+    impostor_policy: ImpostorPolicyFactory | None = None,
     assert_recorded_action_fidelity: bool = False,
 ) -> EvidenceHonestyReport:
     """Compute the evidence-honesty cells over one committed replay set.
@@ -908,13 +1035,18 @@ def compute_evidence_honesty(
     flags and prompts. Fails loud (:class:`EvidenceHonestyReconstructionError`) on
     any reconstruction disagreement and on a clock-offset exception.
 
-    ``impostor_policy`` builds the policy the I-11 cells re-invoke; it defaults to
-    the one in the tree, which since the 20.32 mover repair is NOT the policy the
-    committed bytes were recorded with. ``assert_recorded_action_fidelity`` is
-    therefore opt-in: a caller that asserts its policy IS the recorded one gets a
-    raise on the first disagreeing decision, and every other caller reads the
-    disagreements as ``impostor_targeting.reconstruction_mismatches`` — the size of
-    the counterfactual. The ratified pre-repair I-11 cells live in
+    ``impostor_policy`` builds the policy the I-11 cells re-invoke. ``None`` (the
+    default) rebuilds each game with the policy its recorded settings name
+    (:func:`recorded_impostor_policy`): the one in the tree for a recording made
+    without tactical settings, which since the 20.32 mover repair is NOT the
+    policy the committed bytes were recorded with, and the experimental policy
+    for one made with them. Every game of a set must name the same kind of
+    policy, or the set raises, since the block carries one ``policy_mode``.
+    ``assert_recorded_action_fidelity`` is opt-in: a caller that asserts its
+    policy IS the recorded one gets a raise on the first disagreeing decision,
+    and every other caller reads the disagreements as
+    ``impostor_targeting.reconstruction_mismatches`` — the size of the
+    counterfactual. The ratified pre-repair I-11 cells live in
     :data:`RATIFIED_I11_CELLS`; nothing recomputes them, because the policy that
     produced them is deleted.
     """
@@ -939,8 +1071,9 @@ def compute_evidence_honesty(
     persona_phrase = _singular_persona_phrase()
     tallies = _Tallies()
     public_map = public_map_from_engine_map(game_map)
+    modes: set[str] = set()
     for seed in seeds:
-        _fold_game(
+        mode = _fold_game(
             sample_dir / f"replay-seed-{seed}.jsonl",
             seed=seed,
             num_players=num_players,
@@ -955,6 +1088,12 @@ def compute_evidence_honesty(
             assert_recorded_action_fidelity=assert_recorded_action_fidelity,
             tallies=tallies,
         )
+        modes.add(mode)
+    if len(modes) != 1:
+        raise EvidenceHonestyReconstructionError(
+            f"{sample_dir}: its games name different impostor policies "
+            f"({sorted(modes)}), and one set's block carries one policy_mode"
+        )
 
     return _report(
         sample_dir=sample_dir,
@@ -962,11 +1101,7 @@ def compute_evidence_honesty(
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
         games_total=len(seeds),
-        policy_mode=(
-            LIVE_POLICY_FOLD
-            if impostor_policy is live_impostor_policy
-            else CUSTOM_POLICY_FOLD
-        ),
+        policy_mode=modes.pop(),
         tallies=tallies,
     )
 
@@ -1239,13 +1374,14 @@ def reconstruct_impostor_decisions(
     sample_dir: Path,
     *,
     seed: int,
-    impostor_policy: ImpostorPolicyFactory = live_impostor_policy,
+    impostor_policy: ImpostorPolicyFactory | None = None,
 ) -> tuple[ReconstructedDecision, ...]:
     """Rebuild one committed game's impostor decisions, in tick order.
 
-    The same walk, the same perception path and the same post-meeting fold the
-    I-11 cells run, exposed per decision so a named seed and tick can be pinned as
-    a demonstrable case rather than only as an aggregate. Pure and offline; it
+    The same walk, the same perception path, the same post-meeting fold and the
+    same policy choice the I-11 cells run (``None`` is the policy the recording
+    names), exposed per decision so a named seed and tick can be pinned as a
+    demonstrable case rather than only as an aggregate. Pure and offline; it
     re-invokes the policy but never re-simulates, so the recorded bytes are read
     exactly as committed.
     """
@@ -1263,7 +1399,12 @@ def reconstruct_impostor_decisions(
     impostor_ids = frozenset(pid for pid, role in roles.items() if role == "IMPOSTOR")
     memories: dict[PlayerId, MemoryStore] = {pid: MemoryStore() for pid in roles}
     composites = {pid: AgentMemory(episodic=store) for pid, store in memories.items()}
-    policies = {pid: impostor_policy(pid) for pid in sorted(impostor_ids)}
+    chosen = _ImpostorPolicies(
+        chosen=impostor_policy,
+        impostor_ids=impostor_ids,
+        game_id=f"headless-seed-{seed}",
+    )
+    policies = chosen.policies
     decisions: list[ReconstructedDecision] = []
 
     audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-honesty-")
@@ -1271,16 +1412,22 @@ def reconstruct_impostor_decisions(
         game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
     )
     try:
-        for walk_event in walk_replay(
-            sample_dir / f"replay-seed-{seed}.jsonl",
-            seed=seed,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            game_map=game_map,
-            config=_WALK_CONFIG,
+        for walk_event in read_recorded_settings(
+            walk_replay(
+                sample_dir / f"replay-seed-{seed}.jsonl",
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ),
+            reader=f"replay profile {_WALK_CONFIG.profile!r}",
+            reads=HONESTY_READS,
         ):
             if isinstance(walk_event, TickOpened):
+                chosen.open(walk_event.entry)
+                policies = chosen.policies
                 _perceive_tick(walk_event, service=service, memories=memories)
                 recorded = {
                     str(raw["actor"]): raw
@@ -1305,6 +1452,7 @@ def reconstruct_impostor_decisions(
                     )
             elif isinstance(walk_event, MeetingApplied):
                 _fold_meeting_into_memories(walk_event, composites=composites)
+                chosen.meeting_concluded(walk_event.state)
     finally:
         service.close()
         audit_dir.cleanup()
@@ -1394,11 +1542,15 @@ def _fold_game(
     public_map: PublicMapView,
     distances: Mapping[RoomId, Mapping[RoomId, int]],
     persona_phrase: str,
-    impostor_policy: ImpostorPolicyFactory,
+    impostor_policy: ImpostorPolicyFactory | None,
     assert_recorded_action_fidelity: bool,
     tallies: _Tallies,
-) -> None:
-    """Walk one recording once and fold every cell it contributes to."""
+) -> str:
+    """Walk one recording once, fold every cell it contributes to, name its policy.
+
+    Returns the ``policy_mode`` of the policy its I-11 decisions were rebuilt
+    with (:class:`_ImpostorPolicies`).
+    """
 
     game_id = f"headless-seed-{seed}"
     impostor_ids = frozenset(pid for pid, role in roles.items() if role == "IMPOSTOR")
@@ -1408,7 +1560,9 @@ def _fold_game(
     composites: dict[PlayerId, AgentMemory] = {
         pid: AgentMemory(episodic=store) for pid, store in memories.items()
     }
-    policies = {pid: impostor_policy(pid) for pid in sorted(impostor_ids)}
+    chosen = _ImpostorPolicies(
+        chosen=impostor_policy, impostor_ids=impostor_ids, game_id=game_id
+    )
     # Engine frame: ``room_at[T]`` is the state after tick ``T``'s recorded
     # actions resolved — the frame the replay row's ``state_hash`` covers and the
     # frame the loader serves as "tick T". A memory row at agent tick ``T``
@@ -1428,23 +1582,28 @@ def _fold_game(
         game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
     )
     try:
-        for walk_event in walk_replay(
-            replay_path,
-            seed=seed,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            game_map=game_map,
-            config=_WALK_CONFIG,
+        for walk_event in read_recorded_settings(
+            walk_replay(
+                replay_path,
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ),
+            reader=f"replay profile {_WALK_CONFIG.profile!r}",
+            reads=HONESTY_READS,
         ):
             if isinstance(walk_event, TickOpened):
+                chosen.open(walk_event.entry)
                 _perceive_tick(walk_event, service=service, memories=memories)
                 _fold_impostor_decisions(
                     game_id=game_id,
                     walk_event=walk_event,
                     impostor_ids=impostor_ids,
                     memories=memories,
-                    policies=policies,
+                    policies=chosen.policies,
                     public_map=public_map,
                     assert_recorded_action_fidelity=(assert_recorded_action_fidelity),
                     ranked_first=ranked_first,
@@ -1485,6 +1644,7 @@ def _fold_game(
                     ejected_at.setdefault(entry.ejected_player_id, entry.tick)
                     death_tick.setdefault(entry.ejected_player_id, entry.tick)
                 _fold_meeting_into_memories(walk_event, composites=composites)
+                chosen.meeting_concluded(walk_event.state)
     finally:
         service.close()
         audit_dir.cleanup()
@@ -1510,6 +1670,11 @@ def _fold_game(
         persona_phrase=persona_phrase,
         tallies=tallies,
     )
+    if chosen.mode is None:  # pragma: no cover - the profile requires a terminal tick
+        raise EvidenceHonestyReconstructionError(
+            f"{game_id}: the recording holds no tick row, so no policy was folded"
+        )
+    return chosen.mode
 
 
 def _fold_impostor_decisions(
@@ -2602,6 +2767,12 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
     raise EvidenceHonestyReconstructionError(f"{violation.game_id}: {detail}")
 
 
+#: The recorded settings the honesty cells read (module docstring, "Recorded
+#: settings"): every setting a reviewed reader may read except the meeting reset,
+#: which stays refused until the reset's own card makes ``room_at`` and the clock
+#: alignment coherent under it.
+HONESTY_READS: Final[frozenset[str]] = READABLE_SETTINGS - {"meeting_reset"}
+
 _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="evidence-honesty",
     on_violation=_raise_walk_violation,
@@ -2614,12 +2785,16 @@ _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     require_terminal_tick=True,
     reject_trailing_rows=True,
     require_game_end_row=True,
+    supports_experiments=True,
+    threaded_layers=layers_read(HONESTY_READS),
 )
 
 
 __all__ = [
     "AGENT_CLOCK_OFFSET",
     "CELL_DEFINITIONS",
+    "HONESTY_READS",
+    "RECORDED_ARM_POLICY_FOLD",
     "AdjacentRoomFlagCells",
     "EvidenceHonestyReconstructionError",
     "EvidenceHonestyReport",
@@ -2634,4 +2809,5 @@ __all__ = [
     "SingularPersonaCells",
     "SoleFlagPrecisionCells",
     "compute_evidence_honesty",
+    "recorded_impostor_policy",
 ]

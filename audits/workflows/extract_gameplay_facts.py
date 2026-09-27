@@ -162,6 +162,7 @@ from eval.vote_correctness import (
     genuine_class_subjects,
 )
 from experiments.lab.rubric_score import score as _rubric_score
+from orchestrator.experiment_config import RecordedExperimentConfig
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
@@ -171,12 +172,40 @@ from orchestrator.replay import (
     ReplayEntry,
     _state_hash,
     read_all_entries,
+    recorded_experiment_config,
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SAMPLE_DIR = REPO_ROOT / "replays" / "samples" / "9p2i"
+
+
+def refuse_experiment_settings(
+    seed: int, config: RecordedExperimentConfig | None
+) -> None:
+    """Exit, naming the seed and its settings, for a recording made with experiment settings.
+
+    The extraction re-simulates with no settings and re-derives the meeting
+    chain, so it reads only recordings made without experiment settings, and
+    refuses the rest before the first advance rather than failing later on a
+    fact the settings changed.
+    """
+
+    if config is None:
+        return
+    named = ", ".join(
+        f"{field} = {getattr(config, field)!r}"
+        for field, info in RecordedExperimentConfig.model_fields.items()
+        if field != "format_version" and getattr(config, field) != info.default
+    )
+    raise SystemExit(
+        f"seed {seed}: the recording was made with experiment settings "
+        f"({named}); this extractor reads only recordings made without "
+        "experiment settings"
+    )
+
+
 SEEDSET = "9p2i"
 
 # Action adapter for deserializing recorded raw actions.
@@ -2120,6 +2149,7 @@ def main() -> int:
 
         # 2) Reconstruct resolved events by re-running the engine.
         entries = read_all_entries(path)
+        refuse_experiment_settings(seed, recorded_experiment_config(entries))
         trigger_index = _trigger_kind_index(entries)
         replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
         meeting_entries = [e for e in entries if isinstance(e, MeetingReplayEntry)]

@@ -59,6 +59,7 @@ if TYPE_CHECKING:
         VentWitnessRecord,
     )
     from meetings.transcript import MeetingTriggerKind
+    from orchestrator.experiment_config import RecordedExperimentConfig
     from orchestrator.replay import MeetingReplayEntry
 
 _Row = TypeVar("_Row")
@@ -424,21 +425,33 @@ class MoveRecordBuilder(Protocol):
     ) -> tuple[MoveWitnessRecord, ...]: ...
 
 
-def meeting_trigger_kind(walk_event: MeetingOpened) -> MeetingTriggerKind:
+def meeting_trigger_kind(
+    walk_event: MeetingOpened,
+    *,
+    experiment_config: RecordedExperimentConfig | None,
+) -> MeetingTriggerKind:
     """The trigger kind the meeting manager threads into detection.
 
     The orchestrator rebuilds the meeting trigger from the engine's trigger event
     (``orchestrator.game._build_meeting_trigger``), copying that event's typed
     kind onto ``MeetingTrigger.kind``, and the manager reads that field
     (``meetings.manager._trigger_is_emergency``). The builder is called here
-    rather than restated, and the returned value is the rebuilt trigger's typed
-    ``kind``: the trigger's description is never read.
+    rather than restated, with the recording's own trigger settings
+    (``experiment_config``, ``None`` for a recording made without settings), and
+    the returned value is the rebuilt trigger's typed ``kind``: the trigger's
+    description is never read.
     """
 
     from orchestrator.game import _build_meeting_trigger
 
     trigger, _body_id, _engine_kind = _build_meeting_trigger(
-        state=walk_event.state, events=walk_event.events
+        state=walk_event.state,
+        events=walk_event.events,
+        report_body_handle_version=(
+            experiment_config.report_body_handle_version
+            if experiment_config is not None
+            else None
+        ),
     )
     return trigger.kind
 
@@ -509,6 +522,14 @@ def walk_committed_meetings(
     speakers held. Uncached: read committed sets through
     :func:`committed_meetings`. ``seeds`` and ``move_records`` exist for planted
     controls, which walk one game with a builder production does not use.
+
+    A recording's own settings are read as far as
+    :data:`eval.recorded_settings.READABLE_SETTINGS` names them: the engine
+    settings reach every advance through the walk's engine-arguments helper, the
+    meeting reset reaches every applied meeting, and the trigger settings reach
+    :func:`meeting_trigger_kind`; the tactical and meeting settings reach the
+    channels only as the recorded actions and turns. Any other recorded setting
+    is refused before the first advance.
     """
 
     from agents.memory.episodic import MemoryStore
@@ -519,9 +540,11 @@ def walk_committed_meetings(
         _fold_meeting_into_memories,
         _perceive_tick,
     )
+    from eval.recorded_settings import READABLE_SETTINGS, read_recorded_settings
     from eval.replay_walk import MeetingApplied, MeetingOpened, TickOpened, walk_replay
     from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
     from observation.service import ObservationService
+    from orchestrator.experiment_config import normalize_experiment_config
 
     set_name = f"{sample_dir.parent.name}/{sample_dir.name}"
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
@@ -540,21 +563,29 @@ def walk_committed_meetings(
         composites = {
             pid: AgentMemory(episodic=store) for pid, store in memories.items()
         }
+        recorded: RecordedExperimentConfig | None = None
         with tempfile.TemporaryDirectory(prefix="ailibi-channels-") as audit_dir:
             service = ObservationService(
                 game_map=game_map, audit_log_path=Path(audit_dir) / "audit.jsonl"
             )
             try:
-                for walk_event in walk_replay(
-                    sample_dir / f"replay-seed-{seed}.jsonl",
-                    seed=seed,
-                    num_players=num_players,
-                    num_impostors=num_impostors,
-                    tasks_per_crewmate=tasks_per_crewmate,
-                    game_map=game_map,
-                    config=_WALK_CONFIG,
+                for walk_event in read_recorded_settings(
+                    walk_replay(
+                        sample_dir / f"replay-seed-{seed}.jsonl",
+                        seed=seed,
+                        num_players=num_players,
+                        num_impostors=num_impostors,
+                        tasks_per_crewmate=tasks_per_crewmate,
+                        game_map=game_map,
+                        config=_WALK_CONFIG,
+                    ),
+                    reader="the committed-meeting channel walk",
+                    reads=READABLE_SETTINGS,
                 ):
                     if isinstance(walk_event, TickOpened):
+                        recorded = normalize_experiment_config(
+                            walk_event.entry.experiment_config
+                        )
                         _perceive_tick(walk_event, service=service, memories=memories)
                     elif isinstance(walk_event, MeetingOpened):
                         living = sorted(
@@ -568,7 +599,9 @@ def walk_committed_meetings(
                                 seed=seed,
                                 entry=walk_event.entry,
                                 roster=frozenset(living),
-                                trigger_kind=meeting_trigger_kind(walk_event),
+                                trigger_kind=meeting_trigger_kind(
+                                    walk_event, experiment_config=recorded
+                                ),
                                 vent_witness_records=_non_empty(
                                     {
                                         pid: vent_witness_records_for_meeting(

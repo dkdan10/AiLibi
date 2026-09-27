@@ -48,6 +48,12 @@ same census with one lever withheld. ``--withhold`` names that lever (default
 ablation is a committed command rather than a number nobody can re-derive. The
 headline column is always the full eight.
 
+Recorded settings: the table is defined over recordings made without experiment
+settings, the way the committed games were. It walks with the evidence-honesty
+profile, which reads some recorded settings, so :func:`_walk_game` refuses any
+recorded setting before the first advance
+(:func:`eval.recorded_settings.read_recorded_settings` with nothing read).
+
 Purity: offline, no network, no LLM call, no replay written, no ``os.environ``
 assignment.
 """
@@ -92,6 +98,7 @@ from engine.entities import PlayerId, Role, RoomId  # noqa: E402
 from engine.events import TaskCompletedEvent  # noqa: E402
 from engine.world import load_canonical_map  # noqa: E402
 from eval.deduction_metrics import WilsonRateCell, classify_flag  # noqa: E402
+from eval.recorded_settings import read_recorded_settings  # noqa: E402
 from eval.evidence_honesty import (  # noqa: E402
     _MARKER_PREFIXES,
     _RENDERED_ROW,
@@ -635,14 +642,18 @@ def _walk_game(
         game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
     )
     try:
-        for walk_event in walk_replay(
-            replay_path,
-            seed=seed,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            game_map=game_map,
-            config=_WALK_CONFIG,
+        for walk_event in read_recorded_settings(
+            walk_replay(
+                replay_path,
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ),
+            reader="the offline lever counterfactual",
+            reads=frozenset(),
         ):
             if isinstance(walk_event, TickOpened):
                 state = walk_event.state
