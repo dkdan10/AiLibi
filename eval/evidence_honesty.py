@@ -2,7 +2,7 @@
 
 Ten cell families over committed bytes, one per instrument row I-2…I-11 of
 ``audits/audit-phase-20-preregistration.md`` §2, plus the render-budget cells the
-lever tasks print. Every number the pre-registration names as a bar's "before"
+lever tasks print and one ballot-conduct family the Stage-B record reads. Every number the pre-registration names as a bar's "before"
 is recomputed here from the recorded replay bytes, so a bar can be re-derived
 rather than quoted: a falsifiability contract whose numbers cannot be re-run is
 not one.
@@ -17,7 +17,7 @@ Definitions before counting
 ---------------------------
 The house rule of ``eval.deduction_metrics`` — every metric's numerator,
 denominator, clock convention and non-coverage stated before it is counted — is
-extended here. The ten sentences live in :data:`CELL_DEFINITIONS` and are repeated
+extended here. The eleven sentences live in :data:`CELL_DEFINITIONS` and are repeated
 verbatim in each cell family's own docstring; ``tests/eval/test_evidence_honesty.py``
 asserts the two never drift, so the string Task 20.22 copies into the memo is the
 string the code computes.
@@ -86,6 +86,17 @@ string the code computes.
   PRE-advance engine state the tick's actions were decided from; it does NOT
   measure whether the declined kill would have landed, because a lower-id
   target may dodge in the same tick.
+* **Ballot conduct** — numerators: impostor EJECT ballots split by what their valid citations
+  point toward, where a cited turn points toward the target when it carries
+  a typed accusation against the target or minted a contradiction of this
+  meeting naming the target and a cited own observation is neutral; impostor
+  EJECTs whose valid citations are only neutral rows; ejections whose
+  ballots for the ejected player at or above the tally's own confidence floor
+  were all cast by impostors; first-hand kill holders at meeting open whose
+  ballot cites the kill; and impostor ballots whose recorded target is a
+  fellow impostor; denominators: impostor EJECT ballots, all ejections, the
+  first-hand kill holders and all impostor ballots; no clock applies; it does
+  NOT measure whether an accusation is true, or a voter's intent.
 
 One clock, asserted rather than assumed
 ---------------------------------------
@@ -172,7 +183,7 @@ the same bytes produce identical reports.
 
 STABLE JSON report schema (``EvidenceHonestyReport.model_dump()``): one object per
 measured set carrying ``replay_set_dir``, the roster knobs, ``games_total``,
-``clock_alignment_checked``, and the eleven cell-family blocks named on
+``clock_alignment_checked``, and the twelve cell-family blocks named on
 :class:`EvidenceHonestyReport`. Every rate is an
 ``eval.deduction_metrics.WilsonRateCell`` (counts + the Wilson 95% score interval);
 the blocks are count-only — no player ids, rooms or transcript text leave here.
@@ -232,10 +243,12 @@ from meetings.manager import (
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
     INVALID_CORROBORATION_SUPPORTS_MARKER,
+    _turn_id_for_event,
     derive_reported_testimony,
     extract_belief_evidence,
 )
 from meetings.schemas import (
+    AccusationClaim,
     AlibiClaim,
     AlibiSegment,
     ContradictionRef,
@@ -255,13 +268,18 @@ from observation.public_map import PublicMapView
 from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
 from orchestrator.experiment_config import normalize_experiment_config
-from orchestrator.game import TacticalAgent, build_default_agent_factory
+from orchestrator.game import (
+    TacticalAgent,
+    build_default_agent_factory,
+    kill_witness_records_in,
+)
 from orchestrator.replay import (
     LLMCallRecord,
     MeetingReplayEntry,
     ReplayEntry,
     fold_meeting_outcome_into_memories,
 )
+from orchestrator.replay_integrity import resolve_ballot_tally_threshold
 
 # The agent memory frame runs one ahead of the engine/replay frame: a row stamped
 # ``[tick T]`` describes engine tick ``T - 1``.
@@ -515,8 +533,22 @@ CELL_DEFINITIONS: Final[Mapping[str, str]] = {
         "declined kill would have landed, because a lower-id target may dodge in "
         "the same tick."
     ),
+    "ballot-conduct": (
+        "numerators: impostor EJECT ballots split by what their valid citations "
+        "point toward, where a cited turn points toward the target when it carries "
+        "a typed accusation against the target or minted a contradiction of this "
+        "meeting naming the target and a cited own observation is neutral; impostor "
+        "EJECTs whose valid citations are only neutral rows; ejections whose "
+        "ballots for the ejected player at or above the tally's own confidence floor "
+        "were all cast by impostors; first-hand kill holders at meeting open whose "
+        "ballot cites the kill; and impostor ballots whose recorded target is a "
+        "fellow impostor; denominators: impostor EJECT ballots, all ejections, the "
+        "first-hand kill holders and all impostor ballots; no clock applies; it does "
+        "NOT measure whether an accusation is true, or a voter's intent."
+    ),
 }
-"""The ten definition sentences Task 20.22 copies into the pre-registration memo.
+"""The ten definition sentences Task 20.22 copies into the pre-registration memo,
+and the ballot-conduct family's sentence the Stage-B record reads beside them.
 
 Each is repeated verbatim in its cell family's docstring and in this module's
 docstring; the test asserts all three copies agree, so the memo cannot drift from
@@ -900,6 +932,56 @@ class RenderBudgetCells(_FrozenModel):
     testimony_rows_by_living_bucket: Mapping[str, int]
 
 
+class BallotConductCells(_FrozenModel):
+    """Ballot conduct: impostor ballots, carried ejections and kill-row holders.
+
+    numerators: impostor EJECT ballots split by what their valid citations
+    point toward, where a cited turn points toward the target when it carries
+    a typed accusation against the target or minted a contradiction of this
+    meeting naming the target and a cited own observation is neutral; impostor
+    EJECTs whose valid citations are only neutral rows; ejections whose
+    ballots for the ejected player at or above the tally's own confidence floor
+    were all cast by impostors; first-hand kill holders at meeting open whose
+    ballot cites the kill; and impostor ballots whose recorded target is a
+    fellow impostor; denominators: impostor EJECT ballots, all ejections, the
+    first-hand kill holders and all impostor ballots; no clock applies; it does
+    NOT measure whether an accusation is true, or a voter's intent.
+
+    An impostor EJECT is classified by its primary citations, in this order:
+    ``ejects_pointing_toward`` when ``primary_reason_id`` names a turn of this
+    meeting that points toward the ballot's target (``ejects_pointing_toward_own_turn``
+    counts those whose cited turn the voter spoke itself); ``ejects_other_turn``
+    when it names a turn of this meeting that does not; ``ejects_citing_only_neutral``
+    when it names no turn but ``primary_reason_observation_id`` names one of the
+    voter's own observations; ``ejects_without_citation`` otherwise. The counter
+    citation is not a citation of the EJECT. A recorded id is valid because the
+    meeting layer nulls every other id before the ballot is recorded; a turn id
+    must also name a turn of this meeting's transcript.
+    ``ejections_carried_by_impostors_alone`` reads the confidence floor from the
+    recording (:func:`orchestrator.replay_integrity.resolve_ballot_tally_threshold`),
+    the value the tally resolved the meeting with. ``kill_holders`` counts the
+    ballots whose voter held a first-hand kill record when the meeting opened, read
+    by the accessor's own predicate
+    (:func:`orchestrator.game.kill_witness_records_in`) over the rebuilt memory, and
+    ``kill_holders_citing_the_kill`` those whose ballot cites one of those records'
+    observations. No cell is a gate.
+    """
+
+    impostor_ballots: int
+    impostor_ejects: int
+    impostor_skips: int
+    ejects_pointing_toward: int
+    ejects_pointing_toward_own_turn: int
+    ejects_other_turn: int
+    ejects_citing_only_neutral: WilsonRateCell
+    ejects_without_citation: int
+    ejections: int
+    ejections_carried_by_impostors_alone: WilsonRateCell
+    kill_holders: int
+    kill_holders_citing_the_kill: WilsonRateCell
+    recorded_teammate_targets: WilsonRateCell
+
+
 class EvidenceHonestyReport(_FrozenModel):
     """One replay set's evidence-honesty cells — counts and rate cells only.
 
@@ -928,6 +1010,7 @@ class EvidenceHonestyReport(_FrozenModel):
     meeting_physicality: MeetingPhysicalityCells
     impostor_targeting: ImpostorTargetingCells
     render_budget: RenderBudgetCells
+    ballot_conduct: BallotConductCells
 
 
 # --------------------------------------------------------------------------- #
@@ -1020,6 +1103,20 @@ class _Tallies:
     rendered_lines: int = 0
     testimony_rows: int = 0
     testimony_by_bucket: Counter[str] = field(default_factory=Counter)
+
+    impostor_ballots: int = 0
+    impostor_ejects: int = 0
+    impostor_skips: int = 0
+    ejects_pointing_toward: int = 0
+    ejects_pointing_toward_own_turn: int = 0
+    ejects_other_turn: int = 0
+    ejects_citing_only_neutral: int = 0
+    ejects_without_citation: int = 0
+    ejections: int = 0
+    ejections_carried_by_impostors_alone: int = 0
+    kill_holders: int = 0
+    kill_holders_citing_the_kill: int = 0
+    recorded_teammate_targets: int = 0
 
 
 def compute_evidence_honesty(
@@ -1244,6 +1341,29 @@ def _report(
             testimony_rows_total=tallies.testimony_rows,
             testimony_rows_by_living_bucket=dict(
                 sorted(tallies.testimony_by_bucket.items())
+            ),
+        ),
+        ballot_conduct=BallotConductCells(
+            impostor_ballots=tallies.impostor_ballots,
+            impostor_ejects=tallies.impostor_ejects,
+            impostor_skips=tallies.impostor_skips,
+            ejects_pointing_toward=tallies.ejects_pointing_toward,
+            ejects_pointing_toward_own_turn=tallies.ejects_pointing_toward_own_turn,
+            ejects_other_turn=tallies.ejects_other_turn,
+            ejects_citing_only_neutral=cell(
+                tallies.ejects_citing_only_neutral, tallies.impostor_ejects
+            ),
+            ejects_without_citation=tallies.ejects_without_citation,
+            ejections=tallies.ejections,
+            ejections_carried_by_impostors_alone=cell(
+                tallies.ejections_carried_by_impostors_alone, tallies.ejections
+            ),
+            kill_holders=tallies.kill_holders,
+            kill_holders_citing_the_kill=cell(
+                tallies.kill_holders_citing_the_kill, tallies.kill_holders
+            ),
+            recorded_teammate_targets=cell(
+                tallies.recorded_teammate_targets, tallies.impostor_ballots
             ),
         ),
     )
@@ -2052,6 +2172,9 @@ def _fold_meetings(
             distances=distances,
             tallies=tallies,
         )
+        _fold_ballot_conduct(
+            facts=facts, roles=roles, memories=memories, tallies=tallies
+        )
     if game_marked:
         tallies.marker_games += 1
     if game_fabricated:
@@ -2716,6 +2839,109 @@ def _fold_grounding(
     tallies.grounded_at_tick += int(nearest == 0)
 
 
+def _points_toward(
+    turn_id: str,
+    target: PlayerId,
+    *,
+    transcript: MeetingTranscript,
+    contradictions: Sequence[ContradictionRef],
+) -> bool:
+    """Whether the cited turn points toward ``target``.
+
+    It does when that turn carries a typed accusation against ``target``, or when
+    a contradiction of this meeting naming ``target`` was minted from it: one of
+    the flag's two event ids resolves to the turn by the manager's own mapping
+    (:func:`meetings.manager._turn_id_for_event`).
+    """
+
+    turns = transcript.turns
+    for turn in turns:
+        if turn.turn_id != turn_id:
+            continue
+        if any(
+            isinstance(claim, AccusationClaim) and claim.against == target
+            for claim in turn.claims
+        ):
+            return True
+    return any(
+        target in flag.subjects
+        and turn_id
+        in (
+            _turn_id_for_event(flag.event_a_id, turns=turns),
+            _turn_id_for_event(flag.event_b_id, turns=turns),
+        )
+        for flag in contradictions
+    )
+
+
+def _fold_ballot_conduct(
+    *,
+    facts: _MeetingFacts,
+    roles: Mapping[PlayerId, Role],
+    memories: Mapping[PlayerId, MemoryStore],
+    tallies: _Tallies,
+) -> None:
+    """Fold the ballot-conduct family for one meeting (:class:`BallotConductCells`)."""
+
+    entry = facts.entry
+    impostors = frozenset(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    turn_ids = frozenset(turn.turn_id for turn in entry.transcript.turns)
+    speaker_by_turn = {turn.turn_id: turn.speaker for turn in entry.transcript.turns}
+    for ballot in entry.ballots:
+        memory = memories.get(ballot.voter)
+        if memory is None:
+            raise EvidenceHonestyReconstructionError(
+                f"{entry.meeting_id}: ballot by {ballot.voter!r}, a player the walk "
+                "rebuilt no memory for"
+            )
+        kills = kill_witness_records_in(
+            _memory_at_meeting(memory, ballot.voter, facts.memory_prefix)
+        )
+        if kills:
+            tallies.kill_holders += 1
+            if ballot.primary_reason_observation_id is not None and any(
+                record.observation_id == ballot.primary_reason_observation_id
+                for record in kills
+            ):
+                tallies.kill_holders_citing_the_kill += 1
+        if ballot.voter not in impostors:
+            continue
+        tallies.impostor_ballots += 1
+        if ballot.target == "SKIP":
+            tallies.impostor_skips += 1
+            continue
+        tallies.impostor_ejects += 1
+        if ballot.target in impostors and ballot.target != ballot.voter:
+            tallies.recorded_teammate_targets += 1
+        cited_turn = ballot.primary_reason_id
+        if cited_turn is not None and cited_turn in turn_ids:
+            if _points_toward(
+                cited_turn,
+                ballot.target,
+                transcript=entry.transcript,
+                contradictions=entry.contradictions,
+            ):
+                tallies.ejects_pointing_toward += 1
+                if speaker_by_turn[cited_turn] == ballot.voter:
+                    tallies.ejects_pointing_toward_own_turn += 1
+            else:
+                tallies.ejects_other_turn += 1
+        elif ballot.primary_reason_observation_id is not None:
+            tallies.ejects_citing_only_neutral += 1
+        else:
+            tallies.ejects_without_citation += 1
+    if entry.outcome == "EJECTED" and entry.ejected_player_id is not None:
+        tallies.ejections += 1
+        floor = resolve_ballot_tally_threshold(entry)
+        confident = [
+            ballot.voter
+            for ballot in entry.ballots
+            if ballot.target == entry.ejected_player_id and ballot.confidence >= floor
+        ]
+        if confident and all(voter in impostors for voter in confident):
+            tallies.ejections_carried_by_impostors_alone += 1
+
+
 def _fold_movement_origin(
     resolved: _ResolvedFlag,
     *,
@@ -2832,6 +3058,7 @@ __all__ = [
     "HONESTY_READS",
     "RECORDED_ARM_POLICY_FOLD",
     "AdjacentRoomFlagCells",
+    "BallotConductCells",
     "EvidenceHonestyReconstructionError",
     "EvidenceHonestyReport",
     "FabricatedCompletionCells",
