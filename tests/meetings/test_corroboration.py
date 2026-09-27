@@ -20,7 +20,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 import pytest
 
@@ -41,7 +41,7 @@ from meetings.corroboration import (
 # Aliased so pytest does not try to COLLECT the production row DTO as a test
 # class on its ``Test`` prefix.
 from meetings.corroboration import TestimonySupport as _TestimonySupport
-from meetings.render_contract import EvidenceRow
+from meetings.render_contract import EvidenceRow, VoterRole
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -2325,6 +2325,9 @@ class _CapturingVotePrompt:
         render_inputs: object | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
         evidence_rows: tuple[EvidenceRow, ...] = (),
+        voter_role: VoterRole | None = None,
+        ballot_kill_row_version: Literal[1] | None = None,
+        impostor_ballot_version: Literal[1] | None = None,
     ) -> str:
         self.seen.append(testimony_ledger)
         return _vote_prompt(

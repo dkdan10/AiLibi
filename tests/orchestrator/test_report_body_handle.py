@@ -20,7 +20,7 @@ changes nothing else. This module holds that contract:
   handle and leaves temporal mode's text alone; under the arm a corpse gone from
   the state reads "a body" and never the engine id, which only the setting with
   neither the arm nor temporal delivery still names;
-* the field round-trips, is omitted at its default and no longer pending;
+* the field round-trips and is omitted at its default;
 * the prompt-byte golden re-renders an arm-ON recording through the recorded
   value, and misses the opening without it; a plain shell loads the recording;
 * with the meeting reset, a report after a regroup names the public handle and a
@@ -72,7 +72,6 @@ from meetings.evidence_profile import profile_from_config
 from meetings.manager import EMERGENCY_TRIGGER_PHRASE, MeetingTrigger
 from observation.body_ids import public_body_id
 from orchestrator.experiment_config import (
-    WAVE_ARMS_PENDING,
     RecordedExperimentConfig,
     meeting_values,
 )
@@ -1200,10 +1199,6 @@ def test_the_default_serializes_without_the_key(
     assert config.report_body_handle_version is None
     assert "report_body_handle_version" not in config.model_dump(mode="json")
     assert "report_body_handle_version" not in json.loads(config.model_dump_json())
-
-
-def test_the_arm_is_no_longer_pending() -> None:
-    assert "report_body_handle_version" not in WAVE_ARMS_PENDING
 
 
 @pytest.mark.parametrize("value", [True, 2])

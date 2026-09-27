@@ -4762,14 +4762,6 @@ def test_the_later_settings_cover_every_layer_the_census_declares() -> None:
     )
 
 
-def _open_pending_arms(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let a planted recording carry an ON value no arm card has built yet."""
-
-    monkeypatch.setattr(
-        experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}), raising=False
-    )
-
-
 def _stamped_copy(directory: Path, settings: Mapping[str, object]) -> Path:
     """A copy of one committed game whose tick rows and footer record ``settings``."""
 
@@ -4820,9 +4812,7 @@ def _spied_walk(monkeypatch: pytest.MonkeyPatch) -> list[ReplayWalkEvent]:
     return yielded
 
 
-def test_the_census_walk_reads_every_later_setting_it_declares(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_census_walk_reads_every_later_setting_it_declares(tmp_path: Path) -> None:
     """A full-config copy walks with every hash verified, and each value is read.
 
     The copy carries every later setting outside the engine layer at its ON
@@ -4830,7 +4820,6 @@ def test_the_census_walk_reads_every_later_setting_it_declares(
     committed game's; only the era differs, and it holds the recorded values.
     """
 
-    _open_pending_arms(monkeypatch)
     settings = dict(LATER_SETTINGS)
     walked = _walked(_stamped_copy(tmp_path, settings))
     committed = _committed_game()
@@ -4848,9 +4837,7 @@ def test_the_census_walk_reads_every_later_setting_it_declares(
         assert not PREDICATES[key].holds(committed.era.values), key
 
 
-def test_the_recorded_body_handle_setting_reaches_its_guard(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_recorded_body_handle_setting_reaches_its_guard(tmp_path: Path) -> None:
     """End to end: the committed opening carries the kill-tick handle.
 
     Read from a recording that says the public handle was ON, that opening is a
@@ -4858,7 +4845,6 @@ def test_the_recorded_body_handle_setting_reaches_its_guard(
     folds.
     """
 
-    _open_pending_arms(monkeypatch)
     committed = _committed_game()
     assert any(item.opener_prompt_has_kill_tick_handle for item in committed.meetings)
     walked = _walked(_stamped_copy(tmp_path, {"report_body_handle_version": 1}))
@@ -4880,7 +4866,6 @@ def test_a_census_walk_without_a_layer_refuses_its_setting_before_advancing(
 ) -> None:
     """Planted: the census profile with that setting's layer taken out."""
 
-    _open_pending_arms(monkeypatch)
     path = _stamped_copy(tmp_path, {name: value})
     layer = FIELD_LAYER[name]
     monkeypatch.setattr(

@@ -262,8 +262,8 @@ def test_the_enumerator_lists_rounds_only_and_reads_an_absent_root(
 # The planted round                                                            #
 # --------------------------------------------------------------------------- #
 
-#: The declared test config: arms that exist today, since the pending guard
-#: refuses the wave's new values.
+#: The declared test config: arms that existed before the Stage-B wave, which
+#: every reader of a candidate set reads.
 _TEST_CONFIG_JSON: Final[str] = (
     '{"format_version": 1, "meeting_reset": "hub_with_grace", '
     '"vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}\n'

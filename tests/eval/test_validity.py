@@ -1110,8 +1110,7 @@ def test_every_check_is_individually_reported() -> None:
 # check 9's declarations                                                       #
 # --------------------------------------------------------------------------- #
 
-#: The declared test config: three arms that exist today, since the pending
-#: guard refuses the wave's new values.
+#: The declared test config: three arms that existed before the Stage-B wave.
 _TEST_CONFIG_JSON: Final[str] = (
     '{"format_version": 1, "meeting_reset": "hub_with_grace", '
     '"vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}\n'
@@ -1583,14 +1582,7 @@ def _counted_advances(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     return calls
 
 
-def _open_pending(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
-
-
-def test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _open_pending(monkeypatch)
+def test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer() -> None:
     full = RecordedExperimentConfig.model_validate(
         {**_TEST_CONFIG.model_dump(), **_FULL_CONFIG_SETTINGS}
     )
@@ -1619,7 +1611,6 @@ def test_each_profile_reads_the_full_config_copy_with_every_hash_verified(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _open_pending(monkeypatch)
     plain = _one_game(arms_on_set, tmp_path, "plain")
     full = _one_game(arms_on_set, tmp_path, "full")
     _rewrite_configs(full, lambda config: config.update(_FULL_CONFIG_SETTINGS))
@@ -1637,7 +1628,6 @@ def test_without_its_declaration_a_profile_refuses_the_full_config_copy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _open_pending(monkeypatch)
     full = _one_game(arms_on_set, tmp_path, "full")
     _rewrite_configs(full, lambda config: config.update(_FULL_CONFIG_SETTINGS))
     module, name = _PROFILES[profile]

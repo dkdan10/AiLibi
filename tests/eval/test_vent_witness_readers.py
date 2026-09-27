@@ -56,7 +56,6 @@ from meetings.evidence_profile import profile_from_config
 from observation.service import ObservationService
 from orchestrator import experiment_config
 from orchestrator.experiment_config import (
-    WAVE_ARMS_PENDING,
     EngineArguments,
     RecordedExperimentConfig,
     engine_arguments,
@@ -492,7 +491,6 @@ def test_the_helper_threads_the_recorded_rule() -> None:
         "both_rooms"
     )
     assert "vent_witness_rule" in experiment_config._THREADED_ENGINE_FIELDS
-    assert "vent_witness_rule" not in WAVE_ARMS_PENDING
 
 
 def test_a_physical_config_round_trips_through_the_config_and_the_view() -> None:

@@ -1703,12 +1703,12 @@ def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
 def test_an_arm_stamp_resolves_only_on_a_recording_that_carries_the_arm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The window with a registered arm: planted, since the registry is empty here.
+    """The window with a registered arm, planted for an arm the registry lacks.
 
     With a planted registry entry the arm's stamp resolves on a recording whose
     settings carry the arm and passes the window; the same stamp on a recording
     without the arm fails it, and so does the default stamp on a recording that
-    carries the arm. With the registry empty the arm's settings serve the default
+    carries the arm. Without an entry the arm's settings serve the default
     stamp, so a committed recording's stamp is the live default mapping.
     """
 
@@ -1718,7 +1718,7 @@ def test_an_arm_stamp_resolves_only_on_a_recording_that_carries_the_arm(
         dict(prompt_versions_for_set(_OVERLAY_SET, env={}, experiment_config=carrying))
         == default
     )
-    assert stamp_window_problems([("empty registry", default, carrying)]) == []
+    assert stamp_window_problems([("no entry for the arm", default, carrying)]) == []
 
     monkeypatch.setattr(
         game_module,
@@ -2400,6 +2400,10 @@ def test_an_applied_meeting_takes_the_recorded_redistribution_rule(
         walk_directory(directory)
 
 
+def _no_body_check(*args: object, **kwargs: object) -> None:
+    """Stand in for the body check where a planted registry entry has no body."""
+
+
 def test_a_recording_made_with_a_registered_arm_resolves_through_its_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2411,6 +2415,10 @@ def test_a_recording_made_with_a_registered_arm_resolves_through_its_settings(
         "EXPERIMENT_ARM_TEMPLATES",
         MappingProxyType({"bounded_rebuttal_version": ("accusation_round",)}),
     )
+    # The planted entry names a body with no block for the arm, which the
+    # runner's body check refuses; the check is stubbed so the recording carries
+    # the planted stamp this test resolves.
+    monkeypatch.setattr(game_module, "require_guarded_bodies", _no_body_check)
     directory = _scripted_rebuttal_game(tmp_path / "arm" / "9p2i")
     stamps = [
         entry.prompt_versions["accusation_round"]
@@ -2479,3 +2487,50 @@ def test_candidate_sets_are_listed_in_path_order_whatever_the_filesystem_returns
         (planted / "replay-seed-0.jsonl").write_text("", encoding="utf-8")
     found = golden_directories(samples=(), candidates_root=_Reversing(tmp_path))
     assert [path.parent.name for path in found] == ["round-1", "round-2"]
+
+
+# --------------------------------------------------------------------------- #
+# The witnessed-kill row's OFF gate is not vacuous                             #
+# --------------------------------------------------------------------------- #
+
+#: MEASURED at the ballot card: the committed sample meetings where a living
+#: voter holds a first-hand sighting of a non-teammate's kill, as
+#: ``(set, seed, meeting id)``. They are the only ballots the kill-row gate moves,
+#: so they are where the golden's OFF leg bites.
+_KILL_HOLDER_MEETINGS: Final[frozenset[tuple[str, int, str]]] = frozenset(
+    {
+        ("9p2i", 17, "headless-seed-17:meeting-3"),
+        ("9p2i", 19, "headless-seed-19:meeting-3"),
+        ("9p2i", 26, "headless-seed-26:meeting-0"),
+        ("9p2i", 26, "headless-seed-26:meeting-1"),
+        ("4p1i", 22, "headless-seed-22:meeting-0"),
+    }
+)
+
+
+def test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the assembler's kill-row gate forced ON for every ballot.
+
+    With the arm OFF the committed ballots re-render byte-identically (the golden
+    above). Forcing only the gate -- the ``own_kill`` rows, not the header
+    sentence -- moves exactly the ballots of the voters who watched a kill, so
+    the OFF gate is what keeps them identical and it is not vacuous.
+    """
+
+    import meetings.manager as manager_module
+
+    real = manager_module.build_evidence_rows
+
+    def _forced(**kwargs: Any) -> Any:
+        return real(**{**kwargs, "ballot_kill_row_version": 1})
+
+    monkeypatch.setattr(manager_module, "build_evidence_rows", _forced)
+    failing = {
+        (set_dir.name, prompt.seed, prompt.meeting_id)
+        for set_dir in _SAMPLE_SETS
+        for prompt in walk_directory(set_dir).prompts
+        if not prompt.reproduced
+    }
+    assert failing == _KILL_HOLDER_MEETINGS

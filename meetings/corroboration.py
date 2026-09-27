@@ -343,10 +343,11 @@ def _speaker_grounding_places(
 
     A spoken :class:`~meetings.schemas.SawKillObservation` is NOT a further
     channel. Each of the three above tests an account against a typed record or a
-    minted flag, and the kill shape has neither: ``KillWitnessRecord`` is an
-    ``orchestrator.game`` tactical-agent surface that never reaches the meeting
-    layer, no such mapping is threaded into :func:`build_testimony_ledger`, and
-    this module may not import one (the module docstring's import rule). Counting
+    minted flag, and the kill shape has neither here: the speaker's own
+    :class:`~meetings.schemas.KillWitnessRecord` rows reach the meeting layer only
+    as ``own_kill`` rows on that speaker's OWN ballot, and only under the
+    ``ballot_kill_row_version`` arm (:func:`meetings.manager.build_evidence_rows`);
+    no kill mapping is threaded into :func:`build_testimony_ledger`. Counting
     it would credit an UNGROUNDED claim as a first-hand source -- the one thing
     "first-hand" is defined here to exclude -- and would put on the ballot the
     same suspicion delta

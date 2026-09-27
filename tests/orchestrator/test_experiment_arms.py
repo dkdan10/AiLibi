@@ -1,12 +1,10 @@
-"""The Stage-B arm spine: committed bytes, the pending guard, one engine helper,
-a runner built from the recorded config, derived arm stamps, the spectator
-view, the contract page (``docs/experiment-arms.md``) and the factory-kind
-record the policy-stamp docstring in ``orchestrator/replay.py`` relies on.
+"""The Stage-B arm spine: committed bytes, one engine helper, a runner built
+from the recorded config, derived arm stamps, the spectator view, the contract
+page (``docs/experiment-arms.md``) and the factory-kind record the policy-stamp
+docstring in ``orchestrator/replay.py`` relies on.
 
-Each arm card builds its values' behaviour and removes them from the pending
-guard. A value still pending is either refused here or reached with that guard
-patched open to prove the plumbing around it. The last arm card deletes the
-guard's refusal tests with the guard.
+Every wave value's behaviour is built, so every value validates; the ballot
+card deleted the pending guard that refused the unbuilt ones, with its tests.
 """
 
 from __future__ import annotations
@@ -23,19 +21,17 @@ from typing import Any, Literal, cast, get_args
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, TypeAdapter
 
 import orchestrator.game as game_module
 from agents.base import AgentInterface
 from agents.tactical.experimental import (
-    UNBUILT_OPTION_VALUES,
     ExperimentalCrewmatePolicy,
     ExperimentalImpostorPolicy,
 )
 from api.replay_loader import ReplayLoader
 from api.schemas import ExperimentConfigView
 from engine.entities import PlayerId, Role
-from engine.events import MeetingTriggeredEvent
 from engine.world import load_canonical_map
 from engine.actions import Action
 from engine.tick import advance_tick
@@ -56,7 +52,6 @@ from orchestrator import experiment_config
 from orchestrator.experiment_config import (
     FIELD_LAYER,
     OMITTED_AT_DEFAULT,
-    WAVE_ARMS_PENDING,
     RecordedExperimentConfig,
     engine_arguments,
     fields_in_layer,
@@ -67,7 +62,6 @@ from orchestrator.game import (  # noqa: PLC2701
     HeadlessGame,
     TacticalAgent,
     _arm_is_served,
-    _build_meeting_trigger,
     build_default_agent_factory,
     build_default_meeting_runner,
     experiment_arm_suffix,
@@ -112,12 +106,8 @@ _WAVE_CONFIG: dict[str, object] = {
 }
 
 
-def _open_the_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
-
-
 def _constructed(values: dict[str, object]) -> RecordedExperimentConfig:
-    """A config built past validation (the pending guard's bypass route)."""
+    """A config built past validation."""
 
     return RecordedExperimentConfig.model_construct(**cast(dict[str, Any], values))
 
@@ -237,10 +227,7 @@ def test_without_the_omission_rule_the_first_archive_row_fails(
     assert rows == 1
 
 
-def test_the_declared_wave_config_serializes_as_format_one(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _open_the_guard(monkeypatch)
+def test_the_declared_wave_config_serializes_as_format_one() -> None:
     config = RecordedExperimentConfig.model_validate(_WAVE_CONFIG)
     dumped = config.model_dump(mode="json")
     assert dumped["format_version"] == 1
@@ -248,101 +235,6 @@ def test_the_declared_wave_config_serializes_as_format_one(
     assert RecordedExperimentConfig.model_validate_json(config.model_dump_json()) == (
         config
     )
-
-
-# ---------------------------------------------------------------------------
-# The pending guard, parametrized from its live contents.
-# ---------------------------------------------------------------------------
-
-_PENDING: list[tuple[str, object]] = [
-    (field, value)
-    for field, values in WAVE_ARMS_PENDING.items()
-    for value in sorted(values, key=repr)
-]
-_PENDING_PROFILE = [
-    (field, value)
-    for field, value in _PENDING
-    if field in MeetingEvidenceProfile.model_fields
-]
-
-
-def _unbuilt_values() -> set[tuple[str, object]]:
-    """Every wave ON value whose behaviour is not built, read off the behaviour.
-
-    An engine value is unbuilt while the engine-arguments helper does not
-    thread its field; a tactical value while the policies refuse it; the body
-    handle while the trigger builder refuses it; a ballot value while no
-    template is registered for its stamp. An arm card builds the behaviour and
-    deletes the pending name together, so this equality needs no edit.
-    """
-
-    unbuilt: set[tuple[str, object]] = set()
-    for field in fields_in_layer("engine"):
-        if field not in experiment_config._THREADED_ENGINE_FIELDS:
-            default = RecordedExperimentConfig.model_fields[field].default
-            unbuilt |= {
-                (field, value)
-                for value in _literal_values(RecordedExperimentConfig, field)
-                if value != default
-            }
-    for field, values in UNBUILT_OPTION_VALUES.items():
-        unbuilt |= {(field, value) for value in values}
-    state = seed_initial_state(seed=0, game_map=load_canonical_map(), num_players=4)
-    event = MeetingTriggeredEvent(
-        type="MeetingTriggered", tick=4, actor="p-1", trigger="emergency"
-    )
-    try:
-        _build_meeting_trigger(
-            state=state, events=(event,), report_body_handle_version=1
-        )
-    except ValueError:
-        unbuilt.add(("report_body_handle_version", 1))
-    for field in CONFIG_ONLY_PROFILE_FIELDS:
-        if field not in game_module.EXPERIMENT_ARM_TEMPLATES:
-            unbuilt.add((field, 1))
-    return unbuilt
-
-
-def test_a_value_is_pending_exactly_while_its_behaviour_is_unbuilt() -> None:
-    assert set(_PENDING) == _unbuilt_values()
-
-
-def test_the_pending_guard_still_lists_an_arm() -> None:
-    assert _PENDING, (
-        "WAVE_ARMS_PENDING is empty: the last arm card deletes the guard, its "
-        "call sites and this module's refusal tests"
-    )
-    assert isinstance(WAVE_ARMS_PENDING, MappingProxyType)
-
-
-@pytest.mark.parametrize(("field", "value"), _PENDING)
-def test_validation_refuses_a_pending_value(field: str, value: object) -> None:
-    with pytest.raises(ValidationError, match=re.escape(f"{field}={value!r}")):
-        RecordedExperimentConfig.model_validate({field: value})
-
-
-@pytest.mark.parametrize(("field", "value"), _PENDING)
-def test_construction_refuses_a_pending_value_built_past_validation(
-    field: str, value: object
-) -> None:
-    config = _constructed({field: value})
-    with pytest.raises(ValueError, match=re.escape(f"{field}={value!r}")):
-        HeadlessGame(
-            seed=1,
-            game_map=load_canonical_map(),
-            agent_factory=build_default_agent_factory(),
-            replay_path=None,
-            experiment_config=config,
-        )
-
-
-@pytest.mark.parametrize(("field", "value"), _PENDING_PROFILE)
-def test_the_runner_refuses_a_profile_carrying_a_pending_value(
-    field: str, value: object
-) -> None:
-    profile = MeetingEvidenceProfile.model_validate({field: value})
-    with pytest.raises(ValueError, match=re.escape(f"{field}={value!r}")):
-        build_default_meeting_runner(llm_client=FakeProvider(), env={}, profile=profile)
 
 
 _EXISTING_ON: dict[str, dict[str, object]] = {
@@ -727,13 +619,12 @@ def _game(
 
 
 @pytest.mark.parametrize("field", CONFIG_ONLY_PROFILE_FIELDS)
-def test_a_config_only_field_must_equal_the_runners_both_ways(
-    monkeypatch: pytest.MonkeyPatch, field: str
-) -> None:
-    _open_the_guard(monkeypatch)
+def test_a_config_only_field_must_equal_the_runners_both_ways(field: str) -> None:
+    # The ballot arms' blocks live in the served set's body, so the runner is
+    # built on that set.
     served = build_default_meeting_runner(
         llm_client=FakeProvider(),
-        env={},
+        env={"AILIBI_PROMPT_SET": _SET},
         profile=MeetingEvidenceProfile.model_validate({field: 1}),
     )
     bare = build_default_meeting_runner(llm_client=FakeProvider(), env={})
@@ -882,6 +773,10 @@ def test_a_hand_written_stamp_fails_the_derivation_test() -> None:
     ]
 
 
+def _no_body_check(*args: object, **kwargs: object) -> None:
+    """Stand in for the body check where a planted registry entry has no body."""
+
+
 def _register(
     monkeypatch: pytest.MonkeyPatch, entries: dict[str, tuple[str, ...]]
 ) -> None:
@@ -955,22 +850,6 @@ def test_two_arms_fold_in_field_declaration_order(
     ] == ("vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1")
 
 
-def test_a_pinned_runner_still_refuses_a_pending_profile_value(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # An explicit version pin skips the stamp fold, so the runner's own check
-    # is what refuses the pending value on this path.
-    assert _PENDING_PROFILE
-    field, value = _PENDING_PROFILE[0]
-    with pytest.raises(ValueError, match=re.escape(f"{field}={value!r}")):
-        build_default_meeting_runner(
-            llm_client=FakeProvider(),
-            env={"AILIBI_PROMPT_SET": _SET},
-            prompt_versions=PROMPT_VERSION_SETS[_SET],
-            profile=MeetingEvidenceProfile.model_validate({field: value}),
-        )
-
-
 def test_a_version_two_profile_folds_its_stamps_as_format_two() -> None:
     env = {"AILIBI_PROMPT_SET": _SET, "AILIBI_TEMPORAL_OBSERVATIONS": "2"}
     declared = build_default_meeting_runner(
@@ -990,6 +869,10 @@ def test_the_runner_stamps_the_profile_it_renders(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _register(monkeypatch, {"bounded_rebuttal_version": ("accusation_round",)})
+    # The planted entry names a body that carries no block for the arm, which a
+    # runner refuses (the ballot arms' body check); that check is stubbed here so
+    # this test reads the stamp fold alone.
+    monkeypatch.setattr(game_module, "require_guarded_bodies", _no_body_check)
     env = {"AILIBI_PROMPT_SET": _SET}
     declared = build_default_meeting_runner(
         llm_client=FakeProvider(),
@@ -1032,10 +915,7 @@ def test_an_older_payload_without_the_wave_keys_reads_as_defaults() -> None:
         )
 
 
-def test_a_wave_payload_reaches_the_view_unchanged(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _open_the_guard(monkeypatch)
+def test_a_wave_payload_reaches_the_view_unchanged() -> None:
     config = RecordedExperimentConfig.model_validate(_WAVE_CONFIG)
     view = ExperimentConfigView.model_validate(config.model_dump())
     assert {field: getattr(view, field) for field in _WAVE_CONFIG} == _WAVE_CONFIG
@@ -1079,7 +959,6 @@ def _page_problems(
     for symbol in (
         "FIELD_LAYER",
         "OMITTED_AT_DEFAULT",
-        "WAVE_ARMS_PENDING",
         "engine_arguments",
         "profile_from_config",
         "EXPERIMENT_ARM_TEMPLATES",
@@ -1139,17 +1018,6 @@ def test_the_page_check_bites_an_undisclosed_environment_switch() -> None:
         )
         == []
     )
-
-
-def test_the_lab_candidates_are_all_arms_that_exist_today() -> None:
-    # A lab arm records only built values: none it sets is still pending.
-    for config in candidate_configs().values():
-        dumped = config.model_dump()
-        assert not [
-            field
-            for field, refused in WAVE_ARMS_PENDING.items()
-            if field in dumped and dumped[field] in refused
-        ]
 
 
 # ---------------------------------------------------------------------------

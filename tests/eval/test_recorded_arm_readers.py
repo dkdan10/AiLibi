@@ -139,29 +139,36 @@ def _record(
     return directory
 
 
-def _open_the_pending_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+class _BuilderReached(RuntimeError):
+    """The experimental impostor policy was built with a wave tactical value."""
 
 
-def _plant_unbuilt(monkeypatch: pytest.MonkeyPatch) -> None:
-    """List the two tactical wave values as unbuilt again, as the spine did.
+def _stop_at_the_builder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the experimental impostor policy raise when built with a wave value.
 
-    The factory then refuses them by name, so a walk that reaches the refusal
-    proves the recorded value reached the policy builder.
+    The raise names the field and value the builder received, so a walk that
+    reaches it proves the recorded value reached the policy builder; a walk
+    that dropped the field would build the default policy and never raise.
     """
 
-    import agents.tactical.experimental as experimental
-
-    monkeypatch.setattr(
-        experimental,
-        "UNBUILT_OPTION_VALUES",
-        MappingProxyType(
-            {
-                "vent_exit_policy": frozenset({"look_and_wait"}),
-                "vent_entry_policy": frozenset({"own_fresh_kill"}),
-            }
-        ),
+    from agents.tactical.experimental import (
+        ExperimentalImpostorPolicy,
     )
+
+    real = ExperimentalImpostorPolicy.__init__
+
+    def _stopping(
+        self: ExperimentalImpostorPolicy,
+        *,
+        agent_id: str,
+        options: TacticalExperimentOptions,
+    ) -> None:
+        for field, value in _WAVE_TACTICAL.items():
+            if getattr(options, field) == value:
+                raise _BuilderReached(f"{field}={value!r}")
+        real(self, agent_id=agent_id, options=options)
+
+    monkeypatch.setattr(ExperimentalImpostorPolicy, "__init__", _stopping)
 
 
 def _with_settings(source: Path, target: Path, **settings: object) -> Path:
@@ -232,13 +239,13 @@ def recordings(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
 
 # The wave fields carried by rewritten copies of recordings that did not run
 # them: the readers take the recorded bytes, so the walk reads them exactly as it
-# would a recording that ran them. The two tactical values are built; the tests
-# that need a builder's refusal plant them back as unbuilt (_plant_unbuilt).
-_PENDING_TACTICAL: Final[dict[str, object]] = {
+# would a recording that ran them. The tests that need to see a value reach the
+# policy builder stop the builder there (_stop_at_the_builder).
+_WAVE_TACTICAL: Final[dict[str, object]] = {
     "vent_exit_policy": "look_and_wait",
     "vent_entry_policy": "own_fresh_kill",
 }
-_PENDING_MEETING_AND_TRIGGER: Final[dict[str, object]] = {
+_WAVE_MEETING_AND_TRIGGER: Final[dict[str, object]] = {
     "report_body_handle_version": 1,
     "ballot_kill_row_version": 1,
     "impostor_ballot_version": 1,
@@ -367,22 +374,20 @@ _BALLOT_VALUES: Final[dict[str, object]] = {
 
 
 @pytest.mark.parametrize("arm", ["reset_rebuttal", "observed_risk_rebuttal"])
-def test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_pending_values(
+def test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_wave_values(
     recordings: dict[str, Path],
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     arm: str,
 ) -> None:
-    # The pending values each reconstructor reads without reaching a builder that
+    # The wave values each reconstructor reads without reaching a builder that
     # refuses them: the committed-meeting walk builds no agents, so it takes the
-    # pending tactical values too; the golden takes the ballot values. (The body
-    # handle and the golden's tactical values reach their builders' refusals,
-    # pinned below.)
-    _open_the_pending_guard(monkeypatch)
+    # wave's tactical values too, and the golden takes the ballot values. (The
+    # body handle and the golden's tactical values reach their builders'
+    # refusals, pinned below.)
     committed_copy = _with_settings(
         recordings[arm],
         tmp_path / "committed" / "9p2i",
-        **_PENDING_TACTICAL,
+        **_WAVE_TACTICAL,
         **_BALLOT_VALUES,
     )
     walked = walk_committed_meetings(committed_copy)
@@ -392,10 +397,16 @@ def test_the_reconstructors_walk_every_meeting_of_a_copy_carrying_the_pending_va
     golden_copy = _with_settings(
         recordings[arm], tmp_path / "golden" / "9p2i", **_BALLOT_VALUES
     )
+    # The golden renders the ballot arms the copy's values name, so the copy's
+    # recorded ballots, rendered without those arms, no longer reproduce while
+    # every turn prompt still does: the recorded values reach the render.
     walk = golden.walk_directory(golden_copy)
     assert walk.meetings == len(_meeting_ids(golden_copy)) > 0
-    assert walk.prompts and all(prompt.reproduced for prompt in walk.prompts)
-    assert walk.miscounted_meetings == ()
+    ballots = [prompt for prompt in walk.prompts if prompt.kind == "vote_ballot"]
+    turns = [prompt for prompt in walk.prompts if prompt.kind != "vote_ballot"]
+    assert ballots and turns
+    assert all(prompt.reproduced for prompt in turns)
+    assert not any(prompt.reproduced for prompt in ballots)
 
 
 @pytest.mark.parametrize("reader", ["committed-meeting walk", "golden"])
@@ -409,7 +420,6 @@ def test_the_reconstructors_hand_the_recorded_witness_rule_to_the_engine_helper(
     # default rule, which this copy of a default-rule recording holds, so the
     # walk goes on to every meeting. A reader that refused the rule as unread
     # would never call the helper.
-    _open_the_pending_guard(monkeypatch)
     copy = _with_settings(
         recordings["plain"], tmp_path / "witness" / "9p2i", vent_witness_rule="physical"
     )
@@ -450,34 +460,31 @@ def test_kill_craft_reads_the_regroup_reset_with_every_hash_verified(
 @pytest.mark.parametrize("reader", sorted(set(_READERS) - {"evidence-honesty"}))
 def test_a_widened_reader_verifies_a_copy_carrying_every_wave_value(
     recordings: dict[str, Path],
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     reader: str,
 ) -> None:
-    _open_the_pending_guard(monkeypatch)
     copy = _with_settings(
         recordings["reset_rebuttal"],
         tmp_path / "wave" / "9p2i",
-        **_PENDING_TACTICAL,
-        **_PENDING_MEETING_AND_TRIGGER,
+        **_WAVE_TACTICAL,
+        **_WAVE_MEETING_AND_TRIGGER,
     )
     _name, _reads, run = _READERS[reader]
     assert run(copy) is not None
 
 
 def test_honesty_verifies_every_arm_it_reads(
-    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    recordings: dict[str, Path], tmp_path: Path
 ) -> None:
     # Both honesty walks read the arms, each through its own field-list site:
     # the I-11 cells and the per-decision rebuild.
     for arm in ("plain", "workload", "physical", "observed_risk_rebuttal"):
         assert compute_evidence_honesty(recordings[arm]).games_total == 1
         assert reconstruct_impostor_decisions(recordings[arm], seed=_SEED)
-    _open_the_pending_guard(monkeypatch)
     copy = _with_settings(
         recordings["observed_risk_rebuttal"],
         tmp_path / "wave" / "9p2i",
-        **_PENDING_MEETING_AND_TRIGGER,
+        **_WAVE_MEETING_AND_TRIGGER,
     )
     report = compute_evidence_honesty(copy)
     assert report.impostor_targeting.reconstruction_mismatches == 0
@@ -485,28 +492,23 @@ def test_honesty_verifies_every_arm_it_reads(
 
 
 @pytest.mark.parametrize("walk", ["cells", "decision rebuild"])
-@pytest.mark.parametrize("field", sorted(_PENDING_TACTICAL))
-def test_honesty_hands_a_pending_tactical_value_to_the_policy_builder(
+@pytest.mark.parametrize("field", sorted(_WAVE_TACTICAL))
+def test_honesty_hands_a_wave_tactical_value_to_the_policy_builder(
     recordings: dict[str, Path],
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     field: str,
     walk: str,
 ) -> None:
-    # With the value planted back as unbuilt, the factory refuses it, so reaching
-    # that refusal proves the recorded value passed the walk's field list; a walk
-    # that dropped the field would refuse the recording by name first, with a
-    # plain ValueError.
-    from agents.tactical.experimental import UnbuiltTacticalOptionError
-
-    _plant_unbuilt(monkeypatch)
-    value = _PENDING_TACTICAL[field]
+    # With the builder stopped at a wave value, reaching it proves the recorded
+    # value passed the walk's field list; a walk that dropped the field would
+    # refuse the recording by name first, with a plain ValueError.
+    _stop_at_the_builder(monkeypatch)
+    value = _WAVE_TACTICAL[field]
     copy = _with_settings(
         recordings["plain"], tmp_path / "tactical" / "9p2i", **{field: value}
     )
-    with pytest.raises(
-        UnbuiltTacticalOptionError, match=re.escape(f"{field}={value!r}")
-    ):
+    with pytest.raises(_BuilderReached, match=re.escape(f"{field}={value!r}")):
         if walk == "cells":
             compute_evidence_honesty(copy)
         else:
@@ -1926,13 +1928,11 @@ def test_the_golden_builds_the_recorded_arms_agents(
     recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # The default factory builds the experimental policy a recorded tactical
-    # setting names, and refuses a value planted back as unbuilt; an agent built
-    # without the recorded settings would not reach that refusal.
-    from agents.tactical.experimental import UnbuiltTacticalOptionError
-
-    _plant_unbuilt(monkeypatch)
+    # setting names; an agent built without the recorded settings would never
+    # reach the stopped builder.
+    _stop_at_the_builder(monkeypatch)
     copy = _with_settings(
-        recordings["plain"], tmp_path / "unbuilt" / "9p2i", **_PENDING_TACTICAL
+        recordings["plain"], tmp_path / "builder" / "9p2i", **_WAVE_TACTICAL
     )
-    with pytest.raises(UnbuiltTacticalOptionError, match="vent_exit_policy"):
+    with pytest.raises(_BuilderReached, match="vent_exit_policy"):
         golden.walk_directory(copy)

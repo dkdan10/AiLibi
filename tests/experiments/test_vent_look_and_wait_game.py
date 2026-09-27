@@ -29,7 +29,6 @@ from agents.base import AgentInterface
 from agents.tactical.experimental import (
     FRESH_KILL_WINDOW_TICKS,
     IN_VENT_CAP_TICKS,
-    UNBUILT_OPTION_VALUES,
     ExperimentalCrewmatePolicy,
     ExperimentalImpostorPolicy,
     TacticalExperimentOptions,
@@ -232,11 +231,6 @@ def test_a_config_whose_entry_value_builds_the_default_policy_fails_the_wiring(
 
 
 def test_both_values_build_and_validate_with_no_refusal() -> None:
-    assert UNBUILT_OPTION_VALUES == {}
-    assert not any(
-        field in experiment_config.WAVE_ARMS_PENDING
-        for field in ("vent_exit_policy", "vent_entry_policy")
-    )
     assert RecordedExperimentConfig.model_validate(B1_ON.model_dump()) == B1_ON
     for options in (
         TacticalExperimentOptions(vent_exit_policy="look_and_wait"),
@@ -792,10 +786,6 @@ def _full_config_copy(source: Path, tmp_path: Path) -> Path:
     return path
 
 
-def _open_pending(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
-
-
 def _walk_with(profile: str, path: Path) -> object:
     """``path`` read through ``profile`` as the lab reads it."""
 
@@ -895,7 +885,6 @@ def test_each_lab_profile_reads_the_full_config_copy_with_every_hash_verified(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _open_pending(monkeypatch)
     plain = _copy(today_game, tmp_path, "plain")
     full = _full_config_copy(today_game, tmp_path)
     advances = _counted_advances(monkeypatch)
@@ -912,7 +901,6 @@ def test_without_its_declaration_a_lab_profile_refuses_the_full_config_copy(
 ) -> None:
     """Perturbed: the profile's layer declaration removed."""
 
-    _open_pending(monkeypatch)
     full = _full_config_copy(today_game, tmp_path)
     name = _PROFILES[profile]
     monkeypatch.setattr(

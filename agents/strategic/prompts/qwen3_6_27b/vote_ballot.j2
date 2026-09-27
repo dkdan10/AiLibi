@@ -135,6 +135,31 @@
    someone. One prose sentence in the bullet, no third word to write, and the
    skeleton still prefills null.
 
+   Two experiment arms (ballot_kill_row_version, impostor_ballot_version), each
+   default-OFF and set only by a recording's declared experiment config, render
+   guarded blocks in THIS body under the same v8 marker above; a ballot rendered
+   with either arm is stamped vote_ballot.qwen3_6_27b.v8.<arm>_v1 by the runner
+   (both arms join with "+"), never with the plain v8 stamp. With both OFF every
+   byte below is the v8 body.
+
+   * ballot_kill_row_version: the manager adds one first-hand own_kill row per
+     kill the voter itself watched ("you watched them KILL in <room> at tick
+     <tick>", citable by that memory line's id; never for a fellow impostor),
+     and the suspicion header's partial-summary sentence stops naming a watched
+     kill among the inputs with no row of their own. The body-proximity lift
+     still has none.
+   * impostor_ballot_version, for an IMPOSTOR voter only (voter_role, so a sole
+     impostor with no teammate list is covered): the persona keeps its
+     win-condition clause and replaces the belief clause with a move for the
+     impostor's side; the team block renders for every impostor voter, its
+     Secret line (present only with a teammate) loses its belief clause, and one
+     honest-citation paragraph asks the voter to name a crewmate only when it
+     can cite a line it holds that points toward them, and to SKIP otherwise.
+     That bound is instructed, not enforced: the tally reads no grounding label,
+     so a vote that ignores it is recorded and tallied like any other. The
+     confidence sentences, the nine-key contract and decision_basis are the
+     v8 text. Every crew ballot is byte-identical to OFF.
+
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
    skip_confidence_threshold (optional, default 0.6; accepted for the render
@@ -144,10 +169,12 @@
    off), persona (rendered since v3 — Task 16.16), flag_groups + impostors +
    map_card (rendered since v4 — Task 20.31), testimony_ledger (optional, Task
    21.19 lever — default None keeps the surface off), evidence_rows (rendered
-   since v8 — ruling D5; default () keeps the block off).
+   since v8 — ruling D5; default () keeps the block off), voter_role,
+   ballot_kill_row_version and impostor_ballot_version (the two experiment arms
+   above; default None keeps both off).
 -#}
 <persona>
-You are {{ voter_id }}, voting at an AiLibi meeting: {{ impostors.phrase }} {{ impostors.verb_kill }} crewmates; the crew wins by voting {{ impostors.eject_all }}, {{ impostors.subject }} by surviving until they equal or outnumber the crew. The discussion is over — cast one ejection ballot: name the one player you believe is {{ impostors.one_of_them }}, or SKIP if the evidence is too thin. The outcome is a deterministic tally over every ballot, so vote the conclusion you actually reach.
+You are {{ voter_id }}, voting at an AiLibi meeting: {{ impostors.phrase }} {{ impostors.verb_kill }} crewmates; the crew wins by voting {{ impostors.eject_all }}, {{ impostors.subject }} by surviving until they equal or outnumber the crew. {% if impostor_ballot_version is defined and impostor_ballot_version and voter_role == "IMPOSTOR" %}You are {{ impostors.one_of_them }}. The discussion is over — cast one ejection ballot. It is a move for your side, not a statement of who {{ impostors.subject }} {{ impostors.verb_be }}: name one crewmate to eject, or SKIP, whichever you judge better for your side. The outcome is a deterministic tally over every ballot.{% else %}The discussion is over — cast one ejection ballot: name the one player you believe is {{ impostors.one_of_them }}, or SKIP if the evidence is too thin. The outcome is a deterministic tally over every ballot, so vote the conclusion you actually reach.{% endif +%}
 </persona>
 {% if persona %}
 
@@ -268,7 +295,7 @@ What you actually hold on each of them, and where each piece came from. Every li
 {% endif %}
 
 ## Your suspicion of each player
-A running count you have been keeping across the game, one number per player. It is bookkeeping, not a finding about anyone and not an instruction. And it is only a PARTIAL summary of the lines above: a kill you watched happen, or someone you saw near a body just before you found it, moves these numbers with no line of its own up there — your memory block above still carries those. What you decide on is the evidence, not this count.
+A running count you have been keeping across the game, one number per player. It is bookkeeping, not a finding about anyone and not an instruction. And it is only a PARTIAL summary of the lines above: {% if ballot_kill_row_version is defined and ballot_kill_row_version %}someone you saw near a body just before you found it moves these numbers with no line of its own up there — your memory block above still carries that.{% else %}a kill you watched happen, or someone you saw near a body just before you found it, moves these numbers with no line of its own up there — your memory block above still carries those.{% endif %} What you decide on is the evidence, not this count.
 {% for entry in suspicion_graph %}
 {% set _prov_rows = (suspicion_provenance | selectattr('player_id', 'equalto', entry.player_id) | list) if suspicion_provenance else [] %}
 - `{{ entry.player_id }}`: suspicion {{ "%.2f" | format(entry.suspicion) }}{% if _prov_rows %}{% set _p = _prov_rows[0] %}{% set _fresh = _p.flag_lift + _p.body_proximity + _p.kill_or_vent_pin + _p.testimony_spread + _p.accusation_carry %}{% set _carried = _p.carried_hard + _p.carried_soft %}{% set _hard = _p.flag_lift + _p.body_proximity + _p.kill_or_vent_pin + _p.carried_hard %}{% set _soft = _p.testimony_spread + _p.accusation_carry + _p.carried_soft %} — built from: this meeting {{ "%+.2f" | format(_fresh) }}, carried prior {{ "%+.2f" | format(_carried) }}{% if (_hard | abs) <= 0.000000001 and (_p.unattributed | abs) <= 0.000000001 and _soft > 0.000000001 %} — no contradiction; carried/soft only{% endif %}{% endif %}{% if candidate_targets is defined and candidate_targets and entry.player_id not in candidate_targets %} — OUT OF THE GAME (dead or ejected; voting them is wasted){% endif +%}
@@ -284,7 +311,16 @@ Each row's "built from" split shows what made its number: "this meeting" is evid
 {% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %} — or "SKIP".
 These are the ONLY names a ballot may carry. Every other player is already out of the game — ejected or dead — and naming one wastes your vote: an invalid target is struck to SKIP. Pick your target from this list, or SKIP.
 {% endif %}
+{% if impostor_ballot_version is defined and impostor_ballot_version and voter_role == "IMPOSTOR" %}
+
+## Your team
 {% if fellow_impostor_ids %}
+Secret: {{ fellow_impostor_ids | join(", ") }} {% if fellow_impostor_ids | length == 1 %}is your fellow saboteur{% else %}are your fellow saboteurs{% endif %}. Never vote a teammate, and never your own name: your ballot names a crewmate or SKIP, nothing else.
+{% else %}
+Your own name never goes in "target": your ballot names a crewmate or SKIP, nothing else.
+{% endif %}
+Name a crewmate only when you can cite a line you hold that points toward them: a turn in which someone accused them at this table, or a conflict that names them. Copy that line's id exactly. You may choose which of the lines you hold to cite. Cite only lines that are really on this page, and in "rationale_text" say only what the cited line shows. When nothing you hold points toward any crewmate, write SKIP.
+{% elif fellow_impostor_ids %}
 
 ## Your team
 Secret: {{ fellow_impostor_ids | join(", ") }} {% if fellow_impostor_ids | length == 1 %}is your fellow saboteur{% else %}are your fellow saboteurs{% endif %}. Never vote a teammate — if your suspicion lands on one, set "target" to "SKIP" instead. And your own name never goes in "target": you vote a crewmate or SKIP, nothing else.
