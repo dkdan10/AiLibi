@@ -3590,15 +3590,19 @@ def _build_meeting_trigger(
     emergency call per game).
 
     ``report_body_handle_version`` is the recorded config's body-handle arm.
-    ``None`` names a reported corpse by the engine's body id,
-    ``body-<victim>-<death tick>``, byte for byte as every recording made
-    without the arm holds it. Version 1 names it, as ``temporal_observations``
-    does, by the victim's public handle ``body-<victim>``
-    (:func:`observation.body_ids.public_body_id`), which carries no tick. Under
-    either, a corpse missing from ``state.bodies`` reads "a body" and the
-    engine id is never the fallback. The arm changes that handle and nothing
-    else: an emergency description, the trigger tick and every other returned
-    value are the same under both. Any other value raises.
+    With neither version 1 nor ``temporal_observations``, a report names the
+    corpse by the event's engine body id, ``body-<victim>-<death tick>``, byte
+    for byte as every recording made without either holds it, whether or not
+    the corpse is still in ``state.bodies``. With version 1, with
+    ``temporal_observations`` or with both, a report names the corpse by the
+    victim's public handle ``body-<victim>``
+    (:func:`observation.body_ids.public_body_id`), which carries no tick, and a
+    corpse missing from ``state.bodies`` reads "a body": the engine id is never
+    the fallback. A report event that carries no body id reads "a body" under
+    every setting. The arm changes at most the report description's body
+    phrase, and only without ``temporal_observations``: an emergency
+    description, the trigger tick and every other returned value are the same
+    under ``None`` and 1. Any other value raises.
     """
 
     if report_body_handle_version is not None and (
@@ -3630,9 +3634,10 @@ def _build_meeting_trigger(
             corpse = state.bodies.get(body_id)
             victim_id = corpse.player_id if corpse is not None else None
         # Trigger text reaches the model. With neither the temporal experiment
-        # nor the body-handle arm, keep the engine id every recording made
-        # without them holds; either one exposes only the victim's public
-        # handle, which carries no kill tick.
+        # nor the body-handle arm, keep the event's engine id, as every
+        # recording made without them holds it, even for a corpse no longer in
+        # the state. Either one exposes at most the victim's public handle,
+        # which carries no kill tick, and names no body once the corpse is gone.
         described_body = (
             (public_body_id(victim_id) if victim_id is not None else None)
             if temporal_observations or report_body_handle_version == 1

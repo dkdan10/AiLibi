@@ -15,8 +15,10 @@ changes nothing else. This module holds that contract:
   emergency openings, every other prompt byte-identical once the fake provider's
   prompt-seeded tokens are normalized, or raw under a client whose answers do
   not depend on the handle; no temporal version; the registry's prompt stamps;
-* the builder, over generated meetings, changes only a reported corpse's handle,
-  never falls back to the engine id and leaves temporal mode's text alone;
+* the builder, over generated meetings, changes at most a reported corpse's
+  handle and leaves temporal mode's text alone; under the arm a corpse gone from
+  the state reads "a body" and never the engine id, which only the setting with
+  neither the arm nor temporal delivery still names;
 * the field round-trips, is omitted at its default and no longer pending;
 * the prompt-byte golden re-renders an arm-ON recording through the recorded
   value, and misses the opening without it; a plain shell loads the recording;
@@ -850,6 +852,80 @@ def test_an_absent_corpse_reads_a_body_and_never_the_engine_id() -> None:
         "description",
         "engine id",
     ]
+
+
+#: Every (report_body_handle_version, temporal_observations) setting.
+_SWITCH_SETTINGS: Final[tuple[tuple[Literal[1] | None, bool], ...]] = (
+    (None, False),
+    (None, True),
+    (1, False),
+    (1, True),
+)
+
+
+def _hides_the_engine_id(**kwargs: Any) -> Built:
+    """Planted: a builder that reads "a body" for a gone corpse under every setting."""
+
+    trigger, body_id, kind = _build_meeting_trigger(**kwargs)
+    if kind == "report" and trigger.body_victim_id is None:
+        trigger = replace(
+            trigger,
+            description=(
+                f"{trigger.triggered_by} reported a body at tick {trigger.trigger_tick}"
+            ),
+        )
+    return trigger, body_id, kind
+
+
+def _gone_corpse_readings(
+    builder: Builder,
+) -> dict[tuple[Literal[1] | None, bool], tuple[str, str]]:
+    """Per setting: a report of a corpse gone from the state, and one with no id."""
+
+    state, (event,), _engine_id = _meeting_inputs(
+        kind="report", trigger_tick=17, victim="p-6", kill_tick=11, corpse_present=False
+    )
+    unnamed_event = replace(event, body_id=None)
+    readings = {}
+    for version, temporal in _SWITCH_SETTINGS:
+        gone, _, _ = builder(
+            state=state,
+            events=(event,),
+            temporal_observations=temporal,
+            report_body_handle_version=version,
+        )
+        unnamed, _, _ = builder(
+            state=state,
+            events=(unnamed_event,),
+            temporal_observations=temporal,
+            report_body_handle_version=version,
+        )
+        readings[(version, temporal)] = (gone.description, unnamed.description)
+    return readings
+
+
+def test_only_neither_switch_names_the_engine_id_of_a_gone_corpse() -> None:
+    # The builder docstring's absent-corpse sentences, setting by setting: with
+    # neither the arm nor temporal delivery a report names the event's engine
+    # id even though the corpse is gone; with the arm, temporal delivery or
+    # both it reads "a body"; a report event with no body id reads "a body"
+    # under every setting.
+    legacy = "p-4 reported body body-p-6-11 at tick 17"
+    a_body = "p-4 reported a body at tick 17"
+    assert _gone_corpse_readings(_build_meeting_trigger) == {
+        (None, False): (legacy, a_body),
+        (None, True): (a_body, a_body),
+        (1, False): (a_body, a_body),
+        (1, True): (a_body, a_body),
+    }
+    # Planted: an engine-id fallback names the id under every setting, and a
+    # builder that hides it everywhere loses the legacy reading.
+    assert _gone_corpse_readings(_falls_back_to_the_engine_id) == dict.fromkeys(
+        _SWITCH_SETTINGS, (legacy, a_body)
+    )
+    assert _gone_corpse_readings(_hides_the_engine_id) == dict.fromkeys(
+        _SWITCH_SETTINGS, (a_body, a_body)
+    )
 
 
 def test_the_arm_beside_temporal_observations_keeps_the_temporal_text() -> None:
