@@ -18,6 +18,7 @@ from types import MappingProxyType
 from typing import Any, Literal
 
 import pytest
+import hypothesis
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -468,6 +469,137 @@ def test_at_the_cap_a_room_other_than_the_one_fled_wins() -> None:
     assert _vent(_policy().decide(memory, fled)) == "VZ"
 
 
+def test_before_the_cap_the_pick_follows_the_loaded_map() -> None:
+    # From H on the two-link map, VA, VB and VH2 are visible and clear and VC's
+    # room is unseen. The room fled (H, also VH2's) loses, then the vent id
+    # takes VA. No canonical vent or room appears here.
+    two_links = _two_link_map()
+    clear = _custom_inside(inside=1, seen=())
+    assert _vent(_policy().decide(clear, two_links)) == "VA"
+    # A body in A, VA's room on this map, moves the pick to VB.
+    body_in_a = _custom_inside(inside=1, seen=(), bodies=(("p-8", "A"),))
+    assert _vent(_policy().decide(body_in_a, two_links)) == "VB"
+    # With VA moved to the unseen C, VA is no candidate before the cap: VB.
+    moved = two_links.model_copy(
+        update={"vent_rooms": {**two_links.vent_rooms, "VA": "C"}}
+    )
+    assert _vent(_policy().decide(clear, moved)) == "VB"
+
+
+# --------------------------------------------------------------------------- #
+# Only this tick's bodies                                                      #
+# --------------------------------------------------------------------------- #
+
+
+def _after_a_report(
+    room: str,
+    *,
+    inside: int,
+    reported: str,
+    now: tuple[tuple[str, str], ...],
+    seen: tuple[tuple[str, str], ...] = (),
+) -> MemoryStore:
+    """A body seen in ``reported`` before a meeting, reported at that meeting.
+
+    The engine hides a reported body, so after the boundary its ``saw_body``
+    rows remain only at earlier ticks. The impostor stays inside through the
+    meeting (no regroup), and ``inside`` rows follow the boundary, each seeing
+    the bodies in ``now``; the last also carries ``seen``.
+    """
+
+    memory = MemoryStore()
+    before = ((VICTIM, reported),)
+    _tick(memory, tick=20, room=room, in_vent=False, bodies=before)
+    _tick(memory, tick=21, room=room, in_vent=True, bodies=before)
+    _boundary(memory, 22)
+    for tick in range(22, 22 + inside):
+        last = tick == 21 + inside
+        _tick(
+            memory,
+            tick=tick,
+            room=room,
+            in_vent=True,
+            bodies=now,
+            seen=seen if last else (),
+        )
+    return memory
+
+
+@pytest.mark.parametrize(
+    ("room", "inside", "reported", "now", "seen", "chosen", "if_still_seen"),
+    [
+        pytest.param(
+            "STORAGE",
+            1,
+            "STORAGE",
+            ((OTHER_CREW, "ENGINEERING"),),
+            (),
+            "STORAGE_VENT",
+            "ENGINEERING_VENT",
+            id="before-the-cap-own-room-reported",
+        ),
+        pytest.param(
+            "STORAGE",
+            1,
+            "ENGINEERING",
+            (),
+            (),
+            "ENGINEERING_VENT",
+            "STORAGE_VENT",
+            id="before-the-cap-connected-room-reported",
+        ),
+        pytest.param(
+            "ENGINEERING",
+            IN_VENT_CAP_TICKS,
+            "STORAGE",
+            (),
+            ((CREW, "EAST_HALL"),),
+            "STORAGE_VENT",
+            "ENGINEERING_VENT",
+            id="at-the-cap-connected-room-reported",
+        ),
+        pytest.param(
+            "ENGINEERING",
+            IN_VENT_CAP_TICKS,
+            "ENGINEERING",
+            ((OTHER_CREW, "STORAGE"),),
+            ((CREW, "EAST_HALL"),),
+            "ENGINEERING_VENT",
+            "STORAGE_VENT",
+            id="at-the-cap-own-room-reported",
+        ),
+    ],
+)
+def test_a_body_seen_only_before_this_tick_is_not_in_the_exit_key(
+    room: str,
+    inside: int,
+    reported: str,
+    now: tuple[tuple[str, str], ...],
+    seen: tuple[tuple[str, str], ...],
+    chosen: str,
+    if_still_seen: str,
+) -> None:
+    memory = _after_a_report(room, inside=inside, reported=reported, now=now, seen=seen)
+    assert ExperimentalImpostorPolicy._ticks_inside(memory.recent(since_tick=0)) == (
+        inside
+    )
+    if inside >= IN_VENT_CAP_TICKS:
+        # A crewmate in EAST_HALL is in view, so only the cap key surfaces it.
+        early = _after_a_report(room, inside=1, reported=reported, now=now, seen=seen)
+        assert _policy().decide(early, MAP).type == "wait"
+    assert _vent(_policy().decide(memory, MAP)) == chosen
+    # The same memory with the reported body still in view this tick picks the
+    # other vent, so the earlier rows would change the pick if they were read.
+    still = _after_a_report(
+        room,
+        inside=inside,
+        reported=reported,
+        now=(*now, (VICTIM, reported)),
+        seen=seen,
+    )
+    assert _vent(_policy().decide(still, MAP)) == if_still_seen
+
+
 @pytest.mark.parametrize("restart_at", [1, 2, 3])
 def test_a_meeting_boundary_inside_the_streak_restarts_the_count(
     restart_at: int,
@@ -881,6 +1013,68 @@ def test_an_event_time_own_kill_row_is_refused() -> None:
         _entry(memory, "own_fresh_kill")
 
 
+_ENTRY_POLICIES: tuple[EntryPolicy, ...] = ("any_body", "own_fresh_kill")
+
+
+def test_self_report_runs_before_the_entry_gate() -> None:
+    # A teammate's victim and no witness: the gate alone walks away, and with
+    # self_report on the impostor reports first whether or not the gate is on.
+    memory = _entry_memory(own_kill=None)
+    assert _entry(memory, "own_fresh_kill").type == "move"
+    reported = [
+        ExperimentalImpostorPolicy(
+            agent_id=ME,
+            options=TacticalExperimentOptions(
+                self_report=True, vent_entry_policy=entry_policy
+            ),
+        ).decide(memory, MAP)
+        for entry_policy in _ENTRY_POLICIES
+    ]
+    assert reported[0] == reported[1]
+    assert reported[1].type == "report"
+    assert reported[1].payload.body_id == f"body-{VICTIM}"
+
+
+def test_the_entry_gate_allows_one_re_entry_per_kill_after_an_in_place_exit() -> None:
+    # A kill in REACTOR at engine tick 10, perceived at 11. REACTOR sees neither
+    # connected vent's room, so each trip surfaces in place beside the body.
+    # Under the gate it enters at 11 and again at 13 (kill age 3), then walks
+    # away at 15 (age 5); under any_body it would enter again at 15.
+    body = ((VICTIM, "REACTOR"),)
+    memory = MemoryStore()
+    _tick(memory, tick=10, room="REACTOR", in_vent=False, cooldown=0)
+    gated = _policy("look_and_wait", "own_fresh_kill")
+    intents: list[ActionIntent] = []
+    for tick, in_vent, cooldown in ((11, False, 4), (12, True, 3), (13, False, 2)):
+        _tick(
+            memory,
+            tick=tick,
+            room="REACTOR",
+            in_vent=in_vent,
+            cooldown=cooldown,
+            own_kill=(VICTIM, "REACTOR") if tick == 11 else None,
+            bodies=body,
+        )
+        intents.append(gated.decide(memory, MAP))
+    for tick, in_vent, cooldown in ((14, True, 1), (15, False, 0)):
+        _tick(
+            memory,
+            tick=tick,
+            room="REACTOR",
+            in_vent=in_vent,
+            cooldown=cooldown,
+            bodies=body,
+        )
+        intents.append(gated.decide(memory, MAP))
+    assert [_vent(intent) for intent in intents[:4]] == ["REACTOR_VENT"] * 4
+    assert intents[4] == ImpostorPolicy(agent_id=ME)._cover(
+        public_map=MAP, own_room="REACTOR"
+    )
+    assert _vent(_policy("look_and_wait", "any_body").decide(memory, MAP)) == (
+        "REACTOR_VENT"
+    )
+
+
 @dataclass(frozen=True)
 class _EngineKill:
     """A kill run through the engine, the observation service and perception."""
@@ -1011,15 +1205,16 @@ def test_an_in_vent_impostor_in_a_room_with_no_vent_raises() -> None:
         _policy().decide(memory, MAP)
 
 
-def test_a_connected_vent_with_no_room_raises() -> None:
-    broken = MAP.model_copy(
-        update={
-            "vent_graph": {
-                **MAP.vent_graph,
-                "STORAGE_VENT": (*MAP.vent_graph["STORAGE_VENT"], "GHOST_VENT"),
-            }
-        }
-    )
+@pytest.mark.parametrize("ghost_is_a_graph_key", [False, True])
+def test_a_connected_vent_with_no_room_raises(ghost_is_a_graph_key: bool) -> None:
+    graph = {
+        **MAP.vent_graph,
+        "STORAGE_VENT": (*MAP.vent_graph["STORAGE_VENT"], "GHOST_VENT"),
+    }
+    if ghost_is_a_graph_key:
+        # Listed with links of its own, the vent still has no room.
+        graph["GHOST_VENT"] = ("STORAGE_VENT",)
+    broken = MAP.model_copy(update={"vent_graph": graph})
     with pytest.raises(ValueError, match="GHOST_VENT"):
         _policy().decide(_inside("STORAGE"), broken)
 
@@ -1027,6 +1222,156 @@ def test_a_connected_vent_with_no_room_raises() -> None:
 def test_memory_the_anchor_refuses_is_refused() -> None:
     with pytest.raises(ValueError, match="at least one episodic event"):
         _policy().decide(MemoryStore(), MAP)
+
+
+def _rebuilt(rows: Iterable[EpisodicEvent]) -> MemoryStore:
+    memory = MemoryStore()
+    for row in rows:
+        memory.append(row)
+    return memory
+
+
+def _edited(
+    memory: MemoryStore, *, kind: str, tick: int | None, **changes: object
+) -> MemoryStore:
+    """``memory`` with the last ``kind`` row (at ``tick`` if given) edited.
+
+    A change whose value is ``_ABSENT`` deletes that key.
+    """
+
+    rows = list(memory.recent(since_tick=0))
+    index = max(
+        position
+        for position, row in enumerate(rows)
+        if row.type == kind and (tick is None or row.tick == tick)
+    )
+    payload = {**rows[index].payload, **changes}
+    rows[index] = replace(
+        rows[index],
+        payload={key: value for key, value in payload.items() if value is not _ABSENT},
+    )
+    return _rebuilt(rows)
+
+
+def _with_row(
+    memory: MemoryStore, *, at: int, kind: str, provenance: str, **payload: object
+) -> MemoryStore:
+    """``memory`` with one row inserted before position ``at``, at its tick."""
+
+    rows = list(memory.recent(since_tick=0))
+    tick = rows[at - 1].tick
+    rows.insert(
+        at, EpisodicEvent(tick=tick, type=kind, provenance=provenance, payload=payload)
+    )
+    return _rebuilt(rows)
+
+
+_ABSENT = object()
+
+
+def _planted_malformed(kind: str) -> MemoryStore:
+    """An in-vent memory with one row that only the anchor's row checks meet.
+
+    Each row is one the anchor refuses before its in-vent exit and that the
+    look's own reads never touch: an earlier tick, a pending task, or a
+    sighting that is not first-hand.
+    """
+
+    base = _inside("STORAGE", inside=2)
+    if kind == "pending task":
+        return _edited(base, kind="self_state", tick=None, pending_task_id=5)
+    if kind == "earlier self_state room":
+        return _edited(base, kind="self_state", tick=20, room=7)
+    if kind == "earlier saw_body victim":
+        return _with_row(
+            base,
+            at=1,
+            kind="saw_body",
+            provenance="observed",
+            body_id="b",
+            room="ADMIN",
+        )
+    if kind == "earlier saw_player subject":
+        return _with_row(
+            base,
+            at=1,
+            kind="saw_player",
+            provenance="observed",
+            player_id=5,
+            room="ADMIN",
+            action=None,
+        )
+    if kind == "earlier saw_player room":
+        return _with_row(
+            base,
+            at=1,
+            kind="saw_player",
+            provenance="observed",
+            player_id=CREW,
+            action=None,
+        )
+    assert kind == "reported saw_player room this tick"
+    return _with_row(
+        base,
+        at=len(base.recent(since_tick=0)),
+        kind="saw_player",
+        provenance="reported",
+        player_id=CREW,
+        action=None,
+    )
+
+
+_PLANTED_KINDS: tuple[tuple[str, str], ...] = (
+    ("pending task", "non-string pending_task_id"),
+    ("earlier self_state room", "self_state event missing string 'room' field"),
+    ("earlier saw_body victim", "saw_body event missing string 'victim_id'"),
+    ("earlier saw_player subject", "saw_player event missing string 'player_id'"),
+    ("earlier saw_player room", "saw_player event missing string 'room'"),
+    ("reported saw_player room this tick", "saw_player event missing string 'room'"),
+)
+
+
+@pytest.mark.parametrize(("kind", "message"), _PLANTED_KINDS)
+def test_a_row_the_anchor_refuses_is_refused_inside_a_vent(
+    kind: str, message: str
+) -> None:
+    memory = _planted_malformed(kind)
+    with pytest.raises(ValueError, match=message) as anchor:
+        ImpostorPolicy(agent_id=ME).decide(memory, MAP)
+    with pytest.raises(ValueError) as look:
+        _policy().decide(memory, MAP)
+    assert str(look.value) == str(anchor.value)
+
+
+def _check_refused_like_the_anchor(memory: MemoryStore) -> None:
+    """The anchor refuses ``memory`` and the look refuses it with the same message."""
+
+    with pytest.raises(ValueError) as anchor:
+        ImpostorPolicy(agent_id=ME).decide(memory, MAP)
+    with pytest.raises(ValueError) as look:
+        _policy().decide(memory, MAP)
+    assert str(look.value) == str(anchor.value)
+
+
+@pytest.mark.parametrize("kind", [kind for kind, _ in _PLANTED_KINDS])
+def test_without_the_row_checks_each_planted_row_fails_the_check(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Perturbed: with the anchor's row checks removed, the look decides."""
+
+    def accept(events: tuple[EpisodicEvent, ...], *, state: EpisodicEvent) -> None:
+        return None
+
+    memory = _planted_malformed(kind)
+    _check_refused_like_the_anchor(memory)
+    monkeypatch.setattr(
+        ExperimentalImpostorPolicy,
+        "_refuse_rows_the_anchor_refuses",
+        staticmethod(accept),
+    )
+    assert _policy().decide(memory, MAP).type in ("vent", "wait")
+    with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+        _check_refused_like_the_anchor(memory)
 
 
 def test_both_values_build_a_policy_now() -> None:
@@ -1163,3 +1508,136 @@ def test_a_policy_without_the_cap_fails_the_property(
     monkeypatch.setattr(experimental, "IN_VENT_CAP_TICKS", 10**9)
     with pytest.raises(AssertionError):
         _check_never_stuck(memory, "STORAGE", IN_VENT_CAP_TICKS, 0)
+
+
+# --------------------------------------------------------------------------- #
+# Every row the anchor refuses in a vent is refused by the look                #
+# --------------------------------------------------------------------------- #
+
+#: Every way ``ImpostorPolicy.decide`` refuses an in-vent memory with a
+#: self_state before it returns its exit: each names one malformed row.
+_ANCHOR_REFUSALS: tuple[str, ...] = (
+    "pending task",
+    "self_state room",
+    "fellow ids",
+    "in_vent flag",
+    "no cooldown row",
+    "cooldown value",
+    "body room this tick",
+    "body victim",
+    "sighting subject",
+    "sighting room",
+    "room with no vent",
+)
+
+
+@st.composite
+def _anchor_refused_memories(draw: st.DrawFn) -> tuple[MemoryStore, str]:
+    """An in-vent memory from the never-stuck family with one malformed row."""
+
+    base, _, _ = draw(_in_vent_memories())
+    rows = list(base.recent(since_tick=0))
+    latest = rows[-1].tick
+    refusal = draw(st.sampled_from(_ANCHOR_REFUSALS))
+    if refusal == "pending task":
+        memory = _edited(
+            base,
+            kind="self_state",
+            tick=None,
+            pending_task_id=draw(st.sampled_from((5, ("task-1",)))),
+        )
+    elif refusal == "self_state room":
+        tick = draw(
+            st.sampled_from(
+                sorted({row.tick for row in rows if row.type == "self_state"})
+            )
+        )
+        memory = _edited(
+            base, kind="self_state", tick=tick, room=draw(st.sampled_from((7, _ABSENT)))
+        )
+    elif refusal == "fellow ids":
+        memory = _edited(
+            base,
+            kind="self_state",
+            tick=None,
+            fellow_impostor_ids=draw(st.sampled_from(("p-2", (2,), 5))),
+        )
+    elif refusal == "in_vent flag":
+        memory = _edited(
+            base,
+            kind="self_state",
+            tick=None,
+            in_vent=draw(st.sampled_from(("yes", 1))),
+        )
+    elif refusal == "no cooldown row":
+        memory = _rebuilt(
+            row
+            for row in rows
+            if not (row.type == "cooldown_status" and row.tick == latest)
+        )
+    elif refusal == "cooldown value":
+        memory = _edited(
+            base,
+            kind="cooldown_status",
+            tick=latest,
+            cooldown=draw(st.sampled_from(("3", None, 2.5))),
+        )
+    elif refusal == "body room this tick":
+        memory = _with_row(
+            base,
+            at=len(rows),
+            kind="saw_body",
+            provenance="observed",
+            body_id="body-p-9",
+            victim_id="p-9",
+            **({} if draw(st.booleans()) else {"room": 3}),
+        )
+    elif refusal in ("body victim", "sighting subject", "sighting room"):
+        at = draw(st.integers(min_value=1, max_value=len(rows)))
+        bad = draw(st.sampled_from((_ABSENT, 5)))
+        room = draw(st.sampled_from(_ROOMS))
+        if refusal == "body victim":
+            payload: dict[str, object] = {
+                "body_id": "b",
+                "room": room,
+                "victim_id": bad,
+            }
+            kind = "saw_body"
+        elif refusal == "sighting subject":
+            payload = {"player_id": bad, "room": room, "action": None}
+            kind = "saw_player"
+        else:
+            payload = {"player_id": CREW, "room": bad, "action": None}
+            kind = "saw_player"
+        memory = _with_row(
+            base,
+            at=at,
+            kind=kind,
+            provenance=draw(st.sampled_from(("observed", "reported", "inferred"))),
+            **{key: value for key, value in payload.items() if value is not _ABSENT},
+        )
+    else:
+        assert refusal == "room with no vent"
+        memory = _edited(
+            base,
+            kind="self_state",
+            tick=None,
+            room=draw(
+                st.sampled_from(
+                    tuple(
+                        room for room in _ROOMS if room not in MAP.vent_rooms.values()
+                    )
+                )
+            ),
+        )
+    return memory, refusal
+
+
+@settings(deadline=None, max_examples=300)
+@given(case=_anchor_refused_memories())
+def test_every_row_the_anchor_refuses_in_a_vent_is_refused_by_the_look(
+    case: tuple[MemoryStore, str],
+) -> None:
+    memory, refusal = case
+    hypothesis.event(refusal)
+    _check_refused_like_the_anchor(memory)

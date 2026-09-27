@@ -252,12 +252,23 @@ def test_the_b1_recording_repeats_byte_for_byte_and_loads_verified(
     record_game(again, seed=SEED, config=B1_ON)
     name = f"replay-seed-{SEED}.jsonl"
     first = (b1_set / name).read_bytes()
-    assert (again / name).read_bytes() == first
-    # Planted: one tick row's state hash edited breaks the byte comparison.
-    rows = _rows(again / name)
-    tick = next(row for row in rows if row["kind"] == "tick")
-    tick["state_hash"] = "0" * len(tick["state_hash"])
-    edited = "".join(json.dumps(row) + "\n" for row in rows).encode()
+    second = (again / name).read_bytes()
+    assert second == first
+    # Planted: one tick row's state hash edited in the second recording's own
+    # bytes breaks the byte comparison. The line split alone keeps every byte,
+    # so only the edit can make the copy differ.
+    lines = second.splitlines(keepends=True)
+    assert b"".join(lines) == first
+    index = next(
+        position
+        for position, line in enumerate(lines)
+        if json.loads(line)["kind"] == "tick"
+    )
+    state_hash = json.loads(lines[index])["state_hash"].encode()
+    assert lines[index].count(state_hash) == 1
+    lines[index] = lines[index].replace(state_hash, b"0" * len(state_hash))
+    edited = b"".join(lines)
+    assert len(edited) == len(first)
     assert edited != first
     replay = ReplayLoader(b1_set).load_replay(f"headless-seed-{SEED}")
     assert replay.metadata.outcome_verified

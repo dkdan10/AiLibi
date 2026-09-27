@@ -302,9 +302,13 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
         events = memory.recent(since_tick=0)
         if self.options.vent_exit_policy == "look_and_wait":
             # Decided before the anchor, so nothing inside the vent reads the
-            # kill ranking. Memory the anchor would refuse falls through to it.
+            # kill ranking. A memory with no self_state falls through to the
+            # anchor, which refuses it. Inside a vent, the anchor's row checks
+            # run first (:meth:`_refuse_rows_the_anchor_refuses`), so every row
+            # the anchor refuses before its in-vent exit is refused here too.
             inside = self._latest_self_state(events)
             if inside is not None and self._in_vent_from_self_state(inside):
+                self._refuse_rows_the_anchor_refuses(events, state=inside)
                 return self._look_and_wait_exit(
                     events, public_map=public_map, state=inside
                 )
@@ -447,6 +451,32 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
             for event in latest
         )
         return nearby and cooldown > 0
+
+    @staticmethod
+    def _refuse_rows_the_anchor_refuses(
+        events: tuple[EpisodicEvent, ...], *, state: EpisodicEvent
+    ) -> None:
+        """Raise, with the anchor's message, on a row the anchor refuses in a vent.
+
+        ``ImpostorPolicy.decide`` validates these rows before its in-vent exit:
+        the pending task on the latest ``self_state`` as it reads that row, and,
+        while it builds the kill ranking, the room of every ``self_state`` row,
+        the victim of every ``saw_body`` row and the subject and room of every
+        ``saw_player`` row of any provenance. This runs the anchor's own readers
+        over them and builds no ranking. :meth:`_look_and_wait_exit` reads the
+        anchor's other in-vent inputs itself: the latest ``self_state``'s room
+        and fellow ids, the cooldown, this tick's body rooms and the vent in the
+        impostor's room.
+        """
+
+        ImpostorPolicy._pending_task_from_self_state(state)
+        ImpostorPolicy._confirmed_dead_from_bodies(events)
+        for event in events:
+            if event.type == EVENT_SELF_STATE:
+                ImpostorPolicy._room_from_self_state(event)
+            elif event.type == EVENT_SAW_PLAYER:
+                ImpostorPolicy._sighting_subject(event)
+                ImpostorPolicy._sighting_room(event)
 
     def _look_and_wait_exit(
         self,
