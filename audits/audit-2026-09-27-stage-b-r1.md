@@ -666,3 +666,95 @@ live leg runs `uv run --env-file <that file> bash scripts/refresh_samples.sh
 recorder itself prints the key's first eight characters into its run log;
 that log stays outside the repository, and every line quoted from it here
 leaves that line out.
+
+## 3. The probe, and the stop it called (2026-09-27)
+
+### 3.1 Seed 0
+
+Recorded alone in the recording checkout at P, with the shell of 2.6 and the
+key passed by `uv run --env-file`:
+
+```
+<the 2.6 exports> uv run --env-file <key file> bash scripts/refresh_samples.sh \
+  --seeds 0 --expect-levers "" --experiment-config replays/candidates/stage-b-r1/experiment-config.json
+```
+
+It opened at 2026-09-27T16:30:45Z and exited 0 at 16:44:56Z: "seed 0 done in
+838s", 3 meetings, `$0.0000`, no retry and no warning in the run log, and the
+recorder's post-step rebuilt the one-game report. The MANIFEST row names model
+`Qwen/Qwen3.6-27B`, policy `fsm-default`, `git_sha` `f1133de5` (P) and cost
+`0.0000`; the flags column is the bare slate's, as on s9. The tally prints
+`39 270760 10976 0.0`, and no replay carries `deadline_default`.
+
+### 3.2 The probe's gates
+
+Run in the delivery checkout on its copy of the probe's bytes, in a bare shell
+(0 `AILIBI_*` exports), with the declared file's sha256 re-checked
+(`4f0c4dd4…6d6c7`):
+
+| gate | result |
+|---|---|
+| `validity_gate.py <dir> --expected-model Qwen/Qwen3.6-27B --require-zero-cost --expected-prompt-versions <the four pairs, the composite ballot stamp> --expected-experiment-config <config> --expected-seeds 0 --require-one-recording-sha` | exit 0; all ten checks PASS |
+| `bash scripts/verify_samples.sh <dir>` | exit 0; "All 1 samples verified clean." |
+| the golden's directory walk | exit 0; 3 meetings, 39 prompts, 0 not reproduced, 0 miscounted meetings |
+| census `--set-dir <dir> --json-stdout` | exit 0: every Conf. cell of 1.6 reads 0 |
+| scorecard `--set-dir <dir> --json-stdout` | exit 0 |
+| `measure_baseline.py <dir> --honesty --json` | exit 0; no raise |
+| `scan_recording_packets.py <dir>` | exit 0 |
+
+Seed 0 held meetings and a fired rebuttal in each of its 3 meetings (3
+repeat-speaker turns, each by an accused opener answering an impostor;
+`rebuttals_differing_from_selector` 0/3, `meetings_with_second_repeat_speaker`
+0/3), so the probe did not extend to seeds 0-3. The counts of one game are no
+reading and none is drawn here.
+
+### 3.3 The re-projection, and the stop
+
+The rule of 1.4, applied to the one completed seed (s9's seed 0 has 3
+meetings, 42 calls, 271,968 input and 10,486 output):
+
+| limit | candidate / s9, seed 0 | projected | share of ceiling | 90% stop |
+|---|---|---|---|---|
+| model calls | 39 / 42 = 0.9286 | 1,573 | 56.2% | ok |
+| input tokens | 270,760 / 271,968 = 0.9956 | 9,807,175 | 56.0% | ok |
+| output tokens | 10,976 / 10,486 = 1.0467 | 442,705 | 59.0% | ok |
+| recording wall | 838 s / 1 seed x 50 | 41,900 s = 11.64 h | 258.6% of 4.5 h | **STOP** (past 4.05 h) |
+| marginal cost | every `cost_usd` is 0.0 | | | ok |
+
+**The recording wall projects past its 90% stop, so the round stops here, at
+seed 0, and reports to the owner (1.5).** Seeds 1-49 were not queued, and no
+provider call was made after 16:44:56Z.
+
+The literal rule divides by one seed recorded alone, while the rest of the leg
+would run two seeds at a time, so it overstates the wall. The stop does not
+rest on that: every reading of the probe's wall lands past 4.05 h.
+
+| reading of the probe's wall | projected leg wall |
+|---|---|
+| the rule as written: 838 s x 50 | 11.64 h |
+| two workers: 838 s x 50 / 2 | 5.82 h |
+| per call, two workers: 1,573 projected calls x 21.5 s / 2 | 4.70 h |
+
+The cause is provider latency, not the arms' traffic. The probe spent 21.5 s
+per call on one worker (838 s / 39 calls). The baseline-9 leg of the same seeds
+spent about 10.3 s per call on each of its two workers (8,695 s x 2 / 1,694
+calls). The probe's calls, input and output all project inside their ceilings
+at 56-59%, and the call ratio is below 1.
+
+### 3.4 What stands, and what the owner decides
+
+- The probe's bytes are the round's partial output: `replay-seed-0.jsonl`,
+  `MANIFEST.md`, `roster.json` and the recorder's one-game report, checkpointed
+  on `work/stage-b-record-r1` after a count-only key scan. The branch head holds
+  a partial round, so the candidate test fails there until seeds 1-49 land; no
+  pull request is open.
+- The recording checkout stays detached at P with seed 0 on disk. A resumed leg
+  records `--seeds 1,...,49` only, in a checkout detached at P, so every
+  MANIFEST row keeps the one sha; seed 0 is never re-recorded.
+- The key file was deleted when this sitting ended. A resumed leg copies the key
+  again the same way (2.7).
+- The owner's choices, none of which this record takes: raise the recording-wall
+  ceiling (the 8 h window, opened by the first seed at 16:30:45Z, closes at
+  00:30:45Z on 2026-09-28), with the 10-seed re-projection still binding; resume
+  under the same ceiling at a time the provider answers faster, re-projecting at
+  10 seeds; or end the round at seed 0.
