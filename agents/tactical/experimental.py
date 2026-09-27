@@ -349,14 +349,15 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
                     }
                 )
             if (
-                anchor.type == "vent"
-                and self.options.vent_entry_policy == "own_fresh_kill"
+                self.options.vent_entry_policy == "own_fresh_kill"
                 and not self._own_fresh_kill_here(
                     events, latest=latest, own_room=own_room, tick=tick
                 )
             ):
                 # Any body but the impostor's own fresh kill: the default cover's
-                # walk-away move instead of the vent.
+                # walk-away move. The anchor here is that vent or that move
+                # already (``ImpostorPolicy._cover_or_vent``), so only a vent
+                # entry changes.
                 return self._cover(public_map=public_map, own_room=own_room)
             return anchor
         if anchor.type in ("kill", "sabotage"):

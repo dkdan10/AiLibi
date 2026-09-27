@@ -808,10 +808,13 @@ def test_a_kill_on_a_meeting_trigger_tick_is_across_that_meeting() -> None:
     assert _entry(memory, "own_fresh_kill").type == "move"
 
 
-def test_a_non_teammate_in_the_room_keeps_the_walk_away_under_both() -> None:
-    memory = _entry_memory(own_kill=(VICTIM, "STORAGE"), seen=((CREW, "STORAGE"),))
+@pytest.mark.parametrize("own_kill", [(VICTIM, "STORAGE"), None])
+def test_a_non_teammate_in_the_room_keeps_the_walk_away_under_both(
+    own_kill: tuple[str, str] | None,
+) -> None:
+    memory = _entry_memory(own_kill=own_kill, seen=((CREW, "STORAGE"),))
     assert _entry(memory, "any_body").type == "move"
-    assert _entry(memory, "own_fresh_kill").type == "move"
+    assert _entry(memory, "own_fresh_kill") == _entry(memory, "any_body")
 
 
 def test_an_own_kill_row_in_another_room_is_not_this_body() -> None:

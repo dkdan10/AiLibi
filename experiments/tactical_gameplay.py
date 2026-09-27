@@ -189,6 +189,34 @@ def candidate_configs() -> dict[str, RecordedExperimentConfig]:
     return configs
 
 
+def entry_after_own_fresh_kill(
+    entry: VentEnteredEvent,
+    *,
+    kills: Sequence[KilledEvent],
+    meeting_ticks: Sequence[int],
+) -> bool:
+    """Whether a vent entry follows the entering impostor's own fresh kill.
+
+    The census's definition: a kill by the same impostor in the room it entered
+    from, at most :data:`FRESH_KILL_WINDOW_TICKS` ticks before the entry, with no
+    meeting opened at or after the kill and before the entry.
+    """
+
+    return any(
+        kill.actor == entry.actor
+        and kill.room == entry.source_room
+        and entry.tick - FRESH_KILL_WINDOW_TICKS <= kill.tick < entry.tick
+        and not any(kill.tick <= tick < entry.tick for tick in meeting_ticks)
+        for kill in kills
+    )
+
+
+def living_player_in_vent(state: WorldState) -> bool:
+    """Whether a living player is inside a vent; only an impostor can be."""
+
+    return any(player.alive and player.in_vent for player in state.players.values())
+
+
 def _remaining_work(state: WorldState, owner: str) -> int:
     return sum(
         task.required_ticks - task.progress
@@ -511,9 +539,9 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
                 if isinstance(event, KilledEvent):
                     _transfers(working, after, event.target, counts)
                 working = after
+                # Only an impostor is ever inside a vent.
                 if (
-                    role == "IMPOSTOR"
-                    and action.type == "wait"
+                    action.type == "wait"
                     and step.pre_state.players[action.actor].in_vent
                 ):
                     counts["impostor_in_vent_waits"] += 1
@@ -584,16 +612,10 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
                     )
                 elif isinstance(event, VentEnteredEvent):
                     vent_anchor[event.actor] = event.tick
-                    counts["vent_entries_not_after_own_fresh_kill"] += not any(
-                        kill.actor == event.actor
-                        and kill.room == event.source_room
-                        and event.tick - FRESH_KILL_WINDOW_TICKS
-                        <= kill.tick
-                        < event.tick
-                        and not any(
-                            kill.tick <= tick < event.tick for tick in meeting_ticks
-                        )
-                        for kill in kills
+                    counts[
+                        "vent_entries_not_after_own_fresh_kill"
+                    ] += not entry_after_own_fresh_kill(
+                        event, kills=kills, meeting_ticks=meeting_ticks
                     )
             last_move = {
                 pid: value for pid, value in last_move.items() if pid in moves_this_tick
@@ -604,9 +626,8 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
             meeting_ticks.append(step.entry.tick)
             for actor in vent_anchor:
                 vent_anchor[actor] = step.entry.tick
-            counts["meetings_opening_with_impostor_in_vent"] += any(
-                player.alive and player.in_vent and player.role == "IMPOSTOR"
-                for player in step.state.players.values()
+            counts["meetings_opening_with_impostor_in_vent"] += living_player_in_vent(
+                step.state
             )
             counts[
                 f"meeting_caller:{step.state.players[step.entry.triggered_by].role}"

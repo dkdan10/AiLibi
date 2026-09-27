@@ -12,11 +12,11 @@ import importlib.util
 import json
 import shutil
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
-from types import MappingProxyType
-from typing import Any, Final, Literal, TypedDict
+from types import MappingProxyType, SimpleNamespace
+from typing import Any, Final, Literal, TypedDict, cast
 
 import pytest
 from pydantic import TypeAdapter
@@ -38,6 +38,7 @@ from agents.tactical.impostor_policy import ImpostorPolicy
 from api.replay_loader import ReplayLoader
 from engine.actions import Action
 from engine.entities import PlayerId, Role
+from engine.events import KilledEvent, VentEnteredEvent
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from eval.evidence_honesty import (
@@ -45,6 +46,7 @@ from eval.evidence_honesty import (
     compute_evidence_honesty,
     live_impostor_policy,
 )
+import eval.gameplay_census as census
 from eval.gameplay_census import (
     CensusInputs,
     GameFacts,
@@ -80,6 +82,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
+from orchestrator.seeder import seed_initial_state
 from tests._helpers.scripted_meeting import record_game
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
@@ -620,6 +623,112 @@ def test_the_lab_counters_agree_with_the_census(
     if arm == "vent_look_and_wait":
         assert counts["vent_exits_crew_source_only_witnessed"] > 0
         assert counts["vent_entries_not_after_own_fresh_kill"] > 0
+
+
+def _entered(tick: int, actor: str = "p-1", room: str = "STORAGE") -> VentEnteredEvent:
+    return VentEnteredEvent(
+        type="VentEntered",
+        tick=tick,
+        actor=actor,
+        vent_id=f"{room}_VENT",
+        room=room,
+        source_vent_id=f"{room}_VENT",
+        destination_vent_id=f"{room}_VENT",
+        source_room=room,
+        destination_room=room,
+        traversal_ticks=1,
+        witnesses=(),
+        source_witnesses=(),
+        destination_witnesses=(),
+    )
+
+
+def _killed(tick: int, actor: str = "p-1", room: str = "STORAGE") -> KilledEvent:
+    return KilledEvent(
+        type="Killed", tick=tick, actor=actor, target="p-7", room=room, witnesses=()
+    )
+
+
+@pytest.mark.parametrize(
+    ("kill", "meetings", "fresh"),
+    [
+        (_killed(9), (), True),
+        (_killed(7), (), True),
+        (_killed(6), (), False),
+        (_killed(10), (), False),
+        (_killed(9, actor="p-2"), (), False),
+        (_killed(9, room="ENGINEERING"), (), False),
+        (_killed(8), (8,), False),
+        (_killed(8), (9,), False),
+        (_killed(8), (7,), True),
+        (_killed(8), (10,), True),
+    ],
+)
+def test_an_entry_follows_its_own_fresh_kill_by_the_census_definition(
+    kill: KilledEvent, meetings: tuple[int, ...], fresh: bool
+) -> None:
+    # The entry resolves at tick 10 in STORAGE; the window is three ticks.
+    assert (
+        lab.entry_after_own_fresh_kill(
+            _entered(10), kills=(kill,), meeting_ticks=meetings
+        )
+        is fresh
+    )
+    game = cast(
+        GameFacts,
+        SimpleNamespace(
+            kills=(KillFact(kill.tick, kill.actor, kill.room, frozenset()),),
+            meetings=tuple(SimpleNamespace(tick=tick) for tick in meetings),
+        ),
+    )
+    entry = VentFact(10, "p-1", "entry", "STORAGE", "STORAGE", frozenset(), frozenset())
+    assert census._own_fresh_kill_before(game, entry) is fresh
+
+
+def test_a_living_player_in_a_vent_is_one_the_census_reads() -> None:
+    state = seed_initial_state(seed=0, game_map=MAP, num_players=4)
+    assert not lab.living_player_in_vent(state)
+    inside = {
+        pid: replace(player, in_vent=pid == "p-1")
+        for pid, player in state.players.items()
+    }
+    assert lab.living_player_in_vent(replace(state, players=inside))
+    dead_inside = {
+        pid: replace(player, in_vent=pid == "p-1", alive=pid != "p-1")
+        for pid, player in state.players.items()
+    }
+    assert not lab.living_player_in_vent(replace(state, players=dead_inside))
+
+
+def test_measure_replay_hands_the_entry_check_the_kills_and_meetings_so_far(
+    b1_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[tuple[int, tuple[int, ...], tuple[int, ...]]] = []
+    real = lab.entry_after_own_fresh_kill
+
+    def spying(
+        entry: VentEnteredEvent,
+        *,
+        kills: Sequence[KilledEvent],
+        meeting_ticks: Sequence[int],
+    ) -> bool:
+        seen.append(
+            (entry.tick, tuple(kill.tick for kill in kills), tuple(meeting_ticks))
+        )
+        return real(entry, kills=kills, meeting_ticks=meeting_ticks)
+
+    monkeypatch.setattr(lab, "entry_after_own_fresh_kill", spying)
+    measure_replay(b1_set / f"replay-seed-{SEED}.jsonl", seed=SEED, roster=NINE)
+    rows = _rows(b1_set / f"replay-seed-{SEED}.jsonl")
+    meetings = [row["tick"] for row in rows if row["kind"] == "meeting"]
+    game = _game(load_census_inputs(b1_set))
+    assert seen
+    for tick, kill_ticks, meeting_ticks in seen:
+        assert meeting_ticks == tuple(m for m in meetings if m < tick)
+        assert kill_ticks == tuple(
+            kill.tick for kill in game.kills if kill.tick <= tick
+        )
+    assert any(meeting_ticks for _tick, _kills, meeting_ticks in seen)
 
 
 # The two lab walk profiles ---------------------------------------------------
