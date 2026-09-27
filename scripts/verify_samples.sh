@@ -21,6 +21,11 @@
 #     old 4p1i default would silently skip a stale/corrupted 9p2i replay (PR #218
 #     Codex review). The samples root defaults to replays/samples and is
 #     overridable via AILIBI_SAMPLES_ROOT (used by the wrapper test).
+#     The no-argument run also verifies every candidate set, each directory
+#     <round>/<set>/ under the candidates root (default replays/candidates,
+#     overridable via AILIBI_CANDIDATES_ROOT), and folds each status into the
+#     exit code. An empty or absent candidates root is not an error; exit 2
+#     still means the samples root holds no set.
 
 set -euo pipefail
 
@@ -50,4 +55,15 @@ if [[ "$found" -eq 0 ]]; then
   echo "No committed sample sets (subdirs with replay-seed-*.jsonl) under ${samples_root}" >&2
   exit 2
 fi
+
+# Every candidate set: each <round>/<set>/ directory is verified, and a set
+# holding no replay (the verifier's exit 2) fails the aggregate like a drift.
+candidates_root="${AILIBI_CANDIDATES_ROOT:-$REPO_ROOT/replays/candidates}"
+for set_dir in "$candidates_root"/*/*/; do
+  [[ -d "$set_dir" ]] || continue
+  echo "=== verifying candidate set ${set_dir} ==="
+  if ! uv run python "$SCRIPT_DIR/_verify_samples.py" "$set_dir"; then
+    status=1
+  fi
+done
 exit "$status"

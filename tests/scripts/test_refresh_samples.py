@@ -14,19 +14,30 @@ byte is ever written:
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Iterator, Sequence
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+import _declared_experiment as de
+from api.replay_loader import ReplayLoader
+from meetings.evidence_profile import EXPERIMENT_ENV_NAMES
+from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator.replay import GameEndReplayEntry, ReplayEntry, read_all_entries
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _REFRESH_SH = _REPO_ROOT / "scripts" / "refresh_samples.sh"
@@ -1737,3 +1748,1011 @@ def test_default_fake_model_mirrors_the_fake_client() -> None:
     match = re.search(r'^DEFAULT_FAKE_MODEL="([^"]+)"$', script, re.MULTILINE)
     assert match is not None, "DEFAULT_FAKE_MODEL constant missing from script"
     assert match.group(1) == _FAKE_MEETING_MODEL
+
+
+# -- the declared experiment config (--experiment-config) ---------------------
+#
+# scripts/_declared_experiment.py holds the three rules the recorder applies
+# before any preflight or staging: the file, the meeting-experiment
+# environment, and the target a switched-on config may record into.
+
+#: The declared test config: three arms that exist today, since the pending
+#: guard refuses the wave's new values.
+_TEST_CONFIG_JSON = (
+    '{"format_version": 1, "meeting_reset": "hub_with_grace", '
+    '"vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}\n'
+)
+_TEST_CONFIG = RecordedExperimentConfig.model_validate_json(_TEST_CONFIG_JSON)
+_TEST_SETTINGS_ECHO = (
+    "Experiment config settings: meeting_reset='hub_with_grace', "
+    "vent_exit_policy='observed_risk', bounded_rebuttal_version=1"
+)
+#: Today's per-seed line, byte for byte: the recorder's seven flags.
+_SEVEN_FLAG_LINE = (
+    "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python "
+    "scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir "
+    "<stage> --num-players 4 --num-impostors 1 --tasks-per-crewmate 1 --force"
+)
+_NOTHING_STAGED = "Nothing was staged."
+
+
+def _test_config(tmp_path: Path, text: str = _TEST_CONFIG_JSON) -> Path:
+    path = tmp_path / "experiment-config.json"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _git_status() -> str:
+    return subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _stage_dirs() -> list[Path]:
+    return sorted((_REPO_ROOT / "replays").rglob(".ailibi-refresh-stage-*"))
+
+
+def test_the_dry_run_echoes_the_config_and_stages_nothing(tmp_path: Path) -> None:
+    config = _test_config(tmp_path)
+    set_dir = tmp_path / "scratch-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir), AILIBI_MANIFEST=str(set_dir / "MANIFEST.md")
+    )
+    before = _git_status()
+    proc = _run(
+        "--seeds",
+        "0,1",
+        "--dry-run",
+        "--expect-levers",
+        "",
+        "--experiment-config",
+        str(config),
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    sha = hashlib.sha256(config.read_bytes()).hexdigest()
+    lines = proc.stdout.splitlines()
+    assert f"[dry-run] Experiment config: {config} (sha256 {sha})" in lines
+    assert f"[dry-run] {_TEST_SETTINGS_ECHO}" in lines
+    assert "[dry-run] Experiment switch exports: none" in lines
+    assert (
+        _SEVEN_FLAG_LINE + " --experiment-config <stage-dir>/experiment-config.json"
+    ) in lines
+    assert any(
+        line.startswith("[dry-run] experiment config: would copy") and sha in line
+        for line in lines
+    )
+    assert not set_dir.exists()
+    assert sorted(tmp_path.iterdir()) == [config]
+    assert _git_status() == before
+
+
+def test_without_the_flag_the_per_seed_line_is_todays_seven_flag_line() -> None:
+    proc = _run("--seeds", "0,1", "--dry-run", "--expect-levers", "", env=_clean_env())
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    lines = proc.stdout.splitlines()
+    assert [line for line in lines if "run_tournament.py" in line] == [_SEVEN_FLAG_LINE]
+    assert (
+        "[dry-run] Experiment config: none declared; the recording keeps the "
+        "historical defaults"
+    ) in lines
+    assert not any("experiment-config" in line for line in lines)
+
+
+def test_the_flag_needs_a_file_argument() -> None:
+    proc = _run("--seeds", "0", "--dry-run", "--experiment-config", env=_clean_env())
+    assert proc.returncode == 1
+    assert "--experiment-config requires a config file path" in proc.stderr
+
+
+@pytest.mark.parametrize("name", sorted(EXPERIMENT_ENV_NAMES))
+@pytest.mark.parametrize("value", ["1", "0"])
+def test_every_meeting_experiment_export_is_refused_before_the_slate_check(
+    name: str, value: str
+) -> None:
+    """The planted case that turned red: the export once passed the slate check.
+
+    ``AILIBI_BOUNDED_REBUTTAL=1`` with ``--expect-levers ""`` printed "Substrate
+    slate OK" before this check existed. Each of the four names is refused, with
+    or without a config, whatever its value.
+    """
+
+    env = _clean_env()
+    env[name] = value
+    proc = _run("--seeds", "0", "--expect-levers", "", "--dry-run", env=env)
+    assert proc.returncode == 1
+    assert f"the environment exports {name}." in proc.stderr
+    assert _NOTHING_STAGED in proc.stderr
+    assert "Substrate slate OK" not in proc.stdout
+    assert "[dry-run] mode:" not in proc.stdout
+
+
+def test_a_run_without_any_export_passes_the_environment_check() -> None:
+    proc = _run("--seeds", "0", "--expect-levers", "", "--dry-run", env=_clean_env())
+    assert proc.returncode == 0
+    assert "[dry-run] Experiment switch exports: none" in proc.stdout
+    assert "Substrate slate OK" in proc.stdout
+
+
+_DECOY = _REPO_ROOT / "replays" / "samples" / ".test-config-decoy"
+
+#: macOS reaches every directory of its data volume through this prefix too (a
+#: firmlink): the same directory on disk under a second spelling.
+_DATA_VOLUME = Path("/System/Volumes/Data")
+
+
+def _case_insensitive(directory: Path) -> bool:
+    """Whether ``directory``'s name, case-flipped, opens the same directory."""
+
+    flipped = directory.parent / directory.name.swapcase()
+    return (
+        flipped.name != directory.name
+        and flipped.exists()
+        and os.path.samefile(flipped, directory)
+    )
+
+
+def _firmlinked(directory: Path) -> Path | None:
+    """``directory`` reached through the data-volume firmlink, where one exists."""
+
+    alias = Path(f"{_DATA_VOLUME}{os.path.realpath(directory)}")
+    if alias.exists() and os.path.samefile(alias, directory):
+        return alias
+    return None
+
+
+def _alias_skip_reason(case: str) -> str | None:
+    """Why this filesystem cannot plant ``case``'s second spelling, if it cannot."""
+
+    if case == "a case-variant spelling of samples" and not _case_insensitive(
+        _REPO_ROOT / "replays"
+    ):
+        return "this filesystem tells case-variant names apart"
+    if case == "a case-variant ancestor into ml_corpus" and not _case_insensitive(
+        _REPO_ROOT
+    ):
+        return "this filesystem tells case-variant names apart"
+    if case == "a firmlink into samples" and _firmlinked(_REPO_ROOT) is None:
+        return "no firmlink reaches this checkout"
+    return None
+
+
+def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]:
+    """The environment aiming a switched-on config at ``case``, and the refusal."""
+
+    env = _clean_env()
+    replays = _REPO_ROOT / "replays"
+    if case == "default target":
+        return env, "needs an explicit AILIBI_SAMPLE_DIR"
+    targets = {
+        "samples 9p2i": (replays / "samples" / "9p2i", "inside replays/samples/"),
+        "ml_corpus 9p2i": (replays / "ml_corpus" / "9p2i", "inside replays/ml_corpus/"),
+        "a .. alias into samples": (
+            Path(f"{_REPO_ROOT}/scripts/../replays/samples/4p1i"),
+            "inside replays/samples/",
+        ),
+        "a symlink into samples": (
+            tmp_path / "looks-like-scratch",
+            "inside replays/samples/",
+        ),
+        "replays/<name>": (replays / "stage-b-r1", "records only into a candidate set"),
+        "one-level candidates/<round>": (
+            replays / "candidates" / "stage-b-r1",
+            "records only into a candidate set",
+        ),
+        "a hidden round name": (
+            replays / "candidates" / ".stage-b-r1" / "9p2i",
+            "name '.stage-b-r1' must start with a letter or digit",
+        ),
+        "a case-variant spelling of samples": (
+            _REPO_ROOT / "REPLAYS" / "Samples" / "9p2i",
+            "inside replays/samples/",
+        ),
+        "a case-variant ancestor into ml_corpus": (
+            _REPO_ROOT.parent
+            / _REPO_ROOT.name.swapcase()
+            / "replays"
+            / "ml_corpus"
+            / "9p2i",
+            "inside replays/ml_corpus/",
+        ),
+        "a firmlink into samples": (
+            Path(f"{_DATA_VOLUME}{_REPO_ROOT}") / "replays" / "samples" / "9p2i",
+            "inside replays/samples/",
+        ),
+    }
+    if case == "a scratch dir with a committed manifest":
+        env.update(
+            AILIBI_SAMPLE_DIR=str(tmp_path / "scratch-set"),
+            AILIBI_MANIFEST=str(_COMMITTED_4P1I / "MANIFEST.md"),
+        )
+        return env, "AILIBI_MANIFEST resolves to"
+    target, refusal = targets[case]
+    env.update(AILIBI_SAMPLE_DIR=str(target), AILIBI_MANIFEST=f"{target}/MANIFEST.md")
+    return env, refusal
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "default target",
+        "samples 9p2i",
+        "ml_corpus 9p2i",
+        "a .. alias into samples",
+        "a symlink into samples",
+        "a scratch dir with a committed manifest",
+        "replays/<name>",
+        "one-level candidates/<round>",
+        "a hidden round name",
+        "a case-variant spelling of samples",
+        "a case-variant ancestor into ml_corpus",
+        "a firmlink into samples",
+    ],
+)
+def test_a_switched_on_config_is_refused_at_every_unsafe_target(
+    case: str, tmp_path: Path
+) -> None:
+    """A real run (no key, so any gate after the check would fail differently).
+
+    The last three cases spell a committed tree the way only some filesystems
+    allow (a case-flipped segment or ancestor, the macOS data-volume firmlink),
+    so each runs where its filesystem gives that second spelling and is skipped
+    elsewhere.
+    """
+
+    skip_reason = _alias_skip_reason(case)
+    if skip_reason is not None:
+        pytest.skip(skip_reason)
+    env, refusal = _refused_target_env(case, tmp_path)
+    config = _test_config(tmp_path)
+    if case == "a symlink into samples":
+        _DECOY.mkdir()
+        (tmp_path / "looks-like-scratch").symlink_to(_DECOY)
+    try:
+        with _replays_tree_restored():
+            proc = _run("--seeds", "0", "--experiment-config", str(config), env=env)
+            assert proc.returncode == 1
+            assert refusal in proc.stderr
+            assert _NOTHING_STAGED in proc.stderr
+            # The refusal names the offending path as it resolves physically.
+            offending = {
+                "default target": None,
+                "a scratch dir with a committed manifest": env.get("AILIBI_MANIFEST"),
+            }.get(case, env.get("AILIBI_SAMPLE_DIR"))
+            if offending is not None:
+                assert f"resolves to {os.path.realpath(offending)}" in proc.stderr
+            # The check ran before every preflight: the key gate never spoke.
+            assert "ANTHROPIC_API_KEY" not in proc.stderr
+            assert "Substrate slate OK" not in proc.stdout
+            assert _stage_dirs() == []
+            assert not (_REPO_ROOT / "replays" / "stage-b-r1").exists()
+            assert not (_REPO_ROOT / "replays" / "candidates" / "stage-b-r1").exists()
+            assert not (tmp_path / "scratch-set").exists()
+    finally:
+        if _DECOY.exists():
+            shutil.rmtree(_DECOY)
+
+
+def test_a_switched_on_config_is_accepted_at_a_candidate_set_directory(
+    tmp_path: Path,
+) -> None:
+    target = _REPO_ROOT / "replays" / "candidates" / "stage-b-r1" / "9p2i"
+    env = _clean_env()
+    env.update(AILIBI_SAMPLE_DIR=str(target), AILIBI_MANIFEST=f"{target}/MANIFEST.md")
+    config = _test_config(tmp_path)
+    with _replays_tree_restored():
+        proc = _run(
+            "--seeds",
+            "0",
+            "--dry-run",
+            "--expect-levers",
+            "",
+            "--experiment-config",
+            str(config),
+            env=env,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert f"[dry-run] {_TEST_SETTINGS_ECHO}" in proc.stdout.splitlines()
+        assert not target.parent.exists()
+
+
+def test_a_config_of_historical_defaults_goes_anywhere_and_records_no_key(
+    tmp_path: Path,
+) -> None:
+    defaults = _test_config(
+        tmp_path, '{"format_version": 1, "meeting_reset": "preserve"}\n'
+    )
+    proc = _run(
+        "--seeds",
+        "0",
+        "--dry-run",
+        "--expect-levers",
+        "",
+        "--experiment-config",
+        str(defaults),
+        env=_clean_env(),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (
+        "[dry-run] Experiment config settings: none: historical defaults"
+        in proc.stdout.splitlines()
+    )
+    set_dir, env = _fake_set(tmp_path)
+    proc = _run(
+        "--seeds", "0", "--experiment-config", str(defaults), env=env, timeout=600
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert '"experiment_config"' not in (set_dir / "replay-seed-0.jsonl").read_text()
+
+
+def _arms_on_refresh(
+    tmp_path: Path,
+) -> tuple[Path, Path, subprocess.CompletedProcess[str]]:
+    """A fake refresh of seeds 0 and 1 on the test config, traced, in a bare shell."""
+
+    config = _test_config(tmp_path)
+    set_dir, env = _fake_set(tmp_path)
+    proc = subprocess.run(
+        [
+            "bash",
+            "-x",
+            str(_REFRESH_SH),
+            "--seeds",
+            "0,1",
+            "--expect-levers",
+            "",
+            "--experiment-config",
+            str(config),
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=900,
+    )
+    return config, set_dir, proc
+
+
+def test_a_fake_arms_on_refresh_records_exactly_the_file_and_loads_verified(
+    tmp_path: Path,
+) -> None:
+    config, set_dir, proc = _arms_on_refresh(tmp_path)
+    assert "Refresh complete" in proc.stdout, proc.stdout[-4000:] + proc.stderr[-4000:]
+    for seed in (0, 1):
+        entries = read_all_entries(set_dir / f"replay-seed-{seed}.jsonl")
+        stamped = [
+            entry.experiment_config
+            for entry in entries
+            if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+        ]
+        assert len(stamped) > 1 and all(item == _TEST_CONFIG for item in stamped)
+        replay = ReplayLoader(set_dir).load_replay(f"headless-seed-{seed}")
+        assert replay.metadata.outcome_verified
+    # The config was copied into the stage once, and every seed recorded from
+    # that copy, never from the file the operator could still edit.
+    snapshots = re.findall(
+        r"Experiment config snapshot: (\S+) \(sha256 ([0-9a-f]{64})\)", proc.stdout
+    )
+    assert len(snapshots) == 1
+    snapshot, sha = snapshots[0]
+    assert sha == hashlib.sha256(config.read_bytes()).hexdigest()
+    assert ".ailibi-refresh-stage-" in snapshot
+    invocations = [
+        line
+        for line in proc.stderr.splitlines()
+        if "scripts/run_tournament.py" in line
+        and line.lstrip("+").startswith(" uv run")
+    ]
+    assert len(invocations) == 2
+    assert all(
+        line.endswith(f"--force --experiment-config {snapshot}") for line in invocations
+    )
+    assert list(tmp_path.glob(".ailibi-refresh-stage-*")) == []
+
+
+def test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set(
+    tmp_path: Path,
+) -> None:
+    _config, set_dir, proc = _arms_on_refresh(tmp_path)
+    assert proc.returncode == 0, proc.stdout[-4000:] + proc.stderr[-4000:]
+    check = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            str(_REPO_ROOT / "scripts" / "build_sample_report.py"),
+            "--sample-dir",
+            str(set_dir),
+            "--check",
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=600,
+    )
+    assert check.returncode == 0, check.stdout + check.stderr
+    assert "is consistent with its replays" in check.stdout
+
+
+# -- the helper's own rules, below the script ---------------------------------
+
+
+def test_the_snapshot_refuses_a_file_edited_after_the_check(tmp_path: Path) -> None:
+    config = _test_config(tmp_path)
+    checked = de.load_declared_config(config)
+    config.write_text(_TEST_CONFIG_JSON.replace("observed_risk", "target_distance"))
+    dest = tmp_path / "stage" / "experiment-config.json"
+    dest.parent.mkdir()
+    edited = hashlib.sha256(config.read_bytes()).hexdigest()
+    with pytest.raises(
+        de.DeclaredExperimentError, match="changed after it was checked"
+    ) as refused:
+        de.write_snapshot(config, dest, expected_sha256=checked.sha256)
+    assert f"it now reads sha256 {edited}" in str(refused.value)
+    assert f"the checked copy read {checked.sha256}" in str(refused.value)
+    assert not dest.exists()
+    config.write_text(_TEST_CONFIG_JSON)
+    line = de.write_snapshot(config, dest, expected_sha256=checked.sha256)
+    assert dest.read_bytes() == config.read_bytes()
+    assert line.endswith("every seed records from this copy")
+
+
+def test_the_snapshot_validates_the_bytes_it_copies(tmp_path: Path) -> None:
+    config = _test_config(tmp_path, '{"hidden_travel": "on"}\n')
+    dest = tmp_path / "copy.json"
+    with pytest.raises(de.DeclaredExperimentError, match="hidden_travel"):
+        de.write_snapshot(
+            config,
+            dest,
+            expected_sha256=hashlib.sha256(config.read_bytes()).hexdigest(),
+        )
+    assert not dest.exists()
+
+
+@pytest.mark.parametrize(
+    ("text", "detail"),
+    [
+        ('{"hidden_travel": "on"}', "hidden_travel"),
+        ('{"meeting_reset": "sometimes"}', "meeting_reset"),
+        ('{"bounded_rebuttal_version": true}', "bounded_rebuttal_version"),
+        (
+            '{"meeting_reset": "hub_with_grace", "meeting_reset": "preserve"}',
+            "more than once",
+        ),
+        ('["meeting_reset"]', "one object"),
+        ("{", "not a valid experiment config"),
+    ],
+)
+def test_the_file_must_be_one_valid_config(
+    tmp_path: Path, text: str, detail: str
+) -> None:
+    with pytest.raises(de.DeclaredExperimentError, match=detail):
+        de.load_declared_config(_test_config(tmp_path, text + "\n"))
+
+
+def test_the_sha256_covers_exactly_the_bytes_read(tmp_path: Path) -> None:
+    config = _test_config(tmp_path)
+    declared = de.load_declared_config(config)
+    assert declared.sha256 == hashlib.sha256(config.read_bytes()).hexdigest()
+    assert declared.config == _TEST_CONFIG
+    assert declared.settings() == (
+        ("meeting_reset", "hub_with_grace"),
+        ("vent_exit_policy", "observed_risk"),
+        ("bounded_rebuttal_version", 1),
+    )
+
+
+def test_the_target_rule_reads_physical_paths(tmp_path: Path) -> None:
+    """The rule over a planted repository: its own replays/ tree, not this one."""
+
+    repo = tmp_path / "repo"
+    (repo / "replays" / "samples" / "4p1i").mkdir(parents=True)
+    (repo / "replays" / "candidates").mkdir(parents=True)
+    link = tmp_path / "link"
+    link.symlink_to(repo / "replays" / "samples")
+    candidate = repo / "replays" / "candidates" / "r1" / "9p2i"
+
+    def refusal(sample_dir: Path, manifest: Path | None = None) -> str | None:
+        try:
+            de.refuse_unsafe_target(
+                _TEST_CONFIG,
+                sample_dir=sample_dir,
+                manifest=manifest
+                if manifest is not None
+                else sample_dir / "MANIFEST.md",
+                sample_dir_explicit=True,
+                repo_root=repo,
+            )
+        except de.DeclaredExperimentError as exc:
+            return str(exc)
+        return None
+
+    assert refusal(candidate) is None
+    assert refusal(tmp_path / "scratch") is None
+    assert "inside replays/samples/" in (refusal(link / "new-set") or "")
+    assert "inside replays/samples/" in (
+        refusal(tmp_path / "gone" / ".." / "link" / "4p1i") or ""
+    )
+    assert "records only into a candidate set" in (
+        refusal(candidate, repo / "replays" / "candidates" / "r1" / "MANIFEST.md") or ""
+    )
+    assert "records only into a candidate set" in (
+        refusal(repo / "replays" / "candidates" / "r1" / "9p2i" / "deeper") or ""
+    )
+    assert refusal(candidate, candidate / "MANIFEST.md") is None
+    # A canonical tree this repository lacks is still refused where the recorder
+    # would create it: below the nearest existing directory, spelled exactly.
+    assert "inside replays/ml_corpus/" in (
+        refusal(repo / "replays" / "ml_corpus" / "9p2i") or ""
+    )
+    # The replays/ directory itself is no candidate set directory.
+    assert "records only into a candidate set" in (refusal(repo / "replays") or "")
+    # A path through a regular file is placed by the nearest directory holding
+    # it: outside replays/ it is accepted (the recorder fails to create it), and
+    # a file inside a canonical tree is inside that tree.
+    (tmp_path / "a-file").write_text("not a directory\n", encoding="utf-8")
+    assert refusal(tmp_path / "a-file" / "set") is None
+    committed = repo / "replays" / "samples" / "4p1i" / "MANIFEST.md"
+    committed.write_text("| seed |\n", encoding="utf-8")
+    assert "inside replays/samples/" in (refusal(committed) or "")
+    assert "inside replays/samples/" in (refusal(committed / "set") or "")
+    # The historical defaults record nothing new, so they go anywhere.
+    de.refuse_unsafe_target(
+        RecordedExperimentConfig(),
+        sample_dir=repo / "replays" / "samples" / "4p1i",
+        manifest=repo / "replays" / "samples" / "4p1i" / "MANIFEST.md",
+        sample_dir_explicit=False,
+        repo_root=repo,
+    )
+
+
+# -- the helper's rules as properties over generated families -----------------
+
+#: Path segments the target property composes, including the ones a string
+#: prefix test would mishandle: ``..``, ``.``, a link into a canonical tree,
+#: names that look like trees one level off, and case-flipped spellings (the
+#: same directory on a case-insensitive filesystem, a new name elsewhere).
+_SEGMENTS = st.sampled_from(
+    [
+        "..",
+        ".",
+        "samples",
+        "ml_corpus",
+        "candidates",
+        "records",
+        "into-samples",
+        "into-corpus",
+        "r1",
+        "9p2i",
+        "a.b",
+        ".hidden",
+        "SAMPLES",
+        "Ml_Corpus",
+        "Candidates",
+        "Replays",
+        "INTO-SAMPLES",
+        "R1",
+    ]
+)
+
+
+@pytest.fixture(scope="module")
+def planted_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A repository whose replays/ tree carries both canonical trees and links.
+
+    The links are relative, so a copy of the tree links within the copy.
+    """
+
+    root = tmp_path_factory.mktemp("planted-repo")
+    replays = root / "repo" / "replays"
+    for tree in ("samples/4p1i", "ml_corpus/9p2i", "candidates/r1/9p2i", "records"):
+        (replays / tree).mkdir(parents=True)
+    (replays / "candidates" / "into-samples").symlink_to(Path("..") / "samples")
+    (root / "outside").mkdir()
+    (root / "outside" / "into-corpus").symlink_to(
+        Path("..") / "repo" / "replays" / "ml_corpus"
+    )
+    return root
+
+
+@pytest.fixture(scope="module")
+def planted_copies(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Where the target property copies the planted repository, once per example."""
+
+    return Path(os.path.realpath(tmp_path_factory.mktemp("planted-copies")))
+
+
+def _target_outcome(repo: Path, target: Path, manifest: Path) -> str | None:
+    try:
+        de.refuse_unsafe_target(
+            _TEST_CONFIG,
+            sample_dir=target,
+            manifest=manifest,
+            sample_dir_explicit=True,
+            repo_root=repo,
+        )
+    except de.DeclaredExperimentError as exc:
+        return str(exc)
+    return None
+
+
+def _landed_place(replays: Path, target: Path) -> tuple[str, ...] | None:
+    """Where ``mkdir -p`` puts ``target``, as segments below ``replays``.
+
+    The directory is made, then found by device and inode among the directories
+    ``replays`` holds afterwards, under the names they were made with. ``None``
+    when it landed anywhere else.
+    """
+
+    target.mkdir(parents=True, exist_ok=True)
+    landed = target.stat()
+    for directory, _subdirectories, _files in os.walk(replays):
+        status = os.stat(directory)
+        if (status.st_dev, status.st_ino) == (landed.st_dev, landed.st_ino):
+            return Path(directory).relative_to(replays).parts
+    return None
+
+
+@settings(deadline=None, max_examples=300)
+@given(
+    base=st.sampled_from(
+        [
+            "repo/replays",
+            "repo",
+            "outside",
+            "repo/replays/candidates",
+            "REPO/REPLAYS",
+            "Outside",
+        ]
+    ),
+    flip_root=st.booleans(),
+    segments=st.lists(_SEGMENTS, max_size=5),
+)
+def test_no_accepted_target_resolves_inside_a_canonical_tree(
+    planted_repo: Path,
+    planted_copies: Path,
+    base: str,
+    flip_root: bool,
+    segments: list[str],
+) -> None:
+    """Whatever the path's spelling, the directory it lands in decides.
+
+    A target accepted for a switched-on config never lands inside
+    ``replays/samples/`` or ``replays/ml_corpus/``, and inside ``replays/`` it is
+    exactly a candidate set directory with names the verifier's glob can see.
+    The oracle compares no spellings: after the rule has spoken, it makes the
+    target in a fresh copy of the planted repository the way the recorder
+    would, and finds the made directory by device and inode among the copy's
+    ``replays/`` directories. On a case-insensitive filesystem a flipped
+    segment or a flipped planted root opens the same directory; elsewhere it is
+    a new name.
+    """
+
+    copy = Path(tempfile.mkdtemp(dir=planted_copies))
+    try:
+        shutil.copytree(planted_repo, copy / "planted", symlinks=True)
+        repo = copy / "planted" / "repo"
+        root = copy / ("PLANTED" if flip_root else "planted")
+        target = Path(root, base, *segments)
+        outcome = _target_outcome(repo, target, target / "MANIFEST.md")
+        if copy not in Path(os.path.realpath(target)).parents:
+            # It climbed out of the copy, so it is nowhere near replays/.
+            assert outcome is None, (target, outcome)
+            return
+        parts = _landed_place(repo / "replays", target)
+    finally:
+        shutil.rmtree(copy)
+    if parts is None:
+        assert outcome is None, (target, outcome)
+    elif parts[:1] in (("samples",), ("ml_corpus",)):
+        assert outcome is not None and f"inside replays/{parts[0]}/" in outcome
+    elif (
+        len(parts) == 3
+        and parts[0] == "candidates"
+        and all(not name.startswith(".") for name in parts[1:])
+    ):
+        assert outcome is None, (target, outcome)
+    else:
+        assert outcome is not None, (target, parts)
+
+
+@settings(deadline=None, max_examples=100)
+@given(
+    round_name=st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,8}", fullmatch=True),
+    set_name=st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,8}", fullmatch=True),
+)
+def test_every_well_named_candidate_set_directory_is_accepted(
+    planted_repo: Path, round_name: str, set_name: str
+) -> None:
+    repo = planted_repo / "repo"
+    if "into-samples" in (round_name, set_name) or ".." in (round_name, set_name):
+        return
+    target = repo / "replays" / "candidates" / round_name / set_name
+    assert _target_outcome(repo, target, target / "MANIFEST.md") is None
+    # The same set's manifest aimed one level up is refused.
+    assert _target_outcome(repo, target, target.parent / "MANIFEST.md") is not None
+
+
+@settings(deadline=None, max_examples=200)
+@given(
+    exported=st.sets(st.sampled_from(sorted(EXPERIMENT_ENV_NAMES))),
+    others=st.dictionaries(
+        st.from_regex(r"AILIBI_[A-Z_]{1,12}", fullmatch=True), st.text(max_size=5)
+    ),
+    value=st.text(max_size=8),
+)
+def test_any_meeting_experiment_export_is_refused_whatever_its_value(
+    exported: set[str], others: dict[str, str], value: str
+) -> None:
+    environ = {
+        key: item for key, item in others.items() if key not in EXPERIMENT_ENV_NAMES
+    }
+    environ.update({name: value for name in exported})
+    names = de.ambient_experiment_exports(environ)
+    assert names == tuple(sorted(exported))
+    for recorder in ("refresh", "tournament"):
+        if exported:
+            with pytest.raises(de.DeclaredExperimentError) as refused:
+                de.refuse_ambient_exports(environ, recorder=recorder)
+            assert ", ".join(sorted(exported)) in str(refused.value)
+        else:
+            de.refuse_ambient_exports(environ, recorder=recorder)
+
+
+def test_the_refused_names_follow_the_experiment_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a fifth switch registered is refused too, with no edit here."""
+
+    monkeypatch.setattr(
+        de,
+        "EXPERIMENT_ENV_NAMES",
+        MappingProxyType({**EXPERIMENT_ENV_NAMES, "AILIBI_PLANTED_SWITCH": "planted"}),
+    )
+    with pytest.raises(de.DeclaredExperimentError, match="AILIBI_PLANTED_SWITCH"):
+        de.refuse_ambient_exports({"AILIBI_PLANTED_SWITCH": "1"}, recorder="refresh")
+
+
+def test_the_settings_follow_the_config_model() -> None:
+    """Planted: a field added to the config model is listed once it is set."""
+
+    class _Wider(RecordedExperimentConfig):
+        planted_rule: str = "old"
+
+    wider = _Wider(meeting_reset="hub_with_grace", planted_rule="new")
+    assert de.non_default_settings(wider) == (
+        ("meeting_reset", "hub_with_grace"),
+        ("planted_rule", "new"),
+    )
+    assert de.describe_settings(wider) == (
+        "meeting_reset='hub_with_grace', planted_rule='new'"
+    )
+    assert de.describe_settings(None) == "none: historical defaults"
+    assert de.describe_settings(RecordedExperimentConfig(format_version=2)) == (
+        "none: historical defaults"
+    )
+
+
+def test_an_unreadable_config_is_refused_by_name(tmp_path: Path) -> None:
+    missing = tmp_path / "absent.json"
+    with pytest.raises(de.DeclaredExperimentError, match="it cannot be read"):
+        de.load_declared_config(missing)
+    with pytest.raises(de.DeclaredExperimentError, match="it cannot be read"):
+        de.write_snapshot(missing, tmp_path / "copy.json", expected_sha256="0" * 64)
+    assert not (tmp_path / "copy.json").exists()
+
+
+def test_the_target_rule_resolves_the_repository_itself(tmp_path: Path) -> None:
+    """Planted: the repository reached through a link, the target by its real path.
+
+    Both sides are compared physically, so a checkout opened through a link
+    still refuses its own canonical trees and still accepts its candidates.
+    """
+
+    repo = tmp_path / "repo"
+    (repo / "replays" / "samples" / "9p2i").mkdir(parents=True)
+    (repo / "replays" / "records").mkdir(parents=True)
+    linked = tmp_path / "linked-checkout"
+    linked.symlink_to(repo)
+    for root, target in (
+        (linked, repo / "replays" / "samples" / "9p2i"),
+        (repo, linked / "replays" / "samples" / "9p2i"),
+    ):
+        with pytest.raises(de.DeclaredExperimentError, match="inside replays/samples/"):
+            de.refuse_unsafe_target(
+                _TEST_CONFIG,
+                sample_dir=target,
+                manifest=target / "MANIFEST.md",
+                sample_dir_explicit=True,
+                repo_root=root,
+            )
+    candidate = repo / "replays" / "candidates" / "r1" / "9p2i"
+    de.refuse_unsafe_target(
+        _TEST_CONFIG,
+        sample_dir=candidate,
+        manifest=candidate / "MANIFEST.md",
+        sample_dir_explicit=True,
+        repo_root=linked,
+    )
+    # The candidate depth is not enough on its own: the family must be candidates.
+    records = repo / "replays" / "records" / "r1" / "9p2i"
+    with pytest.raises(de.DeclaredExperimentError, match="records only into"):
+        de.refuse_unsafe_target(
+            _TEST_CONFIG,
+            sample_dir=records,
+            manifest=records / "MANIFEST.md",
+            sample_dir_explicit=True,
+            repo_root=repo,
+        )
+
+
+def test_the_target_rule_decides_each_tree_by_identity_not_spelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: a second name for each directory, as a second mount would give.
+
+    Each alias is a real directory elsewhere whose spelling shares nothing with
+    the tree it stands for; the patched identity reports it as that tree's
+    device and inode. Before the patch every alias is an ordinary scratch
+    directory and is accepted, so the patch alone is what refuses them.
+    """
+
+    replays = tmp_path / "repo" / "replays"
+    for tree in ("samples/9p2i", "ml_corpus/9p2i", "candidates"):
+        (replays / tree).mkdir(parents=True)
+    mounts = Path(os.path.realpath(tmp_path)) / "mounts"
+    second_samples = mounts / "second-samples"
+    second_corpus = mounts / "second-corpus"
+    second_replays = mounts / "second-replays"
+    second_candidates = mounts / "second-candidates"
+    aliases = {
+        second_samples: replays / "samples",
+        second_corpus: replays / "ml_corpus",
+        second_replays: replays,
+        second_candidates: replays / "candidates",
+    }
+    for alias in aliases:
+        alias.mkdir(parents=True)
+    repo = tmp_path / "repo"
+    scratch = tmp_path / "scratch"
+    probes = (
+        second_samples,
+        second_samples / "new-set",
+        second_corpus / "9p2i",
+        second_replays / "newset",
+        second_candidates / "r1",
+        second_candidates / "r1" / "9p2i",
+        second_candidates / ".r1" / "9p2i",
+    )
+    for probe in probes:
+        assert _target_outcome(repo, probe, probe / "MANIFEST.md") is None, probe
+
+    unpatched = de._identity
+
+    def aliased(path: Path) -> tuple[int, int]:
+        return unpatched(aliases[path] if path in aliases else path)
+
+    monkeypatch.setattr(de, "_identity", aliased)
+
+    def outcome(sample_dir: Path, manifest: Path | None = None) -> str:
+        return (
+            _target_outcome(
+                repo,
+                sample_dir,
+                manifest if manifest is not None else sample_dir / "MANIFEST.md",
+            )
+            or ""
+        )
+
+    assert "inside replays/samples/" in outcome(second_samples)
+    assert "inside replays/samples/" in outcome(second_samples / "new-set")
+    assert "inside replays/ml_corpus/" in outcome(second_corpus / "9p2i")
+    assert "records only into a candidate set" in outcome(second_replays / "newset")
+    assert "records only into a candidate set" in outcome(second_candidates / "r1")
+    assert "name '.r1' must start" in outcome(second_candidates / ".r1" / "9p2i")
+    assert outcome(second_candidates / "r1" / "9p2i") == ""
+    manifest_refusal = outcome(scratch, second_samples / "9p2i" / "MANIFEST.md")
+    assert manifest_refusal.startswith("Refused: AILIBI_MANIFEST resolves to ")
+    assert "inside replays/samples/" in manifest_refusal
+    assert outcome(scratch) == ""
+
+
+def test_case_variant_spellings_name_the_same_directories(tmp_path: Path) -> None:
+    """Planted: case-flipped segments and a case-flipped ancestor.
+
+    On a case-insensitive filesystem each flipped spelling opens the directory
+    it flips, so it gets that directory's verdict; the recorder would write
+    there. Skipped where the filesystem tells the names apart.
+    """
+
+    repo = tmp_path / "repo"
+    for tree in ("samples/9p2i", "ml_corpus/9p2i", "candidates/r1"):
+        (repo / "replays" / tree).mkdir(parents=True)
+    if not _case_insensitive(repo):
+        pytest.skip("this filesystem tells case-variant names apart")
+    flipped_ancestor = tmp_path.parent / tmp_path.name.swapcase()
+    assert os.path.samefile(flipped_ancestor, tmp_path)
+    cases = {
+        repo / "REPLAYS" / "Samples" / "9p2i": "inside replays/samples/",
+        repo / "Replays" / "samples" / "new-set": "inside replays/samples/",
+        repo / "REPLAYS" / "ML_CORPUS" / "9p2i": "inside replays/ml_corpus/",
+        flipped_ancestor / "repo" / "replays" / "samples" / "9p2i": (
+            "inside replays/samples/"
+        ),
+        flipped_ancestor / "REPO" / "replays" / "ml_corpus": (
+            "inside replays/ml_corpus/"
+        ),
+        repo / "REPLAYS" / "newset": "records only into a candidate set",
+        repo / "replays" / "CANDIDATES" / "r1": "records only into a candidate set",
+    }
+    for target, refusal in cases.items():
+        assert refusal in (
+            _target_outcome(repo, target, target / "MANIFEST.md") or ""
+        ), target
+    # The candidate family under a flipped spelling is still the family.
+    for target in (
+        repo / "REPLAYS" / "candidates" / "r1" / "9p2i",
+        repo / "replays" / "CANDIDATES" / "R1" / "9p2i",
+        flipped_ancestor / "REPO" / "Replays" / "Candidates" / "new" / "9p2i",
+    ):
+        assert _target_outcome(repo, target, target / "MANIFEST.md") is None, target
+
+
+def test_a_firmlink_spelling_names_the_same_directories(tmp_path: Path) -> None:
+    """Planted: the planted repository reached through the data-volume firmlink.
+
+    Skipped where no firmlink reaches the temporary directory.
+    """
+
+    repo = tmp_path / "repo"
+    for tree in ("samples/9p2i", "ml_corpus/9p2i", "candidates/r1"):
+        (repo / "replays" / tree).mkdir(parents=True)
+    firmlinked = _firmlinked(repo)
+    if firmlinked is None:
+        pytest.skip("no firmlink reaches this temporary directory")
+    assert str(firmlinked) != os.path.realpath(repo)
+    for tree, refusal in (
+        ("samples/9p2i", "inside replays/samples/"),
+        ("ml_corpus/9p2i", "inside replays/ml_corpus/"),
+        ("newset", "records only into a candidate set"),
+    ):
+        target = firmlinked / "replays" / tree
+        assert refusal in (
+            _target_outcome(repo, target, target / "MANIFEST.md") or ""
+        ), target
+    candidate = firmlinked / "replays" / "candidates" / "r1" / "9p2i"
+    assert _target_outcome(repo, candidate, candidate / "MANIFEST.md") is None
+
+
+def test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped(
+    tmp_path: Path,
+) -> None:
+    """Planted: a canonical tree the walk cannot list.
+
+    Its place cannot be read from disk, so the rule raises instead of treating
+    the tree as outside ``replays/``. Skipped where permissions do not bind (a
+    superuser reads every directory).
+    """
+
+    repo = tmp_path / "repo"
+    samples = repo / "replays" / "samples"
+    (samples / "9p2i").mkdir(parents=True)
+    # The manifest goes to scratch, so only the walk can see the tree.
+    scratch_manifest = tmp_path / "scratch" / "MANIFEST.md"
+    samples.chmod(0)
+    try:
+        if os.access(samples, os.R_OK):
+            pytest.skip("permissions do not bind for this user")
+        with pytest.raises(PermissionError):
+            _target_outcome(repo, samples, scratch_manifest)
+    finally:
+        samples.chmod(0o755)
+    assert "inside replays/samples/" in (
+        _target_outcome(repo, samples, scratch_manifest) or ""
+    )

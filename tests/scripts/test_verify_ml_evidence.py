@@ -180,6 +180,9 @@ def _availability_tree(root: Path) -> None:
         # tree, so both probes are single files rather than a set directory.
         "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
         "replays/records/phase-21-wave2-finding/README.md",
+        # The candidate family's row probes its README, present with or
+        # without a round.
+        "replays/candidates/README.md",
     ):
         _link(root, probe)
     # coevo/ is rebuilt from its TRACKED entries only — never linked whole.
@@ -1059,6 +1062,93 @@ def test_registry_row_with_no_probe_fails_the_availability_leg(
     row = _row(vme.run_availability(_context(root)).rows, "registry coverage")
     assert row.status == "FAIL"
     assert "training/artifacts/brand_new/" in row.detail
+
+
+_CANDIDATES_KEY = "replays/candidates/"
+
+
+def test_a_registry_without_the_candidate_row_fails_registry_coverage(
+    tmp_path: Path,
+) -> None:
+    """Planted: the family's row deleted, its probe still in this command."""
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(root, vme.PATHS_DOC, vme.FINALIST_REPORT)
+    doc = _copy(root, vme.ARTIFACTS_DOC)
+    lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
+    kept = [line for line in lines if not line.startswith(f"| `{_CANDIDATES_KEY}`")]
+    assert len(kept) == len(lines) - 1
+    doc.write_text("".join(kept), encoding="utf-8")
+
+    row = _row(vme.run_availability(_context(root)).rows, "registry coverage")
+    assert row.status == "FAIL"
+    assert (
+        f"probed here but not in {vme.ARTIFACTS_DOC}: {_CANDIDATES_KEY}" in row.detail
+    )
+
+
+def test_the_candidate_family_probe_bites_on_a_tree_without_its_readme(
+    tmp_path: Path,
+) -> None:
+    """The row reads IN-TREE with the README, and fails once it is gone."""
+
+    root = tmp_path / "repo"
+    _availability_tree(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.SLATE_MANIFEST)
+    name = f"{_CANDIDATES_KEY} [(a) + (b)]"
+    present = _row(vme.run_availability(_context(root)).rows, name)
+    assert (present.status, present.measured) == ("OK", "IN-TREE")
+
+    (root / "replays/candidates/README.md").unlink()
+    gone = _row(vme.run_availability(_context(root)).rows, name)
+    assert (gone.status, gone.measured) == ("FAIL", "MISSING")
+    assert "replays/candidates/README.md" in gone.detail
+
+
+def test_the_candidate_row_is_inventoried_at_its_stated_count() -> None:
+    tracked = vme.in_tree_inventory(_REPO_ROOT, _CANDIDATES_KEY)
+    assert tracked is not None, "no git index"
+    assert "replays/candidates/README.md" in tracked
+    size = next(
+        size
+        for key, _cls, _where, size in vme.registry_rows(_REPO_ROOT)
+        if key == _CANDIDATES_KEY
+    )
+    stated = vme._STATED_FILES.search(size)
+    assert stated is not None and int(stated.group(1)) == len(tracked)
+
+
+def test_a_singular_stated_count_is_read_and_can_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a two-file row restated as ``1 file`` fails the inventory.
+
+    Before the pattern read the singular, the same row carried no count at all
+    and the inventory passed it unchecked.
+    """
+
+    for text, count in (("1 file", "1"), ("40 MB / 107 files", "107")):
+        match = vme._STATED_FILES.search(text)
+        assert match is not None and match.group(1) == count
+    for text in ("1,569 digests", "3 filesystems", "12 KB"):
+        assert vme._STATED_FILES.search(text) is None
+
+    key = "replays/records/phase-21-wave2-finding/"
+    rows = vme.registry_rows(_REPO_ROOT)
+    changed = [
+        (row_key, category, where, "1 file" if row_key == key else size)
+        for row_key, category, where, size in rows
+    ]
+    assert changed != rows
+    monkeypatch.setattr(vme, "registry_rows", lambda _root: changed)
+    result = _row(
+        vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
+    )
+    assert result.status == "FAIL", result.detail
+    assert f"{key}: {vme.ARTIFACTS_DOC} promises 1 files, the index tracks 2" in (
+        result.detail
+    )
 
 
 def test_registry_row_with_an_unknown_where_raises(tmp_path: Path) -> None:

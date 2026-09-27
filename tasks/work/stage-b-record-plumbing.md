@@ -1,6 +1,6 @@
 # Recorder, validity gate and candidate landing for experiment-config records
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -145,7 +145,30 @@ The test config uses arms that exist today, because the spine's pending guard re
 new values:
 `{"format_version": 1, "meeting_reset": "hub_with_grace", "vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}`.
 
-- [ ] **`run_tournament.py --experiment-config FILE` records exactly the file.**
+- [x] Review correction: the card holds on `main` after the physical witness card and the readers card merged
+  (round 3, integration). `main` is merged in `b91ecd7c`, never rebased, and the three shared files are resolved
+  as Results records. In `f10da891` the post-step's strict xfail and the candidate test's kill-craft fixture are
+  deleted, and `vent_witness_rule` joins the full-config copy. Proof:
+  `test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set` passes unmarked,
+  `test_each_profile_reads_the_full_config_copy_with_every_hash_verified` reads the physical rule, and the card's
+  whole Validation passes at the merged head (Results, round 3).
+- [x] Review correction: on a case-insensitive filesystem a case-variant spelling of a canonical tree or of one
+  of its ancestors is refused like the plain path (round 1, correctness). The target rule now decides a
+  target's place on disk, by device and inode, not by spelling. Proof in `tests/scripts/test_refresh_samples.py`:
+  `test_case_variant_spellings_name_the_same_directories`; the script cases `a case-variant spelling of samples`
+  and `a case-variant ancestor into ml_corpus` of `test_a_switched_on_config_is_refused_at_every_unsafe_target`;
+  and `test_no_accepted_target_resolves_inside_a_canonical_tree`, with case-flipped segments and root and an
+  oracle that makes the target in a copy and finds where it landed.
+- [x] Review correction: a switched-on config cannot record into `replays/samples/` or `replays/ml_corpus/`
+  through a case, firmlink or second-mount alias (round 1, integrity). Proof: the script case
+  `a firmlink into samples`, `test_a_firmlink_spelling_names_the_same_directories`,
+  `test_the_target_rule_decides_each_tree_by_identity_not_spelling` (a second mount of each tree, planted on every
+  platform) and `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped`; the recorder's dry
+  run exits 1 at each alias the verifiers named (Results, round 1).
+- [x] Review correction: the one-sha rule runs only when it is declared, also beside `--expected-seeds` on a set
+  whose MANIFEST names two shas (round 1, integrity). Proof: `test_the_seed_flag_alone_does_not_apply_the_one_sha_rule`
+  in `tests/eval/test_validity.py`, which kills the guard reduced to its None test.
+- [x] **`run_tournament.py --experiment-config FILE` records exactly the file.**
   - Mechanism: the file is parsed once as a `RecordedExperimentConfig` (`extra="forbid"`) and
     threaded to `run_tournament_eval(experiment_config=...)`, `HeadlessGame(experiment_config=...)`,
     `build_default_agent_factory(experiment_config=...)`, a meeting runner built from the config's
@@ -159,7 +182,7 @@ new values:
     footer. An unknown field exits non-zero before any file is written. `--resume` with an edited
     config file is refused by the fingerprint. Each refused combination is refused, parametrized
     over the four names and the three factory flags.
-- [ ] **`refresh_samples.sh` passes the file through, echoes it, and refuses the unsafe slates.**
+- [x] **`refresh_samples.sh` passes the file through, echoes it, and refuses the unsafe slates.**
   - Mechanism: one plumbing-owned Python helper, which the script calls before any preflight or
     staging, in the dry run and the real run alike. It validates the file, prints its sha256 and
     its non-default fields (or "none: historical defaults"), and refuses any of the four experiment
@@ -185,7 +208,7 @@ new values:
       tree unchanged, which the existing `_replays_tree_restored` helper guarantees;
     - a config holding only historical defaults is accepted anywhere and records no
       `experiment_config` key.
-- [ ] **A fake arms-ON seed recorded through the recorder is read end to end in a bare shell.**
+- [x] **A fake arms-ON seed recorded through the recorder is read end to end in a bare shell.**
   - Mechanism: this card widens the validity and kill-gift walk profiles to
     `supports_experiments=True`, after the check-by-check review recorded in Results. The readers
     card widens kill-craft and threads `meeting_reset` there in its own acceptance, so this
@@ -198,7 +221,7 @@ new values:
   - Perturbed proof: the same seed, holding at least one meeting, with `meeting_reset` stripped
     from every row, fails both the kill-gift walk's and the gate's meeting post-hash check. So both
     re-simulate from the recorded config and do not default it.
-- [ ] **The three walk profiles this card owns declare their layers.** Mechanism: validity,
+- [x] **The three walk profiles this card owns declare their layers.** Mechanism: validity,
   kill-gift and `current-report` each set the spine's `threaded_layers` to the layers their
   consumers read, named per profile in Results after the review. Proof, per profile: it reads the
   spine's fake full-config recording (a copy of this card's fake recording on the test config, its
@@ -207,7 +230,7 @@ new values:
   hash verified, and it refuses a planted unknown field (a stand-in added to the config model and
   `FIELD_LAYER` in a layer the profile does not declare) by name before its first advance.
   Perturbed: the same profile with its layer declaration removed refuses the full-config copy.
-- [ ] **The validity gate checks a declaration, within its ten checks.**
+- [x] **The validity gate checks a declaration, within its ten checks.**
   - Mechanism: check 9 learns three declarations:
     - `--expected-experiment-config FILE`: every game's recorded config equals the file's, read
       through the existing recorded-config resolver, not re-parsed.
@@ -227,7 +250,7 @@ new values:
     - an unknown field in the declared file exits with a usage error.
 
     With no new flag, every check's verdict on the four committed sets is unchanged.
-- [ ] **`verify_samples.sh` walks candidates.**
+- [x] **`verify_samples.sh` walks candidates.**
   - Mechanism: the no-argument run also walks `${AILIBI_CANDIDATES_ROOT:-replays/candidates}/*/*/`,
     with a header per candidate set, and folds each status into the aggregate. An empty or absent
     candidates root is not an error. The exit-2 "no sample sets" rule keeps its meaning for the
@@ -235,7 +258,7 @@ new values:
     `AILIBI_CANDIDATES_ROOT` at an empty directory and still asserts exactly 2.
   - Proof: a planted candidate root holding one copied seed and its roster adds a third clean
     set. One corrupted candidate hash makes the aggregate exit 1 while both sample sets are clean.
-- [ ] **Candidate rounds have one declared shape, and CI checks it.**
+- [x] **Candidate rounds have one declared shape, and CI checks it.**
   - Mechanism, the layout: `replays/candidates/README.md` defines the round layout:
     `<round>/README.md`, `<round>/experiment-config.json`, and `<round>/<set>/` holding the
     replays, `MANIFEST.md`, `roster.json` and `tournament-eval-report.json.gz`.
@@ -258,7 +281,7 @@ new values:
   - Proof: a planted fake round in `tmp_path` passes. Each of these perturbations fails it: one
     byte of the config, a missing or doubled block, an undeclared set directory, a missing seed, a
     foreign sha, a mixed config, one edited report cell, a stray file in the family root.
-- [ ] **The family is registered.**
+- [x] **The family is registered.**
   - Mechanism: `docs/artifacts.md` gains the `replays/candidates/` row: class (a) plus (b), in
     git, with its file count. `scripts/verify_ml_evidence.py` gains its `_IN_TREE_PROBES` entry,
     anchored on `replays/candidates/README.md`, and its `_IN_TREE_INVENTORY` entry. If a singular
@@ -266,7 +289,7 @@ new values:
     The offline `uv run python scripts/verify_ml_evidence.py` reads the row IN-TREE and OK.
   - Proof: a planted registry without the row fails "registry coverage", and a planted tree
     without the README fails the probe (`tests/scripts/test_verify_ml_evidence.py`).
-- [ ] **Serving and publication do not change with a candidate present.**
+- [x] **Serving and publication do not change with a candidate present.**
   - Mechanism: the resolver and the bundle read `replays/samples/` only, and the depth rule keeps a
     round below them.
   - Proof:
@@ -278,12 +301,12 @@ new values:
     - the demo bundle's `data/` tree, built at the base with no round and at the head with a
       planted round (untracked, then deleted), is byte-identical (`diff -r`);
     - `git diff --stat <base>..HEAD -- api frontend replays/samples` is empty.
-- [ ] **The copy this card adds is plain.**
+- [x] **The copy this card adds is plain.**
   - Mechanism: a test scans the family README and every new refusal and echo message for task or
     audit identifiers (`Task \d`, `audit-`) and bare threshold arithmetic. The README defines
     "candidate round" and "experimental switch" in its own words and adds no glossary entry.
   - Proof: a planted message containing "Task 20.33" fails the scan.
-- [ ] **Everything committed keeps verifying byte-identically, and the full gate is green.**
+- [x] **Everything committed keeps verifying byte-identically, and the full gate is green.**
   - Mechanism: the gates in Validation, run in a clean worktree and in a bare shell.
   - Proof: `git diff --stat <base>..HEAD -- replays/samples replays/ml_corpus tests/fixtures` is
     empty, and the prompt-byte golden passes on s9 and s4 unedited. `bash scripts/check.sh` and
@@ -456,15 +479,596 @@ Also run these fake-provider rehearsals, into scratch directories outside `repla
 
 ## Results
 
-Not started. The implementer records here and in the PR:
-- the sections relied on (the spine's arm page, `docs/experiment-arms.md`, linked from
-  `docs/architecture.md`; memo 1, 2.1, 3.4);
-- the check-by-check review behind each profile flip: for each of the ten validity checks and for
-  kill-gift, what it reads from an experiment-stamped recording and why that reading is correct,
-  and the layers each of the three profiles declares;
-- the decisions: the depth rule, the gate's absent-flag default, the two opt-in declarations, the
-  helper module's name and the `committed.py` region;
-- each planted failure with its red output, every Validation command with its exit code, and the
-  bundle diff;
-- limitations: the fake provider fires no rebuttal, and at merge the candidate leg walks zero
-  rounds.
+Implemented on `work/stage-b-record-plumbing` from base `bdfa5b19` in nine commits: `bfd7ceb8` (the harness,
+the three walk profiles and the gate's declarations), `86274c1b` (both recorders), `d2dbc4c0` (the candidate
+family), `5d1ff825` (two refresh lines removed), and `e817b3ca`, `f8bf9e3d`, `1f98d945`, `fc4c384b`, `17cd2e65`
+(tests).
+Every number below was measured at `17cd2e65` unless a row names another commit. The commit that carries this
+section changes only this card and `tasks/README.md`.
+
+**Status: active, one box open.** Every acceptance item but the third is met at `17cd2e65`. The third's
+post-step, `build_sample_report.py` over the arms-ON recording, walks kill-craft, which refuses every experiment
+recording until the readers card (`tasks/work/stage-b-readers.md`) widens it. That card has not merged into
+`main`, so at this head the fake recording stamps exactly the file and loads verified, the perturbed reset
+fails every walk, and the post-step still exits 1 on kill-craft's refusal. The test that proves the box,
+`test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set`, is a strict xfail keyed on kill-craft's own
+profile: it runs for real, and must pass, once `main` carries the readers card and is merged here. At a trial
+merge of `fc4c384b` (one test line short of `17cd2e65`'s typing fix) with `origin/work/stage-b-readers` at
+`9bab8d16` (a throwaway local branch, deleted, never pushed), it ran and PASSED, and the card's eight test files passed whole (485 passed); the box is ticked when
+that merge is this branch's.
+
+**What it implements.** Decision memo (`tasks/decision-2026-09-24-stage-b-wave.md`) section 0.3 items 1, 5, 9
+and 10; section 1, "The recorder needs" and "The candidate keeps verifying"; 2.1 (no MANIFEST column; the
+config's sha256 in the round README; the gate checks every row); 3.2 (the writer map) and the card-5 brief in
+3.4. The spine's arm page, [`docs/experiment-arms.md`](../../docs/experiment-arms.md), linked from
+`docs/architecture.md` ("Determinism and the substrate ladder"), for `FIELD_LAYER`, `threaded_layers`,
+`engine_arguments`, `profile_from_config` and the pending guard. The owner's rulings of 2026-09-24 ("We should
+implement stage B"; the 50-seed record paragraph) and the dated 2026-09-24 addendum to
+`tasks/direction-2026-09-19-process-over-outcome.md` section 12.
+
+### The check-by-check review behind the three profiles
+
+Each profile now sets `supports_experiments=True` and declares `threaded_layers = {orchestrator, tactical,
+meeting}`, every layer a profile can declare; engine fields reach all three through the spine's
+`engine_arguments`, which refuses one it does not thread (`vent_witness_rule` until B0 threads it). What each
+consumer reads from an experiment-stamped recording, and why that reading is correct:
+
+| Consumer | What it reads | Why the reading holds under the wave's settings |
+| --- | --- | --- |
+| 1 `all_games_reach_game_over` | the walk's `GameOverEvent` and the recorded `game_over` row | the walk applies the recorded actions (whatever tactical policy chose them) and the recorded meeting outcomes, with the recorded `meeting_reset` threaded into `apply_meeting_result`; a stripped reset fails the meeting post-hash (planted below) |
+| 2 `meeting_rate_and_resolution` | meeting rows per game, and whether each resolved | counts rows; no setting changes what a row is. The 0.60 floor is the Stage-A enablement floor, unchanged |
+| 3 `no_duplicate_meeting_rows` | meeting ids and ticks | structural |
+| 4 `no_tick_1_kills` | `KilledEvent` ticks from the walk | the spawn cooldown is seeded before any setting acts; the reset sets cooldowns after a meeting, never at spawn |
+| 5 `no_friendly_fire_kills` | `KilledEvent` victims against seeded roles | engine truth |
+| 6 `no_betrayal_ballots_or_accusations` | recorded impostor ballots and accusations naming a fellow impostor | the strategic impostor ballot keeps the teammate firewall (memo 2.5, direction addendum), so a teammate target stays the regression this row reports |
+| 7 `no_railroaded_crew_ejections` | the suspicion block of each recorded vote prompt, bounded by the next `## ` header | the ballot arms add their own guarded blocks to `vote_ballot.j2`; a block outside the suspicion block is not read (a limitation: the ballot card must keep its rows outside it) |
+| 8 `no_dangling_primary_reason_id` | ballot `primary_reason_id` against the meeting's turn ids | a rebuttal reply is a transcript turn with its own id; an own-evidence citation travels in `primary_reason_observation_id`, which this row does not read |
+| 9 `cost_and_provenance_exact` | substrate stamp, model and prompt-version sets, cost rows, and now the recorded config | the wave adds no lever, so the bare-shell stamp comparison is unchanged; a ballot arm stamps its composite versions on every meeting of the set, which stays one coherent set; the recorded config is checked against the declaration |
+| 10 `byte_identical_reconstruction` | `ReplayLoader` re-simulation | the loader re-simulates from the recorded config (engine arguments and `meeting_reset`, from the spine) |
+| kill-gift (`_kill_gift_accounting`) | task instances and the final tick's kill, from the walk | engine truth over recorded actions and outcomes |
+| current-report (`_current_replay_facts`, the lab's two derived profiles) | the same kill-gift facts; the lab's action and event counts (`measure_identity_effects` refuses every experiment recording first) | action-level folds; its format-3 policy reconstruction builds agents from the recorded config (`build_default_agent_factory(experiment_config=...)`), so a recorded tactical setting is decided as recorded. The census derives its own profile and declares its own layers |
+
+Temporal observations stay refused by validity and kill-gift (planted: the recorded version patched to 2 is
+refused by both and read by current-report).
+
+### Verification at `17cd2e65`
+
+Each command ran in a bare shell (`env -i HOME PATH`), with its exit code captured directly, never through a
+pipe.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0: ruff, format (532 files), import contracts 4 kept, task docs, prompts, mypy (503 source files), 9,004 passed, 20 skipped, 4 xfailed (the new strict xfail is the fourth); frontend lint, `tsc:check`, 559 vitest tests and the build. The same run at `fc4c384b` exited 1 on strict mypy (a set minus an optional set in the new ordering canary), fixed in `17cd2e65` |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| the card's eight test files (`uv run pytest <the eight files> -q -n 6 --dist loadfile`) | exit 0: 474 passed, 1 xfailed |
+| `bash scripts/verify_samples.sh` (no argument) | exit 0: 2 sets verified clean, 0 candidate sets |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO; `replays/candidates/ [(a) + (b)]` OK |
+| `uv run python scripts/validity_gate.py <set> --json`, the four sets | exit 0 each; each JSON byte-identical (`cmp`) to the same command at `bdfa5b19` |
+| `git diff --stat bdfa5b19..17cd2e65 -- api frontend replays/samples replays/ml_corpus tests/fixtures` | empty |
+| `tests/meetings/test_prompt_byte_golden.py` on s9 and s4, unedited | passes (inside the targeted run and `check.sh`) |
+| `grep -l '"experiment_config"'` over the 300 committed replay files | 0 |
+
+**The fake-provider rehearsals** (at `1f98d945`, whose production files equal `17cd2e65`'s; a scratch directory
+outside `replays/`, the 9p2i roster, the test config):
+
+| Rehearsal | Result |
+| --- | --- |
+| the dry run with the file | exit 0; prints the file's sha256 (`8984cfef…`), its three settings, the per-seed line ending `--experiment-config <stage-dir>/experiment-config.json`, and "Substrate slate OK"; `git status --porcelain` 0 lines before and after, the scratch target not created |
+| `--seeds 0,1` with the file | both seeds recorded from the stage snapshot, "Refresh complete", 2 of 2 reached a meeting; then exit 1 in the post-step: `replay profile 'kill-craft' does not support experimental recordings` (the open box) |
+| `validity_gate.py <scratch> --expected-experiment-config <file> --expected-seeds 0-1 --require-one-recording-sha` | exit 0, all ten checks PASS (5 resolved meetings, 31 ballots) |
+| the same set with no declaration | exit 1, `cost_and_provenance_exact` the one failing check |
+| `bash scripts/verify_samples.sh <scratch>` | exit 0, 2 verified clean |
+
+**Publication.** `scripts/build_demo_bundle.py` built at `bdfa5b19` with no round, and at `1f98d945` (whose
+production files equal `17cd2e65`'s) with an
+untracked planted round (`replays/candidates/planted-r1/9p2i/` holding s9 seed 0 and its roster; deleted after
+the build, leaving `git status` clean): 156 baked JSON files each, `diff -r` of the two `data/` trees empty (exit
+0). This card touches neither `api/` nor `frontend/`.
+
+**The probe the card named.** At `bdfa5b19`, `AILIBI_BOUNDED_REBUTTAL=1 bash scripts/refresh_samples.sh --seeds 0
+--expect-levers "" --dry-run` in a bare shell exited 0 and printed "Substrate slate OK". At `17cd2e65` it exits 1:
+"Refused: the environment exports AILIBI_BOUNDED_REBUTTAL. … Nothing was staged.", and the same holds for the
+other three names, at value `1` and at value `0`.
+
+### Planted and perturbed failures
+
+Each is a committed test; each was seen red with its defect and green without it.
+
+| Claim | Planted or perturbed case | Red |
+| --- | --- | --- |
+| the flag records exactly the file | one fake 4p1i seed on the test config | every tick row and the footer parse equal to the file's config; loads with `outcome_verified` |
+| an unknown field stops before any write | `{"hidden_travel": "on"}`; a repeated key | `SystemExit` naming the field or the key; the output directory never created |
+| resume binds the config | the file edited between a run and `--resume` | "Continuation configuration differs"; unedited, the resume exits 0 |
+| refusals beside the flag | each of the four names at `1` and at `0` (and a Hypothesis family of values); `--agent-factory learned-champion`, `learned-crew`, `--candidate-artifact`, `--crew-artifact` | `SystemExit` naming each; `fsm-default` accepted |
+| the library runner | a switched-on config beside a custom `meeting_runner_factory`; `AILIBI_BOUNDED_REBUTTAL=1` beside a declared config | `ValueError` each; a config of defaults beside a custom runner accepted |
+| the recorder's exports | the four names at `1` and `0`, with no config | exit 1 naming each, before "Substrate slate OK" |
+| the target rule | the default target, `samples/9p2i`, `ml_corpus/9p2i`, a `..` alias, a symlink, a scratch directory with a committed manifest, `replays/<name>`, a one-level `candidates/<round>`, a hidden round name | exit 1, each naming its rule and the path as it resolves, nothing staged, no key gate reached; a Hypothesis property over composed paths (links, `..`, names one level off) finds no accepted target inside a canonical tree |
+| the snapshot | the file edited after the check; a copy that no longer parses; an unreadable file | refused, naming both sha256 values; nothing written |
+| every seed uses the copy | a traced (`bash -x`) fake run | both `run_tournament.py` calls end `--experiment-config <stage>/experiment-config.json`, never the source path |
+| the gate's default | the arms-ON set with no declaration | check 9 names each game's recorded settings against "none: historical defaults" |
+| mixed configs | seed 2's rows without the rebuttal field | check 9 names `headless-seed-2` alone |
+| a seed recorded without the arm | seed 1 recorded bare | check 9 names `headless-seed-1` |
+| one sha | one MANIFEST row given `def5678` | fails under `--require-one-recording-sha` only |
+| exact seeds | seed 2 removed with its MANIFEST row | fails under `--expected-seeds` only |
+| a usage error | `--expected-experiment-config` with `hidden_travel` | exit 2 naming the field |
+| profiles re-simulate the reset | `meeting_reset` stripped from every row of a game with a meeting | `meeting_post_hash_mismatch` at the meeting tick, for validity, kill-gift and current-report |
+| profiles read the full config | the fake game's rows rewritten to carry every other wave setting at its ON value (pending set patched empty) | each profile's result equals the unedited game's, every hash verified |
+| declarations bite | each profile with its layers removed; a stand-in field added to the config model and `FIELD_LAYER` in each layer | refused by name before the first advance (the advance counter reads 0); a declared layer's stand-in is read |
+| temporal stays refused | the recorded version patched to 2 | validity and kill-gift refuse; current-report reads |
+| the candidates loop | a planted round with one copied seed; one corrupted candidate hash; a set holding no replay; an absent root; no sample set | 3 clean; exit 1 with both sample sets clean; exit 1; exit 0; exit 2 |
+| the candidate shape | a planted fake round, then one byte of the config, a missing and a doubled block, an undeclared set, a missing seed, a foreign sha, a mixed config, one edited report cell, a stray file in the family root, a config of defaults | the planted round passes; each perturbation fails with its own line |
+| registration | the registry without the row; the tree without the README; a two-file row restated as `1 file` | "registry coverage" FAIL; the row MISSING; the inventory FAIL |
+| serving | a planted round, then the same set moved to `replays/9p2i/` | the resolver keeps `replays/samples/` and its set list; the moved set makes it return `replays/` |
+| plain copy | "Task 20.33", an audit filename, "`>= 0.6`", "6/7" | the scan flags each; every template, help text, echo and the README pass |
+
+### The neutering pass
+
+Every production line or row this card added or changed was neutered in place, the named test files run
+(`pytest -x -n 6 --dist loadfile`), and the file restored from a byte copy (sha256 compared, never `git
+checkout`). The pass ran at `e817b3ca`; 155 probes, 155 restored.
+
+| File | Probes | Red |
+| --- | --- | --- |
+| `scripts/_declared_experiment.py` (constants, the 15 message templates and their tuple, parsing, sha, the environment, the target rule, the snapshot, the command line) | 58 | 58 |
+| `scripts/run_tournament.py` (the flag, the resolver's rows and calls, the placement, the resume key, the harness option) | 15 | 15 |
+| `eval/balance_eval.py` (the refusal, the profile, the factory, runner and game calls and their absent-config branches, each layer of both profiles) | 18 | 18 |
+| `eval/validity.py` (each layer, the inventory, each violation function's filters and messages, check 9's branches, the gate's reads and pass-throughs) | 29 | 29 |
+| `scripts/validity_gate.py` | 9 | 9 |
+| `scripts/refresh_samples.sh` | 14 | 14 |
+| `scripts/verify_samples.sh` | 4 | 4 |
+| `scripts/verify_ml_evidence.py` (probe, inventory, `_STATED_FILES`) | 3 | 3 |
+| `tests/_helpers/committed.py` region | 4 | 4 |
+| `.gitignore` | 1 | 1 |
+
+No probe came back green in the pass. Before it, a line-by-line review found two refresh lines no test could
+reach (a relative config path made absolute, and a refusal of an empty checked sha), removed in `5d1ff825`, and
+the probes it predicted would survive were closed in `e817b3ca` before the pass ran: the repository reached
+through a link, the `records/` family at the candidate depth, an unreadable file, the run deadline beside a
+config, a default config object against none, a MANIFEST naming no sha, an unreadable MANIFEST, the gate's sha
+flag, the default candidates root, and the template tuple's completeness.
+
+### The mutation pass
+
+One bounded pass over the production modules this card touched, with the eight operator classes and no others,
+each mutant run against its targeted test files only. It ran at `f8bf9e3d`; 56 mutants, 56 restored.
+
+| Operator class | Mutants | Killed | Survivors |
+| --- | --- | --- | --- |
+| drop a filter or wrapper on a collection | 8 | 8 | none after `fc4c384b` (below) |
+| swap one collection for a related one | 4 | 4 | |
+| replace a comparison with a None test or its inverse | 18 | 18 | |
+| replace a role, kind, room or tick read with a constant | 3 | 3 | |
+| replace a message argument with a constant | 15 | 15 | |
+| drop one member of a tuple of kinds or types | 2 | 2 | |
+| swap adjacent branches | 3 | 3 | |
+| replace a read of a loaded source with the canonical literal | 3 | 1 | 2 equivalent |
+
+- **Killed after the first run.** `sorted(expected_seeds - seeds)` replaced by `list(...)` survived: every planted
+  difference held one seed. `1f98d945` planted two missing and two unexpected seeds, but chose unexpected seeds
+  that share a slot in a small set's table, so their order depended on how the set was built, and the trial merge
+  with the readers branch iterated them sorted. `fc4c384b` uses values in distinct slots, asserts the unsorted
+  order the set gives, and both mutants (this one and its twin on the unexpected seeds, 56 mutants in all) are
+  killed at `fc4c384b`.
+- **Equivalent, named.** The kill-gift profile's and the validity profile's `threaded_layers=<constant>` replaced
+  by the literal `frozenset({"orchestrator", "tactical", "meeting"})`: the constant is that literal, defined in the
+  same module and read from no other source; the tests hold the profile, the constant and the literal equal.
+
+### Decisions
+
+- **The helper module.** `scripts/_declared_experiment.py` holds the three rules and the copy: the file (one
+  JSON object, no repeated key, `RecordedExperimentConfig` with `extra="forbid"`, sha256 over the bytes read),
+  the environment (the four `EXPERIMENT_ENV_NAMES`, refused when present at any value) and the target. Its
+  command line has `check` (run by `refresh_samples.sh` before any preflight, dry run and real run alike) and
+  `snapshot` (run once the stage exists). `run_tournament.py` imports it; `eval/validity.py` reads its
+  `describe_settings` through the existing `scripts/` edge; `scripts/validity_gate.py` reads a declared file
+  through it.
+- **The depth rule.** A switched-on config needs an explicit `AILIBI_SAMPLE_DIR`. Its sample directory and its
+  manifest have their symlinks and `..` resolved (`os.path.realpath`), and each one's place is then decided on
+  disk (round 1, below): its nearest existing directory is looked up by device and inode among the directories
+  under the repository's `replays/`, and the segments that do not exist yet follow as spelled. Inside
+  `replays/samples/` or `replays/ml_corpus/` they are refused; elsewhere inside `replays/` the
+  sample directory must be exactly `replays/candidates/<round>/<set>/` and the manifest must sit directly in
+  such a directory; a round or set name starts with a letter or digit (`[A-Za-z0-9][A-Za-z0-9._-]*`), so the
+  verifier's `*/*/` glob sees every set. Outside `replays/` anything goes. A config of historical defaults
+  records nothing new and goes anywhere.
+- **The environment refusal is presence-based and unconditional in the sample recorder.** Any of the four
+  names present, at any value, is refused by `refresh_samples.sh` with or without a config (the intended
+  default-path change), and by `run_tournament.py` beside `--experiment-config`. The runner built from a
+  config still refuses an ON export on its own (the spine's rule), so the library path is covered too.
+- **The snapshot.** The check prints the file's sha256; `snapshot` reads the file once, copies it into the
+  stage only if it still has that sha256, validates it again and writes a new file; every per-seed call passes
+  that copy. An edit between the check and the copy is refused; an edit after the copy cannot reach a seed.
+- **The resume configuration** carries `experiment_config` (the normalized config, or `null` for historical
+  defaults) only when the flag is given, so an unflagged run's sidecar keeps its keys; a resume with an edited
+  file that records anything different fails the fingerprint.
+- **The library's absent-config path is byte-for-byte today's calls.** `run_tournament_eval` adds a keyword to
+  the factory, the runner and the game only when a config is declared; a declared config of defaults still
+  builds the runner from its (all-none) profile, so an ambient ON export is refused beside it. A switched-on
+  config beside a custom `meeting_runner_factory` is refused, as the card states; a config of defaults beside
+  one is accepted.
+- **The gate's absent-flag default** is the historical defaults: every game must have recorded no config. An
+  experiment set gated without a declaration now fails check 9, naming its recorded settings, where it used to
+  be unreadable. With no new flag, the gate's JSON on the four committed sets is byte-identical to the base.
+- **Two opt-in declarations**, inside check 9: `--expected-seeds` (the replay files and the MANIFEST rows are
+  exactly the seeds) and `--require-one-recording-sha` (every MANIFEST row names one sha; opt-in because c9
+  names 2). They read the set's MANIFEST through the two readers the tree already has: the verifier's seed list
+  (`_verify_samples._manifest_seeds`) and the loader's sha list (`replay_loader._manifest_seed_shas`); a row the
+  second cannot read counts as naming no sha, which fails closed.
+- **The `committed.py` region** is appended at the end of the file: `CANDIDATES_ROOT`, `candidate_rounds`
+  (directories only, an absent root holds none) and the cached `candidate_report_check`.
+- **The candidate test builds its planted round with kill-craft reading the test config.** Kill-craft refuses
+  every experiment recording until the readers card widens it, and the report build walks it; the test config
+  sets only settings that existed before the wave, which `supports_experiments` alone covers, so an autouse
+  fixture patches exactly that while kill-craft refuses, and does nothing once it reads them. It should be
+  deleted when `main` is merged in after the readers card.
+- **The post-step end-to-end test is a conditional strict xfail**, keyed on kill-craft's own profile: it is
+  expected to fail while kill-craft refuses experiment recordings and runs for real, and must pass, once the
+  readers card lands. A pass before then fails the suite.
+- **Two refresh lines removed** in `5d1ff825`: making a relative config path absolute (the check, the snapshot
+  and every seed run in one working directory) and refusing an empty checked sha (the snapshot already refuses
+  it). The review before the neutering pass found no test could reach either, and neither changed what the
+  recorder does.
+- **Status and the index.** The card reserves its Status line and the index sentence for the orchestrator; the
+  dispatch delegated both, and asked for `done` only if every box is truly met. The third box is not met at this
+  head, so the Status is `active` and the index sentence is re-derived to "88 cards: 8 ready, 1 active, 79 done".
+- **Declared FROZEN departure.** `refresh_samples.sh`'s header allows bug fixes and evidence readers; this card
+  adds a declared config, two refusals and an echo, under the owner's record ruling of 2026-09-24 and the
+  orchestrator's landing ruling, with the `--expect-levers` flag as precedent. The header is not edited.
+
+### Closing greps
+
+- `git grep -niE '(validity|kill.gift|current.report)[^.]{0,80}(refus|reject|cannot read|does not (support|read))[^.]{0,60}experiment' -- ':!tasks' ':!audits' ':!agent_prompts'`:
+  none.
+- `git grep -niE 'recorder (cannot|can.t) set|refresh_samples[^.]{0,80}(no|without an?) experiment' -- ':!tasks' ':!audits' ':!agent_prompts'`:
+  none.
+- `git grep -nE 'verify_samples\.sh' -- '*.md' ':!tasks' ':!audits' ':!agent_prompts'`: 16 hits; none says the
+  bare run walks only the samples root (`training/README.md` says it walks every `replays/samples/` set, which
+  stays true).
+- `git grep -niE 'every profile declares no layer'`: `eval/replay_walk.py` (and `docs/experiment-arms.md`, where
+  the phrase wraps a line), the spine's rule ("until its owner reviews what its consumer reads"), which these three
+  reviews follow; the third hit is this card.
+- The decision memo and the Stage-B cards cite the old recorder and verifier at their `e886b663` anchors; they are
+  dated records and are not edited.
+
+### Limitations
+
+- The third acceptance box waits on the readers card (above). The candidate test's planted round is built with
+  an autouse fixture that lets kill-craft read the test config while kill-craft refuses experiment recordings; it
+  does nothing once kill-craft reads them, and should be deleted when `main` is merged in after the readers card.
+- The fake provider fires no rebuttal, so these fake runs prove stamping, reading and refusing, not an arm's
+  behaviour.
+- At merge the candidate leg walks zero rounds; the first round is the record card's.
+- `vent_witness_rule` is not in the full-config copy: the engine-arguments helper refuses it until the physical
+  witness card threads it.
+- A layer declaration covers every later field in that layer, which is the spine's mechanism: a later field's card
+  must re-read these three reviews. The railroad check reads the suspicion block up to the next header, so the
+  ballot card must keep its rows outside that block.
+- The tactical lab's two profiles derive from current-report, so they now read wave settings in the three layers
+  (its `measure_identity_effects` still refuses every experiment recording first).
+- The MANIFEST is read through two existing readers that differ on a malformed row; a row the sha reader skips
+  counts as naming no sha, which fails closed.
+- The bundle comparison was built on macOS; CI builds on Linux.
+
+### Review corrections, round 1 (2026-09-26)
+
+Three blocking findings from the round-1 verifiers of PR 487, repaired in `25d6f574` (production:
+`scripts/_declared_experiment.py` only; tests: `tests/scripts/test_refresh_samples.py`,
+`tests/eval/test_validity.py`). The commit that carries this subsection changes only this card. Every number
+below was measured at `25d6f574` unless a row says otherwise. The Status stays `active`: the third box still
+waits on the readers card, which has not merged into `main` (`origin/main` is still `bdfa5b19`).
+
+**Findings 1 and 2 (correctness and integrity, one defect): the target rule compared spellings.** The rule
+resolved each target with `os.path.realpath` and compared the result with `replays/samples/` and
+`replays/ml_corpus/` as path prefixes. On this macOS checkout (APFS, case-insensitive), `realpath` keeps the
+typed case and the `/System/Volumes/Data` firmlink prefix, so `REPLAYS/Samples/9p2i`, `Replays/ml_corpus/9p2i`,
+a lower-cased checkout path and the firmlinked path all named a committed tree and were accepted. The
+integrity verifier reports a fake run through such an alias that recorded a switched-on seed into
+`replays/samples/9p2i` (restored). The fake-provider guard, a separate and older check with a hole of its own
+(Limitations, round 1), did not stop it.
+
+- **The rule now decides on disk.** `refuse_unsafe_target` lists every directory under the repository's
+  `replays/` once, keyed by device and inode (`_replays_places`, an `os.walk` that does not enter a symlinked
+  directory and raises on a directory it cannot read). Each target still has its symlinks and `..` resolved
+  first. Its nearest existing directory is then looked up in that list (`_place_in_replays`), and the segments
+  that do not exist yet are appended as spelled, which is where the recorder creates them. A case-variant
+  spelling, the firmlink, or a second mount of any directory under `replays/` therefore reaches the verdict of
+  the plain path. The depth and name rules read the same place, so `REPLAYS/candidates/r1/9p2i` and
+  `replays/CANDIDATES/r1/9p2i` are accepted: they are the candidate set directory on disk.
+- **Stated strength.** The rule knows directories, not single files. A manifest is placed by the directory that
+  holds it, so a hard link elsewhere to a committed `MANIFEST.md` is not recognised. That link cannot change the
+  committed bytes, because `_manifest_writer._atomic_write_text` writes a temporary file and `os.replace`s it
+  onto the name it was given. That name then points at a new file, and the committed file keeps its bytes.
+
+**Finding 3 (integrity): a mutant of the sha guard survived.** Reducing
+`if inventory is not None and require_one_recording_sha:` in `check_cost_and_provenance` to
+`if inventory is not None:` survived `tests/eval/test_validity.py`. The only sha-flag-off case gated without
+`--expected-seeds`, so the inventory was `None` and the sha rule could not run. New:
+`test_the_seed_flag_alone_does_not_apply_the_one_sha_rule` gives seed 0's MANIFEST row a second sha and gates
+the set by its exact seeds. Check 9 passes without the sha flag and fails with it, naming both shas. This is the
+two-pass shape the card cites for c9.
+
+**Planted proofs, run against the round-0 rule.** The round-0 `scripts/_declared_experiment.py` (from
+`3ed462b0`) was copied into the tree. The new and widened tests were run against it with
+`uv run pytest tests/scripts/test_refresh_samples.py -k "reads_physical_paths or unreadable_directory or target or identity or case_variant or firmlink or canonical or candidate_set_directory"`:
+8 failed and 22 passed. The file was then restored from a byte copy (sha256 compared). The eight red tests:
+
+| Test | What it plants |
+| --- | --- |
+| `test_a_switched_on_config_is_refused_at_every_unsafe_target[a case-variant spelling of samples]` | the real recorder, a real run (no key), `AILIBI_SAMPLE_DIR=<checkout>/REPLAYS/Samples/9p2i` |
+| `...[a case-variant ancestor into ml_corpus]` | the checkout's own directory name case-flipped, then `replays/ml_corpus/9p2i` |
+| `...[a firmlink into samples]` | `/System/Volumes/Data<checkout>/replays/samples/9p2i` |
+| `test_case_variant_spellings_name_the_same_directories` | flipped segments (`REPLAYS/Samples`, `Replays/samples`, `REPLAYS/ML_CORPUS`), a flipped `tmp_path` ancestor, and flipped candidate spellings that must still be accepted |
+| `test_a_firmlink_spelling_names_the_same_directories` | a planted repository reached through the firmlink |
+| `test_the_target_rule_decides_each_tree_by_identity_not_spelling` | four scratch directories whose identity is patched to be `replays/samples`, `replays/ml_corpus`, `replays/` and `replays/candidates`: a second mount, planted on every platform. Before the patch each is accepted, and that half passes on the round-0 rule; the rest errors there, because the round-0 rule reads no on-disk identity to patch |
+| `test_no_accepted_target_resolves_inside_a_canonical_tree` | the property, widened: case-flipped segments (`SAMPLES`, `Ml_Corpus`, `Candidates`, `Replays`, `INTO-SAMPLES`, `R1`), case-flipped bases and a flipped planted root. The oracle compares no spellings: it copies the planted repository, makes the target there as the recorder would, and finds the made directory by device and inode among the copy's `replays/` directories |
+| `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped` | `replays/samples` made unreadable (mode 0), the sample directory aimed at it and the manifest at scratch; the rule must raise |
+
+Where a filesystem tells case-variant names apart, or has no firmlink, the case-variant and firmlink cases skip
+by name. The patched second-mount test and the property run everywhere; on such a filesystem a flipped name is
+simply a new directory, and the oracle expects that verdict. On this checkout nothing skipped. The widened
+`test_the_target_rule_reads_physical_paths` passes on both rules; its new lines pin the new rule's edges:
+- a canonical tree the repository does not have yet is refused;
+- `replays/` itself is refused;
+- a file inside a canonical tree, and a path below that file, are refused;
+- a path below a scratch file is accepted.
+The seed-only sha test is red on the finding's mutant (below).
+
+**The recorder at the verifiers' aliases** (a bare environment, `refresh_samples.sh --seeds 0 --dry-run
+--expect-levers "" --experiment-config <the test config>`, `AILIBI_MANIFEST` beside each directory):
+
+| `AILIBI_SAMPLE_DIR` | Provider | Result |
+| --- | --- | --- |
+| `REPLAYS/samples/9p2i` | featherless | exit 1, "inside replays/samples/", no slate line |
+| `Replays/samples/9p2i` | featherless | exit 1, "inside replays/samples/" |
+| `REPLAYS/ml_corpus/9p2i` | featherless | exit 1, "inside replays/ml_corpus/" |
+| `/System/Volumes/Data<checkout>/replays/samples/9p2i` | featherless | exit 1, "inside replays/samples/" |
+| the checkout path lower-cased, then `/replays/samples/9p2i` | featherless | exit 1, "inside replays/samples/" |
+| `REPLAYS/samples/9p2i` | fake | exit 1, "inside replays/samples/" (the declared-config check runs before the fake-provider guard) |
+| `REPLAYS/candidates/r1/9p2i` | featherless | exit 0, "Substrate slate OK", nothing created |
+
+`git status --porcelain --untracked-files=all` showed only the three edited files before and after.
+
+### Mutation and neutering, round 1
+
+One bounded pass over the spans this round changed and the span finding 3 names, with the eight listed operator
+classes. The same harness ran eight neutering probes over the new lines. Each mutant or probe ran against its
+targeted suite only: the rule's tests (`tests/scripts/test_refresh_samples.py -k "target or identity or
+case_variant or firmlink or canonical or candidate_set_directory or unreadable_directory"`) or
+`tests/eval/test_validity.py`, with `-x -n 6 --dist loadfile`. Each file was restored from a byte copy and its
+sha256 compared. The pass ran at `25d6f574`'s production bytes: 22 mutants and 8 probes, 30 restored.
+
+The first red test is named as `-x` reported it; `[case]` is a case of `test_a_switched_on_config_is_refused_at_every_unsafe_target`.
+
+| Id | Class | Mutant | Verdict (first red test) |
+| --- | --- | --- | --- |
+| D1 | drop a filter | nearest ancestor without `is_dir()` | killed (`[a scratch dir with a committed manifest]`) |
+| D2 | drop a wrapper | `os.walk` without `onerror` | first SURVIVED, see below; killed by `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped` |
+| D3 | swap a collection | `path.parents` for `(path, *path.parents)` | killed (`test_no_accepted_target_resolves_inside_a_canonical_tree`) |
+| D4 | None test inverse | `place is not None` in `_place_in_replays` | killed (`[samples 9p2i]`) |
+| D5 | None test inverse | `place is not None` in `target_problem` | killed (`[samples 9p2i]`) |
+| D6 | swap branches | the manifest and sample-dir depth swapped | killed (`[a hidden round name]`) |
+| D7 | drop a filter | `place[0]` without the empty-place guard | killed (`test_the_target_rule_reads_physical_paths`, `replays/` itself) |
+| D8 | message argument | `tree="replays/samples/"` | killed (`[ml_corpus 9p2i]`) |
+| D9 | message argument | `path=Path("replays")` | killed (`[samples 9p2i]`) |
+| D10 | swap a collection | the place without its unmade tail | killed (`[a hidden round name]`) |
+| D11 | swap a collection | the walk over the repository, not `replays/` | killed (`[samples 9p2i]`) |
+| D12 | loaded source to literal | `CANONICAL_TREES` as `("samples", "ml_corpus")` | survives, equivalent: the constant is that literal, in this module, read from no other source |
+| D13 | None test | `directory[0] is None` for the family test | killed (`test_no_accepted_target_resolves_inside_a_canonical_tree`) |
+| D14 | read to constant | `is_manifest=False` at the call | killed (`test_a_switched_on_config_is_accepted_at_a_candidate_set_directory`) |
+| D15 | swap branches | `None` and the place swapped | killed (`[samples 9p2i]`) |
+| D16 | loaded source to literal | `CANDIDATES_TREE` as `"candidates"` | survives, equivalent, as D12 |
+| V1 | None test | the sha guard as `inventory is not None` (the finding) | killed (`test_the_seed_flag_alone_does_not_apply_the_one_sha_rule`) |
+| V2 | None test | the seed guard as `inventory is not None` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V3 | None test | the sha guard as `inventory is None and ...` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V4 | None test | the seed guard as `... and expected_seeds is None` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V5 | drop a filter | the inventory read only for `expected_seeds` | killed (`test_one_foreign_recording_sha_fails_only_under_the_sha_flag`) |
+| V6 | drop a filter | the inventory read only for the sha flag | killed (`test_the_seed_flag_alone_does_not_apply_the_one_sha_rule`) |
+
+| Probe | Neutered | Red (first red test) |
+| --- | --- | --- |
+| N1 | `_identity` returns `(0, 0)` | `[samples 9p2i]` |
+| N2 | the walk's error handler returns instead of raising | `test_an_unreadable_directory_under_replays_raises_rather_than_being_skipped` |
+| N3 | every listed directory placed at `()` | `[samples 9p2i]` |
+| N4 | the identity of the target, not of its nearest directory | `[a scratch dir with a committed manifest]` |
+| N5 | only the set name checked, not the round name | `[a hidden round name]` |
+| N6 | the depth test without the length | `[one-level candidates/<round>]` |
+| N7 | an empty directory list at the call | `[samples 9p2i]` |
+| N8 | the target without `realpath` | `[a .. alias into samples]` |
+
+**The one that first came back green.** D2 survived its first run: the unreadable-directory test aimed the
+manifest inside the unreadable tree, and `Path.is_dir()` on it raised `PermissionError` before the walk
+mattered. The test now aims the manifest at scratch, so only the walk can see the tree, and D2 is killed. The
+finding's own mutant, V1, survives at `3ed462b0` (the verifier's run) and is killed at `25d6f574`.
+
+### Verification at `25d6f574`
+
+Run in a bare environment (`HOME` and `PATH` only), each exit code captured directly from the process, never
+through a pipe.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | ran once, at the commit carrying this subsection (the card's only change is this text); its exit code and counts are quoted in the PR body |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| the card's eight test files (`-q -n 6 --dist loadfile`) | exit 0: 482 passed, 1 xfailed (the post-step's strict xfail); 474 passed at `17cd2e65`, plus the eight new tests |
+| `bash scripts/verify_samples.sh` (no argument) | exit 0: the two sample sets verified clean (50 each), no candidate set |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/validity_gate.py <set> --json`, the four sets | exit 0 each, every check passed (2994, 2980, 3008 and 2982 bytes of JSON). The gate's production files are unchanged since `17cd2e65`, whose JSON was byte-identical to `bdfa5b19`'s (`cmp`) |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO; `replays/candidates/ [(a) + (b)]` OK |
+| `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run mypy .` | all clean: 532 files formatted, 4 contracts kept, 503 source files |
+| `git diff --stat 3ed462b0..25d6f574 -- eval scripts/validity_gate.py scripts/refresh_samples.sh scripts/run_tournament.py api frontend replays tests/fixtures audits docs` | empty: no gate, recorder, served, committed-replay, fixture, audit or doc byte moved, so no artifacts row and no bundle changes |
+
+### Closing greps, round 1
+
+- `git grep -niE "resolv(e|es|ed|ing) physically|resolved physically|os\.path\.realpath|string prefix|by spelling" -- ':!tasks/phase-*' ':!agent_prompts' ':!audits'`,
+  after the edit. The hits:
+  - the rule itself (`scripts/_declared_experiment.py`: the `realpath` step, which still resolves symlinks and
+    `..`, and the docstring saying the lookup is "not by spelling");
+  - the tests;
+  - this card: the Acceptance contract ("resolve physically outside", which the on-disk decision now meets), the
+    new review items, the rewritten Decisions bullet "The depth rule" and this subsection;
+  - three unrelated uses: string prefixes of observation ids in `meetings/citation_relevance.py` and
+    `tasks/work/relevance-aware-citation-guard.md`, and "spelling one word" in `tasks/work/alibi-as-route.md`.
+
+  The PR body's "depth rule" bullet is rewritten to match.
+- `git grep -niE "case.insensitive|case-variant|firmlink" -- scripts replays docs`: the new rule's module
+  docstring, and the process scorecard's room-id matching ("matched case-insensitively"), which is unrelated.
+- `replays/candidates/README.md` says the recorder refuses a switched-on config "aimed at the committed sets ...
+  or anywhere inside `replays/` other than `replays/candidates/<round>/<set>/`". That is true at the new strength
+  and is not edited, so the family's registered bytes do not move.
+
+### Limitations, round 1
+
+- CI runs on a case-sensitive filesystem with no firmlink, so there the case-variant and firmlink cases skip by
+  name. The second-mount test (patched identity) and the property carry the identity rule on every platform.
+- The rule places directories, not single files; the hard-link case above is covered by the manifest writer's
+  atomic replace, not by the rule.
+- An unreadable directory under `replays/` stops the check with the `PermissionError` traceback (exit 1, nothing
+  staged) rather than a worded refusal.
+- **A pre-existing hole of the same kind, outside this round's findings.** The fake-provider guard in both
+  recorders (`scripts/refresh_samples.sh`, the `fake` branch with `resolve_physical_path`; its twin in
+  `scripts/record_ml_corpus.sh`) compares strings made by bash's builtin `pwd -P`. On this macOS checkout that
+  builtin keeps the typed case and the firmlink prefix: `bash -c 'cd REPLAYS/Samples && pwd -P'` prints
+  `.../REPLAYS/Samples`, where `/bin/pwd -P` prints `.../replays/samples`. The guard's own comparison, applied to
+  the two helper functions sourced from the script, accepts `REPLAYS/samples/9p2i`, `Replays/Samples/9p2i` and
+  the firmlinked path. This explains the verifier's fake run into `replays/samples/9p2i`. Since this round, a
+  switched-on config is refused at those paths by the declared-config check, which runs first. A fake run with no
+  config through such an alias is still accepted, as it is on `main`. The card forbids editing
+  `scripts/record_ml_corpus.sh`, and the findings name only the declared-config rule, so both guards are left
+  as they are and the fix is flagged as a separate task (see the PR's Questions).
+- The dispatch asked to keep the Status `done`. The card was `active` with its third box open, and it stays so:
+  the readers card has not merged, so that box is still unmet. The inventory sentence in `tasks/README.md` is
+  unchanged.
+
+### Review corrections, round 3 (2026-09-26)
+
+The three review lenses verified `fde0157c` on base `bdfa5b19`, with CI green (round 2). One blocking finding
+followed, from the integration lens: `main` moved under the verified head. The physical vent witness card (PR 485)
+and the readers card (PR 486) merged, and `main` is now `e22b54e6`. This card writes `tests/_helpers/committed.py`
+after the readers card and `docs/artifacts.md` after A1, and its gate and verify loop had to hold against what those
+cards brought. The repair merges `main`, never rebasing, and re-runs the card's whole Validation at the merged head.
+Every number below was measured at `f10da891`. The commit that carries this subsection changes only this card and
+`tasks/README.md`.
+
+**The merge, `b91ecd7c`** (parents `fde0157c` and `e22b54e6`).
+- `tasks/README.md` conflicted on the derived inventory sentence, because each side had flipped other cards. It was
+  re-derived with `scripts/validate_task_docs.py`: "6 ready, 1 active, 81 done" at the merge, and "6 ready, 82 done"
+  in this subsection's commit (below).
+- `tests/_helpers/committed.py` merged without a conflict. The readers' threading stands: `meeting_trigger_kind`
+  takes the recording's settings, and the committed-meeting walk runs through `read_recorded_settings`. This card's
+  candidates region stands, unchanged, at the end of the file. Proof: `git diff fde0157c b91ecd7c --
+  tests/_helpers/committed.py` equals `git diff bdfa5b19 e22b54e6 -- tests/_helpers/committed.py` line for line once
+  the `index` lines are removed (`cmp` exit 0). The merge brought exactly the readers' hunks.
+- `docs/artifacts.md` merged without a conflict. It keeps main's `audits/` row (26,636,557 tracked bytes / 329
+  files), which the readers card recomputed. It also keeps this card's `replays/candidates/` row, still 1 file
+  (`git ls-files replays/candidates | wc -l` is 1), and its class sentence. This card moves no audit byte (`git diff
+  --stat e22b54e6..f10da891 -- audits` is empty), so the `audits/` row stays main's. The offline
+  `verify_ml_evidence.py` reads both rows OK.
+
+**Follow-through, `f10da891` (three test files only).** The merge left three test crutches doing nothing:
+- The strict xfail on `test_the_post_step_builds_and_checks_the_report_of_an_arms_on_set` is deleted. It was keyed
+  on kill-craft's refusal, which the readers card lifted, so the test now runs and passes. That is the third box.
+- The candidate test's autouse fixture that let kill-craft read the test config is deleted, with its use in the
+  module-scoped planted round. Decisions and Limitations said it should go once `main` carried the readers card. The
+  planted round is now built through kill-craft's own profile.
+- The full-config copy that the three profiles read now carries `vent_witness_rule="physical"`. The acceptance item
+  says the rule joins once the physical witness card has merged. That card threads the field through
+  `engine_arguments` and removed it from `WAVE_ARMS_PENDING`. The copy's layer assertion now names the engine layer
+  too. Each profile reads the copy with every hash verified, and each result equals the unedited game's.
+
+No production byte of this card changed in this round: `git diff b91ecd7c f10da891` touches the three test files
+only.
+
+**The third box is met, and the Status is `done`.** At the merged head, the recorder's post-step completes on an
+arms-ON set, and the report's `--check` is consistent (the test above, and the rehearsal below). The perturbed
+proof, `test_each_profile_resimulates_the_recorded_meeting_reset`, is unchanged since `17cd2e65` and still passes:
+with `meeting_reset` stripped, the kill-gift walk and the gate both fail on the meeting post-hash. Every box is now
+ticked. The card reserves its Status line and the
+index sentence for the orchestrator, and this round's dispatch names the card done at the merged head. The Status
+is therefore `done`, and the index sentence is re-derived as "88 cards: 6 ready, 82 done".
+
+**The readers' recorded-settings refusals.** The validity, kill-gift and `current-report` profiles declare layers,
+not field lists. The readers card's field-by-field refusal (`eval/recorded_settings.py`) wraps only that card's own
+instruments, and none of this card's profiles runs through it. The recorder's post-step walks kill-craft, which does
+run through it, reading all nine settings the refusal allows (`KILL_CRAFT_READS`). Probe R6 below narrows those
+reads by `meeting_reset`, and the post-step test then fails on the readers' refusal ("does not read the recorded
+meeting_reset='hub_with_grace'"). So the post-step reads through that refusal, not around it. The gate's planted
+cases in `tests/eval/test_validity.py` all pass at the merged head.
+
+### Probes, round 3
+
+Each probe planted one defect in a span this round changed or relied on. It then ran the named tests
+(`-x -n 4 --dist loadfile`) and restored the file from a byte copy, comparing sha256. There were 6 probes, and all 6
+turned red.
+
+| Id | Planted defect | Tests | Red (first red test) |
+| --- | --- | --- | --- |
+| R1 | kill-craft back to its profile before the readers card (`supports_experiments=False`, no layers) | the post-step test | the post-step test: "replay profile 'kill-craft' does not support experimental recordings" |
+| R2 | the same | `tests/scripts/test_candidate_sets.py -k planted_round_holds` | the planted round's fixture errors on the same refusal, so the round is built through kill-craft's own profile |
+| R3 | `vent_witness_rule` dropped from the full-config copy | `tests/eval/test_validity.py -k "full_config or declares_every_layer or stand_in"` | `test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer` |
+| R4 | `engine_arguments` no longer threads `vent_witness_rule` (the spine's helper, planted) | the same | `test_each_profile_reads_the_full_config_copy_with_every_hash_verified[current-report]`: "is not threaded into the engine tick", so the copy's physical rule reaches the engine |
+| R5 | the layer assertion without the engine layer | the same | `test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer` |
+| R6 | kill-craft's reads narrowed by `meeting_reset` | the post-step test | the post-step test, on the readers' refusal |
+
+### Verification at `f10da891`
+
+Each command ran in a bare environment (`HOME` and `PATH` only), and its exit code was captured directly from the
+process, never through a pipe.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | ran once, at the commit that carries this subsection (whose only changes are this text and the index sentence); its exit code and counts are quoted in the PR body |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| the card's eight test files (`-q -n 6 --dist loadfile`) | exit 0: 493 passed, none xfailed. At `25d6f574` it was 482 passed and 1 xfailed. The post-step test now runs and passes, and the readers card added ten test functions to the golden (17 at `fde0157c`, 27 at the merge) |
+| `bash scripts/verify_samples.sh` (no argument) | exit 0: the two sample sets verified clean (50 each), no candidate set |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/validity_gate.py <set> --json`, the four sets | exit 0 each, every check passed (2994, 2980, 3008 and 2982 bytes). Each JSON is byte-identical (`cmp`) to the same command in an export of `e22b54e6` over the same replay bytes |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/check_doc_facts.py` | exit 0 |
+| `uv run python scripts/validate_task_docs.py` | exit 0, 88 work cards |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO; `replays/candidates/ [(a) + (b)]` and `audits/ [(b)]` OK |
+| `uv run ruff check`, `uv run ruff format --check` and `uv run mypy` on the three edited test files | clean |
+| `git diff --stat e22b54e6..f10da891 -- api frontend replays/samples replays/ml_corpus tests/fixtures` | empty |
+| `git grep -l '"experiment_config"'` over the 300 committed replay files | 0 |
+
+**The fake-provider rehearsals**, into a scratch directory outside `replays/`, with the 9p2i roster and the test
+config:
+
+| Rehearsal | Result |
+| --- | --- |
+| the dry run with the file | exit 0. It prints the file's sha256 (`8984cfef…`), its three settings, the per-seed line ending `--experiment-config`, and "Substrate slate OK". `git status --porcelain --untracked-files=all` shows 0 lines before and after, and the scratch target is not created |
+| the four experiment exports at `1` and at `0`, no config, `--dry-run` | exit 1 each, naming the variable, with no "Substrate slate OK" line |
+| `--seeds 0,1` with the file | exit 0: "Refresh complete", 2 of 2 reached a meeting, and the post-step wrote the report (2 games). At `17cd2e65` this step exited 1 on kill-craft's refusal |
+| the recorded rows (a count-only reader) | seed 0: 62 tick rows, all 62 carrying the file's config, and the footer carrying it too; seed 1: 21 of 21, and the footer. Both load with `outcome_verified` true |
+| `validity_gate.py <scratch> --expected-experiment-config <file> --expected-seeds 0-1 --require-one-recording-sha --json` | exit 0, all ten checks pass (5 resolved meetings, 31 ballots) |
+| the same set with no declaration | exit 1; `cost_and_provenance_exact` is the one failing check |
+| `bash scripts/verify_samples.sh <scratch>` | exit 0, 2 verified clean |
+| `build_sample_report.py --sample-dir <scratch> --check` | exit 0, consistent |
+
+**Publication.** `scripts/build_demo_bundle.py` ran twice. The first build used an export of `e22b54e6` with no round.
+The second used `f10da891` with an untracked planted round (`replays/candidates/planted-r1/9p2i/` holding s9 seed 0
+and its roster, 2 untracked paths), deleted after the build so that `git status` showed 0 lines. Each build baked 156
+JSON files, and `diff -r` of the two `data/` trees is empty (exit 0). The two bundles' README differs in one
+sentence. The base export reached the replays through a link outside its own directory, so that sentence comes
+from the comparison setup, not from the card.
+
+### Limitations, round 3
+
+- `f10da891` closes two of the round-0 limitations: the candidate test's kill-craft fixture, and `vent_witness_rule`
+  missing from the full-config copy.
+- The fake provider still fires no rebuttal, so these runs prove stamping, reading and refusing, not an arm's
+  behaviour.
+- The rehearsals and the bundle comparison ran on macOS; CI runs on Linux.
+- The pre-existing fake-provider guard hole (Limitations, round 1) is unchanged, and it stays a separate task.

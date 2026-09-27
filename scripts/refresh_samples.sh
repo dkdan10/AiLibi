@@ -51,7 +51,7 @@ TASKS_PER_CREWMATE="${AILIBI_TASKS_PER_CREWMATE:-1}"
 usage() {
   cat <<EOF
 Usage: $(basename "$0") (--full | --meetings | --seeds N,N,N) [--dry-run]
-                        [--expect-levers KEY,KEY]
+                        [--expect-levers KEY,KEY] [--experiment-config FILE]
 
   --full          Re-run all 50 sample seeds              (~\$1,    ~3 min)
   --meetings      Re-run only the meeting-bearing seeds   (~\$0.10, ~30s)
@@ -62,6 +62,16 @@ Usage: $(basename "$0") (--full | --meetings | --seeds N,N,N) [--dry-run]
                   bare slate). The live slate must match it EXACTLY before any
                   seed stages: a named lever that is not exported and an export
                   nobody named are both refused.
+  --experiment-config FILE
+                  Record every seed with the experimental switches this JSON
+                  file declares (default: none, the historical defaults). The
+                  file is checked before anything stages and copied into the
+                  stage once, and every seed records from that copy. A config
+                  that turns switches on needs an explicit AILIBI_SAMPLE_DIR
+                  outside the committed sets: a candidate round directory,
+                  replays/candidates/<round>/<set>/, or a scratch directory.
+                  The meeting-experiment environment variables are refused
+                  with or without this flag.
   -h, --help      Show this help
 
 Modes are mutually exclusive. The meeting-bearing seeds are derived from
@@ -75,6 +85,9 @@ seeds_arg=""
 # The toggleable levers this record expects ON (comma-separated registry keys).
 # Empty is the bare slate: every live toggle OFF.
 expect_levers=""
+# The declared experiment config file (--experiment-config); empty records the
+# historical defaults.
+experiment_config=""
 
 set_mode() {
   if [[ -n "$mode" ]]; then
@@ -257,6 +270,15 @@ while [[ $# -gt 0 ]]; do
       fi
       expect_levers="$1"
       ;;
+    --experiment-config)
+      shift
+      if [[ -z "${1:-}" ]]; then
+        echo "Error: --experiment-config requires a config file path." >&2
+        usage
+        exit 1
+      fi
+      experiment_config="$1"
+      ;;
     -h | --help)
       usage
       exit 0
@@ -274,6 +296,37 @@ if [[ -z "$mode" ]]; then
   echo "Error: pick one mode (--full, --meetings, or --seeds N,N,N)." >&2
   usage
   exit 1
+fi
+
+# The declared experiment config, the meeting-experiment environment and the
+# recording target, checked before any preflight or staging, in the dry run and
+# the real run alike. scripts/_declared_experiment.py states the three rules: the
+# file must parse as a closed experiment config; any meeting-experiment variable
+# in the environment is refused, with or without a config; and a config that
+# turns switches on records only into an explicit AILIBI_SAMPLE_DIR that resolves
+# outside the committed sets, inside replays/ only at
+# replays/candidates/<round>/<set>/. The check prints the file's sha256, which
+# the snapshot below must match.
+declared_args=(check --sample-dir "$SAMPLE_DIR" --manifest "$MANIFEST")
+if [[ -n "$experiment_config" ]]; then
+  declared_args+=(--config "$experiment_config")
+fi
+if [[ -n "${AILIBI_SAMPLE_DIR:-}" ]]; then
+  declared_args+=(--sample-dir-explicit)
+fi
+if [[ "$dry_run" -eq 1 ]]; then
+  declared_args+=(--prefix "[dry-run] ")
+fi
+if ! declared_out="$(uv run python "$REPO_ROOT/scripts/_declared_experiment.py" "${declared_args[@]}")"; then
+  exit 1
+fi
+printf '%s\n' "$declared_out"
+# The sha256 the check printed; the snapshot below copies the file only if it
+# still reads this (an empty value matches no file, so the snapshot refuses).
+declared_sha=""
+declared_sha_pattern='\(sha256 ([0-9a-f]{64})\)'
+if [[ "$declared_out" =~ $declared_sha_pattern ]]; then
+  declared_sha="${BASH_REMATCH[1]}"
 fi
 
 # One human-readable rendering of the expected slate, used by the dry-run echoes
@@ -513,7 +566,14 @@ if [[ "$dry_run" -eq 1 ]]; then
   fi
   echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
-  echo "[dry-run]   AILIBI_LLM_PROVIDER=$PROVIDER uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
+  per_seed_line="[dry-run]   AILIBI_LLM_PROVIDER=$PROVIDER uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
+  if [[ -n "$experiment_config" ]]; then
+    per_seed_line="$per_seed_line --experiment-config <stage-dir>/experiment-config.json"
+  fi
+  echo "$per_seed_line"
+  if [[ -n "$experiment_config" ]]; then
+    echo "[dry-run] experiment config: would copy $experiment_config into the stage directory once, if it still reads sha256 $declared_sha, and pass that copy to every seed"
+  fi
   if [[ "$mode" == "full" ]]; then
     echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49 and zero-padded aliases like replay-seed-01.jsonl) and prune their manifest rows"
   fi
@@ -736,6 +796,21 @@ echo "Substrate flags: expected levers ON = $expect_levers_desc; every other liv
 stage_dir="$(mktemp -d "$(dirname "$SAMPLE_DIR")/.ailibi-refresh-stage-XXXXXX")"
 trap 'rm -rf "$stage_dir"' EXIT
 
+# The declared config is copied into the stage ONCE, and only if it still reads
+# as checked above; every seed records from that copy, so an edit to the file
+# mid-run cannot mix two configs in one set.
+tournament_config_args=()
+if [[ -n "$experiment_config" ]]; then
+  config_snapshot="$stage_dir/experiment-config.json"
+  if ! uv run python "$REPO_ROOT/scripts/_declared_experiment.py" snapshot \
+    --config "$experiment_config" \
+    --dest "$config_snapshot" \
+    --expect-sha "$declared_sha"; then
+    exit 1
+  fi
+  tournament_config_args=(--experiment-config "$config_snapshot")
+fi
+
 IFS=',' read -ra seed_list <<<"$seeds_csv"
 total_seeds="${#seed_list[@]}"
 refresh_start="$(date +%s)"
@@ -883,7 +958,8 @@ record_one_seed() {
       --num-players "$NUM_PLAYERS" \
       --num-impostors "$NUM_IMPOSTORS" \
       --tasks-per-crewmate "$TASKS_PER_CREWMATE" \
-      --force; then
+      --force \
+      ${tournament_config_args[@]+"${tournament_config_args[@]}"}; then
       break
     fi
     if [[ "$attempt" -ge "$max_attempts" ]]; then

@@ -9,17 +9,32 @@ and the baseline-9 reproduction of ``run_validity_gate`` over the committed sets
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
-from collections.abc import Sequence
+import sys
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType, ModuleType
+from typing import Any, Final, Literal, NoReturn
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
+from engine.tick import advance_tick
+from engine.world import load_canonical_map
+from eval import balance_eval, replay_walk, validity
+from eval.balance_eval import run_tournament_eval
+from eval.replay_walk import ReplayWalkConfig, WalkViolation
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.validity import (
     TRUNCATED_REPLAY_REASON,
+    VALIDITY_THREADED_LAYERS,
+    SetInventory,
     ValidityCheck,
+    ValidityGateReport,
     _GameReconstruction,
     _KillFact,
     _reconstruct_game,
@@ -34,9 +49,13 @@ from eval.validity import (
     check_no_friendly_fire_kills,
     check_no_railroaded_crew_ejections,
     check_no_tick_1_kills,
+    experiment_config_violations,
+    read_set_inventory,
+    recording_sha_violations,
     resolve_roster_knobs,
     roles_by_seed,
     run_validity_gate,
+    seed_set_violations,
     seeds_on_disk,
 )
 from eval.win_condition_selfcheck import (
@@ -44,7 +63,15 @@ from eval.win_condition_selfcheck import (
     check_replay_win_condition,
 )
 from meetings.schemas import AccusationClaim, ContradictionRef
+from orchestrator import experiment_config
+from orchestrator.experiment_config import (
+    FIELD_LAYER,
+    ConfigLayer,
+    RecordedExperimentConfig,
+    wave_settings,
+)
 from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord
+from orchestrator.replay_integrity import ReplayIntegrityError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -1076,3 +1103,771 @@ def test_every_check_is_individually_reported() -> None:
         "byte_identical_reconstruction",
     ]
     assert all(isinstance(check, ValidityCheck) for check in report.checks)
+
+
+# --------------------------------------------------------------------------- #
+# Experiment-stamped sets: the gate's and the report's walk profiles, and     #
+# check 9's declarations                                                       #
+# --------------------------------------------------------------------------- #
+
+#: The declared test config: three arms that exist today, since the pending
+#: guard refuses the wave's new values.
+_TEST_CONFIG_JSON: Final[str] = (
+    '{"format_version": 1, "meeting_reset": "hub_with_grace", '
+    '"vent_exit_policy": "observed_risk", "bounded_rebuttal_version": 1}\n'
+)
+_TEST_CONFIG: Final[RecordedExperimentConfig] = (
+    RecordedExperimentConfig.model_validate_json(_TEST_CONFIG_JSON)
+)
+#: Every other wave setting at its ON value: the round-one config of the
+#: decision memo, the engine's physical witness rule included, which the
+#: engine-arguments helper threads into every advance.
+_FULL_CONFIG_SETTINGS: Final[dict[str, object]] = {
+    "vent_witness_rule": "physical",
+    "vent_exit_policy": "look_and_wait",
+    "vent_entry_policy": "own_fresh_kill",
+    "report_body_handle_version": 1,
+    "ballot_kill_row_version": 1,
+    "impostor_ballot_version": 1,
+}
+_FAKE_SEEDS: Final[tuple[int, ...]] = (0, 1, 2)
+#: Seed 1 of the fake 4p/1i roster holds a meeting, so a regroup moves players.
+_MEETING_SEED: Final[int] = 1
+_FAKE_SHA: Final[str] = "abc1234"
+
+
+def _scripts_on_path() -> None:
+    scripts = _REPO_ROOT / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+
+
+def _record_fake_set(
+    directory: Path,
+    *,
+    seeds: Sequence[int],
+    config: RecordedExperimentConfig | None,
+) -> Path:
+    """Fake-provider 4p/1i games recorded into ``directory`` as the recorder does.
+
+    The replays, a roster descriptor and a MANIFEST whose rows all name
+    :data:`_FAKE_SHA`; the observation sidecars are dropped, as the recorder's
+    stage drops them.
+    """
+
+    _scripts_on_path()
+    import _manifest_writer
+
+    run_tournament_eval(
+        seeds=seeds,
+        output_dir=directory,
+        num_players=4,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        experiment_config=config,
+    )
+    for audit in directory.glob("*.audit.jsonl"):
+        audit.unlink()
+    _manifest_writer.ensure_roster_descriptor(
+        directory, num_players=4, num_impostors=1, tasks_per_crewmate=1
+    )
+    _manifest_writer.update_manifest(
+        directory / "MANIFEST.md",
+        directory,
+        seeds,
+        git_sha=_FAKE_SHA,
+        refreshed_at="2026-09-26",
+        model_override="fake-meeting",
+    )
+    return directory
+
+
+@pytest.fixture(scope="module")
+def arms_on_set(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Three fake games recorded on the test config, with roster and MANIFEST."""
+
+    return _record_fake_set(
+        tmp_path_factory.mktemp("arms-on") / "set",
+        seeds=_FAKE_SEEDS,
+        config=_TEST_CONFIG,
+    )
+
+
+def _copied(source: Path, tmp_path: Path) -> Path:
+    return Path(shutil.copytree(source, tmp_path / "set"))
+
+
+def _rewrite_configs(path: Path, update: Callable[[dict[str, object]], object]) -> None:
+    """Apply ``update`` to the config on every tick row and on the footer."""
+
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    stamped = 0
+    for row in rows:
+        if row["kind"] in ("tick", "game_over"):
+            update(row["experiment_config"])
+            stamped += 1
+    assert stamped > 1
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+
+def _provenance(report: ValidityGateReport) -> ValidityCheck:
+    return next(c for c in report.checks if c.name == "cost_and_provenance_exact")
+
+
+def test_a_declared_arms_on_set_passes_the_whole_gate(arms_on_set: Path) -> None:
+    """The profile reads every game with its hashes verified; check 9 agrees."""
+
+    report = run_validity_gate(
+        arms_on_set,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+        require_one_recording_sha=True,
+    )
+    assert report.passed, report.failing_checks()
+    games = assemble_tournament_report(arms_on_set).games
+    assert {game.experiment_config for game in games} == {_TEST_CONFIG}
+
+
+def test_an_arms_on_set_gated_with_no_declaration_fails_naming_its_config(
+    arms_on_set: Path,
+) -> None:
+    report = run_validity_gate(arms_on_set)
+    assert report.failing_checks() == ("cost_and_provenance_exact",)
+    violations = _provenance(report).violations
+    assert len(violations) == len(_FAKE_SEEDS)
+    assert all(
+        "meeting_reset='hub_with_grace'" in line
+        and "bounded_rebuttal_version=1" in line
+        and "(none: historical defaults)" in line
+        for line in violations
+    )
+
+
+def test_a_set_mixing_two_configs_fails_naming_the_odd_game(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    mixed = _copied(arms_on_set, tmp_path)
+    _rewrite_configs(
+        mixed / "replay-seed-2.jsonl",
+        lambda config: config.update(bounded_rebuttal_version=None),
+    )
+    report = run_validity_gate(mixed, expected_experiment_config=_TEST_CONFIG)
+    assert report.failing_checks() == ("cost_and_provenance_exact",)
+    (line,) = _provenance(report).violations
+    recorded, declared = line.split(" differs from the declared config ")
+    assert recorded.startswith("headless-seed-2: recorded experiment config")
+    assert "bounded_rebuttal_version" not in recorded
+    assert "bounded_rebuttal_version=1" in declared
+
+
+def test_a_set_whose_seed_one_was_recorded_without_the_arm_fails(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    mixed = _copied(arms_on_set, tmp_path)
+    bare = _record_fake_set(tmp_path / "bare", seeds=(1,), config=None)
+    shutil.copy(bare / "replay-seed-1.jsonl", mixed / "replay-seed-1.jsonl")
+    _scripts_on_path()
+    import _manifest_writer
+
+    _manifest_writer.update_manifest(
+        mixed / "MANIFEST.md",
+        mixed,
+        (1,),
+        git_sha=_FAKE_SHA,
+        refreshed_at="2026-09-26",
+        model_override="fake-meeting",
+    )
+    report = run_validity_gate(
+        mixed,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+        require_one_recording_sha=True,
+    )
+    assert "cost_and_provenance_exact" in report.failing_checks()
+    (line,) = _provenance(report).violations
+    assert line.startswith(
+        "headless-seed-1: recorded experiment config (none: historical defaults)"
+    )
+
+
+def test_one_foreign_recording_sha_fails_only_under_the_sha_flag(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    foreign = _copied(arms_on_set, tmp_path)
+    manifest = foreign / "MANIFEST.md"
+    lines = manifest.read_text(encoding="utf-8").splitlines()
+    edited = [
+        line.replace(f"| {_FAKE_SHA} |", "| def5678 |")
+        if line.startswith("| 2 |")
+        else line
+        for line in lines
+    ]
+    assert edited != lines
+    manifest.write_text("\n".join(edited) + "\n", encoding="utf-8")
+
+    flagged = run_validity_gate(
+        foreign,
+        expected_experiment_config=_TEST_CONFIG,
+        require_one_recording_sha=True,
+    )
+    assert flagged.failing_checks() == ("cost_and_provenance_exact",)
+    assert _provenance(flagged).violations == (
+        f"MANIFEST.md names 2 recording shas ({_FAKE_SHA}, def5678); one is required",
+    )
+    assert run_validity_gate(foreign, expected_experiment_config=_TEST_CONFIG).passed
+
+
+def test_the_seed_flag_alone_does_not_apply_the_one_sha_rule(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    """Planted: a MANIFEST naming two recording shas, gated by its exact seeds.
+
+    This is the shape of a set recorded in two passes (c9 names two shas).
+    ``expected_seeds`` reads the set's inventory as the sha rule does, so this
+    is the case where the sha rule could run without being declared: check 9
+    passes it, and fails it only once ``require_one_recording_sha`` is given.
+    """
+
+    two_shas = _copied(arms_on_set, tmp_path)
+    manifest = two_shas / "MANIFEST.md"
+    lines = manifest.read_text(encoding="utf-8").splitlines()
+    edited = [
+        line.replace(f"| {_FAKE_SHA} |", "| def5678 |")
+        if line.startswith("| 0 |")
+        else line
+        for line in lines
+    ]
+    assert edited != lines
+    manifest.write_text("\n".join(edited) + "\n", encoding="utf-8")
+    assert {sha for _seed, sha in read_set_inventory(two_shas).manifest_shas} == {
+        _FAKE_SHA,
+        "def5678",
+    }
+
+    seeds_only = run_validity_gate(
+        two_shas,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+    )
+    assert seeds_only.passed, seeds_only.failing_checks()
+    assert _provenance(seeds_only).violations == ()
+    both = run_validity_gate(
+        two_shas,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+        require_one_recording_sha=True,
+    )
+    assert both.failing_checks() == ("cost_and_provenance_exact",)
+    assert _provenance(both).violations == (
+        f"MANIFEST.md names 2 recording shas ({_FAKE_SHA}, def5678); one is required",
+    )
+
+
+def test_a_removed_seed_fails_only_under_the_seed_flag(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    short = _copied(arms_on_set, tmp_path)
+    (short / "replay-seed-2.jsonl").unlink()
+    _scripts_on_path()
+    import _manifest_writer
+
+    assert _manifest_writer.prune_manifest(short / "MANIFEST.md", short) == 1
+
+    flagged = run_validity_gate(
+        short,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+    )
+    assert "cost_and_provenance_exact" in flagged.failing_checks()
+    assert _provenance(flagged).violations == (
+        "the replay files do not hold exactly the declared seeds: missing [2], "
+        "unexpected []",
+        "the MANIFEST.md rows do not hold exactly the declared seeds: missing [2], "
+        "unexpected []",
+    )
+    unflagged = run_validity_gate(short, expected_experiment_config=_TEST_CONFIG)
+    assert _provenance(unflagged).passed
+
+
+def test_the_seed_and_sha_declarations_read_each_inventory_part() -> None:
+    """Planted inventories: no MANIFEST, a row without a sha, a stray replay."""
+
+    none = SetInventory(
+        replay_seeds=frozenset({0, 1}), manifest_seeds=None, manifest_shas=()
+    )
+    assert seed_set_violations(none, frozenset({0, 1})) == [
+        "the declared seeds are checked against MANIFEST.md rows, but the "
+        "directory has no MANIFEST.md"
+    ]
+    assert recording_sha_violations(none) == [
+        "one recording sha is required, but the directory has no MANIFEST.md"
+    ]
+    unnamed = SetInventory(
+        replay_seeds=frozenset({0, 1}),
+        manifest_seeds=frozenset({0, 1}),
+        manifest_shas=((0, _FAKE_SHA),),
+    )
+    assert recording_sha_violations(unnamed) == [
+        "MANIFEST.md rows for seeds [1] name no recording sha"
+    ]
+    stray = SetInventory(
+        replay_seeds=frozenset({0, 1, 7}),
+        manifest_seeds=frozenset({0, 1}),
+        manifest_shas=((0, _FAKE_SHA), (1, _FAKE_SHA)),
+    )
+    assert seed_set_violations(stray, frozenset({0, 1})) == [
+        "the replay files do not hold exactly the declared seeds: missing [], "
+        "unexpected [7]"
+    ]
+    assert recording_sha_violations(stray) == []
+    with pytest.raises(ValueError, match="at least one seed"):
+        seed_set_violations(stray, frozenset())
+    # The seeds a line names are sorted, whatever order the set would give. A
+    # two-seed set of small ints fills an eight-slot table by value modulo 8,
+    # with no collision here, so {1, 8} iterates 8 first and {9, 16} 16 first.
+    short = SetInventory(
+        replay_seeds=frozenset({20, 9, 16}),
+        manifest_seeds=frozenset({20}),
+        manifest_shas=((20, _FAKE_SHA),),
+    )
+    assert list(frozenset({1, 8, 20}) - frozenset({20})) == [8, 1]
+    assert list(short.replay_seeds - frozenset({1, 8, 20})) == [16, 9]
+    assert seed_set_violations(short, frozenset({1, 8, 20})) == [
+        "the replay files do not hold exactly the declared seeds: missing [1, 8], "
+        "unexpected [9, 16]",
+        "the MANIFEST.md rows do not hold exactly the declared seeds: missing "
+        "[1, 8], unexpected []",
+    ]
+
+
+def test_the_inventory_reads_the_replay_files_and_the_manifest(
+    arms_on_set: Path,
+) -> None:
+    assert read_set_inventory(arms_on_set) == SetInventory(
+        replay_seeds=frozenset(_FAKE_SEEDS),
+        manifest_seeds=frozenset(_FAKE_SEEDS),
+        manifest_shas=tuple((seed, _FAKE_SHA) for seed in _FAKE_SEEDS),
+    )
+
+
+def test_the_opt_in_declarations_need_the_inventory(
+    nine_report: TournamentReport,
+) -> None:
+    with pytest.raises(ValueError, match="inventory"):
+        check_cost_and_provenance(
+            nine_report, _substrate_by_seed(_NINE), expected_seeds=frozenset({0})
+        )
+    with pytest.raises(ValueError, match="inventory"):
+        check_cost_and_provenance(
+            nine_report, _substrate_by_seed(_NINE), require_one_recording_sha=True
+        )
+
+
+def test_the_committed_sample_sets_satisfy_every_declaration_with_no_config(
+    nine_report: TournamentReport,
+) -> None:
+    """The historical default holds on every committed sample game."""
+
+    for sample_dir in (_NINE, _FOUR):
+        inventory = read_set_inventory(sample_dir)
+        assert recording_sha_violations(inventory) == []
+        assert seed_set_violations(inventory, frozenset(range(50))) == []
+    assert experiment_config_violations(nine_report.games, None) == []
+
+
+def _gate_cli() -> ModuleType:
+    _scripts_on_path()
+    import validity_gate
+
+    return validity_gate
+
+
+def test_an_unknown_field_in_the_declared_file_is_a_usage_error(
+    arms_on_set: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    declared = tmp_path / "config.json"
+    declared.write_text('{"format_version": 1, "hidden_travel": "on"}\n')
+    with pytest.raises(SystemExit) as exited:
+        _gate_cli().main(
+            [str(arms_on_set), "--expected-experiment-config", str(declared)]
+        )
+    assert exited.value.code == 2
+    assert "hidden_travel" in capsys.readouterr().err
+    good = tmp_path / "good.json"
+    good.write_text(_TEST_CONFIG_JSON)
+    arguments = [
+        str(arms_on_set),
+        "--expected-experiment-config",
+        str(good),
+        "--expected-seeds",
+        "0-2",
+        "--require-one-recording-sha",
+    ]
+    assert _gate_cli().main(arguments) == 0
+    assert _gate_cli().main([*arguments[:-3], "--expected-seeds", "0-3"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("raw", "seeds"),
+    [
+        ("0-49", frozenset(range(50))),
+        ("3", frozenset({3})),
+        ("0, 2,5", frozenset({0, 2, 5})),
+    ],
+)
+def test_the_seed_flag_reads_a_range_or_a_list(raw: str, seeds: frozenset[int]) -> None:
+    assert _gate_cli()._parse_seed_set(raw) == seeds
+
+
+@pytest.mark.parametrize("raw", ["5-2", "a-b", "1,,2", "-1", "1-", ""])
+def test_the_seed_flag_refuses_a_malformed_value(raw: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        _gate_cli()._parse_seed_set(raw)
+
+
+#: The three profiles, each run below through the entry point its consumers call.
+_PROFILES: Final[dict[str, tuple[ModuleType, str]]] = {
+    "validity-gate": (validity, "_WALK_CONFIG"),
+    "kill-gift": (balance_eval, "_KILL_GIFT_WALK_CONFIG"),
+    "current-report": (balance_eval, "_CURRENT_REPORT_WALK_CONFIG"),
+}
+
+
+def _walk_with(profile: str, path: Path, seed: int) -> object:
+    """``path`` read by ``profile``'s consumer, as that consumer calls the walk."""
+
+    game_map = load_canonical_map()
+    roles = roles_by_seed(
+        path.parent,
+        num_players=4,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        game_map=game_map,
+    )[seed]
+    if profile == "validity-gate":
+        return _reconstruct_game(
+            path,
+            seed=seed,
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            roles=roles,
+            game_map=game_map,
+        )
+    if profile == "kill-gift":
+        return balance_eval._kill_gift_accounting(
+            path, seed=seed, roles=roles, tasks_per_crewmate=1, game_map=game_map
+        )
+    return balance_eval._current_replay_facts(
+        path, seed=seed, roles=roles, tasks_per_crewmate=1, game_map=game_map
+    )
+
+
+def _one_game(source: Path, tmp_path: Path, name: str) -> Path:
+    directory = tmp_path / name
+    directory.mkdir()
+    return Path(shutil.copy(source / f"replay-seed-{_MEETING_SEED}.jsonl", directory))
+
+
+def _counted_advances(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Count the walk's engine advances, to see a refusal land before the first."""
+
+    calls: list[int] = []
+    real = advance_tick
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(replay_walk, "advance_tick", counting)
+    return calls
+
+
+def _open_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
+
+
+def test_the_full_config_copy_sets_a_later_value_in_every_declarable_layer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _open_pending(monkeypatch)
+    full = RecordedExperimentConfig.model_validate(
+        {**_TEST_CONFIG.model_dump(), **_FULL_CONFIG_SETTINGS}
+    )
+    layers = {FIELD_LAYER[field] for field, _value in wave_settings(full)}
+    assert layers == {"engine", "orchestrator", "tactical", "meeting"}
+
+
+@pytest.mark.parametrize("profile", sorted(_PROFILES))
+def test_each_profile_declares_every_layer_after_its_review(profile: str) -> None:
+    module, name = _PROFILES[profile]
+    config = getattr(module, name)
+    assert config.profile == profile
+    assert config.supports_experiments
+    declared = {
+        "validity-gate": VALIDITY_THREADED_LAYERS,
+        "kill-gift": balance_eval.KILL_GIFT_THREADED_LAYERS,
+        "current-report": balance_eval.CURRENT_REPORT_THREADED_LAYERS,
+    }[profile]
+    assert config.threaded_layers == declared == {"orchestrator", "tactical", "meeting"}
+
+
+@pytest.mark.parametrize("profile", sorted(_PROFILES))
+def test_each_profile_reads_the_full_config_copy_with_every_hash_verified(
+    profile: str,
+    arms_on_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _open_pending(monkeypatch)
+    plain = _one_game(arms_on_set, tmp_path, "plain")
+    full = _one_game(arms_on_set, tmp_path, "full")
+    _rewrite_configs(full, lambda config: config.update(_FULL_CONFIG_SETTINGS))
+    advances = _counted_advances(monkeypatch)
+    assert _walk_with(profile, full, _MEETING_SEED) == _walk_with(
+        profile, plain, _MEETING_SEED
+    )
+    assert advances
+
+
+@pytest.mark.parametrize("profile", sorted(_PROFILES))
+def test_without_its_declaration_a_profile_refuses_the_full_config_copy(
+    profile: str,
+    arms_on_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _open_pending(monkeypatch)
+    full = _one_game(arms_on_set, tmp_path, "full")
+    _rewrite_configs(full, lambda config: config.update(_FULL_CONFIG_SETTINGS))
+    module, name = _PROFILES[profile]
+    monkeypatch.setattr(
+        module, name, replace(getattr(module, name), threaded_layers=frozenset())
+    )
+    advances = _counted_advances(monkeypatch)
+    with pytest.raises(ValueError, match=f"replay profile '{profile}' does not read"):
+        _walk_with(profile, full, _MEETING_SEED)
+    assert advances == []
+
+
+class _StandIn(RecordedExperimentConfig):
+    """The config model with one field no reader has reviewed."""
+
+    stand_in_rule: Literal["old", "new"] = "old"
+
+
+@pytest.mark.parametrize("profile", sorted(_PROFILES))
+@pytest.mark.parametrize("layer", ["engine", "orchestrator", "tactical", "meeting"])
+def test_a_stand_in_field_in_an_undeclared_layer_is_refused_before_advancing(
+    profile: str,
+    layer: ConfigLayer,
+    arms_on_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a field added to the config model and to the layer table.
+
+    An engine-layer stand-in is refused by the engine-arguments helper, which no
+    profile can declare past. A stand-in in a declarable layer is read by the
+    profile as declared, and refused by the same profile with that one layer
+    removed, so the refusal comes from the declaration.
+    """
+
+    path = _one_game(arms_on_set, tmp_path, "game")
+    stand_in = _StandIn.model_validate(
+        {**_TEST_CONFIG.model_dump(), "stand_in_rule": "new"}
+    )
+    layers = MappingProxyType({**FIELD_LAYER, "stand_in_rule": layer})
+    monkeypatch.setattr(experiment_config, "FIELD_LAYER", layers)
+    monkeypatch.setattr(replay_walk, "FIELD_LAYER", layers)
+    monkeypatch.setattr(
+        replay_walk, "recorded_experiment_config", lambda _entries: stand_in
+    )
+    module, name = _PROFILES[profile]
+    declared = getattr(module, name)
+    advances = _counted_advances(monkeypatch)
+    if layer != "engine":
+        _walk_with(profile, path, _MEETING_SEED)
+        assert advances
+        advances.clear()
+        monkeypatch.setattr(
+            module,
+            name,
+            replace(declared, threaded_layers=declared.threaded_layers - {layer}),
+        )
+    with pytest.raises(ValueError, match="stand_in_rule='new'"):
+        _walk_with(profile, path, _MEETING_SEED)
+    assert advances == []
+
+
+@pytest.mark.parametrize("profile", sorted(_PROFILES))
+def test_each_profile_resimulates_the_recorded_meeting_reset(
+    profile: str,
+    arms_on_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Perturbed: the reset stripped from every row fails the meeting post-hash.
+
+    The stripped copy reads as ``preserve``, while its hashes were recorded
+    under the regroup, so a profile that takes the reset from the recording
+    reads the unedited game and fails the edited one at its meeting.
+    """
+
+    stripped = _one_game(arms_on_set, tmp_path, "stripped")
+    _rewrite_configs(stripped, lambda config: config.pop("meeting_reset"))
+    meeting_tick = next(
+        json.loads(line)["tick"]
+        for line in stripped.read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["kind"] == "meeting"
+    )
+    seen: list[tuple[str, int | None]] = []
+    real = replay_walk._violate
+
+    def spy(config: ReplayWalkConfig, violation: WalkViolation) -> NoReturn:
+        seen.append((violation.kind, violation.tick))
+        real(config, violation)
+
+    monkeypatch.setattr(replay_walk, "_violate", spy)
+    with pytest.raises((ValueError, ReplayIntegrityError)):
+        _walk_with(profile, stripped, _MEETING_SEED)
+    assert seen == [("meeting_post_hash_mismatch", meeting_tick)]
+    seen.clear()
+    _walk_with(profile, _one_game(arms_on_set, tmp_path, "kept"), _MEETING_SEED)
+    assert seen == []
+
+
+@pytest.mark.parametrize("profile", ["validity-gate", "kill-gift"])
+def test_validity_and_kill_gift_still_refuse_temporal_observations(
+    profile: str,
+    arms_on_set: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = _one_game(arms_on_set, tmp_path, "game")
+    monkeypatch.setattr(
+        replay_walk, "recorded_temporal_observation_version", lambda _entries: 2
+    )
+    with pytest.raises(ValueError, match="does not support temporal observations"):
+        _walk_with(profile, path, _MEETING_SEED)
+    # The report profile reads them, so the plant is what the two refuse.
+    _walk_with("current-report", path, _MEETING_SEED)
+
+
+@settings(deadline=None, max_examples=100)
+@given(st.lists(st.integers(min_value=0, max_value=100_000), min_size=1, max_size=20))
+def test_a_comma_list_of_seeds_parses_to_exactly_those_seeds(seeds: list[int]) -> None:
+    parse = _gate_cli()._parse_seed_set
+    assert parse(",".join(str(seed) for seed in seeds)) == frozenset(seeds)
+
+
+@settings(deadline=None, max_examples=100)
+@given(
+    low=st.integers(min_value=0, max_value=100_000),
+    width=st.integers(min_value=0, max_value=200),
+)
+def test_a_seed_range_parses_inclusive_of_both_ends(low: int, width: int) -> None:
+    parse = _gate_cli()._parse_seed_set
+    assert parse(f"{low}-{low + width}") == frozenset(range(low, low + width + 1))
+    if width:
+        with pytest.raises(argparse.ArgumentTypeError, match="backwards"):
+            parse(f"{low + width}-{low}")
+
+
+@settings(deadline=None, max_examples=60)
+@given(
+    declared=st.sampled_from(["test", "none", "no-rebuttal"]),
+    recorded=st.lists(
+        st.sampled_from(["test", "none", "no-rebuttal"]), min_size=1, max_size=6
+    ),
+)
+def test_exactly_the_games_off_the_declared_config_are_named(
+    nine_report: TournamentReport, declared: str, recorded: list[str]
+) -> None:
+    """Over any mix of recorded configs, a game is named iff it differs."""
+
+    configs: dict[str, RecordedExperimentConfig | None] = {
+        "test": _TEST_CONFIG,
+        "none": None,
+        "no-rebuttal": _TEST_CONFIG.model_copy(
+            update={"bounded_rebuttal_version": None}
+        ),
+    }
+    template = nine_report.games[0]
+    games = [
+        template.model_copy(
+            update={
+                "game_id": f"headless-seed-{index}",
+                "experiment_config": configs[name],
+            }
+        )
+        for index, name in enumerate(recorded)
+    ]
+    named = experiment_config_violations(games, configs[declared])
+    assert [line.split(":", 1)[0] for line in named] == [
+        f"headless-seed-{index}"
+        for index, name in enumerate(recorded)
+        if name != declared
+    ]
+
+
+def test_a_declared_config_of_historical_defaults_is_the_same_as_none(
+    nine_report: TournamentReport,
+) -> None:
+    """Both sides are normalized: a default config object equals no config."""
+
+    assert (
+        experiment_config_violations(nine_report.games, RecordedExperimentConfig())
+        == []
+    )
+    carrying_default = nine_report.games[0].model_copy(
+        update={"experiment_config": RecordedExperimentConfig()}
+    )
+    assert experiment_config_violations([carrying_default], None) == []
+    assert experiment_config_violations([carrying_default], _TEST_CONFIG) != []
+
+
+def test_a_manifest_naming_no_sha_at_all_fails_the_sha_declaration() -> None:
+    bare = SetInventory(
+        replay_seeds=frozenset({0}), manifest_seeds=frozenset({0}), manifest_shas=()
+    )
+    assert recording_sha_violations(bare) == [
+        "MANIFEST.md rows for seeds [0] name no recording sha",
+        "MANIFEST.md names 0 recording shas (none); one is required",
+    ]
+
+
+def test_an_unreadable_manifest_fails_check_nine_closed(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    """A MANIFEST the inventory cannot read leaves check 9 unavailable, not a crash."""
+
+    broken = _copied(arms_on_set, tmp_path)
+    (broken / "MANIFEST.md").write_bytes(b"| 0 | \xff\xfe |\n")
+    report = run_validity_gate(
+        broken,
+        expected_experiment_config=_TEST_CONFIG,
+        expected_seeds=frozenset(_FAKE_SEEDS),
+    )
+    provenance = _provenance(report)
+    assert not provenance.passed
+    assert provenance.facts == {"input_available": False}
+    assert "UnicodeDecodeError" in provenance.violations[0]
+
+
+def test_the_gate_cli_passes_the_sha_flag_through(
+    arms_on_set: Path, tmp_path: Path
+) -> None:
+    foreign = _copied(arms_on_set, tmp_path)
+    manifest = foreign / "MANIFEST.md"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            f"| {_FAKE_SHA} |", "| def5678 |", 1
+        ),
+        encoding="utf-8",
+    )
+    good = tmp_path / "good.json"
+    good.write_text(_TEST_CONFIG_JSON)
+    arguments = [str(foreign), "--expected-experiment-config", str(good)]
+    assert _gate_cli().main(arguments) == 0
+    assert _gate_cli().main([*arguments, "--require-one-recording-sha"]) == 1
