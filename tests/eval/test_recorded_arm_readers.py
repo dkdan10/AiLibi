@@ -143,6 +143,27 @@ def _open_the_pending_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(experiment_config, "WAVE_ARMS_PENDING", MappingProxyType({}))
 
 
+def _plant_unbuilt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """List the two tactical wave values as unbuilt again, as the spine did.
+
+    The factory then refuses them by name, so a walk that reaches the refusal
+    proves the recorded value reached the policy builder.
+    """
+
+    import agents.tactical.experimental as experimental
+
+    monkeypatch.setattr(
+        experimental,
+        "UNBUILT_OPTION_VALUES",
+        MappingProxyType(
+            {
+                "vent_exit_policy": frozenset({"look_and_wait"}),
+                "vent_entry_policy": frozenset({"own_fresh_kill"}),
+            }
+        ),
+    )
+
+
 def _with_settings(source: Path, target: Path, **settings: object) -> Path:
     """A copy of a recorded set whose every stamped row also carries ``settings``."""
 
@@ -209,9 +230,10 @@ def recordings(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     }
 
 
-# The wave fields no behaviour exists for yet, carried by rewritten copies while
-# the pending guard is patched open: the readers take the recorded bytes, so the
-# walk reads them exactly as it would a recording that ran them.
+# The wave fields carried by rewritten copies of recordings that did not run
+# them: the readers take the recorded bytes, so the walk reads them exactly as it
+# would a recording that ran them. The two tactical values are built; the tests
+# that need a builder's refusal plant them back as unbuilt (_plant_unbuilt).
 _PENDING_TACTICAL: Final[dict[str, object]] = {
     "vent_exit_policy": "look_and_wait",
     "vent_entry_policy": "own_fresh_kill",
@@ -471,13 +493,13 @@ def test_honesty_hands_a_pending_tactical_value_to_the_policy_builder(
     field: str,
     walk: str,
 ) -> None:
-    # The factory refuses a declared tactical value whose behaviour is not built
-    # yet, so reaching that refusal proves the recorded value passed the walk's
-    # field list; a walk that dropped the field would refuse the recording by
-    # name first, with a plain ValueError.
+    # With the value planted back as unbuilt, the factory refuses it, so reaching
+    # that refusal proves the recorded value passed the walk's field list; a walk
+    # that dropped the field would refuse the recording by name first, with a
+    # plain ValueError.
     from agents.tactical.experimental import UnbuiltTacticalOptionError
 
-    _open_the_pending_guard(monkeypatch)
+    _plant_unbuilt(monkeypatch)
     value = _PENDING_TACTICAL[field]
     copy = _with_settings(
         recordings["plain"], tmp_path / "tactical" / "9p2i", **{field: value}
@@ -1909,11 +1931,11 @@ def test_the_golden_builds_the_recorded_arms_agents(
     recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # The default factory builds the experimental policy a recorded tactical
-    # setting names, and refuses a value whose behaviour is not built yet; an
-    # agent built without the recorded settings would not reach that refusal.
+    # setting names, and refuses a value planted back as unbuilt; an agent built
+    # without the recorded settings would not reach that refusal.
     from agents.tactical.experimental import UnbuiltTacticalOptionError
 
-    _open_the_pending_guard(monkeypatch)
+    _plant_unbuilt(monkeypatch)
     copy = _with_settings(
         recordings["plain"], tmp_path / "unbuilt" / "9p2i", **_PENDING_TACTICAL
     )

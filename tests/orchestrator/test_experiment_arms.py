@@ -3,9 +3,10 @@ a runner built from the recorded config, derived arm stamps, the spectator
 view, the contract page (``docs/experiment-arms.md``) and the factory-kind
 record the policy-stamp docstring in ``orchestrator/replay.py`` relies on.
 
-No arm behaviour exists yet, so every ON value here is either refused (the
-pending guard) or reached with that guard patched open to prove the plumbing
-around it. The last arm card deletes the guard's refusal tests with the guard.
+Each arm card builds its values' behaviour and removes them from the pending
+guard. A value still pending is either refused here or reached with that guard
+patched open to prove the plumbing around it. The last arm card deletes the
+guard's refusal tests with the guard.
 """
 
 from __future__ import annotations
@@ -1141,8 +1142,14 @@ def test_the_page_check_bites_an_undisclosed_environment_switch() -> None:
 
 
 def test_the_lab_candidates_are_all_arms_that_exist_today() -> None:
+    # A lab arm records only built values: none it sets is still pending.
     for config in candidate_configs().values():
-        assert not set(OMITTED_AT_DEFAULT) & set(config.model_dump())
+        dumped = config.model_dump()
+        assert not [
+            field
+            for field, refused in WAVE_ARMS_PENDING.items()
+            if field in dumped and dumped[field] in refused
+        ]
 
 
 # ---------------------------------------------------------------------------
