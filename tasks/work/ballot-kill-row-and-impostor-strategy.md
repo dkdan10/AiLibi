@@ -122,6 +122,30 @@ edits the text under that header.
 
 ## Acceptance
 
+- [x] Review correction: **an EJECT citing a turn and an own observation is classified by the
+  turn** (round 2, correctness verifier, probe R07). Two new carriers in
+  `tests/meetings/test_ballot_arms.py::test_each_carrier_moves_its_cell_by_exactly_one`: impostor
+  p-2's EJECT keeps its own observation and also cites p-7's turn, which points nowhere (another
+  turn +1, neutral only -1), or its own turn accusing the target (pointing toward +1, own turn +1,
+  neutral only -1). Probe R07 (swap the turn branch and the observation branch in
+  `eval/evidence_honesty.py::_fold_ballot_conduct`) now fails it.
+- [x] Review correction: **the carried-ejection cell reads only ballots for the ejected player**
+  (round 2, correctness verifier probe R05 and the docs verifier's cell-4 finding, the same
+  probe). New carriers in the same test: crew p-1 voting p-9, or SKIP, at 0.9 leaves
+  `ejections_carried_by_impostors_alone` unchanged, and crew p-1 voting the ejected p-7 at 0.9
+  lowers it by one. Probe R05 (keep only the confidence filter in the carried list) now fails it.
+- [x] Review correction: **the ejected-target comparison is pinned** (round 2, integrity verifier,
+  probe P3). The same carriers; P3 (`ballot.target == entry.ejected_player_id` read as
+  `ballot.target is not None`) now fails them.
+- [x] Review correction: **only an accusation against the target points toward it** (round 2,
+  integrity verifier, probe Q1). New carrier in the same test: the cited turn accuses p-9, not the
+  EJECT's target, so the EJECT cites another turn (+1) and pointing toward is unchanged. Probe Q1
+  (`claim.against == target` read as `claim.against is not None` in `_points_toward`) now fails it.
+- [x] Review correction: **a contradiction points toward only from the turn it was minted from**
+  (round 2, integrity verifier, probe Q4). New entry in the same test's conflict loop: a
+  contradiction naming the target, minted from two other turns, while the cited turn accuses
+  nobody: another turn +1, pointing toward unchanged. Probe Q4 (drop the per-turn conjunct on the
+  contradiction branch of `_points_toward`) now fails it.
 - [x] Review correction: **the ballot family's per-turn filter is pinned** (round 1, correctness
   verifier). A new carrier in `tests/meetings/test_ballot_arms.py::test_each_carrier_moves_its_cell_by_exactly_one`
   has another turn of the meeting accuse the target while the cited turn does not: it moves
@@ -1090,3 +1114,120 @@ the two loader docstrings, now both pinned.
 honesty cell now reads both slots, so the two can differ once an arm-ON record holds a counter-slot
 kill citation; on committed data both read nothing from the counter slot. Noted for the census
 owner and the record card.
+
+### Review corrections, round 2 (2026-09-27)
+
+Six blocking findings from the round-2 verifiers at `07282a4e`, five distinct probes: the
+correctness verifier's R05 and the docs verifier's cell-4 finding are the same mutant. All five are
+listed-class survivors in `eval/evidence_honesty.py` that no carrier pinned; the code already did
+what the family sentence says, so no production byte changes. Fix commit `173139cb` edits only
+`tests/meetings/test_ballot_arms.py`; the commit after it changes only this card. Every command
+below ran at `173139cb` in a shell with no `AILIBI_*` export.
+
+**What changed.** New carriers in `test_each_carrier_moves_its_cell_by_exactly_one`, all on the
+scripted game's third meeting (impostors p-2 and p-3 eject p-7 at 0.9; recorded floor 0.6):
+- **Classification order (R07, correctness verifier).** Impostor p-2's EJECT keeps its own
+  observation `p-2:1:12` and also cites a turn of this meeting. Citing p-7's turn, which points
+  nowhere, moves another turn +1 and neutral only -1; citing its own turn accusing p-7 moves
+  pointing toward +1, own turn +1 and neutral only -1. The family docstring's order (a turn first,
+  then an own observation) is now enforced; with the branches swapped the published s9 cell 3 would
+  read 17 of 46 instead of 1 of 46 (the verifier's measurement), consistent with the count-only
+  population below.
+- **The ejected-target filter in cell 4 (R05, correctness verifier; the docs verifier's cell-4
+  finding; P3, integrity verifier).** Crew p-1 voting p-9 at 0.9, or SKIP at 0.9, leaves
+  `ejections_carried_by_impostors_alone` unchanged; crew p-1 voting p-7 at 0.9 lowers it by one.
+  Both mutants could only lower a count that reads 0 of 411 on committed data, so no published
+  value was at risk; the family sentence ("ballots for the ejected player") is now enforced.
+- **An accusation against somebody else (Q1, integrity verifier).** p-7's turn carries a typed
+  accusation against p-9 and impostor p-3's EJECT of p-7 cites it: another turn +1, pointing toward
+  unchanged. With the mutant the published s9 split would read 45 / 0 instead of 26 / 19 (the
+  verifier's measurement).
+- **A contradiction minted from other turns (Q4, integrity verifier).** A new conflict-loop entry:
+  a contradiction naming p-7 whose two event ids resolve to p-9's and p-1's turns, while the cited
+  turn (p-7's) accuses nobody: another turn +1, pointing toward unchanged. The loop's assertion
+  message now names both event ids, since two entries share the subjects `("p-7",)`.
+
+**Count-only population for the R07 carrier.** Impostor EJECTs whose recorded
+`primary_reason_id` names a turn of the meeting and whose `primary_reason_observation_id` is set:
+16 of 46 on s9 and 61 of 183 pooled (samples/4p1i 1 of 6, ml_corpus/9p2i 43 of 121, ml_corpus/4p1i
+1 of 10). A scratch script over the recorded ballots, roles through `eval.validity.roles_by_seed`
+with `resolve_roster_knobs`, printing counts keyed by set only.
+
+**Mutation pass, bounded to the spans the findings name.** The card's operator letters (F drop a
+filter, S swap one collection for a related one, N comparison to a None test or its inverse, B swap
+adjacent branches). Suites: `tests/meetings/test_ballot_arms.py` and
+`tests/eval/test_evidence_honesty.py`, `pytest -q -n 6`, no `-x`. Each probe was applied in place,
+run, and `eval/evidence_honesty.py` restored from a copy with its sha256 checked; restored, the pair
+reads 195 passed after each run. First run: the test file of `07282a4e`; second run: the test file
+of `173139cb`. The last column names the assertion that fails first under the probe (a single-test
+run with `--tb=line`).
+
+| id | class | probe | first run (tests of `07282a4e`) | with the round-2 tests | first failing assertion |
+|---|---|---|---|---|---|
+| R07 | B | classification swaps the turn branch and the own-observation branch | SURVIVED: 195 passed | killed: 1 failed, 194 passed | p-2 cites p-7's turn and keeps its observation |
+| R07b | B | pointing-toward and other-turn bodies swapped | killed: 2 failed, 193 passed | killed: 2 failed, 193 passed | |
+| R07c | F | drop the turn-id membership test | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+| R07d | N | own-observation test `is not None` to `is None` | killed: 3 failed, 192 passed | killed: 3 failed, 192 passed | |
+| R05 | F | carried list keeps only the confidence filter | SURVIVED: 195 passed | killed: 1 failed, 194 passed | crew p-1 votes p-9 at 0.9 |
+| R05b | F | carried list drops the confidence filter | killed: 5 failed, 190 passed | killed: 5 failed, 190 passed | |
+| R05c | F | drop the non-empty test before `all` | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+| R05d | S | impostor set swapped for the roles mapping | killed: 1 failed, 194 passed | killed: 2 failed, 193 passed | |
+| P3 | N | ejected-target test to `ballot.target is not None` | SURVIVED: 195 passed | killed: 1 failed, 194 passed | crew p-1 votes p-9 at 0.9 |
+| P3b | N | ejected-target `==` to `!=` | killed: 4 failed, 191 passed | killed: 4 failed, 191 passed | |
+| Q1 | N | accusation `claim.against == target` to `is not None` | SURVIVED: 195 passed | killed: 1 failed, 194 passed | the cited turn accuses p-9 |
+| Q1b | N | accusation `==` to `!=` | killed: 2 failed, 193 passed | killed: 2 failed, 193 passed | |
+| Q4 | F | drop the per-turn conjunct on the contradiction branch | SURVIVED: 195 passed | killed: 1 failed, 194 passed | the contradiction minted from p-9's and p-1's turns |
+| Q4b | N | subjects `in` to `not in` | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+| Q4c | F | drop the subjects filter | killed: 1 failed, 194 passed | killed: 1 failed, 194 passed | |
+
+15 probes, all killed with the round-2 tests. The probes that first came back green were exactly
+the five the findings name (R07, R05, P3, Q1, Q4); the other ten are neighbours in the same spans,
+killed on both runs. The crew-SKIP carrier sits after the p-9 carrier in the same loop, so no probe
+reached it first; it is not claimed as a killer. No other operator class was run.
+
+**Verification at `173139cb`.** No production path changed since `318c99ed` (`git diff --stat
+318c99ed 173139cb` names only `tests/meetings/test_ballot_arms.py`), so no committed number can
+move; the family was re-measured anyway with
+`uv run python scripts/measure_baseline.py replays/<set> --honesty --json` on the four sets and
+equals the round-1 table cell for cell:
+
+| cell | s9 | pooled, four sets |
+|---|---|---|
+| impostor ballots: EJECT / SKIP | 46 / 164 | 183 / 760 (943) |
+| ejections | 90 | 411 |
+| family cell 2: pointing toward (own turn) / another turn | 26 (13) / 19 | 98 (47) / 83 |
+| family cell 3: EJECTs citing only a neutral row | 1 of 46 | 2 of 183 |
+| family cell 4: ejections carried by impostor ballots alone | 0 of 90 | 0 of 411 |
+| family cell 5: kill holders; their ballots citing the kill (either slot) | 4; 3 of 4 | 31; 21 of 31 |
+| family cell 6: recorded teammate targets | 0 of 210 | 0 of 943 |
+
+| command | result |
+|---|---|
+| the card's targeted pytest list (`-n 6`) | exit 0, 897 passed (the carriers sit inside one existing test) |
+| `uv run lint-imports` | exit 0, 4 kept, 0 broken |
+| `git grep -n WAVE_ARMS_PENDING -- '*.py'` | no output (exit 1) |
+| `uv run mypy tests/meetings/test_ballot_arms.py eval/evidence_honesty.py` | no issues |
+| `bash scripts/verify_samples.sh replays/<set>`, four sets | exit 0 each: 50, 50, 150, 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, four sets | exit 0 each |
+| `uv run python scripts/measure_baseline.py replays/<set> --honesty --json`, four sets | exit 0 each; the family as tabled above |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0 |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0 |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0 |
+| `uv run pytest -m campaign` | exit 0, 336 passed |
+| `scripts/build_demo_bundle.py --out <scratch>` with only the test file changed from `07282a4e` and again at `173139cb`, `diff -r` of `data/` | exit 0, no output; the builder reads no `tests/` path |
+| `bash scripts/check.sh` (clean tree at `173139cb`) | exit 0: ruff, format (547 files), `lint-imports` (4 kept), task docs, prompt sync, mypy (518 files); 9,756 passed, 20 skipped, 3 xfailed (292 s); frontend lint, typecheck, 559 tests in 20 files, build |
+| `uv run python scripts/check_doc_facts.py`, `uv run python scripts/validate_task_docs.py` | exit 0 each, at the card commit |
+
+**Changed test expectations.** None weakened, skipped or deleted. Added, all inside
+`test_each_carrier_moves_its_cell_by_exactly_one`: seven carrier assertions (Q1 one, R07 two, Q4
+one conflict-loop entry, cell 4 three, two of them in one loop) and two precondition assertions
+(p-2's recorded observation id is set; the third meeting ejects p-7 under the recorded floor 0.6). Changed: the
+conflict loop's assertion message, from the subjects alone to the subjects and both event ids.
+
+**Closing greps.** No behaviour or vocabulary changed this round, so no old-behaviour sentence can
+be stale. The sentences the carriers now enforce, `git grep -n -i -E "ballots for the ejected
+player|minted a contradiction of this|classified by its primary citations" -- '*.py' '*.md'
+':!replays' ':!audits' ':!agent_prompts'`: `eval/evidence_honesty.py` lines 91, 94, 539, 542, 940,
+943 and 950 (the module text, the `CELL_DEFINITIONS` sentence and the family docstring) and the new
+test comment at `tests/meetings/test_ballot_arms.py:2138`; each states what the code does, at that
+strength.
