@@ -529,6 +529,10 @@ whether to raise the wall ceiling, resume under the same ceiling later with the
   request opens.
 - The operator log sits outside the repository under the run's own scratch
   subdirectory.
+- The `replays/candidates/` row of `docs/artifacts.md` states the checkpoint's 7
+  tracked files, so offline `verify_ml_evidence.py` passes at this head (it
+  failed that row, 1 stated against 7 tracked, before the edit); delivery
+  re-derives it to 56. `check_doc_facts.py` and `validate_task_docs.py` pass here.
 - The candidate sentence will go on `docs/experiment-arms.md`, the card's
   default: `docs/architecture.md` has 1,283 words against its 1,300 budget.
 
