@@ -2535,7 +2535,11 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         if not gate_killscene_vouches:
 
             def _ungated(
-                *, tick: int, rooms: object, triggering_body_rooms: object
+                *,
+                tick: int,
+                rooms: object,
+                triggering_body_rooms: object,
+                regroup_ticks: frozenset[int] = frozenset(),
             ) -> bool:
                 return True
 
@@ -2634,7 +2638,11 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         if not gate_killscene_vouches:
 
             def _ungated(
-                *, tick: int, rooms: object, triggering_body_rooms: object
+                *,
+                tick: int,
+                rooms: object,
+                triggering_body_rooms: object,
+                regroup_ticks: frozenset[int] = frozenset(),
             ) -> bool:
                 return True
 

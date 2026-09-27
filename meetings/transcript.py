@@ -1247,19 +1247,34 @@ def _route_self_refuted(
     return False
 
 
+def in_regroup_window(tick: int, *, regroup_ticks: frozenset[int]) -> bool:
+    """Whether ``tick`` is a public regroup's tick or the tick after it.
+
+    Under the regroup reset every living player stands in the meeting room at a
+    regroup's tick and at most one hop out of it on the next, exactly as every
+    player co-spawns there (:data:`SPAWN_WINDOW_LAST_TICK`). A sighting in that
+    window says where the regroup put the subject, not where they chose to be, so
+    it carries no alibi evidence either way. ``regroup_ticks`` is empty unless the
+    recording's settings regroup (``orchestrator.replay.derive_regroup_ticks``).
+    """
+
+    return tick in regroup_ticks or tick - 1 in regroup_ticks
+
+
 def is_relevant_sighting(
     *,
     tick: int,
     rooms: frozenset[str],
     triggering_body_rooms: frozenset[str],
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> bool:
     """The §6.3 Rule-3 relevance predicate (Task 10.6; audit gp-2 C-C-3).
 
     A supporting sighting is corroboration-grade ONLY when it carries
-    actual evidential weight about the subject's innocence. Two
-    evidentially-empty shapes are excluded -- on the Wave-0 set they let
-    52% of impostor accusation flow cancel in-meeting (30 of 58
-    accused-impostor events netted to zero):
+    actual evidential weight about the subject's innocence. Evidentially
+    empty shapes are excluded -- on the Wave-0 set the first two let 52% of
+    impostor accusation flow cancel in-meeting (30 of 58 accused-impostor
+    events netted to zero):
 
     * **Spawn-window sightings** (``tick <=``
       :data:`SPAWN_WINDOW_LAST_TICK`): everyone co-spawns in CAFETERIA,
@@ -1271,9 +1286,13 @@ def is_relevant_sighting(
       scene must never exonerate (the seed-6 m1 byte walk: the accuser's
       own ADMIN@16 sighting of the impostor who had just killed there
       corroborated the killer's alibi and cancelled the accusation).
+    * **Regroup-window sightings** (:func:`in_regroup_window`): a public
+      regroup's tick and the tick after it recreate the spawn shape, so they are
+      excluded the same way. ``regroup_ticks`` is empty by default, so a caller
+      that passes none excludes the spawn window and the kill scene only.
 
     Pure and total: ``rooms`` may be empty (a claim-stated corroboration
-    carries no room -- only the spawn-window prong can gate it), and an
+    carries no room -- only the two tick prongs can gate it), and an
     empty ``triggering_body_rooms`` (an emergency meeting with no body)
     never excludes by scene. Callers pass canonical room sets
     (:func:`canonical_rooms`) on both sides; the corroboration path
@@ -1283,6 +1302,8 @@ def is_relevant_sighting(
     """
 
     if tick <= SPAWN_WINDOW_LAST_TICK:
+        return False
+    if in_regroup_window(tick, regroup_ticks=regroup_ticks):
         return False
     if rooms & triggering_body_rooms:
         return False
@@ -1399,6 +1420,7 @@ def reconstruct_stated_paths(
     include_kill_scene: bool = False,
     movement_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
     | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> Mapping[PlayerId, tuple[StatedPlacement, ...]]:
     """Each subject's STATED room-by-tick path from the transcript (Task 13.2).
 
@@ -1426,7 +1448,8 @@ def reconstruct_stated_paths(
       one-home gate the corroboration path uses, so a spawn-window
       (tick 0-1) or kill-scene sighting -- the evidentially-empty shapes --
       reconstructs no position. ``trigger_kind="emergency"`` drops the
-      kill-scene exclusion (an emergency meeting has no body, Task 10.11).
+      kill-scene exclusion (an emergency meeting has no body, Task 10.11), and
+      ``regroup_ticks`` (empty by default) adds the regroup window.
 
     The ``roster`` filter mirrors :func:`detect_contradictions`:
     ``roster=None`` (the default) places every named player (unit-test
@@ -1509,6 +1532,7 @@ def reconstruct_stated_paths(
             tick=sighting.observation.tick,
             rooms=sighting.rooms,
             triggering_body_rooms=relevance_body_rooms,
+            regroup_ticks=regroup_ticks,
         ):
             continue
         placement = StatedPlacement(
@@ -1635,6 +1659,7 @@ def absent_players(
     include_vent_sightings: bool = False,
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]]
     | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> tuple[PlayerId, ...]:
     """The publicly UNPLACED living players -- Task 16.8's absent set.
 
@@ -1663,8 +1688,8 @@ def absent_players(
     explicit universe, and a living-only universe excludes dead players by
     construction (a dead player named in testimony is filtered out of the
     reconstruction AND absent from the roster, so it can never surface
-    here). ``trigger_kind`` threads through to the reconstruction's
-    relevance gate unchanged.
+    here). ``trigger_kind`` and ``regroup_ticks`` thread through to the
+    reconstruction's relevance gate unchanged.
 
     ``include_vent_sightings`` (Task 17.5, the PR #264 vent-placement
     widening; default ``False`` -> byte-identical for every existing
@@ -1700,7 +1725,10 @@ def absent_players(
     """
 
     placed = reconstruct_stated_paths(
-        transcript, roster=roster, trigger_kind=trigger_kind
+        transcript,
+        roster=roster,
+        trigger_kind=trigger_kind,
+        regroup_ticks=regroup_ticks,
     )
     unplaced = frozenset(player for player in roster if player not in placed)
     if include_vent_sightings and vent_witness_records is not None:
@@ -1745,6 +1773,7 @@ def detect_contradictions(
     | None = None,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
     evidence_reasoning_version: Literal[1, 2] | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -1906,6 +1935,15 @@ def detect_contradictions(
     Like the rules above it re-bands only descriptions, so the flag set is
     unchanged.
 
+    The regroup window. ``regroup_ticks`` are the public regroup ticks the
+    recording's settings produced before this meeting (empty by default). A
+    sighting at a regroup's tick or the tick after it (:func:`in_regroup_window`)
+    says where the regroup put its subject, so it prosecutes no alibi: it mints
+    no ``alibi_vs_sighting`` flag, and the stated-path reconstruction behind
+    ``alibi_vs_physical`` drops it through the relevance gate. It stays in the
+    transcript, and a grounded vent sighting is untouched, since a witnessed
+    vent is gated when it happens.
+
     The function is pure: it does not mutate the transcript and has no
     side effects.
     """
@@ -1957,6 +1995,7 @@ def detect_contradictions(
             ),
             grounded_prosecution=grounded_prosecution,
             evidence_reasoning_version=evidence_reasoning_version,
+            regroup_ticks=regroup_ticks,
         )
     )
     # Task 13.4 (B3/B4): the inferential physical path.
@@ -1982,7 +2021,10 @@ def detect_contradictions(
         tuple(a for a in indexed_alibis if a.speaker == a.claim.subject)
     )
     paths = reconstruct_stated_paths(
-        transcript, roster=roster, trigger_kind=trigger_kind
+        transcript,
+        roster=roster,
+        trigger_kind=trigger_kind,
+        regroup_ticks=regroup_ticks,
     )
     # Task 13.5.3 (the witnessed-kill kill-scene intensification; unconditional
     # since Task 14.9 — the adopted lever is the default substrate). When the
@@ -1997,6 +2039,7 @@ def detect_contradictions(
             roster=roster,
             trigger_kind=trigger_kind,
             include_kill_scene=True,
+            regroup_ticks=regroup_ticks,
         )
     flags.extend(
         _detect_alibi_vs_physical(
@@ -2132,6 +2175,7 @@ def detect_corroborations(
     *,
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> tuple[DetectedCorroboration, ...]:
     """Containment-consistent (alibi, sighting) pairs (Task 10.1; §6.3 Rule 3).
 
@@ -2154,10 +2198,11 @@ def detect_corroborations(
     the meeting's :func:`triggering_body_rooms` -- a spawn-window
     (tick 0-1) sighting or a kill-scene sighting (subject seen in the
     triggering body's room inside the corroborated window) is
-    evidentially empty and corroborates nothing. Gated at this one home
-    so every detector-derived Rule-3 corroboration -- the recording-time
-    path and the post-meeting belief fold alike -- sees the identical
-    gate.
+    evidentially empty and corroborates nothing, and so is a sighting in
+    the window of a public regroup (``regroup_ticks``, empty by default).
+    Gated at this one home so every detector-derived Rule-3 corroboration
+    -- the recording-time path and the post-meeting belief fold alike --
+    sees the identical gate.
 
     Unlike the contradiction path, echo alibis are NOT deduped here.
     The echo dedup exists to stop flag multiplication and classification
@@ -2216,6 +2261,7 @@ def detect_corroborations(
                 tick=sighting.observation.tick,
                 rooms=sighting.rooms,
                 triggering_body_rooms=body_rooms,
+                regroup_ticks=regroup_ticks,
             ):
                 continue
             corroborations.append(
@@ -2238,6 +2284,7 @@ def independent_voices(
     *,
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> Mapping[PlayerId, tuple[PlayerId, ...]]:
     """The INDEPENDENT VOICES against each accused subject (Tasks 10.7, 10.15).
 
@@ -2275,7 +2322,9 @@ def independent_voices(
       content is evidentially empty: spawn-window (tick 0-1)
       observations and kill-scene observations are exactly the
       everyone-can-say-it shapes (the seed-30 deflection's only
-      sightings sat at the kill scene -- no voice).
+      sightings sat at the kill scene -- no voice), and so are
+      observations in a public regroup's window (``regroup_ticks``,
+      empty by default).
     * **An opt-in corroboration aligned with an existing accuser**: an
       ``opt_in`` turn whose :class:`CorroborationClaim` supports a
       player who accused the subject this meeting, where the opt-in
@@ -2344,7 +2393,9 @@ def independent_voices(
     # external producer ordered the transcript.
     seen_rationales: dict[PlayerId, set[str]] = {}
     for turn in sort_turns_canonically(transcript.turns):
-        if not _carries_relevant_observation(turn, triggering_body_rooms=body_rooms):
+        if not _carries_relevant_observation(
+            turn, triggering_body_rooms=body_rooms, regroup_ticks=regroup_ticks
+        ):
             continue
         if turn.turn_kind in ("opening", "reply"):
             for claim in turn.claims:
@@ -2383,7 +2434,10 @@ def independent_voices(
 
 
 def _carries_relevant_observation(
-    turn: MeetingTurn, *, triggering_body_rooms: frozenset[str]
+    turn: MeetingTurn,
+    *,
+    triggering_body_rooms: frozenset[str],
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> bool:
     """Whether ``turn`` stakes relevance-grade first-hand content (Task 10.7).
 
@@ -2402,7 +2456,9 @@ def _carries_relevant_observation(
     rule), while a witnessed vent is incrimination, and an impostor
     venting at the kill scene is exactly the shape the evidence must
     reach. The spawn-window prong still applies, matching every other
-    observation kind.
+    observation kind; the regroup window does not, because a witnessed vent
+    was gated on who could see it when it happened, so the regroup that
+    followed cannot empty it (``regroup_ticks`` gates every other kind).
 
     Task 16.7: a :class:`~meetings.schemas.WhereaboutsClaim` is NOT
     observation backing. A roll-call self-placement carries zero
@@ -2452,6 +2508,7 @@ def _carries_relevant_observation(
             tick=observation.tick,
             rooms=rooms,
             triggering_body_rooms=triggering_body_rooms,
+            regroup_ticks=regroup_ticks,
         ):
             return True
     return False
@@ -3262,6 +3319,7 @@ def _detect_alibi_vs_sightings(
     subject_accounts: Mapping[PlayerId, tuple[_SubjectAccount, ...]],
     grounded_prosecution: bool = False,
     evidence_reasoning_version: Literal[1, 2] | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
         if not alibi.rooms:
@@ -3313,6 +3371,14 @@ def _detect_alibi_vs_sightings(
         )
         for sighting in sightings:
             if sighting.observation.subject != alibi.claim.subject:
+                continue
+            # The regroup window: a sighting at a public regroup's tick or the
+            # tick after it places its subject where the regroup put them, so it
+            # prosecutes no alibi -- the mirror of the relevance gate that keeps
+            # the same sighting from corroborating one.
+            if in_regroup_window(
+                sighting.observation.tick, regroup_ticks=regroup_ticks
+            ):
                 continue
             # Canonical room comparison (Task 10.1): a no-room sighting
             # is not comparable; a sighting room inside the alibi's room
@@ -3752,6 +3818,7 @@ def grounded_vouch_subjects(
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> frozenset[PlayerId]:
     """Subjects of GROUNDED VOUCHES -- corroboration-class, never flags (Task 16.7).
 
@@ -3787,8 +3854,9 @@ def grounded_vouch_subjects(
     * **roster** -- a non-roster subject (hallucinated id, dead player)
       never reaches the fold, matching :func:`detect_corroborations`;
     * **Rule-3 relevance** (:func:`is_relevant_sighting` against this
-      meeting's :func:`triggering_body_rooms`) -- a spawn-window or
-      kill-scene vouch is evidentially empty and never exculpates,
+      meeting's :func:`triggering_body_rooms` and ``regroup_ticks``) -- a
+      spawn-window, regroup-window or kill-scene vouch is evidentially
+      empty and never exculpates,
       preserving the documented invariant that EVERY producer of the
       ``corroborated`` set routes through the one relevance gate
       (:data:`agents.memory.beliefs.CORROBORATION_SUSPICION_DELTA`). The
@@ -3847,6 +3915,7 @@ def grounded_vouch_subjects(
                     tick=record.tick,
                     rooms=canonical_rooms(record.room),
                     triggering_body_rooms=body_rooms,
+                    regroup_ticks=regroup_ticks,
                 )
                 for record in records
             ):
@@ -4755,6 +4824,7 @@ __all__ = [
     "detect_corroborations",
     "grounded_vent_subjects_from_flags",
     "grounded_vouch_subjects",
+    "in_regroup_window",
     "independent_voices",
     "is_canonically_ordered",
     "is_relevant_sighting",
