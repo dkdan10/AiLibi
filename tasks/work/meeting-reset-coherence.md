@@ -1259,9 +1259,12 @@ subsection was written.
 | `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
 | `git diff --stat 711e488f -- engine/ frontend/ api/ observation/ replays/ eval/off_menu.py orchestrator/experiment_config.py eval/gameplay_census.py eval/leak_scan.py api/schemas.py docs/architecture.md audits/ tests/fixtures/` | empty |
 
-`bash scripts/check.sh` runs once, at the commit that first carries this subsection, in a bare shell with its exit
-code captured from the process; the card commit after it records the result in this paragraph and changes
-nothing else.
+`bash scripts/check.sh` ran once, at `dbb32f6c`, the commit that first carries this subsection, in a bare shell with
+0 `AILIBI_*` exports and its exit code captured from the process: exit 0 (ruff clean, 546 files formatted,
+`lint-imports` 4 kept 0 broken, task docs with 88 work cards and prompts valid, mypy clean on 517 files, pytest
+9667 passed, 20 skipped, 3 xfailed, the round's 13 new items above round 3's 9654; frontend lint, types, 559
+vitest tests and build). The commit after it changes only this paragraph; `scripts/validate_task_docs.py` and
+`scripts/check_doc_facts.py` re-run at that head.
 
 **Changed test expectations.** One, stricter: the refusal `match` in
 `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` now also pins `; got
