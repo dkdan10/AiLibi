@@ -203,8 +203,13 @@ def ingest_public_regroup(
     room: str,
     player_ids: tuple[str, ...],
 ) -> None:
-    """Record an announced relocation, not an inferred walk or hidden route."""
-    if memory.evidence_reasoning_version != 2:
+    """Record an announced relocation, not an inferred walk or hidden route.
+
+    Written on the default evidence path and under evidence version 2. Version 1
+    is excluded: its walking checks never learned the relocation, and the
+    recorded settings refuse it beside the regroup reset.
+    """
+    if memory.evidence_reasoning_version == 1:
         return
     if tick < 0 or not room or len(set(player_ids)) != len(player_ids):
         raise ValueError(

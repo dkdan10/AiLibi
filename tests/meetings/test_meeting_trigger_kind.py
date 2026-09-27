@@ -405,6 +405,7 @@ class _WatchedManager(MeetingManager):
         sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
         evidence_reasoning_version: Literal[1, 2] | None,
         trigger_kind: MeetingTriggerKind | None = None,
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> tuple[ContradictionRef, ...]:
         self._seen.detector_kinds.append(trigger_kind)
         return super()._detect_contradictions(
@@ -415,6 +416,7 @@ class _WatchedManager(MeetingManager):
             sighting_records=sighting_records,
             evidence_reasoning_version=evidence_reasoning_version,
             trigger_kind=trigger_kind,
+            regroup_ticks=regroup_ticks,
         )
 
 

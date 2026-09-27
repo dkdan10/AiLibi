@@ -1,6 +1,6 @@
 # B2: the full meeting reset, coherent for agents and instruments
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -20,7 +20,8 @@ recorded arm or on the public regroup row it produces, so each is byte-neutral o
 4. **A symmetric regroup relevance window.** A regroup tick and the tick after it carry no alibi evidence,
    whether they would corroborate an alibi or prosecute one (`alibi_vs_sighting`). Their sightings stay out
    of the ballot's own-evidence rows.
-5. **Legible memory.** The regroup co-presence folds into one line; the self-location trail marks the regroup.
+5. **Legible memory.** The regroup co-presence folds into one line on the default evidence path when no
+   regroup-tick sighting carries a movement note; the self-location trail marks the regroup.
 6. **Every reader follows:** game, replay helpers, loader, walk, funnel, evidence honesty, scorecard, the
    phase-20 counterfactual, transcript detectors, manager, corroboration and agent memory.
 
@@ -145,7 +146,100 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
 
 ## Acceptance
 
-- [ ] **The reset at the orchestrator entry.** Mechanism: the arm-gated `regroup_after_meeting` call in
+- [x] Review correction: **the reset beside the account profiles is a stated limitation, by the orchestrator's
+  ruling of 2026-09-27** (round 7). No validator clause is written and no test changes:
+  `orchestrator/experiment_config.py` and `tests/orchestrator/test_public_regroup_evidence.py` have no diff
+  against `main`, and that test, the done temporal-evidence card's, passes with its later-account assertion
+  (`:101`) intact. The ruling's three options and why the third was taken are in Decisions, Limitations and
+  round 7 below. `docs/observation-contract.md` states the window's reach at the strength the code delivers:
+  every profile but attributed testimony, alone or beside public accounts, whose account detector takes no ticks
+  (`test_the_account_detector_reads_no_regroup_window`); public accounts alone keep the windowed detector
+  (`test_independent_account_arms_complete_real_meetings[1-None]`, red under three routing mutants, round 7).
+  `MeetingManager.run`'s docstring already states it and is unchanged. The glossary's "regroup" entry, the one
+  other document that states the window's reach, gains the same exception in one clause.
+- [x] Review correction: **the regroup fold is stated at the strength the code delivers, its movement-note
+  condition included** (round 6, correctness lens). On the default evidence path the fold renders only when no
+  regroup-tick row carries a movement note; a subject last seen at the regroup after a sighting in another room
+  carries one, and every regroup sighting then keeps its own row. The contract paragraph, the `store.py`
+  docstrings, the "Legible memory" box, Decisions, Limitations, the PR body and the test helper's docstring say
+  so; the fold's code is unchanged. Planted: `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`
+  pins the unfolded render beside the folded case, and `test_a_subject_never_seen_elsewhere_leaves_the_fold_whole`
+  pins that the note, not the missing later sighting, breaks the fold. Count-only, fake arm-ON seeds 1000-1007:
+  18 of 54 post-regroup views render the latest regroup's fold line (round 6 below).
+- [x] Review correction: **the window's reach is stated at the profiles that read it** (round 6, orchestrator
+  ruling, in part). `docs/observation-contract.md` and `MeetingManager.run`'s docstring now say prosecution
+  reads the window on every profile but attributed testimony, whose account detector takes no ticks
+  (`test_the_account_detector_reads_no_regroup_window`). The ruled validator refusal of the reset beside the
+  public-account profiles is not written: it makes the done temporal-evidence card's pinned test
+  (`tests/orchestrator/test_public_regroup_evidence.py`) unrecordable, so it waited on the stop-and-ask in round
+  6, which the orchestrator's round-7 ruling settles (the first item above).
+- [x] Review correction: **the walk's resume phase read is pinned by a recorded meeting that ends the game**
+  (round 5, correctness lens). A 5-player reset game whose first meeting ejects the only impostor is recorded
+  through `HeadlessGame` with a replay path and walked through `eval.replay_walk` under the evidence-honesty and
+  funnel profiles. Each walk completes with the terminal `MeetingApplied` (phase `GAME_OVER`, its game-over
+  event last) and then `WalkComplete` at the meeting's tick
+  (`test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting`). With the walk's resume phase
+  read replaced by `"PLAY"` both cases are red (`M-WK-compose-phase`, round 5 below).
+- [x] Review correction: **the regroup fold is stated at the strength the code delivers** (round 5, correctness
+  lens). The fold renders on the default evidence path only. Evidence version 2 folds no sightings, the spawn
+  group's included, so each regroup sighting keeps its own row there while the notice and the route step
+  render. `docs/observation-contract.md`, this card's Decisions and Limitations and the PR body say so.
+  `test_under_version_2_the_regroup_sightings_keep_their_own_rows` pins the version-2 render, and
+  `test_only_version_2_leaves_the_spawn_group_unfolded` pins the gate on all three paths. The Constraints
+  sentence the finding names is the orchestrator's to amend (the PR's Questions).
+- [x] Review correction: **the four listed-class mutation survivors are killed** (round 4, correctness lens).
+  Each is red under its mutant through a planted case: a hand-built `public_regroup` row that lists its players
+  renders byte-identically to the tuple row (`test_a_public_row_listing_its_players_reads_as_the_tuple_row_does`);
+  the malformed-row refusal quotes the payload it read (`test_the_malformed_row_refusal_quotes_the_payload_it_read`,
+  four payloads); the manager's refusal names the ticks it was handed
+  (`test_the_manager_refusal_names_the_ticks_it_was_handed`); and the resume helper's property now matches the
+  meeting's event count (`test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest`). The mutation
+  table is in round 4 below.
+- [x] Review correction: **the phase-21 counterfactual refuses a reset recording by name** (round 4, Codex P2 and
+  the documentation lens). `scripts/counterfactual_phase21.py::_refuse_the_meeting_reset` reads each recording's
+  settings and raises, naming `meeting_reset='hub_with_grace'` and the seed, before the walk re-derives anything.
+  It runs in the shared `_walk`, so both modes refuse. Proof in `tests/eval/test_regroup_instruments.py`:
+  `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking`,
+  `test_the_phase21_command_refuses_a_reset_set_staged_under_replays` (`main(["--sets", ...])`),
+  `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` and the three controls of
+  `test_the_phase21_refusal_names_the_reset_and_nothing_else`. Command: `uv run python
+  scripts/counterfactual_phase21.py --sets <a fake reset set staged under replays/>` exits 1, naming the setting
+  and seed 1000.
+- [x] Review correction: **the stop-and-ask over the phase-21 counterfactual, and the Status** (round 4, the
+  integrity lens). The equality box now holds at the strength it states: no production caller reads a reset
+  recording at the no-regroup default, because this one refuses. The repair is the first of the findings' three
+  options, forwarded by the orchestrator's round-4 dispatch with the instruction to repair each finding. It
+  restores the script's outcome at the merge base, a named refusal and no table, where `compute_evidence_honesty`
+  refused a reset recording after the walk; the refusal now comes before it. The file is outside the decision
+  memo's 3.2 map, and no Stage-B card writes it. The PR's Questions
+  asks the orchestrator to confirm the disposition and to record the map row, as `cb0a4cfc` did for the three
+  readers.
+- [x] Review correction: **the round-3 test counts are corrected** (round 4, documentation lens): 14 new
+  instrument tests, 26 already in the file, and 16 added in total. Command: `uv run pytest --collect-only -q
+  tests/eval/test_regroup_instruments.py` collects 26 items at `1ad1b57c` and 40 at `711e488f`.
+- [x] Review correction: **the three readers the stop-and-ask named, resolved by the orchestrator's ruling of
+  2026-09-27.** `eval/meeting_quality.py` reads the regroup window in `_ejected_in_inform_band` through
+  `_regroup_ticks_before` (the one derivation, `orchestrator.replay.derive_regroup_ticks`);
+  `eval/vj_instruments.py` passes each walked meeting's `regroup_ticks` to its pre-vote derivation; the FROZEN
+  `eval/deception_instruments.py` refuses a `hub_with_grace` recording by name and seed before its walk and
+  changes no evidence semantics. Proof, in `tests/eval/test_regroup_instruments.py`:
+  `test_the_inform_band_reads_the_window_each_live_meeting_ran_with`,
+  `test_a_voice_resting_on_a_regroup_sighting_informs_nobody` against
+  `test_with_the_window_withheld_the_same_fold_credits_the_inform` and
+  `test_the_preserve_twin_of_the_planted_game_folds_as_before`;
+  `test_the_vj_pre_vote_fold_reads_each_meetings_window` and
+  `test_a_regroup_sighting_lifts_no_row_in_the_vj_pre_vote_graphs`;
+  `test_the_deception_instruments_refuse_the_reset_by_name_before_walking`,
+  `test_a_set_with_one_reset_recording_is_refused_at_that_seed` and
+  `test_the_deception_refusal_names_the_reset_and_nothing_else`. Commands: `build_sample_report.py` on a fake
+  `hub_with_grace` set, and the four committed `--check` runs.
+- [x] Review correction: **`main` merged and the body-handle hand-off written.** `main` at `cb0a4cfc` (B1, B4
+  and the one-writer amendment) is merged in `1ad1b57c`, never rebased. `docs/observation-contract.md` names
+  `report_body_handle_version = 1` and what it changes
+  (`test_the_contract_names_the_recorded_body_handle_setting`, planted
+  `test_the_paragraph_before_the_setting_fails_the_body_handle_check`). Every Validation gate is re-run at
+  `6fb328a8` and `check.sh` at the head (round 3 below).
+- [x] **The reset at the orchestrator entry.** Mechanism: the arm-gated `regroup_after_meeting` call in
   `apply_meeting_result`. The fixture is a MEETING state with the trigger corpse, two unreported corpses, an
   impostor in a vent with cooldown 0, an active reactor with repair progress, and used button presses. Under
   the arm the result has no corpses, nobody in a vent, the impostor at the map's `kill_cooldown_ticks` (4) and
@@ -153,7 +247,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   tick is +1 and the RNG advanced once. Planted proof: the same assertions fail on the `preserve` twin, which
   keeps the two unreported corpses, the vent and cooldown 0 and loses only the trigger corpse.
   `git diff --stat <merge-base> -- engine/` is empty.
-- [ ] **Order and openings.** Mechanism: the win check returns before the regroup call; a button names no body.
+- [x] **Order and openings.** Mechanism: the win check returns before the regroup call; a button names no body.
   - An impostor-parity win at the meeting (a crewmate ejection that reaches parity) ends before any reset,
     beside the existing crew-win case.
   - A button meeting under the arm with an unreported corpse on the floor: the description names no body,
@@ -161,12 +255,12 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     `dead_ids` at the next meeting.
   - Planted proof: moving the regroup call above the win check fails the parity case, and a `found_body`
     emergency opening still raises.
-- [ ] **The grace window, end to end.** Mechanism: the cooldown the regroup sets, read from the map. A kill
+- [x] **The grace window, end to end.** Mechanism: the cooldown the regroup sets, read from the map. A kill
   through `apply_meeting_result` and `advance_tick` is rejected at T+1 to T+4 after a regroup at meeting tick T
   and succeeds at T+5. A1's census window for that meeting, read through its write-nothing `--set-dir` fold, is
   T+1 to T+4. Planted proof: under `preserve` with cooldown 0 at the meeting, the same kill succeeds at T+1;
   a carrier with the kill moved to T+4 raises the census breach.
-- [ ] **Resume perception, one helper.** Mechanism: one helper in `orchestrator/replay.py` composes the resume
+- [x] **Resume perception, one helper.** Mechanism: one helper in `orchestrator/replay.py` composes the resume
   events, with a keyword-only regroup flag that defaults to no regroup. After a regroup it keeps `KilledEvent`,
   `VentEnteredEvent` and `VentExitedEvent`, drops the rest, and returns the dropped movement and task events by
   kind. It is called at `orchestrator/game.py:2635`, `api/replay_loader.py:1958`, `eval/replay_walk.py:795` and
@@ -176,11 +270,11 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     a meeting-room task sighting for the first two, and the vent witness still gets the vent.
   - Planted proof: removing the filter fails the test, and a helper that also drops `KilledEvent` fails a
     kill-witness case. The `preserve` twin still delivers the MEDBAY task sighting to the MEDBAY observer.
-- [ ] **Own-completion placement.** Mechanism: a completion detected across a public regroup row takes the
+- [x] **Own-completion placement.** Mechanism: a completion detected across a public regroup row takes the
   previous self-state row's room (a `do_task` tick is never a move tick). A trigger-tick completion in LABS
   renders "(you were in LABS)" under the arm. Planted proof: reverting the placement renders the meeting room.
   The `preserve` render is byte-identical.
-- [ ] **The regroup notice on the default path** (signed-off decision 1).
+- [x] **The regroup notice on the default path** (signed-off decision 1).
   - Mechanism: `ingest_public_regroup` ingests under evidence None as well as version 2, and still returns
     under version 1. The existing line renders whenever a public row exists and the version is not 1.
   - The ingestion moves into `fold_meeting_outcome_into_memories` behind a keyword-only regroup argument, so
@@ -190,16 +284,20 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     loader's `get_meeting_memory` text equals the live prompt's memory block.
   - Planted proof: removing the ingestion from the fold fails both. `preserve` renders no line, and an
     evidence-version-1 memory ingests nothing.
-- [ ] **Legible memory: the fold and the trail marker.** Mechanism: under a public regroup row,
+- [x] **Legible memory: the fold and the trail marker.** Mechanism: under a public regroup row,
   `_spawn_group_indices` and its caller also fold runs that begin at the regroup tick when they name every other
-  living player in the row's `player_ids`, all in the meeting room. The trail renders the regroup as its own
-  step, in the notice's words. The two freeze docstrings and `apply_meeting_result`'s name the reset.
-  - A planted 9-player regroup renders one fold line where it rendered eight rows; a partial view (one player
-    unseen) keeps its rows. Under the arm, memory rendered with the public row differs from memory rendered
-    without it only in the notice line, the fold line and the trail step.
+  living player in the row's `player_ids`, all in the meeting room, on the default evidence path, and none of
+  their regroup-tick rows carries a movement note. A row carries one when it is that subject's latest sighting
+  and the agent saw the subject in another room before it; then every regroup sighting keeps its own row. The
+  trail renders the regroup as its own step, in the notice's words. The two freeze docstrings and
+  `apply_meeting_result`'s name the reset.
+  - A planted 9-player regroup, each subject seen again after it, renders one fold line where it rendered eight
+    rows; a partial view (one player unseen) keeps its rows, and so does a subject seen elsewhere, then at the
+    regroup and not after (round 6). Under the arm, memory rendered with the public row differs from memory
+    rendered without it only in the notice line, the fold line and the trail step.
   - Planted proof: removing the fold extension restores eight rows, and removing the marker restores the bare
     arrow. The golden keeps `preserve` byte-identical.
-- [ ] **The symmetric regroup window** (signed-off decision 2).
+- [x] **The symmetric regroup window** (signed-off decision 2).
   - Mechanism: one function beside the resume helper derives the regroup ticks R from the recorded config and
     the meeting rows. R is the resume tick (meeting tick + 1), as the public row records it
     (`tests/orchestrator/test_public_regroup_evidence.py:68-75` pins meetings at 2 and 6 against regroups at 3
@@ -211,12 +309,12 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     envelope alibi spanning a regroup, contradicted only by a sighting at R, mints no flag; with no regroup
     ticks it does. The spawn window is unchanged.
   - Planted proof: each case fails with the exclusion removed.
-- [ ] **Regroup sightings stay out of the ballot's own rows.** Mechanism: `_own_channel_evidence_rows` skips
+- [x] **Regroup sightings stay out of the ballot's own rows.** Mechanism: `_own_channel_evidence_rows` skips
   sighting records at R or R+1; the spawn-window rows are unchanged, because changing them would move
   `preserve` bytes. Planted test: a voter holds an `own_vent` row for subject X at tick 5, seven ordinary
   sightings of X after tick 5, and co-presence sightings of X at R and R+1. The `own_vent` row survives the
   8-row budget. Removing the exclusion drops it and fails the test.
-- [ ] **Full caller threading, proved by equality.** Mechanism: the regroup ticks and the resume helper reach
+- [x] **Full caller threading, proved by equality.** Mechanism: the regroup ticks and the resume helper reach
   every production caller that can read a reset recording: the live meeting run and its detectors, the vouch
   gate in `derive_belief_evidence`, every caller listed in Evidence (including `meetings/corroboration.py:648`),
   and `agents/memory` through the public row. `scripts/counterfactual_phase20.py` (`:526`, `:543`, `:781`) is
@@ -227,7 +325,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     walker (every prompt byte-equal) and the evidence-honesty walk.
   - Planted proof, parametrised over the threaded sites: withholding the regroup ticks, or the resume helper,
     at any one site fails the test.
-- [ ] **Instruments and the viewer data layer.**
+- [x] **Instruments and the viewer data layer.**
   - `walk_routes` takes a meeting tick's room table from `MeetingApplied.state`. Under the arm a resume-tick
     self-claim naming the meeting room scores true. Planted proof: reverted, it scores false.
   - Evidence honesty walks a reset fixture, and its `room_at` table and clock alignment pass. Planted proof:
@@ -236,7 +334,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     lifted, and only with its fix. Planted proof: every other field that card refused is still refused.
   - The loader's first post-meeting `TickView.bodies` is `()` under the arm, and the `preserve` twin shows the
     unreported corpse. This covers the analysis memo's "no corpse after a meeting" without a frontend edit.
-- [ ] **The `process-scorecard` walk profile declares its layers.** Mechanism: the profile
+- [x] **The `process-scorecard` walk profile declares its layers.** Mechanism: the profile
   (`eval/process_scorecard.py:787`) sets the spine's `threaded_layers` to the layers the scorecard
   reads, named in Results; the spine names this card as its owner. Proof: it reads the spine's fake
   full-config recording (a copy of a fake recording on today's arms, its tick rows and footer
@@ -245,7 +343,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   and `FIELD_LAYER` in a layer the profile does not declare) by name before its first advance.
   Perturbed: the profile with its layer declaration removed refuses the full-config copy. The
   record card's scorecard `--set-dir` on the candidate walks this profile.
-- [ ] **The census, end to end** (in this card's own test file). Mechanism: A1's conformance cells whose arm
+- [x] **The census, end to end** (in this card's own test file). Mechanism: A1's conformance cells whose arm
   predicate is `meeting_reset == "hub_with_grace"`, folded through its `--set-dir` path. The fake arm-ON game
   reads 0 on stale reports, on play resuming with an impostor in a vent or with a corpse, and on kills in the
   grace window. Its trigger-tick discard count equals the sum of the resume helper's dropped counts. It reads a
@@ -256,7 +354,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     with the call inserted; Results names which.
   - Planted proof: a perturbed carrier with one corpse restored at a resume raises that cell's breach, and so
     does one with a kill moved to T+4. B5's conformance stops on corpses, vents and grace kills rely on this.
-- [ ] **The OFF path, the c9 and c4 derivations and the demo bundle are byte-identical.** Mechanism: every fix
+- [x] **The OFF path, the c9 and c4 derivations and the demo bundle are byte-identical.** Mechanism: every fix
   keys on the recorded arm or on a public regroup row, and no committed recording holds either. At the branch
   head: `verify_samples` once per set directory for all four sets; the four `build_sample_report --check` runs;
   the golden on s9 and s4; `publish_process_scorecard --check` (the 955 / 104 / 103 / 2 census cannot move);
@@ -265,7 +363,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   at the head gives an empty `diff -r` of the two `data/` trees, and `npm --prefix frontend test` and the
   Playwright journey pass. Planted proof: applying the resume filter under `preserve` turns the golden and the
   census `--check` red; Results names both failures.
-- [ ] **The documents, and the copy.**
+- [x] **The documents, and the copy.**
   - `docs/observation-contract.md` states the resume rule (after a regroup the resume packet carries only the
     trigger tick's kills and vents) and the default-path ingestion of the public row. It also takes the
     body-handle card's hand-off: the sentence at `:35-38` names the recorded body-handle setting.
@@ -279,7 +377,7 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
     identifiers and for arithmetic.
   - Planted proof: an event kind added to the keep-set without the documents fails the first test, and a
     planted identifier fails the copy test.
-- [ ] **The registry row follows the audit bytes.** This card edits `audits/tactical-gameplay/README.md`, so
+- [x] **The registry row follows the audit bytes.** This card edits `audits/tactical-gameplay/README.md`, so
   the `audits/` row of `docs/artifacts.md` (`:109`, 26,635,440 tracked bytes / 329 files at `e886b663`, moved
   since by earlier cards) is recomputed with `git ls-files` as the last step, after the final merge of `main`.
   Mechanism: `test_every_counted_registry_row_matches_the_index` (`tests/scripts/test_verify_ml_evidence.py`,
@@ -332,7 +430,10 @@ survives: 8 of 594 9p2i meetings opened with an active reactor, 5 of them non-te
   `audits/tactical-gameplay/README.md` (B1, this card).
 - This card alone: `eval/process_scorecard.py`, `scripts/counterfactual_phase20.py`,
   `agents/memory/evidence_context.py`, `docs/cleanup-dispositions.md`, the new test files, and
-  `orchestrator/policy_reconstruction.py` only if its call must route through the fold.
+  `orchestrator/policy_reconstruction.py` only if its call must route through the fold. By the orchestrator's
+  ruling of 2026-09-27 on this card's stop-and-ask (the decision memo's 3.2 map, amended in `cb0a4cfc`), also
+  `eval/meeting_quality.py`, `eval/vj_instruments.py` and one refusal in the FROZEN
+  `eval/deception_instruments.py`.
 - Not written here: `engine/`, `observation/`, `orchestrator/experiment_config.py`, `eval/gameplay_census.py`,
   `eval/off_menu.py`, `eval/leak_scan.py`, `frontend/`, `api/schemas.py`, `docs/architecture.md`, the direction
   file and `tasks/README.md`.
@@ -384,6 +485,15 @@ merging B1 or B4 overlaps a region of this card.
   is unchanged.
 - Test helpers: `tests/meetings/test_prompt_byte_golden.py` (the resume helper, and regroup ingestion through
   the fold) and `tests/_helpers/committed.py` (the reset).
+- Instruments, by the orchestrator's ruling of 2026-09-27 on the stop-and-ask: `eval/meeting_quality.py` and
+  `eval/vj_instruments.py` (the regroup window), and `eval/deception_instruments.py` (one refusal; the FROZEN
+  departure is declared under Record impact).
+- By the orchestrator's round-6 ruling of 2026-09-27: one model-validator clause in
+  `orchestrator/experiment_config.py` refusing `meeting_reset = hub_with_grace` beside `public_account_version`
+  or `attributed_testimony_version`, a declared one-clause exception to the spine's ownership. Not written at
+  round 6: it would break a done card's pinned test, and the stop-and-ask in round 6's Results waited on it.
+  Withdrawn by the orchestrator's ruling of 2026-09-27 (round 7): no clause is written, the file stays
+  unchanged, and the combination is a stated limitation (Decisions).
 - Docs: `docs/observation-contract.md`, `docs/glossary.md`, `docs/cleanup-dispositions.md`,
   `audits/tactical-gameplay/README.md`, and the `audits/` row of `docs/artifacts.md`, recomputed last.
 - New tests: `tests/orchestrator/test_meeting_reset_coherence.py` (entry, order, grace, resume, equality,
@@ -414,6 +524,13 @@ fixes and is not regenerated, since a later experiment never changes an earlier 
 **Publication.** A push to `main` republishes the demo bundle (`.github/workflows/pages.yml`). This card edits
 `api/replay_loader.py`, which the bundle executes, and no shown replay or viewer file. The empty `data/` diff,
 `npm --prefix frontend test` and the Playwright journey are the proof.
+
+**Declared FROZEN departure.** `eval/deception_instruments.py:1-2` limits the module to bug fixes and evidence
+readers. This card adds one refusal there: a set holding a recording whose `meeting_reset` is `hub_with_grace`
+is refused by name and seed before the walk re-derives anything. No evidence semantics change, and the header
+is not edited. The orchestrator's ruling of 2026-09-27 on this card's stop-and-ask, made under the owner's
+delegation of 2026-09-24, authorizes the departure; the record-plumbing card's `refresh_samples.sh` departure is
+the precedent. The PR states it under Decisions.
 
 **Adoption, stated now.** A missing config means `preserve` while any committed recording lacks the key, so each
 `preserve` branch stays a reader path. Graduation also needs `post_meeting_retarget` and evidence version 1
@@ -461,8 +578,1173 @@ rooms, ticks and counts only.
 
 ## Results
 
-Not started. The worker records here and in the PR: the sections relied on (decision memo 2.3, 3.2 and 3.4
-card 9, the spine's arm page `docs/experiment-arms.md`, `docs/observation-contract.md`); the two signed-off
-decisions and every decision under Constraints; each caller's disposition; the equality fixture's seed and
-meeting count and the kill-witness case's source; each planted failure with its red output; every Validation
-command with its exit code and the bundle diff; changed test expectations with reasons; and the limitations.
+Implemented on `work/meeting-reset-coherence` from base `f98bfae9` (the record plumbing merged; B1
+`vent-look-and-wait` and B4 `report-body-handle` were not on `main` at the last fetch, 2026-09-27). Commits:
+`bcfbbf6d` (the meeting layer's window), `c0767039` (agent memory), `0034e39e` (the resume helper, the
+derivation, the fold and every in-scope reader, with the contract and glossary entries its tests pin) and
+`d801eb3c` (A-28, the lab's dated note and the `audits/` row). What it implements: `docs/architecture.md`
+"Determinism and the substrate ladder" (every reader re-derives the regroup from the recorded settings; replays
+stay byte-identical), "Enforced boundaries" (`agents/` imports no `engine/`; `.importlinter` unchanged) and
+"Explicit cleanup experiments"; the decision record `tasks/decision-2026-09-24-stage-b-wave.md` sections 0.3
+items 6, 8 and 10, 2.3, 3.2 and 3.4 card 9; the spine's arm page `docs/experiment-arms.md`; and
+`docs/observation-contract.md`'s public-regroup paragraph. No engine line, no recorded schema field, no new
+setting, no prompt registry bump; nothing is recorded.
+
+**Status at `d801eb3c`: active, two boxes open**; round 3 below closes both and sets `done`. The other
+fourteen acceptance items were met at `d801eb3c`.
+
+- **Blocked at `d801eb3c`, stop and ask (resolved in round 3): three readers outside Expected scope read a
+  reset recording at the no-regroup default.** The card's stop-and-ask list names exactly this case. Each re-derives meeting evidence from a
+  recorded transcript without the regroup ticks, so on a `hub_with_grace` recording it can read a sighting in
+  the window that the live meeting excluded:
+  - `eval/meeting_quality.py::_ejected_in_inform_band` calls `derive_belief_evidence(meeting.transcript,
+    contradictions=, roster=, trigger_kind=)`. `scripts/build_sample_report.py` reaches it through the
+    validity profile, which threads all three layers, so the record card's sample report on the candidate would
+    compute each ejection's inform band without the window.
+  - `eval/vj_instruments.py` (`derive_belief_evidence` in the pre-vote graph, `:388`) reads through the
+    funnel's shared walk, whose meetings now carry `regroup_ticks`, but this call does not pass them.
+  - `eval/deception_instruments.py` (FROZEN; `grounded_vouch_subjects` at `:642`) reads the same walk and
+    passes no window.
+
+  The owner's options: widen this card to thread the window into the first two (one keyword each: the funnel
+  meeting's `regroup_ticks`, or `derive_regroup_ticks` over the recorded settings and meeting rows) and decide
+  the FROZEN third (its header allows "Bug fixes and evidence readers only"); make all three refuse a reset
+  recording by name; or accept the unwindowed reading as a named limitation of those cells. The equality box
+  stayed open until one was chosen, and no pull request was opened.
+- **Waited on B4 at `d801eb3c` (closed in round 3): the body-handle hand-off.** The contract sentence at `docs/observation-contract.md:43-47`
+  ("Full model-facing removal is implemented only in temporal mode ...") is to name the recorded body-handle
+  setting once B4 has merged. B4 was not on `main`, so the documents box stayed open. This card merges after B1
+  and B4: round 3 takes `main` by merging, reruns every gate and recomputes the `audits/` row after B1's section of
+  `audits/tactical-gameplay/README.md`.
+
+### Decisions
+
+- **Signed-off material decisions** (decision record 0.3 item 8): Outcome item 3, the regroup notice on the
+  default evidence path, and Outcome item 4, the symmetric regroup relevance window (this card's signed-off
+  decisions 1 and 2). Both are new model-facing bytes or a detector change beyond the words "full reset"; they
+  appear only in an arm-ON recording.
+- **The keep-set is exactly `KilledEvent`, `VentEnteredEvent` and `VentExitedEvent`**
+  (`orchestrator.replay.REGROUP_KEPT_EVENTS`). The helper reports the dropped `Moved`, `TaskProgressed` and
+  `TaskCompleted` events by kind (`REGROUP_REPORTED_DROPS`), the kinds the census table
+  `trigger_tick_events_dropped_by_regroup` counts. Re-gating the other channels against pre-regroup visibility
+  is rejected: it needs two visibility frames in one packet. A regrouped meeting's own events must be empty,
+  and the helper raises otherwise.
+- **One derivation of R** (`derive_regroup_ticks`: each earlier non-terminal meeting's tick plus one, empty
+  unless the recorded reset is `hub_with_grace`) feeds the live loop, the loader, the walk, the golden, the
+  funnel, evidence honesty and the policy rebuild, so every in-scope reader computes the same window. The ticks
+  reach `MeetingManager.run` beside `dead_ids` as a keyword with an empty default, validated as non-negative
+  integers; they are public knowledge and no recorded schema gains a field. A runner of a game's own that
+  predates the keyword runs unchanged outside the reset and is refused by a `TypeError` naming it in a regroup
+  game.
+- **The window** is R and R+1 (`meetings.transcript.in_regroup_window`). The relevance gate excludes it, the
+  alibi-versus-sighting detector does not prosecute with it, and `_own_channel_evidence_rows` makes no row for
+  it; the sighting stays in the voter's memory. The spawn window's rows are unchanged. The vent branch of
+  accusation backing keeps only its spawn test: a witnessed vent is gated at event time and stays evidence
+  across a regroup (`test_a_witnessed_vent_in_the_window_still_backs_a_voice`).
+- **Ingestion moved into the fold.** `fold_meeting_outcome_into_memories` takes a keyword-only `regroup_room`
+  and calls `fold_public_regroup`; the live loop calls the same helper beside its own post-meeting folds. The
+  policy rebuild (`orchestrator/policy_reconstruction.py`) does not run the full meeting fold, so its direct
+  call now routes through `fold_public_regroup` and `regroup_room_for`, the same home.
+  `ingest_public_regroup` ingests under evidence None and version 2 and returns under version 1.
+- **Sabotage survives the reset**: documented in the glossary entry, not changed. The notice and the trail step
+  key on the public row, so an evidence-version-2 memory renders them too. The fold renders on the default
+  evidence path only: version 2 folds no sightings, the spawn group's included, so each regroup sighting keeps
+  its own row there (corrected in round 5; `test_under_version_2_the_regroup_sightings_keep_their_own_rows`).
+  On the default path it renders only when no regroup-tick row carries a movement note: a subject whose latest
+  sighting is its regroup-tick row, after a sighting in another room, leaves every regroup sighting on its own
+  row (corrected in round 6; `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`). On fake
+  arm-ON games that is the common case: 18 of 54 post-regroup views render the latest regroup's fold (round 6).
+  No committed recording carries the row. The completion line keeps its detection-row tick (evidence honesty's
+  fabricated-sighting rule dates it) and takes the previous self-state row's room when the detection row is a
+  regroup tick.
+- **Evidence honesty reads two frames** under the reset: `room_at` is the frame an agent reads (the regrouped
+  frame at a meeting tick) and `resolved_at` the frame each tick's actions resolved in. A state-read sighting
+  is checked against the first and an action-stamped sighting against the second.
+- **The `process-scorecard` profile's layers** are `SCORECARD_THREADED_LAYERS = {orchestrator, tactical,
+  meeting}`. The route is engine rooms only: the regroup reaches it through the applied meeting's state, the
+  body-handle setting changes only trigger text, a tactical setting arrives as recorded actions and a meeting
+  setting as the recorded result.
+- **Status and index.** The card assigns the Status line and `tasks/README.md` to the orchestrator. As the
+  record-plumbing card did under the same dispatch, this worker set Status to `active` and re-derived the
+  inventory sentence with `scripts/validate_task_docs.py`. Round 3 sets `done` the same way.
+- **The reset beside the account profiles is a stated limitation** (the orchestrator's ruling of 2026-09-27,
+  round 7). `RecordedExperimentConfig(format_version=2, attributed_testimony_version=1,
+  meeting_reset="hub_with_grace")` validates, and under it the meeting's contradiction step is the account
+  detector, which takes no regroup ticks and so can prosecute a regroup relocation. The pinned test is
+  `tests/orchestrator/test_public_regroup_evidence.py::test_public_reset_does_not_create_an_impossible_walk_or_erase_later_checks`,
+  the done `tasks/work/temporal-evidence-v2.md` card's. It records exactly that combination with public accounts
+  and evidence version 2, and its later-account assertion (`:101`) needs both account fields. The three options:
+  1. Refuse the combination in the validator (round 6's ruling). That fails the pinned test at construction,
+     and retiring its later-account assertion weakens a test and moves an earlier verdict (craft rule 7).
+  2. Thread the regroup ticks into the account detector
+     (`meetings.public_accounts.detect_public_account_conflicts`). That is a detector change outside this card.
+  3. Keep the combination and state the account detector's missing window as a limitation.
+
+  Option 3 was taken. It moves no byte, weakens no test and changes no earlier verdict. The Stage-B record uses
+  neither attributed testimony nor public accounts, so no recorded byte depends on the combination. The contract
+  and `MeetingManager.run`'s docstring state the reach: every profile but attributed testimony, alone or beside
+  public accounts. Public accounts alone keep the windowed detector, because `MeetingManager._detect_contradictions`
+  picks the account detector on `attributed_testimony_version` only.
+
+### Caller dispositions
+
+| Caller | Disposition |
+| --- | --- |
+| `orchestrator/game.py`: the resume composition, `MeetingManager.run`, `_absorb_meeting_beliefs`, the regroup fold | threaded (the helper, the ticks, the ticks, `fold_public_regroup`) |
+| `api/replay_loader.py`: `extract_belief_evidence`, the fold, the resume, the policy rebuild | threaded |
+| `eval/replay_walk.py`: the resume; `MeetingOpened.regroup_ticks`, `MeetingApplied.regroup_ticks` and `.regroup_room`; the policy rebuild | threaded |
+| `eval/evidence_honesty.py`: extraction, fold, `room_at` and `resolved_at` | threaded; the readers card's `meeting_reset` refusal lifted with its fix |
+| `eval/funnel.py`: extraction, `reconstruct_stated_paths`, the vouch and absence folds, `VJMeeting.regroup_ticks` | threaded |
+| `eval/process_scorecard.py` (`walk_routes`) | reads `MeetingApplied.state`; layers declared |
+| `meetings/corroboration.py:648` and the `meetings/transcript.py` internal sites | threaded |
+| `tests/meetings/test_prompt_byte_golden.py` (`walk_replay_meetings`) and `tests/_helpers/committed.py` | threaded (the helper, the fold, the ticks) |
+| `scripts/counterfactual_phase20.py` (`:526`, `:543`, `:781`) | unchanged: keeps the readers card's named refusal (`test_the_offline_lever_counterfactual_keeps_refusing_the_reset`) |
+| `scripts/counterfactual_phase21.py` (`_ledger_for` over the golden walk, both modes) | round 4: refuses a reset recording by name and seed before its walk (`_refuse_the_meeting_reset`); before round 4, from the lift of honesty's refusal on, it read one without the window |
+| `eval/off_menu.py` (FROZEN), `training/anchor_study.py`, `training/surrogate/dataset.py`, `experiments/lab/inference_testimony_probe.py` (FROZEN) | unchanged, at the no-regroup default: each refuses experiment recordings or reads only committed `preserve` bytes |
+| `audits/workflows/extract_gameplay_facts.py`, `eval/reasoning_evidence.py` | unchanged: the first refuses experiment settings (`refuse_experiment_settings`), the second reads fixtures only |
+| `eval/meeting_quality.py`, `eval/vj_instruments.py`, `eval/deception_instruments.py` | round 3: the first two threaded, the FROZEN third refuses the reset by name; at `d801eb3c` not threaded (the stop-and-ask above) |
+
+The readers card named one refusal pending this card, evidence honesty's `meeting_reset`. It is lifted
+(`test_honesty_reads_the_meeting_reset_now_its_room_table_is_coherent`, both reset arms), and every other field
+that card refused is still refused (`test_every_other_setting_the_readers_refused_is_still_refused`).
+
+### Acceptance evidence
+
+- **The reset at the entry**: `test_the_reset_at_the_orchestrator_entry_clears_what_it_must`; the planted twin
+  `test_the_preserve_twin_keeps_the_unreported_corpses_the_vent_and_the_cooldown`;
+  `test_the_reset_reads_its_room_and_its_cooldown_from_the_map`. `git diff --stat f98bfae9 -- engine/` prints
+  nothing.
+- **Order and openings**: `test_an_impostor_parity_win_at_the_meeting_ends_before_any_reset` beside the engine's
+  crew-win case, `test_a_button_meeting_under_the_reset_names_no_body_and_clears_the_corpse`,
+  `test_a_found_body_emergency_opening_still_raises`, and
+  `test_a_meeting_that_ends_the_game_under_the_reset_resumes_nothing` (the meeting's game-over event reaches
+  the loop's end).
+- **The grace window**: `test_a_kill_after_a_regroup_is_refused_until_the_map_cooldown_runs_out` (refused at T+1
+  to T+4, legal at T+5); `test_under_preserve_the_ready_impostor_kills_on_the_resume_tick`;
+  `test_the_census_grace_window_is_the_engines` (a carrier kill at T+1 to T+4 raises the grace breach, at T+5
+  and T+6 it does not).
+- **Resume perception**: `test_after_a_regroup_no_observer_views_the_trigger_ticks_walk_or_task`,
+  `test_after_a_regroup_the_witnessed_vent_and_kill_still_arrive`; planted
+  `test_without_the_filter_the_regroup_hands_every_observer_false_views` and
+  `test_a_keep_set_without_the_kill_loses_the_kill_witness`; the twin
+  `test_the_preserve_twin_still_delivers_the_medbay_task_sighting`;
+  `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest`.
+- **Own-completion placement**: `test_a_trigger_tick_completion_is_placed_where_it_was_done` ("(you were in
+  LABS)"), planted `test_without_the_row_the_completion_takes_the_resume_room`,
+  `test_an_ordinary_resume_places_the_completion_as_before`.
+- **The notice on the default path**: `test_the_regroup_row_is_ingested_on_the_default_path_and_under_version_2`,
+  `test_version_1_ingests_no_regroup_row`, `test_the_default_path_renders_the_notice_whenever_the_row_exists`,
+  `test_version_1_renders_no_notice_even_beside_a_row`,
+  `test_the_second_meeting_carries_the_notice_live_and_reconstructed` (the loader's `get_meeting_memory` equals
+  the live memory block), planted `test_without_the_folds_ingestion_the_reconstruction_loses_the_notice`,
+  `test_the_preserve_game_renders_no_notice`.
+- **The fold and the trail step**: `test_a_nine_player_regroup_folds_eight_rows_into_one_line`,
+  `test_a_partial_view_of_the_regroup_keeps_its_rows`, `test_the_route_states_the_regroup_as_its_own_step`,
+  `test_the_regroup_breaks_a_stay_in_the_meeting_room_too`,
+  `test_the_row_changes_only_the_notice_the_fold_and_the_route`. Removing the fold extension (N-ST-coalesce)
+  and the marker (N-ST-trail-step) is red in the table below; the golden keeps `preserve` byte-identical.
+- **The symmetric window**: `tests/meetings/test_regroup_relevance_window.py` (the window and gate as Hypothesis
+  properties with `deadline=None`; corroboration, claim-stated and grounded vouches, voices, placements, the
+  envelope alibi, the physical and kill-scene detectors and the testimony ledger each at R and R+1, with the
+  no-window and just-outside cases; the spawn window unchanged).
+- **Own rows**: `test_an_early_vent_row_survives_the_budget_past_a_regroup`, planted
+  `test_without_the_exclusion_the_regroup_sightings_push_the_vent_row_out`,
+  `test_a_spawn_window_sighting_row_is_unchanged`.
+- **Equality**: the fixture is seed 1000, recorded with the fake provider from the declared config into
+  `tmp_path`: 3 meetings at ticks 8, 20 and 31, all skipped, handed regroup ticks `[]`, `[9]` and `[9, 21]`;
+  0 disagreements among the live agents, the loader, the golden walker and the evidence-honesty walk
+  (`test_the_four_readings_agree_at_every_meeting_open`). Withholding the ticks, the resume or the notice at any
+  of the 4 live sites and 9 reader sites breaks agreement (13 parametrised cases). The three readers above are
+  closed in round 3 by their own planted cases.
+- **Instruments and the viewer data layer**: `test_a_resume_tick_self_claim_naming_the_meeting_room_scores_true`,
+  planted `test_without_the_applied_meeting_the_same_claim_scores_false`;
+  `test_honesty_walks_a_reset_recording_and_checks_its_regrouped_clock`, planted
+  `test_with_the_pre_regroup_room_table_the_clock_alignment_raises`; `test_the_first_frame_after_a_regroup_shows_no_corpse`
+  (the loader's first post-meeting `TickView.bodies` is `()`, the `preserve` twin shows the corpse).
+- **The scorecard profile**: `test_the_profile_declares_the_layers_the_route_reads`,
+  `test_the_profile_reads_the_full_config_copy_with_every_hash_verified`, planted
+  `test_without_its_declaration_the_profile_refuses_the_full_config_copy` and
+  `test_a_stand_in_field_in_an_undeclared_layer_is_refused_before_advancing` (each layer).
+- **The census**: `test_the_census_reads_zero_where_the_reset_forces_it` (stale reports, a vented impostor or a
+  corpse at a resume, grace kills: 0 over a positive denominator; trips closed by a regroup and sabotage at a
+  regroup read a count), `test_the_census_discards_what_the_resume_helper_dropped`,
+  `test_every_living_agent_holds_one_public_row_per_regroup`,
+  `test_a_kill_witness_button_call_soon_after_a_regroup_is_counted`, planted
+  `test_a_corpse_restored_at_a_resume_raises_the_breach` and the grace carrier above. The kill-witness case is a
+  carrier: a count-only scan of fake arm-ON games at seeds 1000-1007 read 0 such calls in every game.
+- **The OFF path**: the Verification table (every gate at the head, the 956 `"preserve"` stamps, an empty bundle
+  `data/` diff) and the planted filter below.
+- **The documents**: the contract's "The regroup reset" section (the resume rule and the announced
+  regroup), the glossary's "regroup (the full meeting reset)", the A-28 line and the lab's dated note;
+  `test_the_contract_and_the_glossary_name_every_kept_event_kind`, planted
+  `test_a_kind_added_to_the_keep_set_without_the_documents_fails`,
+  `test_the_glossary_says_what_moves_what_clears_and_what_survives`,
+  `test_the_new_copy_carries_no_identifier_and_no_arithmetic`, planted
+  `test_a_planted_identifier_fails_the_copy_scan` (three identifiers). The body-handle sentence is written in round 3.
+- **The registry row**: `audits/` read 26,636,941 tracked bytes / 329 files at `d801eb3c`; round 3 recomputes
+  it after the merge. The stale-row failure is below.
+
+### Planted failures
+
+Each ran through a harness that edits one snippet, runs one command and restores the file from an in-memory copy,
+comparing its sha256.
+
+- **The regroup above the win check** (`apply_meeting_result` with the arm's regroup call copied above
+  `resolve_win_conditions`): `pytest tests/orchestrator/test_meeting_reset_coherence.py -k "parity or
+  found_body"` exit 1. `FAILED ...::test_an_impostor_parity_win_at_the_meeting_ends_before_any_reset`: the
+  survivors' rooms read `{'p-5': 'CAFETERIA'} != {'p-5': 'STORAGE'}` and three more. The found-body case still
+  raises (1 passed).
+- **The resume filter applied under `preserve`** (the no-regroup branch keeping only the keep-set):
+  `pytest tests/meetings/test_prompt_byte_golden.py -n 8` exit 1, 5 failed and 30 passed: on `[9p2i]`
+  `test_every_recorded_prompt_re_renders_byte_identically`, `test_reconstructed_transcript_matches_the_recording`,
+  `test_every_reconstruction_divergence_is_a_retired_guard`, `test_every_recorded_llm_call_is_consumed_exactly_once`
+  and `test_defaults_are_the_only_lookup_misses` (1202 prompts reproduced against 1694). The s4 cases stayed
+  green. **`scripts/publish_gameplay_census.py --check` stayed green (exit 0) under the same plant**: the census
+  folds the engine's own `TickAdvanced` events and computes its discard table itself, only under the arm, so it
+  never reads the resume composition. The card expected it to turn red; that half of the proof cannot fail, and
+  the census's own `--check` at the head is its evidence instead.
+- **The row left stale after the README note**: `pytest tests/scripts/test_verify_ml_evidence.py -k
+  registry_row` exit 1, `FAILED ...::test_every_counted_registry_row_matches_the_index`: "audits/:
+  docs/artifacts.md promises 26,636,557 tracked bytes, the tracked files contain 26,636,941 bytes".
+
+### Neutering and the bounded mutation pass
+
+One pass at the production bytes of `0034e39e` (the bytes `d801eb3c` carries), over the 13 production modules
+this card edits. 96 neutering probes removed or blanked one added line, argument or condition each; 52 mutants
+used exactly the eight listed classes (a: drop a filter or wrapper on a collection, 4; b: swap a collection
+for a related one, 3; c: a comparison replaced by a None test or its inverse, 10; d: a role, kind, room, tick
+or phase read replaced by a constant, 14; e: a message argument replaced by a constant, 2; f: one member of a
+tuple of kinds or layers dropped, 9; g: adjacent branches swapped, 5; h: a loaded source replaced by its
+canonical literal, 5). Each ran the four new test files plus `tests/orchestrator/test_public_regroup_evidence.py`
+and `tests/engine/test_meeting_reset_experiment.py` (`-x -n 8`), with the readers test or the golden,
+`tests/eval/test_replay_walk.py` and `tests/orchestrator/test_meeting_integration.py` added where the site
+feeds them; every file was restored from a byte copy and its sha256 compared (148 restored).
+
+First pass: 90 of 96 probes and 45 of 52 mutants red. The thirteen that came back green:
+
+| Id | What stayed green | Planted case that kills it |
+| --- | --- | --- |
+| N-GM-game-gate | the runner handed the ticks under any recorded settings | `test_outside_the_reset_a_runner_written_before_the_ticks_runs_unchanged[other-settings]` |
+| N-MG-detect-chain, -opt-in, -rebuttal | the chain, opt-in and rebuttal detections without the window | `test_every_in_meeting_detection_and_the_pre_vote_fold_receive_the_window` (a meeting that runs every phase) |
+| N-MG-prevote, N-MG-absent | the pre-vote derivation and the absence set without the window | the same test |
+| M-GM-compose-phase | the live resume told play resumed after a game-ending meeting | `test_a_meeting_that_ends_the_game_under_the_reset_resumes_nothing` |
+| M-GM-fold-room, M-LD-fold-room-const, M-WK-room-const | the regroup room as `"CAFETERIA"` instead of the map's | `test_the_live_notice_names_the_maps_meeting_room`, `test_the_readers_name_the_maps_meeting_room` (the canonical map with its meeting room moved to ADMIN) |
+| M-ST-trail-room-const, M-ST-notice-room | the trail step's and the notice's room as `"CAFETERIA"` | `test_the_notice_and_the_route_step_read_the_rows_room` |
+| M-RP-kind-source | `REGROUP_REPORTED_DROP_KINDS` as the literal `("Moved", "TaskProgressed", "TaskCompleted")` | equivalent: the literal is value-equal to the three event classes' `type` tags, which no mutant here can change; `test_the_helper_names_the_kinds_the_census_table_counts` pins them to the census table's kinds |
+
+Every one of the twelve was red when rerun against its planted case. The whole table, with the first red
+test each `-x` run reported (id prefixes: RP `orchestrator/replay.py`, GM `orchestrator/game.py`, PR
+`orchestrator/policy_reconstruction.py`, LD `api/replay_loader.py`, WK `eval/replay_walk.py`, EH
+`eval/evidence_honesty.py`, FN `eval/funnel.py`, SC `eval/process_scorecard.py`, TR `meetings/transcript.py`,
+MG `meetings/manager.py`, CR `meetings/corroboration.py`, EC `agents/memory/evidence_context.py`, ST
+`agents/memory/store.py`):
+
+| Id | Kind | First red test |
+| --- | --- | --- |
+| N-RP-fold | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| M-RP-fold-none | None test / inverse | `test_withholding_the_window_or_the_resume_at_a_reader_breaks_agreement[golden-notice]` |
+| M-RP-keep-kill | drop a tuple member | `test_after_a_regroup_the_witnessed_vent_and_kill_still_arrive` |
+| M-RP-keep-enter | drop a tuple member | `test_after_a_regroup_the_witnessed_vent_and_kill_still_arrive` |
+| M-RP-keep-exit | drop a tuple member | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| M-RP-drop-moved | drop a tuple member | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| M-RP-drop-progress | drop a tuple member | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| M-RP-drop-complete | drop a tuple member | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| N-RP-plain-meeting-events | neuter | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| N-RP-refusal | neuter | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| M-RP-regrouped-branch | swap branches | `test_without_the_filter_the_regroup_hands_every_observer_false_views` |
+| N-RP-keep-append | neuter | `test_after_a_regroup_the_witnessed_vent_and_kill_still_arrive` |
+| N-RP-count | neuter | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| M-RP-count-kind | read to constant | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| M-RP-dropped-filter | drop a filter | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| M-RP-kind-source | loaded source to literal | survives, equivalent (below) |
+| N-RP-regrouped-reset | neuter | `test_a_meeting_regroups_only_under_the_reset_and_only_when_play_resumes[config2-PLAY-False]` |
+| N-RP-regrouped-phase | neuter | `test_a_meeting_regroups_only_under_the_reset_and_only_when_play_resumes[config1-GAME_OVER-False]` |
+| M-RP-regrouped-none | None test / inverse | `test_a_meeting_regroups_only_under_the_reset_and_only_when_play_resumes[None-PLAY-False]` |
+| M-RP-room-const | read to constant | `test_the_regroup_room_is_the_maps_meeting_room_under_the_reset[ADMIN]` |
+| N-RP-room-guard | neuter | `test_the_regroup_room_is_the_maps_meeting_room_under_the_reset[ADMIN]` |
+| M-RP-ticks-const | read to constant | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| N-RP-ticks-guard | neuter | `test_the_regroup_ticks_are_each_prior_meetings_resume_tick` |
+| N-RP-fold-phase | neuter | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| M-RP-fold-living | drop a filter | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| M-RP-fold-skip | None test / inverse | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| N-RP-fold-ingest | neuter | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| M-RP-fold-tick | read to constant | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| M-RP-fold-room | message argument | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| N-GM-runner-ticks | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-GM-derive-arg | neuter | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| N-GM-append | neuter | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| M-GM-append-phase | None test / inverse | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| M-GM-meeting-tick | read to constant | `test_each_meeting_receives_the_resume_tick_of_every_meeting_before_it` |
+| N-GM-compose | neuter | `test_the_game_resumes_from_at_least_two_regroups` |
+| M-GM-compose-phase | read to constant | first green; killed by `test_a_meeting_that_ends_the_game_under_the_reset_resumes_nothing` |
+| N-GM-game-gate | neuter | first green; killed by `test_outside_the_reset_a_runner_written_before_the_ticks_runs_unchanged[other-settings]` |
+| M-GM-game-gate-none | None test / inverse | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| N-GM-run-kwargs | neuter | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| M-GM-run-kwargs-branch | swap branches | `test_a_runner_written_before_the_ticks_is_refused_in_a_regroup_game` |
+| N-GM-absorb-ticks | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-GM-fold-call | neuter | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| M-GM-fold-none | None test / inverse | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| M-GM-fold-room | loaded source to literal | first green; killed by `test_the_live_notice_names_the_maps_meeting_room` |
+| M-GM-fold-filter | drop a filter | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| M-GM-fold-state | swap a collection | `test_a_runner_of_its_own_receives_the_ticks_and_a_memoryless_agent_is_skipped` |
+| N-GM-extract-ticks | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-PR-absorb-ticks | neuter | `test_the_policy_rebuild_folds_the_meeting_with_its_regroup_ticks` |
+| N-PR-fold | neuter | `test_the_policy_rebuild_folds_the_meeting_with_its_regroup_ticks` |
+| M-PR-room | loaded source to literal | `test_the_policy_rebuild_folds_the_meeting_with_its_regroup_ticks` |
+| N-LD-derive-arg | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-LD-policy-ticks | neuter | `test_each_reader_hands_the_policy_rebuild_every_meetings_regroup_ticks[loader]` |
+| N-LD-extract-ticks | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-LD-fold-room | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| M-LD-fold-room-const | loaded source to literal | first green; killed by `test_the_readers_name_the_maps_meeting_room` |
+| N-LD-append | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| M-LD-append-tick | read to constant | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-LD-compose | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-WK-opened-ticks | neuter | `test_the_funnel_walk_carries_each_meetings_regroup_ticks` |
+| N-WK-applied-ticks | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-WK-applied-room | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| M-WK-room-const | loaded source to literal | first green; killed by `test_the_readers_name_the_maps_meeting_room` |
+| N-WK-policy-ticks | neuter | `test_each_reader_hands_the_policy_rebuild_every_meetings_regroup_ticks[walk]` |
+| N-WK-compose | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-WK-append | neuter | `test_each_reader_hands_the_policy_rebuild_every_meetings_regroup_ticks[walk]` |
+| M-WK-append-phase | None test / inverse | `test_each_reader_hands_the_policy_rebuild_every_meetings_regroup_ticks[walk]` |
+| N-WK-derive-arg | neuter | `test_each_reader_hands_the_policy_rebuild_every_meetings_regroup_ticks[walk]` |
+| N-EH-extract-ticks | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-EH-fold-room | neuter | `test_the_four_readings_agree_at_every_meeting_open` |
+| N-EH-room-at-override | neuter | `test_honesty_walks_a_reset_recording_and_checks_its_regrouped_clock` |
+| N-EH-resolved-fill | neuter | `test_with_the_pre_regroup_room_table_the_clock_alignment_raises` |
+| M-EH-resolved-swap | swap a collection | `test_the_clock_reads_state_rows_on_the_regrouped_frame_and_actions_where_resolved` |
+| M-EH-resolved-branch | swap branches | `test_honesty_walks_a_reset_recording_and_checks_its_regrouped_clock` |
+| M-EH-resolved-none | None test / inverse | `test_the_clock_reads_state_rows_on_the_regrouped_frame_and_actions_where_resolved` |
+| N-EH-pass-resolved | neuter | `test_with_the_pre_regroup_room_table_the_clock_alignment_raises` |
+| N-EH-reads | neuter | `test_every_other_setting_the_readers_refused_is_still_refused[crew_idle_policy-patrol]` |
+| N-FN-vj-ticks | neuter | `test_the_funnel_walk_carries_each_meetings_regroup_ticks` |
+| N-FN-extract-ticks | neuter | `test_the_funnel_belief_fold_reads_the_window` |
+| N-FN-vouch-ticks | neuter | `test_the_pooling_folds_read_the_window` |
+| N-FN-absence-ticks | neuter | `test_the_pooling_folds_read_the_window` |
+| N-SC-override | neuter | `test_a_resume_tick_self_claim_naming_the_meeting_room_scores_true` |
+| N-SC-layers | neuter | `test_a_stand_in_field_in_an_undeclared_layer_is_refused_before_advancing[tactical]` |
+| M-SC-layer-orchestrator | drop a tuple member | `test_a_stand_in_field_in_an_undeclared_layer_is_refused_before_advancing[orchestrator]` |
+| M-SC-layer-tactical | drop a tuple member | `test_the_profile_reads_the_full_config_copy_with_every_hash_verified` |
+| M-SC-layer-meeting | drop a tuple member | `test_the_profile_declares_the_layers_the_route_reads` |
+| M-TR-window-now | neuter | `test_withholding_the_window_or_the_resume_at_a_reader_breaks_agreement[loader-ticks]` |
+| M-TR-window-next | neuter | `test_a_co_presence_sighting_in_the_window_does_not_corroborate[13]` |
+| M-TR-window-tick | read to constant | `test_withholding_the_window_or_the_resume_at_a_reader_breaks_agreement[loader-ticks]` |
+| N-TR-gate-prong | neuter | `test_a_sighting_in_the_window_backs_no_voice[13]` |
+| N-TR-reconstruct | neuter | `test_a_placement_in_the_window_places_nobody[12]` |
+| N-TR-absent | neuter | `test_a_placement_in_the_window_places_nobody[12]` |
+| N-TR-avs-thread | neuter | `test_an_envelope_alibi_spanning_a_regroup_is_not_prosecuted_in_the_window[12]` |
+| N-TR-paths | neuter | `test_co_presence_in_the_window_cannot_physically_contradict_an_alibi` |
+| N-TR-killscene-paths | neuter | `test_a_kill_scene_co_presence_in_the_window_contradicts_nothing` |
+| N-TR-avs-skip | neuter | `test_an_envelope_alibi_spanning_a_regroup_is_not_prosecuted_in_the_window[12]` |
+| M-TR-avs-tick | read to constant | `test_an_envelope_alibi_spanning_a_regroup_is_not_prosecuted_in_the_window[12]` |
+| N-TR-corroborations | neuter | `test_a_co_presence_sighting_in_the_window_does_not_corroborate[12]` |
+| N-TR-voices | neuter | `test_a_sighting_in_the_window_backs_no_voice[12]` |
+| N-TR-carries | neuter | `test_a_sighting_in_the_window_backs_no_voice[12]` |
+| N-TR-vouch | neuter | `test_a_grounded_vouch_in_the_window_grounds_nothing[12]` |
+| N-MG-detect-inner | neuter | `test_the_manager_reads_the_window_in_every_detection_and_the_ballot_rows` |
+| N-MG-detect-chain | neuter | first green; killed by `test_every_in_meeting_detection_and_the_pre_vote_fold_receive_the_window` |
+| N-MG-detect-opt-in | neuter | first green; killed by `test_every_in_meeting_detection_and_the_pre_vote_fold_receive_the_window` |
+| N-MG-detect-roll-call | neuter | `test_the_manager_reads_the_window_in_every_detection_and_the_ballot_rows` |
+| N-MG-detect-rebuttal | neuter | first green; killed by `test_every_in_meeting_detection_and_the_pre_vote_fold_receive_the_window` |
+| N-MG-detect-final | neuter | `test_the_manager_reads_the_window_in_every_detection_and_the_ballot_rows` |
+| N-MG-validate | neuter | `test_the_manager_refuses_a_tick_that_is_not_a_non_negative_integer[bad1]` |
+| N-MG-prevote | neuter | first green; killed by `test_every_in_meeting_detection_and_the_pre_vote_fold_receive_the_window` |
+| N-MG-absent | neuter | first green; killed by `test_every_in_meeting_detection_and_the_pre_vote_fold_receive_the_window` |
+| N-MG-ledger | neuter | `test_the_manager_hands_the_testimony_ledger_the_window` |
+| N-MG-ballots | neuter | `test_the_manager_reads_the_window_in_every_detection_and_the_ballot_rows` |
+| N-MG-one-ballot | neuter | `test_the_manager_reads_the_window_in_every_detection_and_the_ballot_rows` |
+| N-MG-rows | neuter | `test_the_manager_reads_the_window_in_every_detection_and_the_ballot_rows` |
+| N-MG-own-rows | neuter | `test_an_early_vent_row_survives_the_budget_past_a_regroup` |
+| N-MG-own-skip | neuter | `test_an_early_vent_row_survives_the_budget_past_a_regroup` |
+| M-MG-own-skip-tick | read to constant | `test_an_early_vent_row_survives_the_budget_past_a_regroup` |
+| N-MG-claim-vouch | neuter | `test_withholding_the_window_or_the_resume_at_a_reader_breaks_agreement[loader-ticks]` |
+| N-MG-derive-corroborations | neuter | `test_a_co_presence_sighting_in_the_window_does_not_corroborate[12]` |
+| N-MG-derive-grounded | neuter | `test_a_grounded_vouch_in_the_window_grounds_nothing[12]` |
+| N-MG-derive-voices | neuter | `test_a_sighting_in_the_window_backs_no_voice[12]` |
+| N-MG-derive-absent | neuter | `test_a_placement_in_the_window_places_nobody[12]` |
+| N-MG-extract | neuter | `test_withholding_the_window_or_the_resume_at_a_reader_breaks_agreement[loader-ticks]` |
+| N-CR-ledger | neuter | `test_the_manager_hands_the_testimony_ledger_the_window` |
+| N-EC-guard | neuter | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| M-EC-guard-none | None test / inverse | `test_the_regroup_row_goes_to_every_living_memory_and_to_nobody_else` |
+| N-ST-regroups | neuter | `test_the_default_path_renders_the_notice_whenever_the_row_exists` |
+| M-ST-public-filter | drop a filter | `test_only_a_public_row_is_an_announced_regroup` |
+| N-ST-malformed | neuter | `test_a_malformed_public_row_is_refused` |
+| N-ST-completion-ticks | neuter | `test_a_trigger_tick_completion_is_placed_where_it_was_done` |
+| M-ST-completion-branch | swap branches | `test_a_trigger_tick_completion_is_placed_where_it_was_done` |
+| N-ST-completion-room | neuter | `test_a_trigger_tick_completion_is_placed_where_it_was_done` |
+| N-ST-last-room | neuter | `test_a_trigger_tick_completion_is_placed_where_it_was_done` |
+| N-ST-coalesce | neuter | `test_a_nine_player_regroup_folds_eight_rows_into_one_line` |
+| M-ST-group-loop | neuter | `test_a_nine_player_regroup_folds_eight_rows_into_one_line` |
+| M-ST-group-start | read to constant | `test_a_nine_player_regroup_folds_eight_rows_into_one_line` |
+| M-ST-group-expected | swap a collection | `test_the_fold_expects_the_players_the_row_gathered_not_the_known_roster` |
+| N-ST-group-room | neuter | `test_the_fold_reads_the_rows_room` |
+| M-ST-group-room-none | None test / inverse | `test_withholding_the_window_or_the_resume_at_a_live_site_breaks_agreement[live-run-ticks]` |
+| M-ST-group-prefix | swap branches | `test_a_nine_player_regroup_folds_eight_rows_into_one_line` |
+| M-ST-group-start-obs | read to constant | `test_a_nine_player_regroup_folds_eight_rows_into_one_line` |
+| M-ST-consumed | neuter | `test_a_nine_player_regroup_folds_eight_rows_into_one_line` |
+| N-ST-trail-regroups | neuter | `test_the_route_states_the_regroup_as_its_own_step` |
+| M-ST-trail-break | neuter | `test_the_regroup_breaks_a_stay_in_the_meeting_room_too` |
+| M-ST-trail-room-const | read to constant | first green; killed by `test_the_notice_and_the_route_step_read_the_rows_room` |
+| N-ST-trail-step | neuter | `test_the_route_states_the_regroup_as_its_own_step` |
+| M-ST-trail-step-tick | read to constant | `test_the_route_states_the_regroup_as_its_own_step` |
+| N-ST-notice | neuter | `test_the_default_path_renders_the_notice_whenever_the_row_exists` |
+| M-ST-notice-room | message argument | first green; killed by `test_the_notice_and_the_route_step_read_the_rows_room` |
+
+### Verification at `d801eb3c`
+
+A bare shell with 0 `AILIBI_*` exports; each exit code captured from the process, never through a pipe.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0: ruff clean, 543 files formatted, `lint-imports` 4 kept 0 broken, task docs (88 work cards) and prompts valid, mypy clean on 514 files, pytest 9430 passed, 20 skipped, 3 xfailed; frontend lint, types, 559 vitest tests and build |
+| the card's seven test files (`-q`) | exit 0: 183 passed |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent (the 955 / 104 / 103 / 2 census cannot have moved) |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 329; 26,636,941 |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl' \| sort \| uniq -c` | 956 `"meeting_reset":"preserve"`, in 101 files |
+| `scripts/build_demo_bundle.py`, at an export of `f98bfae9` and at the head | exit 0 each, 156 JSON files baked; `diff -r` of the two `data/` trees prints nothing (exit 0). The base export read the same replay bytes through a link (`diff -rq` of the two `replays/` trees empty), so the file times that stamp `created_at` agree; the two READMEs differ only in that sentence |
+| `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
+| `git diff --stat f98bfae9 -- engine/ frontend/ eval/off_menu.py replays/` | empty |
+
+A first full `pytest -n 10` run (not `check.sh`'s `--dist loadfile`) also failed
+`tests/scripts/test_record_ml_corpus.py::test_fake_target_guard_resolves_symlinks_and_dot_dot`, a file this card
+does not touch; it passes alone and in `check.sh`.
+
+### Changed test expectations
+
+- `tests/eval/test_recorded_arm_readers.py`: `HONESTY_READS` is now all of `READABLE_SETTINGS`, and the refusal
+  test became `test_honesty_reads_the_meeting_reset_now_its_room_table_is_coherent`: the refusal was lifted with
+  its fix, as the readers card specified.
+- `tests/meetings/test_meeting_trigger_kind.py` (`_WatchedManager._detect_contradictions`) and
+  `tests/agents/test_beliefs.py` (the two `_ungated` stand-ins for `is_relevant_sighting`): each stand-in gained
+  the `regroup_ticks` keyword the real signature gained; no assertion changed.
+- `tests/eval/test_replay_walk.py` and `tests/agents/test_memory_rendering.py`: a docstring and a comment now say
+  the stated contract holds without a regroup; no assertion changed.
+- No test was weakened and no committed fixture byte moved. The description in
+  `tests/fixtures/memory_rendering/self_location_trail.json` ("a meeting freezes movement") is still true of
+  its ordinary meeting, so it is left as is.
+
+### Closing greps
+
+`git grep -n -i -E "freez(es|e) (the )?movement|meeting freezes|pre-meeting play events plus|refuses the (meeting
+)?reset|until that setting's own card|written only under evidence version 2|only under version 2" --
+':!tasks/phase-*' ':!agent_prompts' ':!audits'`, at the head. The hits:
+- `eval/funnel.py:413` and `tests/eval/test_replay_walk.py:276`: rewritten here to state both cases;
+- `tests/agents/test_memory_rendering.py:2291` ("An ordinary meeting freezes movement") and the fixture above:
+  true of an ordinary meeting;
+- this card's Evidence (citations at `e886b663`) and `tasks/work/stage-b-readers.md:595-597` and `:656`, that
+  card's record of the state before this card; neither is rewritten.
+
+### Limitations
+
+- The resume filter drops every trigger-tick event outside the keep-set and counts only the three reported
+  kinds. In the default delivery the only other trigger-tick event an observer reads is a rejected `do_task`
+  (`observation/service.py:557`), which is dropped uncounted.
+- The notice and the trail step key on the public row, so an evidence-version-2 memory under the reset
+  renders them too; the fold line renders on the default evidence path only, and version 2 renders each
+  regroup sighting on its own row (corrected in round 5). On the default path the fold also needs every
+  regroup-tick row free of a movement note, and the token budget can shed the fold line like any sighting row:
+  on fake arm-ON seeds 1000-1007 the latest regroup's fold line renders in 18 of 54 post-regroup views (round 6).
+  No committed recording has the row. The notice stays excluded under evidence version 1.
+- Under attributed testimony, alone or beside public accounts, the meeting's contradiction step is the account
+  detector, which reads no regroup window, so a meeting there can prosecute a player the regroup moved. The
+  recorded settings accept the reset beside either account profile: a stated limitation by the orchestrator's
+  ruling of 2026-09-27 (round 7), which kept the temporal-evidence card's pinned test
+  (`tests/orchestrator/test_public_regroup_evidence.py`) and took no detector change (Decisions). No committed
+  recording and no Stage-B setting combines them.
+- The fake provider ejects nobody, so every fake reset game's meetings resume. A meeting that ends the game
+  under the reset is covered by a runner of the test's own; how a model reasons after a regroup is first
+  measured by the record.
+- No development game at seeds 1000-1007 holds a kill-witness button call within 6 ticks of a regroup, so that
+  census case is a carrier built from the fixture game's walk with the call inserted.
+- The planted census `--check` cannot turn red under the filter applied to `preserve` (above).
+- The three readers the stop-and-ask named are resolved in round 3; the further readers round 3 found are
+  listed there.
+
+### Review corrections, round 3 (2026-09-27)
+
+The resume after the stop-and-ask. Commits: `1ad1b57c` (the merge of `main`), `6fb328a8` (the three readers and
+the contract sentence) and the card commits that follow it. All three verifier lenses run on this round, the
+card's first.
+
+**The merge.** `main` at `cb0a4cfc` (B1 `#489`, B4 `#488`, the flip of B4's card and the orchestrator's
+amendment of the decision memo's one-writer map for this card's three readers) is merged in `1ad1b57c`; nothing
+is rebased. `orchestrator/game.py` merged without a conflict and by region: B4 changed only the body of
+`_build_meeting_trigger`, this card's regions are the resume composition, the regroup ticks and the absorb.
+`audits/tactical-gameplay/README.md` keeps B1's rows and this card's dated reset-row note. Two conflicts, both
+derived: the `tasks/README.md` inventory sentence, re-derived with `scripts/validate_task_docs.py`, and the
+`audits/` row of `docs/artifacts.md`, recomputed with `git ls-files` over the merged tree (330 files, 27,303,776
+tracked bytes; neither later commit touches `audits/`, and the row is re-read at the head below).
+
+**Finding 1: the three readers, by the orchestrator's ruling of 2026-09-27.** Candidate-facing instruments read
+the window; a FROZEN instrument keeps its evidence semantics and refuses.
+
+- (a) `eval/meeting_quality.py`. `_ejected_in_inform_band` takes a required keyword `regroup_ticks` and hands it
+  to `derive_belief_evidence`. `decompose_ejection_channels` passes `_regroup_ticks_before(game, meeting_index)`:
+  `orchestrator.replay.derive_regroup_ticks` over the report's recorded settings (`GameReport.experiment_config`,
+  filled from the recording by `eval.balance_eval`) and the earlier meetings' ticks. Every earlier meeting of a
+  game resumed play, since a meeting that ends the game is its last, so this is the live derivation. Consumers:
+  `compute_multi_signal_conversion` and `decompose_ejection_channels`, read by `scripts/build_sample_report.py`
+  (the summary at `:336`, `--baseline-out` at `:502` and `:513`) and by `audits/workflows/extract_gameplay_facts.py`,
+  which refuses experiment settings (`refuse_experiment_settings`). The scorecard, the census and the validity
+  gate do not reach it: `eval/process_scorecard.py` names it only in a definition that says it is not used.
+  Planted: on the fake reset recording (`vouching_game`, assembled by `assemble_tournament_report`, the sample
+  report's own assembly), `_regroup_ticks_before` equals the ticks each live meeting ran with (none at the
+  first meeting, then every earlier meeting's resume tick); the last meeting turned into an impostor ejection whose one voice rests on a sighting
+  at the previous regroup tick or the tick after it decomposes to `{body_proximity}` and the multi-signal fold
+  counts 0 inform conversions; with the window withheld (`derive_regroup_ticks` patched empty) the same fold
+  reads `{single_witness_inform}` and counts 1; a sighting two ticks past the regroup still informs; the
+  `preserve` twin (the same planted game with no recorded settings) reads `{single_witness_inform}` and 1, as
+  before this card. The committed sets fold byte-identically: the four `build_sample_report --check` runs.
+- (b) `eval/vj_instruments.py`: **threaded**, not refused. `_pre_vote_graphs` passes the walked meeting's
+  `regroup_ticks` (the funnel walk's `_VJMeeting` already carried them). Consumer: `compute_vj_instruments`, read
+  by `scripts/measure_baseline.py --vj` (`:785`) on any directory; `eval/deception_instruments.py` imports only
+  the funnel's carriers, not this module. `measure_baseline.py` is the command the record card runs on the
+  candidate (`--honesty`), and `--vj` is a flag of the same command, so it is candidate-facing. Planted: a spy on
+  the derivation reads each meeting's live window over the whole fold of the fake reset recording, and a
+  planted one-voice turn at the last regroup tick moves every listening crewmate's row by the absence lift
+  (+0.08) with the window and by the inform lift (+0.05) without it.
+- (c) `eval/deception_instruments.py` (FROZEN): `_refuse_the_meeting_reset` reads each replay's recorded
+  settings (`recorded_experiment_config`) and raises, naming `meeting_reset='hub_with_grace'` and the seed,
+  before `_walk_set_vj` runs. No evidence semantics change: `_restricted_grounded_subjects` and every other fold
+  are byte-identical, `tests/eval/test_deception_instruments.py` stays green, and the refusal fires on the reset
+  alone (a `preserve` recording, one stating `preserve` explicitly, and one with two other wave settings all reach
+  the walk). The departure is declared under Record impact.
+
+**Finding 2: integration.** Beside the merge above, `docs/observation-contract.md` now takes the body-handle
+card's hand-off: full model-facing removal is in temporal mode; without it,
+`report_body_handle_version = 1` changes the report opening alone, naming the corpse by its public
+`body-{victim_id}` handle (no death tick) and reading "a body" for a corpse missing from the state; with neither,
+the opening still carries the internal id. That is the builder's docstring at the strength it delivers
+(`orchestrator/game.py`, `_build_meeting_trigger`). The test reads the setting from `RecordedExperimentConfig`
+and the handle from `observation.body_ids.public_body_id`; the planted case is the paragraph as it read before
+the setting existed.
+
+**Further readers found, not in the ruling and left unchanged.** A search over every production caller of the
+window-bearing functions (`derive_belief_evidence`, `extract_belief_evidence`, `grounded_vouch_subjects`,
+`is_relevant_sighting`, `reconstruct_stated_paths`, `detect_corroborations`, `detect_contradictions`,
+`independent_voices`, `absent_players`, `build_testimony_ledger`, `build_evidence_rows`) found two more that can
+read a reset recording at the no-regroup default. Neither is in the record card's path, and neither file is this
+card's, so both are the PR's question to the orchestrator:
+- `scripts/counterfactual_phase21.py::_ledger_for` builds the testimony ledger without the window over the
+  golden walk. Its `--sets` mode takes any set name under `replays/`; its `--recording` mode requires the Wave-2
+  substrate slate, which a Stage-B candidate does not carry. (Round 4: it now refuses a reset recording by name.)
+- The FROZEN concluded lab probes `experiments/lab/deception_battery.py`, `deflection_probe.py`,
+  `forward_redesign_conversion_probe.py`, `forward_redesign_detector_sweep.py`, `meeting_prompt_battery.py` and
+  `vent_escape_lab.py` call `detect_contradictions` without the window, like `inference_testimony_probe.py`,
+  which the Evidence section already lists.
+
+**Red before, green after.** The 14 new instrument tests and the contract test, run against the pre-round
+bytes of the three modules and the contract (swapped in from byte copies, restored, sha256 equal):
+`pytest tests/eval/test_regroup_instruments.py tests/orchestrator/test_meeting_reset_coherence.py::test_the_contract_names_the_recorded_body_handle_setting`
+exit 1, 10 failed and 31 passed. Red: both `informs_nobody` cases (the inform credited), the two V&J tests (no
+window reaches the derivation; the rows equal the unwindowed ones), the two deception refusals (the walk ran
+first), the contract test, and three tests that call the new helper (`window_each`, `reads_no_window`,
+`withheld`, red because the helper and the module's import of the derivation do not exist yet). Green, as controls must be: `just_past_the_window`, the `preserve` twin, the
+three `names_the_reset_and_nothing_else` cases, and the 26 tests this card already had in the file. With the
+round's bytes: 41 passed.
+
+**The bounded mutation pass**, over the spans this round changed, with the listed classes only. Each mutant
+replaced one snippet, ran `tests/eval/test_regroup_instruments.py` plus the module's own suite
+(`test_gate_spec_metrics.py` and `test_wave2_metrics.py`, `test_vj_instruments.py`, or
+`test_deception_instruments.py`) with `-x`, and was restored from a byte copy (20 restored, sha256 equal). 20
+mutants, 19 red on the first run; the one survivor is equivalent. None needed a new planted case.
+
+| Id | Class | First red test |
+| --- | --- | --- |
+| N-MQ-derive-kw | neuter the keyword | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| M-MQ-call-arg | message argument to constant (`frozenset()`) | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| M-MQ-call-index | tick read to constant (`meeting_index` to 0) | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| M-MQ-config | loaded source to literal (settings to `None`) | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-tick | tick read to constant | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-slice | drop a filter (every meeting) | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-slice-next | swap a collection (this meeting too) | `test_the_inform_band_reads_the_window_each_live_meeting_ran_with` |
+| M-MQ-branch | swap branches (the band test inverted) | `test_a_voice_resting_on_a_regroup_sighting_informs_nobody[0]` |
+| N-VJ-kw | neuter the keyword | `test_the_vj_pre_vote_fold_reads_each_meetings_window` |
+| M-VJ-const | message argument to constant | `test_the_vj_pre_vote_fold_reads_each_meetings_window` |
+| N-DI-call | neuter the refusal | `test_the_deception_instruments_refuse_the_reset_by_name_before_walking` |
+| M-DI-order | swap adjacent statements (walk first) | `test_the_deception_instruments_refuse_the_reset_by_name_before_walking` |
+| M-DI-none | None test inverted | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings0]` |
+| M-DI-none-only | comparison replaced by a None test | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings2]` |
+| M-DI-eq | comparison inverted | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings2]` |
+| M-DI-literal | loaded source to literal (`"preserve"`) | `test_the_deception_refusal_names_the_reset_and_nothing_else[settings2]` |
+| M-DI-seeds | swap a collection (first seed only) | `test_a_set_with_one_reset_recording_is_refused_at_that_seed` |
+| M-DI-seed-path | read to constant (first seed's file) | `test_a_set_with_one_reset_recording_is_refused_at_that_seed` |
+| M-DI-msg-seed | message argument to constant | `test_the_deception_instruments_refuse_the_reset_by_name_before_walking` |
+| M-DI-msg-value | message argument to constant (`'hub_with_grace'`) | survives, equivalent: the branch runs only when the value is `'hub_with_grace'`, so the message bytes are equal |
+
+**Verification at `6fb328a8`.** A bare shell with 0 `AILIBI_*` exports; each exit code captured from the process,
+never through a pipe.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 199 passed |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `build_sample_report.py` on a fake `hub_with_grace` set (seeds 1000-1002, 7 meetings, recorded into the scratchpad by `tests/_helpers/scripted_meeting.record_game`): write, then `--check`, then `--baseline-out` | exit 0 each; 0 impostor ejections, so every channel count reads 0 |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted; `git grep -l` for the files | 956 `"meeting_reset":"preserve"`, in 101 files |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as recomputed in the merge |
+| `scripts/build_demo_bundle.py`, at an export of `cb0a4cfc` and at `6fb328a8` | exit 0 each, 156 JSON files baked; `diff -r` of the two `data/` trees prints nothing (exit 0). The export reads the same replay bytes through a link (`diff -rq` of its archived `replays/` against the branch's is empty), so the file times that stamp `created_at` agree |
+| `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
+| `git diff --stat cb0a4cfc 6fb328a8 -- engine/ frontend/ eval/off_menu.py replays/ observation/ orchestrator/experiment_config.py eval/gameplay_census.py eval/leak_scan.py api/schemas.py docs/architecture.md` | empty |
+
+`bash scripts/check.sh` ran once, at `faa61591`, the commit that first carried this subsection, in a bare shell
+with its exit code captured from the process: exit 0 (ruff clean, 546 files formatted, `lint-imports` 4 kept 0
+broken, task docs with 88 work cards and prompts valid, mypy clean on 517 files, pytest 9654 passed, 20 skipped,
+3 xfailed; frontend lint, types, 559 vitest tests and build). The commit after it changes only this paragraph;
+`scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` re-run at that head.
+
+**Changed test expectations.** None. The round adds 16 tests (14 in `tests/eval/test_regroup_instruments.py`, 2
+in `tests/orchestrator/test_meeting_reset_coherence.py`) and weakens, skips or deletes none.
+
+**Closing greps.** `git grep -n -i -E "removal is implemented only in temporal|only in temporal mode|OFF opening
+descriptions|passes no window|does not pass them|inherit the funnel's refusal|need no edit" -- ':!tasks/phase-*'
+':!agent_prompts' ':!audits'`, at `6fb328a8`. The hits:
+- this card's own record of `d801eb3c` (Results, the stop-and-ask bullets), now stated in the past;
+- `tasks/work/report-body-handle.md:350` and `:642`, that card's hand-off, and
+  `tasks/work/stage-b-readers.md:601`, that card's record of the readers before this ruling; neither is
+  rewritten;
+- `tasks/investigations-2026-09-24/vent_witness_and_exit.md:155`, an unrelated "need no edit";
+- `tests/orchestrator/test_meeting_reset_coherence.py`, the planted pre-setting paragraph.
+
+**Limitations.**
+- The planted ejections are carriers built from a fake reset game: the fake provider ejects nobody, so the fake
+  set's own fold reads 0 on every channel with or without the window. The record is the first real reading.
+- The two readers under "Further readers found" read a reset recording without the window if pointed at one.
+  (Round 4: the phase-21 counterfactual now refuses one; the lab probes remain the PR's question.)
+
+### Review corrections, round 4 (2026-09-27)
+
+The repair of the four blocking findings the three verifier lenses and the Codex review raised on round 3.
+Commits: the commit that first carries this subsection (the phase-21 refusal, the planted cases and this record)
+and the card commit after it, which records the `check.sh` run. `main` is still `cb0a4cfc`, the round-3 merge
+base, so nothing is merged. No `audits/` or `tests/fixtures/` byte moves, so the `audits/` row stays
+(330 files, 27,303,776 tracked bytes, re-read at the head below).
+
+**Finding 1: four listed-class survivors in lines this card added (correctness).** The verifiers' harness kept
+four mutants green over the six non-golden card suites at `711e488f` (164 passed each). Each is now red through
+a planted case; none is named equivalent:
+
+| Id | Mutant | Planted case that kills it |
+| --- | --- | --- |
+| S1 | `_public_regroups`: `isinstance(players, (tuple, list))` to `(tuple,)` (drop a tuple member) | `test_a_public_row_listing_its_players_reads_as_the_tuple_row_does`: the row's contract is a room and a list of player ids; a hand-built row holding a list renders the same notice, fold and route step as the tuple row the one writer stores |
+| S2 | the same refusal's `{event.payload!r}` to a constant (message argument) | `test_the_malformed_row_refusal_quotes_the_payload_it_read`: four malformed payloads (no player list, a non-string room, a string, a frozenset), each message equal to `public regroup row is malformed: <the payload's repr>` |
+| S3 | `MeetingManager.run`: `{sorted(regroup_ticks)}` to `{[]}` (message argument) | `test_the_manager_refusal_names_the_ticks_it_was_handed`: `{9, -1}` reads `[-1, 9]` and `{4, 2, True}` reads `[True, 2, 4]`, no model call made |
+| S4 | `compose_resume_events`: `{len(meeting_events)}` to `{0}` (message argument) | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest`: the property's refusal `match` now ends `; got {len(meeting_events)}$`, over its generated one to three meeting events |
+
+**Findings 2 and 3: the phase-21 counterfactual read a reset recording without the window (integrity; the
+documentation lens and Codex P2).** Both are valid. At the merge base the script refused a `hub_with_grace`
+recording through `compute_evidence_honesty` (the readers card: it "takes their thread-or-refuse behaviour").
+This card lifted honesty's refusal with honesty's fix, and the script's own ledger (`_ledger_for`, which calls
+`build_testimony_ledger` without the window) went on reading the recording. The verifiers reproduced it: 7
+ledger calls over a fake reset set, 0 carrying the window, and `--sets` exiting 0 with a table.
+
+- **The repair.** `scripts/counterfactual_phase21.py::_refuse_the_meeting_reset` reads each recording's settings
+  (`recorded_experiment_config`) and raises `SystemExit`, naming the setting and the seed, when the reset is not
+  the default `"preserve"`. `_walk` calls it after the empty-set check and before `roles_by_seed`, so it runs
+  before the walk re-derives anything, in both modes. No evidence semantics change, and a recording without the
+  reset walks exactly as before (`tests/scripts/test_counterfactual_phase21.py` 105 passed).
+- **The ruling.** The round-3 PR asked the orchestrator this question. The round-4 dispatch forwards the
+  findings with their three options (a named refusal, threading, or a ruled limitation) and the instruction to
+  repair each finding; it carries no separate ruling text. The repair is the first option, the one the
+  orchestrator's ruling of 2026-09-27 chose for the analogous FROZEN reader (`eval/deception_instruments.py`),
+  and it restores the script's outcome at the merge base (a named refusal and no table; honesty refused there
+  after the walk, the refusal now comes before it). It edits a file outside the decision memo's 3.2 map;
+  no Stage-B card writes that file. The PR's Questions asks the orchestrator to confirm the disposition and to
+  record the map row, as `cb0a4cfc` did for the three readers. Threading was not chosen: the golden walk's
+  `ReconstructedMeeting` does not carry the ticks, and the script prices the Wave-2 levers over lever-OFF
+  committed bytes, which no Stage-B recording is; the refusal leaves its evidence semantics unchanged.
+- **The strength stated.** The equality box's guarantee now holds as written: every production caller that can
+  read a reset recording either receives the regroup ticks or refuses by name. The FROZEN concluded lab probes
+  in `experiments/lab/` are lab code, not production callers, and stay the PR's question.
+- **Proof** (`tests/eval/test_regroup_instruments.py`, each with `roles_by_seed` and `walk_replay_meetings`
+  replaced by a sentinel raised where the walk would begin):
+  `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` (`walk_set`, seed 1000);
+  `test_the_phase21_command_refuses_a_reset_set_staged_under_replays` (`main(["--sets", "staged/9p2i"])` with the
+  script's repository root pointed at a checkout whose only set is the reset recording);
+  `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` (seed 1001 among `preserve` seeds); and
+  `test_the_phase21_refusal_names_the_reset_and_nothing_else` (no settings, an explicit `preserve`, and two other
+  wave settings each reach the walk).
+- **The command.** A fake `hub_with_grace` set (seeds 1000-1002, 7 meetings, recorded with
+  `tests/_helpers/scripted_meeting.record_game` into the scratchpad) staged as `replays/zz_r4_tmp/9p2i`:
+  `uv run python scripts/counterfactual_phase21.py --sets zz_r4_tmp/9p2i` exit 1, printing `the phase-21
+  counterfactual does not read the recorded meeting_reset='hub_with_grace' (seed 1000): its testimony ledger does
+  not apply the regroup window`. The staged directory was removed and `git status` is clean under `replays/`.
+- **Red before.** The six phase-21 test items against the script's pre-round bytes (swapped in from `711e488f`, restored
+  from a byte copy, sha256 equal): `pytest tests/eval/test_regroup_instruments.py -k phase21` exit 1, 3 failed
+  and 3 passed. Red: the three reset cases (the walk began). Green, as controls must be: the three
+  `names_the_reset_and_nothing_else` cases. With the round's bytes: 6 passed.
+
+**Finding 4: the round-3 counts (documentation).** Valid. `uv run pytest --collect-only -q
+tests/eval/test_regroup_instruments.py` collects 26 items at `1ad1b57c` and 40 at `711e488f`: 14 new items, 9 red
+and 5 green controls in the red-before run (10 failed, 31 passed with the contract test). The three sentences
+now read 14 new instrument tests, 26 tests already in the file, and 16 added in total (14 there, 2 in
+`tests/orchestrator/test_meeting_reset_coherence.py`).
+
+**The bounded mutation pass**, over the spans this round changed and the four spans the findings named, with the
+listed classes only, plus three neutering probes of the new production lines. Each mutant replaced one snippet
+(its count asserted to be exactly one), ran the six non-golden card suites (`tests/orchestrator/test_meeting_reset_coherence.py`,
+`tests/agents/test_regroup_memory.py`, `tests/meetings/test_regroup_relevance_window.py`,
+`tests/eval/test_regroup_instruments.py`, `tests/engine/test_meeting_reset_experiment.py`,
+`tests/orchestrator/test_public_regroup_evidence.py`, `-x -n 8`), and was restored from a byte copy: 18
+restored, sha256 equal, and `git status` showed only this round's edits. 18 probes, 17 red on the first run;
+the one that came back green is equivalent.
+
+| Id | Class | File | First red test |
+| --- | --- | --- | --- |
+| S1 | f, drop a tuple member | `agents/memory/store.py` | `test_a_public_row_listing_its_players_reads_as_the_tuple_row_does` |
+| S2 | e, message argument | `agents/memory/store.py` | `test_the_malformed_row_refusal_quotes_the_payload_it_read[payload0]` |
+| S3 | e, message argument | `meetings/manager.py` | `test_the_manager_refusal_names_the_ticks_it_was_handed[ticks0-[-1, 9]]` |
+| S4 | e, message argument | `orchestrator/replay.py` | `test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` |
+| P-seeds-first | b, the first seed only | `scripts/counterfactual_phase21.py` | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| P-none-inverse | c, `is not None` to `is None` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-cmp-is-not-none | c, `!= "preserve"` to `is not None` | same | `test_the_phase21_refusal_names_the_reset_and_nothing_else[settings2]` |
+| P-cmp-is-none | c, `!= "preserve"` to `is None` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-cmp-inverse | c, `!=` to `==` | same | `test_the_phase21_command_refuses_a_reset_set_staged_under_replays` |
+| P-reset-const | d, the reset read to `"preserve"` | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| P-seed-const | d, the seed read to `0` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-msg-seed | e, message seed to `1000` | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| P-msg-value | e, message value to `'hub_with_grace'` | same | green, equivalent: the branch runs only when the value is not `"preserve"`, and `RecordedExperimentConfig.meeting_reset` admits one other value, `"hub_with_grace"`, so the message bytes are equal |
+| P-order | g, the refusal moved after `roles_by_seed` | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| P-source-literal | h, the recorded settings to `None` | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| N-P-call | neuter, the call in `_walk` removed | same | `test_a_phase21_set_with_one_reset_recording_is_refused_at_that_seed` |
+| N-P-body | neuter, the helper returns at once | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+| N-P-raise | neuter, the raise removed | same | `test_the_phase21_counterfactual_refuses_the_reset_by_name_before_walking` |
+
+**Verification of this round's code and tests.** Every gate below ran on the bytes the commit that first carries
+this subsection holds, in a bare shell with 0 `AILIBI_*` exports, each exit code captured from the process and
+never through a pipe; `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` re-ran after this
+subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 212 passed |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `build_sample_report.py` on the fake `hub_with_grace` set above: write, then `--check`, then `--baseline-out` | exit 0 each; 3 games, 7 meetings, 0 ejections |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each (88 work cards) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest tests/scripts/test_counterfactual_phase21.py -q -n 8` | exit 0: 105 passed |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted; `git grep -l` for the files | 956 `"meeting_reset":"preserve"`, in 101 files |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+| `scripts/build_demo_bundle.py`, at an export of `cb0a4cfc` and at this round's bytes | exit 0 each, 156 JSON files baked; `diff -r` of the two `data/` trees prints nothing (exit 0). Both read the branch's `replays/samples` (the export's archived `replays/` is `diff -rq` identical), and the export's build imported the export's own `api/` and `orchestrator/` |
+| `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
+| `git diff --stat 711e488f -- engine/ frontend/ api/ observation/ replays/ eval/off_menu.py orchestrator/experiment_config.py eval/gameplay_census.py eval/leak_scan.py api/schemas.py docs/architecture.md audits/ tests/fixtures/` | empty |
+
+`bash scripts/check.sh` ran once, at `dbb32f6c`, the commit that first carries this subsection, in a bare shell with
+0 `AILIBI_*` exports and its exit code captured from the process: exit 0 (ruff clean, 546 files formatted,
+`lint-imports` 4 kept 0 broken, task docs with 88 work cards and prompts valid, mypy clean on 517 files, pytest
+9667 passed, 20 skipped, 3 xfailed, the round's 13 new items above round 3's 9654; frontend lint, types, 559
+vitest tests and build). The commit after it changes only this paragraph; `scripts/validate_task_docs.py` and
+`scripts/check_doc_facts.py` re-run at that head.
+
+**Changed test expectations.** One, stricter: the refusal `match` in
+`test_the_helper_keeps_exactly_the_kills_and_vents_and_counts_the_rest` now also pins `; got
+{len(meeting_events)}$`. The round adds 13 test items in 7 functions: 5 in `tests/agents/test_regroup_memory.py`
+(the four-payload refusal and the list row), 2 in `tests/meetings/test_regroup_relevance_window.py` and 6 in
+`tests/eval/test_regroup_instruments.py` (the four phase-21 functions, one of them with three controls). No test
+is weakened, skipped or deleted.
+
+**Closing greps.** `git grep -n -i -E "gains no refusal|thread-or-refuse|takes their (thread|behaviou?r)|without
+the window if pointed|reset recording without the window|read a reset recording at the no-regroup" --
+':!tasks/phase-*' ':!agent_prompts' ':!audits'`, at the head. The hits about the phase-21 script are this card's
+round-3 record (annotated in place with its round-4 outcome), this subsection's own account and grep, the card's
+stop-and-ask rule under Constraints, and `tasks/work/stage-b-readers.md:634` and `:890-891`, that card's record
+of the script before this card, which is not rewritten. The remaining hits name the spine's thread-or-refuse
+mechanism, which is unchanged. `git grep -n -i -E
+"counterfactual_phase21|phase-21 counterfactual" -- docs README.md` prints nothing, so no live document states the
+script's reading of a reset recording.
+
+**Limitations.**
+- The phase-21 disposition awaits the orchestrator's confirmation and its map row (the PR's Questions). If the
+  orchestrator rules for threading instead, this refusal is the thing to replace.
+- The FROZEN concluded lab probes named in round 3 still call `detect_contradictions` without the window if
+  pointed at a reset recording; they are lab code, and the question stands.
+
+### Review corrections, round 5 (2026-09-27)
+
+The repair of the two blocking findings the correctness lens raised on round 4. Commits: the commit that first
+carries this subsection (the planted cases, the contract paragraph, one comment and this record) and the card
+commit after it, which records the `check.sh` run. `main` is still `cb0a4cfc`, the round-3 merge base, so
+nothing is merged. No `audits/` or `tests/fixtures/` byte moves, so the `audits/` row stays (330 files,
+27,303,776 tracked bytes, re-read below). Status stays `done` and the `tasks/README.md` sentence is unchanged.
+
+**Finding 1: the walk's resume phase read (correctness).** Valid. `eval/replay_walk.py::_walk_replay` composes
+the resume events before it stops at game over, so `meeting_regrouped(experiment, phase_after=state.phase)` is
+load-bearing there. After a meeting that ends a reset game the phase is `GAME_OVER`, no regroup ran, and the
+meeting's own events (the ejection's game-over event) pass through. With the read replaced by `"PLAY"`, the
+helper is told a regroup ran and refuses the non-empty meeting events. The loader and the golden stop at game
+over before they compose, so their phase reads are equivalent. No test recorded a reset game whose meeting ends
+it (the fake provider ejects nobody), so the constant stayed green.
+
+- **The planted case.** `_EjectingRunner` is the test's own runner that ejects the only impostor at the first
+  meeting. Every ballot it casts now names the impostor with full confidence, so the ballots tally to the
+  ejection the result states and the game can be recorded. `_button_game` takes an optional replay path, `None`
+  by default, so every other caller runs as before.
+  `test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting` records the 5-player reset game at
+  seed 4 into `tmp_path` through `HeadlessGame.run` and walks it under the evidence-honesty and funnel profiles.
+  Each walk yields one `MeetingApplied` in phase `GAME_OVER` whose post events end with the game-over event,
+  then `WalkComplete` whose terminal tick is the meeting's.
+- **Red under the mutant.** `M-WK-compose-phase` below: both parametrised cases are red (2 failed). At the
+  round's bytes both pass.
+- `test_a_meeting_that_ends_the_game_under_the_reset_resumes_nothing` keeps every assertion; only its runner's
+  ballots changed.
+
+**Finding 2: the fold under evidence version 2 (correctness).** Valid. `render_for_prompt` folds sightings only
+when the evidence version is not 2. Version-2 observations also carry no sighting key, the key the fold groups
+on. So a version-2 memory under the reset renders the notice and the route step, and keeps each regroup sighting
+on its own row, as it keeps the spawn sightings. It is now stated at that strength:
+
+- `docs/observation-contract.md`, "The announced regroup": the fold is on the default evidence path; evidence
+  version 2 folds no sightings.
+- This card's Decisions ("Sabotage survives the reset") and Limitations lines, corrected in place with a round-5
+  note; the PR body's Summary and Decisions.
+- `agents/memory/store.py`: one comment at the fold's version gate, and no code change;
+  `tests/agents/test_regroup_memory.py`: the module docstring.
+- Tests in `tests/agents/test_regroup_memory.py`:
+  `test_under_version_2_the_regroup_sightings_keep_their_own_rows` checks the notice line and the route step are
+  present, with no regroup fold line and no spawn fold. The regroup-tick rows equal those rendered without the
+  row, one per other player. `test_only_version_2_leaves_the_spawn_group_unfolded` checks the default path and
+  version 1 fold the spawn group and version 2 does not.
+- The Constraints sentence the finding names ("so they also apply to evidence-version-2 memories", under
+  "Decisions this card makes") is the orchestrator's contract text; the PR's Questions asks the orchestrator to
+  amend it. The Acceptance box "Legible memory" holds as written: it states the fold and the difference the row
+  makes on the default path, the path its tests render.
+
+**The bounded mutation pass.** It covers the span finding 1 names (the walk's resume composition) and the spans
+finding 2 names (the fold's version gate and its regroup argument, the notice's version gate, the route's regroup
+argument), with the listed classes only. Each mutant replaced one snippet (its count asserted to be exactly
+one) and ran the targeted suites with `-x -n 8`. For the walk: `tests/orchestrator/test_meeting_reset_coherence.py`
+and `tests/eval/test_replay_walk.py`. For the store: `tests/agents/test_regroup_memory.py`,
+`tests/agents/test_memory_rendering.py` and `tests/orchestrator/test_meeting_reset_coherence.py`. Each file was
+restored from a byte copy (18 restorations, sha256 equal each time), and `git status` showed only this round's
+edits. 14 mutants, 11 red on the first run. Of the three that came back green, one is killed by a new planted
+case and two are equivalent:
+
+| Id | Class | File | First red test |
+| --- | --- | --- | --- |
+| M-WK-compose-phase | d, the phase read to `"PLAY"` | `eval/replay_walk.py` | `test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting[funnel-instrument]` (both cases red) |
+| M-WK-compose-settings | h, the recorded settings to `None` | same | `test_the_four_readings_agree_at_every_meeting_open` |
+| M-WK-compose-meeting-events | b, the meeting's events swapped for the trigger tick's | same | `test_the_readers_name_the_maps_meeting_room` |
+| M-WK-compose-trigger-events | b, the trigger tick's events swapped for the meeting's | same | `test_withholding_the_window_or_the_resume_at_a_reader_breaks_agreement[walk-resume]` |
+| M-WK-break-first | g, the game-over break moved above the composition | same | green, equivalent: the walk reads neither `last_events` nor `resumed_meeting_ticks` after it breaks, so composing before or after the break yields the same events |
+| M-ST-fold-gate-inverse | c, `!= 2` to `== 2` | `agents/memory/store.py` | `test_the_fold_expects_the_players_the_row_gathered_not_the_known_roster` |
+| M-ST-fold-gate-not-none | c, `!= 2` to `is not None` | same | `test_the_fold_expects_the_players_the_row_gathered_not_the_known_roster` |
+| M-ST-fold-gate-none | c, `!= 2` to `is None` | same | first green (also over the wider memory suites, 1862 passed); killed by `test_only_version_2_leaves_the_spawn_group_unfolded[1-True]` |
+| M-ST-fold-gate-dropped | a, the version gate dropped | same | green, equivalent: version-2 observations carry no sighting key (`_build_v2_observations`), so `_coalesce_sightings` passes every one through unchanged and the render sorts them afterwards |
+| M-ST-fold-regroups-empty | b, the fold's regroups to `()` | same | `test_the_fold_expects_the_players_the_row_gathered_not_the_known_roster` |
+| M-ST-notice-gate-none | c, `!= 1` to `is None` | same | `test_under_version_2_the_regroup_sightings_keep_their_own_rows` (the one red test: the round's new case) |
+| M-ST-notice-gate-inverse | c, `!= 1` to `== 1` | same | `test_the_default_path_renders_the_notice_whenever_the_row_exists` |
+| M-ST-notice-gate-dropped | a, the notice's version gate dropped | same | `test_version_1_renders_no_notice_even_beside_a_row` |
+| M-ST-trail-regroups-empty | b, the route's regroups to `()` | same | `test_the_route_states_the_regroup_as_its_own_step` |
+
+The fold's version gate predates this card (this card added only its regroup argument). No test pinned that
+version 1 folds the spawn group, so `M-ST-fold-gate-none` survived. The finding names that span, so the round
+kills it rather than naming it pre-existing. The restorations: 14 in the first run, 1 in the wider run and 3 in
+the rerun of the three greens, where `M-ST-fold-gate-none` came back red and the two equivalents came back green.
+
+**Verification of this round's code and tests.** Every gate below ran on the round's code and test bytes, in a
+bare shell with 0 `AILIBI_*` exports. Each exit code was captured from the process, never through a pipe.
+`scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` re-ran after this subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 218 passed (212 at round 4, plus the round's 6 items) |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each, consistent |
+| `build_sample_report.py` on a fake `hub_with_grace` set (seeds 1000-1002, 7 meetings, recorded with `tests/_helpers/scripted_meeting.record_game` into the scratchpad): write, then `--check`, then `--baseline-out` | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each (88 work cards) |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted; `git grep -l` for the files | 956 `"meeting_reset":"preserve"`, in 101 files |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+| `scripts/build_demo_bundle.py`, at an export of `cb0a4cfc` and at the round's bytes | exit 0 each, 156 JSON files baked; `diff -r` of the two `data/` trees prints nothing (exit 0). Both read the branch's `replays/samples` (the export links the branch's `replays/`), and the export's build imports the export's own `api/` and `orchestrator/` |
+| `npm --prefix frontend test`; `npm --prefix frontend run e2e` | exit 0: 559 passed; 13 passed, 3 skipped (the media-capture journeys) |
+| `git diff --stat b590eb17` | five files: `agents/memory/store.py` (one comment, no code), `docs/observation-contract.md`, this card and the two test files; nothing under `engine/`, `frontend/`, `api/`, `eval/`, `observation/`, `orchestrator/`, `meetings/`, `scripts/`, `replays/`, `audits/` or `tests/fixtures/` |
+
+`bash scripts/check.sh` ran once, at `c3edd856`, the commit that first carries this subsection, in a bare shell
+with 0 `AILIBI_*` exports and its exit code captured from the process: exit 0 (ruff clean, 546 files formatted,
+`lint-imports` 4 kept 0 broken, task docs with 88 work cards and prompts valid, mypy clean on 517 files, pytest
+9673 passed, 20 skipped, 3 xfailed, the round's 6 new items above round 4's 9667; frontend lint, types, 559
+vitest tests and build). The commit after it changes only this paragraph; `scripts/validate_task_docs.py` and
+`scripts/check_doc_facts.py` re-run at that head.
+
+**Changed test expectations.** None is weakened, skipped or deleted. Two test helpers changed in
+`tests/orchestrator/test_meeting_reset_coherence.py`: `_EjectingRunner`'s ballots now name the impostor, and
+`_button_game` takes an optional replay path. The round adds 6 test items in 3 functions:
+`test_a_recorded_meeting_that_ends_the_game_walks_to_its_terminal_meeting` (2) in that file, and
+`test_under_version_2_the_regroup_sightings_keep_their_own_rows` (1) and
+`test_only_version_2_leaves_the_spawn_group_unfolded` (3) in `tests/agents/test_regroup_memory.py`.
+
+**Closing greps.** `git grep -n -i -E "also apply to evidence|apply to evidence-version-2|version-2 memor|renders?
+them too|it folds the sightings|fold(s|ed)? .{0,30}under (evidence )?version 2|under (evidence )?version 2.{0,40}fold"
+-- ':!tasks/phase-*' ':!agent_prompts' ':!audits'`, at the head. The hits:
+- this card's Constraints sentence, the orchestrator's (the PR's Questions);
+- this card's Decisions and Limitations lines as corrected, which say the notice and the trail step render under
+  version 2 and the fold does not;
+- this subsection's own quotation and grep.
+`docs/observation-contract.md` no longer says the memory folds the regroup wherever the row exists.
+
+**Limitations.**
+- The Constraints sentence stands until the orchestrator amends it.
+- The recorded game-ending case is a runner of the test's own: the fake provider ejects nobody, so no fake-provider
+  reset game ends at a meeting. The record is the first real reading.
+
+### Review corrections, round 6 (2026-09-27)
+
+The orchestrator's scoped round (its round 4 of this card): one correctness finding on the fold's strength and
+one ruling on the public-account profiles. Commit: the one that first carries this subsection. `main` is still
+`cb0a4cfc`, so nothing is merged. No byte moves under `engine/`, `api/`, `frontend/`, `eval/`, `orchestrator/`,
+`observation/`, `replays/`, `audits/` or `tests/fixtures/`, so the `audits/` row stays (330 files, 27,303,776
+tracked bytes, re-read below) and the demo bundle is not rebuilt. Status stays `done` and the `tasks/README.md`
+sentence is unchanged.
+
+**Finding 1: the fold's movement-note condition (correctness).** Valid. `_spawn_group_indices` takes a run only
+when its first row carries no movement note (`not rows[0].sighting_suffix`). The note lands on a subject's latest
+ordinary sighting when the agent saw that subject in another room at or before it (`_build_breadcrumbs`,
+`_movement_suffix_for`). So a subject seen elsewhere before the meeting and not again after the regroup carries
+the note on its regroup-tick row, and the group does not fold. By the orchestrator's ruling the behaviour stays
+(changing it would move memory bytes under the arm); every statement now matches it:
+- `docs/observation-contract.md`, "The announced regroup": the fold renders only when no regroup-tick sighting
+  carries a note, the case above leaves every regroup sighting on its own row, and the token budget can shed the
+  fold line like any sighting row.
+- `agents/memory/store.py`: the `render_for_prompt`, `_coalesce_sightings` and `_spawn_group_indices` docstrings.
+  No code line changes.
+- This card: Outcome item 5, the "Legible memory" box, Decisions ("Sabotage survives the reset") and Limitations.
+- `tests/agents/test_regroup_memory.py`: the module docstring and `_memory`'s, which now names its once-more
+  sighting after the regroup as what keeps the tick-6 rows free of the note. `_memory` gains
+  `unseen_after_regroup`, empty by default, so every existing caller renders as before.
+- The PR body's Summary and Decisions.
+
+Two planted tests sit beside the folded case (`test_a_nine_player_regroup_folds_eight_rows_into_one_line`):
+- `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`: p-2, seen in LABS at ticks 1-5 and not
+  after the regroup at 6, renders eight tick-6 rows and no fold line. The one row with a note is p-2's, ending
+  "(moved from LABS, last seen there at tick 5)." The notice and the route step still render, and the rows equal
+  those rendered without the public row.
+- `test_a_subject_never_seen_elsewhere_leaves_the_fold_whole`: p-9, never seen away from the meeting room, is not
+  seen after the regroup either, and the group still folds. The note breaks the fold, not the missing later
+  sighting.
+
+**The count-only figures.** Eight fake-provider games, seeds 1000-1007, each recorded into the scratchpad with
+`tests/_helpers/scripted_meeting.record_game(directory, seed=seed,
+config=RecordedExperimentConfig(meeting_reset="hub_with_grace"))` (9 players, 2 impostors). A view is
+`ReplayLoader(directory).get_meeting_memory(...)` for each voter of each meeting after a game's first, 10
+meetings in all. A view renders the latest regroup's fold when a line of its rendered memory holds the fold's
+words at the previous meeting's tick plus one. The reasons come from the same walk, with `_coalesce_sightings`
+wrapped to re-run the fold test on the latest regroup. Only counts were printed.
+
+| Reading | Views |
+| --- | --- |
+| views, one per voter of each meeting after the first | 54 |
+| the latest regroup's fold line in the rendered text | 18 |
+| the fold computed, its line shed by the token budget | 5 |
+| a regroup-tick row carries a movement note, so no fold | 30 |
+| a partial view (one subject unseen at the regroup), so no fold | 1 |
+| with the note withheld from every regroup-tick row: the fold line in the text (computed) | 48 (53) |
+
+The verifier reported 49 of 54 with the test helper's workaround. Two readings of that workaround were tried:
+`_movement_suffix_for` returning no note on a regroup tick, and the note test dropped from the regroup fold.
+Both read 48, so 48 is the figure this card can reproduce; the 49 is the verifier's own and is not reproduced
+here. So a rendered regroup under the arm is usually row by row: the fold line reaches the prompt in a third of
+post-regroup views.
+
+**Ruling: refuse the reset beside the public-account profiles. Stop and ask.** The clause was written and then
+withdrawn, and `orchestrator/experiment_config.py` is unchanged at this round's head.
+- **What was built.** One clause in `_meeting_reset_guards` refused `hub_with_grace` beside
+  `public_account_version` or `attributed_testimony_version`, and its message named both fields and the reset.
+  Planted cases in `tests/orchestrator/test_meeting_reset_coherence.py` covered four profiles: public accounts,
+  attributed testimony, both, and both with evidence version 2. Each was refused, and each profile alone and the
+  reset alone validated. The spine's committed-payload tests stayed green
+  (`test_every_committed_recorded_payload_reserializes_byte_for_byte`,
+  `test_every_committed_audit_json_payload_reserializes_unchanged`). None of the lab's 17 candidate configs
+  combines them. Nine listed-class mutants of the clause ran: 8 red, and the clause swapped with the
+  evidence-version-1 branch was equivalent (the two refuse disjoint settings, and both raise).
+- **The blocker.** `tests/orchestrator/test_public_regroup_evidence.py::test_public_reset_does_not_create_an_impossible_walk_or_erase_later_checks`
+  records exactly this combination: format 2, evidence version 2, public accounts 1, attributed testimony 1 and the
+  reset, through `experiments.deduction_scenarios.run_case`. Under the clause it failed at construction. It is the
+  done `tasks/work/temporal-evidence-v2.md` card's test, and that card's Results state its finding: the regroup
+  record "suppresses that allegation while preserving a later impossible public account". With the two account
+  fields removed, its regroup-boundary assertions still pass, but its later-account assertion (`:101`) fails:
+  without the account profiles the later account yields no such line. The clause therefore forces removing that
+  assertion or the test's account half. That is a weakened test and a moved earlier verdict, in a file outside
+  this card's scope, so this round withdrew the clause and its tests.
+- **The options** (the PR's Questions): refuse as ruled and retire the account half of that test, recording that
+  the temporal-evidence finding covered a combination now refused; thread the regroup ticks into the account
+  detector instead, a detector change beyond the ruling; or keep the combination and state the account detector's
+  missing window as a limitation, which is what the contract states at this head.
+- **What landed: the narrowing the ruling asked for.** The contract's window sentence now says that on every
+  meeting profile but attributed testimony a regroup-window sighting neither corroborates nor prosecutes. Under
+  attributed testimony the contradiction step is the account detector, which reads no window, and nothing refuses
+  the reset beside it. `MeetingManager.run`'s docstring says the same. Both are pinned by
+  `test_the_account_detector_reads_no_regroup_window`: two honest witnesses place p-3 in REACTOR at tick 5 and in
+  the meeting room at the regroup tick 6. The account detector reads that as one conflict and takes no
+  `regroup_ticks`, and `detect_contradictions` with the window flags nothing.
+
+**The bounded mutation pass.** It covers the span finding 1 names, the fold's note test in
+`_spawn_group_indices`. The ruling's narrowing changed only a document and a docstring, so it has no code span.
+Each mutant replaced one snippet (its count asserted to be exactly one) and ran
+`tests/agents/test_regroup_memory.py`, `tests/agents/test_memory_rendering.py` and
+`tests/orchestrator/test_meeting_reset_coherence.py` with `-x -n 8`. Each file was restored from a byte copy with
+sha256 equal, and `git status` showed only this round's edits.
+
+| Id | Class | File | First red test |
+| --- | --- | --- | --- |
+| M-ST-note-test-dropped | a, the note filter dropped | `agents/memory/store.py` | `test_a_subject_last_seen_at_the_regroup_after_a_walk_leaves_every_row`; without `-x`, the only red of 240 |
+| M-ST-note-test-inverse | c, `not rows[0].sighting_suffix` to `rows[0].sighting_suffix` | same | `test_a_subject_never_seen_elsewhere_leaves_the_fold_whole` |
+
+The first mutant is the survivor the finding implies: before this round no test rendered a regroup-tick row with a
+note, and it is red only on the round's new case.
+
+**Verification of this round's bytes.** Every gate ran in a bare shell with 0 `AILIBI_*` exports, each exit code
+captured from the process, never through a pipe. `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py`
+re-ran after this subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 221 passed (218 at round 5, plus the round's 3 items) |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git grep -h -o '"meeting_reset": *"[a-z_]*"' -- '*.jsonl'`, sorted and counted | 956 `"meeting_reset":"preserve"` |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+| `ruff check`, `ruff format --check` and `mypy` on the four changed Python files | clean |
+
+`bash scripts/check.sh` runs once, at this round's head (the commit that carries this subsection), and the PR
+body quotes its exit code. No `api/` or `frontend/` byte changed, so the bundle and the Playwright journey were
+not re-run; `check.sh` runs the frontend's lint, types, tests and build.
+
+**Changed test expectations.** None is weakened, skipped or deleted. `_memory` in
+`tests/agents/test_regroup_memory.py` gains a keyword with an empty default. The round adds 3 test items: two in
+that file and `test_the_account_detector_reads_no_regroup_window` in `tests/orchestrator/test_meeting_reset_coherence.py`.
+
+**Limitations.**
+- The ruled refusal waits on the orchestrator (above and in the PR's Questions). Until then a config combining
+  the reset with attributed testimony validates, and its meetings would prosecute a regroup relocation.
+  (Settled in round 7: no refusal is written, and the combination is a stated limitation.)
+- The Constraints sentence on the fold ("so they also apply to evidence-version-2 memories") still waits on the
+  orchestrator, as in round 5.
+- The verifier's 49 of 54 is not reproduced; the card states the 48 it can reproduce.
+
+### Review corrections, round 7 (2026-09-27)
+
+The orchestrator's recording round: one ruling, recorded, and no other change in kind. Commit: the one that
+first carries this subsection. `main` is still `cb0a4cfc`, so nothing is merged. The round edits one paragraph
+of `docs/observation-contract.md`, one sentence of `docs/glossary.md` and this card. No byte moves under
+`engine/`, `api/`, `frontend/`, `eval/`, `orchestrator/`, `observation/`, `meetings/`, `agents/`, `scripts/`,
+`tests/`, `replays/` or `audits/`, so the `audits/` row stays (330 files, 27,303,776 tracked bytes, re-read
+below) and the demo bundle is not rebuilt.
+Status stays `done` and the `tasks/README.md` sentence is unchanged.
+
+**The ruling: the reset beside the account profiles stays a stated limitation.** It settles round 6's
+stop-and-ask with the third of that round's options: no validator clause and no change to the earlier card's
+pinned test.
+- **Nothing refuses the combination.** `orchestrator/experiment_config.py` and
+  `tests/orchestrator/test_public_regroup_evidence.py` have no diff against `main` (`git diff --stat
+  origin/main...HEAD -- <both files>` prints nothing). Three settings validate at this head:
+  - format 2, attributed testimony 1 and the reset;
+  - format 2, public accounts 1 and the reset;
+  - the pinned test's own combination: format 2, evidence version 2, both account fields and the reset.
+- **The pinned test stays whole.**
+  `test_public_reset_does_not_create_an_impossible_walk_or_erase_later_checks` passes with its later-account
+  assertion (`:101`) intact.
+- **Where the ruling is recorded.**
+  - Decisions: the three options, and why the third was taken.
+  - Limitations, and Expected scope, where the round-6 clause is marked withdrawn.
+  - Round 6's acceptance item and its Limitations, each marked settled.
+  - The PR's Decisions and Questions: the round-6 question is closed with the ruling.
+- **The window's reach, at the strength the code delivers.** The ruling states the reach as "every profile but
+  attributed testimony and public accounts". The code picks the account detector on
+  `attributed_testimony_version == 1` alone (`MeetingManager._detect_contradictions`). Public accounts without
+  attributed testimony therefore run `meetings.transcript.detect_contradictions` with the window. The contract
+  paragraph now says three things:
+  - Prosecution reads the window on every profile but attributed testimony, alone or beside public accounts.
+  - Public accounts without attributed testimony keep the windowed step.
+  - The recorded settings accept the reset beside either account profile and refuse neither. This is the
+    stated limitation. No committed recording combines them, and the Stage-B record's settings include neither.
+
+  `MeetingManager.run`'s docstring already says "every profile but attributed testimony, whose contradiction
+  step is the account detector" and that the detector takes no ticks. It is unchanged.
+- **The glossary, beyond the ruling's list.** The ruling names the contract and the docstring. The glossary's
+  "regroup" entry is the one other document that states the window's reach, and it said without exception that
+  a regroup-window sighting "counts as evidence neither for nor against anyone's alibi". That overstates the
+  delivered reach under attributed testimony. The sentence now carries the same exception, naming the recorded
+  `attributed_testimony_version` setting, because the glossary defines no "attributed testimony" term. The entry
+  is this card's own (decision memo 3.2). The entry's kept-event words, which
+  `test_the_contract_and_the_glossary_name_every_kept_event_kind` reads, are unchanged.
+- **The pins.**
+  - `test_the_account_detector_reads_no_regroup_window`: the account detector takes no `regroup_ticks` and flags
+    a regroup relocation, and the windowed detector flags none.
+  - `test_independent_account_arms_complete_real_meetings[1-None]`: under public accounts alone the meeting
+    carries the grounded `vent_sighting` flag. Only the ordinary detector mints that flag.
+- **The count-only facts.** 0 committed `.jsonl` files carry `hub_with_grace`. 956 `"meeting_reset":"preserve"`
+  stamps. 50 committed `.jsonl` files carry `"attributed_testimony_version": 1`, all of them on `preserve`.
+
+**The bounded mutation pass.** The round changes no code span. The contract sentence names one: the routing
+branch in `MeetingManager._detect_contradictions`.
+- Each mutant replaced `if self._evidence_profile.attributed_testimony_version == 1:`, its count asserted to be
+  exactly one.
+- Each ran `tests/meetings/test_public_accounts.py`, `tests/orchestrator/test_meeting_reset_coherence.py`,
+  `tests/meetings/test_regroup_relevance_window.py` and `tests/orchestrator/test_public_regroup_evidence.py`
+  with `-x -n 0`.
+- `meetings/manager.py` was restored from a byte copy, and its sha256 (`3b2f2ade...`) is equal before and after.
+  `git status` showed only this round's two edits.
+
+| Id | Class | Replacement | First red test |
+| --- | --- | --- | --- |
+| M-MG-route-accounts-enabled | b, one read swapped for a related one | `if self._accounts_enabled:` | `test_independent_account_arms_complete_real_meetings[1-None]` |
+| M-MG-route-none-test | c, the comparison replaced with a None test | `... attributed_testimony_version is None:` | `test_manager_and_persistent_fold_do_not_read_other_speaker_grounding` |
+| M-MG-route-public-accounts | b, one field swapped for the related one | `if self._evidence_profile.public_account_version == 1:` | `test_independent_account_arms_complete_real_meetings[1-None]` |
+
+All three are red.
+
+**Verification of this round's bytes.** Every gate ran in a bare shell with 0 `AILIBI_*` exports. Each exit
+code was captured from the process, never through a pipe. `scripts/validate_task_docs.py` and
+`scripts/check_doc_facts.py` re-ran after this subsection was written.
+
+| Command | Result |
+| --- | --- |
+| the card's seven test files (`-q -n 8`) | exit 0: 221 passed, as at round 6 |
+| the same seven, plus `tests/meetings/test_public_accounts.py`, `tests/engine/test_vent_witness_rule.py` and `tests/scripts/test_architecture_truth.py` (the routing pin and the two other readers of the contract) | exit 0: 290 passed |
+| `uv run lint-imports` | exit 0: 4 kept, 0 broken |
+| `bash scripts/verify_samples.sh <set>`, once per set | exit 0 each: s9 50, s4 50, c9 150, c4 50 verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir <set> --check`, the four sets | exit 0 each |
+| `uv run python scripts/publish_process_scorecard.py --check` | exit 0, consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | exit 0, consistent |
+| `uv run python scripts/gen_frontend_types.py --check`, `scripts/check_doc_facts.py`, `scripts/validate_task_docs.py` | exit 0 each |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | exit 0: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign -n auto --dist loadfile -q` | exit 0: 336 passed |
+| `git ls-files audits \| wc -l`; `git ls-files -z audits \| xargs -0 cat \| wc -c` | 330; 27,303,776, the row as it stands |
+
+`bash scripts/check.sh` runs once, at this round's head (the commit that carries this subsection), and the PR
+body quotes its exit code. No `api/` or `frontend/` byte changed, so the bundle and the Playwright journey were
+not re-run. `check.sh` runs the frontend's lint, types, tests and build.
+
+**Changed test expectations.** None. No test file changes in this round.
+
+**Limitations.**
+- The account detector's missing window stays, as the ruling decides (Limitations above).
+- The Constraints sentence on the fold ("so they also apply to evidence-version-2 memories") still waits on the
+  orchestrator, as in rounds 5 and 6.

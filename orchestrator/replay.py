@@ -102,6 +102,8 @@ from typing import (
     TextIO,
     TypeAlias,
     TypeVar,
+    get_args,
+    get_type_hints,
 )
 
 from pydantic import (
@@ -118,12 +120,23 @@ from orchestrator.experiment_config import (
     normalize_experiment_config,
     validate_recorded_experiment_config,
 )
+from agents.memory.evidence_context import ingest_public_regroup
 from agents.memory.store import (
     AgentMemory,
     record_meeting_outcome,
 )
 from engine.actions import Action
-from engine.events import ActionRejectedEvent, EngineEvent, MeetingTriggeredEvent
+from engine.events import (
+    ActionRejectedEvent,
+    EngineEvent,
+    KilledEvent,
+    MeetingTriggeredEvent,
+    MovedEvent,
+    TaskCompletedEvent,
+    TaskProgressedEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
 from engine.world import WorldState
 from meetings.constants import testimony_shapes_enabled
 from meetings.corroboration import corroboration_discipline_enabled
@@ -1303,6 +1316,7 @@ def fold_meeting_outcome_into_memories(
     *,
     state: WorldState,
     memories: Mapping[str, AgentMemory],
+    regroup_room: str | None = None,
 ) -> None:
     """Fold one applied meeting's public outcome into every living agent's memory.
 
@@ -1319,6 +1333,12 @@ def fold_meeting_outcome_into_memories(
     and the impostor count stated at game start (a roster count, which is why it
     is read off the roles in ``state`` rather than threaded in). A KILLED
     player's role is never read: nobody at the table saw it.
+
+    ``regroup_room`` is the meeting room when the recording's settings regroup
+    the survivors at a meeting's close (:func:`regroup_room_for`), and ``None``
+    otherwise. Given, the announced regroup is written into every living memory
+    through :func:`fold_public_regroup`, the one home the live loop calls too; a
+    meeting that ended the game regroups nobody.
 
     It lives beside the substrate stamp because this is the module every
     reconstruction path already imports, and because the fold's own stamp key
@@ -1344,6 +1364,179 @@ def fold_meeting_outcome_into_memories(
             skip_votes=summary.skip_votes,
             roster_impostor_count=roster_impostor_count,
         )
+    if regroup_room is not None:
+        fold_public_regroup(memories, state=state, room=regroup_room)
+
+
+# --------------------------------------------------------------------------- #
+# The meeting reset, as every reader must see it                              #
+# --------------------------------------------------------------------------- #
+#
+# Under ``meeting_reset = "hub_with_grace"`` a meeting's close gathers every
+# living player in the meeting room (``engine.meeting_reset``). The helpers below
+# are the one home of what that means for perception and evidence, shared by the
+# live loop, the replay loader, the replay walk and the prompt golden, so none of
+# them can drift from the recording.
+
+#: The trigger-tick events a regroup keeps in the resume packet. A kill and a
+#: vent are witness-gated when they happen (``KilledEvent.witnesses`` and the vent
+#: events' witness lists), so the relocation that follows cannot change who saw
+#: them. Every other channel the snapshot reads from these events -- a movement
+#: view, task activity -- is gated on the frame the packet is built from, which
+#: after a regroup is the meeting room, not where the player stood.
+REGROUP_KEPT_EVENTS: Final[
+    tuple[type[KilledEvent], type[VentEnteredEvent], type[VentExitedEvent]]
+] = (KilledEvent, VentEnteredEvent, VentExitedEvent)
+
+#: The movement and task events a regroup drops that the resume helper reports.
+#: A rejected action, the trigger itself, a wait and sabotage progress are
+#: dropped too and not counted; of those only a rejected task attempt ever
+#: reached a snapshot, as task activity.
+REGROUP_REPORTED_DROPS: Final[
+    tuple[type[MovedEvent], type[TaskProgressedEvent], type[TaskCompletedEvent]]
+] = (MovedEvent, TaskProgressedEvent, TaskCompletedEvent)
+
+
+def _event_kind(event_class: type[object]) -> str:
+    """The ``type`` literal an engine event class stamps on its instances."""
+
+    (kind,) = get_args(get_type_hints(event_class)["type"])
+    if not isinstance(kind, str):  # pragma: no cover - engine event kinds are str
+        raise TypeError(f"{event_class.__name__}.type is not a string literal")
+    return kind
+
+
+#: The reported kinds, in report order, read off the event classes.
+REGROUP_REPORTED_DROP_KINDS: Final[tuple[str, ...]] = tuple(
+    _event_kind(event_class) for event_class in REGROUP_REPORTED_DROPS
+)
+
+
+class ResumeEvents(NamedTuple):
+    """The events the first packets after a meeting are built from.
+
+    ``dropped`` counts, per :data:`REGROUP_REPORTED_DROP_KINDS` kind and in that
+    order, the trigger-tick movement and task events a regroup kept out of
+    ``events``. A kind with none is absent, so it is empty when no regroup ran.
+    """
+
+    events: tuple[EngineEvent, ...]
+    dropped: tuple[tuple[str, int], ...]
+
+
+def compose_resume_events(
+    trigger_tick_events: Sequence[EngineEvent],
+    meeting_events: Sequence[EngineEvent],
+    *,
+    regrouped: bool = False,
+) -> ResumeEvents:
+    """The resume tick's events: the trigger tick's, then the meeting's.
+
+    Without a regroup the next packets read the trigger tick's events followed
+    by whatever applying the meeting emitted, so a kill that landed on the
+    trigger tick still reaches its witnesses and the vision-gated channels read
+    the frame an ordinary tick would.
+
+    After a regroup (``regrouped=True``) only :data:`REGROUP_KEPT_EVENTS` are
+    kept. The packets are built from the regrouped state, so a trigger-tick
+    movement view or task sighting would be gated on, and placed in, the meeting
+    room: a view the observer could not have had. A regrouped meeting resumed
+    play, so applying it emitted nothing and ``meeting_events`` must be empty.
+    """
+
+    if not regrouped:
+        return ResumeEvents(
+            events=tuple(trigger_tick_events) + tuple(meeting_events), dropped=()
+        )
+    if meeting_events:
+        raise ValueError(
+            "a regrouped meeting resumes play, so applying it emits no events; "
+            f"got {len(meeting_events)}"
+        )
+    counts = dict.fromkeys(REGROUP_REPORTED_DROP_KINDS, 0)
+    kept: list[EngineEvent] = []
+    for event in trigger_tick_events:
+        if isinstance(event, REGROUP_KEPT_EVENTS):
+            kept.append(event)
+        elif isinstance(event, REGROUP_REPORTED_DROPS):
+            counts[event.type] += 1
+    return ResumeEvents(
+        events=tuple(kept),
+        dropped=tuple(
+            (kind, counts[kind]) for kind in REGROUP_REPORTED_DROP_KINDS if counts[kind]
+        ),
+    )
+
+
+def meeting_regrouped(
+    experiment_config: RecordedExperimentConfig | None, *, phase_after: str
+) -> bool:
+    """Whether applying a meeting under these settings regrouped the survivors.
+
+    The regroup runs only under ``meeting_reset = "hub_with_grace"`` and only when
+    the meeting resumed play: ``orchestrator.game.apply_meeting_result`` returns
+    before it on a meeting that ended the game.
+    """
+
+    return (
+        experiment_config is not None
+        and experiment_config.meeting_reset == "hub_with_grace"
+        and phase_after == "PLAY"
+    )
+
+
+def regroup_room_for(
+    experiment_config: RecordedExperimentConfig | None, *, meeting_room: str
+) -> str | None:
+    """The room a meeting's close regroups the survivors into, or ``None``."""
+
+    if experiment_config is None or experiment_config.meeting_reset != "hub_with_grace":
+        return None
+    return meeting_room
+
+
+def derive_regroup_ticks(
+    experiment_config: RecordedExperimentConfig | None,
+    meeting_ticks: Iterable[int],
+) -> frozenset[int]:
+    """The public regroup ticks that follow meetings held at ``meeting_ticks``.
+
+    A regroup lands on the resume tick, one after the meeting's own tick: the
+    tick the public regroup row records. This is the one derivation every reader
+    of a recording computes the regroup relevance window from, so all of them
+    compute the same window. ``meeting_ticks`` are meetings that resumed play (in
+    one game, every meeting before the current one). Empty unless the settings
+    regroup.
+    """
+
+    if experiment_config is None or experiment_config.meeting_reset != "hub_with_grace":
+        return frozenset()
+    return frozenset(tick + 1 for tick in meeting_ticks)
+
+
+def fold_public_regroup(
+    memories: Mapping[str, AgentMemory],
+    *,
+    state: WorldState,
+    room: str,
+) -> None:
+    """Write the announced regroup into every living player's memory.
+
+    ``state`` is the post-meeting world: its tick is the resume tick and its
+    living players are the ones gathered. A meeting that ended the game regroups
+    nobody, so nothing is written. A living player with no entry in ``memories``
+    holds no memory store (an agent built outside the default factory) and
+    receives nothing, as the live loop has always skipped such an agent.
+    """
+
+    if state.phase != "PLAY":
+        return
+    living = tuple(sorted(pid for pid, player in state.players.items() if player.alive))
+    for player_id in living:
+        memory = memories.get(player_id)
+        if memory is None:
+            continue
+        ingest_public_regroup(memory, tick=state.tick, room=room, player_ids=living)
 
 
 class ReplayLog:
@@ -2116,17 +2309,25 @@ __all__ = [
     "LLMCallRecord",
     "MeetingReplayEntry",
     "PolicyStamps",
+    "REGROUP_KEPT_EVENTS",
+    "REGROUP_REPORTED_DROPS",
+    "REGROUP_REPORTED_DROP_KINDS",
     "ReplayEntry",
     "ReplayLog",
     "ReplayLogEntry",
+    "ResumeEvents",
     "SubstrateStampMismatch",
     "TacticalPolicyStamp",
     "WinnerSide",
     "classify_action_dispositions",
+    "compose_resume_events",
     "compute_cost_usd",
+    "derive_regroup_ticks",
     "env_var_for_lever",
     "fold_meeting_outcome_into_memories",
+    "fold_public_regroup",
     "fsm_default_tactical_policy_stamp",
+    "meeting_regrouped",
     "read_all_entries",
     "recorded_temporal_observations",
     "require_legacy_observations",
@@ -2139,6 +2340,7 @@ __all__ = [
     "read_substrate_flags",
     "read_tactical_policy_stamp",
     "recorded_completion_status",
+    "regroup_room_for",
     "substrate_flag_snapshot",
     "substrate_slate_mismatches",
     "substrate_stamp_mismatches",

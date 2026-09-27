@@ -210,18 +210,19 @@ from orchestrator.replay import (
     WinnerSide,
     _state_hash,
     classify_action_dispositions,
+    compose_resume_events,
+    derive_regroup_ticks,
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
     fsm_default_tactical_policy_stamp,
+    meeting_regrouped,
     read_all_entries,
     recorded_completion_status,
+    regroup_room_for,
     substrate_flag_snapshot,
     substrate_stamp_mismatches,
 )
-from agents.memory.evidence_context import (
-    ingest_public_meeting_roster,
-    ingest_public_regroup,
-)
+from agents.memory.evidence_context import ingest_public_meeting_roster
 from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.seeder import seed_initial_state
 from orchestrator.replay_integrity import (
@@ -1611,6 +1612,10 @@ class ReplayLoader:
             observation_scene_ticks: dict[str, int] = {}
             last_events: tuple[EngineEvent, ...] = ()
             meeting_index = 0
+            # The ticks of the meetings that resumed play, from which each
+            # meeting's public regroup ticks are derived as the live loop
+            # derives them (``orchestrator.replay.derive_regroup_ticks``).
+            resumed_meeting_ticks: list[int] = []
 
             for entry in replay_entries:
                 integrity.check_tick(entry, state)
@@ -1797,6 +1802,7 @@ class ReplayLoader:
                         )
 
                 pre_meeting_events = tuple(events)
+                regroup_ticks = derive_regroup_ticks(experiment, resumed_meeting_ticks)
                 result = _meeting_result_from_entry(meeting_entry)
                 state, post_events = apply_meeting_result(
                     state,
@@ -1867,6 +1873,7 @@ class ReplayLoader:
                         state=state,
                         result=result,
                         emergency=trigger_kind == "emergency",
+                        regroup_ticks=regroup_ticks,
                     )
                 elif track_memory:
                     # Mirror the live loop's post-meeting belief fold (Task
@@ -1887,6 +1894,7 @@ class ReplayLoader:
                         attributed_testimony_version=experiment.attributed_testimony_version
                         if experiment is not None
                         else None,
+                        regroup_ticks=regroup_ticks,
                     )
                     # Task 13.5.2: mirror the live loop's reported-testimony
                     # content fold in the SAME per-living-agent loop,
@@ -1925,33 +1933,26 @@ class ReplayLoader:
                     # evidence-honesty walks so the three reconstructions cannot
                     # drift. It was inert to every rendered byte until
                     # ``meeting_outcome_memory`` graduated at the baseline-7
-                    # record; it now reaches the render on every path.
+                    # record; it now reaches the render on every path. Under
+                    # the regroup reset the same fold writes the announced
+                    # regroup, through the live loop's one home.
                     fold_meeting_outcome_into_memories(
-                        result, state=state, memories=memories
+                        result,
+                        state=state,
+                        memories=memories,
+                        regroup_room=regroup_room_for(
+                            experiment, meeting_room=self._game_map.meeting.room
+                        ),
                     )
-                    if (
-                        experiment is not None
-                        and experiment.meeting_reset == "hub_with_grace"
-                        and state.phase == "PLAY"
-                    ):
-                        living_ids = tuple(
-                            sorted(
-                                pid
-                                for pid, player in state.players.items()
-                                if player.alive
-                            )
-                        )
-                        for pid in living_ids:
-                            ingest_public_regroup(
-                                memories[pid],
-                                tick=state.tick,
-                                room=self._game_map.meeting.room,
-                                player_ids=living_ids,
-                            )
                 meeting_index += 1
                 if state.phase == "GAME_OVER":
                     break
-                last_events = pre_meeting_events + tuple(post_events)
+                resumed_meeting_ticks.append(entry.tick)
+                last_events = compose_resume_events(
+                    pre_meeting_events,
+                    post_events,
+                    regrouped=meeting_regrouped(experiment, phase_after=state.phase),
+                ).events
         finally:
             if service is not None:
                 service.close()

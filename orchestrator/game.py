@@ -62,10 +62,7 @@ from agents.memory.store import (
     record_meeting_outcome,
     render_for_prompt,
 )
-from agents.memory.evidence_context import (
-    ingest_public_meeting_roster,
-    ingest_public_regroup,
-)
+from agents.memory.evidence_context import ingest_public_meeting_roster
 from agents.perception import (
     EVENT_OWN_KILL,
     EVENT_SAW_BODY,
@@ -180,6 +177,11 @@ from orchestrator.replay import (
     TacticalPolicyStamp,
     _state_hash,
     _TOGGLEABLE_LEVER_RESOLVERS,
+    compose_resume_events,
+    derive_regroup_ticks,
+    fold_public_regroup,
+    meeting_regrouped,
+    regroup_room_for,
     substrate_flag_snapshot,
 )
 from orchestrator.scheduler import TickScheduler
@@ -910,6 +912,13 @@ class MeetingRunner(Protocol):
     "unknown". Recording a resolved meeting whose own ballots do not reproduce
     its outcome at that legacy cutoff is refused when the artifacts are
     written, not left for the reader to discover.
+
+    Under the recorded ``meeting_reset = "hub_with_grace"``, :class:`HeadlessGame`
+    also passes ``regroup_ticks``, the public regroup ticks before this meeting
+    (:func:`orchestrator.replay.derive_regroup_ticks`), which the runner hands to the
+    meeting's relevance window. It never passes the keyword otherwise, so a
+    runner written without it runs every other game unchanged and is refused, by
+    the call itself, in a regroup game.
     """
 
     async def run_meeting(
@@ -1330,6 +1339,7 @@ class DefaultMeetingRunner:
         trigger: MeetingTrigger,
         state: WorldState,
         agents: Mapping[PlayerId, AgentInterface],
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> MeetingArtifacts:
         # Each prior attempt transferred its buffers to artifacts or an error.
         self._recording_client.drain()
@@ -1362,12 +1372,16 @@ class DefaultMeetingRunner:
             1 for player in state.players.values() if player.role == "IMPOSTOR"
         )
         try:
+            # The public regroup ticks before this meeting ride beside
+            # ``dead_ids``: public, derived by the orchestrator, and read by the
+            # manager's relevance window only.
             work = self._manager.run(
                 meeting_id=meeting_id,
                 trigger=trigger,
                 participants=participants,
                 dead_ids=dead_ids,
                 impostor_count=impostor_count,
+                regroup_ticks=regroup_ticks,
             )
             result = (
                 await work if self._deadline is None else await self._deadline.run(work)
@@ -1950,11 +1964,21 @@ def apply_meeting_result(
     crew task pool emits a :class:`GameOverEvent` and the returned
     state has ``phase == "GAME_OVER"``.
 
-    The cooldown / sabotage / emergency-uses counters are unchanged
-    during the meeting tick because DESIGN.md §5.1 freezes engine
-    state during a meeting ("kill cooldown paused"). The next normal
-    tick will decrement them via the standard step-2 of
-    :func:`advance_tick`.
+    Under the default ``meeting_reset="preserve"`` the cooldown / sabotage /
+    emergency-uses counters are unchanged during the meeting tick because
+    DESIGN.md §5.1 freezes engine state during a meeting ("kill cooldown
+    paused"), and every player resumes where it stood. The next normal tick
+    decrements them via the standard step-2 of :func:`advance_tick`.
+
+    Under ``meeting_reset="hub_with_grace"`` a meeting that resumes play then
+    runs the full reset (:func:`engine.meeting_reset.regroup_after_meeting`):
+    every living player is gathered in the meeting room, every corpse is
+    cleared, the vents are emptied, ongoing actions stop and each living
+    impostor's kill cooldown restarts at the map's ``kill_cooldown_ticks``, so
+    after a meeting at tick ``T`` a kill is refused at ``T+1`` through
+    ``T+kill_cooldown_ticks``. Tasks, sabotage and emergency uses survive. The
+    win check above returns first, so a meeting that ends the game is never
+    reset.
     """
 
     if state.phase != "MEETING":
@@ -2675,6 +2699,9 @@ class HeadlessGame:
 
         last_events: tuple[EngineEvent, ...] = ()
         meeting_counter = 0
+        # The ticks of the meetings that resumed play, from which each meeting's
+        # public regroup ticks are derived (``orchestrator.replay.derive_regroup_ticks``).
+        resumed_meeting_ticks: list[int] = []
         while state.phase != "GAME_OVER":
             if self._deadline is not None:
                 self._deadline.check()
@@ -2753,6 +2780,7 @@ class HeadlessGame:
                         )
                     return state, "MEETING_PHASE_REACHED"
                 pre_meeting_events = last_events
+                meeting_tick = state.tick
                 state, post_events = self._run_and_apply_meeting(
                     state=state,
                     events=pre_meeting_events,
@@ -2761,17 +2789,28 @@ class HeadlessGame:
                     trace=trace,
                     meeting_index=meeting_counter,
                     temporal_observations=observation_service.temporal_observations,
+                    regroup_ticks=derive_regroup_ticks(
+                        self._experiment_config, resumed_meeting_ticks
+                    ),
                 )
                 meeting_counter += 1
-                # Preserve the events the engine emitted on the
-                # meeting-trigger tick (e.g. a ``KilledEvent`` that
-                # landed in the same action queue as the report).
-                # ``ObservationService._observed_actions_for_agent``
-                # reads ``engine_events`` to surface kills and vent
-                # uses as observed actions; dropping the pre-meeting
-                # events here would silently regress agent perception
-                # on the resume tick.
-                last_events = pre_meeting_events + tuple(post_events)
+                if state.phase == "PLAY":
+                    resumed_meeting_ticks.append(meeting_tick)
+                # The resume tick's events (``compose_resume_events``, shared
+                # with every reader): the trigger tick's events, so a
+                # ``KilledEvent`` that landed in the same action queue as the
+                # report still reaches its witnesses, then the meeting's own.
+                # After a regroup only the witness-gated kill and vent events
+                # are kept, since the packets are built from the regrouped
+                # state and would place every other trigger-tick view in the
+                # meeting room.
+                last_events = compose_resume_events(
+                    pre_meeting_events,
+                    post_events,
+                    regrouped=meeting_regrouped(
+                        self._experiment_config, phase_after=state.phase
+                    ),
+                ).events
 
         # The engine fired a GameOverEvent (the while loop only exits
         # GAME_OVER via that event). Persist the decisive outcome as the
@@ -2797,6 +2836,7 @@ class HeadlessGame:
         trace: _EpisodeTraceCollector | None,
         meeting_index: int,
         temporal_observations: bool,
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> tuple[WorldState, list[EngineEvent]]:
         if self._meeting_runner is None:
             raise RuntimeError(
@@ -2829,6 +2869,13 @@ class HeadlessGame:
         )
         meeting_id = f"{self._game_id()}:meeting-{meeting_index}"
         side_records: _MeetingSideRecords | None = None
+        # Only a regroup game hands the runner its regroup ticks (the
+        # :class:`MeetingRunner` contract), so every other game calls a runner
+        # exactly as before.
+        regroup_game = (
+            self._experiment_config is not None
+            and self._experiment_config.meeting_reset == "hub_with_grace"
+        )
         try:
             artifacts = _drive_async(
                 self._meeting_runner.run_meeting(
@@ -2836,6 +2883,7 @@ class HeadlessGame:
                     trigger=trigger,
                     state=state,
                     agents=agents,
+                    **({"regroup_ticks": regroup_ticks} if regroup_game else {}),
                 )
             )
             side_records = _MeetingSideRecords(
@@ -2961,6 +3009,7 @@ class HeadlessGame:
             attributed_testimony_version=self._experiment_config.attributed_testimony_version
             if self._experiment_config is not None
             else None,
+            regroup_ticks=regroup_ticks,
         )
         # Meeting-end pacing notification (Task 10.8). Runs AFTER the belief
         # fold so the emergency tracker's post-meeting over-gate baseline
@@ -2975,25 +3024,21 @@ class HeadlessGame:
             outcome=derive_meeting_outcome_summary(artifacts.result),
             roster_impostor_count=self._num_impostors,
         )
-        if (
-            self._experiment_config is not None
-            and self._experiment_config.meeting_reset == "hub_with_grace"
-            and next_state.phase == "PLAY"
-        ):
-            living_ids = tuple(
-                sorted(
-                    pid for pid, player in next_state.players.items() if player.alive
-                )
+        # The announced regroup, through the one home every reconstruction's
+        # meeting fold calls too (``orchestrator.replay.fold_public_regroup``).
+        room = regroup_room_for(
+            self._experiment_config, meeting_room=self._game_map.meeting.room
+        )
+        if room is not None:
+            fold_public_regroup(
+                {
+                    pid: agent.memory
+                    for pid, agent in agents.items()
+                    if isinstance(agent, TacticalAgent)
+                },
+                state=next_state,
+                room=room,
             )
-            for pid in living_ids:
-                agent = agents[pid]
-                if isinstance(agent, TacticalAgent):
-                    ingest_public_regroup(
-                        agent.memory,
-                        tick=next_state.tick,
-                        room=self._game_map.meeting.room,
-                        player_ids=living_ids,
-                    )
         return next_state, post_events
 
     def _build_agents(
@@ -3379,6 +3424,7 @@ def _absorb_meeting_beliefs(
     evidence_reasoning_version: Literal[1, 2] | None = None,
     public_account_version: Literal[1] | None = None,
     attributed_testimony_version: Literal[1] | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> None:
     """Fold a resolved meeting's evidence into living agents' beliefs (Task 9.8).
 
@@ -3402,6 +3448,10 @@ def _absorb_meeting_beliefs(
     Rule-3 relevance gate treats an EMERGENCY meeting as having no kill
     scene -- a (fabricated) opening ``found_body`` can never widen the
     exclusion zone that the persisted corroborations / voices fold through.
+
+    ``regroup_ticks`` are the public regroup ticks the meeting ran with
+    (:func:`orchestrator.replay.derive_regroup_ticks`), so the persistent absorb
+    reads the relevance window the meeting's own pre-vote derivation read.
     """
 
     evidence = extract_belief_evidence(
@@ -3409,6 +3459,7 @@ def _absorb_meeting_beliefs(
         trigger_kind=trigger_kind,
         public_account_version=public_account_version,
         attributed_testimony_version=attributed_testimony_version,
+        regroup_ticks=regroup_ticks,
     )
     # Task 13.5.2: the reported-testimony content fold rides the SAME
     # per-living-agent loop as the scalar belief fold, unconditionally since

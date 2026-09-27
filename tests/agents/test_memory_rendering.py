@@ -2288,9 +2288,11 @@ class TestSelfLocationTrail:
         assert 14 not in _trail_ticks(view)
 
     def test_a_meeting_boundary_does_not_break_a_span(self) -> None:
-        # A meeting freezes movement (DESIGN.md §5.1), so the resume tick's room
-        # continues the pre-meeting span -- the one place this walk deliberately
-        # differs from the OTHERS-sighting transition walk, which must break here.
+        # An ordinary meeting freezes movement (DESIGN.md §5.1), so the resume
+        # tick's room continues the pre-meeting span -- the one place this walk
+        # deliberately differs from the OTHERS-sighting transition walk, which
+        # must break here. A public regroup does break it (tests/agents/
+        # test_regroup_memory.py).
         memory = _walk((13, "REACTOR"), (14, "REACTOR"))
         memory.episodic.append(_meeting_boundary_event(tick=14))
 

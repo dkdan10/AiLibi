@@ -374,12 +374,18 @@ class _SelfPlacement:
 
 @dataclass(frozen=True)
 class _SelfLocationSpan:
-    """One coalesced run of adjacent recorded ticks the agent spent in one place."""
+    """One coalesced run of adjacent recorded ticks the agent spent in one place.
+
+    ``regroup_room`` is set on a span that begins at a public regroup's tick: the
+    room the regroup placed the agent in, which the route states as its own step
+    before the span.
+    """
 
     start_tick: int
     end_tick: int
     room: str
     in_vent: bool
+    regroup_room: str | None = None
 
 
 # Most spans the trail block renders; past it the OLDEST are dropped and the block
@@ -405,6 +411,64 @@ _MEETINGS_HEADER: Final[str] = "## Meetings so far:"
 # The one-line summary that replaces a full-roster tick-0 sighting group. It names
 # every subject it stands for, so the fold costs a line instead of a roster.
 _SPAWN_GROUP_PREFIX: Final[str] = "You saw every other player in "
+
+# The same summary for the group a public regroup gathered: every other player
+# the announcement named, seen together in its room from its tick.
+_REGROUP_GROUP_PREFIX: Final[str] = (
+    "After the public regroup you saw every other living player in "
+)
+
+# The public regroup, as the meetings block announces it and the route states it.
+# Both say the relocation was announced and not walked, in the same words.
+_REGROUP_NOTICE: Final[str] = (
+    "Public regroup at the start of tick {tick}: living players were placed in "
+    "{room}; this was not a walking journey."
+)
+_TRAIL_REGROUP_STEP: Final[str] = (
+    "public regroup at the start of t{tick}, placed in {room} (not a walking journey)"
+)
+
+
+@dataclass(frozen=True)
+class _PublicRegroup:
+    """One announced regroup: its tick, its room and the players it gathered."""
+
+    tick: int
+    room: str
+    player_ids: frozenset[str]
+
+
+def _public_regroups(episodic: MemoryStore) -> tuple[_PublicRegroup, ...]:
+    """Every announced regroup this memory holds, oldest first.
+
+    Read from the ``public_regroup`` rows
+    (:func:`agents.memory.evidence_context.ingest_public_regroup`), which hold at
+    most one row per tick. A row whose payload is not a room and a list of player
+    ids is a boundary-contract violation and raises.
+    """
+
+    regroups: list[_PublicRegroup] = []
+    for event in episodic.recent(since_tick=0):
+        if event.type != "public_regroup" or event.provenance != "public":
+            continue
+        room = event.payload.get("room")
+        players = event.payload.get("player_ids")
+        if not isinstance(room, str) or not isinstance(players, (tuple, list)):
+            raise ValueError(f"public regroup row is malformed: {event.payload!r}")
+        regroups.append(
+            _PublicRegroup(
+                tick=event.tick,
+                room=room,
+                player_ids=frozenset(str(player) for player in players),
+            )
+        )
+    return tuple(sorted(regroups, key=lambda regroup: regroup.tick))
+
+
+def _regroup_notice(regroup: _PublicRegroup) -> str:
+    """The meetings-block line announcing one regroup."""
+
+    return _REGROUP_NOTICE.format(tick=regroup.tick, room=regroup.room)
 
 
 def _evidence_context_salience(kind: EvidenceContextKind) -> int:
@@ -514,7 +578,10 @@ def render_for_prompt(
     from several events, carry no id and render unadorned. The completed-task
     line is minted from the ids that LEAVE the agent's ``owned_task_ids`` and
     takes its room from the same ``self_state`` row that dates it, so it carries
-    one clock.
+    one clock. The one exception is a completion detected on a public regroup's
+    tick: that row places the agent in the room the regroup moved it to, so the
+    line takes its room from the row before it, where the task was done (a task
+    step never moves its player).
 
     The ``## Meetings so far:`` block renders one plain line per concluded
     meeting, oldest first: ``Meeting {n} (tick {resume}): {id} EJECTED
@@ -542,14 +609,18 @@ def render_for_prompt(
     so the whole route reaches the prompt beside the observations rather than
     displacing them. A tick with no recorded row BREAKS a span and renders its
     own ``(no record)`` step -- the trail never interpolates across a gap --
-    while a meeting boundary does not, because a meeting freezes movement
-    (DESIGN.md §5.1). At most :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans render;
+    while an ordinary meeting boundary does not, because an ordinary meeting
+    leaves every player where it stood (DESIGN.md §5.1). A public regroup, which
+    moves every survivor to the meeting room when the meeting closes, does break
+    a span, and the route states it as its own step in the regroup notice's
+    words. At most :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans render;
     past that the oldest are dropped and the block says so in one plain line. The
     route line carries no ``[obs ...]`` prefix -- a span is coalesced from several
     rows rather than being one citable observation -- so it cannot teach a model
     to cite an id the ballot validator would null.
 
-    The observations budget is spent on what discriminates. A run of consecutive
+    The observations budget is spent on what discriminates. Outside evidence
+    reasoning v2, which renders every sighting on its own, a run of consecutive
     sightings of one subject in one room, same action and an unchanged companion
     set, renders as ONE line stating its tick range (``You saw p-9 in CAFETERIA
     ticks 0-4 (with p-8).``); any change of room, action or companions -- and any
@@ -558,10 +629,18 @@ def render_for_prompt(
     the observer collapses to one summary line naming those subjects, over the
     stretch they all shared, because "everyone started together" is one fact and
     a partial view is not (a player absent at spawn is real information, so that
-    view keeps its rows). The span carries its FIRST row's ``observation_id``, so
-    every id a ballot can cite off the render is still one of the agent's own
-    stored ids. Reported testimony ranks above bare co-presence in the salience
-    ladder, so the budget sheds routine sightings before it sheds the game's only
+    view keeps its rows). A public regroup is the same fact again: the group that
+    begins at a regroup's tick and names every other player the regroup gathered,
+    all in its room, collapses to one line the same way when none of its
+    regroup-tick rows carries a movement note. A partial view there keeps its
+    rows too, and so does a group in which one subject's regroup-tick row is its
+    latest sighting after the agent saw it in another room: that row carries the
+    subject's movement note, which the one line cannot state, so every row of
+    the group stays its own. The span carries its FIRST row's
+    ``observation_id``, so every id a ballot can cite off the render is still
+    one of the agent's own stored ids. Reported testimony ranks above bare
+    co-presence in the salience ladder, so the budget sheds routine sightings
+    (a group's summary line among them) before it sheds the game's only
     cross-meeting social memory.
 
     Under evidence reasoning v2 the derived context lines enter by CLASS rather
@@ -607,11 +686,17 @@ def render_for_prompt(
     # byte-identically.
     own_agent_id, fellow_impostor_ids = _latest_self_guard_fields(memory.episodic)
     teammate_ids = fellow_impostor_ids if role == "IMPOSTOR" else frozenset()
+    # The announced regroups this agent holds: every read below that keys on a
+    # regroup (completion placement, the co-presence fold, the route step, the
+    # notice) reads this one tuple, so an agent without the public row renders
+    # exactly as it did before regroups were announced.
+    regroups = _public_regroups(memory.episodic)
     observations = _build_observations(
         memory.episodic,
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
         evidence_reasoning_version=memory.evidence_reasoning_version,
+        regroup_ticks=frozenset(regroup.tick for regroup in regroups),
     )
     # §6.6 roster filter (Task 10.2, audit gp-6 C-C-8): belief rows AND
     # open-contradiction lines render only for engine-witnessed player
@@ -627,9 +712,11 @@ def render_for_prompt(
     # Fold the runs BEFORE the id prefix and the sort: the fold works on the
     # built observations, so every firewall suppression, co-presence suffix
     # and breadcrumb is already settled and a span cites a real stored id.
+    # Version 2 folds nothing: every sighting keeps its own row, at spawn and
+    # after a public regroup alike.
     if memory.evidence_reasoning_version != 2:
         observations = _coalesce_sightings(
-            observations, roster=roster, own_agent_id=own_agent_id
+            observations, roster=roster, own_agent_id=own_agent_id, regroups=regroups
         )
     if memory.evidence_reasoning_version == 1:
         observations.extend(
@@ -699,17 +786,16 @@ def render_for_prompt(
     contradiction_lines = _build_contradiction_lines(
         memory.beliefs, roster=active_roster
     )
-    spans = _collect_self_location_spans(memory.episodic)
+    spans = _collect_self_location_spans(memory.episodic, regroups=regroups)
     trail_truncated = len(spans) > SELF_LOCATION_TRAIL_MAX_SPANS
     trail_spans = spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
 
     meeting_lines = _meeting_history_lines(memory.meeting_history)
-    if memory.evidence_reasoning_version == 2:
-        meeting_lines.extend(
-            f"Public regroup at the start of tick {row.tick}: living players were placed in {row.payload['room']}; this was not a walking journey."
-            for row in memory.episodic.recent(since_tick=0)
-            if row.type == "public_regroup" and row.provenance == "public"
-        )
+    # The regroup notice: every announced relocation, on the default evidence
+    # path and under version 2. Version 1 never ingests the row and never
+    # renders it (its walking checks do not know the relocation).
+    if memory.evidence_reasoning_version != 1:
+        meeting_lines.extend(_regroup_notice(regroup) for regroup in regroups)
 
     return _assemble_view(
         role=role,
@@ -1515,23 +1601,31 @@ def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
     return placements
 
 
-def _collect_self_location_spans(episodic: MemoryStore) -> list[_SelfLocationSpan]:
+def _collect_self_location_spans(
+    episodic: MemoryStore, *, regroups: Sequence[_PublicRegroup] = ()
+) -> list[_SelfLocationSpan]:
     """Coalesce the agent's own recorded ticks into an oldest-first route.
 
     A run extends only while the next recorded tick is ADJACENT and the placement
     is unchanged, so a tick the agent holds no row for BREAKS the span instead of
     being interpolated across -- the trail may only claim ticks it has a record
-    for. A meeting boundary does NOT break a span: the meeting freezes movement
-    (DESIGN.md §5.1), so one room really does cover both sides of it. That is the
-    single place this walk differs from :func:`_collect_transitions`, which must
-    break there because OTHERS change discontinuously across a meeting.
+    for. An ordinary meeting boundary does NOT break a span: that meeting leaves
+    every player where it stood (DESIGN.md §5.1), so one room really does cover
+    both sides of it. That is the single place this walk differs from
+    :func:`_collect_transitions`, which must break there because OTHERS change
+    discontinuously across a meeting. A public regroup (``regroups``) moves the
+    agent at a meeting's close, so it does break a span: the span that begins at
+    its tick carries the regroup's room, and the route states the regroup as its
+    own step even when the agent already stood in that room.
     """
 
+    regroup_rooms = {regroup.tick: regroup.room for regroup in regroups}
     spans: list[_SelfLocationSpan] = []
     placements = _self_placement_by_tick(episodic)
     for tick in sorted(placements):
         placement = placements[tick]
-        if spans:
+        regroup_room = regroup_rooms.get(tick)
+        if spans and regroup_room is None:
             open_span = spans[-1]
             if (
                 open_span.end_tick + 1 == tick
@@ -1546,6 +1640,7 @@ def _collect_self_location_spans(episodic: MemoryStore) -> list[_SelfLocationSpa
                 end_tick=tick,
                 room=placement.room,
                 in_vent=placement.in_vent,
+                regroup_room=regroup_room,
             )
         )
     return spans
@@ -1568,7 +1663,9 @@ def _trail_route_line(spans: Sequence[_SelfLocationSpan]) -> str:
 
     Steps are joined by an arrow meaning "and then"; a stretch of ticks the agent
     holds no row for gets its own ``(no record)`` step, so the line never reads as
-    a claim about a tick the record does not cover.
+    a claim about a tick the record does not cover, and a public regroup gets its
+    own step before the span it began, so the jump to the meeting room never reads
+    as a walk.
 
     The line carries no ``[obs ...]`` prefix: a step is coalesced from several
     self-state rows rather than being one citable observation, and the roll-call
@@ -1581,6 +1678,10 @@ def _trail_route_line(spans: Sequence[_SelfLocationSpan]) -> str:
     for span in spans:
         if previous_end is not None and span.start_tick != previous_end + 1:
             steps.append(_TRAIL_GAP_STEP)
+        if span.regroup_room is not None:
+            steps.append(
+                _TRAIL_REGROUP_STEP.format(tick=span.start_tick, room=span.regroup_room)
+            )
         steps.append(_trail_step(span))
         previous_end = span.end_tick
     return _TRAIL_ROUTE_PREFIX + _TRAIL_STEP_JOIN.join(steps)
@@ -1880,6 +1981,7 @@ def _build_observations(
     own_agent_id: str | None = None,
     teammate_ids: frozenset[str] = frozenset(),
     evidence_reasoning_version: Literal[1, 2] | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> list[_Observation]:
     if evidence_reasoning_version == 2:
         return _build_v2_observations(
@@ -1888,6 +1990,9 @@ def _build_observations(
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
     last_owned_task_ids: frozenset[TaskId] | None = None
+    # The room of the previous ``self_state`` row: where a completion detected on
+    # a public regroup's tick was done (``regroup_ticks``).
+    last_self_room: str | None = None
     body_sightings = _collect_body_sightings(episodic)
     own_kill_victims = _collect_own_kill_victims(episodic)
     breadcrumbs = _collect_movement_breadcrumbs(
@@ -1925,7 +2030,13 @@ def _build_observations(
             # One row dates the completion, places it and stamps its citation:
             # the row this iteration is reading. The line therefore carries one
             # clock, and its ``[obs ...]`` handle names the row it is placed by.
-            completion_room = self_room
+            # A public regroup's row is the exception for the room alone: it
+            # places the agent where the regroup moved it, so the completion
+            # takes the previous row's room, where the task was done -- a task
+            # step never moves its player.
+            completion_room = (
+                last_self_room if event.tick in regroup_ticks else self_room
+            )
             # An id LEAVING a living agent's owned set is a completion it
             # performed: only completion removes an id, while redistribution
             # merely ADDS a dead player's unfinished instances to a survivor
@@ -1949,6 +2060,7 @@ def _build_observations(
                     for task_id in sorted(last_owned_task_ids - owned)
                 )
             last_owned_task_ids = owned
+            last_self_room = self_room
             continue
 
         if event.type == _EVENT_OWN_KILL:
@@ -2068,6 +2180,7 @@ def _coalesce_sightings(
     *,
     roster: frozenset[str] | None,
     own_agent_id: str | None,
+    regroups: Sequence[_PublicRegroup] = (),
 ) -> list[_Observation]:
     """Fold runs of sightings that differ only by their tick into span lines.
 
@@ -2076,8 +2189,11 @@ def _coalesce_sightings(
     CONSECUTIVE ticks become one line carrying the tick range; a gap in the ticks
     or any change of room, action or companions starts a new span, so a span never
     claims a tick its rows did not. The stretch from tick 0 over which the whole
-    known roster stood together becomes one summary line, and whatever each subject
-    did after it keeps its own span. Every other observation class -- vents, kills,
+    known roster stood together becomes one summary line, and so does the stretch
+    from each public regroup's tick (``regroups``) over which every other player it
+    gathered stood together in its room, unless a regroup-tick row carries a
+    movement note (:func:`_spawn_group_indices`); whatever each subject did after
+    a summary keeps its own span. Every other observation class -- vents, kills,
     bodies, transitions, testimony, own rows -- passes through untouched.
     """
 
@@ -2099,19 +2215,26 @@ def _coalesce_sightings(
             run.append(row)
         runs.append((key, run))
 
-    spawn_indices = _spawn_group_indices(runs, roster=roster, own_agent_id=own_agent_id)
     folded: list[_Observation] = []
-    spawn_end = -1
-    if spawn_indices:
+    # Each folded run, mapped to the last tick its group's summary covers.
+    consumed: dict[int, int] = {}
+    for regroup in (None, *regroups):
+        indices = _spawn_group_indices(
+            runs, roster=roster, own_agent_id=own_agent_id, regroup=regroup
+        )
+        if not indices:
+            continue
         # The summary covers only the ticks EVERY member shares, so it never
         # outlives the group it stands for; each member's remaining ticks stay
         # its own span.
-        spawn_end = min(runs[index][1][-1].tick for index in spawn_indices)
-        folded.append(_spawn_group_observation(runs, spawn_indices, end_tick=spawn_end))
-    consumed = frozenset(spawn_indices)
+        end_tick = min(runs[index][1][-1].tick for index in indices)
+        folded.append(
+            _spawn_group_observation(runs, indices, end_tick=end_tick, regroup=regroup)
+        )
+        consumed.update(dict.fromkeys(indices, end_tick))
     for index, (key, rows) in enumerate(runs):
         if index in consumed:
-            rows = [row for row in rows if row.tick > spawn_end]
+            rows = [row for row in rows if row.tick > consumed[index]]
             if not rows:
                 continue
         folded.append(_span_observation(key, rows))
@@ -2151,31 +2274,58 @@ def _spawn_group_indices(
     *,
     roster: frozenset[str] | None,
     own_agent_id: str | None,
+    regroup: _PublicRegroup | None = None,
 ) -> list[int]:
-    """The tick-0 runs that together say "everyone started in one room".
+    """The runs that together say "everyone started in one room".
 
-    Empty unless the runs beginning at tick 0 name the full known roster minus the
-    observer, in ONE room, each listing the rest of that roster as its companions --
-    the one fact the summary line states. A partial view, a split room or a subject
-    the observer did not see at spawn is real information and keeps its own rows.
-    How far past tick 0 the summary reaches is the caller's shared-tick arithmetic,
-    not a condition on collapsing at all.
+    Without ``regroup``: empty unless the runs beginning at tick 0 name the full
+    known roster minus the observer, in ONE room, each listing the rest of that
+    roster as its companions -- the one fact the summary line states.
+
+    With ``regroup`` (a public regroup row): the same test for the runs beginning
+    at the regroup's tick, against every player the row gathered minus the
+    observer, all in the row's room -- the dead are not in the row, so they are
+    not expected.
+
+    Either way no run's first row may carry a movement note
+    (``sighting_suffix``). The note lands on a subject's latest sighting when the
+    agent saw that subject in another room before it, and the one line cannot
+    state it. A spawn row has no earlier room to note, so the test bites after a
+    regroup: a subject last seen at the regroup's tick, after a sighting
+    elsewhere, leaves the whole group on its own rows.
+
+    A partial view, a split room or a subject the observer did not see there is
+    real information and keeps its own rows. How far past the first tick the
+    summary reaches is the caller's shared-tick arithmetic, not a condition on
+    collapsing at all.
     """
 
-    if roster is None or own_agent_id is None:
+    if own_agent_id is None:
         return []
-    expected = roster - {own_agent_id}
+    if regroup is None:
+        if roster is None:
+            return []
+        start_tick = 0
+        expected = roster - {own_agent_id}
+    else:
+        start_tick = regroup.tick
+        expected = regroup.player_ids - {own_agent_id}
     if not expected:
         return []
     indices = [
         index
         for index, (key, rows) in enumerate(runs)
-        if rows[0].tick == 0 and key.action is None and not rows[0].sighting_suffix
+        if rows[0].tick == start_tick
+        and key.action is None
+        and not rows[0].sighting_suffix
     ]
     keys = [runs[index][0] for index in indices]
     if len(indices) != len(expected) or {key.subject for key in keys} != expected:
         return []
-    if len({key.room for key in keys}) != 1:
+    rooms = {key.room for key in keys}
+    if len(rooms) != 1:
+        return []
+    if regroup is not None and rooms != {regroup.room}:
         return []
     if any(key.companions != expected - {key.subject} for key in keys):
         return []
@@ -2187,22 +2337,25 @@ def _spawn_group_observation(
     indices: Sequence[int],
     *,
     end_tick: int,
+    regroup: _PublicRegroup | None = None,
 ) -> _Observation:
-    """The single line a full-roster spawn group renders as.
+    """The single line a full-roster spawn group, or a regroup's group, renders as.
 
     It names every subject it stands for, so the fold costs a line instead of a
-    roster and loses nothing; it cites the first-listed subject's tick-0 row.
+    roster and loses nothing; it cites the first-listed subject's first row.
     """
 
     rows_by_subject = {runs[index][0].subject: runs[index][1] for index in indices}
     subjects = sorted(rows_by_subject)
     room = runs[indices[0]][0].room
-    prefix = "[tick 0] " if end_tick == 0 else ""
-    span = "" if end_tick == 0 else f" ticks 0-{end_tick}"
+    start_tick = 0 if regroup is None else regroup.tick
+    group_prefix = _SPAWN_GROUP_PREFIX if regroup is None else _REGROUP_GROUP_PREFIX
+    prefix = f"[tick {start_tick}] " if end_tick == start_tick else ""
+    span = "" if end_tick == start_tick else f" ticks {start_tick}-{end_tick}"
     return _Observation(
         salience=_SALIENCE_SAW_PLAYER,
         tick=end_tick,
-        line=(f"{prefix}{_SPAWN_GROUP_PREFIX}{room}{span}: {', '.join(subjects)}."),
+        line=(f"{prefix}{group_prefix}{room}{span}: {', '.join(subjects)}."),
         observation_id=rows_by_subject[subjects[0]][0].observation_id,
     )
 

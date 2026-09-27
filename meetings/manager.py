@@ -183,6 +183,7 @@ from meetings.transcript import (
     detect_corroborations,
     grounded_vent_subjects_from_flags,
     grounded_vouch_subjects,
+    in_regroup_window,
     independent_voices,
     is_relevant_sighting,
     maximal_stays,
@@ -1188,6 +1189,7 @@ class MeetingManager:
         sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
         evidence_reasoning_version: Literal[1, 2] | None,
         trigger_kind: MeetingTriggerKind | None = None,
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> tuple[ContradictionRef, ...]:
         if self._evidence_profile.attributed_testimony_version == 1:
             if self._public_map is None:
@@ -1205,6 +1207,7 @@ class MeetingManager:
             sighting_records=sighting_records,
             evidence_reasoning_version=evidence_reasoning_version,
             trigger_kind=trigger_kind,
+            regroup_ticks=regroup_ticks,
         )
 
     @property
@@ -1243,6 +1246,7 @@ class MeetingManager:
         participants: Sequence[MeetingParticipant],
         dead_ids: tuple[PlayerId, ...] = (),
         impostor_count: int | None = None,
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> MeetingResult:
         """Run opening -> reactive chain -> opt-in -> voting -> resolution.
 
@@ -1270,6 +1274,21 @@ class MeetingManager:
         the right arithmetic, and nothing about validation or tallying reads
         it. ``None`` (existing call sites, ad-hoc runs) leaves every template
         on its singular wording.
+
+        ``regroup_ticks`` are the public regroup ticks the recording's settings
+        produced before this meeting (``orchestrator.replay.derive_regroup_ticks``),
+        derived by the orchestrator the way ``dead_ids`` is and public in the same
+        way: every survivor was gathered in the meeting room in front of everyone.
+        They mark relevance only. A sighting at a regroup's tick or the tick after
+        it corroborates no alibi, backs no voice and places nobody, and it stays
+        out of the ballot's own-sighting rows
+        (:func:`meetings.transcript.in_regroup_window`); the transcript, every
+        turn and every memory block are untouched. It prosecutes no alibi on
+        every profile but attributed testimony, whose contradiction step is the
+        account detector
+        (:func:`meetings.public_accounts.detect_public_account_conflicts`): it
+        compares spoken placements and takes no ticks. ``frozenset()`` (every
+        recording without the regroup reset) changes nothing.
         """
 
         if not meeting_id:
@@ -1291,6 +1310,10 @@ class MeetingManager:
                 "a meeting participant cannot also be dead"
             )
         dead_ids = tuple(sorted(dead_ids))
+        if any(type(tick) is not int or tick < 0 for tick in regroup_ticks):
+            raise ValueError(
+                f"regroup ticks must be non-negative integers: {sorted(regroup_ticks)}"
+            )
 
         # Fresh per-run ledgers (the manager is reused across a game's
         # meetings); the orchestrator reads :attr:`defaulted_calls` and
@@ -1442,6 +1465,7 @@ class MeetingManager:
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
                 evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
+                regroup_ticks=regroup_ticks,
             )
             reply_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1479,6 +1503,7 @@ class MeetingManager:
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
                 evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
+                regroup_ticks=regroup_ticks,
             )
             opt_in_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1518,6 +1543,7 @@ class MeetingManager:
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
                 evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
+                regroup_ticks=regroup_ticks,
             )
             roll_call_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1551,6 +1577,7 @@ class MeetingManager:
                     move_witness_records=move_witness_records,
                     sighting_records=sighting_records,
                     evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
+                    regroup_ticks=regroup_ticks,
                 )
                 response = await self._collect_turn(
                     meeting_id=meeting_id,
@@ -1597,6 +1624,7 @@ class MeetingManager:
             move_witness_records=move_witness_records,
             sighting_records=sighting_records,
             evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
+            regroup_ticks=regroup_ticks,
         )
         # The VOUCH half of the sighting channel is still not threaded here.
         # Detection above receives the per-speaker mapping (grounding a spoken
@@ -1612,6 +1640,7 @@ class MeetingManager:
             roster=roster,
             public_account_version=self._evidence_profile.public_account_version,
             attributed_testimony_version=self._evidence_profile.attributed_testimony_version,
+            regroup_ticks=regroup_ticks,
         )
         # Task 16.8 (PR #264 review): re-derive the ABSENT set with the
         # ENGINE-derived trigger kind. The sibling folds above keep their
@@ -1636,7 +1665,10 @@ class MeetingManager:
             absent=tuple(
                 player
                 for player in absent_players(
-                    transcript, roster=roster, trigger_kind=meeting_trigger_kind
+                    transcript,
+                    roster=roster,
+                    trigger_kind=meeting_trigger_kind,
+                    regroup_ticks=regroup_ticks,
                 )
                 if player not in _vent_placed
             ),
@@ -1662,6 +1694,7 @@ class MeetingManager:
                 opener=trigger.triggered_by,
                 roster=roster,
                 trigger_kind=meeting_trigger_kind,
+                regroup_ticks=regroup_ticks,
             )
             if corroboration_discipline
             else None
@@ -1674,6 +1707,7 @@ class MeetingManager:
             evidence=evidence,
             render_inputs=render_inputs,
             testimony_ledger=testimony_ledger,
+            regroup_ticks=regroup_ticks,
         )
 
         # Phase 5: resolution.
@@ -2188,6 +2222,7 @@ class MeetingManager:
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> tuple[VoteBallot, ...]:
         # Sequential collection: concurrent ballots on a single local GPU
         # inflate each call's wall-clock past vote_seconds (measured 0.71x
@@ -2209,6 +2244,7 @@ class MeetingManager:
                     evidence=evidence,
                     render_inputs=render_inputs,
                     testimony_ledger=testimony_ledger,
+                    regroup_ticks=regroup_ticks,
                 )
             )
         return tuple(ballots)
@@ -2224,6 +2260,7 @@ class MeetingManager:
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
         testimony_ledger: MeetingTestimonyLedger | None = None,
+        regroup_ticks: frozenset[int] = frozenset(),
     ) -> VoteBallot:
         # Confirm the candidate set over the FINAL transcript: every living
         # participant except the voter is an eligible eject target (the same
@@ -2300,6 +2337,7 @@ class MeetingManager:
             candidate_targets=candidate_targets,
             contradictions=contradictions,
             transcript=transcript,
+            regroup_ticks=regroup_ticks,
         )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
@@ -3474,7 +3512,7 @@ def _turn_id_for_event(event_id: str, *, turns: Sequence[MeetingTurn]) -> TurnId
 
 
 def _own_channel_evidence_rows(
-    *, voter: MeetingParticipant
+    *, voter: MeetingParticipant, regroup_ticks: frozenset[int] = frozenset()
 ) -> list[tuple[int, EvidenceRow]]:
     """This voter's four own-perception channels, as ``(tick, row)`` pairs.
 
@@ -3508,6 +3546,16 @@ def _own_channel_evidence_rows(
     Body-discovery rows take no filter and need none: a body's subject is the
     dead VICTIM, and ``engine.rules`` refuses a kill whose target is an impostor
     (the friendly-fire guard), so a fellow impostor is never a victim.
+
+    A sighting record at a public regroup's tick or the tick after it
+    (``regroup_ticks``, :func:`meetings.transcript.in_regroup_window`) makes no
+    row either. It says where the regroup put its subject, which is no piece of
+    this decision, and a regroup hands every voter one such sighting of every
+    survivor: left in, those rows could fill a subject's
+    :data:`MAX_EVIDENCE_ROWS_PER_SUBJECT` budget and push the voter's earlier
+    first-hand rows of that subject -- a witnessed vent among them -- off the
+    page. The record stays in the voter's memory block. The spawn window is not
+    filtered here: every recording already rendered those rows.
     """
 
     teammates = frozenset(voter.fellow_impostor_ids)
@@ -3532,6 +3580,8 @@ def _own_channel_evidence_rows(
         )
     for sighting in voter.sighting_records:
         if sighting.subject in teammates:
+            continue
+        if in_regroup_window(sighting.tick, regroup_ticks=regroup_ticks):
             continue
         companions = tuple(
             player for player in sighting.co_present if player not in teammates
@@ -3785,6 +3835,7 @@ def build_evidence_rows(
     candidate_targets: tuple[PlayerId, ...],
     contradictions: Sequence[ContradictionRef],
     transcript: MeetingTranscript,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> tuple[EvidenceRow, ...]:
     """The typed pieces THIS voter holds about the players it may vote for.
 
@@ -3861,7 +3912,7 @@ def build_evidence_rows(
     targets = frozenset(candidate_targets)
     turns = transcript.turns
     pairs = (
-        _own_channel_evidence_rows(voter=voter)
+        _own_channel_evidence_rows(voter=voter, regroup_ticks=regroup_ticks)
         + _contradiction_evidence_rows(
             contradictions=contradictions,
             turns=turns,
@@ -4704,8 +4755,9 @@ class MeetingBeliefEvidence:
       (:func:`meetings.transcript.is_relevant_sighting`, audit C-C-3):
       the detector half inside ``detect_corroborations`` itself, the
       claim-stated half here against the claim's ``on_tick`` (a claim
-      carries no room, so only the spawn-window prong can gate it --
-      tick-0/1 vouches are the everyone-was-at-spawn shape). The set
+      carries no room, so only the tick prongs can gate it -- tick-0/1
+      vouches are the everyone-was-at-spawn shape, and a vouch in a public
+      regroup's window is the everyone-was-gathered shape). The set
       is deduplicated per meeting, so a corroborated subject receives the
       Rule-3 delta exactly once however many pairs confirm them.
     * ``contradicted`` -- subjects of the meeting's detected
@@ -4782,6 +4834,7 @@ def derive_belief_evidence(
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
     public_account_version: Literal[1] | None = None,
     attributed_testimony_version: Literal[1] | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> MeetingBeliefEvidence:
     """Derive a meeting's public belief evidence (Tasks 9.8, 10.7).
 
@@ -4826,6 +4879,15 @@ def derive_belief_evidence(
     private records by construction) is byte-identical to the pre-16.7
     derivation, so a recorded meeting still re-derives its persistent
     evidence from the public record alone (DESIGN.md §0 rule 1).
+
+    ``regroup_ticks`` (empty by default) are the public regroup ticks before
+    this meeting (``orchestrator.replay.derive_regroup_ticks``). Every relevance-gated
+    producer below reads them -- the claim-stated vouch, the detector-derived
+    corroborations, the grounded vouches, the independent voices and the absent
+    set -- so a sighting in a regroup's window
+    (:func:`meetings.transcript.in_regroup_window`) exculpates nobody, backs no
+    voice and places nobody, on the live pre-vote path and on every replay that
+    passes the same ticks.
     """
 
     if attributed_testimony_version == 1:
@@ -4844,9 +4906,10 @@ def derive_belief_evidence(
     # vouch passes the same named predicate the detector-derived pairs go
     # through inside ``detect_corroborations`` -- one gate, two producers.
     # A CorroborationClaim carries a tick but no room, so its empty room
-    # set can never trip the kill-scene prong; the spawn-window prong is
-    # the operative one (a tick-0/1 "I can vouch" is the
-    # everyone-spawned-together shape that confirms nothing).
+    # set can never trip the kill-scene prong; the tick prongs are the
+    # operative ones (a tick-0/1 "I can vouch" is the
+    # everyone-spawned-together shape that confirms nothing, and a vouch in a
+    # public regroup's window is the everyone-gathered shape).
     body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
     for turn in transcript.turns:
         for claim in turn.claims:
@@ -4856,6 +4919,7 @@ def derive_belief_evidence(
                 tick=claim.on_tick,
                 rooms=frozenset(),
                 triggering_body_rooms=body_rooms,
+                regroup_ticks=regroup_ticks,
             ):
                 corroborated.add(claim.supports)
     # Detector-derived corroboration (Task 10.1, audit gp-2 C-C-1): a
@@ -4869,7 +4933,10 @@ def derive_belief_evidence(
     corroborated.update(
         corroboration.subject
         for corroboration in detect_corroborations(
-            transcript, roster=roster, trigger_kind=trigger_kind
+            transcript,
+            roster=roster,
+            trigger_kind=trigger_kind,
+            regroup_ticks=regroup_ticks,
         )
     )
     # Grounded vouches (Task 16.7): a spoken sighting matching the SPEAKER'S
@@ -4884,6 +4951,7 @@ def derive_belief_evidence(
                 sighting_records=sighting_records,
                 roster=roster,
                 trigger_kind=trigger_kind,
+                regroup_ticks=regroup_ticks,
             )
         )
     contradicted = {
@@ -4900,7 +4968,12 @@ def derive_belief_evidence(
     # Wave-2 attribution. The two are disjoint by construction and both are
     # subsets of ``accused`` (voice subjects are accusation targets), the
     # invariants the belief-side phase routing validates.
-    voices = independent_voices(transcript, roster=roster, trigger_kind=trigger_kind)
+    voices = independent_voices(
+        transcript,
+        roster=roster,
+        trigger_kind=trigger_kind,
+        regroup_ticks=regroup_ticks,
+    )
     pre_vote_folded = tuple(
         sorted(
             subject
@@ -4943,7 +5016,10 @@ def derive_belief_evidence(
         absent=tuple(
             player
             for player in absent_players(
-                transcript, roster=roster, trigger_kind=trigger_kind
+                transcript,
+                roster=roster,
+                trigger_kind=trigger_kind,
+                regroup_ticks=regroup_ticks,
             )
             if player not in grounded_vent_subjects_from_flags(contradictions)
         ),
@@ -4956,6 +5032,7 @@ def extract_belief_evidence(
     trigger_kind: MeetingTriggerKind | None = None,
     public_account_version: Literal[1] | None = None,
     attributed_testimony_version: Literal[1] | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> MeetingBeliefEvidence:
     """Reduce a resolved meeting to its public belief evidence (Task 9.8).
 
@@ -4974,6 +5051,10 @@ def extract_belief_evidence(
     trusts a fabricated opening ``found_body`` to widen its exclusion
     zone. ``None`` preserves the pre-10.11 read-the-opening behaviour for
     callers without the kind in hand.
+
+    ``regroup_ticks`` are the public regroup ticks the meeting ran with, the
+    same set the live meeting received (``orchestrator.replay.derive_regroup_ticks``),
+    so the persistent absorb and every replay of it read one relevance window.
     """
 
     return derive_belief_evidence(
@@ -4983,6 +5064,7 @@ def extract_belief_evidence(
         trigger_kind=trigger_kind,
         public_account_version=public_account_version,
         attributed_testimony_version=attributed_testimony_version,
+        regroup_ticks=regroup_ticks,
     )
 
 

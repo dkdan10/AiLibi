@@ -171,13 +171,14 @@ from eval.meeting_quality import (
     EffectiveDeflectionReport,
     compute_effective_deflection,
 )
-from eval.validity import assemble_tournament_report
+from eval.validity import assemble_tournament_report, seeds_on_disk
 from meetings.schemas import (
     AccusationClaim,
     CorroborationClaim,
     SawPlayerObservation,
 )
 from meetings.transcript import grounded_vouch_subjects
+from orchestrator.replay import read_all_entries, recorded_experiment_config
 
 # 95% two-sided Wilson score constant.
 _WILSON_Z: Final[float] = 1.96
@@ -710,6 +711,28 @@ def _grounded_split(
     )
 
 
+def _refuse_the_meeting_reset(sample_dir: Path) -> None:
+    """Refuse a set any of whose recordings regroups survivors after a meeting.
+
+    Under ``meeting_reset = "hub_with_grace"`` a sighting on a regroup's tick or
+    the tick after it grounds no vouch in the live meeting. The grounded split
+    here calls the chokepoint without that window, and this module keeps its
+    evidence semantics, so it reads no such recording. The refusal names the
+    setting and runs before the walk re-derives anything.
+    """
+
+    for seed in seeds_on_disk(sample_dir):
+        config = recorded_experiment_config(
+            read_all_entries(sample_dir / f"replay-seed-{seed}.jsonl")
+        )
+        if config is not None and config.meeting_reset == "hub_with_grace":
+            raise ValueError(
+                "deception instruments do not read the recorded "
+                f"meeting_reset={config.meeting_reset!r} (seed {seed}): their "
+                "grounded-vouch split does not apply the regroup window"
+            )
+
+
 def compute_deception_instruments(sample_dir: Path) -> DeceptionInstrumentsReport:
     """Fold a replay set's committed bytes into the Tier-A deception diagnostics.
 
@@ -718,9 +741,12 @@ def compute_deception_instruments(sample_dir: Path) -> DeceptionInstrumentsRepor
     reconstructs the per-speaker sighting records the grounded-vouch chokepoint
     needs), folds the accusation / vouch / corroboration census, then assembles
     the two adopted analyzers. Fail-loud if the walk's meeting count disagrees
-    with the assembled report's.
+    with the assembled report's. A set holding a recording made under the
+    regrouping meeting reset is refused before the walk
+    (:func:`_refuse_the_meeting_reset`).
     """
 
+    _refuse_the_meeting_reset(sample_dir)
     walks: list[_VJGameWalk]
     walks, num_players, num_impostors, tasks_per_crewmate = _walk_set_vj(sample_dir)
 

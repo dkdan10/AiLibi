@@ -608,6 +608,7 @@ def build_testimony_ledger(
     opener: PlayerId,
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
+    regroup_ticks: frozenset[int] = frozenset(),
 ) -> MeetingTestimonyLedger:
     """Derive one meeting's per-subject testimony ledger.
 
@@ -617,8 +618,9 @@ def build_testimony_ledger(
     ledger.
 
     ``sighting_records`` must be the §4.7-firewalled mapping the detector
-    receives, not the raw accessor output. ``roster`` and ``trigger_kind`` are
-    passed straight to :func:`~meetings.transcript.reconstruct_stated_paths`,
+    receives, not the raw accessor output. ``roster``, ``trigger_kind`` and
+    ``regroup_ticks`` (the public regroup window, empty by default) are passed
+    straight to :func:`~meetings.transcript.reconstruct_stated_paths`,
     together with ``move_witness_records``, so the placements the
     walkable-transit clause reads are the movement-shaped ones the rest of the
     meeting layer reads -- a transition the speaker's own record confirms places
@@ -650,6 +652,7 @@ def build_testimony_ledger(
         roster=roster,
         trigger_kind=trigger_kind,
         movement_witness_records=move_witness_records,
+        regroup_ticks=regroup_ticks,
     )
     # Every turn in which the opener accused someone, so a charge answering one
     # of them can be recognised as an answer rather than a second witness.

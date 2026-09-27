@@ -380,15 +380,17 @@ def _pre_vote_graphs(
     voter's meeting-open snapshot with the meeting's RECORDED contradictions
     and the evidence derived exactly as the manager derives it before ballot
     collection (``derive_belief_evidence`` over the final transcript, no
-    trigger kind — mirroring the production call). The fold consults no
-    environment. These are the rows the ballot render reads; the rendered
-    cross-check pins them against the recorded prompt bytes.
+    trigger kind, with the public regroup ticks the meeting ran with —
+    mirroring the production call). The fold consults no environment. These
+    are the rows the ballot render reads; the rendered cross-check pins them
+    against the recorded prompt bytes.
     """
 
     evidence = derive_belief_evidence(
         meeting.transcript,
         contradictions=meeting.contradictions,
         roster=meeting.living,
+        regroup_ticks=meeting.regroup_ticks,
     )
     reporter = meeting.triggered_by if meeting.trigger_kind == "report" else None
     graphs: dict[PlayerId, tuple[SuspicionEntry, ...]] = {}

@@ -150,20 +150,22 @@ Recorded settings
 -----------------
 The ``evidence-honesty`` profile reads recordings that carry experiment settings,
 and :data:`HONESTY_READS` names, field by field, the ones it reads: every setting
-in :data:`eval.recorded_settings.READABLE_SETTINGS` except the meeting reset. The
-engine settings reach every advance through the engine-arguments helper (which
-refuses one it does not thread), and the perception this module rebuilds reads
-the witness lists those advances produce. The vent exit and entry policies reach
-the I-11 fold as the recorded policy above. A rebuttal reply, the trigger's
-described body handle and the ballot settings reach the folds only as recorded
-turns, flags and prompts: every cell here counts what the recorded bytes carry
-and reads no rule those settings change. The meeting reset stays refused: the
-regroup moves every survivor to the hub between the trigger tick's frame and the
-resume tick, so the ``room_at`` table and the clock alignment below would read
-honest post-regroup sightings as a moved clock; the card that makes the reset
-coherent lifts this refusal with its fix. Any other recorded setting, a settings
-format other than the first, and temporal delivery are refused before the first
-advance, naming the profile and the setting.
+in :data:`eval.recorded_settings.READABLE_SETTINGS`. The engine settings reach
+every advance through the engine-arguments helper (which refuses one it does not
+thread), and the perception this module rebuilds reads the witness lists those
+advances produce. The vent exit and entry policies reach the I-11 fold as the
+recorded policy above. A rebuttal reply, the trigger's described body handle and
+the ballot settings reach the folds only as recorded turns, flags and prompts:
+every cell here counts what the recorded bytes carry and reads no rule those
+settings change. The meeting reset reaches the walk as the live loop takes it:
+the perception after a regroup reads the shared resume events (only the trigger
+tick's kills and vents), the post-meeting fold reads the public regroup ticks and
+writes the announced regroup, and a regroup meeting's row of the ``room_at``
+table is the regrouped frame agents read at the resume tick, while the clock
+alignment prices an action-stamped sighting against the frame its action
+resolved in. Any other recorded setting, a settings format other than the first,
+and temporal delivery are refused before the first advance, naming the profile
+and the setting.
 
 Purity: offline, no network, no ``AILIBI_*`` env read, no LLM call. Two runs over
 the same bytes produce identical reports.
@@ -1509,9 +1511,16 @@ def _fold_meeting_into_memories(
     the lever graduated at the baseline-7 record, so the channel now reaches the
     render on every path and the committed cells this module pins were measured
     with it present.
+
+    Under the regroup reset the evidence reads the meeting's public regroup
+    ticks and the history fold writes the announced regroup
+    (``walk_event.regroup_ticks``, ``walk_event.regroup_room``), both as the live
+    loop does; without it both are empty and the fold is the one it always was.
     """
 
-    evidence = extract_belief_evidence(walk_event.result)
+    evidence = extract_belief_evidence(
+        walk_event.result, regroup_ticks=walk_event.regroup_ticks
+    )
     statements = derive_reported_testimony(
         walk_event.result, testimony_shapes=walk_event.testimony_shapes
     )
@@ -1526,7 +1535,10 @@ def _fold_meeting_into_memories(
         )
         absorb_reported_testimony(composites[pid], statements=statements)
     fold_meeting_outcome_into_memories(
-        walk_event.result, state=walk_event.state, memories=composites
+        walk_event.result,
+        state=walk_event.state,
+        memories=composites,
+        regroup_room=walk_event.regroup_room,
     )
 
 
@@ -1566,8 +1578,13 @@ def _fold_game(
     # Engine frame: ``room_at[T]`` is the state after tick ``T``'s recorded
     # actions resolved — the frame the replay row's ``state_hash`` covers and the
     # frame the loader serves as "tick T". A memory row at agent tick ``T``
-    # describes ``room_at[T - AGENT_CLOCK_OFFSET]``.
+    # describes ``room_at[T - AGENT_CLOCK_OFFSET]``. At a regroup meeting's tick
+    # that is the regrouped frame, the one agents read at the resume tick, so a
+    # meeting's row is re-read from the applied meeting's state (identical rooms
+    # without a regroup). ``resolved_at[T]`` keeps the frame tick ``T``'s
+    # actions resolved in, which an action-stamped sighting names.
     room_at: dict[int, Mapping[PlayerId, RoomId]] = {}
+    resolved_at: dict[int, Mapping[PlayerId, RoomId]] = {}
     completions: dict[PlayerId, set[int]] = {pid: set() for pid in roles}
     death_tick: dict[PlayerId, int] = {}
     ejected_at: dict[PlayerId, int] = {}
@@ -1613,6 +1630,7 @@ def _fold_game(
                 room_at[walk_event.entry.tick] = {
                     pid: player.room for pid, player in walk_event.state.players.items()
                 }
+                resolved_at[walk_event.entry.tick] = room_at[walk_event.entry.tick]
                 for event in walk_event.events:
                     if isinstance(event, TaskCompletedEvent):
                         completions[event.actor].add(event.tick)
@@ -1640,6 +1658,9 @@ def _fold_game(
                 )
             elif isinstance(walk_event, MeetingApplied):
                 entry = walk_event.entry
+                room_at[entry.tick] = {
+                    pid: player.room for pid, player in walk_event.state.players.items()
+                }
                 if entry.outcome == "EJECTED" and entry.ejected_player_id is not None:
                     ejected_at.setdefault(entry.ejected_player_id, entry.tick)
                     death_tick.setdefault(entry.ejected_player_id, entry.tick)
@@ -1650,7 +1671,11 @@ def _fold_game(
         audit_dir.cleanup()
 
     _assert_clock_alignment(
-        game_id=game_id, memories=memories, room_at=room_at, tallies=tallies
+        game_id=game_id,
+        memories=memories,
+        room_at=room_at,
+        resolved_at=resolved_at,
+        tallies=tallies,
     )
     _fold_ghost_top(
         tallies=tallies,
@@ -1887,6 +1912,7 @@ def _assert_clock_alignment(
     memories: Mapping[PlayerId, MemoryStore],
     room_at: Mapping[int, Mapping[PlayerId, RoomId]],
     tallies: _Tallies,
+    resolved_at: Mapping[int, Mapping[PlayerId, RoomId]] | None = None,
 ) -> None:
     """Prove the +1 agent clock on this game's discriminating sightings.
 
@@ -1904,7 +1930,15 @@ def _assert_clock_alignment(
 
     Neither branch tolerates anything else, so a clock change fails here first
     instead of silently re-pricing every bar.
+
+    ``room_at`` is the frame agents read (a regroup meeting's row is the
+    regrouped frame) and ``resolved_at`` the frame each tick's actions resolved
+    in (``room_at`` itself when omitted). They differ only at a regroup
+    meeting's tick, where a state-read row names the regrouped room and an
+    action-stamped row the room its action resolved in.
     """
+
+    resolved = room_at if resolved_at is None else resolved_at
 
     for observer in sorted(memories):
         for event in memories[observer].recent(since_tick=0):
@@ -1915,10 +1949,14 @@ def _assert_clock_alignment(
             if not isinstance(subject, str) or not isinstance(room, str):
                 continue
             engine_tick = event.tick - AGENT_CLOCK_OFFSET
-            here = room_at.get(engine_tick, {}).get(subject)
+            action_stamped = event.payload.get("action") is not None
+            here = (
+                (resolved if action_stamped else room_at)
+                .get(engine_tick, {})
+                .get(subject)
+            )
             if here is None:
                 continue
-            action_stamped = event.payload.get("action") is not None
             # A row DISCRIMINATES when its own two candidate frames disagree: the
             # state read is ``obs.tick - 1`` against ``obs.tick``, the action stamp
             # is ``obs.tick - 1`` against ``obs.tick - 2``. Comparing an
@@ -2768,10 +2806,8 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
 
 
 #: The recorded settings the honesty cells read (module docstring, "Recorded
-#: settings"): every setting a reviewed reader may read except the meeting reset,
-#: which stays refused until the reset's own card makes ``room_at`` and the clock
-#: alignment coherent under it.
-HONESTY_READS: Final[frozenset[str]] = READABLE_SETTINGS - {"meeting_reset"}
+#: settings"): every setting a reviewed reader may read.
+HONESTY_READS: Final[frozenset[str]] = READABLE_SETTINGS
 
 _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="evidence-honesty",

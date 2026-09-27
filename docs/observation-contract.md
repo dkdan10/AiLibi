@@ -41,10 +41,14 @@ Public packet body handles are an unconditional boundary repair, translated
 back to unchanged internal engine IDs for reporting. Historical recorded
 report actions, state hashes and raw prompt bodies remain readable. An explicit
 legacy packet projection supports historical analysis. Full model-facing
-removal is implemented only in temporal mode: **OFF opening descriptions still
-contain the internal body ID and can expose its encoded death tick.** Keeping
-those rendered bytes unchanged follows the default-OFF rule pending an adopting
-decision; the packet repair alone does not establish complete model privacy.
+removal is implemented in temporal mode. Without it, the recorded body-handle
+setting `report_body_handle_version = 1` changes the report opening alone: it
+names the corpse by the public `body-{victim_id}` handle, which carries no death
+tick, and a corpse missing from the state reads "a body". **With neither, opening
+descriptions still contain the internal body ID and can expose its encoded death
+tick.** Keeping those rendered bytes unchanged follows the default-OFF rule
+pending an adopting decision; the packet repair alone does not establish
+complete model privacy.
 
 `eval/leak_scan.py` independently checks packet visibility, body identity,
 audible entitlement and source-event claims. Planted tests cover invented,
@@ -161,3 +165,53 @@ boundary that survives the merge is a declared room change or a gap, which is a
 claim a listener can check. Compatible version-2/3/4 inputs retain their historical audio and event
 interpretation; unsupported audio and versions still fail. Spectator knowledge remains privileged: a public account is labeled
 as a speaker's claim even if the viewer can independently inspect engine truth.
+
+## The regroup reset
+
+The recorded `meeting_reset = hub_with_grace` regroups the survivors when a
+meeting that did not end the game closes: every living player is placed in the
+meeting room, every corpse is cleared, the vents are emptied and each living
+impostor's kill cooldown restarts ([glossary](glossary.md#regroup-the-full-meeting-reset)).
+Two rules keep what an agent perceives true to that relocation.
+
+**The resume rule.** The first packets after a meeting are built from the
+state play resumes in and from the trigger tick's events. After a regroup the
+resume packet carries only the trigger tick's kills and vent entries and vent
+exits: their witnesses were fixed where the event happened, so the relocation
+cannot change who saw them. A trigger-tick walk or task step is dropped, because
+its view is gated on the observer's current position, which the regroup has
+moved to the meeting room. One helper composes the resume events for the live
+loop and for every reader of a recording
+(`orchestrator.replay.compose_resume_events`), and it reports the walks and task
+steps it dropped. Without a regroup the resume packet carries the trigger tick's
+events followed by the meeting's own, as it always has.
+
+**The announced regroup.** The `public_regroup` row is written into every living
+memory on the default evidence path as well as under evidence version 2, and
+never under evidence version 1. Wherever the row exists the memory states the
+regroup beside the meeting record and as its own step in the agent's route. On
+the default evidence path it can also fold the sightings the regroup produced
+(every other living player, in the meeting room) into one line, and does so only
+when none of those sightings carries a movement note. A sighting carries one
+when it is that player's latest sighting in the memory and the agent saw the
+player in another room before it. So a player the agent saw elsewhere before
+the meeting and not again after the regroup leaves every regroup sighting on its
+own row, the note on that player's. Like any sighting row, the fold line can be
+shed by the render's token budget. Evidence version 2 folds no sightings, so
+each of those keeps its own row, as the sightings at the start of the game do.
+
+A sighting on a regroup's tick or the tick after it is not evidence about
+anyone's whereabouts. On every meeting profile but attributed testimony the
+meeting layer neither corroborates nor prosecutes an alibi with it, and a
+voter's own sighting there makes no ballot evidence row; it stays in the voter's
+memory. That includes public accounts (`public_account_version`) without
+attributed testimony, whose meetings keep the ordinary contradiction step
+(`meetings.transcript.detect_contradictions`) and its window. Under attributed
+testimony (`attributed_testimony_version`, alone or beside public accounts) the
+contradiction step is the account detector
+(`meetings.public_accounts.detect_public_account_conflicts`), which compares
+spoken placements and reads no window, so it would flag a player the regroup
+moved as an impossible walk. This is a stated limitation: the recorded settings
+accept the reset beside either account profile and refuse neither. No committed
+recording combines them, and the Stage-B record's settings include neither
+account profile.

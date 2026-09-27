@@ -120,9 +120,12 @@ every advance through the engine-arguments helper (which refuses one it does not
 thread), and the vent folds read the witness lists those advances produce, so a
 changed witness rule reaches Stage 2 and the pooled perception. The meeting reset
 reaches the applied meetings, and the per-tick perception across a meeting reads
-the pre-meeting play events plus the meeting's own events, as the live loop and
-the replay loader do; the belief fold after a meeting mirrors the live loop's
-default path. The tactical, meeting and trigger settings reach the folds only as
+the shared resume events (``orchestrator.replay.compose_resume_events``: after a
+regroup only the trigger tick's kills and vents), as the live loop and the replay
+loader do. The belief fold after a meeting, and the pooling folds' grounded
+vouches and absence set, read the meeting's public regroup ticks
+(``orchestrator.replay.derive_regroup_ticks``), the relevance window the live
+meeting read. The tactical, meeting and trigger settings reach the folds only as
 the recorded actions, turns, flags and ballots (a rebuttal reply is one more
 recorded turn), and the trigger's described body handle is never read. Any other
 recorded setting, a settings format other than the first, and temporal delivery
@@ -406,10 +409,11 @@ def _walk_game(
     # killer-at-scene fold reads exactly what the same-room-only firewall surfaces
     # (Task 12.3 / api/replay_loader.py::_walk collect_visibility). The audit log is
     # routed to a throwaway temp file; ``last_events`` is threaded by the walker
-    # EXACTLY as the loader threads it — the previous tick's events (or, across a
-    # meeting, the pre-meeting play events plus the meeting's post-events) — so
-    # witnessed vent / kill / move placements land on the right frame and no stale
-    # movement leaks onto a post-meeting tick.
+    # EXACTLY as the loader threads it — the previous tick's events, or across a
+    # meeting the shared resume events (the pre-meeting play events plus the
+    # meeting's post-events, or after a regroup only the trigger tick's kills and
+    # vents) — so witnessed vent / kill / move placements land on the right frame
+    # and no stale movement leaks onto a post-meeting tick.
     audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-funnel-")
     service = ObservationService(
         game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
@@ -1133,6 +1137,9 @@ class _VJMeeting:
     at meeting open (== the recorded ballot voters — verified during the walk);
     the ``*_by_*`` mappings are the production accessor snapshots taken exactly
     where ``orchestrator.game._build_participants`` takes them.
+    ``regroup_ticks`` are the public regroup ticks the meeting ran with (the
+    walk's :class:`~eval.replay_walk.MeetingOpened` set), which every
+    relevance-gated fold over this meeting reads as the live meeting did.
     """
 
     seed: int
@@ -1151,6 +1158,7 @@ class _VJMeeting:
     sighting_records_by_speaker: Mapping[PlayerId, tuple[SightingRecord, ...]]
     observation_ids_by_voter: Mapping[PlayerId, frozenset[str]]
     fellow_impostor_ids_by_voter: Mapping[PlayerId, tuple[PlayerId, ...]]
+    regroup_ticks: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -1312,6 +1320,7 @@ def _walk_game_vj(
                         sighting_records_by_speaker=sightings_by_speaker,
                         observation_ids_by_voter=obs_ids_by_voter,
                         fellow_impostor_ids_by_voter=fellows_by_voter,
+                        regroup_ticks=walk_event.regroup_ticks,
                     )
                 )
             elif isinstance(walk_event, MeetingApplied):
@@ -1331,7 +1340,9 @@ def _walk_game_vj(
                     )
                 state = walk_event.state
                 evidence = extract_belief_evidence(
-                    walk_event.result, trigger_kind=trigger_kind
+                    walk_event.result,
+                    trigger_kind=trigger_kind,
+                    regroup_ticks=walk_event.regroup_ticks,
                 )
                 statements = derive_reported_testimony(
                     walk_event.result, testimony_shapes=walk_event.testimony_shapes
@@ -1438,6 +1449,7 @@ def _grounded_vouch_set(meeting: _VJMeeting) -> frozenset[PlayerId]:
         sighting_records=meeting.sighting_records_by_speaker,
         roster=meeting.living,
         trigger_kind=meeting.trigger_kind,
+        regroup_ticks=meeting.regroup_ticks,
     )
 
 
@@ -1455,6 +1467,7 @@ def _absence_set(meeting: _VJMeeting) -> tuple[PlayerId, ...]:
         meeting.transcript,
         roster=meeting.living,
         trigger_kind=meeting.trigger_kind,
+        regroup_ticks=meeting.regroup_ticks,
     )
     return tuple(sorted(meeting.living - set(placed)))
 
