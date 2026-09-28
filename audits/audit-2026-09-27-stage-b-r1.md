@@ -758,3 +758,72 @@ at 56-59%, and the call ratio is below 1.
   00:30:45Z on 2026-09-28), with the 10-seed re-projection still binding; resume
   under the same ceiling at a time the provider answers faster, re-projecting at
   10 seeds; or end the round at seed 0.
+
+## 4. Addendum to the pre-registration: the wall amendment (2026-09-28)
+
+This addendum amends 1.4 and 1.5 and changes nothing else in section 1, which
+stands as committed at P. It was committed and pushed before the first seed of
+the second sitting.
+
+### 4.1 The owner's ruling, verbatim and dated
+
+On **2026-09-28**, the owner, relayed verbatim by the orchestrator:
+
+> Raise the wall to 12h in an 18h window and resume. Make sure it allows for a pause.
+
+It takes the first of the choices 3.4 put to the owner. As applied here:
+
+- the recording-wall ceiling becomes **12 h** of recording time, summed over
+  every sitting of the round, with its hard stop at 90%, **10.8 h** (38,880 s);
+- each sitting runs inside an **18 h** elapsed window, opened by that sitting's
+  first seed;
+- the call, token and cost ceilings, and their stops, are unchanged.
+
+### 4.2 The ceilings, restated
+
+| limit | ceiling | hard stop at 90% |
+|---|---|---|
+| model calls | **2,800** (unchanged) | 2,520 |
+| input tokens | **17,500,000** (unchanged) | 15,750,000 |
+| output tokens | **750,000** (unchanged) | 675,000 |
+| recording wall | **12 h** summed over sittings, each sitting inside an **18 h** elapsed window (was 4.5 h inside 8 h) | **10.8 h** summed (was 4.05 h) |
+| marginal cost | **$0.00** (unchanged) | any `cost_usd` other than 0.0000 |
+
+Recording wall is each leg's own wall as the recorder prints it ("Refresh
+complete in"), summed over sittings: the probe's 838 s, then each batch's. The
+time between batches, spent on gates and checkpoints, is not recording wall; it
+counts against the sitting's 18 h window.
+
+**Re-projection** continues by 1.4's rule against the new wall. After 10 seeds
+(the first checkpoint holding at least 10 seeds), each count is (the
+candidate's total over the completed seeds / the s9 total over the same seeds)
+x the s9 leg total, and the wall is the summed recording wall / the completed
+seeds x 50, each compared with its 90% stop. The same figures are printed at
+every batch checkpoint, and a figure past its stop at any of them stops the
+round.
+
+**The stop rules of 1.5 stand**, with 10.8 h summed in place of 4.05 h. The
+probe's projected wall was 11.64 h, so 1.5 times it (17.46 h) lies past the new
+ceiling, and the 10.8 h stop binds first.
+
+### 4.3 The pause, and how the round resumes
+
+- Seeds 1-49 record in batches of 5 (`--seeds 1,2,3,4,5`, then 6-10, and so on,
+  ending with 46-49) in the recording checkout, still detached at P, so every
+  MANIFEST row keeps P's short sha. Each leg names only the seeds it must
+  record; seed 0 is never re-recorded.
+- Before each batch the operator checks for a pause file outside the
+  repository. If it exists, no batch starts: the key file is deleted, the last
+  checkpoint is pushed, and the operator log names the seed reached and the
+  next batch. The sitting ends there. The next sitting opens a new 18 h window,
+  copies the key again as 2.7 describes, and resumes at the named batch; its
+  recording wall adds to the sum.
+- After each batch, in the delivery checkout and a bare shell, the probe's
+  gates of 3.2 run on the set so far, with `--expected-seeds 0-N`: the validity
+  gate with the declared config, `verify_samples.sh`, the golden's walk, the
+  census conformance cells, the scorecard fold, `measure_baseline.py --honesty`
+  (a raise is a STOP) and `scan_recording_packets.py`; then the tally, the
+  re-projection and the count-only key scan. The batch's files are then
+  committed on `work/stage-b-record-r1` as a `record:` checkpoint and pushed.
+- A stall, 45 minutes with no completed seed, kills the batch, and the re-run
+  names only the batch's seeds not on disk.

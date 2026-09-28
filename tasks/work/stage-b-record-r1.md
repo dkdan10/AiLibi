@@ -287,6 +287,11 @@ memo 5 item 1; this is the live-call authorization AGENTS.md requires).
 about 0.72x the meetings with no growth, is 104.4 meetings, about 1,320 calls and 7.6M input. The
 subscription fee is already paid and is not incurred by this run.
 
+**Amended 2026-09-28 by the owner**, verbatim: "Raise the wall to 12h in an 18h window and resume.
+Make sure it allows for a pause." The recording wall becomes 12 h summed over sittings, with its
+stop at 10.8 h, and each sitting runs inside an 18 h elapsed window; the other ceilings and stops
+are unchanged. The audit's section 4 records the amendment, the pause and the batch mechanics.
+
 **Re-projection**, after the probe and after 10 seeds: each count is (the candidate total over the
 completed seeds / the s9 total over the same seeds) x the s9 leg total. Wall is the elapsed recording
 wall / the completed seeds x 50.
