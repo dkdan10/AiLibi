@@ -1,6 +1,6 @@
 # B5: record s9 seeds 0-49 as candidate round 1 and assess it
 
-**Status:** done
+**Status:** active
 
 ## Outcome
 
@@ -552,10 +552,14 @@ seeds 1-49 land; `check.sh` has not been run on it.
 
 ### Sitting 2 (2026-09-28)
 
-**Status: done.** The owner raised the wall, and seeds 1-49 recorded in ten
-batches. The round is complete: every gate passes and every conformance cell
-reads 0. The audit's section 4 carries the amendment, section 5 the sitting,
-and section 6 the assessment. Nothing publishes, and the merge is the owner's.
+**Status: active, blocked on `check.sh`.** The owner raised the wall, and
+seeds 1-49 recorded in ten batches. The round is complete: every round gate
+passes and every conformance cell reads 0. The audit's section 4 carries the
+amendment, section 5 the sitting, and section 6 the assessment. But
+`bash scripts/check.sh` fails at `dae00688` on 14 tests that assume no round
+exists. Fixing them edits test files, which this card may not touch, so the
+card waits on the owner (the last subsection below). Nothing publishes, and
+the merge is the owner's.
 
 **The owner's ruling**, 2026-09-28, relayed verbatim: "Raise the wall to 12h
 in an 18h window and resume. Make sure it allows for a pause." It is applied
@@ -660,7 +664,7 @@ ejections are 11/118, not flagged. Role-correct ejections are 39/54 against
   `git ls-files`. The `audits/` row's tracked bytes are re-derived at each
   audit edit. `audits/README.md`'s row, landed at P, still describes the
   audit and is unchanged.
-- `tasks/README.md`'s derived count sentence follows the Status flip, as
+- `tasks/README.md`'s derived count sentence follows the Status line, as
   `validate_task_docs.py` requires.
 
 **Limitations.**
@@ -671,3 +675,55 @@ ejections are 11/118, not flagged. Role-correct ejections are 39/54 against
   rests on 19 evaluable opener rebuttals.
 - Four pre-registered cells are not carried.
 - Wall and the husk's spend come from logs outside the repository.
+
+### `check.sh` at `dae00688` (2026-09-28): 14 failures, and the question for the owner
+
+`bash scripts/check.sh` ran once at `dae00688`, in a clean worktree with a
+bare shell (0 `AILIBI_*` exports), from 13:45:50Z to 13:51:04Z. Its exit code,
+captured directly: **1**.
+
+Ruff, format, the import contracts, `validate_task_docs.py`,
+`generate_prompts.py --check` and mypy passed. Pytest failed with 14 failed,
+9,753 passed, 20 skipped and 3 xfailed. The frontend leg did not run, because
+`set -e` stops at the first failing leg; nothing under `frontend/` changed.
+
+Every failure comes from a test written before a round existed. None of them
+reads the recorded bytes as wrong:
+
+1. **Thirteen cases of `tests/scripts/test_refresh_samples.py`**: the twelve
+   `test_a_switched_on_config_is_refused_at_every_unsafe_target` cases, and
+   `test_a_switched_on_config_is_accepted_at_a_candidate_set_directory`. After
+   its refused or dry run, each asserts that `replays/candidates/stage-b-r1`
+   does not exist (`:2034`, `:2061`); the acceptance case also uses that path
+   as its dry-run target. That path is now the committed round, the card's
+   fixed landing, so the assertion cannot hold. The refusals and the dry-run acceptance themselves behaved as built
+   in each case; only the non-existence assertion failed.
+2. **`tests/meetings/test_prompt_byte_golden.py::test_every_reconstruction_divergence_is_a_retired_guard[candidates/stage-b-r1/9p2i]`**.
+   The test walks every golden directory, candidates included, but it pins
+   its expected counts by the directory's base name (`:1425-1428`). The
+   candidate's set directory is also named `9p2i`, so the test compares it
+   with s9's pin: `(124, 717, 0, 0)` against `(145, 845, 0, 0)`. The part
+   that matters holds on the candidate: 0 ballots moved, and 0 meetings hold
+   a moved ballot.
+
+The golden's reproduction cases and the candidate test
+(`tests/scripts/test_candidate_sets.py`) passed on the round.
+
+**Why this stops the card.** The card puts every test file out of scope
+(Expected scope, "Not in scope"). Stop and ask covers a test that turns red
+only because a round exists. The fix is a test edit, and the record does not
+make it.
+
+**The question for the owner.** A test-only change is proposed, either on
+this branch with the owner's leave or as a small card that merges into `main`
+first. `tests/` is outside the freeze, so this branch could then merge `main`
+in and re-run its gates. The change:
+- the refresh-samples dry-run tests aim at a round name that no committed
+  round uses, and assert that it was not created;
+- the retired-guard pin is keyed by the set's path under `replays/`
+  (`samples/9p2i`, `candidates/stage-b-r1/9p2i`) rather than its base name,
+  with the candidate pinned at `(124, 717, 0, 0)`.
+
+After that, `check.sh` runs once more at the new head, and the card can flip
+to done. No provider call is needed: the round is complete and its bytes do
+not change.
