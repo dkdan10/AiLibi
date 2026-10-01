@@ -182,6 +182,13 @@ four-set verification prove it moves no byte (Acceptance, last item).
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written
 first and fails at the base for the stated reason; Results quotes that failing run.
 
+- [x] Review correction: the failing-first quote in Results is the output its stated run prints.
+  Each new test file, run alone against a `git archive` export of `107956bf`, exits 2 at
+  collection with `ImportError: cannot import name 'resolve_kill_cooldown' from 'engine.world'`.
+  The readers file asks for that name (line 53) before it asks for `CooldownWrite` from
+  `eval.gameplay_census` (line 61), so the second line the quote carried was never printed. Proof:
+  the per-file command quoted in Results, "Failing first, at the base", re-run for this correction.
+  Results, "Review corrections, round 2 (2026-10-01)".
 - [x] Review correction: the census's regroup writes skip a meeting that ends the game.
   The filter `applied.state.phase == "PLAY"` in `_load_game` was unpinned: a listed-class mutant
   (`is not None`) survived, and under it round 1 breached falsely. It is now pinned by
@@ -605,12 +612,25 @@ engine-arguments helper"); `docs/architecture.md`, "Determinism and the substrat
 
 ### Failing first, at the base
 
-Both new test files, run against an export of `107956bf` (`git archive`), fail at collection:
+Each new test file was copied into an export of `107956bf` (`git archive`) and run there on its
+own, with the worktree's environment. `pyproject.toml` sets `pythonpath = ["."]` and the project
+is not installed into the environment, so the export's modules are the ones imported:
+
+```
+cd <export> && <worktree>/.venv/bin/python -m pytest -p no:cacheprovider <test file>
+```
+
+Both runs exit 2 at collection, on the same missing name. One line per file, the override file
+first; the export's path that follows each line is elided:
 
 ```
 E   ImportError: cannot import name 'resolve_kill_cooldown' from 'engine.world'
-E   ImportError: cannot import name 'CooldownWrite' from 'eval.gameplay_census'
+E   ImportError: cannot import name 'resolve_kill_cooldown' from 'engine.world'
 ```
+
+The readers file also needs `CooldownWrite`, which the base's `eval.gameplay_census` lacks, but it
+asks for `resolve_kill_cooldown` first (line 53, before line 61). Collection stops there, so
+`CooldownWrite` never appears in the output.
 
 ### The reader gate
 
@@ -826,3 +846,31 @@ suites without the new tests still pass 386.
 This commit changes only a test module and this card. No file under `api/`, `frontend/`,
 `replays/`, `audits/`, `tests/fixtures/` or `docs/` moves. The demo bundle and the lab output
 therefore stand as measured at `e164f57d`, and no artifacts row or restamp is due.
+
+### Review corrections, round 2 (2026-10-01)
+
+One blocking finding, from the docs lens on PR 493 at `ab9df8c2`. It is fixed in the commit that
+carries this subsection, which changes only this card. No code, test, recording, derived view or
+doc outside this card moves.
+
+**The finding.** "Failing first, at the base" quoted a second line,
+`ImportError: cannot import name 'CooldownWrite' from 'eval.gameplay_census'`, which the stated run
+does not print. The readers file imports `resolve_kill_cooldown` from `engine.world` at line 53
+and `CooldownWrite` from `eval.gameplay_census` at line 61 (52 and 60 at `e164f57d`). At the base
+the first of these already fails, so collection never reaches the second. The finding is valid.
+
+**The repair.** The section now quotes the run's own output, one line per file, both
+`cannot import name 'resolve_kill_cooldown' from 'engine.world'`. It also states the command and
+why `CooldownWrite` does not appear. For this correction the run was repeated against a fresh
+`git archive` export of `107956bf`, one file per run, with the worktree's environment, for three
+files: the override file and the readers file as committed at `ab9df8c2`, and the readers file as
+committed at `e164f57d`. Each exits 2 at collection with that one `E` line and no other. The
+export and its logs live in scratch, outside the tree.
+
+**Neuter and mutation.** No production line, test line or recorded byte changes, and the finding
+names no production span, so there is nothing to neuter or mutate: zero mutants.
+
+**Validation at the fix head.** The card's Validation and `check.sh` ran at the head that carries
+this subsection, with exit codes captured directly; the PR body quotes the results. The lab and
+the demo bundle read no file this commit touches, so they stand as measured at `e164f57d`. No
+artifacts row or restamp is due.
