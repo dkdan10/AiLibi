@@ -418,6 +418,7 @@ ALLOWED_STRING_FIELDS = frozenset(
         "MeetingFact.in_vent_after",
         "MeetingFact.bodies_after",
         "DiscardedAction.action_type",
+        "CooldownWrite.player",
     }
 )
 
@@ -2632,7 +2633,7 @@ def test_a_surfacing_with_no_recorded_state_before_it_raises() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The grace window is the map's                                                #
+# The grace window is the recorded kill cooldown, else the map's               #
 # --------------------------------------------------------------------------- #
 
 

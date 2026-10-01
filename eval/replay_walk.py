@@ -261,8 +261,8 @@ from orchestrator.replay_integrity import ReplayIntegrityValidator
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 # The layers a profile may declare in ``threaded_layers``. Engine fields are
-# threaded (or refused) by ``engine_arguments`` at every advance, and the format
-# field is read by every walk.
+# threaded (or refused) by ``engine_arguments`` at the seeding, every advance and
+# every applied meeting, and the format field is read by every walk.
 _DECLARABLE_LAYERS: Final[frozenset[ConfigLayer]] = frozenset(
     {"orchestrator", "tactical", "meeting"}
 )
@@ -358,7 +358,8 @@ class ReplayWalkConfig:
     besides the engine whose later fields the profile's consumer reads: before
     its first advance, the walk refuses a recording that sets a Stage-B field,
     or a Stage-B value of an older field, in any other layer, naming the field
-    and the profile. Engine-layer fields reach every advance through
+    and the profile. Engine-layer fields reach the seeding, every advance and
+    every applied meeting through
     :func:`orchestrator.experiment_config.engine_arguments`, which refuses one
     it does not thread. Every profile declares no layer until its owner reviews
     what its consumer reads.
@@ -642,6 +643,7 @@ def _walk_replay(
         num_players=num_players,
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
+        kill_cooldown_ticks=engine["kill_cooldown_ticks"],
     )
     policy: PolicyReconstruction | None = None
     if (
@@ -828,6 +830,7 @@ def _walk_replay(
             if experiment
             else "lowest_id",
             meeting_reset=experiment.meeting_reset if experiment else "preserve",
+            kill_cooldown_ticks=engine["kill_cooldown_ticks"],
         )
         post_events = tuple(raw_post_events)
         if config.verify_meeting_post_hashes:

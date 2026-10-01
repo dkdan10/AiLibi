@@ -23,7 +23,7 @@ import random
 
 from engine.entities import PlayerId, PlayerState, Role, TaskInstanceId, TaskState
 from engine.rng import EngineRng
-from engine.world import Map, WorldState
+from engine.world import Map, WorldState, resolve_kill_cooldown
 
 
 def seed_initial_state(
@@ -33,6 +33,7 @@ def seed_initial_state(
     num_players: int,
     num_impostors: int = 1,
     tasks_per_crewmate: int = 1,
+    kill_cooldown_ticks: int | None = None,
 ) -> WorldState:
     """Build a deterministic initial :class:`WorldState` for one headless game.
 
@@ -66,15 +67,19 @@ def seed_initial_state(
     single crewmate cannot hold the same map task twice, so its instances
     must be distinct map tasks (overlap is allowed only ACROSS crewmates).
 
-    Cooldowns: only impostors carry a kill cooldown, seeded to
-    ``game_map.kill_cooldown_ticks`` at round start (DESIGN.md §3.4) — NOT 0.
-    A tick-1 spawn kill is therefore impossible: the opening kill obeys the
-    same cooldown cadence as every later one (the engine resets the cooldown
-    to ``kill_cooldown_ticks`` after each kill and decrements it per tick in
-    ``engine/tick.py``). Seeding to 0 granted a free, unwitnessed first kill in
-    half the games (audits/audit-2026-06-06-0632-gameplay-data.md gp-1).
+    Cooldowns: only impostors carry a kill cooldown, seeded at round start
+    (DESIGN.md §3.4) to ``kill_cooldown_ticks``, a recording's override, or to
+    ``game_map.kill_cooldown_ticks`` for ``None``
+    (:func:`engine.world.resolve_kill_cooldown`) — NOT 0. A tick-1 spawn kill
+    is therefore impossible: the opening kill obeys the same cooldown cadence as
+    every later one (the engine resets the cooldown to the same value after each
+    kill and decrements it per tick in ``engine/tick.py``). Seeding to 0 granted
+    a free, unwitnessed first kill in half the games
+    (audits/audit-2026-06-06-0632-gameplay-data.md gp-1). An invalid
+    ``kill_cooldown_ticks`` raises before anything is built.
     """
 
+    cooldown = resolve_kill_cooldown(game_map, kill_cooldown_ticks)
     if num_players < 2:
         raise ValueError(f"num_players must be at least 2, got {num_players}")
     if num_impostors < 1:
@@ -104,13 +109,11 @@ def seed_initial_state(
         spawn_room=game_map.spawn.room,
     )
     # Round-start kill cooldown (DESIGN.md §3.4; audit gp-1): seed every
-    # impostor to the map's ``kill_cooldown_ticks`` — read off ``game_map``,
-    # never a literal — so the first kill obeys the same cadence as every later
-    # one and a tick-1 spawn kill is impossible. The engine already resets to
-    # this value after each kill and decrements per tick (``engine/tick.py``).
-    cooldowns: dict[PlayerId, int] = {
-        pid: game_map.kill_cooldown_ticks for pid in impostor_ids
-    }
+    # impostor to the resolved cooldown — the recorded override, else the map's
+    # value, never a literal — so the first kill obeys the same cadence as every
+    # later one and a tick-1 spawn kill is impossible. The engine resets to the
+    # same value after each kill and decrements per tick (``engine/tick.py``).
+    cooldowns: dict[PlayerId, int] = {pid: cooldown for pid in impostor_ids}
     tasks = _build_tasks(
         seed=seed,
         game_map=game_map,

@@ -36,8 +36,9 @@ The profile reads recordings that carry experiment settings.
 setting in :data:`eval.recorded_settings.READABLE_SETTINGS`. The check reads only
 the living impostors after each advance and each applied meeting, plus the
 recorded ``game_over`` row, so each of those settings reaches it through the
-walk: the engine settings through the engine-arguments helper (which refuses one
-it does not thread), the meeting reset through the walk's applied meetings, and
+walk: the engine settings through the engine-arguments helper at the seeding,
+every advance and every applied meeting (it refuses one it does not thread), the
+meeting reset through the walk's applied meetings, and
 the tactical, meeting and trigger settings only as the recorded actions and
 meeting rows it replays. Any other recorded setting, a settings format other
 than the first, and temporal delivery are refused before the first advance,

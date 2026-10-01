@@ -80,6 +80,7 @@ export interface ExperimentConfigView {
   report_body_handle_version?: 1 | null;
   ballot_kill_row_version?: 1 | null;
   impostor_ballot_version?: 1 | null;
+  kill_cooldown_ticks?: number | null;
 }
 
 export interface TacticalPolicyView {

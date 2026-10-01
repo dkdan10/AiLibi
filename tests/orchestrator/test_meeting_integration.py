@@ -479,6 +479,7 @@ def _seed_meeting_setup(
         num_players: int,
         num_impostors: int = 1,
         tasks_per_crewmate: int = 1,
+        kill_cooldown_ticks: int | None = None,
     ) -> WorldState:
         return state_with_body
 
@@ -731,6 +732,7 @@ class TestHeadlessGameMeetingDispatch:
             num_players: int,
             num_impostors: int = 1,
             tasks_per_crewmate: int = 1,
+            kill_cooldown_ticks: int | None = None,
         ) -> WorldState:
             return state_pre
 
@@ -2115,6 +2117,7 @@ def _two_body_meeting_setup(
         num_players: int,
         num_impostors: int = 1,
         tasks_per_crewmate: int = 1,
+        kill_cooldown_ticks: int | None = None,
     ) -> WorldState:
         return state_with_bodies
 
@@ -2416,6 +2419,7 @@ def _emergency_scenario_setup(
         num_players: int,
         num_impostors: int = 1,
         tasks_per_crewmate: int = 1,
+        kill_cooldown_ticks: int | None = None,
     ) -> WorldState:
         return state
 
@@ -3233,6 +3237,7 @@ class TestMeetingOutcomeAnnouncementPayload:
             num_players: int,
             num_impostors: int = 1,
             tasks_per_crewmate: int = 1,
+            kill_cooldown_ticks: int | None = None,
         ) -> WorldState:
             return state_with_body
 

@@ -6,16 +6,18 @@ layer it names in ``threaded_layers`` (:mod:`eval.replay_walk`). That is a
 statement about layers. An instrument reviewed for the wave also states, field
 by field, which recorded settings it reads: a subset of
 :data:`READABLE_SETTINGS`, the wave's eight fields plus the engine's
-task-redistribution rule, under the first settings format.
+task-redistribution rule and its recorded kill cooldown, under the first
+settings format.
 :func:`read_recorded_settings` wraps the instrument's walk and refuses every
 other recorded setting at the walk's first tick, before its first advance,
 naming the reader and the field. Why each named field is read, and why a field
 a reader leaves out is left out, is in that instrument's own module docstring.
 
-The walk still threads what it reads: engine settings reach every advance
-through :func:`orchestrator.experiment_config.engine_arguments`, which refuses
-an engine setting it does not thread, and the meeting reset reaches every
-applied meeting. This module adds no threading; it only refuses.
+The walk still threads what it reads: engine settings reach the seeding, every
+advance and every applied meeting through
+:func:`orchestrator.experiment_config.engine_arguments`, which refuses an engine
+setting it does not thread, and the meeting reset reaches every applied meeting.
+This module adds no threading; it only refuses.
 """
 
 from __future__ import annotations
@@ -31,12 +33,14 @@ from orchestrator.experiment_config import (
     normalize_experiment_config,
 )
 
-#: The most a reviewed instrument may read: the Stage-B wave's eight fields and
-#: the engine's task-redistribution rule. Every other recorded setting, a
-#: settings format other than the first, and temporal delivery stay refused.
+#: The most a reviewed instrument may read: the Stage-B wave's eight fields, the
+#: engine's task-redistribution rule and its recorded kill cooldown. Every other
+#: recorded setting, a settings format other than the first, and temporal
+#: delivery stay refused.
 READABLE_SETTINGS: Final[frozenset[str]] = frozenset(
     {
         "redistribution_policy",
+        "kill_cooldown_ticks",
         "vent_witness_rule",
         "vent_exit_policy",
         "vent_entry_policy",

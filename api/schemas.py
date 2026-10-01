@@ -1455,6 +1455,7 @@ class ExperimentConfigView(_FrozenView):
     report_body_handle_version: Literal[1] | None = None
     ballot_kill_row_version: Literal[1] | None = None
     impostor_ballot_version: Literal[1] | None = None
+    kill_cooldown_ticks: int | None = None
 
 
 class TacticalPolicyView(_FrozenView):

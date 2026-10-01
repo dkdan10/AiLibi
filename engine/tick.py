@@ -52,7 +52,7 @@ from engine.rules import (
     resolve_vent,
     resolve_win_conditions,
 )
-from engine.world import Map, WorldState
+from engine.world import Map, WorldState, resolve_kill_cooldown
 from engine.visibility import compute_visibility_for_player
 
 RedistributionPolicy: TypeAlias = Literal["lowest_id", "least_remaining_work"]
@@ -393,7 +393,11 @@ def _apply_kill(
     action: KillAction,
     *,
     redistribution_policy: RedistributionPolicy = "lowest_id",
+    kill_cooldown_ticks: int | None = None,
 ) -> tuple[WorldState, KilledEvent]:
+    # The killer restarts at the recorded cooldown, else the map's; resolved
+    # first, so an invalid value raises before anything is applied.
+    cooldown = resolve_kill_cooldown(game_map, kill_cooldown_ticks)
     body, event = resolve_kill(state, action)
     if body.id in state.bodies:
         raise ActionRejectedError(f"body id already exists: {body.id}")
@@ -410,7 +414,7 @@ def _apply_kill(
     bodies = dict(state.bodies)
     bodies[body.id] = body
     cooldowns = dict(state.cooldowns)
-    cooldowns[action.actor] = game_map.kill_cooldown_ticks
+    cooldowns[action.actor] = cooldown
     # Dead-crewmate task rule, first step (DESIGN.md §3.5 states the ``drop``
     # form): drop the killed player's incomplete task *instances* (under
     # ``redistribute`` the step below re-keys them) so the crew win check counts only
@@ -576,7 +580,9 @@ def _apply_action(
     *,
     redistribution_policy: RedistributionPolicy = "lowest_id",
     vent_witness_rule: VentWitnessRule = "both_rooms",
+    kill_cooldown_ticks: int | None = None,
 ) -> tuple[WorldState, EngineEvent]:
+    resolve_kill_cooldown(game_map, kill_cooldown_ticks)
     if state.phase != "PLAY":
         raise ActionRejectedError(f"cannot apply gameplay action during {state.phase}")
     if isinstance(action, MoveAction):
@@ -584,10 +590,12 @@ def _apply_action(
     if isinstance(action, DoTaskAction):
         return _apply_do_task(state, game_map, action)
     if isinstance(action, KillAction):
-        if redistribution_policy == "lowest_id":
-            return _apply_kill(state, game_map, action)
         return _apply_kill(
-            state, game_map, action, redistribution_policy=redistribution_policy
+            state,
+            game_map,
+            action,
+            redistribution_policy=redistribution_policy,
+            kill_cooldown_ticks=kill_cooldown_ticks,
         )
     if isinstance(action, VentAction):
         return _apply_vent(state, game_map, action, vent_witness_rule=vent_witness_rule)
@@ -612,6 +620,7 @@ def advance_tick(
     rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
     redistribution_policy: RedistributionPolicy = "lowest_id",
     vent_witness_rule: VentWitnessRule = "both_rooms",
+    kill_cooldown_ticks: int | None = None,
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Advance one engine tick using the DESIGN.md §3.1 seven-step loop.
 
@@ -627,7 +636,11 @@ def advance_tick(
     ``vent_witness_rule`` (:data:`VentWitnessRule`) selects who witnesses a
     vent action; an unknown value raises before any action applies. It changes
     only the witness lists on vent events, never the state, so the state hash
-    cannot tell which rule a tick ran under."""
+    cannot tell which rule a tick ran under.
+
+    ``kill_cooldown_ticks`` is the cooldown a killer restarts at
+    (:func:`engine.world.resolve_kill_cooldown`: ``None`` is the map's value);
+    an invalid value raises before any action applies."""
 
     if state.phase != "PLAY":
         raise ValueError(f"cannot advance tick during {state.phase}")
@@ -635,6 +648,7 @@ def advance_tick(
         raise ValueError(f"unknown redistribution policy: {redistribution_policy!r}")
     if vent_witness_rule not in get_args(VentWitnessRule):
         raise ValueError(f"unknown vent witness rule: {vent_witness_rule!r}")
+    resolve_kill_cooldown(game_map, kill_cooldown_ticks)
     if (
         redistribution_policy != "lowest_id"
         and game_map.dead_task_rule != "redistribute"
@@ -656,6 +670,7 @@ def advance_tick(
                 action,
                 redistribution_policy=redistribution_policy,
                 vent_witness_rule=vent_witness_rule,
+                kill_cooldown_ticks=kill_cooldown_ticks,
             )
             events.append(event)
             if event.type == "Killed":

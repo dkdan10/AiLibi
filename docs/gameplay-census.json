@@ -17,6 +17,7 @@
     "format_version": "not read: a serialization version, not a game rule",
     "impostor_ballot_version": "not read: an instructed ballot framing; the tally does not enforce it, so no cell is forced by it",
     "investigation_version": "not read: moves idle crewmates; no cell is forced by it",
+    "kill_cooldown_ticks": "read as a value by: the length of the grace window, and the value the kill cooldown cell checks every cooldown write against",
     "meeting_reset": "read by: meeting_regroup",
     "post_meeting_retarget": "not read: retargets impostors after a meeting; no cell is forced by it",
     "public_account_version": "not read: changes what a meeting renders; no cell is forced by it",
@@ -380,6 +381,24 @@
         "scope": null,
         "title": "Surfacings in place with a crewmate arriving before the walk-out"
       },
+      "kill_cooldowns_differing_from_recorded": {
+        "by_construction": "always",
+        "definition": "Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes.",
+        "denominator": 1349,
+        "guard": "always",
+        "heading": "The kill cooldown",
+        "in_scope": true,
+        "not_evaluable": 0,
+        "numerator": 0,
+        "rate": 0.0,
+        "reads": [
+          "state at round start",
+          "Killed",
+          "state after the meeting"
+        ],
+        "scope": null,
+        "title": "Kill cooldowns that differ from the recorded value"
+      },
       "kill_witness_button_calls_soon_after_regroup": {
         "by_construction": null,
         "definition": "Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped.",
@@ -400,7 +419,7 @@
       },
       "kills_in_grace_window_after_regroup": {
         "by_construction": null,
-        "definition": "Kills made on a tick after a regroup meeting no later than the map's kill cooldown, over all kills made between a regroup and the next meeting.",
+        "definition": "Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting.",
         "denominator": 0,
         "guard": "meeting_reset = hub_with_grace",
         "heading": "After a regroup",
@@ -1267,6 +1286,23 @@
         "scope": null,
         "title": "Ejected crewmate openers by trigger"
       },
+      "kill_cooldown_writes_by_writer": {
+        "counts": {
+          "after_kill": 849,
+          "round_start": 500
+        },
+        "definition": "The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup).",
+        "heading": "The kill cooldown",
+        "in_scope": true,
+        "not_evaluable": 0,
+        "reads": [
+          "state at round start",
+          "Killed",
+          "state after the meeting"
+        ],
+        "scope": null,
+        "title": "Kill cooldown writes by writer"
+      },
       "meetings_by_trigger": {
         "counts": {
           "emergency": 53,
@@ -1695,6 +1731,24 @@
         "scope": null,
         "title": "Surfacings in place with a crewmate arriving before the walk-out"
       },
+      "kill_cooldowns_differing_from_recorded": {
+        "by_construction": "always",
+        "definition": "Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes.",
+        "denominator": 1125,
+        "guard": "always",
+        "heading": "The kill cooldown",
+        "in_scope": true,
+        "not_evaluable": 0,
+        "numerator": 0,
+        "rate": 0.0,
+        "reads": [
+          "state at round start",
+          "Killed",
+          "state after the meeting"
+        ],
+        "scope": null,
+        "title": "Kill cooldowns that differ from the recorded value"
+      },
       "kill_witness_button_calls_soon_after_regroup": {
         "by_construction": null,
         "definition": "Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped.",
@@ -1715,7 +1769,7 @@
       },
       "kills_in_grace_window_after_regroup": {
         "by_construction": null,
-        "definition": "Kills made on a tick after a regroup meeting no later than the map's kill cooldown, over all kills made between a regroup and the next meeting.",
+        "definition": "Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting.",
         "denominator": 0,
         "guard": "meeting_reset = hub_with_grace",
         "heading": "After a regroup",
@@ -2580,6 +2634,23 @@
         "scope": null,
         "title": "Ejected crewmate openers by trigger"
       },
+      "kill_cooldown_writes_by_writer": {
+        "counts": {
+          "after_kill": 725,
+          "round_start": 400
+        },
+        "definition": "The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup).",
+        "heading": "The kill cooldown",
+        "in_scope": true,
+        "not_evaluable": 0,
+        "reads": [
+          "state at round start",
+          "Killed",
+          "state after the meeting"
+        ],
+        "scope": null,
+        "title": "Kill cooldown writes by writer"
+      },
       "meetings_by_trigger": {
         "counts": {
           "emergency": 43,
@@ -3011,6 +3082,24 @@
           "scope": null,
           "title": "Surfacings in place with a crewmate arriving before the walk-out"
         },
+        "kill_cooldowns_differing_from_recorded": {
+          "by_construction": "always",
+          "definition": "Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes.",
+          "denominator": 850,
+          "guard": "always",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldowns that differ from the recorded value"
+        },
         "kill_witness_button_calls_soon_after_regroup": {
           "by_construction": null,
           "definition": "Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped.",
@@ -3031,7 +3120,7 @@
         },
         "kills_in_grace_window_after_regroup": {
           "by_construction": null,
-          "definition": "Kills made on a tick after a regroup meeting no later than the map's kill cooldown, over all kills made between a regroup and the next meeting.",
+          "definition": "Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting.",
           "denominator": 0,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "After a regroup",
@@ -3893,6 +3982,23 @@
           "scope": null,
           "title": "Ejected crewmate openers by trigger"
         },
+        "kill_cooldown_writes_by_writer": {
+          "counts": {
+            "after_kill": 550,
+            "round_start": 300
+          },
+          "definition": "The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup).",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldown writes by writer"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 33,
@@ -4321,6 +4427,24 @@
           "scope": null,
           "title": "Surfacings in place with a crewmate arriving before the walk-out"
         },
+        "kill_cooldowns_differing_from_recorded": {
+          "by_construction": "always",
+          "definition": "Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes.",
+          "denominator": 275,
+          "guard": "always",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldowns that differ from the recorded value"
+        },
         "kill_witness_button_calls_soon_after_regroup": {
           "by_construction": null,
           "definition": "Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped.",
@@ -4341,7 +4465,7 @@
         },
         "kills_in_grace_window_after_regroup": {
           "by_construction": null,
-          "definition": "Kills made on a tick after a regroup meeting no later than the map's kill cooldown, over all kills made between a regroup and the next meeting.",
+          "definition": "Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting.",
           "denominator": 0,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "After a regroup",
@@ -5195,6 +5319,23 @@
           "scope": null,
           "title": "Ejected crewmate openers by trigger"
         },
+        "kill_cooldown_writes_by_writer": {
+          "counts": {
+            "after_kill": 175,
+            "round_start": 100
+          },
+          "definition": "The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup).",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldown writes by writer"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 10,
@@ -5623,6 +5764,24 @@
           "scope": null,
           "title": "Surfacings in place with a crewmate arriving before the walk-out"
         },
+        "kill_cooldowns_differing_from_recorded": {
+          "by_construction": "always",
+          "definition": "Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes.",
+          "denominator": 108,
+          "guard": "always",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldowns that differ from the recorded value"
+        },
         "kill_witness_button_calls_soon_after_regroup": {
           "by_construction": null,
           "definition": "Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped.",
@@ -5643,7 +5802,7 @@
         },
         "kills_in_grace_window_after_regroup": {
           "by_construction": null,
-          "definition": "Kills made on a tick after a regroup meeting no later than the map's kill cooldown, over all kills made between a regroup and the next meeting.",
+          "definition": "Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting.",
           "denominator": 0,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "After a regroup",
@@ -6485,6 +6644,23 @@
           "scope": null,
           "title": "Ejected crewmate openers by trigger"
         },
+        "kill_cooldown_writes_by_writer": {
+          "counts": {
+            "after_kill": 58,
+            "round_start": 50
+          },
+          "definition": "The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup).",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldown writes by writer"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 7,
@@ -6912,6 +7088,24 @@
           "scope": null,
           "title": "Surfacings in place with a crewmate arriving before the walk-out"
         },
+        "kill_cooldowns_differing_from_recorded": {
+          "by_construction": "always",
+          "definition": "Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes.",
+          "denominator": 116,
+          "guard": "always",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldowns that differ from the recorded value"
+        },
         "kill_witness_button_calls_soon_after_regroup": {
           "by_construction": null,
           "definition": "Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped.",
@@ -6932,7 +7126,7 @@
         },
         "kills_in_grace_window_after_regroup": {
           "by_construction": null,
-          "definition": "Kills made on a tick after a regroup meeting no later than the map's kill cooldown, over all kills made between a regroup and the next meeting.",
+          "definition": "Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting.",
           "denominator": 0,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "After a regroup",
@@ -7773,6 +7967,23 @@
           "scope": null,
           "title": "Ejected crewmate openers by trigger"
         },
+        "kill_cooldown_writes_by_writer": {
+          "counts": {
+            "after_kill": 66,
+            "round_start": 50
+          },
+          "definition": "The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup).",
+          "heading": "The kill cooldown",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state at round start",
+            "Killed",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Kill cooldown writes by writer"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 3,
@@ -7865,13 +8076,13 @@
     "by construction": "a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and the meeting or tick if it is not, and the page says 0 by construction instead of presenting a measured improvement.",
     "era": "the recorded settings a group of games shares: its experiment settings, its observation delivery version, its substrate-flag stamp and its prompt versions. Games of different eras are never pooled.",
     "fresh kill": "the impostor's own victim, killed at most 3 ticks earlier in the same room, with no meeting in between.",
-    "grace window": "the ticks after a regroup before the impostors' restarted kill cooldown runs out: from the tick after the meeting through the map's kill cooldown.",
+    "grace window": "the ticks after a regroup before the impostors' restarted kill cooldown runs out: from the tick after the meeting through the recorded kill cooldown, else the map's.",
     "in-vent cap": "4 ticks inside: under the look-and-wait exit an impostor must surface at this count.",
     "inferred-visible rooms": "the rooms an impostor inside a vent can infer it sees: the vent's own room and its map neighbours, or the own room alone while any sabotage is active. Never the engine's own visibility.",
     "n/a": "nothing to count, so no rate exists: either nothing of that kind happened, or the cell or table counts only games recorded with a setting these games were not recorded with.",
     "opener": "the player whose body report or button press opened a meeting; the opener speaks first.",
     "rebuttal": "a turn by a player who already spoke in the same meeting; the only such turn the meeting layer can produce is the bounded rebuttal.",
-    "regroup": "the optional meeting reset: when play resumes every survivor stands in the meeting room, corpses are cleared, no one is inside a vent and each impostor's kill cooldown restarts at the map's value.",
+    "regroup": "the optional meeting reset: when play resumes every survivor stands in the meeting room, corpses are cleared, no one is inside a vent and each impostor's kill cooldown restarts at the recorded kill cooldown, else the map's value.",
     "ticks inside": "the play ticks a vent trip lasted, counting again from zero at a meeting the trip spanned.",
     "trigger tick": "the play tick on which a meeting opened. Actions submitted for that tick after the one that opened the meeting are thrown away unexecuted.",
     "vent band": "the ejections whose ejected player such a vent-sighting flag names.",

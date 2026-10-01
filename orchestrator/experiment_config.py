@@ -63,6 +63,9 @@ class RecordedExperimentConfig(BaseModel):
     report_body_handle_version: Literal[1] | None = None
     ballot_kill_row_version: Literal[1] | None = None
     impostor_ballot_version: Literal[1] | None = None
+    # The kill cooldown an impostor restarts at, at round start, after each
+    # kill and at each regroup; ``None`` is the map's own value.
+    kill_cooldown_ticks: int | None = None
 
     @field_validator(
         "format_version",
@@ -81,6 +84,19 @@ class RecordedExperimentConfig(BaseModel):
     def _literal_versions_are_integers(cls, value: object) -> object:
         if value is not None and type(value) is not int:
             raise ValueError("experiment versions must be integer version numbers")
+        return value
+
+    @field_validator("kill_cooldown_ticks", mode="before")
+    @classmethod
+    def _cooldown_is_a_whole_positive_tick_count(cls, value: object) -> object:
+        """Refuse anything but a true integer of at least 1, before coercion."""
+
+        if value is None:
+            return value
+        if type(value) is not int:
+            raise ValueError("kill_cooldown_ticks must be an integer number of ticks")
+        if value < 1:
+            raise ValueError("kill_cooldown_ticks must be at least 1 tick")
         return value
 
     @model_validator(mode="after")
@@ -218,6 +234,7 @@ FIELD_LAYER: Final[Mapping[str, ConfigLayer]] = MappingProxyType(
         "report_body_handle_version": "orchestrator",
         "ballot_kill_row_version": "meeting",
         "impostor_ballot_version": "meeting",
+        "kill_cooldown_ticks": "engine",
     }
 )
 
@@ -228,6 +245,7 @@ OMITTED_AT_DEFAULT: Final[tuple[str, ...]] = (
     "report_body_handle_version",
     "ballot_kill_row_version",
     "impostor_ballot_version",
+    "kill_cooldown_ticks",
 )
 
 #: Every field and value that existed before the Stage-B wave. A walk profile's
@@ -299,10 +317,17 @@ def meeting_values(config: RecordedExperimentConfig) -> dict[str, object]:
 
 
 class EngineArguments(TypedDict):
-    """The ``advance_tick`` keyword arguments a recorded config selects."""
+    """The ``advance_tick`` keyword arguments a recorded config selects.
+
+    ``kill_cooldown_ticks`` also goes, from the same helper result, to the
+    seeding (``orchestrator.seeder.seed_initial_state``) and to every applied
+    meeting (``orchestrator.game.apply_meeting_result``), the two cooldown
+    writes outside the tick.
+    """
 
     redistribution_policy: Literal["lowest_id", "least_remaining_work"]
     vent_witness_rule: Literal["both_rooms", "physical"]
+    kill_cooldown_ticks: int | None
 
 
 #: The engine-layer fields :func:`engine_arguments` threads, in the order the
@@ -316,7 +341,8 @@ def engine_arguments(config: RecordedExperimentConfig | None) -> EngineArguments
     The live tick, the replay loader, the shared replay walk and the tactical
     lab take their advance keywords from here (an ``ast`` scan in the tests
     pins those four modules), so an engine-layer field reaches all of them or
-    none. A field :data:`FIELD_LAYER` assigns to the engine that this function
+    none. The live game, the loader and the walk also pass this result's
+    ``kill_cooldown_ticks`` to their seeding and to every meeting they apply. A field :data:`FIELD_LAYER` assigns to the engine that this function
     does not thread raises when set off its default, rather than re-simulating
     the default in its place: a witness list lives only in the events, so a
     site that dropped such a field could still reproduce every state hash.
