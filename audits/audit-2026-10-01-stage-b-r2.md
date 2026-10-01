@@ -986,3 +986,462 @@ over the 5 files changed since `F`. Proof: one planted scratch file per
 pattern, each scanned alone, fires its own pattern and exits 1 (the exact-value
 plant, gzip-compressed, also fires the prefix and one generic shape); the
 plants were deleted after the run.
+
+## 3. The probe (2026-10-01)
+
+### 3.1 Seeds 0-1, and the failed seed
+
+The sitting's 18 h window opened with the probe's first seed at
+2026-10-01T10:55:33Z; it closes at 2026-10-02T04:55:33Z. The pause file was
+absent. Seeds 0-1 recorded as one leg on the leg's two workers in the
+recording checkout at P, with the shell of 1.8 and the key passed by
+`uv run --env-file`:
+
+```
+<the 1.8 exports> uv run --env-file <key file> bash scripts/refresh_samples.sh \
+  --seeds 0,1 --expect-levers "" --experiment-config replays/candidates/stage-b-r2/experiment-config.json
+```
+
+It exited 0 at 11:06:27Z: "Refresh complete in 10m53s" (653 s), seed 0 in 646 s
+and seed 1 in 653 s, `$0.0000`, no retry and no `WARN` line in the run log.
+
+**Event: seed 1, a `(deadline_default)` re-record, cause logged as it
+happened.** The probe's validity gate failed `cost_and_provenance_exact`
+(`model provenance ['(deadline_default)', 'Qwen/Qwen3.6-27B'] != expected`),
+and `grep -l deadline_default` named seed 1. Seed 1 held one `failed_call` row
+of type `deadline_default` in its second meeting, at tick 29, whose message
+reads "opt_in turn (turn 4) defaulted (validation); p-6 submitted no turn",
+beside one `ValidationError` row at the same meeting and tick (an alibi claim
+whose route segments overlapped). It is round 1's seed-31 event again: the
+opt-in turn's answer failed validation and the turn fell back to a default
+instead of model output. Every conformance cell still read 0 on it. By 1.7's
+failed-seed rule the husk was moved out of the set, outside the repository,
+and seed 1 alone was re-recorded at P (11:07:37Z to 11:14:07Z, "Refresh
+complete in 6m29s", 389 s, exit 0, no `failed_call` row). The husk had spent 45
+calls, 282,575 input and 12,531 output at `0.0000`; that spend is counted in
+the round's spend (5.2) and is not in the set.
+
+### 3.2 The probe's gates
+
+Run in the delivery checkout on its copy of seeds 0-1, in a bare shell (0
+`AILIBI_*` exports), with the declared file's sha256 re-checked
+(`0c02fa61…5c192b`):
+
+| gate | result |
+|---|---|
+| `validity_gate.py <dir> --expected-model Qwen/Qwen3.6-27B --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <config> --expected-seeds 0-1 --require-one-recording-sha` | exit 0; all ten checks PASS (first run, before the re-record: exit 1 on `cost_and_provenance_exact`, 3.1) |
+| `bash scripts/verify_samples.sh <dir>` | exit 0; "All 2 samples verified clean." |
+| the golden's directory walk | exit 0; 7 meetings, 85 prompts, 0 not reproduced, 0 miscounted meetings |
+| census `--set-dir <dir> --json-stdout` | exit 0; through the readings command with `--after`, every Conf. cell reads 0, and the cooldown cell 0/21 with writes at round start 4, after a kill 9 and at a regroup 8 |
+| scorecard `--set-dir <dir> --json-stdout` | exit 0 |
+| `measure_baseline.py <dir> --honesty --json` | exit 0; no raise |
+| `scan_recording_packets.py <dir>` | exit 0 |
+| `grep -l deadline_default` | 0 files |
+| MANIFEST | one `git_sha`, `43b5ee45` (P) |
+| the key scan | 0 over the 10 files changed since `F` |
+
+Seeds 0-1 held 7 meetings and a fired rebuttal in each of them
+(`meetings_with_repeat_speaker` 7/7, `rebuttals_differing_from_selector` 0/7),
+so the probe did not extend, and the batches ran the first list of 1.8. The
+counts of two games are no reading and none is drawn here.
+
+### 3.3 The re-projection after the probe
+
+By 1.6's rule over seeds 0-1 (s9's seeds 0-1: 78 calls, 475,960 input and
+19,093 output), with the summed recording wall of the probe and the re-record:
+
+| limit | round 2 / s9, seeds 0-1 | projected | share of the 90% stop |
+|---|---|---|---|
+| model calls | 85 / 78 | 1,846 | 73.3% |
+| input tokens | 546,811 / 475,960 | 11,317,331 | 71.9% |
+| output tokens | 23,202 / 19,093 | 513,962 | 76.1% |
+| recording wall | 1,042 s / 2 seeds x 50 | 26,050 s = 7.24 h | against the 10.8 h stop |
+| marginal cost | every `cost_usd` is 0.0 | | |
+
+Every figure was inside its stop. The probe's projected wall is 7.24 h, so 1.5
+times it (10.86 h) lies past the 10.8 h stop, which binds first, as in round 1;
+the probe leg's own 653 s alone would have projected 4.53 h. For context only:
+over round 1's seeds 0-1 the round ran 1.31x the calls, 1.31x the input and
+1.25x the output. Before the re-record, with the husk still in the set, the
+same rule read calls 2,020 (80.1%), input 12,555,817 (79.7%) and output 578,468
+(85.7%), also inside every stop.
+
+The probe was checkpointed as `0509b45d` after a count-only key scan.
+
+## 4. The batches (2026-10-01, one sitting)
+
+### 4.1 The legs
+
+Each batch was `uv run --env-file <key file> bash scripts/refresh_samples.sh
+--seeds <the batch> --expect-levers "" --experiment-config
+replays/candidates/stage-b-r2/experiment-config.json` with the 1.8 exports, in
+the recording checkout still detached at P (`43b5ee45`); the untracked declared
+copy read `0c02fa61…5c192b` before every leg (the leg runner refuses a
+mismatch), and the pause file was checked before every leg and was absent each
+time, so the sitting never paused. Wall is the recorder's own "Refresh
+complete in" figure; calls and tokens are the tally of the leg's seeds as they
+stand in the committed set. No leg ran pytest or `check.sh` in the recording
+checkout, and no commit was made there.
+
+| leg | seeds | UTC | recording wall | calls | input | output | checkpoint |
+|---|---|---|---|---|---|---|---|
+| probe | 0-1 | 10:55:33-11:06:27 | 653 s | 85 (seed 1 as re-recorded) | 546,811 | 23,202 | `0509b45d` |
+| seed 1 again | 1 | 11:07:37-11:14:07 | 389 s | (in the probe) | | | `0509b45d` |
+| batch 1 | 2-6 | 11:15:51-11:31:17 | 924 s | 135 | 831,947 | 39,026 | `e720632d` |
+| batch 2 | 7-11 | 11:32:41-11:49:13 | 990 s | 152 | 891,880 | 38,876 | `415ba1fe` |
+| batch 3 | 12-16 | 11:50:28-12:08:31 | 1,081 s | 130 | 769,106 | 35,277 | `2af09014` |
+| batch 4 | 17-21 | 12:09:24-12:32:03 | 1,358 s | 168 | 1,033,852 | 47,287 | `51924fc2` |
+| batch 5 | 22-26 | 12:32:57-12:58:29 | 1,529 s | 162 | 1,000,010 | 46,729 | `eac32e55` |
+| batch 6 | 27-31 | 12:59:35-13:12:09 | 751 s | 115 | 682,603 | 33,225 | `eb2d1eca` |
+| batch 7 | 32-36 | 13:13:12-13:29:49 | 994 s | 145 (seed 36 as re-recorded) | 903,622 | 41,112 | `fd577159` |
+| seed 36 again | 36 | 13:30:44-13:34:55 | 247 s | (in batch 7) | | | `fd577159` |
+| batch 8 | 37-41 | 13:36:19-13:56:22 | 1,199 s | 173 | 1,068,824 | 47,817 | `fd5868d1` |
+| batch 9 | 42-46 | 13:57:26-14:24:26 | 1,616 s | 114 | 684,873 | 33,487 | `3004a3e2` |
+| batch 10 | 47-49 | 14:26:15-14:46:15 | 1,196 s | 123 | 774,352 | 32,232 | `a8e22538` |
+| **the round** | 0-49 | | **12,927 s** | **1,502** | **9,187,880** | **418,270** | |
+
+After every leg, in the delivery checkout and a bare shell (0 `AILIBI_*`
+exports): the validity gate with the declared config and `--expected-seeds
+0-N`, `verify_samples.sh`, the golden's walk, the census (every Conf. cell read
+0 at every checkpoint, the cooldown cell at all three writers), the scorecard
+fold, `measure_baseline.py --honesty` (no raise at any checkpoint),
+`scan_recording_packets.py`, the tally, the re-projection and the count-only
+key scan (0 at every push) all exited 0, except the two gate failures of 4.2,
+each cleared by the failed-seed rule before its checkpoint was committed. Every
+checkpoint's MANIFEST named the one sha `43b5ee45`.
+
+### 4.2 Events
+
+1. **Seed 1, a `(deadline_default)` re-record** (3.1).
+2. **Seed 36, a `(deadline_default)` re-record, cause logged as it
+   happened.** Batch 7 exited 0, but its gate failed
+   `cost_and_provenance_exact` in the same way: seed 36 held one `failed_call`
+   row of type `deadline_default` in its third meeting, at tick 42 ("opt_in
+   turn (turn 2) defaulted (validation); p-7 submitted no turn"), beside a
+   `ValidationError` row at the same meeting and tick (an alibi claim whose
+   route segments overlapped). Every conformance cell still read 0 on it. The
+   husk was moved outside the repository, and seed 36 alone was re-recorded at
+   P (247 s, exit 0, no `failed_call` row) before the checkpoint was committed.
+   The husk had spent 41 calls, 255,772 input and 10,291 output at `0.0000`.
+3. **One retry, no stall.** In batch 9, seed 45's first attempt failed on an
+   empty completion (`RuntimeError: Featherless response carried no choices`,
+   which the client refuses to record), and the recorder's second attempt
+   recorded it (seed 45 took 1,190 s). This is the transport retry the
+   8-attempt budget exists for; it did not survive the budget, so it is no
+   stop. The failed attempt's stage was discarded, so its calls are in no
+   committed byte and no tally (8). No leg went 45 minutes without a completed
+   seed (the longest seed took 1,190 s), the pause file never existed, and no
+   other recorder log carries a `WARN` line or a refusal. Across the 50
+   committed seeds there is no `failed_call` row at all.
+4. **A stale inventory row at one checkpoint.** At `e720632d` the commit
+   helper's pattern matched two rows of `docs/artifacts.md`, refused to rewrite
+   either, and the commit kept the 63-file candidates row (offline
+   `verify_ml_evidence.py` fails that row at that commit). The helper was
+   corrected to match the candidates row alone and to stop before committing on
+   a failed inventory check; every later checkpoint re-derived the row and
+   passed it. No recorded byte was involved.
+5. **No stop fired.** Every `cost_usd` is `0.0000`, and no re-projection came
+   near a stop (4.3).
+
+### 4.3 The re-projection at every checkpoint
+
+By 1.6's rule; each figure is the projected leg total and its share of the
+90% stop. The pre-registered 10-seed re-projection is the first checkpoint
+holding at least 10 seeds, seeds 0-11.
+
+| checkpoint | seeds | calls | input | output | summed wall | projected wall |
+|---|---|---|---|---|---|---|
+| the probe | 0-1 | 1,846 (73.3%) | 11,317,331 (71.9%) | 513,962 (76.1%) | 1,042 s | 7.24 h |
+| batch 1 | 0-6 | 1,620 (64.3%) | 9,965,360 (63.3%) | 440,976 (65.3%) | 1,966 s | 3.90 h |
+| **batch 2, the 10-seed re-projection** | 0-11 | 1,439 (57.1%) | 8,576,341 (54.5%) | 382,786 (56.7%) | 2,956 s | 3.42 h |
+| batch 3 | 0-16 | 1,529 (60.7%) | 9,243,370 (58.7%) | 412,618 (61.1%) | 4,037 s | 3.30 h |
+| batch 4 | 0-21 | 1,499 (59.5%) | 9,094,958 (57.7%) | 410,872 (60.9%) | 5,395 s | 3.41 h |
+| batch 5 | 0-26 | 1,512 (60.0%) | 9,223,760 (58.6%) | 419,818 (62.2%) | 6,924 s | 3.56 h |
+| batch 6 | 0-31 | 1,453 (57.7%) | 8,862,360 (56.3%) | 405,470 (60.1%) | 7,675 s | 3.33 h |
+| batch 7 | 0-36 | 1,468 (58.3%) | 8,982,608 (57.0%) | 413,450 (61.3%) | 8,916 s | 3.35 h |
+| batch 8 | 0-41 | 1,486 (59.0%) | 9,084,983 (57.7%) | 415,957 (61.6%) | 10,115 s | 3.34 h |
+| batch 9 | 0-46 | 1,449 (57.5%) | 8,815,856 (56.0%) | 405,771 (60.1%) | 11,731 s | 3.47 h |
+| batch 10 | 0-49 | 1,502 (59.6%) | 9,187,880 (58.3%) | 418,270 (62.0%) | 12,927 s | 3.59 h |
+
+Beside it, for context only: over round 1's same seeds the round ran 1.31x
+round 1's calls at the probe, 0.93x at seeds 0-11, and 0.965x the calls,
+0.983x the input and 0.965x the output over all 50.
+
+## 5. The round's gates, and its spend
+
+### 5.1 The gates on the whole round
+
+In the delivery checkout, bare shell, at the recorded bytes:
+
+| gate | result |
+|---|---|
+| `validity_gate.py <round> --expected-model Qwen/Qwen3.6-27B --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <config> --expected-seeds 0-49 --require-one-recording-sha` | exit 0, ten checks PASS: `all_games_reach_game_over` (50/50), `meeting_rate_and_resolution` (1.0; 117 resolved, 0 unresolved), `no_duplicate_meeting_rows` (0 of 117), `no_tick_1_kills` (0), `no_friendly_fire_kills` (0), `no_betrayal_ballots_or_accusations` (0 of 691), `no_railroaded_crew_ejections` (0 of 2,341), `no_dangling_primary_reason_id` (0 of 691), `cost_and_provenance_exact` (one model, four prompt versions, the declared config, seeds 0-49, one sha), `byte_identical_reconstruction` (0 drifted) |
+| proof: the same gate with `--expected-seeds 0-50` | exit 1: `cost_and_provenance_exact`, "missing [50]" for the replay files and the MANIFEST rows |
+| proof: round 1 against this round's config | exit 1: `cost_and_provenance_exact`, 50 lines naming the `kill_cooldown_ticks` round 1 did not record |
+| `bash scripts/verify_samples.sh` (bare), then once per set directory | bare: exit 0, four sets clean (the two sample sets and both rounds); `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i` (150), `ml_corpus/4p1i`, round 1 and this round: each exit 0, all clean |
+| `build_sample_report.py --sample-dir <dir> --check`, each of the six | exit 0 each; this round's report gz is the recorder's post-step rebuild through `eval/report_io.py` |
+| the golden's directory walk | exit 0: 50 seeds, 117 meetings, 1,502 prompts, 0 not reproduced, 0 miscounted meetings; retired-guard census (117, 691, 0, 0) |
+| census `--set-dir <round> --json-stdout` | exit 0: every Conf. cell reads 0 (6.2) |
+| scorecard `--set-dir <round> --json-stdout` | exit 0 |
+| `measure_baseline.py <round> --honesty --json` | exit 0; no raise |
+| `scan_recording_packets.py <round>` | exit 0 |
+| `grep -l deadline_default` over the 50 replays | 0 files |
+| MANIFEST columns | 50 rows, seeds 0-49: model `Qwen/Qwen3.6-27B`, policy `fsm-default`, `git_sha` `43b5ee45`, cost `0.0000`, the four prompt versions; the flags column equals s9's (one value on every row of each) |
+| proof: the round pooled through the census (`fold_set` then `pool`) with s9, and with round 1 | each folds alone; pooled, `GameplayCensusEraError`, "two eras differ in settings; the census never pools across eras", both times |
+| `git merge-base --is-ancestor 43b5ee45 43b5ee45` (P against the MANIFEST's one sha); `git merge-base --is-ancestor e87403b7 43b5ee45` (`F` against P) | exit 0 each. Proof: the head `a8e22538` in place of P, exit 1 |
+| the pre-registration section at P against the head | 668 lines, 0 differing (the comparison drops the blank line that separates the section from the next heading). Proof: "0.30" edited to "0.31" in one reading of a scratch copy, 2 differing lines, exit 1 |
+
+The freeze held: `git log --oneline e87403b7..HEAD` and `e87403b7..origin/main`
+print nothing over `engine agents meetings observation orchestrator eval api
+scripts llm` (`main` is still at `e87403b7`); proof, the same pathspec over
+`f937dfaa..e87403b7` prints 1 commit, the kill-cooldown card's. `git diff --stat
+e87403b7..HEAD` is empty over `replays/samples`, `replays/ml_corpus`, round 1's
+directory, `tests/fixtures`, `training`, `api`, `frontend` and the scorecard
+and census documents.
+
+### 5.2 The spend against the ceilings
+
+Spent, including the two husks (the set's own tally is `1502 9187880 418270
+0.0`):
+
+| limit | the set | the two husks | spent | ceiling | share | 90% stop |
+|---|---|---|---|---|---|---|
+| model calls | 1,502 | 86 | 1,588 | 2,800 | 56.7% | 2,520 |
+| input tokens | 9,187,880 | 538,347 | 9,726,227 | 17,500,000 | 55.6% | 15,750,000 |
+| output tokens | 418,270 | 22,822 | 441,092 | 750,000 | 58.8% | 675,000 |
+| recording wall | | | 12,927 s (3.59 h), both re-records included | 12 h | 29.9% | 10.8 h |
+| marginal cost | $0.0000 | $0.0000 | $0.0000 | $0.00 | | any non-zero |
+
+The round ran in one sitting: its 18 h window opened at 10:55:33Z, and the last
+seed finished at 14:46:15Z, 3 h 50 min 42 s into it. The round held 117 meetings
+against s9's 145 and round 1's 124 on the same seeds, at 12.84 calls and
+78,529 input tokens per meeting. The husks' figures come from the same tally
+over the husk files, kept outside the repository. Outside the tally, as for
+s9 and round 1: the husks' 5 `failed_call` rows carry 13,511 input and 1,919
+output tokens, and the discarded first attempt of seed 45 left no bytes to
+count.
+
+### 5.3 Nothing publishes, and the key
+
+- `git diff --stat e87403b7..HEAD` over the committed sets, round 1, fixtures,
+  training, `api`, `frontend` and the scorecard and census documents is empty
+  (5.1). `publish_process_scorecard.py --check`, `publish_gameplay_census.py
+  --check` and `check_doc_facts.py` exit 0, and `scripts/check_doc_facts.py`,
+  which holds `_LADDER_TIP_AUDIT`, is unchanged since `F`.
+- The demo bundle built at `F` (a worktree detached at `e87403b7`) and at the
+  head, each with the sample replays' mtimes pinned to the same instant (the
+  loader takes `created_at` from the file mtime), holds 194 files each, and
+  `diff -r` exits 0.
+- The key scan read 0 at every push, over every file changed since `F`. The
+  key file was deleted after the last push; the card's Results records when.
+
+## 6. The assessment
+
+The round-2 column is this round alone, computed only from 1.9's named sources
+and never pooled with another column: the census and scorecard `--set-dir
+replays/candidates/stage-b-r2/9p2i --json-stdout`, `measure_baseline.py
+replays/candidates/stage-b-r2/9p2i --honesty --json` and the validity gate's
+`no_betrayal_ballots_or_accusations`. Each reading is what 1.12's command,
+unchanged, prints:
+
+```
+python3 readings.py census-stage-b-r2.json honesty-stage-b-r2.json --after --round-3-rule   # exit 0
+```
+
+Rates carry Wilson 95% intervals. One key separates rounds 1 and 2, but both
+are single hosted recordings, so a difference between them is the dial's only
+within hosted-generation noise; only the Conf. cells and the lab's rows (2.6)
+attribute a mechanism.
+
+### 6.1 The process cells
+
+The scorecard's rows. They move with the game, and none is a gate.
+
+| row | s9 at baseline 9 | round 1 | round 2 |
+|---|---|---|---|
+| games; meetings; ballots (EJECT, SKIP) | 50; 145; 845 (496, 349) | 50; 124; 717 (387, 330) | 50; 117; 691 (410, 281) |
+| 1 grounded decisions, EJECT | 494/496 = 0.996 (0.99-1.00) | 384/387 = 0.992 (0.98-1.00) | 407/410 = 0.993 (0.98-1.00) |
+| 1 grounded decisions, SKIP | 79/349 = 0.226 (0.19-0.27) | 54/330 = 0.164 (0.13-0.21) | 44/281 = 0.157 (0.12-0.20) |
+| 1 grounded decisions, all ballots | 573/845 = 0.678 (0.65-0.71) | 438/717 = 0.611 (0.57-0.65) | 451/691 = 0.653 (0.62-0.69) |
+| 2 EJECTs deviating from the voter's own suspicion argmax | 31/413 = 0.075 (0.05-0.10) | 67/275 = 0.244 (0.20-0.30) | 65/292 = 0.223 (0.18-0.27) |
+| 2 role-correct, followers vs deviators (chance) | 359/382 vs 3/31 (0.298) | 200/208 vs 5/67 (0.327) | 215/227 vs 4/65 (0.340) |
+| 3 manufactured contradiction | 0/17, all 17 not evaluable | 0/22, all 22 not evaluable | 1/15, 14 not evaluable |
+| 4 unexplained decisions | 5/845 = 0.006 | 7/717 = 0.010 | 11/691 = 0.016 (0.01-0.03) |
+| 5 evidence-quality mix over ejections | contradiction flag 2, first hand 16, hearsay 2, vent flag 70 (of 90) | 2, 27, 1, 24 (of 54) | 2, 39, 1, 24 (of 66) |
+| 6 rationale faithfulness (tokens) | 708/708 (137 not evaluable) | 588/588 (129 not evaluable) | 580/580 (111 not evaluable) |
+| 7 agent-authored share | 841/845 = 0.995 (invalid target 3, teammate coerced 1) | 701/717 = 0.978 (teammate coerced 16) | 674/691 = 0.975 (invalid target 1, teammate coerced 16) |
+| 8 wrong-but-believable, reported and never penalised | 119/496 = 0.240 | 178/387 = 0.460 | 189/410 = 0.461 |
+| 9 role-correct ejection, reported and never a gate | 81/90 = 0.900 | 39/54 = 0.722 | 44/66 = 0.667 (0.55-0.77) |
+
+### 6.2 Each arm: its Conf. cells, then its reading
+
+**Every Conf. cell reads 0 as built**, the cooldown cell included. The census
+exits non-zero on any breach; it exited 0 on the round, and the readings
+command with `--after` exited 0 with no Conf. miss.
+
+| arm | Conf. cell | s9 at baseline 9 | round 1 | round 2 |
+|---|---|---|---|---|
+| physical witness | exits seen only from the room left | 9/85 | 0/72 | **0/72** |
+| physical witness | vent-band ejections resting only on them | 8/70 | 0/24 | **0/24** |
+| look and wait | surfacings before the cap with a non-teammate in the inferred-visible set | 52/85 | 0/72 | **0/72** |
+| look and wait | trips over the cap | 0/0 | 0/63 | **0/66** |
+| own fresh kill | entries not after the impostor's own fresh kill | 13/105 | 0/142 | **0/140** |
+| full reset | stale report meetings | 43/135 | 0/118 | **0/114** |
+| full reset | reported corpses older than the last regroup | 0/0 | 0/68 | **0/64** |
+| full reset | play resumes with an impostor in a vent | 10/107 | 0/110 | **0/102** |
+| full reset | play resumes with a corpse | 60/107 | 0/110 | **0/102** |
+| full reset | kills in the grace window after a regroup | 0/0 | 0/139 (T+1 to T+4) | **0/109** (T+1 to T+6) |
+| one reply | rebuttals the selector would not have chosen | 0/0 | 0/121 | **0/117** |
+| one reply | meetings with a second repeat-speaker turn | 0/145 | 0/124 | **0/117** |
+| body handle | report openings carrying the kill-tick handle | 135/135 | 0/118 | **0/114** |
+| kill row | own-kill rows naming a teammate or held by a non-witness | 0/0 | 0/4 | **0/23** |
+| impostor ballot | recorded teammate ballot targets | 0/210 | 0/203 | **0/200** |
+| impostor ballot | the gate's `no_betrayal_ballots_or_accusations` | 0 of 845 | 0 of 717 | **0 of 691** |
+| self-report off | impostor openers | 0/145 | 0/124 | **0/117** |
+
+The two full-reset cells no named source carries (false resume perceptions,
+the regroup notice) stay **not carried**: what stands behind them is the one
+resume helper and the notice fold, re-rendered byte-equal by the golden's walk
+over all 1,502 recorded prompts.
+
+**Physical witness.** Conf. cells only; both read 0. As built.
+
+**Look and wait.** Exits seen from the exit room: 53/85 = 0.624 (0.52-0.72),
+8/72 = 0.111 (0.06-0.20), and **8/72 = 0.111 (0.06-0.20)**. By 1.9's rule
+(0.30 or below) the reading is **effective**. Beside it: exits into a room the
+impostor could see a crewmate in, 31/85, 0/72 and 0/72. Reported: forced exits
+at the cap 0/0, 13/72 and 5/72 = 0.069 (0.03-0.15); ticks inside per surfaced
+trip, s9 85 at 1 tick, round 1 1 tick 51, 2 ticks 6, 3 ticks 2, 4 ticks 13,
+round 2 1 tick 49, 2 ticks 3, 3 ticks 15, 4 ticks 5; in-place surfacings a
+crewmate reaches 0/0, 2/37 and 2/44 = 0.045 (0.01-0.15); kills within 2 ticks
+of the killer's surfacing 3/175, 0/227 and 0/195.
+
+**Own fresh kill.** Conf. cell only; 13/105, 0/142 and 0/140. As built.
+
+**Full reset.** Conf. cells all 0, the grace window now running to T+6;
+regroup notice and false resume perceptions not carried (above). Reported:
+skipped report meetings 55/135 = 0.407, 70/118 = 0.593 and 51/114 = 0.447
+(0.36-0.54); meetings per game 2.90, 2.48 and 2.34; trips closed by a regroup
+n/a, 46/142 and 47/140 = 0.336; kill-witness button calls within 6 ticks of a
+regroup n/a, 0/6 and 0/3; trigger-tick events a regroup dropped n/a, `Moved`
+51, `TaskProgressed` 26, `TaskCompleted` 6, and `Moved` 46, `TaskProgressed` 22,
+`TaskCompleted` 10; meetings opening with an impostor in a vent 29/145 = 0.200,
+66/124 = 0.532 and 66/117 = 0.564 (0.47-0.65).
+
+**One reply.** Opener rebuttals answering the charged tick with an alibi,
+whereabouts or sighting: n/a, 19/19 (82 not evaluable) and **17/18 = 0.944
+(0.74-0.99)**, 69 not evaluable; rebuttals that only redirect: n/a, 17/121 and
+27/117 = 0.231 (0.16-0.31). By 1.9's rule (half or more answer; redirect-only
+below half) the reading is **effective**, resting on the 18 evaluable of 87
+opener rebuttals. Reported: an accused opener answered in 0/125, 101/112 and
+87/105 = 0.829; rebuttals carrying an alibi 104/121 and 89/117, a whereabouts
+claim 104/121 and 89/117, a sighting 91/121 and 79/117; rebuttals accusing a
+player who already spoke 121/121 and 116/116; beneficiaries in round 2: the
+opener answering an impostor 59, the opener answering a crewmate 28, another
+impostor answering a crewmate 28, another crewmate answering an impostor 1,
+another crewmate answering a crewmate 1 (round 1: 71, 30, 17, 3). Ballots
+citing a rebuttal stay **not carried**.
+
+**Body handle.** Conf. cell only; 135/135, 0/118 and 0/114. As built.
+
+**Kill row.** Conf. cell 0/23. Presence: **present**, 23 own-kill rows served
+(round 1: 4). Reported, with no effect reading at this size: the holder cited
+its own-kill row in 21 of 23; honesty cell 5, 23 kill holders and 21/23 = 0.913
+(0.73-0.98) citing the kill (s9: 4 holders, 3 of 4; round 1: 4 holders, 3 of 4).
+
+**Impostor ballot.** Conf. cells 0. Impostor EJECTs whose only citation is a
+neutral row (honesty cell 3): 1/46, 0/107 and **0/111 = 0.000 (0.00-0.03)**.
+By 1.9's rule (0.10 or below), **the wording holds**. Reported: impostor EJECT
+share 46/210, 107/203 and 111/200 = 0.555 (0.49-0.62); EJECTs labelled
+supported 44/46, 107/107 and 111/111; authored teammate targets 1/210, 16/203
+and 16/200 (each coerced to a skip, recorded 0); ejections whose floor only
+impostor ballots met 0/90, 0/54 and 0/66. SKIPs labelled `none_held` stay
+**not carried**.
+
+**Self-report off.** Conf. cell 0/117. As built.
+
+### 6.3 The kill cooldown cell
+
+Kill cooldowns that differ from the recorded value
+(`kill_cooldowns_differing_from_recorded`): s9 0/275 against the map's 4
+(round start 100, after a kill 175, no regroup write), round 1 0/487 against 4
+(100, 227, 160), and **round 2 0/447 against 6, with a count at each of the
+three writers: round start 100, after a kill 195, at a regroup 152**. Conf. 0
+as built; no writer is empty. The grace-window cell, read at the recorded 6,
+counted 0 kills at T+1 to T+6 after any of the round's regroups (6.2).
+
+### 6.4 The envelope, and the step the round-3 rule names (non-gating)
+
+| cell | s9 at baseline 9 | round 1 | round 2 | envelope |
+|---|---|---|---|---|
+| impostor win share | 11/50 = 0.22 (0.13-0.35) | 34/50 = 0.68 (0.54-0.79), flagged above 0.60 | **24/50 = 0.48 (0.35-0.61)** | inside 0.20-0.60, not flagged |
+| innocent ejections | 9 of 90 | 15 of 54 | 22 of 66 | reported |
+| reporters ejected per report meeting | 7/135 = 0.052 | 11/118 = 0.093 (0.05-0.16) | **17/114 = 0.149 (0.10-0.23)** | **flagged above 0.104** |
+| role-correct ejections | 81/90 | 39/54 | 44/66 | reported (6.5) |
+| meetings with vent proof | 70/145 = 0.483 | 26/124 = 0.210 (0.15-0.29) | 24/117 = 0.205 (0.14-0.29) | reported |
+| scorecard rows 1-9 | as published | round 1's audit 6.1 | 6.1 | reported |
+
+**The round-3 rule** (1.10) reads the point share of impostor wins, 24/50 =
+0.48: it is neither above 0.60 nor below 0.20, so neither cooldown branch
+fires. Its third branch names the era-keyed promotion only with no envelope
+flag and every Conf. cell at 0. Every Conf. cell reads 0, but the envelope
+flags reporter ejections (17/114 = 0.149, above 0.104), so **the rule names no
+step**. The readings command's last line reads `round-3 rule: names no step`.
+The rule and the envelope gate nothing; what comes next is the owner's.
+
+### 6.5 Role-correct ejection, the balance row and the win split, gating nothing
+
+Role-correct ejections 81/90 = 0.900, 39/54 = 0.722 and 44/66 = 0.667
+(0.55-0.77). Kills (the denominator of `kills_seen_by_crew`): 175, 227 and
+195. Impostors able to kill when a meeting opened
+(`impostor_cooldown_zero_at_open`): 63/210 = 0.300, 84/203 = 0.414 and 54/200 =
+0.270 (0.21-0.34). The win split: 39 crew and 11 impostor wins at baseline 9;
+16 crew and 34 impostor in round 1; 26 crew and 24 impostor in round 2. All are
+reported beside the readings and gate nothing; a wrong ejection on believable
+data is the game working (scorecard row 8).
+
+## 7. The decision menu
+
+The audit gives no verdict.
+
+- **The step the round-3 rule names: none.** The win share sits inside the
+  envelope, so the rule names no cooldown round; the reporter-ejection flag
+  keeps its promotion branch from naming the promotion (6.4). The next card,
+  if any, is the owner's to name.
+- **`vent_exit_policy = look_and_wait`**, round 1's options for it alone:
+  Conf. 0; **effective** again (8/72). The owner chooses **adopt** through the
+  era-keyed promotion (the path compatible with the ML hold), **iterate** under
+  a new value, **escalate** to hidden travel, or **fall back** to the status
+  quo.
+- **The seven adopted arms**: Conf. cells only, and every one reads 0
+  (6.2): `vent_witness_rule = physical`, `vent_entry_policy = own_fresh_kill`,
+  `meeting_reset = hub_with_grace`, `bounded_rebuttal_version = 1`,
+  `report_body_handle_version = 1`, `ballot_kill_row_version = 1` and
+  `impostor_ballot_version = 1`.
+- **`kill_cooldown_ticks = 6`**, the round's one dial: its Conf. cell reads 0
+  at all three writers (6.3). The rule names no step for it.
+
+The promoting card's follow-up this round would add to memo 1's adoption list
+(a public-results label for the kill cooldown) is listed only when the step is
+the promotion, so it is not listed here.
+
+## 8. Limitations
+
+- Hosted generation is not byte-reproducible, so a seed is re-recorded only by
+  the failed-seed rule, never to change its bytes. Rounds 1 and 2 differ in one
+  key, but each is one hosted recording of 50 games: the win shares' intervals
+  (0.54-0.79 and 0.35-0.61) overlap, and the difference between the rounds is
+  the dial's only within that noise.
+- The arms land together; only the Conf. cells and the lab rows attribute a
+  mechanism, and fake and lab rows establish mechanics, not reasoning quality.
+- 50 games: the kill row served 23 rows, and the one-reply reading rests on 18
+  evaluable opener rebuttals of 87.
+- Four pre-registered cells are not carried by any named source (false resume
+  perceptions, the regroup notice, ballots citing a rebuttal, `none_held`
+  SKIPs).
+- The tally counts `llm_calls` rows only, as for s9 and round 1: the husks'
+  `failed_call` tokens (13,511 input, 1,919 output) and the calls of seed 45's
+  discarded first attempt are outside it. Recording wall and the husks' spend
+  come from the recorder's logs and the husk files, kept outside the
+  repository; every other count reproduces from the committed bytes with the
+  commands above.
